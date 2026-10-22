@@ -67,6 +67,7 @@ func main() {
 	only := flag.String("only", "", "run only cases whose id starts with this")
 	workers := flag.Int("workers", 6, "drafts written at once")
 	regrade := flag.Bool("regrade", false, "grade the drafts of an earlier run in -out again, without drafting")
+	reviewRun := flag.Bool("review-only", false, "run only the review of the graded high drafts in -out and report precision with it")
 	budget := flag.Duration("budget", 90*time.Second, "start no new draft or grade after this long; run again to go on where it stopped")
 	flag.Parse()
 	deadline := time.Now().Add(*budget)
@@ -102,6 +103,14 @@ func main() {
 		log.Fatal(err)
 	}
 	ctx := context.Background()
+	if *reviewRun {
+		graded, err := readJSONL[grade](filepath.Join(*out, "grades.jsonl"))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Print(reviewOnly(ctx, provider, aidraft.Settings{Model: *model, Effort: aiprovider.Effort(*effort)}, data, graded, *workers))
+		return
+	}
 	draftsPath, gradesPath := filepath.Join(*out, "drafts.jsonl"), filepath.Join(*out, "grades.jsonl")
 	if *regrade {
 		_ = os.Remove(gradesPath)

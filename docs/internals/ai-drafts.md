@@ -41,6 +41,17 @@ does not say; give every step and prerequisite of a procedure (the commonest "mi
 never tell a customer who is writing to support to contact support; never copy a commitment from a past
 conversation; "normal" priority covers how-to questions (the model put them at "low").
 
+## A second read of every high draft
+
+A draft that `Parse` rates high gets one more call (`review.go`, the drafting model): the reviewer sees
+only the customer's newest messages, the full text of the sources the reply cites, and the reply, and
+answers whether a support lead would send it exactly as written, listing what is missing or unsupported.
+A no, or a review that fails, lowers the draft to medium (`review_flagged`, `review_failed`) and puts
+the list in `handoff_reason` for the person who sends it. Measuring showed why: the draft's own call
+rated drafts high that left out a condition or caveat of the article (which extensions qualify, a
+backup card PayPal needs, a form that expires); a rule in the prompt asking for them made things worse
+(85 % from 89 %), a separate reader did not. The review is metered as `review`.
+
 ## Auto-answer is earned per article
 
 A draft is sent on its own only when its topic (the first article it cites) has a record that meets the

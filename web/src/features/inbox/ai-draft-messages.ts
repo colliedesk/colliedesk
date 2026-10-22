@@ -13,6 +13,9 @@ const reasons: Record<string, string> = {
   'risk:angry_customer': 'the customer is upset',
   'risk:outage_or_incident': 'something may be down right now',
   'risk:needs_action_by_team': 'someone on the team has to act',
+  review_flagged: 'a second read found something to fix',
+  review_failed: 'the second read could not be done',
+  unsourced_link: 'it holds a link or address no source has',
 };
 
 export const aiMessages = {

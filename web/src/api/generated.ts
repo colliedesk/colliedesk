@@ -3428,7 +3428,7 @@ export interface components {
             body: string | null;
             /** @enum {string|null} */
             confidence: "high" | "medium" | "low" | null;
-            /** @description Why the draft is not high: model_unsure, no_kb_source, uncited_claim, unknown_source, not_an_answer, handoff, or risk:<name> (refund_or_billing_exception, account_specific_data, security_or_access, legal_or_complaint, angry_customer, outage_or_incident, needs_action_by_team). */
+            /** @description Why the draft is not high: model_unsure, no_kb_source, uncited_claim, unknown_source, not_an_answer, handoff, unsourced_link (a link or address no source holds), review_flagged or review_failed (a second read of a high draft against its sources found something to fix, which handoff_reason says, or could not be done), or risk:<name> (refund_or_billing_exception, account_specific_data, security_or_access, legal_or_complaint, angry_customer, outage_or_incident, needs_action_by_team). */
             confidence_reasons: string[];
             /** @description For the team what is missing or must be done. */
             handoff_reason: string | null;

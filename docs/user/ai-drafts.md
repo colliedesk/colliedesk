@@ -33,7 +33,9 @@ from AI ([knowledge base](knowledge-base.md)), another workspace's data. Custome
 companies and long numbers from past conversations are masked before a model reads them.
 
 A draft whose reply holds a link or an email address that no source contains is never rated "From your
-knowledge base" either.
+knowledge base" either. Before a draft gets that rating, a second read checks it against the sources it
+cites, as a support lead would: does it answer everything, with every step, condition and caveat the
+customer needs? If not, it shows as "Check before sending" with what to add.
 
 The risks that keep a draft from "From your knowledge base": a refund or an exception, the customer's
 own account or order, account access or security, a legal matter or formal complaint, an upset

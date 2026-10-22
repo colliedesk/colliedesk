@@ -76,7 +76,7 @@ func (r *reviewer) Complete(ctx context.Context, request aiprovider.Request) (ai
 		r.calls++
 		text := r.verdict
 		if text == "" {
-			text = `{"sendable":true,"missing":[],"unsupported":[]}`
+			text = `{"sendable":true,"blocking":[],"optional":["a link to the article"]}`
 		}
 		return aiprovider.Response{Text: text, JSON: text, Stop: aiprovider.StopDone, Model: request.Model, Hops: []aiprovider.Hop{{Model: request.Model}}}, nil
 	}
@@ -637,7 +637,7 @@ func TestAHighDraftTheReviewWouldNotSendAsWrittenDropsBelowHighWithWhatToFix(t *
 	desk.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
 		return highAnswer("Annual plans are refundable within 30 days."), nil
 	}
-	desk.review.verdict = `{"sendable":false,"missing":["the refund takes 5 to 10 business days to reach the card"],"unsupported":[]}`
+	desk.review.verdict = `{"sendable":false,"blocking":["the refund takes 5 to 10 business days to reach the card"],"optional":["a link"]}`
 	conversation := desk.email(t, "a@customer.example", "Refund", "Refund? How long does it take?")
 	desk.run(t)
 	draft := desk.draft(t, desk.admin, conversation).Draft
