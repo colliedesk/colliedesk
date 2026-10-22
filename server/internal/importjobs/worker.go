@@ -55,8 +55,9 @@ type WorkerOptions struct {
 	// Mailer and MailFrom send the admins a notice when an import ends; nil sends nothing.
 	Mailer   Mailer
 	MailFrom string
-	// Origin is the address of the app, for the link in the notice.
-	Origin string
+	// Origin is the address of the app, for the link in the notice; with HelpCenterDomain it also gives
+	// the importer the help center's address, which old Freshdesk help center links are pointed at.
+	Origin, HelpCenterDomain string
 	// Workers is how many jobs run at once in this process; default 2.
 	Workers                           int
 	Interval, Lease, Heartbeat, Flush time.Duration
@@ -213,7 +214,8 @@ func (w *Worker) process(parent context.Context, item claimed) error {
 func (w *Worker) importOptions(job runRow, key string, onProgress func(freshdesk.ProgressEvent)) freshdesk.Options {
 	options := freshdesk.Options{WorkspaceSlug: job.slug, BaseURL: w.options.BaseURL(job.Domain), APIKey: key, Storage: w.options.Storage,
 		Cloud: w.options.Cloud, PlansOnSale: w.options.PlansOnSale, PaidStorageBytes: w.options.PaidStorageBytes, ReserveRateLimit: true,
-		IncludePersonalCannedResponses: job.Options.IncludePersonalCannedResponses, HelpCenterPortal: job.Options.HelpCenterPortal, OnProgress: onProgress}
+		IncludePersonalCannedResponses: job.Options.IncludePersonalCannedResponses, HelpCenterPortal: job.Options.HelpCenterPortal, OnProgress: onProgress,
+		Origin: w.options.Origin, HelpCenterDomain: w.options.HelpCenterDomain, OldHelpCenterDomain: job.Options.OldHelpCenterDomain}
 	if w.options.Configure != nil {
 		w.options.Configure(&options)
 	}

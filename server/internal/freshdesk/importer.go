@@ -73,6 +73,11 @@ type run struct {
 	kb        *knowledgeBase
 	kbState   *kbState
 	kbRefused []string
+
+	// accountDomain is the account's own <name>.freshdesk.com (View Account); links is the report of
+	// the old help center links (solutions-links.go), nil when the account has nothing to report.
+	accountDomain string
+	links         *LinksReport
 }
 
 // Run imports (or, with DryRun, only counts) a Freshdesk account. Item-level
@@ -131,7 +136,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	steps := []step{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"importing contacts", r.importContacts}, {"importing saved replies", r.importSavedReplies},
 		{"listing tickets", r.listTickets}, {"checking ticket ids", r.classifyTickets}, {"verifying totals", r.verifyTotals}}
 	if !options.DryRun {
-		steps = append(steps, step{"importing knowledge base", r.importKnowledgeBase}, step{"importing tickets", r.importTickets})
+		// Links are pointed at the new help center once every article and saved reply they may name is written.
+		steps = append(steps, step{"importing knowledge base", r.importKnowledgeBase}, step{"rewriting help center links", r.rewriteFreshdeskLinks},
+			step{"importing tickets", r.importTickets})
 	}
 	for _, step := range steps {
 		r.progress.phase(step.name)
@@ -222,6 +229,11 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 	}
 	if options.Storage == nil && !options.DryRun {
 		return nil, errors.New("attachment storage is required")
+	}
+	if options.OldHelpCenterDomain != "" {
+		if options.OldHelpCenterDomain, err = OldHelpCenterHost(options.OldHelpCenterDomain); err != nil {
+			return nil, err
+		}
 	}
 	if options.Sleep == nil {
 		options.Sleep = sleepContext

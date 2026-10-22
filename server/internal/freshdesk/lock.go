@@ -3,6 +3,7 @@ package freshdesk
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/importkit"
@@ -13,10 +14,12 @@ func acquireRunLock(ctx context.Context, db *database.DB, workspaceID string) (f
 }
 
 // accountSource reads the Freshdesk account id. The ledger is keyed by it, so
-// renaming the Freshdesk subdomain never imports the account a second time.
+// renaming the Freshdesk subdomain never imports the account a second time. It also keeps the
+// account's domain, whose old help center links the import points at the new help center.
 func (r *run) accountSource(ctx context.Context) (string, error) {
 	var account struct {
-		AccountID *int64 `json:"account_id"`
+		AccountID     *int64 `json:"account_id"`
+		AccountDomain string `json:"account_domain"`
 	}
 	if _, err := r.client.getJSON(ctx, r.endpoint("/api/v2/account", nil), &account); err != nil {
 		return "", fmt.Errorf("read the Freshdesk account (an admin API key is required): %w", err)
@@ -24,5 +27,6 @@ func (r *run) accountSource(ctx context.Context) (string, error) {
 	if account.AccountID == nil || *account.AccountID <= 0 {
 		return "", fmt.Errorf("the Freshdesk account response has no account_id")
 	}
+	r.accountDomain = strings.ToLower(strings.TrimSpace(account.AccountDomain))
 	return fmt.Sprintf("freshdesk:account:%d", *account.AccountID), nil
 }

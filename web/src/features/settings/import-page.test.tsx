@@ -47,6 +47,15 @@ test('the account is read only from a Freshdesk address and a key, and the key i
   expect(onPreview).toHaveBeenCalledWith('acme.freshdesk.com', 'secret');
 });
 
+test('the old help center address is optional and goes with the preview as a host', () => {
+  const { onPreview } = page();
+  fireEvent.change(screen.getByLabelText('Freshdesk address'), { target: { value: 'acme.freshdesk.com' } });
+  fireEvent.change(screen.getByLabelText('API key of a Freshdesk admin'), { target: { value: 'secret' } });
+  fireEvent.change(screen.getByLabelText('Old help center address (optional)'), { target: { value: ' https://Support.Acme.com/ ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
+  expect(onPreview).toHaveBeenCalledWith('acme.freshdesk.com', 'secret', 'support.acme.com');
+});
+
 test('the preview shows what Freshdesk holds before anything is written, and what the key cannot read', () => {
   const { onStart } = page({ job: job({ preview: { ...preview, archive: 'refused' } }) });
   const ledger = screen.getByRole('table');
@@ -146,6 +155,49 @@ test('a key Freshdesk refused while reading the account is a preview to try agai
 test('trying again keeps the address that was typed', () => {
   page({ job: job({ state: 'failed', phase: 'preview', domain: 'beta.freshdesk.com' }), connecting: true });
   expect(screen.getByLabelText('Freshdesk address')).toHaveValue('beta.freshdesk.com');
+});
+
+test('a finished import says where the old help center addresses and links lead now', () => {
+  const links = {
+    status: 'UNVERIFIED', detail: ['1 Freshdesk link(s) were left as written; they stop working when the Freshdesk account closes.'],
+    help_center: 'https://acme.help.example.net',
+    old_addresses: { found: 36, redirected: 36, languages: ['en', 'es'], unmapped: [] },
+    rewritten: { articles: 2, saved_replies: 1, links: 5 },
+    left: [{ entity: 'kb_article', freshdesk_id: '101', url: 'https://acme.freshdesk.com/support/solutions/articles/999-gone', reason: 'not_imported' }],
+  };
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', links } });
+  const section = screen.getByRole('region', { name: 'Old help center links' });
+  expect(section).toHaveTextContent('36 of 36 old addresses lead to their new page on https://acme.help.example.net.');
+  expect(section).toHaveTextContent('5 Freshdesk links in 2 articles and 1 saved reply now point at the help center.');
+  expect(section).toHaveTextContent('1 Freshdesk link(s) were left as written');
+  expect(within(section).getByText('Needs a look')).toBeInTheDocument();
+});
+
+test('links rewritten in translations are counted where they were', () => {
+  const links = {
+    status: 'OK', detail: [], help_center: 'https://acme.help.example.net',
+    old_addresses: { found: 4, redirected: 4, languages: ['es'], unmapped: [] },
+    rewritten: { articles: 2, translations: 1, saved_replies: 0, links: 4 }, left: [],
+  };
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', links } });
+  expect(screen.getByRole('region', { name: 'Old help center links' })).toHaveTextContent('4 Freshdesk links in 2 articles, 1 translation and 0 saved replies now point at the help center.');
+});
+
+test('without a help center address the links section names none', () => {
+  const links = {
+    status: 'UNVERIFIED', detail: [], help_center: '',
+    old_addresses: { found: 4, redirected: 0, languages: [], unmapped: [] },
+    rewritten: { articles: 0, saved_replies: 0, links: 0 }, left: [],
+  };
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', links } });
+  const section = screen.getByRole('region', { name: 'Old help center links' });
+  expect(section).toHaveTextContent('0 of 4 old addresses lead to their new page.');
+  expect(section).not.toHaveTextContent(' on .');
+});
+
+test('an import without a knowledge base shows no links section', () => {
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK' } });
+  expect(screen.queryByRole('region', { name: 'Old help center links' })).not.toBeInTheDocument();
 });
 
 test('the undo question is brought into view with the safe answer focused', () => {

@@ -50,6 +50,16 @@ func ArticlePath(number int64, articleSlug string) string {
 	return "/a/" + strconv.FormatInt(number, 10) + "-" + url.PathEscape(articleSlug)
 }
 
+// CollectionPath is a collection's path below its help center's address: /c/ and the slugs of the
+// collections from the top down to it (a slug is unique only among siblings).
+func CollectionPath(slugs []string) string {
+	escaped := make([]string, len(slugs))
+	for index, slug := range slugs {
+		escaped[index] = url.PathEscape(slug)
+	}
+	return "/c/" + strings.Join(escaped, "/")
+}
+
 // hostSlug returns the workspace slug of a request host <slug>.<domain>, or false when the host is
 // not exactly one valid label below the help center domain, or is the server's own host.
 func hostSlug(host, domain, originHost string) (string, bool) {

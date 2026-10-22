@@ -13,6 +13,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -283,6 +284,92 @@ func TestHelpCenterThemePreviewLatencyBudget(t *testing.T) {
 		t.Logf("help center preview %s p95=%s (%d bytes)", page, p95, size)
 		if p95 > inboxLatencyBudget {
 			t.Errorf("help center preview %s p95 %s exceeds %s", page, p95, inboxLatencyBudget)
+		}
+	}
+}
+
+// TestHelpCenterOldFreshdeskAddressesLatencyBudget holds the old Freshdesk addresses to the same
+// budget on the shared fixture, with an import ledger of the size a real migration leaves: in both
+// workspaces a kb_article row per article and 25,000 ticket rows under the same Freshdesk ids, so the
+// lookup must stay an index probe of (workspace, entity, Freshdesk id). It times a mapped article
+// (301), a draft (302 to search), an id nobody imported (302) and a folder (301, which reads the
+// collection tree).
+func TestHelpCenterOldFreshdeskAddressesLatencyBudget(t *testing.T) {
+	_, pool, _, slug := sharedKBBudget(t)
+	api, _, _, _ := testAPIOnPool(t, pool, nil)
+	site := helpCenterSite(api)
+	ctx := context.Background()
+	// Registered before anything can stop the test, so the shared fixture never keeps these rows.
+	t.Cleanup(func() {
+		if _, err := pool.Exec(ctx, `DELETE FROM import_items WHERE source='freshdesk:account:77'`); err != nil {
+			t.Errorf("remove the budget ledger: %v", err)
+		}
+	})
+	seeded := time.Now()
+	if _, err := pool.Exec(ctx, `INSERT INTO import_items(workspace_id,source,entity,source_id,target_id,status)
+		SELECT w.id,'freshdesk:account:77','ticket',g::text,NULL,'done' FROM workspaces w, generate_series(1,25000) g WHERE w.name LIKE 'KB Budget %';
+		INSERT INTO import_items(workspace_id,source,entity,source_id,target_id,status)
+		SELECT a.workspace_id,'freshdesk:account:77','kb_article',(900000+a.number)::text,a.id,'done'
+		FROM kb_articles a JOIN workspaces w ON w.id=a.workspace_id WHERE w.name LIKE 'KB Budget %';
+		INSERT INTO import_items(workspace_id,source,entity,source_id,target_id,status)
+		SELECT c.workspace_id,'freshdesk:account:77','kb_folder','800001',c.id,'done'
+		FROM kb_collections c JOIN workspaces w ON w.id=c.workspace_id WHERE w.name LIKE 'KB Budget %' AND c.slug='budget'`); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("seeded the import ledger in %s", time.Since(seeded))
+	// The index holds the knowledge base rows only, so ticket imports never maintain it.
+	var index string
+	if err := pool.QueryRow(ctx, `SELECT indexdef FROM pg_indexes WHERE indexname='import_items_source_id_idx' AND schemaname=current_schema()`).Scan(&index); err != nil ||
+		!strings.Contains(index, "WHERE") || !strings.Contains(index, "kb_article") {
+		t.Errorf("import_items_source_id_idx is not limited to the knowledge base rows (%v): %s", err, index)
+	}
+	// The store's own lookup is a probe of that index for every entity, even as the generic plan a
+	// prepared statement settles on after a few runs.
+	// GENERIC_PLAN takes the statement with its $n placeholders unbound, which only the raw protocol sends.
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Release()
+	for _, entity := range []string{"kb_category", "kb_folder", "kb_article"} {
+		results, err := conn.Conn().PgConn().Exec(ctx, "EXPLAIN (GENERIC_PLAN) "+store.HelpCenterLegacyTargetSQL(entity)).ReadAll()
+		var plan strings.Builder
+		for _, result := range results {
+			for _, row := range result.Rows {
+				plan.Write(row[0])
+				plan.WriteByte('\n')
+			}
+		}
+		if err != nil || !strings.Contains(plan.String(), "import_items_source_id_idx") {
+			t.Errorf("the %s lookup does not use import_items_source_id_idx (%v):\n%s", entity, err, plan.String())
+		}
+	}
+	base := "/help/" + slug
+	paths := []struct {
+		name, path string
+		status     int
+	}{
+		{"mapped article", "/support/solutions/articles/901000-article-1000", http.StatusMovedPermanently},
+		{"draft article", "/de/support/solutions/articles/901001-article-1001", http.StatusFound},
+		{"unknown id", "/support/solutions/articles/42-never-imported", http.StatusFound},
+		{"folder", "/support/solutions/folders/800001", http.StatusMovedPermanently},
+	}
+	// 20 visits each, not 50, since this gate shares its CI runner with every other latency gate.
+	for _, old := range paths {
+		durations := make([]time.Duration, 20)
+		for index := range durations {
+			started := time.Now()
+			response := visit(site, base+old.path, fmt.Sprintf("198.51.100.%d", index+1))
+			durations[index] = time.Since(started)
+			if response.Code != old.status {
+				t.Fatalf("GET %s status=%d, want %d", old.path, response.Code, old.status)
+			}
+		}
+		sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
+		p95 := durations[(len(durations)*95+99)/100-1]
+		t.Logf("help center old address %s p95=%s", old.name, p95)
+		if p95 > inboxLatencyBudget {
+			t.Errorf("help center old address %s p95 %s exceeds %s", old.name, p95, inboxLatencyBudget)
 		}
 	}
 }

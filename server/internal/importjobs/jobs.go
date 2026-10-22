@@ -84,6 +84,9 @@ type Options struct {
 	RecentDays                     *int  `json:"recent_days,omitempty"`
 	IncludePersonalCannedResponses bool  `json:"include_personal_canned_responses"`
 	HelpCenterPortal               int64 `json:"help_center_portal,omitempty"`
+	// OldHelpCenterDomain is the old Freshdesk help center's own custom domain, stored as its host
+	// (freshdesk.OldHelpCenterHost); its links are pointed at the new help center too.
+	OldHelpCenterDomain string `json:"old_help_center_domain,omitempty"`
 }
 
 func (o Options) recentDays() int {

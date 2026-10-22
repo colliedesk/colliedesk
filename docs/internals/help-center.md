@@ -338,6 +338,29 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   hosts), article `url`s, canonical links and the ETag, which holds the address so a page cached
   under the old one is stale.
 
+- **Old Freshdesk addresses are one handler on every address** (`legacy.go`). A path the help
+  center does not know that `ParseLegacyPath` reads as `[/<lang>]/support/...` (language
+  `[a-z]{2,3}(-[a-z0-9]{2,8})?`; the language and the fixed words in any case) is answered after `OpenHelpCenter`, so the slug host, `/help/<slug>`
+  and an active custom domain all serve it (the path address first moves to the help center's address
+  with the old path kept), behind the page limiter. Home, `/support/home` and `/support/solutions` are
+  301 home; a category, folder or article id is looked up by `HelpCenterLegacyTarget`: one scoped query
+  that probes `import_items_source_id_idx` `(workspace_id, entity, source_id)`, partial on the three
+  knowledge base entities (the primary key leads with the source, which the old address does not
+  carry; ticket rows, most of the ledger, never maintain it). The entity is a literal in the statement
+  (`HelpCenterLegacyTargetSQL`), never a parameter: a generic plan could not prove the index predicate
+  from `$2`, `source LIKE 'freshdesk:%'`, `status='done'`,
+  joined to the article (published, outside the trash) or collection (outside the trash). An article is
+  301 to `ArticlePath`; a collection 301 to its slug path only while something is published in or
+  below it (the collection tree, as the pages decide). Anything else is 302 to `/search?q=<words of the
+  old slug>`, or home without words: 302 so a later publish takes over, and never a 404, since these
+  addresses live in emails and search engines. `/support/search?term=` is 302 to the search. Every
+  target is `SiteURL` plus our own path, never a host or path the request names; the redirect is
+  `no-store`. `/support/...` on `APP_ORIGIN` outside `/help/` is the app's and looks nothing up.
+  Workspace B never reaches A's pages: the query is scoped and filters `workspace_id`, and Freshdesk
+  ids repeat across accounts (`TestOldFreshdeskAddressesStayInTheirWorkspace`). Two accounts imported
+  into one workspace with the same id: a row whose target is public now (or a collection outside the
+  trash) wins, then the newest row, so a newer account's draft never hides the older one's page.
+
 ## Traps
 
 - **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line

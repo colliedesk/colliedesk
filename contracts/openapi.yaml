@@ -4072,6 +4072,14 @@ components:
           type: integer
           minimum: 0
           description: On an account with several portals, the portal whose published articles stay published.
+        old_help_center_domain:
+          type: string
+          maxLength: 255
+          description: >-
+            The old Freshdesk help center's own custom domain, for example support.acme.com (an http:// or https://
+            prefix and a trailing slash are dropped; stored as the host). Its /support/ links in imported articles
+            and saved replies are pointed at the new help center like the account domain's. Answers 400 when it
+            is not a host name.
     ImportInput:
       type: object
       additionalProperties: false

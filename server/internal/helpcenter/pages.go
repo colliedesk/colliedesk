@@ -10,7 +10,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -207,11 +206,29 @@ func (t tree) find(slugs []string) *node {
 }
 
 func (v view) collectionURL(n *node) string {
+	return v.base + n.path()
+}
+
+// path is the collection's path below the help center's address.
+func (n *node) path() string {
 	var slugs []string
 	for current := n; current != nil; current = current.parent {
-		slugs = append([]string{url.PathEscape(current.Slug)}, slugs...)
+		slugs = append([]string{current.Slug}, slugs...)
 	}
-	return v.base + "/c/" + strings.Join(slugs, "/")
+	return CollectionPath(slugs)
+}
+
+// PublicCollectionPaths gives every collection with a published article in or below it its path
+// below the help center's address (CollectionPath); the others have none, as on the pages.
+func PublicCollectionPaths(collections []domain.PublicKBCollection) map[string]string {
+	t := buildTree(collections)
+	paths := make(map[string]string, len(t.byID))
+	for id, n := range t.byID {
+		if n.total > 0 {
+			paths[id] = n.path()
+		}
+	}
+	return paths
 }
 
 func (v view) crumbs(n *node) []link {

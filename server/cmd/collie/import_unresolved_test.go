@@ -78,3 +78,42 @@ func TestImportSendsProgressToStderrNotStdout(t *testing.T) {
 		t.Fatalf("progress must go to stderr only.\nstderr:\n%s\nstdout:\n%s", stderr.String(), stdout)
 	}
 }
+
+// The import points old Freshdesk help center links at the help center's address, which it builds
+// from the server's APP_ORIGIN and HELP_CENTER_DOMAIN, as the server does.
+func TestImportGivesTheImporterTheHelpCenterAddress(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("FRESHDESK_API_KEY", cliTestKey)
+	t.Setenv("ATTACHMENTS_DIR", t.TempDir())
+	t.Setenv("APP_ORIGIN", " https://support-desk.example.org ")
+	t.Setenv("HELP_CENTER_DOMAIN", "Help.Example.NET")
+	createImportDesk(t, databaseURL)
+	var origin, domain string
+	if _, err := runImportWithReport(t, databaseURL, &freshdesk.Report{Status: freshdesk.StatusOK}, func(options freshdesk.Options) {
+		origin, domain = options.Origin, options.HelpCenterDomain
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if origin != "https://support-desk.example.org" || domain != "help.example.net" {
+		t.Fatalf("importer got origin %q and help center domain %q", origin, domain)
+	}
+}
+
+// Without APP_ORIGIN the import does not know the server's address: it must not point links at the
+// local default the other commands fall back to, so the importer gets no origin at all.
+func TestImportWithoutAppOriginGivesTheImporterNoOrigin(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("FRESHDESK_API_KEY", cliTestKey)
+	t.Setenv("ATTACHMENTS_DIR", t.TempDir())
+	t.Setenv("APP_ORIGIN", "")
+	createImportDesk(t, databaseURL)
+	origin := "unset"
+	if _, err := runImportWithReport(t, databaseURL, &freshdesk.Report{Status: freshdesk.StatusOK}, func(options freshdesk.Options) {
+		origin = options.Origin
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if origin != "" {
+		t.Fatalf("importer got origin %q without APP_ORIGIN", origin)
+	}
+}
