@@ -42,6 +42,11 @@ type AIDraftJob struct {
 	Turns          []AIDraftTurn
 	Sources        []AIRetrievedDoc
 	Tags           []string
+	// Index lists the articles AI may read, for a chooser; WholeKB says Sources already holds every one.
+	Index   []AIArticleIndexEntry
+	WholeKB bool
+	// Query is what retrieval searched for.
+	Query string
 }
 
 // AIUsage is one call to a provider. Reported false means the provider sent no token counts.
@@ -113,11 +118,22 @@ func (s *Store) ClaimAIDraft(ctx context.Context, workspaceID string, lease time
 		if err != nil {
 			return nil, fmt.Errorf("read messages for AI draft: %w", err)
 		}
-		job.Sources, err = AIRetrieve(ctx, tx, workspaceID, AIRetrievalQuery{Text: aiDraftQuery(job.Subject, job.Turns), ExcludeConversationID: job.ConversationID,
+		job.Query = aiDraftQuery(job.Subject, job.Turns)
+		job.Sources, err = AIRetrieve(ctx, tx, workspaceID, AIRetrievalQuery{Text: job.Query, ExcludeConversationID: job.ConversationID,
 			KBLimit: 5, ConversationLimit: 3})
 		if err != nil {
 			return nil, err
 		}
+		if job.Index, err = aiArticleIndex(ctx, tx, workspaceID); err != nil {
+			return nil, err
+		}
+		articles := 0
+		for _, doc := range job.Sources {
+			if doc.Kind == AIRetrievedKBArticle {
+				articles++
+			}
+		}
+		job.WholeKB = articles >= len(job.Index)
 		rows, err = tx.Query(ctx, `SELECT name FROM tags WHERE workspace_id=$1 ORDER BY name LIMIT $2`, workspaceID, aiDraftTags)
 		if err != nil {
 			return nil, fmt.Errorf("read tags for AI draft: %w", err)

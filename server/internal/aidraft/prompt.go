@@ -43,10 +43,12 @@ type Input struct {
 	Tags []string
 }
 
-// Settings choose the model.
+// Settings choose the models. SelectModel, when set, chooses articles from their titles before the
+// draft (select.go); empty leaves the sources to the keyword search.
 type Settings struct {
-	Model  string
-	Effort aiprovider.Effort
+	Model       string
+	Effort      aiprovider.Effort
+	SelectModel string
 }
 
 // escaper keeps text written by a customer or a teammate from closing the tags of the prompt.
@@ -125,13 +127,15 @@ Rules for the reply:
 3. Keep button, menu, setting and product names exactly as the source writes them, also when replying in another language.
 4. Reply in the language of the customer's newest message. Be warm, direct and brief: one short opening line at most, numbered steps for a procedure, no sign-off or signature (the team adds it). Use the customer's name only if they signed with it.
 5. Answer every question in the newest customer message. If the sources answer only part of it, answer that part, say a teammate will follow up on the rest, and set confidence below high.
-6. Never promise what only the team can decide or know: a refund, credit, discount, exception, deadline, fix date, escalation, or whether a service is down right now. Past conversations show how the team phrases answers; do not copy a commitment or a fact from one unless a knowledge base article states it too.
-7. Never ask for a password, a one-time code or a full card number.
+6. For a procedure, give every step, prerequisite, condition and time frame the source states for the customer's case: where to start, what must be done first, each place to save or confirm, which box to tick, how long it takes to work. A reply missing a step the customer needs is wrong.
+7. The customer is already writing to the support team: never tell them to contact support, email support or call. When a source says only support can do something, say what the team needs from them to do it, and flag needs_action_by_team.
+8. Never promise what only the team can decide or know: a refund, credit, discount, exception, deadline, fix date, escalation, or whether a service is down right now. Past conversations show how the team phrases answers; do not copy a commitment or a fact from one unless a knowledge base article states it too.
+9. Never ask for a password, a one-time code or a full card number.
 
 "claims": list every factual statement in the reply, one per item, with the id of the source that states it ("S3"). Greetings and "a teammate will follow up" are not claims. If you cannot name a source for a statement, remove it from the reply. For a handoff, claims is empty.
 
 "confidence":
-- "high": every question in the newest customer message is fully answered by a knowledge base article, you are sure it applies to this customer's case, nothing in the reply goes beyond the sources, and none of the risks applies.
+- "high": every question in the newest customer message is fully answered by a knowledge base article, you are sure it applies to this customer's case, the reply has every step and condition the customer needs, nothing in it goes beyond the sources, and none of the risks applies.
 - "medium": probably right, but it rests on a past conversation only, answers only part, or the customer's case is not certain.
 - "low": you are not sure, or it is a handoff.
 
@@ -146,7 +150,7 @@ Rules for the reply:
 
 "handoff_reason": for a handoff, or whenever confidence is not high, one sentence for the team saying what is missing or what must be done. Otherwise empty.
 
-"triage": "tags" are names from <workspace_tags> that fit the ticket (possibly none; never invent one); "priority" is "urgent" (the customer cannot work at all, data loss, a security problem, many people affected), "high" (blocked on something important, or upset), "normal" (most questions) or "low" (feedback, an idea, nothing blocked); "reason" is one short sentence.`
+"triage": "tags" are the names from <workspace_tags> that clearly fit the ticket's subject, usually one or two (possibly none; never invent one); "priority" is "urgent" (the customer cannot work at all, data loss, a security problem, many people affected), "high" (blocked on something important, or upset), "normal" (most tickets, including every how-to question and anything not working as expected) or "low" (only feedback, an idea, or a thank-you with nothing to do); "reason" is one short sentence.`
 
 // Schema is the JSON the model must answer with.
 func Schema() map[string]any {

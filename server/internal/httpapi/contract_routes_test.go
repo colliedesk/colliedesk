@@ -253,5 +253,6 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/public/forms/{workspace_slug}":           {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
 	}
 	maps.Copy(cases, kbContractCases(f))
+	maps.Copy(cases, contractAICases(f))
 	return cases
 }

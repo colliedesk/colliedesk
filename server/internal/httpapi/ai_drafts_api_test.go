@@ -422,3 +422,42 @@ func timelineWithDraft(t *testing.T, api http.Handler, token, conversationID str
 	decode(t, request(t, api, http.MethodGet, "/api/v1/conversations/"+conversationID+"/messages", nil, token, nil), &list)
 	return list.Items
 }
+
+func TestAnArticleTheSearchMissesIsChosenFromTheWorkspacesOwnArticleList(t *testing.T) {
+	desk := newAIDesk(t, "Draft Chooser")
+	desk.worker.Settings.SelectModel = "select-model"
+	collection := kbCollection(t, desk.api, desk.admin, map[string]any{"name": "Accounts"}).ID
+	bigKB(t, desk.api, desk.admin, collection)
+	push := kbArticle(t, desk.api, desk.admin, map[string]any{"collection_id": collection, "title": "Domain Push",
+		"body_md": "Open Domains, select Push, enter the receiving account's username. The receiver accepts within 7 days.", "status": "published"})
+	other := desk.sibling(t, "Draft Chooser Beta")
+	kbArticle(t, other.api, other.admin, map[string]any{"collection_id": kbCollection(t, other.api, other.admin, map[string]any{"name": "Secret"}).ID,
+		"title": "CANARY-TITLE-4410", "body_md": "Beta only.", "status": "published"})
+	var chooserPrompt string
+	desk.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
+		if request.Model == "select-model" {
+			chooserPrompt = request.Messages[0].Text
+			text := fmt.Sprintf(`{"articles":[%d]}`, push.Number)
+			return aiprovider.Response{Text: text, JSON: text, Stop: aiprovider.StopDone, Model: "select-model", Hops: []aiprovider.Hop{{Model: "select-model"}}}, nil
+		}
+		return highAnswer("Open Domains, select Push."), nil
+	}
+	conversation := desk.email(t, "a@customer.example", "Brother", "How can I give my website name to my brother so he owns it?")
+	desk.run(t)
+
+	if !strings.Contains(chooserPrompt, "Domain Push") || strings.Contains(chooserPrompt, "CANARY-TITLE-4410") {
+		t.Fatalf("chooser prompt should list this workspace's articles only:\n%s", chooserPrompt)
+	}
+	requests := desk.fake.Requests()
+	draftPrompt := requests[len(requests)-1].Messages[0].Text
+	if !strings.Contains(draftPrompt, "receiving account's username") {
+		t.Fatalf("the chosen article did not reach the draft prompt:\n%s", draftPrompt)
+	}
+	if draft := desk.draft(t, desk.admin, conversation).Draft; draft.Status != "ready" {
+		t.Fatalf("draft = %+v", draft)
+	}
+	var features string
+	if err := desk.pool.QueryRow(context.Background(), `SELECT string_agg(feature, ',' ORDER BY id) FROM ai_usage`).Scan(&features); err != nil || features != "select,draft" {
+		t.Errorf("metered features = %q %v, want select,draft", features, err)
+	}
+}

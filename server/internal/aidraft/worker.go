@@ -32,6 +32,8 @@ type Worker struct {
 	Timeout time.Duration
 	// LogError hears failures that are not a draft's own (the database); nil drops them.
 	LogError func(error)
+	// MaxPerRun stops RunOnce after this many drafts; 0 writes every draft that is due.
+	MaxPerRun int
 }
 
 func (w *Worker) logError(err error) {
@@ -69,7 +71,7 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 		if _, err := w.Store.SendDueAutoAnswers(ctx, workspaceID); err != nil {
 			failed = append(failed, err)
 		}
-		for ctx.Err() == nil {
+		for ctx.Err() == nil && (w.MaxPerRun == 0 || written < w.MaxPerRun) {
 			job, err := w.Store.ClaimAIDraft(ctx, workspaceID, w.lease())
 			if err != nil {
 				failed = append(failed, err)
@@ -86,6 +88,13 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 		}
 	}
 	return written, errors.Join(failed...)
+}
+
+func (w *Worker) timeout() time.Duration {
+	if w.Timeout > 0 {
+		return w.Timeout
+	}
+	return defaultTimeout
 }
 
 func (w *Worker) lease() time.Duration {
@@ -136,12 +145,12 @@ var (
 
 // write drafts one job: every attempt is metered, a failure is recorded on the draft.
 func (w *Worker) write(ctx context.Context, job *store.AIDraftJob) error {
-	timeout := w.Timeout
-	if timeout <= 0 {
-		timeout = defaultTimeout
+	in := JobInput(job)
+	if err := w.choose(ctx, job, &in); err != nil {
+		return err
 	}
-	call, cancel := context.WithTimeout(ctx, timeout)
-	result, response, err := Draft(call, w.Provider, JobInput(job), w.Settings)
+	call, cancel := context.WithTimeout(ctx, w.timeout())
+	result, response, err := Draft(call, w.Provider, in, w.Settings)
 	cancel()
 	code := ""
 	retryable, retryAfter := false, retryBase*time.Duration(job.Attempt)
@@ -159,7 +168,7 @@ func (w *Worker) write(ctx context.Context, job *store.AIDraftJob) error {
 	case err != nil:
 		code, retryable = string(aiprovider.CodeOf(err)), true
 	}
-	if meterErr := w.meter(ctx, job, response, code); meterErr != nil {
+	if meterErr := w.meter(ctx, job, "draft", w.Settings.Model, response, code); meterErr != nil {
 		return meterErr
 	}
 	if err != nil {
@@ -175,12 +184,12 @@ func (w *Worker) write(ctx context.Context, job *store.AIDraftJob) error {
 
 // meter stores one row per model that ran in the attempt (a fallback bills two), or one row with the
 // requested model and the error when nothing answered.
-func (w *Worker) meter(ctx context.Context, job *store.AIDraftJob, response aiprovider.Response, code string) error {
+func (w *Worker) meter(ctx context.Context, job *store.AIDraftJob, feature, model string, response aiprovider.Response, code string) error {
 	if len(response.Hops) == 0 {
-		return w.Store.RecordAIUsage(ctx, job.WorkspaceID, store.AIUsage{DraftID: job.DraftID, Feature: "draft", Model: w.Settings.Model, ErrorCode: code})
+		return w.Store.RecordAIUsage(ctx, job.WorkspaceID, store.AIUsage{DraftID: job.DraftID, Feature: feature, Model: model, ErrorCode: code})
 	}
 	for _, hop := range response.Hops {
-		usage := store.AIUsage{DraftID: job.DraftID, Feature: "draft", Model: hop.Model, Reported: hop.Usage.Reported, InputTokens: hop.Usage.InputTokens,
+		usage := store.AIUsage{DraftID: job.DraftID, Feature: feature, Model: hop.Model, Reported: hop.Usage.Reported, InputTokens: hop.Usage.InputTokens,
 			OutputTokens: hop.Usage.OutputTokens, CacheReadTokens: hop.Usage.CacheReadTokens, CacheWriteTokens: hop.Usage.CacheWriteTokens, ErrorCode: code}
 		if err := w.Store.RecordAIUsage(ctx, job.WorkspaceID, usage); err != nil {
 			return err

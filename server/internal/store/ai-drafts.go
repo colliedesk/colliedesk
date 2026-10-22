@@ -254,9 +254,13 @@ func (s *Store) changeAIDraft(ctx context.Context, workspaceID, conversationID, 
 }
 
 // DiscardAIDraft records that a person did not want the draft. It counts against its topic's record.
-// A scheduled answer is stopped with it.
+// A scheduled answer is stopped with it. Discarding it again changes nothing; a draft already sent
+// from, or replaced by a newer one, is ErrAIDraftState.
 func (s *Store) DiscardAIDraft(ctx context.Context, workspaceID, conversationID, draftID, agentID string) (domain.AIDraft, error) {
 	return s.changeAIDraft(ctx, workspaceID, conversationID, draftID, func(tx pgx.Tx, draft domain.AIDraft) error {
+		if draft.Status == domain.AIDraftDiscarded {
+			return nil
+		}
 		if draft.Status != domain.AIDraftReady && draft.Status != domain.AIDraftScheduled && draft.Status != domain.AIDraftFailed {
 			return domain.ErrAIDraftState
 		}
@@ -271,10 +275,15 @@ func (s *Store) DiscardAIDraft(ctx context.Context, workspaceID, conversationID,
 }
 
 // CancelAutoAnswer stops a scheduled answer. The draft stays on the conversation, ready for a person.
+// A draft that is not scheduled is left as it is, since nothing will go out; one auto-answer already
+// sent is ErrAIDraftState, so the caller learns it is too late.
 func (s *Store) CancelAutoAnswer(ctx context.Context, workspaceID, conversationID, draftID, agentID string) (domain.AIDraft, error) {
 	return s.changeAIDraft(ctx, workspaceID, conversationID, draftID, func(tx pgx.Tx, draft domain.AIDraft) error {
-		if draft.Status != domain.AIDraftScheduled {
+		if draft.Status == domain.AIDraftAutoSent {
 			return domain.ErrAIDraftState
+		}
+		if draft.Status != domain.AIDraftScheduled {
+			return nil
 		}
 		_, err := tx.Exec(ctx, `UPDATE ai_drafts SET status='ready',auto_send_at=NULL,decided_by_agent_id=NULLIF($4,'')::uuid,decided_at=now()
 			WHERE workspace_id=$1 AND conversation_id=$2 AND id=$3`, workspaceID, conversationID, draftID, agentID)

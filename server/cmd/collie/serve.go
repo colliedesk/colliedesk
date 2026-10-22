@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/aidraft"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
@@ -149,6 +150,17 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	go sweepMailImageCache(ctx, store.NewWithDB(db).WithObjects(storage), mailImageCacheBytes)
 	// What AI features may quote is built from a queue the database fills (docs/internals/ai-retrieval.md).
 	go store.NewWithDB(db).RunAIRetrieval(ctx, 2*time.Second, func(err error) { slog.Error("build AI retrieval", "error", err) })
+	// AI drafts are written in the background when a customer writes (docs/internals/ai-drafts.md). A
+	// setting that cannot be used leaves AI off with the reason logged; the inbox keeps working.
+	ai, err := aiServerFromEnv(os.Getenv)
+	if err != nil {
+		slog.Error("AI drafts are off", "reason", err.Error())
+	}
+	if ai.Enabled() {
+		worker := &aidraft.Worker{Store: store.NewWithDB(db).WithAI(true), Provider: ai.Provider, Settings: ai.Settings,
+			LogError: func(err error) { slog.Error("write AI drafts", "error", err) }}
+		go worker.Run(ctx, 2*time.Second)
+	}
 	kbVideoMaxBytes, err := kbVideoMaxBytesFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -161,7 +173,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	apiConfig := httpapi.Config{ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+	apiConfig := httpapi.Config{AI: ai.Enabled(), ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.

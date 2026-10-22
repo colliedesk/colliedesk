@@ -86,7 +86,8 @@ CREATE TABLE ai_usage (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     ai_draft_id uuid,
-    feature text NOT NULL CHECK (feature IN ('draft', 'check')),
+    -- draft: writing a draft; select: choosing articles from their titles first; check: testing a provider.
+    feature text NOT NULL CHECK (feature IN ('draft', 'select', 'check')),
     model text NOT NULL,
     input_tokens bigint,
     output_tokens bigint,

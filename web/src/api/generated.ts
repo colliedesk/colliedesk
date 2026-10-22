@@ -480,6 +480,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/ai-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The conversation's newest AI draft: a reply and a triage suggestion the server wrote from the workspace's published knowledge base and resolved conversations when the customer wrote. It is written in the background (a few seconds), so `status` is `queued` until it is `ready`; the screen never waits for it. `draft` is null when there is none. `available` says whether this server has an AI provider, `drafts_enabled` whether the workspace has drafts on. `confidence` is decided by Colliedesk, not taken from the model: `high` only when every statement of the reply cites a knowledge base article that was shown to the model, the model is sure, and none of the risks applies (refunds, the customer's own account, security, legal, an angry customer, an outage, work only the team can do); `confidence_reasons` says what kept it lower. `sources` come from the database, never from the model. */
+        get: operations["getAIDraft"];
+        put?: never;
+        /** @description Ask for a new draft of a reply to the newest customer message. The conversation's drafts that were still open (queued, ready or scheduled) are superseded. Answers 202 with the queued draft; read it with GET. 409 `ai_unavailable` when the server has no AI provider, `ai_drafts_off` when the workspace turned drafts off. */
+        post: operations["requestAIDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-draft/{draftId}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: components["parameters"]["AIDraftID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Say the draft is not wanted. A ready or scheduled draft counts against its topic's record (auto-answer is earned per knowledge base article); a scheduled answer is stopped. Ask for a new draft with POST on the conversation. Discarding it again changes nothing (200). 409 `ai_draft_state` for a draft that was already used or superseded. */
+        post: operations["discardAIDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-draft/{draftId}/apply-triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: components["parameters"]["AIDraftID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Apply the draft's triage suggestion: add its tags that still exist and set its priority. Undo each like any other change (remove the tag, set the priority back). 409 `ai_draft_state` when the draft has no suggestion. */
+        post: operations["applyAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-draft/{draftId}/cancel-auto-answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: components["parameters"]["AIDraftID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stop a scheduled answer before it goes out. The draft stays on the conversation as `ready` for a person to send, edit or discard. A draft that is not scheduled is returned as it is (nothing will go out); 409 `ai_draft_state` when auto-answer already sent it. */
+        post: operations["cancelAutoAnswer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inbox/activity": {
         parameters: {
             query?: never;
@@ -681,6 +761,24 @@ export interface paths {
         head?: never;
         /** @description Rename the workspace. The team sees the name in the workspace switcher and Settings. Customers see it as the help center title while the help center has no title of its own; replies never carry it, because every email channel keeps its own `sender_name`. Spaces at the ends are removed; a name is 2 to 60 characters without line breaks or other control characters (400 otherwise). On Colliedesk Cloud a name with a well-known brand in it is refused (422), as at sign-up. */
         patch: operations["updateWorkspaceName"];
+        trace?: never;
+    };
+    "/api/v1/workspace/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's AI settings, the record of every topic (knowledge base article) its high-confidence drafts rest on, and the last 30 days of usage. A topic is `eligible` for auto-answer when auto-answer is on, at least `auto_answer_min_reviewed` of its drafts were reviewed by a person, and at least `auto_answer_min_accuracy` percent of those were sent with small changes at most (the sent reply shares 85 % of its words, in order, with the draft). Answers sent on their own never count toward a record. */
+        get: operations["getAISettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Change any of the AI settings (admins). Turning drafts off stops the queued drafts; turning drafts or auto-answer off stops every scheduled answer, which stays as a draft for a person. */
+        patch: operations["updateAISettings"];
         trace?: never;
     };
     "/api/v1/workspace/slug": {
@@ -3285,6 +3383,130 @@ export interface components {
                 incoming_at: string | null;
             }[];
         };
+        AIDraftSource: {
+            /** @enum {string} */
+            kind: "kb_article" | "conversation";
+            /**
+             * Format: uuid
+             * @description The knowledge base article or the resolved conversation.
+             */
+            id: string;
+            /** @description The article's number; absent for a conversation. */
+            number?: number;
+            title: string;
+            /** @description The translation quoted; absent for the article's own language. */
+            locale?: string;
+        };
+        AITriage: {
+            /** @description Names of tags that exist in the workspace. */
+            tags: string[];
+            /** @enum {string} */
+            priority?: "low" | "normal" | "high" | "urgent";
+            reason?: string;
+        };
+        AIDraft: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /**
+             * Format: uuid
+             * @description The customer message the draft answers.
+             */
+            message_id: string | null;
+            /**
+             * @description queued until written; ready for a person; failed (see error_code); superseded when the customer wrote again or a new draft was asked for; used when a reply was sent from it; discarded; scheduled to be sent on its own at auto_send_at; auto_sent; cancelled when a scheduled answer was stopped by a new message.
+             * @enum {string}
+             */
+            status: "queued" | "ready" | "failed" | "superseded" | "used" | "discarded" | "scheduled" | "auto_sent" | "cancelled";
+            /**
+             * @description answer the customer, ask them one question, or hand over to a person
+             * @enum {string|null}
+             */
+            action: "answer" | "clarify" | "handoff" | null;
+            /** @description The reply text; null for a handoff and until it is written. */
+            body: string | null;
+            /** @enum {string|null} */
+            confidence: "high" | "medium" | "low" | null;
+            /** @description Why the draft is not high: model_unsure, no_kb_source, uncited_claim, unknown_source, not_an_answer, handoff, or risk:<name> (refund_or_billing_exception, account_specific_data, security_or_access, legal_or_complaint, angry_customer, outage_or_incident, needs_action_by_team). */
+            confidence_reasons: string[];
+            /** @description For the team what is missing or must be done. */
+            handoff_reason: string | null;
+            /**
+             * Format: uuid
+             * @description The knowledge base article the reply rests on.
+             */
+            topic_article_id: string | null;
+            sources: components["schemas"]["AIDraftSource"][];
+            triage: null | components["schemas"]["AITriage"];
+            /** Format: date-time */
+            triage_applied_at: string | null;
+            /** @enum {string|null} */
+            outcome: "sent_unchanged" | "sent_edited" | "discarded" | "auto_sent" | "auto_cancelled" | null;
+            /** @description How close the sent reply is to the draft. */
+            similarity: number | null;
+            /** Format: date-time */
+            auto_send_at: string | null;
+            /** @description The last failure: a provider error code (auth, rate_limited, ...), invalid_answer or refused. */
+            error_code: string | null;
+            model: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            ready_at: string | null;
+        };
+        AIDraftEnvelope: {
+            draft: components["schemas"]["AIDraft"];
+        };
+        AIDraftState: {
+            draft: null | components["schemas"]["AIDraft"];
+            /** @description This server has an AI provider. */
+            available: boolean;
+            drafts_enabled: boolean;
+        };
+        AISettings: {
+            /** @description This server has an AI provider. */
+            available: boolean;
+            drafts_enabled: boolean;
+            auto_answer_enabled: boolean;
+            auto_answer_delay_seconds: number;
+            auto_answer_min_reviewed: number;
+            /** @description Percent. */
+            auto_answer_min_accuracy: number;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
+        AISettingsUpdate: {
+            drafts_enabled?: boolean;
+            auto_answer_enabled?: boolean;
+            auto_answer_delay_seconds?: number;
+            auto_answer_min_reviewed?: number;
+            auto_answer_min_accuracy?: number;
+        };
+        AITopicRecord: {
+            /** Format: uuid */
+            article_id: string;
+            article_number: number;
+            title: string;
+            reviewed: number;
+            accepted: number;
+            eligible: boolean;
+        };
+        AIUsageSummary: {
+            drafts: number;
+            calls: number;
+            input_tokens: number;
+            output_tokens: number;
+            sent_unchanged: number;
+            sent_edited: number;
+            discarded: number;
+            auto_sent: number;
+        };
+        AIWorkspace: {
+            settings: components["schemas"]["AISettings"];
+            topics: components["schemas"]["AITopicRecord"][];
+            usage: components["schemas"]["AIUsageSummary"];
+        };
         Message: {
             /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
             reply_number: number | null;
@@ -3303,6 +3525,11 @@ export interface components {
              * @description The agent request whose approval sent this message (a reply draft): `agent_token` drafted it, `author_agent_id` approved and sent it. Null otherwise.
              */
             agent_request_id: string | null;
+            /**
+             * Format: uuid
+             * @description The AI draft this reply was sent from. With `author_agent_id` null, auto-answer sent it on its own.
+             */
+            ai_draft_id: string | null;
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
@@ -3843,6 +4070,7 @@ export interface components {
     };
     parameters: {
         ID: string;
+        AIDraftID: string;
     };
     requestBodies: never;
     headers: never;
@@ -4473,6 +4701,11 @@ export interface operations {
                     cc?: components["schemas"]["CopiedAddresses"];
                     /** @description The newest reply number the sender had seen; 0 when there was none. */
                     seen_reply_number?: number;
+                    /**
+                     * Format: uuid
+                     * @description With `kind: outgoing`: the AI draft this reply was written from. The draft is marked used and how much the reply differs from it is recorded (`outcome`, `similarity`). 404 for a draft not on the conversation, 409 `ai_draft_state` for one that was discarded or already used.
+                     */
+                    ai_draft_id?: string;
                     /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
                     draft?: boolean;
                 };
@@ -4502,13 +4735,13 @@ export interface operations {
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`); nothing was stored or sent */
+            /** @description A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`), or one naming an AI draft that can no longer be used (`ai_draft_state`); nothing was stored or sent */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReplyConflict"];
+                    "application/json": components["schemas"]["ReplyConflict"] | components["schemas"]["Error"];
                 };
             };
             413: components["responses"]["AttachmentsTooLarge"];
@@ -4882,6 +5115,146 @@ export interface operations {
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getAIDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest draft, or null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraftState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    requestAIDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queued draft */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraftEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    discardAIDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: components["parameters"]["AIDraftID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The discarded draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraftEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    applyAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: components["parameters"]["AIDraftID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft and the conversation after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        draft: components["schemas"]["AIDraft"];
+                        conversation: components["schemas"]["Conversation"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelAutoAnswer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: components["parameters"]["AIDraftID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft, ready again */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraftEnvelope"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     getInboxActivity: {
@@ -5341,6 +5714,58 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["NameNotAllowed"];
+        };
+    };
+    getAISettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings, topics and usage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIWorkspace"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateAISettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AISettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description The settings after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AISettings"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
         };
     };
     updateWorkspaceSlug: {
