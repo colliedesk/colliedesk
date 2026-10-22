@@ -63,7 +63,7 @@ var (
 // 30 days); the knowledge base is send for the same reason (an article can be published, which reaches
 // customers, but every change is a version and a delete waits 30 days in the trash), and so are its
 // image uploads. Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
-// admin: workspace settings (the help center's on and off among them), the team, revoking invites, channels and sessions. An admin token acts
+// admin: workspace settings (the help center's on and off and its brand among them), the team, revoking invites, channels and sessions. An admin token acts
 // with its creator's role, so it reaches these only while that person is an admin, and the role still
 // decides the admin-only reads (billing is classified admin for that reason). The handlers file a
 // request for every tier when the change is risky for people: a change that grants, keeps or takes
@@ -134,6 +134,8 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/kb/media/{id}/details":                          tier(auth.ScopeRead),
 	"GET /api/v1/kb/media/{id}/thumbnail":                        tier(auth.ScopeRead),
 	"GET /api/v1/help-center":                                    tier(auth.ScopeRead),
+	"GET /api/v1/help-center/theme":                              tier(auth.ScopeRead),
+	"POST /api/v1/help-center/theme/check":                       tier(auth.ScopeRead),
 	"POST /api/v1/conversations":                                 tier(auth.ScopeSend),
 	"GET /api/v1/conversations/{id}":                             tier(auth.ScopeRead),
 	"PATCH /api/v1/conversations/{id}":                           tier(auth.ScopeDraft),
@@ -177,6 +179,7 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/auth/invites/{id}":                tier(auth.ScopeAdmin),
 	"PUT /api/v1/channels/web-form":                   tier(auth.ScopeAdmin),
 	"PUT /api/v1/help-center":                         tier(auth.ScopeAdmin),
+	"PUT /api/v1/help-center/theme":                   tier(auth.ScopeAdmin),
 	"PUT /api/v1/channels/email":                      tier(auth.ScopeAdmin),
 	"POST /api/v1/channels/email/domain-verification": tier(auth.ScopeAdmin),
 	"DELETE /api/v1/auth/sessions/{id}":               tier(auth.ScopeAdmin),

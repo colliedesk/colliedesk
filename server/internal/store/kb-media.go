@@ -70,9 +70,9 @@ func (s *Store) ListKBMedia(ctx context.Context, workspaceID string, filter doma
 	}
 	switch filter.Usage {
 	case "in_use":
-		where += ` AND ` + kbMediaInUse
+		where += ` AND (` + kbMediaInUse + ` OR ` + kbMediaNamedByHelpCenter + `)`
 	case "unused":
-		where += ` AND NOT ` + kbMediaInUse
+		where += ` AND NOT ` + kbMediaInUse + ` AND NOT ` + kbMediaNamedByHelpCenter
 	case "missing_alt":
 		where += ` AND m.alt=''`
 	}

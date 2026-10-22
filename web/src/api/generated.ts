@@ -1539,7 +1539,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets an agent request. */
+        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets an agent request. */
         post: operations["purgeKBMedia"];
         delete?: never;
         options?: never;
@@ -1772,6 +1772,41 @@ export interface paths {
         /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Admins only, and an `admin` agent token. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. */
         put: operations["putHelpCenter"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/theme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The brand of the public help center: logo, favicon, website and contact links, colors and fonts, with the contrast `checks` of the colors it shows. A null color or font is the default. */
+        get: operations["getHelpCenterTheme"];
+        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). Admins only, and an `admin` agent token. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. A save changes `content_version`, so every page is new. */
+        put: operations["putHelpCenterTheme"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/theme/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Check a candidate theme without saving it: the same checks as PUT. Contrast is answered with 200 and `ok` false, so an editor can show every pair while a person picks colors; a theme of the wrong shape or a logo that is not in the library is 422 as on PUT. */
+        post: operations["checkHelpCenterTheme"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2747,6 +2782,93 @@ export interface components {
              */
             url: string;
         };
+        /** @description Each color is #rrggbb, or null for the default. Any color set makes the pages light only. */
+        HelpCenterThemeColors: {
+            primary?: components["schemas"]["ThemeColor"];
+            header?: components["schemas"]["ThemeColor"];
+            header_text?: components["schemas"]["ThemeColor"];
+            background?: components["schemas"]["ThemeColor"];
+            text?: components["schemas"]["ThemeColor"];
+            link?: components["schemas"]["ThemeColor"];
+            footer?: components["schemas"]["ThemeColor"];
+        };
+        /** @description A color as #rrggbb; answers are lowercase. */
+        ThemeColor: string | null;
+        /**
+         * @description A font stack of the reader's own system: nothing is downloaded. Null is the default (system-sans for text, classic-serif for headings).
+         * @enum {string|null}
+         */
+        ThemeFont: "system-sans" | "humanist-sans" | "geometric-sans" | "classic-serif" | "transitional-serif" | "rounded-sans" | "mono" | null;
+        HelpCenterThemeInput: {
+            /**
+             * Format: uuid
+             * @description An image of the media library shown at the top of every page.
+             */
+            logo_media_id?: string | null;
+            /**
+             * Format: uuid
+             * @description An image of the media library shown as the browser tab icon.
+             */
+            favicon_media_id?: string | null;
+            /** @description What the logo says, for screen readers; empty uses the help center title. */
+            logo_alt?: string | null;
+            /** @description Your website, an absolute http or https address, linked from the top of every page. */
+            linkback_url?: string | null;
+            /** @description Where readers contact you: an https address or mailto:<address>. */
+            contact_url?: string | null;
+            /** @description A phone number shown in the footer: digits, spaces and + - ( ). */
+            contact_phone?: string | null;
+            colors?: components["schemas"]["HelpCenterThemeColors"];
+            body_font?: components["schemas"]["ThemeFont"];
+            heading_font?: components["schemas"]["ThemeFont"];
+        };
+        HelpCenterTheme: {
+            /** Format: uuid */
+            logo_media_id: string | null;
+            /** Format: uuid */
+            favicon_media_id: string | null;
+            logo_alt: string;
+            linkback_url: string | null;
+            contact_url: string | null;
+            contact_phone: string | null;
+            colors: WithRequired<components["schemas"]["HelpCenterThemeColors"], "primary" | "header" | "header_text" | "background" | "text" | "link" | "footer">;
+            body_font: components["schemas"]["ThemeFont"];
+            heading_font: components["schemas"]["ThemeFont"];
+            content_version: number;
+            /**
+             * Format: date-time
+             * @description Null until the help center settings were first changed.
+             */
+            updated_at: string | null;
+            /** @description The contrast of every color pair the pages show, with defaults filled in. */
+            checks: components["schemas"]["ThemeContrastCheck"][];
+        };
+        HelpCenterThemeChecks: {
+            /** @description True when every pair passes and the theme can be saved. */
+            ok: boolean;
+            checks: components["schemas"]["ThemeContrastCheck"][];
+            /** @description One message per failing color, keyed like colors.text; empty when ok. */
+            fields: {
+                [key: string]: string;
+            };
+        };
+        ThemeContrastCheck: {
+            /**
+             * @description Which colors meet. ink_on_primary is the button text (white or black, the better one) on the primary color; footer_ink_on_footer is the text or header text, the better one, on the footer.
+             * @enum {string}
+             */
+            pair: "text_on_background" | "link_on_background" | "header_text_on_header" | "ink_on_primary" | "footer_ink_on_footer" | "primary_on_background";
+            /** @description The color to change when it fails, such as colors.text. */
+            field: string;
+            foreground: string;
+            background: string;
+            /** @description WCAG 2 contrast ratio, to two decimals; 4.5 means 4.5:1. */
+            ratio: number;
+            required: number;
+            passes: boolean;
+            /** @description Null when it passes: else the nearest color for field that passes every pair of that field. */
+            suggestion: string | null;
+        };
         SavedReplyText: {
             title: string;
             body: string;
@@ -3156,6 +3278,8 @@ export interface components {
                 reason?: "contact_address_differs";
                 /** @description Only with reason contact_address_differs: the address the reply would go to. */
                 reply_to?: string;
+                /** @description Only on contrast_too_low: every color pair of the theme, passing or not. */
+                checks?: components["schemas"]["ThemeContrastCheck"][];
                 /** @description Only on contact_exists: the contact to use instead of adding one. */
                 contact?: components["schemas"]["Contact"];
             };
@@ -3310,6 +3434,15 @@ export interface components {
                 [name: string]: unknown;
             };
             content?: never;
+        };
+        /** @description The theme was not saved. `error.code` is `validation_failed` (a field of the wrong shape), `media_not_found` (a logo or favicon that is not an image of the library outside the trash) or `contrast_too_low` (a color pair below WCAG AA; `error.checks` lists every pair). `error.fields` holds one message per field, such as `colors.text`. */
+        ThemeInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
         };
         /** @description Invalid request */
         Error400: {
@@ -6627,6 +6760,7 @@ export interface operations {
             query?: {
                 kind?: "image" | "video";
                 q?: string;
+                /** @description in_use: a live article shows it, or the help center as its logo or favicon; unused: neither. */
                 usage?: "in_use" | "unused" | "missing_alt";
                 sort?: "newest" | "oldest" | "name" | "largest";
                 /** @description The next_cursor of the previous page. */
@@ -7457,4 +7591,85 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getHelpCenterTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The help center theme */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterTheme"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenterTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterThemeInput"];
+            };
+        };
+        responses: {
+            /** @description The saved theme */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterTheme"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    checkHelpCenterTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterThemeInput"];
+            };
+        };
+        responses: {
+            /** @description The checks of the candidate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterThemeChecks"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ThemeInvalid"];
+        };
+    };
 }
+type WithRequired<T, K extends keyof T> = T & {
+    [P in K]-?: T[P];
+};

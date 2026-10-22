@@ -30,6 +30,7 @@ var settingsFields = map[string][]string{
 	"POST /api/v1/channels/email/domain-verification": {},
 	"DELETE /api/v1/auth/sessions/{id}":               {},
 	"GET /api/v1/billing":                             {},
+	"PUT /api/v1/help-center/theme":                   themeFields,
 }
 
 // settingsBodyProblem says why body cannot be filed for a settings route: it is not a JSON object, or

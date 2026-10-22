@@ -221,6 +221,11 @@ The public help center is in `help-center.md`.
   give the app role all four rights, so `GRANT SELECT, INSERT` alone does not make a table append-only.
   The migration revokes all rights on `kb_article_versions` first; `TestKnowledgeBaseVersionsAreAppendOnlyForTheAppRole`
   pins it. (`saved_reply_versions` was created with only the grant, so the app role can still change it.)
+- **"Unused" is more than "no article".** The help center's logo and favicon (`help_centers.logo_media_id`,
+  `favicon_media_id`) are library items no article links. `kbMediaNamedByHelpCenter` is part of the
+  purge rule (`kbMediaPurgeable`), the `unused` and `in_use` filters, trash-unused and the admin's
+  purge; a new query that decides an item is unused must add it, or it deletes a logo. The foreign
+  keys clear the theme's column (`ON DELETE SET NULL (col)`) if a row goes anyway.
 - **A generated column cannot be copied in.** `restore-workspace.sh` skips columns with
   `attgenerated` set; the database computes `kb_articles.search` again.
 - **One file can back several rows.** Storage keys are content addresses, so an image and an attachment

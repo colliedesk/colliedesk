@@ -261,6 +261,32 @@ it on or off with **Publish the help center** and set its **Title** (empty uses 
 Turning it off takes every page offline at once; turning it on again publishes the articles marked
 published.
 
+### Brand
+
+An admin sets the help center's brand through the API (`PUT /api/v1/help-center/theme`) or an AI
+agent (`colliedesk_help_center_theme_update`); the pages show it in a later release. A brand has:
+
+- **Logo** and **favicon**: images of the [media library](#media-library), outside its trash, with
+  the logo's text for screen readers (empty uses the title). An image the help center uses is kept:
+  it never counts as **Not used** and is never deleted on its own. It can still go to the trash; it
+  is then not shown, and restoring it brings it back. **Delete forever** leaves it in the trash
+  until the brand no longer names it.
+- **Website link** (an `http` or `https` address) and **contact**: an `https` address or
+  `mailto:<address>`, and a phone number (digits, spaces and `+ - ( )`).
+- **Colors**: primary, header, header text, background, text, links and footer, each `#rrggbb`. Any
+  color set makes the help center light only.
+- **Fonts** for text and headings, from fonts already on the reader's device, so nothing is
+  downloaded: `system-sans` (the default text font), `humanist-sans`, `geometric-sans`,
+  `classic-serif` (the default heading font), `transitional-serif`, `rounded-sans`, `mono`.
+
+Every color pair must be readable (WCAG AA): 4.5:1 for text, links, header text, footer text and
+the button text on the primary color (white or black, whichever reads better), and 3:1 for the
+primary color against the background. A brand that fails is not saved; the answer names each color
+with its ratio and the nearest color that passes, for example "Text on the background is 2.85:1; it
+needs 4.5:1. #767676 passes." `POST /api/v1/help-center/theme/check` (`colliedesk_help_center_theme_check`)
+runs the same checks without saving. A field left out of a save goes back to its default, so send
+the whole brand. Every save changes `content_version`.
+
 ## Public help center
 
 The help center is a public website made from your published articles. Customers read it without
@@ -343,7 +369,8 @@ unpublished or deleted, or while the help center is off.
 
 An AI agent connected through [MCP](mcp.md), or the API with an agent token, can search and read
 articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, publish, delete and
-restore them, manage collections, upload and read images, and read the help center settings.
+restore them, manage collections, upload and read images, and read the help center settings and
+brand (`colliedesk_help_center_theme_get`, and `colliedesk_help_center_theme_check` to try one).
 Every article an agent reads or finds carries its public address in `url` (also in the API), so an
 agent links an article in a reply the same way a person does: the title and the address on two
 lines, from a search with `status` published while the help center is on. In
@@ -356,7 +383,7 @@ move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's. An agent wit
 a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets its poster
 (`colliedesk_kb_video_poster_set`); a lower tier cannot upload files.
 
-| Token tier | Read, search, history, trash | Write, publish, delete, restore, upload images | Turn the help center on or off |
+| Token tier | Read, search, history, trash | Write, publish, delete, restore, upload images | Turn the help center on or off, set its brand |
 |---|---|---|---|
 | `admin` | Yes | Yes, at once | Yes |
 | `send` | Yes | Yes, at once. The version names the token | Proposed for an admin to approve |

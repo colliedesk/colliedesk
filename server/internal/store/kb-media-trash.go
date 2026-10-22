@@ -45,7 +45,12 @@ func lockKBMedia(ctx context.Context, tx pgx.Tx, workspaceID string, ids []strin
 
 // kbMediaIDsInUse returns which of ids a live article's current text names.
 func kbMediaIDsInUse(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string) (map[string]bool, error) {
-	rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.id=ANY($2::uuid[]) AND `+kbMediaInUse, workspaceID, ids)
+	return kbMediaIDsWhere(ctx, tx, workspaceID, ids, kbMediaInUse)
+}
+
+// kbMediaIDsWhere returns which of ids meet condition, an SQL rule on library rows aliased m.
+func kbMediaIDsWhere(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string, condition string) (map[string]bool, error) {
+	rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.id=ANY($2::uuid[]) AND `+condition, workspaceID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +172,7 @@ func (s *Store) TrashUnusedKBMedia(ctx context.Context, workspaceID string, acto
 	}
 	out, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (answer, error) {
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NULL AND m.created_at<$2
-				AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` ORDER BY m.id LIMIT `+strconv.Itoa(domain.MaxKBMediaUnusedBatch)+` FOR UPDATE OF m SKIP LOCKED`,
+				AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` ORDER BY m.id LIMIT `+strconv.Itoa(domain.MaxKBMediaUnusedBatch)+` FOR UPDATE OF m SKIP LOCKED`,
 			workspaceID, before, includeKept)
 		if err != nil {
 			return answer{}, err
@@ -208,7 +213,7 @@ func (s *Store) TrashUnusedKBMedia(ctx context.Context, workspaceID string, acto
 func (s *Store) UnusedKBMediaIDs(ctx context.Context, workspaceID string, includeKept bool, before time.Time, limit int) ([]string, error) {
 	ids, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]string, error) {
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NULL AND m.created_at<$2
-			AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` ORDER BY m.size DESC, m.id LIMIT $4`, workspaceID, before, includeKept, limit)
+			AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` ORDER BY m.size DESC, m.id LIMIT $4`, workspaceID, before, includeKept, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -296,6 +301,10 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 		if err != nil {
 			return answer{}, err
 		}
+		named, err := kbMediaIDsWhere(ctx, tx, workspaceID, ids, kbMediaNamedByHelpCenter)
+		if err != nil {
+			return answer{}, err
+		}
 		var gone []string
 		results := make([]domain.KBMediaResult, len(ids))
 		for i, id := range ids {
@@ -306,6 +315,9 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 				status = domain.KBMediaNotFound
 			case !inTrash || inUse[id]:
 				status = domain.KBMediaNotInTrash
+			case named[id]:
+				// The help center's logo or favicon waits in the trash until the theme lets go of it.
+				status = domain.KBMediaInUse
 			default:
 				gone = append(gone, id)
 			}
