@@ -100,8 +100,9 @@ test('a row marks who else has the conversation open, and says in words who is w
   const marked = screen.getByRole('button', { name: /example request/i });
   expect(marked).toHaveAccessibleName(/Open now: Lan Pham \(writing a reply\), Ben via Claude Code/);
   expect(within(marked).getByText('Replying')).toBeInTheDocument();
-  expect(marked.querySelector('.viewer-stack')).toHaveAttribute('data-tip', 'Lan Pham is writing a reply · Ben via Claude Code is viewing');
+  expect(marked.querySelector('.viewer-stack')).toHaveAttribute('data-tip', 'Lan Pham is writing a reply\nBen via Claude Code is viewing');
   expect(marked.querySelectorAll('.viewer-stack .avatar')).toHaveLength(2);
+  expect(marked.querySelectorAll('.viewer-stack .avatar-agent')).toHaveLength(1);
   const unmarked = screen.getByRole('button', { name: /other request/i });
   expect(unmarked).not.toHaveAccessibleName(/Open now/);
   expect(unmarked.querySelector('.viewer-stack')).toBeNull();
@@ -117,4 +118,16 @@ test('many viewers show three avatars and a count', () => {
   expect(marked.querySelectorAll('.viewer-stack .avatar')).toHaveLength(3);
   expect(within(marked).getByText('+2')).toBeInTheDocument();
   expect(within(marked).queryByText('Replying')).toBeNull();
+});
+
+test('an AI agent with several tokens is one tile of its own shape, apart from the same person in a tab', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const ben = { agent_id: '55555555-5555-4555-8555-555555555555', name: 'Ben', writing: false, writing_since: null, edited_at: null, agent_token: null };
+  const token = (id: string, label: string) => ({ ...ben, agent_token: { id, label, scope: 'read' as const, agent_name: 'Ben' } });
+  const viewers = [ben, token('66666666-6666-4666-8666-666666666661', 'Claude Code'), token('66666666-6666-4666-8666-666666666662', 'Codex')];
+  render(<ConversationList items={[row('2026-10-15T09:05:00Z')]} timezone="UTC" page={1} hasNextPage={false} viewers={new Map([['11111111-1111-4111-8111-111111111111', viewers]])} />);
+  const marked = screen.getByRole('button', { name: /example request/i });
+  expect(marked.querySelectorAll('.viewer-stack .avatar')).toHaveLength(2);
+  expect(marked.querySelectorAll('.viewer-stack .avatar-agent')).toHaveLength(1);
+  expect(marked.querySelector('.viewer-stack')).toHaveAttribute('data-tip', 'Ben is viewing\nBen via Claude Code is viewing\nBen via Codex is viewing');
 });

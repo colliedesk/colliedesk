@@ -62,14 +62,16 @@ function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boo
 const visibleTags = 2;
 const visibleViewers = 3;
 
-// ViewerStack marks a row with the initials of the others who have it open, and a word when one of them
-// is writing a reply. The row's accessible name carries the same in words.
+// ViewerStack marks a row with the initials of the others who have it open (an AI agent as its own
+// shape, once per person however many tokens), and a word when one of them is writing a reply. The
+// row's accessible name carries the same in words; the tip lists one name per line.
 function ViewerStack({ viewers }: { viewers: ConversationViewer[] }) {
-  const tip = viewers.map((viewer) => messages.viewerTip(messages.viewerName(viewer), viewer.writing)).join(' · ');
+  const tip = viewers.map((viewer) => messages.viewerTip(messages.viewerName(viewer), viewer.writing)).join('\n');
+  const faces = [...new Map(viewers.map((viewer) => [`${viewer.agent_id}:${viewer.agent_token ? 'agent' : 'person'}`, viewer])).values()];
   return <>
     <span className="viewer-stack" data-tip={tip} aria-hidden="true">
-      {viewers.slice(0, visibleViewers).map((viewer) => <Avatar key={`${viewer.agent_id}:${viewer.agent_token?.id ?? ''}`} name={viewer.name} size="xs" />)}
-      {viewers.length > visibleViewers && <span className="viewer-more">+{viewers.length - visibleViewers}</span>}
+      {faces.slice(0, visibleViewers).map((viewer) => <Avatar key={`${viewer.agent_id}:${viewer.agent_token ? 'agent' : 'person'}`} name={viewer.name} size="xs" agent={viewer.agent_token !== null} />)}
+      {faces.length > visibleViewers && <span className="viewer-more">+{faces.length - visibleViewers}</span>}
     </span>
     {viewers.some((viewer) => viewer.writing) && <span className="badge badge-replying" aria-hidden="true">{messages.replying}</span>}
     <span className="sr-only">{messages.openNow(viewers.map((viewer) => (viewer.writing ? messages.writingAReply(messages.viewerName(viewer)) : messages.viewerName(viewer))))}</span>

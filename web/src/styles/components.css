@@ -95,7 +95,7 @@
 @media (prefers-reduced-motion: reduce) { .chip-remove, .view-open { transition: none; } }
 
 /* Conversation rows. */
-.conversation-scroll { min-height: 0; overflow-y: auto; }
+.conversation-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .group-label {
   position: sticky; top: 0; z-index: 1; background: var(--surface-1); padding: var(--space-3) var(--space-4) var(--space-1);
   color: var(--text-3); font-size: var(--fs-label); font-weight: 600;
@@ -110,7 +110,7 @@
 .conversation-row:focus-visible { outline-offset: -2px; }
 .conversation-subject { overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-row time { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
-.conversation-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.conversation-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); min-height: 20px; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 .get-started { display: grid; gap: var(--space-2); padding: var(--space-6) var(--space-4); }
 .get-started h2 { font-size: 14px; font-weight: 600; }
@@ -363,7 +363,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 }
 .avatar-md { width: 32px; height: 32px; font-size: var(--fs-label); }
 .avatar-sm { width: 24px; height: 24px; font-size: 10px; }
-.avatar-xs { width: 20px; height: 20px; font-size: 9px; }
+.avatar-xs { width: 18px; height: 18px; font-size: 8px; }
+/* An AI agent working through a token: a square tile with a dashed ring, never mistaken for a person. */
+.avatar-agent { border-radius: var(--radius-sm); outline: 1px dashed var(--text-3); outline-offset: 1px; }
 
 /* Windows High Contrast drops backgrounds and shadows; keep selection visible with system colours. */
 @media (forced-colors: active) {
@@ -532,11 +534,14 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .badge-request-failed, .badge-request-rejected { background: var(--danger-soft); color: var(--danger); }
 .badge-draft { background: var(--note-bg); color: var(--note-text); border: 1px solid var(--note-line); }
 /* Who else has a conversation open: overlapping initials, and a word (not only a colour) for a reply being written. */
-.viewer-stack { display: inline-flex; align-items: center; gap: var(--space-1); }
+.viewer-stack { display: inline-flex; align-items: center; gap: var(--space-1); height: 20px; }
 .viewer-stack .avatar { box-shadow: 0 0 0 2px var(--surface-1); }
-.viewer-stack .avatar + .avatar { margin-left: -6px; }
-.viewer-more { color: var(--text-2); font-size: var(--fs-small); }
-.badge-replying { background: var(--accent-soft); color: var(--accent-text); }
+.viewer-stack .avatar + .avatar { margin-left: -5px; }
+.viewer-more { color: var(--text-2); font-size: var(--fs-label); line-height: 1; }
+/* One name per line, kept inside the list; out of the layout until shown, so it never widens the list. */
+.viewer-stack[data-tip]::after { left: 0; translate: none; width: max-content; max-width: min(15rem, 60vw); white-space: pre-line; text-align: left; }
+.viewer-stack[data-tip]:not(:hover)::after { display: none; }
+.badge-replying { background: var(--accent-soft); color: var(--accent-text); padding: 0 var(--space-1); font-size: var(--fs-label); line-height: 18px; }
 /* The marker has its own tip: the row's timestamp tip stays hidden while the pointer is on it. */
 .conversation-row:has(.viewer-stack:hover)::after { opacity: 0; }
 .reply-draft { display: grid; gap: var(--space-2); margin: 0 var(--space-6) var(--space-2); border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3); }
