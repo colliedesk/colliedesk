@@ -20,7 +20,8 @@ const text = {
   replying: 'Replying',
   draftOpen: 'Draft open',
   more: (count: number) => `Show ${count} more`,
-  conflictTitle: 'Someone replied while you were writing. Nothing was sent; your text is still here.',
+  conflictTitle: (count: number) => `Someone replied while you were writing (${count === 1 ? '1 new reply' : `${count} new replies`}). Nothing was sent; your text is still here.`,
+  newReplies: 'New replies',
   teammate: 'A teammate',
   imported: (system: string) => `Imported from ${system}`,
   sendAnyway: 'Send anyway',
@@ -119,19 +120,21 @@ export function ConversationViewers({ viewers, timezone }: { viewers: Conversati
 // from), then Send anyway or Edit reply. Both count those replies as read, so they are asked about once.
 export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { replies: Message[]; timezone: string; onSendAnyway: () => void; onEdit: () => void }) {
   return (
-    <div role="alert" className="reply-conflict">
-      <p className="reply-conflict-title">{text.conflictTitle}</p>
-      <ul>
+    <section className="reply-conflict" aria-label={text.newReplies}>
+      {/* Only the fact is read out at once; the replies are there to read, not to be read aloud whole. */}
+      <p role="alert" className="reply-conflict-title">{text.conflictTitle(replies.length)}</p>
+      <ul tabIndex={0} aria-label={text.newReplies}>
         {replies.map((reply) => <li key={reply.id}>
           <p className="reply-conflict-by">{reply.author_name ?? text.teammate} · <time dateTime={reply.created_at}>{formatDate(reply.created_at, timezone)}</time>
             {reply.origin && <> · {text.imported(reply.origin.system)}</>}</p>
           <p className="reply-conflict-text">{reply.body}</p>
         </li>)}
       </ul>
+      {/* Editing is the safe default; sending anyway answers the customer a second time. */}
       <div className="reply-conflict-actions">
-        <button type="button" className="primary-action" onClick={onSendAnyway}>{text.sendAnyway}</button>
-        <button type="button" onClick={onEdit}>{text.editReply}</button>
+        <button type="button" className="primary-action" onClick={onEdit}>{text.editReply}</button>
+        <button type="button" className="send-anyway" onClick={onSendAnyway}>{text.sendAnyway}</button>
       </div>
-    </div>
+    </section>
   );
 }

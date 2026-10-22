@@ -556,6 +556,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .reply-conflict-by { color: var(--text-2); font-size: var(--fs-small); }
 .reply-conflict-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .reply-conflict-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.reply-conflict .send-anyway { border-color: var(--danger); color: var(--danger); }
+@media (pointer: coarse) { .reply-conflict-actions button { min-height: var(--touch); } }
 .badge-draft-open { background: var(--surface-3); color: var(--text-2); padding: 0 var(--space-1); font-size: var(--fs-label); line-height: 18px; }
 .reply-draft { display: grid; gap: var(--space-2); margin: 0 var(--space-6) var(--space-2); border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3); }
 .reply-draft-by { color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }

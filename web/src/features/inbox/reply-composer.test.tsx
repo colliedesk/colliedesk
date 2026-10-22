@@ -654,13 +654,14 @@ test('someone replied meanwhile: the text stays, their reply shows, and Send any
   const body = screen.getByLabelText('Message body');
   fireEvent.change(body, { target: { value: 'Refund on its way' } });
   fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
-  const warning = await screen.findByRole('alert');
-  expect(warning).toHaveTextContent('Someone replied while you were writing');
+  expect(await screen.findByRole('alert')).toHaveTextContent('Someone replied while you were writing (1 new reply). Nothing was sent');
+  const warning = screen.getByRole('region', { name: 'New replies' });
   expect(warning).toHaveTextContent('Lan');
   expect(warning).toHaveTextContent('Your refund left today.');
+  expect(within(warning).getByRole('list', { name: 'New replies' })).toHaveAttribute('tabindex', '0');
   expect(body).toHaveValue('Refund on its way');
   fireEvent.click(within(warning).getByRole('button', { name: 'Edit reply' }));
-  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'New replies' })).toBeNull();
   expect(body).toHaveFocus();
   fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
   await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('outgoing', 'Refund on its way', [], [], 3));
@@ -674,7 +675,8 @@ test('Send anyway sends the same text with the newest reply number', async () =>
   render(<ReplyComposer onSubmit={onSubmit} latestReplyNumber={2} timezone="UTC" />);
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Refund on its way' } });
   fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
-  const warning = await screen.findByRole('alert');
+  await screen.findByRole('alert');
+  const warning = screen.getByRole('region', { name: 'New replies' });
   // An imported reply keeps its own time and says where it came from.
   expect(warning).toHaveTextContent('Imported from freshdesk');
   expect(warning).toHaveTextContent('Oct 22, 9:00 AM');

@@ -38,8 +38,8 @@ test('two people on one conversation: who is writing, a warning before a second 
   await lan.getByRole('button', { name: 'Send reply' }).click();
   await expect(lan.getByLabel('Message body')).toHaveValue('');
   await bao.getByRole('button', { name: 'Send reply' }).click();
-  const warning = bao.getByRole('alert').filter({ hasText: 'Someone replied while you were writing' });
-  await expect(warning).toBeVisible();
+  await expect(bao.getByRole('alert').filter({ hasText: 'Someone replied while you were writing' })).toBeVisible();
+  const warning = bao.getByRole('region', { name: 'New replies' });
   await expect(warning).toContainText('Your refund left today.');
   await expect(bao.getByLabel('Message body')).toHaveValue('We are checking your refund.');
   await warning.getByRole('button', { name: 'Send anyway' }).click();
