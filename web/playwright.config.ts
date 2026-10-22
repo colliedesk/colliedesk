@@ -30,9 +30,6 @@ function server(origin: string, env: Record<string, string> = {}, tags = '') {
   };
 }
 
-// Reaching the fake Freshdesk and a key ring that seals its API key, as a fresh install has one.
-const inAppImport = { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=' };
-
 export default defineConfig({
   testDir: './e2e',
   outputDir: join(scratchDir, 'results'),
@@ -45,13 +42,15 @@ export default defineConfig({
   webServer: [
     // The main server also imports in the app from the fake Freshdesk (-tags e2e lets it reach a loopback
     // address), with a key ring as a fresh install has one.
-    server(servers.main, inAppImport, 'e2e'),
+    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=' }, 'e2e'),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any' }),
-    // The hosted cloud as Colliedesk Cloud runs it, for the golden path: sign-up, the in-app import and
-    // replies by SMTP, sent from MAIL_FROM_DOMAIN while the team's own domain is unverified.
+    // The cloud server also imports in the app and sends replies by SMTP, for the golden path. Every server
+    // with a relay runs an outbox worker that sends any workspace's queued reply, and the worker picks the
+    // From line, so it uses the mail server's policy: either worker sends a reply the same way. Its key
+    // ring has its own key id, so the main server never runs a cloud import (and the other way round).
     server(servers.cloud, {
-      ...inAppImport,
-      SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', MAIL_FROM_DOMAIN: 'mail.colliedesk.example',
+      ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'c1:ZTJlLWNsb3VkLWltcG9ydC1rZXktMzItYnl0ZXMhISE=',
+      SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any',
       CLOUD_AUTH_ISSUER: identity.issuer, CLOUD_AUTH_JWKS_URL: jwksURL,
       CLOUD_AUTH_AUTHORIZED_PARTIES: identity.authorizedParty, CLERK_PUBLISHABLE_KEY: identity.publishableKey,
       // The hosted cloud: billing on (so trials, the lock and sign-up exist) with the settings sign-up refuses to start without.

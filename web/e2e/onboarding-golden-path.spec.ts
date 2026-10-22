@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { servers, uniqueSuffix } from './support/cli';
-import { FakeFreshdesk, fixture } from './support/fake-freshdesk';
+import { FakeFreshdesk, fixture, requesterEmail, ticketSubject } from './support/fake-freshdesk';
 import { IdentityProvider } from './support/identity-provider';
 import { waitForMail } from './support/mailpit';
 import { signUp } from './support/signup';
@@ -44,14 +44,15 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     expect(imports.items.filter((job) => job.kind === 'import').map((job) => job.status)).toEqual(['OK']);
 
     // Connect the support address: replies now go out by email.
+    const support = `support-${suffix}@acme.example`;
     await page.getByRole('link', { name: 'Settings' }).click();
-    await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@acme.example`);
+    await page.getByRole('textbox', { name: 'Support address' }).fill(support);
     await page.getByRole('button', { name: 'Save support address' }).click();
 
-    // Answer the first conversation of the inbox: a customer who wrote in Freshdesk gets the reply by SMTP.
-    const first = await (await page.request.get(`${baseURL}/api/v1/conversations?page_size=1`)).json() as { items: Array<{ subject: string; contact_id: string }> };
-    const { subject, contact_id: contactID } = first.items[0];
-    const contact = await (await page.request.get(`${baseURL}/api/v1/contacts/${contactID}`)).json() as { email: string };
+    // Answer a first conversation: a customer who wrote in Freshdesk (ticket 296, open, an active contact)
+    // gets the reply by SMTP from the support address.
+    const subject = ticketSubject(296);
+    const customer = requesterEmail(296)!;
     await page.getByRole('link', { name: 'Inbox' }).click();
     await page.getByRole('button', { name: new RegExp(subject) }).click();
     const reply = `Thanks for your patience, this is Golden Desk (${suffix}).`;
@@ -59,7 +60,8 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     await page.getByRole('button', { name: 'Send reply' }).click();
     await expect(page.getByText('Sent', { exact: true })).toBeVisible({ timeout: 30_000 });
 
-    const delivered = await waitForMail(contact.email, 30_000, suffix);
+    const delivered = await waitForMail(customer, 30_000, suffix);
+    expect(delivered.from).toBe(support);
     expect(delivered.subject).toBe(`Re: ${subject}`);
     expect(delivered.text).toContain(reply);
   } finally {

@@ -38,6 +38,11 @@ const epoch = Date.UTC(2024, 0, 1, 0, 0, 0);
 const iso = (ms: number) => new Date(ms).toISOString().replace('.000Z', 'Z');
 export const ticketCreatedAt = (id: number) => iso(epoch + id * 3_600_000);
 const topics = ['refund request', 'shipping delay', 'login problem', 'invoice copy'];
+export const ticketSubject = (id: number) => id === fixture.searchableTicket ? `Fixture ticket ${id}: parcel stuck in ${fixture.searchableWord}` : `Fixture ticket ${id}: ${topics[id % 4]}`;
+// The contact (index from 0) who asked ticket id, and their address; contact 1120 has none.
+const requesterIndex = (id: number) => (id - 1) % fixture.contacts;
+export const contactEmail = (index: number) => index === fixture.contacts - 1 ? null : `customer${index + 1}@shop${index % 7}.example`;
+export const requesterEmail = (id: number) => contactEmail(requesterIndex(id));
 
 interface Options { apiKey: string; agentEmail: string; archiveForbidden?: boolean; cannedUnavailable?: boolean; knowledgeBase?: boolean; fixed?: boolean }
 
@@ -228,7 +233,7 @@ export class FakeFreshdesk {
     return Array.from({ length: fixture.contacts }, (_, index) => {
       const id = 1001 + index;
       return {
-        id, name: `Customer ${index + 1}`, email: id === 1120 ? null : `customer${index + 1}@shop${index % 7}.example`,
+        id, name: `Customer ${index + 1}`, email: contactEmail(index),
         phone: id === 1120 ? '+1 555 0100' : null, mobile: null, company_id: [501, 502, null][index % 3], active: index % 10 !== 9,
         other_emails: [], created_at: iso(epoch - 86_400_000 + index * 60_000), updated_at: iso(epoch - 86_400_000 + index * 60_000),
       };
@@ -239,10 +244,10 @@ export class FakeFreshdesk {
 
   private ticket(id: number, full: boolean) {
     const created = epoch + id * 3_600_000;
-    const subject = id === fixture.searchableTicket ? `Fixture ticket ${id}: parcel stuck in ${fixture.searchableWord}` : `Fixture ticket ${id}: ${topics[id % 4]}`;
+    const subject = ticketSubject(id);
     const ticket: Record<string, unknown> = {
       id, subject, status: [2, 3, 4, 5][id % 4], priority: [1, 2, 3, 4][id % 4], source: 1, type: id % 2 ? 'Question' : 'Problem',
-      spam: false, deleted: false, requester_id: 1001 + ((id - 1) % fixture.contacts), responder_id: id % 4 === 0 ? 101 : null,
+      spam: false, deleted: false, requester_id: 1001 + requesterIndex(id), responder_id: id % 4 === 0 ? 101 : null,
       company_id: null, group_id: null, tags: [...(id % 3 === 0 ? ['billing'] : []), ...(id % 3 === 1 ? ['shipping', 'vip'] : [])],
       due_by: null, fr_due_by: null, cc_emails: [], fwd_emails: [], to_emails: null,
       created_at: iso(created), updated_at: iso(created + 30 * 60_000),
