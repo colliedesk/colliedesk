@@ -6,7 +6,7 @@ reaches the customer until a person sends it, unless you turn on auto-answer for
 have proved right.
 
 The server needs a model provider. On your own server the administrator sets one up
-([self-host: AI drafts](../self-host/ai.md)); without one the AI controls are hidden and nothing is sent anywhere.
+([self-host: AI drafts](../self-host/environment-variables.md#ai-drafts)); without one the AI controls are hidden and nothing is sent anywhere.
 
 ## The draft
 
@@ -63,7 +63,7 @@ the article that answers it. On emails the knowledge base answers, 92 % of the d
 knowledge base" were correct as written and none was wrong (79 drafts over two independent sets);
 every email that needed a person was handed over. About a third to a half of the answerable emails got
 that rating; the rest got "Check before sending". Your own numbers are in Settings once your team
-reviews drafts. The method is in [the internals](../internals/ai-drafts.md#measuring).
+reviews drafts. The method is in [the internals](https://github.com/colliedesk/colliedesk/blob/main/docs/internals/ai-drafts.md#measuring).
 
 ## AI agents (MCP)
 

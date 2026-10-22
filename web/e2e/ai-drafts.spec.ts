@@ -5,7 +5,7 @@ import { FakeAI } from './support/fake-ai';
 
 // docs/user/ai-drafts.md: a customer's email gets a draft from the knowledge base, shown with its
 // source, and a person sends it. The model is a local stand-in (support/fake-ai.ts).
-const baseURL = servers.main;
+const baseURL = servers.ai;
 const answer = 'Open Settings, then Billing, and choose Export invoices.';
 const ai = new FakeAI(answer);
 test.beforeAll(() => ai.start());
