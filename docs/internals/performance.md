@@ -101,6 +101,13 @@ counts the statements). A name no cache knows is charged to the client first (10
 random names from one client make at most 10 queries (`TestRandomHostNamesCostABoundedNumberOfLookups`),
 and a domain write forgets only its own names (`TestDomainWritesForgetOnlyTheirOwnHostNames`). The gate adds about 0.5 s to the timed shard once the fixture is seeded.
 
+`TestHelpCenterOldFreshdeskAddressesLatencyBudget` adds to the same fixture the import ledger a real
+migration leaves (a `kb_article` row per article and 25,000 ticket rows in each workspace, by
+`generate_series`) and times old Freshdesk addresses 20 times each: a mapped article (301), a draft
+and an unknown id (302 to the search) and a folder (301, which also reads the collection tree), all
+under 100 ms (3–7 ms p95 locally). It checks with `EXPLAIN` that the lookup uses
+`import_items_source_id_idx`. Seeding takes about 0.9 s, the visits about 0.3 s.
+
 `TestHelpCenterHostileArticlesLatencyBudget` holds an article page to the same 100 ms when its
 100,000 characters are built to be slow to parse: one line of quote or list markers (`>`, `> `,
 `1. `, `+ `, mixed), 1,500 quoted players, same-named ATX and setext headings, open links and
