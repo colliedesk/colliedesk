@@ -96,6 +96,16 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 	if err != nil {
 		return nil, fmt.Errorf("read imports: %w", err)
 	}
+	// Time to first result: from sign-up to the first in-app import whose reconcile report is ready
+	// (OK, FAILED or UNVERIFIED). A report still being retried is not final; an undo keeps the time.
+	firstResults, err := countsByWorkspace(ctx, tx, 1, `SELECT j.workspace_id::text,
+		floor(extract(epoch FROM min(j.finished_at) - w.created_at))::bigint
+		FROM import_jobs j JOIN workspaces w ON w.id = j.workspace_id
+		WHERE j.kind = 'import' AND j.state = 'finished' AND j.status IS NOT NULL
+		GROUP BY j.workspace_id, w.created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("read first results: %w", err)
+	}
 	subscriptions, err := store.LoadAllSubscriptions(ctx, tx)
 	if err != nil {
 		return nil, fmt.Errorf("read subscriptions: %w", err)
@@ -108,25 +118,30 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 		if access.Plan == domain.PlanTrial {
 			trialDaysLeft = int64(math.Ceil(float64(w.trialTo.Sub(now)) / float64(day)))
 		}
+		var firstResult any // null until the first import report is ready
+		if row, ok := firstResults[w.id]; ok {
+			firstResult = max(row[0], 0)
+		}
 		replyCounts, signIns, convCounts := replies.at(w.id, 3), signedIn.at(w.id, 2), conversations.at(w.id, 2)
 		snapshots = append(snapshots, snapshot{workspaceID: w.id, properties: map[string]any{
-			"plan":                     access.Plan,
-			"trial_days_left":          trialDaysLeft,
-			"days_since_created":       max(int64(now.Sub(w.created)/day), 0),
-			"agents_total":             agents.at(w.id, 1)[0],
-			"agents_active_7d":         signIns[0],
-			"agents_active_30d":        signIns[1],
-			"replies_7d":               replyCounts[0],
-			"replies_30d":              replyCounts[1],
-			"ai_agent_replies_7d":      replyCounts[2],
-			"conversations_open":       convCounts[0],
-			"conversations_created_7d": convCounts[1],
-			"email_channel":            emailChannels[w.id],
-			"web_form":                 webForms[w.id],
-			"tokens_active":            tokens.at(w.id, 1)[0],
-			"freshdesk_import":         imports[w.id],
-			"workspace_name":           w.name,
-			"workspace_slug":           w.slug,
+			"plan":                         access.Plan,
+			"trial_days_left":              trialDaysLeft,
+			"days_since_created":           max(int64(now.Sub(w.created)/day), 0),
+			"agents_total":                 agents.at(w.id, 1)[0],
+			"agents_active_7d":             signIns[0],
+			"agents_active_30d":            signIns[1],
+			"replies_7d":                   replyCounts[0],
+			"replies_30d":                  replyCounts[1],
+			"ai_agent_replies_7d":          replyCounts[2],
+			"conversations_open":           convCounts[0],
+			"conversations_created_7d":     convCounts[1],
+			"email_channel":                emailChannels[w.id],
+			"web_form":                     webForms[w.id],
+			"tokens_active":                tokens.at(w.id, 1)[0],
+			"freshdesk_import":             imports[w.id],
+			"time_to_first_result_seconds": firstResult,
+			"workspace_name":               w.name,
+			"workspace_slug":               w.slug,
 		}})
 	}
 	slices.SortFunc(snapshots, func(a, b snapshot) int { return strings.Compare(a.workspaceID, b.workspaceID) })

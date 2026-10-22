@@ -50,7 +50,8 @@ var (
 // TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool keeps a new route from reaching main
 // without a row.
 //
-// read: what triage needs to look at (conversations, messages, contacts, tags, the team list), and the
+// read: what triage needs to look at (conversations, messages, contacts, tags, the team list), saying
+// that a conversation is open (presence, which changes nothing anyone wrote), and the
 // settings a person can see without secrets: the session and invite lists (never a token or a link),
 // the email channel (never the inbound secret or the SMTP password) and the web form.
 // draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
@@ -164,6 +165,10 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/agent-requests/{id}/cancel":                    tier(auth.ScopeRead),
 	"POST " + problemReportPath:                                  tier(auth.ScopeRead),
 
+	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
+	"PUT /api/v1/conversations/{id}/presence":               tier(auth.ScopeRead),
+	"DELETE /api/v1/conversations/{id}/presence/{clientId}": tier(auth.ScopeRead),
+
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
 	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),
 	"POST /api/v1/agent-requests/{id}/reject":  personOnly("deciding an agent's request is a person's call"),
@@ -199,6 +204,23 @@ var tokenTiers = map[string]TokenAccess{
 	// browser); disconnecting changes the address customers get replies from.
 	"POST " + gmailPath:   approvalRequired,
 	"DELETE " + gmailPath: approvalRequired,
+
+	// Imports read and write the whole workspace: admin. An undo deletes what an import brought in, so
+	// every token asks a person. The two routes that take a Freshdesk key are refused below admin
+	// (credentialRoutes) rather than filed: an agent request keeps its body.
+	"GET /api/v1/imports":              tier(auth.ScopeAdmin),
+	"POST /api/v1/imports":             tier(auth.ScopeAdmin),
+	"GET /api/v1/imports/{id}":         tier(auth.ScopeAdmin),
+	"POST /api/v1/imports/{id}/start":  tier(auth.ScopeAdmin),
+	"POST /api/v1/imports/{id}/cancel": tier(auth.ScopeAdmin),
+	"PUT /api/v1/imports/{id}/key":     tier(auth.ScopeAdmin),
+	"GET /api/v1/imports/{id}/report":  tier(auth.ScopeAdmin),
+	"POST /api/v1/imports/{id}/undo":   approvalRequired,
+	// A link only changes who wrote imported replies and holds imported tickets, and is taken back
+	// the same way.
+	"GET /api/v1/imports/{id}/people":                      tier(auth.ScopeAdmin),
+	"PUT /api/v1/imports/{id}/people/{externalId}/link":    tier(auth.ScopeAdmin),
+	"DELETE /api/v1/imports/{id}/people/{externalId}/link": tier(auth.ScopeAdmin),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
@@ -246,8 +268,20 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 		writeFilesNeedApproval(response)
 		return true
 	}
+	if credentialRoutes[route.Method+" "+route.Pattern] {
+		writeError(response, http.StatusForbidden, "credentials_need_admin_token",
+			"This call carries another helpdesk's API key, which must never be kept in an agent request for approval. Use an agent token of the admin tier, or let an admin do it in Settings.")
+		return true
+	}
 	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil, "")
 	return true
+}
+
+// credentialRoutes carry another helpdesk's API key: a token below their tier is refused, never filed,
+// because an agent request stores the call's body (and the export carries it).
+var credentialRoutes = map[string]bool{
+	"POST /api/v1/imports":         true,
+	"PUT /api/v1/imports/{id}/key": true,
 }
 
 // kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits

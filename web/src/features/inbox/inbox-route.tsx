@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { api } from '../../api/client';
+import { api, ReplyConflictError } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
@@ -16,6 +16,8 @@ import { messages } from '../../messages';
 import { outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
+import { useConversationPresence } from './use-conversation-presence';
+import { useInboxViewing } from './use-inbox-activity';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -141,6 +143,8 @@ export function InboxRoute() {
   const pending = usePendingRequests().data?.items;
   const drafts = useMemo(() => (pending ?? []).filter((item) => item.kind === 'reply_draft' && item.conversation_id), [pending]);
   const draftConversationIds = useMemo(() => new Set(drafts.map((item) => item.conversation_id!)), [drafts]);
+  // Who else has which conversation open, from the activity poll the app already runs: no request of its own.
+  const viewing = useInboxViewing();
   // The poll carries no body, so the open conversation reads its drafts in full.
   const draftDetails = useQueries({ queries: drafts.filter((item) => item.conversation_id === selected?.id)
     .map((item) => ({ queryKey: ['agent-requests', 'one', item.id], queryFn: () => api.agentRequest(item.id) })) });
@@ -193,10 +197,17 @@ export function InboxRoute() {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
   } });
-  const message = useMutation({ mutationFn: ({ kind, body, files, cc }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[] }) => api.createMessage(selected!.id, kind, body, files, cc),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }) });
+  const message = useMutation({ mutationFn: ({ kind, body, files, cc, seen }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number }) =>
+    api.createMessage(selected!.id, kind, body, files, cc, seen),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }),
+    // A reply refused for a newer one: the timeline shows it at once.
+    onError: (error) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', selected?.id] }); } });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
+  // The others see that this tab has the conversation open and whether a reply is being written; the first
+  // announce waits for the requests above, so it never delays opening the ticket.
+  const [writingReply, setWritingReply] = useState(false);
+  const presence = useConversationPresence(selected?.id, writingReply);
   // A refusal belongs to the conversation it happened in; opening another one hides it.
   const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
   const applyQuery = (next: InboxQuery) => {
@@ -218,7 +229,7 @@ export function InboxRoute() {
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body, files, cc) => message.mutateAsync({ kind, body, files, cc })}
+    onMessage={(kind, body, files, cc, seen) => message.mutateAsync({ kind, body, files, cc, seen })}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.
@@ -229,12 +240,24 @@ export function InboxRoute() {
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}
+    canManage={me.data?.agent?.role === 'admin'} onOpenSettings={(to = '/settings') => void navigate({ to })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
-    replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds}
+    replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
+    openViewers={presence.viewers} onReplyDraft={setWritingReply} onReplyEdited={presence.markEdited}
     onSendDraft={async (draft, edit) => {
-      const outcome = await api.approveAgentRequest(draft.id, edit);
+      // The draft goes only if no reply came after the newest one on the approver's screen; one that did
+      // leaves the draft waiting, shown in the timeline, to be read before sending again.
+      const seen = timeline.data?.items.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0);
+      let outcome;
+      try {
+        outcome = await api.approveAgentRequest(draft.id, seen === undefined ? edit : { ...edit, seen_reply_number: seen });
+      } catch (error) {
+        if (!(error instanceof ReplyConflictError)) throw error;
+        await afterDraft(draft.conversation_id);
+        setDraftNotice(error.newer.length > 0 && error.newer.every((reply) => reply.origin) ? messages.draftAfterImport : messages.draftAfterReply);
+        return;
+      }
       track('agent_request_decided', { decision: 'approved' });
       await afterDraft(draft.conversation_id);
       // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.

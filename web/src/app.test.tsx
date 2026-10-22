@@ -1,11 +1,12 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { createQueryClient } from './query-client';
 import { resetProductAnalytics } from './lib/product-analytics';
+import { presenceViewPart } from './features/inbox/presence-part';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
 // Clerk draws its own sign-in form from the network; the page around it is what is under test here.
@@ -49,6 +50,14 @@ function open(path = '/') {
   render(<QueryClientProvider client={createQueryClient()}><RouterProvider router={router} /></QueryClientProvider>);
   return router;
 }
+
+
+// The presence chunk loads once a conversation is open; start with it there, so no test ends while it is
+// still on its way (vitest refuses a module asked for after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./features/inbox/presence-view');
+});
 
 test('a locked workspace sees the locked screen with the identity bar and an admin\'s plan choices', async () => {
   serve({
@@ -283,4 +292,18 @@ test('the Colliedesk logo at the top of the rail goes back to the inbox from any
   fireEvent.click(within(rail).getByRole('link', { name: 'Colliedesk' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   expect(within(rail).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
+});
+
+test('Settings shows its title at once while its own chunk loads, then the sections', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+  });
+  open('/settings');
+  const title = await screen.findByRole('heading', { level: 1, name: 'Settings' });
+  expect(title).toBeInTheDocument();
+  // The sections arrive with the chunk; the title stays where it was.
+  await waitFor(() => expect(document.querySelector('.settings-page[aria-busy="true"]')).toBeNull());
+  expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
 });

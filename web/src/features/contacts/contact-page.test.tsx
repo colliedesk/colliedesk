@@ -18,7 +18,7 @@ const duplicate = {
   id: '22222222-2222-4222-8222-222222222222', name: 'Mai at home', email: 'mai@home.example', organization: null, merged_into_id: null,
   created_at: '2026-01-03T00:00:00Z', updated_at: '2026-01-03T00:00:00Z',
 };
-const row = (id: string, subject: string, imported = false): Conversation => ({
+const row = (id: string, subject: string, imported = false): Conversation => ({ latest_reply_number: 0,
   id, contact_id: contact().id, contact_name: 'Mai Linh', subject, status: 'closed', priority: 'normal', assignee_id: null, tags: [], channel: imported ? 'imported' : 'email',
   origin: imported ? { system: 'freshdesk', external_id: '7', type: null, source: null, due_at: null, first_response_due_at: null, cc: [], forwarded_to: [] } : null,
   created_at: '2026-01-02T00:00:00Z', updated_at: '2026-01-02T00:00:00Z',

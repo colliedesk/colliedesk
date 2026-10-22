@@ -6,17 +6,19 @@ import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
+import { ReplyConflictError } from '../../api/client';
+import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon } from '../../ui/icons';
-import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
+import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 
 interface ReplyComposerProps {
   disabled?: boolean;
   // May return a promise: the text is kept, with the reason shown, when it rejects.
   // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
   // only for a reply that copies someone.
-  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[]) => void | Promise<unknown>;
+  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number) => void | Promise<unknown>;
   // The addresses the customer copied on their latest message; the field starts with them until the agent edits it.
   suggestedCc?: string[];
   // The server's per-message file limits; the composer warns and holds the send while they are exceeded.
@@ -29,6 +31,15 @@ interface ReplyComposerProps {
   savedRepliesState?: 'loading' | 'failed' | 'ready';
   // An admin, who can turn the help center on from the articles list while it is off.
   canManage?: boolean;
+  // Whether the box holds a reply to the customer not sent yet (never a private note), each time that
+  // changes, and each change of that reply's text: the team sees that someone is writing, never the text.
+  onReplyDraft?: (writing: boolean) => void;
+  onReplyEdited?: () => void;
+  // The newest reply number on screen. With it, a reply carries the number shown when its writer started
+  // (passed to onSubmit after cc), and a refusal for a newer reply (ReplyConflictError) shows that reply
+  // with Send anyway and Edit reply. timezone formats its time.
+  latestReplyNumber?: number;
+  timezone?: string;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -56,7 +67,7 @@ const noAddresses: string[] = [];
 // starts loading it when it mounts, which is when a conversation opens: a click a moment later finds it.
 export const replyPickersPart = lazyPart(() => import('./reply-pickers'));
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, timezone = 'UTC' }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -112,6 +123,17 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     caret.current = null;
   }, [body, picking]);
   useEffect(() => { if (disabled) setPicking(null); }, [disabled]);
+  const reply = kind === 'outgoing' ? body.trim() : '';
+  const writing = reply !== '';
+  useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
+  // The newest reply on screen when the reply was started: a teammate's reply arriving later, even on
+  // screen, is asked about once when this one is sent.
+  const latest = useRef(latestReplyNumber);
+  const mark = useRef<number | undefined>(undefined);
+  useEffect(() => { latest.current = latestReplyNumber; }, [latestReplyNumber]);
+  useEffect(() => { mark.current = writing ? mark.current ?? latest.current : undefined; }, [writing]);
+  const [conflict, setConflict] = useState<ReplyConflictError>();
+  useEffect(() => { if (reply) onReplyEdited?.(); }, [reply, onReplyEdited]);
   // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
   // An address typed into Cc that cannot be added would otherwise be dropped from the reply unseen.
   const ccHolds = kind === 'outgoing' && showCc && ccBlocking;
@@ -123,7 +145,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     const sent = body.trim();
     const sentFiles = files;
     const sentCc = kind === 'outgoing' ? cc : [];
-    const result = sentCc.length > 0 ? onSubmit?.(kind, sent, sentFiles, sentCc)
+    const seen = kind === 'outgoing' && latestReplyNumber !== undefined ? mark.current ?? latestReplyNumber : undefined;
+    setConflict(undefined);
+    const result = seen !== undefined ? onSubmit?.(kind, sent, sentFiles, sentCc, seen)
+      : sentCc.length > 0 ? onSubmit?.(kind, sent, sentFiles, sentCc)
       : sentFiles.length > 0 ? onSubmit?.(kind, sent, sentFiles) : onSubmit?.(kind, sent);
     if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); return; }
     setSending(true);
@@ -134,7 +159,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
       setBody((current) => (current.trim() === sent ? '' : current));
       setFiles((current) => current.filter((file) => !sentFiles.includes(file)));
     };
-    (result as Promise<unknown>).then(clearSent, (error: unknown) => setProblem(replyRefusalText(error))).finally(() => setSending(false));
+    (result as Promise<unknown>).then(clearSent, (error: unknown) => {
+      if (error instanceof ReplyConflictError) setConflict(error);
+      else setProblem(replyRefusalText(error));
+    }).finally(() => setSending(false));
   };
   // R starts a reply and N a private note from anywhere on the page, as the keycaps on the tabs say.
   useEffect(() => {
@@ -175,6 +203,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
           : picking === 'replies' ? <pickers.module.SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />
           : <pickers.module.ArticleLinkPicker box={field} onInsert={insertText} onClose={closePicker} canManage={canManage} />)}
+        {conflict && <Part part={presenceViewPart} failed={<p role="alert" className="composer-notice">{conflict.message}</p>}
+          render={(view) => <view.ReplyConflict replies={conflict.newer} timezone={timezone}
+            onSendAnyway={() => { mark.current = conflict.latest; submit(); }}
+            onEdit={() => { mark.current = conflict.latest; setConflict(undefined); field.current?.focus(); }} />} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />

@@ -120,6 +120,9 @@ type Conversation struct {
 	Origin    *ConversationOrigin `json:"origin"`
 	CreatedAt time.Time           `json:"created_at"`
 	UpdatedAt time.Time           `json:"updated_at"`
+	// LatestReplyNumber is the number of the newest reply (0 before the first): a reply sent with an
+	// older seen_reply_number is refused with ReplyConflictError.
+	LatestReplyNumber int `json:"latest_reply_number"`
 }
 
 // How a conversation started (conversations.channel).
@@ -135,25 +138,29 @@ const (
 
 // ConversationOrigin records where an imported conversation came from.
 type ConversationOrigin struct {
-	System             string     `json:"system"`
-	ExternalID         string     `json:"external_id"`
-	Type               *string    `json:"type"`
-	Source             *string    `json:"source"`
-	DueAt              *time.Time `json:"due_at"`
-	FirstResponseDueAt *time.Time `json:"first_response_due_at"`
-	CC                 []string   `json:"cc"`
-	ForwardedTo        []string   `json:"forwarded_to"`
+	System     string `json:"system"`
+	ExternalID string `json:"external_id"`
+	// ResponderExternalID is the source agent the ticket was assigned to, for linking them later.
+	ResponderExternalID *string    `json:"responder_external_id,omitempty"`
+	Type                *string    `json:"type"`
+	Source              *string    `json:"source"`
+	DueAt               *time.Time `json:"due_at"`
+	FirstResponseDueAt  *time.Time `json:"first_response_due_at"`
+	CC                  []string   `json:"cc"`
+	ForwardedTo         []string   `json:"forwarded_to"`
 }
 
 // MessageOrigin records where an imported message came from and who it was addressed to.
 type MessageOrigin struct {
-	System     string   `json:"system"`
-	ExternalID string   `json:"external_id"`
-	Kind       string   `json:"kind"`
-	From       *string  `json:"from"`
-	To         []string `json:"to"`
-	CC         []string `json:"cc"`
-	BCC        []string `json:"bcc"`
+	System     string `json:"system"`
+	ExternalID string `json:"external_id"`
+	// AuthorExternalID is the source agent who wrote the item, for linking them later; nil for a customer.
+	AuthorExternalID *string  `json:"author_external_id,omitempty"`
+	Kind             string   `json:"kind"`
+	From             *string  `json:"from"`
+	To               []string `json:"to"`
+	CC               []string `json:"cc"`
+	BCC              []string `json:"bcc"`
 }
 
 type TimeEntry struct {
@@ -194,6 +201,20 @@ type Message struct {
 	CreatedAt time.Time        `json:"created_at"`
 	Delivery  *MessageDelivery `json:"delivery"`
 	Email     *IncomingEmail   `json:"email"`
+	// ReplyNumber numbers the replies of a conversation in the order they were stored, 1 first; nil for
+	// a note or a customer message.
+	ReplyNumber *int `json:"reply_number"`
+}
+
+// ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the
+// conversation's latest: Newer are the replies after it, oldest first by time.
+type ReplyConflictError struct {
+	Latest int
+	Newer  []Message
+}
+
+func (e *ReplyConflictError) Error() string {
+	return "someone replied to this conversation after you started writing"
 }
 
 type Attachment struct {

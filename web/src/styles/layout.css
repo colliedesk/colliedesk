@@ -119,7 +119,10 @@
   .settings-page { padding: var(--space-6); }
   .settings-layout { grid-template-columns: 1fr; gap: var(--space-4); }
   /* Narrow: the section nav is one row of links that scrolls sideways. */
-  .settings-nav { position: static; display: flex; gap: var(--space-1); overflow-x: auto; padding-bottom: var(--space-1); }
+  /* It hides its scrollbar and fades at the edges (like .scroll-x-fade); the current page scrolls into view. */
+  .settings-nav { position: static; display: flex; gap: var(--space-1); overflow-x: auto; padding-bottom: var(--space-1); scrollbar-width: none;
+    mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
+  .settings-nav::-webkit-scrollbar { display: none; }
   .settings-nav > div { display: contents; }
   .settings-nav .settings-group-label { display: none; }
   .settings-nav ul { display: flex; gap: var(--space-1); margin: 0; }
@@ -146,6 +149,11 @@
   .app-rail { padding-inline: var(--space-2); }
   .rail-brand { margin-right: 0; }
   .rail-link { gap: var(--space-1); }
+}
+/* A short wide screen (a phone on its side): the reply box and what stands above it (a reply warning, a
+   draft) scroll on their own instead of being cut below the pane. */
+@media (min-width: 44.01rem) {
+  .conversation-center .composer { max-height: 75dvh; overflow-y: auto; }
 }
 @media (max-width: 44rem) {
   .app-main, .app-content { overflow: visible; }

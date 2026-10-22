@@ -8,8 +8,9 @@ export type PartState<T> = { status: 'loading' } | { status: 'ready'; module: T 
 export interface LazyPart<T> {
   // preload starts the import now (once); a failure is kept for use() to report, never thrown.
   preload: () => void;
-  // use returns the part's state and starts the import if nothing did. A hook: call it unconditionally.
-  use: () => PartState<T>;
+  // use returns the part's state and starts the import if nothing did, unless load is false (it starts once
+  // load turns true). A hook: call it unconditionally.
+  use: (load?: boolean) => PartState<T>;
 }
 
 // lazyPart loads a part of a page from its own chunk without React.lazy and Suspense. React 19 holds a
@@ -40,8 +41,8 @@ export function lazyPart<T>(load: () => Promise<T>): LazyPart<T> {
     return () => { listeners.delete(listener); };
   };
   const snapshot = (): PartState<T> => state ?? loading;
-  const use = () => {
-    useEffect(preload, []);
+  const use = (load = true) => {
+    useEffect(() => { if (load) preload(); }, [load]);
     return useSyncExternalStore(subscribe, snapshot);
   };
   return { preload, use };
@@ -61,7 +62,7 @@ export function PartUnavailable() {
   return (
     <p role="alert" className="error-copy">
       {messages.partNotLoaded}{' '}
-      <button type="button" className="link-action" onClick={() => window.location.reload()}>{messages.reloadPage}</button>
+      <button type="button" className="link-action part-reload" onClick={() => window.location.reload()}>{messages.reloadPage}</button>
     </p>
   );
 }

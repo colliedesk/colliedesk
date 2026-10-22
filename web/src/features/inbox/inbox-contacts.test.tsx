@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeAll, expect, test, vi } from 'vitest';
 import { InboxPage } from './inbox-page';
+import { presenceViewPart } from './presence-part';
 
-const conversation = {
+const conversation = { latest_reply_number: 0,
   id: '11111111-1111-4111-8111-111111111111', contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh',
   subject: 'Example request', status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], channel: 'email' as const, origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
@@ -11,6 +12,15 @@ const mai = {
   id: conversation.contact_id, name: 'Mai Linh', email: 'mai@customer.example', organization: null, merged_into_id: null,
   created_at: '2026-01-02T00:00:00Z', updated_at: '2026-01-02T00:00:00Z',
 };
+
+
+// The presence chunk loads when somebody else is on a conversation, a reply is refused or a notice shows;
+// start with it there, so no test ends while it is still on its way (vitest refuses a module asked for
+// after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('the open conversation names its customer and opens their page', () => {
   const onOpenContact = vi.fn();

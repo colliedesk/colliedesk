@@ -9,8 +9,23 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 )
 
+// Mode chooses what one run covers.
+type Mode int
+
+const (
+	// ModeFull is the whole account, checked against independent totals: the only run whose report
+	// can be OK. It is the zero value, so the CLI runs it.
+	ModeFull Mode = iota
+	// ModeRecent imports the tickets updated since Options.Since, newest first, and leaves everything
+	// account-wide to a full run that follows: the knowledge base, the contact and saved-reply lists,
+	// the id probe and the totals. Its report is interim, never OK. The in-app import runs it first so
+	// a team can work on recent tickets while the rest arrives.
+	ModeRecent
+)
+
 // Options configures one import run.
 type Options struct {
+	Mode          Mode
 	WorkspaceSlug string
 	// BaseURL is the account root, for example https://acme.freshdesk.com.
 	BaseURL string
@@ -35,6 +50,10 @@ type Options struct {
 	MaxTicketPages int
 	// RateLimitPause is the wait after a response reports zero remaining calls.
 	RateLimitPause time.Duration
+	// ReserveRateLimit leaves part of the account's API limit to the customer's other integrations:
+	// the run pauses once X-Ratelimit-Remaining falls to max(10, 20 % of X-Ratelimit-Total) instead of
+	// zero. The in-app import sets it; the CLI, watched by an operator, does not.
+	ReserveRateLimit bool
 
 	// Cloud is true on Colliedesk Cloud, the only place a trial exists. A self-hosted run still
 	// moves the stored end (nothing reads it) but reports nothing about it.
@@ -51,6 +70,9 @@ type Options struct {
 	Progress io.Writer
 	// ProgressInterval is the minimum time between counter lines; default 30 s.
 	ProgressInterval time.Duration
+	// OnProgress receives every phase start, counter and rate-limit wait, unthrottled and outside any
+	// lock of the run. The id probe calls it from several goroutines at once.
+	OnProgress func(ProgressEvent)
 
 	hooks testHooks
 }

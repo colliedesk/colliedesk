@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeAll, expect, test, vi } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
+import { presenceViewPart } from './presence-part';
 
-const base = { conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
+const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, agent_request_id: null };
 const incoming: Message = {
   ...base, id: '22222222-2222-4222-8222-222222222222', kind: 'incoming', body: 'Please help.',
@@ -15,6 +16,15 @@ const failed: Message = {
 };
 const queued: Message = { ...base, id: '44444444-4444-4444-8444-444444444444', kind: 'outgoing', body: 'Later.', delivery: { status: 'queued', attempts: 0, last_error: null, sent_at: null } };
 const note: Message = { ...base, id: '55555555-5555-4555-8555-555555555555', kind: 'note', body: 'Internal.' };
+
+
+// The presence chunk loads when somebody else is on a conversation, a reply is refused or a notice shows;
+// start with it there, so no test ends while it is still on its way (vitest refuses a module asked for
+// after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('shows the sender, a verification warning and attachments that were not imported', () => {
   render(<TimelinePanel items={[incoming]} timezone="UTC" />);

@@ -27,7 +27,7 @@ type Spec struct {
 // server registers from it and the user guide and the generated references read it.
 func Catalog() []Spec {
 	return []Spec{
-		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), timeEntriesListSpec(), attachmentGetSpec(),
+		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), conversationPresenceSpec(), timeEntriesListSpec(), attachmentGetSpec(),
 		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
 		conversationStartSpec(),
 		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), contactUpdateSpec(), contactMergeSpec(), contactUnmergeSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
@@ -47,6 +47,8 @@ func Catalog() []Spec {
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
 		helpCenterUpdateSpec(), helpCenterThemeUpdateSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), billingGetSpec(),
+		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoRequestSpec(),
+		importPeopleListSpec(), importPersonLinkSpec(), importPersonUnlinkSpec(),
 	}
 }
 

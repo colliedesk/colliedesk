@@ -79,8 +79,8 @@ func (r *run) descriptionMessage(ticket fdTicket) newMessage {
 		kind, author = "outgoing", *ticket.ResponderID
 	}
 	agentID, name := r.author(author)
-	origin := &domain.MessageOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(ticket.ID, 10), Kind: "description",
-		To: list(ticket.ToEmails), CC: list(ticket.CcEmails), BCC: []string{}}
+	origin := &domain.MessageOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(ticket.ID, 10), AuthorExternalID: r.agentExternalID(author),
+		Kind: "description", To: list(ticket.ToEmails), CC: list(ticket.CcEmails), BCC: []string{}}
 	return newMessage{origin: origin, kind: kind, body: messageBody(ticket.DescriptionText), html: ticket.Description,
 		authorAgentID: agentID, authorName: name, createdAt: ticket.CreatedAt.UTC()}
 }
@@ -112,8 +112,8 @@ func (r *run) conversationMessage(c fdConversation) newMessage {
 		kind, originKind = "incoming", "incoming"
 	}
 	agentID, name := r.author(c.UserID)
-	origin := &domain.MessageOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(c.ID, 10), Kind: originKind,
-		From: c.FromEmail, To: list(c.ToEmails), CC: list(c.CcEmails), BCC: list(c.BccEmails)}
+	origin := &domain.MessageOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(c.ID, 10), AuthorExternalID: r.agentExternalID(c.UserID),
+		Kind: originKind, From: c.FromEmail, To: list(c.ToEmails), CC: list(c.CcEmails), BCC: list(c.BccEmails)}
 	return newMessage{origin: origin, kind: kind, body: messageBody(c.BodyText), html: c.Body,
 		authorAgentID: agentID, authorName: name, createdAt: c.CreatedAt.UTC()}
 }
@@ -125,7 +125,12 @@ func ticketOrigin(ticket fdTicket) *domain.ConversationOrigin {
 	if name, ok := ticketSources[ticket.Source]; ok {
 		source = name
 	}
-	return &domain.ConversationOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(ticket.ID, 10), Type: ticket.Type,
+	var responder *string
+	if ticket.ResponderID != nil {
+		id := strconv.FormatInt(*ticket.ResponderID, 10)
+		responder = &id
+	}
+	return &domain.ConversationOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(ticket.ID, 10), ResponderExternalID: responder, Type: ticket.Type,
 		Source: &source, DueAt: utcPointer(ticket.DueBy), FirstResponseDueAt: utcPointer(ticket.FrDueBy),
 		CC: list(ticket.CcEmails), ForwardedTo: list(ticket.FwdEmails)}
 }
@@ -147,6 +152,15 @@ func utcPointer(value *time.Time) *time.Time {
 
 // author resolves a Freshdesk user id to a Colliedesk agent (when matched by
 // email) and a display name that is always kept.
+// agentExternalID is the Freshdesk id of userID when it is an agent of the account, nil otherwise.
+func (r *run) agentExternalID(userID int64) *string {
+	if _, ok := r.agents[userID]; !ok {
+		return nil
+	}
+	id := strconv.FormatInt(userID, 10)
+	return &id
+}
+
 func (r *run) author(userID int64) (*string, string) {
 	if agent, ok := r.agents[userID]; ok {
 		if id, matched := r.agentTargets[userID]; matched {

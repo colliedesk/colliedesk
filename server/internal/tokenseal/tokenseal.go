@@ -64,6 +64,9 @@ func ParseKeys(value string) (Keys, error) {
 // Configured reports whether at least one key is set.
 func (k Keys) Configured() bool { return len(k.order) > 0 }
 
+// IDs are the ids of every key, the sealing one first.
+func (k Keys) IDs() []string { return append([]string{}, k.order...) }
+
 // Current is the id of the key that seals, empty when none is set. A value sealed with another id should
 // be sealed again, so the older key can be removed.
 func (k Keys) Current() string {

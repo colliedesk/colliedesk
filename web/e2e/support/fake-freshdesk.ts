@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:https';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Server } from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ports, scratchDir } from './checkout';
 
 // A local Freshdesk API v2 built from the public API documentation, serving only the documented
 // endpoints the importer reads: account, agents, companies, contacts (paged with Link headers),
@@ -37,8 +38,26 @@ const epoch = Date.UTC(2024, 0, 1, 0, 0, 0);
 const iso = (ms: number) => new Date(ms).toISOString().replace('.000Z', 'Z');
 export const ticketCreatedAt = (id: number) => iso(epoch + id * 3_600_000);
 const topics = ['refund request', 'shipping delay', 'login problem', 'invoice copy'];
+export const ticketSubject = (id: number) => id === fixture.searchableTicket ? `Fixture ticket ${id}: parcel stuck in ${fixture.searchableWord}` : `Fixture ticket ${id}: ${topics[id % 4]}`;
+// The contact (index from 0) who asked ticket id, and their address; contact 1120 has none.
+const requesterIndex = (id: number) => (id - 1) % fixture.contacts;
+export const contactEmail = (index: number) => index === fixture.contacts - 1 ? null : `customer${index + 1}@shop${index % 7}.example`;
+export const requesterEmail = (id: number) => contactEmail(requesterIndex(id));
 
-interface Options { apiKey: string; agentEmail: string; archiveForbidden?: boolean; cannedUnavailable?: boolean; knowledgeBase?: boolean }
+interface Options { apiKey: string; agentEmail: string; archiveForbidden?: boolean; cannedUnavailable?: boolean; knowledgeBase?: boolean; fixed?: boolean }
+
+// The main server imports in the app (`collie serve`, built with -tags e2e) from this fake at fixed
+// addresses: the server reads them once at start, while the fake starts with its test. The
+// certificate is read again by every import, so a new one per test is trusted.
+export const inAppFreshdesk = {
+  dir: join(scratchDir, 'fake-freshdesk-in-app'),
+  env(): Record<string, string> {
+    return {
+      COLLIEDESK_E2E_FRESHDESK_URL: `https://127.0.0.1:${ports.freshdeskAPI}`, COLLIEDESK_E2E_FRESHDESK_CA: join(this.dir, 'cert.pem'),
+      COLLIEDESK_E2E_FRESHDESK_DIAL: `127.0.0.1:${ports.freshdeskAPI},127.0.0.1:${ports.freshdeskFiles}`,
+    };
+  },
+};
 
 export class FakeFreshdesk {
   readonly requests = new Map<string, number>();
@@ -52,19 +71,25 @@ export class FakeFreshdesk {
   constructor(private readonly options: Options) {}
 
   async start(): Promise<void> {
-    const dir = mkdtempSync(join(tmpdir(), 'colliedesk-fake-freshdesk-'));
+    const dir = this.options.fixed ? inAppFreshdesk.dir : mkdtempSync(join(tmpdir(), 'colliedesk-fake-freshdesk-'));
+    mkdirSync(dir, { recursive: true });
     this.caPath = join(dir, 'cert.pem');
     execFileSync('openssl', ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes', '-days', '1',
       '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', join(dir, 'key.pem'), '-out', this.caPath], { stdio: 'ignore' });
     const tls = { key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(this.caPath) };
     this.api = createServer(tls, (request, response) => this.serveAPI(request, response));
     this.files = createServer(tls, (request, response) => this.serveFile(request, response));
-    this.apiURL = await listen(this.api);
-    this.filesURL = await listen(this.files);
+    this.apiURL = await listen(this.api, this.options.fixed ? ports.freshdeskAPI : 0);
+    this.filesURL = await listen(this.files, this.options.fixed ? ports.freshdeskFiles : 0);
   }
 
+  // stop also drops open connections: the server's importer keeps them alive, and close() alone waits
+  // for them to go idle (about a minute and a half).
   async stop(): Promise<void> {
-    await Promise.all([this.api, this.files].map((server) => new Promise((resolve) => server?.close(resolve))));
+    await Promise.all([this.api, this.files].map((server) => new Promise((resolve) => {
+      server?.close(resolve);
+      server?.closeAllConnections();
+    })));
   }
 
   // env is what the e2e importer build reads to reach this fake (cmd/collie/e2e_freshdesk.go).
@@ -208,7 +233,7 @@ export class FakeFreshdesk {
     return Array.from({ length: fixture.contacts }, (_, index) => {
       const id = 1001 + index;
       return {
-        id, name: `Customer ${index + 1}`, email: id === 1120 ? null : `customer${index + 1}@shop${index % 7}.example`,
+        id, name: `Customer ${index + 1}`, email: contactEmail(index),
         phone: id === 1120 ? '+1 555 0100' : null, mobile: null, company_id: [501, 502, null][index % 3], active: index % 10 !== 9,
         other_emails: [], created_at: iso(epoch - 86_400_000 + index * 60_000), updated_at: iso(epoch - 86_400_000 + index * 60_000),
       };
@@ -219,10 +244,10 @@ export class FakeFreshdesk {
 
   private ticket(id: number, full: boolean) {
     const created = epoch + id * 3_600_000;
-    const subject = id === fixture.searchableTicket ? `Fixture ticket ${id}: parcel stuck in ${fixture.searchableWord}` : `Fixture ticket ${id}: ${topics[id % 4]}`;
+    const subject = ticketSubject(id);
     const ticket: Record<string, unknown> = {
       id, subject, status: [2, 3, 4, 5][id % 4], priority: [1, 2, 3, 4][id % 4], source: 1, type: id % 2 ? 'Question' : 'Problem',
-      spam: false, deleted: false, requester_id: 1001 + ((id - 1) % fixture.contacts), responder_id: id % 4 === 0 ? 101 : null,
+      spam: false, deleted: false, requester_id: 1001 + requesterIndex(id), responder_id: id % 4 === 0 ? 101 : null,
       company_id: null, group_id: null, tags: [...(id % 3 === 0 ? ['billing'] : []), ...(id % 3 === 1 ? ['shipping', 'vip'] : [])],
       due_by: null, fr_due_by: null, cc_emails: [], fwd_emails: [], to_emails: null,
       created_at: iso(created), updated_at: iso(created + 30 * 60_000),
@@ -281,7 +306,7 @@ function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(value));
 }
 
-async function listen(server: Server): Promise<string> {
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+async function listen(server: Server, port: number): Promise<string> {
+  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
   return `https://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }

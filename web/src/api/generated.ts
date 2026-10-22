@@ -268,6 +268,8 @@ export interface paths {
          * @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace.
          *
          *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (customer mail through the platform forwarder that did not fail authentication, or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
+         *
+         *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -439,6 +441,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Says that the caller has this conversation open, and whether its reply box holds a reply not sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI agents who have it open, so one call both announces and reads. A browser tab calls it every `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent token, which does not call on a schedule). `client_id` names one tab: a person with two tabs open has two rows and is listed once. One tab announces one conversation at most every 2 seconds, and a call that starts or ends a reply (`writing` changes) at most every half second: a quicker call is answered 429 `too_many_requests` with `Retry-After` and changes nothing. Changes nothing a customer or a teammate wrote, so the read tier is enough for an agent token. */
+        put: operations["putConversationPresence"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/presence/{clientId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                clientId: components["schemas"]["PresenceClientID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Says that the caller closed the conversation in the tab `clientId` (or, for an agent token, stopped working on it). Only the caller's own row is removed; another person's row, an unknown `clientId` or one already gone answer 204 the same, so calling it twice is harmless. A browser sends it with `fetch` `keepalive` when the tab closes. */
+        delete: operations["deleteConversationPresence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inbox/activity": {
         parameters: {
             query?: never;
@@ -446,7 +487,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description What changed in the inbox after `since`: conversations created, conversations another agent assigned to the caller, and conversations that changed in any way (a new customer message, a status, assignee, priority or tag change, a reply or note). `updated` includes the caller's own changes; only `incoming_at` marks something to announce. Each list holds at most 50 items, newest first; in `updated`, conversations with a customer message in the window come first, so a bulk change cannot push a customer reply out of the list. Send the returned `now` as the next `since`. A `since` older than 10 minutes is treated as 10 minutes old; an agent who was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor. */
+        /** @description What changed in the inbox after `since`: conversations created, conversations another agent assigned to the caller, and conversations that changed in any way (a new customer message, a status, assignee, priority or tag change, a reply or note). `updated` includes the caller's own changes; only `incoming_at` marks something to announce. Each list holds at most 50 items, newest first; in `updated`, conversations with a customer message in the window come first, so a bulk change cannot push a customer reply out of the list. Send the returned `now` as the next `since`. A `since` older than 10 minutes is treated as 10 minutes old; an agent who was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor. `viewing` is not a change list: every call, with or without `since`, says who has which conversation open now. */
         get: operations["getInboxActivity"];
         put?: never;
         post?: never;
@@ -1032,6 +1073,181 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's in-app imports and undos, newest first (at most 100). Admins only. A job never shows its Freshdesk API key; `has_key` says whether the server still holds it. */
+        get: operations["listImports"];
+        put?: never;
+        /** @description Starts an import from Freshdesk by reading the account in the background, before anything is written (`state` previewing, then previewed with `preview`, or failed with `error_code`). Poll `GET /api/v1/imports/{id}`. The key must be a Freshdesk admin's; it is sealed on the server, never returned, and erased when the job ends or when the preview is not started within an hour. A new preview discards the workspace's earlier preview. An agent token below the admin tier is refused with 403 `credentials_need_admin_token` and nothing is stored: an agent request would keep the key. */
+        post: operations["previewImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description State, progress and preview of one import or undo; the report is at `/report`. */
+        get: operations["getImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Imports a previewed account: first the tickets updated in the last `recent_days` (newest first, so the team can work on them), then the whole account with its reconcile report. 409 `import_running` when the workspace already has an import or undo queued, running or waiting; 409 `import_state` when the job is not previewed, or was previewed more than an hour ago. */
+        post: operations["startImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stops a job. A preview is discarded; a running import stops within a minute (`cancel_requested` until then). What was imported stays: `POST /api/v1/imports/{id}/undo` removes it. The key is erased. */
+        post: operations["cancelImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Gives a job in `waiting_key` (the server restarted without a key ring, or its keys changed) the Freshdesk API key again; it goes on where it stopped. Refused to agent tokens below the admin tier like `POST /api/v1/imports`. */
+        put: operations["setImportKey"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}/report": {
+        parameters: {
+            query?: {
+                format?: "json" | "markdown";
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an undo, what it removed. `format=markdown` answers the report as a Markdown file to download. 404 `report_not_ready` before there is one. */
+        get: operations["getImportReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Queues an undo of an import that ended (finished, failed or cancelled): it removes what that Freshdesk account brought into the workspace, as `collie import undo` does, and keeps what the team changed since. Every agent token's call waits for a person's approval. */
+        post: operations["undoImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The agents of the import's Freshdesk account and the Colliedesk agent each is linked to. A link makes that agent the author of their imported replies and the assignee of the imported tickets they held; the preview links the agents whose email matches, and accepting an invite links the ones with the invited email. 409 `import_state` before the preview read the account. */
+        get: operations["listImportPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}/people/{externalId}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                /** @description The Freshdesk agent id */
+                externalId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Links a Freshdesk agent to an active agent of this workspace, replacing an earlier link. Their imported replies get that author and the imported tickets assigned to them, unless someone reassigned them since, that assignee, within seconds (`pending` until then). Timestamps do not change. `DELETE` takes the link back. */
+        put: operations["linkImportPerson"];
+        post?: never;
+        /** @description Takes a link back: the imported replies show the Freshdesk name again and the imported tickets the link assigned lose that assignee, unless someone reassigned them since. */
+        delete: operations["unlinkImportPerson"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -1174,7 +1390,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. */
+        /** @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. `seen_reply_number` is the newest reply the approving person had on screen: when someone replied since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so it can be read again and approved with the new number. */
         post: operations["approveAgentRequest"];
         delete?: never;
         options?: never;
@@ -1851,6 +2067,140 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ImportPerson: {
+            /** @description The Freshdesk agent id */
+            external_id: string;
+            name: string;
+            email: string;
+            /** @description An active agent in Freshdesk */
+            active: boolean;
+            /** Format: uuid */
+            linked_agent_id: string | null;
+            /** @description Linked because the emails match, not by a person */
+            linked_by_email: boolean;
+            /** @description The link changed and the imported replies and tickets are still being moved */
+            pending: boolean;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ImportOptions: {
+            /** @description The tickets updated in these last days are imported first, newest first; 0 skips that pass. Default 90. */
+            recent_days?: number;
+            /** @description Also import canned responses from personal folders; they become shared with the whole workspace. */
+            include_personal_canned_responses?: boolean;
+            /** @description On an account with several portals, the portal whose published articles stay published. */
+            help_center_portal?: number;
+        };
+        ImportInput: {
+            /** @enum {string} */
+            source: "freshdesk";
+            /** @description Your <account>.freshdesk.com address */
+            domain: string;
+            /** @description A Freshdesk admin's API key (Profile settings > API key) */
+            api_key: string;
+            options?: components["schemas"]["ImportOptions"];
+        };
+        ImportProgress: {
+            /** @description The importer step, for example importing tickets */
+            step: string;
+            done: number;
+            /** @description 0 when the step does not know its total */
+            total: number;
+            /**
+             * Format: date-time
+             * @description Set while the import waits for the Freshdesk rate limit
+             */
+            rate_limit_until?: string;
+            /** @description Freshdesk requests of this run so far */
+            api_calls: number;
+            /** @description The rest of the step at the pace of the last five minutes; missing when unknown */
+            eta_seconds?: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description What a few reads of the account tell before anything is written. Freshdesk has no ticket count: tickets_outside_archive is its search total, which leaves archived tickets out, and archived tickets can have ids above highest_listed_ticket_id; neither is an upper bound. */
+        ImportPreview: {
+            domain: string;
+            account_id: number;
+            source: string;
+            agents: {
+                id: number;
+                name: string;
+                email: string;
+                active: boolean;
+            }[];
+            companies: number;
+            /** @description null when Freshdesk search is unavailable */
+            contacts: number | null;
+            tickets_outside_archive: number | null;
+            highest_listed_ticket_id: number;
+            archive: components["schemas"]["ImportAccess"];
+            canned_responses: components["schemas"]["ImportAccess"];
+            knowledge_base: components["schemas"]["ImportAccess"];
+            /** @description X-Ratelimit-Total; 0 when Freshdesk sent none */
+            rate_limit_per_minute: number;
+            api_calls: number;
+            /** Format: date-time */
+            checked_at: string;
+        };
+        /**
+         * @description Whether the key can read this part: none means the account has none; refused (403) for the archive means the report can be UNVERIFIED at best.
+         * @enum {string}
+         */
+        ImportAccess: "readable" | "none" | "refused" | "unknown";
+        ImportJob: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "import" | "undo";
+            /** @enum {string} */
+            source: "freshdesk";
+            domain: string;
+            /** @description The Freshdesk account, freshdesk:account:<id>, known after the preview */
+            account_source: string | null;
+            /**
+             * Format: uuid
+             * @description The import an undo removes
+             */
+            undo_of: string | null;
+            /** @enum {string} */
+            state: "previewing" | "previewed" | "queued" | "running" | "retry_wait" | "waiting_key" | "finished" | "failed" | "cancelled" | "discarded";
+            /** @enum {string} */
+            phase: "preview" | "recent" | "full" | "undo";
+            options: components["schemas"]["ImportOptions"];
+            preview: null | components["schemas"]["ImportPreview"];
+            progress: null | components["schemas"]["ImportProgress"];
+            /**
+             * @description The reconcile status of a finished import
+             * @enum {string|null}
+             */
+            status: "OK" | "FAILED" | "UNVERIFIED" | null;
+            /** @description Why a job failed or waits: freshdesk_key_rejected, freshdesk_needs_admin_key, freshdesk_plan_no_api (the Freshdesk Free plan, or an ended trial of a higher plan, has no API calls), freshdesk_unavailable, import_running_elsewhere, retrying_failed_items, storage_cap, knowledge_base_limit, key_unavailable, no_progress or import_error. */
+            error_code: string | null;
+            error_message: string | null;
+            /** @description How many conversations of the Freshdesk account were in the workspace when the import ended (what an undo removes, less what the team changed since); null while it runs and for an undo. */
+            imported_conversations: number | null;
+            /** @description The server still holds the Freshdesk API key of this job */
+            has_key: boolean;
+            has_interim_report: boolean;
+            has_report: boolean;
+            cancel_requested: boolean;
+            /**
+             * Format: date-time
+             * @description When a job in retry_wait runs again
+             */
+            next_run_at: string | null;
+            /** Format: uuid */
+            created_by: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
         /** @enum {string} */
         AgentRequestStatus: "pending" | "approved" | "failed" | "rejected" | "cancelled" | "expired";
         AgentRequestAccepted: {
@@ -2951,6 +3301,8 @@ export interface components {
             updated_at: string;
         };
         Conversation: {
+            /** @description The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply. */
+            latest_reply_number: number;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -2975,6 +3327,8 @@ export interface components {
             system: string;
             /** @description Ticket id in the source system */
             external_id: string;
+            /** @description Id of the source agent the ticket was assigned to, so it can be linked to a Colliedesk agent later. Missing or null on imports that predate it and when the ticket had no agent. */
+            responder_external_id?: string | null;
             /** @description Ticket type in the source system */
             type: string | null;
             /** @description Channel the ticket came from: email, portal, phone, chat, feedback_widget, outbound_email or other */
@@ -3004,9 +3358,70 @@ export interface components {
             page: number;
             page_size: number;
         };
+        ReplyConflict: {
+            error: {
+                /** @enum {string} */
+                code: "reply_conflict";
+                message: string;
+                request_id?: string;
+                /** @description Send this as seen_reply_number to send anyway. */
+                latest_reply_number: number;
+                /** @description The replies after the sender's seen_reply_number, oldest first by created_at. */
+                newer_replies: components["schemas"]["Message"][];
+            };
+        };
+        /** @description A random id a browser tab makes when the page loads (not stored across reloads), or a fixed name an agent token picks. */
+        PresenceClientID: string;
+        PresenceUpdate: {
+            client_id: components["schemas"]["PresenceClientID"];
+            /** @description The reply box (not a private note) holds text that is not sent yet. */
+            writing: boolean;
+            /**
+             * @description The reply text changed since the last call; keeps `edited_at` current.
+             * @default false
+             */
+            edited: boolean;
+            /**
+             * @description The tab is in the background; the answer then asks for fewer calls.
+             * @default false
+             */
+            hidden: boolean;
+        };
+        ConversationViewer: {
+            /** Format: uuid */
+            agent_id: string;
+            /** @description Display name, or the email when there is none */
+            name: string;
+            /** @description A reply not sent yet is open in one of their tabs. */
+            writing: boolean;
+            /**
+             * Format: date-time
+             * @description When that reply was started; null when not writing.
+             */
+            writing_since: string | null;
+            /**
+             * Format: date-time
+             * @description When that reply last changed; a reply untouched for minutes is a draft left open, not someone typing. Null when not writing.
+             */
+            edited_at: string | null;
+            /** @description The agent token an AI agent has the conversation open with, acting as `agent_id`; null for a person. */
+            agent_token: null | components["schemas"]["MessageAgentToken"];
+        };
+        ConversationPresence: {
+            /** @description Everyone else who has the conversation open, once per person and per agent token, people first then by name. The caller's own tabs are left out. */
+            viewers: components["schemas"]["ConversationViewer"][];
+            /** @description Call again after this many seconds to stay listed. */
+            heartbeat_seconds: number;
+        };
         InboxActivity: {
             /** Format: date-time */
             now: string;
+            /** @description Who else has a conversation open right now, on every call (the first one included), so the inbox list can mark those conversations: the same viewers `PUT /api/v1/conversations/{id}/presence` answers, per conversation. The caller's own tabs are left out; conversations nobody else has open are not listed. */
+            viewing: {
+                /** Format: uuid */
+                conversation_id: string;
+                viewers: components["schemas"]["ConversationViewer"][];
+            }[];
             new_conversations: {
                 /** Format: uuid */
                 id: string;
@@ -3040,6 +3455,8 @@ export interface components {
             }[];
         };
         Message: {
+            /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
+            reply_number: number | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -3086,6 +3503,8 @@ export interface components {
         MessageOrigin: {
             system: string;
             external_id: string;
+            /** @description Id of the source agent who wrote the item, so it can be linked to a Colliedesk agent later. Missing or null on imports that predate it and when a customer wrote it. */
+            author_external_id?: string | null;
             /**
              * @description How the source system classified the item. public_note was visible to the customer there; forward went to a third party, not to the customer; automated_response is an automatic reply from the customer side (an out-of-office or a messenger acknowledgement) that the source flagged, which the timeline folds into one line.
              * @enum {string}
@@ -4053,6 +4472,7 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    seen_reply_number?: number;
                     files?: string[];
                 };
             };
@@ -4235,6 +4655,8 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /** @description The newest reply number the sender had seen; 0 when there was none. */
+                    seen_reply_number?: number;
                     /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
                     draft?: boolean;
                 };
@@ -4264,6 +4686,15 @@ export interface operations {
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`); nothing was stored or sent */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplyConflict"];
+                };
+            };
             413: components["responses"]["AttachmentsTooLarge"];
             429: components["responses"]["TrialOutboundLimit"];
             /** @description The attachments volume is low on disk space; nothing was sent or stored */
@@ -4568,6 +4999,72 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putConversationPresence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresenceUpdate"];
+            };
+        };
+        responses: {
+            /** @description The others who have the conversation open */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationPresence"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description This tab announced this conversation too recently (2 seconds, half a second to start or end a reply); nothing changed */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteConversationPresence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                clientId: components["schemas"]["PresenceClientID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's row for this tab is gone */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -5816,6 +6313,323 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listImports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Import jobs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ImportJob"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    previewImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportInput"];
+            };
+        };
+        responses: {
+            /** @description The preview job, still previewing */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Import job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    startImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The queued import */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setImportKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    api_key: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The queued job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getImportReport: {
+        parameters: {
+            query?: {
+                format?: "json" | "markdown";
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                    "text/markdown": string;
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    undoImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The undo job, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"] | components["schemas"]["AgentRequestAccepted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listImportPeople: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Freshdesk agents */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ImportPerson"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    linkImportPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                /** @description The Freshdesk agent id */
+                externalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    agent_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The Freshdesk agent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportPerson"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unlinkImportPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                /** @description The Freshdesk agent id */
+                externalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Freshdesk agent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportPerson"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     exportWorkspace: {
         parameters: {
             query?: never;
@@ -6132,6 +6946,8 @@ export interface operations {
                     body?: string;
                     /** @description The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise). */
                     cc?: string[];
+                    /** @description Reply drafts only: the newest reply number on the approver's screen. */
+                    seen_reply_number?: number;
                 };
             };
         };
