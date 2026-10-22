@@ -659,6 +659,8 @@ test('someone replied meanwhile: the text stays, their reply shows, and Send any
   expect(warning).toHaveTextContent('Lan');
   expect(warning).toHaveTextContent('Your refund left today.');
   expect(within(warning).getByRole('list', { name: 'New replies' })).toHaveAttribute('tabindex', '0');
+  // The safe choice takes the focus, so the warning is where the person is.
+  expect(within(warning).getByRole('button', { name: 'Edit reply' })).toHaveFocus();
   expect(body).toHaveValue('Refund on its way');
   fireEvent.click(within(warning).getByRole('button', { name: 'Edit reply' }));
   expect(screen.queryByRole('region', { name: 'New replies' })).toBeNull();

@@ -124,8 +124,16 @@ export function ConversationViewers({ viewers, timezone }: { viewers: Conversati
 // writer started: their replies by time (an imported one keeps its own time and says where it came
 // from), then Send anyway or Edit reply. Both count those replies as read, so they are asked about once.
 export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { replies: Message[]; timezone: string; onSendAnyway: () => void; onEdit: () => void }) {
+  // On a phone the timeline sits above the reply box and the new replies push it down: the warning is
+  // brought on screen and its safe choice takes the focus, so the refusal never goes unseen.
+  const panel = useRef<HTMLElement>(null);
+  const edit = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    panel.current?.scrollIntoView?.({ block: 'nearest' });
+    edit.current?.focus({ preventScroll: true });
+  }, []);
   return (
-    <section className="reply-conflict" aria-label={text.newReplies}>
+    <section className="reply-conflict" aria-label={text.newReplies} ref={panel}>
       {/* Only the fact is read out at once; the replies are there to read, not to be read aloud whole. */}
       {/* Replies a re-run import added are not someone answering now: the title says so when they are all there is. */}
       <p role="alert" className="reply-conflict-title">{replies.length > 0 && replies.every((reply) => reply.origin)
@@ -139,7 +147,7 @@ export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { rep
       </ul>
       {/* Editing is the safe default; sending anyway answers the customer a second time. */}
       <div className="reply-conflict-actions">
-        <button type="button" className="primary-action" onClick={onEdit}>{text.editReply}</button>
+        <button type="button" className="primary-action" ref={edit} onClick={onEdit}>{text.editReply}</button>
         <button type="button" className="send-anyway" onClick={onSendAnyway}>{text.sendAnyway}</button>
       </div>
     </section>

@@ -131,6 +131,9 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
     }
   };
   const copied = useMemo(() => suggestedCc(timeline, { hosted }), [timeline, hosted]);
+  // A refusal under a long timeline (a phone) is brought on screen, not left below it.
+  const deliveryRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (deliveryNotice) deliveryRef.current?.scrollIntoView?.({ block: 'nearest' }); }, [deliveryNotice]);
   // The newest reply on screen; unknown while the timeline loads, so nothing is checked against a guess.
   const latestReply = useMemo(() => timeline.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0), [timeline]);
   const agentNames = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.display_name || agent.email])), [agents]);
@@ -179,7 +182,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           viewers={openViewers} detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={onOpenSettings}>{messages.openSettings}</button></>}</p>}
-        {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
+        {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
