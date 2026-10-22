@@ -16,7 +16,8 @@ const open = new Set<ImportJob['state']>(['previewing', 'previewed', 'queued', '
 // before it (its report, its undo).
 export function currentJob(items: ImportJob[], justAsked?: string): ImportJob | undefined {
   const ended = (job: ImportJob) => job.phase === 'preview' && !open.has(job.state);
-  return items.find((job) => open.has(job.state)) ?? items.find((job) => job.id === justAsked) ?? items.find((job) => !ended(job)) ?? items[0];
+  // justAsked only keeps a preview that ended on screen; once it became an import, the newest job leads.
+  return items.find((job) => open.has(job.state)) ?? items.find((job) => job.id === justAsked && ended(job)) ?? items.find((job) => !ended(job)) ?? items[0];
 }
 
 // onOpenInbox follows the inbox link through the router.

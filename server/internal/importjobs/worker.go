@@ -106,6 +106,7 @@ func (w *Worker) Run(ctx context.Context) {
 			w.wg.Wait()
 			return
 		case <-ticker.C:
+		case <-w.options.Keys.wakeups:
 		}
 	}
 }
