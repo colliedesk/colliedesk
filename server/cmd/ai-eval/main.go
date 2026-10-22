@@ -185,7 +185,9 @@ func runDrafts(ctx context.Context, data dataset, cases []evalCase, provider aip
 		return nil, fmt.Errorf("create workspace: %w", err)
 	}
 	var adminID string
-	if err := pool.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1`, workspace.ID).Scan(&adminID); err != nil {
+	if err := db.InWorkspace(ctx, workspace.ID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1`, workspace.ID).Scan(&adminID)
+	}); err != nil {
 		return nil, err
 	}
 	data.Workspace = workspace.ID
@@ -193,10 +195,11 @@ func runDrafts(ctx context.Context, data dataset, cases []evalCase, provider aip
 	if err := seedKB(ctx, base, workspace.ID, adminID, data); err != nil {
 		return nil, err
 	}
-	for _, tag := range evalTags {
-		if _, err := pool.Exec(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,$2)`, workspace.ID, tag); err != nil {
-			return nil, err
-		}
+	if err := db.InWorkspace(ctx, workspace.ID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO tags(workspace_id,name) SELECT $1, unnest($2::text[])`, workspace.ID, evalTags)
+		return err
+	}); err != nil {
+		return nil, err
 	}
 	if _, err := base.BuildAIRetrieval(ctx); err != nil {
 		return nil, fmt.Errorf("build retrieval: %w", err)
@@ -246,8 +249,10 @@ func runDrafts(ctx context.Context, data dataset, cases []evalCase, provider aip
 		if err != nil {
 			row.Error = err.Error()
 		}
-		if err := pool.QueryRow(ctx, `SELECT COALESCE(sum(u.input_tokens),0),COALESCE(sum(u.output_tokens),0) FROM ai_usage u JOIN ai_drafts d ON d.id=u.ai_draft_id
-			WHERE d.conversation_id=$1`, id).Scan(&row.Usage.Input, &row.Usage.Output); err != nil {
+		if err := db.InWorkspace(ctx, workspace.ID, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `SELECT COALESCE(sum(u.input_tokens),0),COALESCE(sum(u.output_tokens),0) FROM ai_usage u JOIN ai_drafts d
+				ON d.workspace_id=u.workspace_id AND d.id=u.ai_draft_id WHERE u.workspace_id=$1 AND d.conversation_id=$2`, workspace.ID, id).Scan(&row.Usage.Input, &row.Usage.Output)
+		}); err != nil {
 			return nil, err
 		}
 		if draft != nil && draft.ReadyAt != nil {
@@ -353,29 +358,30 @@ func scratchPool(ctx context.Context) (*pgxpool.Pool, func(), error) {
 		return nil, nil, errors.New("ai-eval: set TEST_DATABASE_URL to a PostgreSQL the tool may create a schema in")
 	}
 	schema := fmt.Sprintf("ai_eval_%d", time.Now().UnixNano())
-	admin, err := pgxpool.New(ctx, url)
+	// One plain connection makes and drops the schema; every query of the run goes through database.DB.
+	admin, err := pgx.Connect(ctx, url)
 	if err != nil {
 		return nil, nil, err
 	}
 	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		admin.Close()
+		admin.Close(ctx)
 		return nil, nil, err
 	}
 	config, err := pgxpool.ParseConfig(url)
 	if err != nil {
-		admin.Close()
+		admin.Close(ctx)
 		return nil, nil, err
 	}
 	config.ConnConfig.RuntimeParams["search_path"] = schema
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
-		admin.Close()
+		admin.Close(ctx)
 		return nil, nil, err
 	}
 	return pool, func() {
 		pool.Close()
 		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE")
-		admin.Close()
+		admin.Close(context.Background())
 	}, nil
 }
 

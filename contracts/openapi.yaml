@@ -1010,8 +1010,8 @@ paths:
         the workspace turned drafts off.
       responses:
         '202':
-          description: The queued draft
-          content: {application/json: {schema: {$ref: '#/components/schemas/AIDraftEnvelope'}}}
+          description: The queued draft; for an agent token below the draft tier, the agent request a person approves
+          content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/AIDraftEnvelope'}, {$ref: '#/components/schemas/AgentRequestAccepted'}]}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -1028,6 +1028,7 @@ paths:
         draft with POST on the conversation. Discarding it again changes nothing (200). 409
         `ai_draft_state` for a draft that was already used or superseded.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: The discarded draft
           content: {application/json: {schema: {$ref: '#/components/schemas/AIDraftEnvelope'}}}
@@ -1046,6 +1047,7 @@ paths:
         each like any other change (remove the tag, set the priority back). 409 `ai_draft_state` when
         the draft has no suggestion.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: The draft and the conversation after the change
           content:
@@ -1071,6 +1073,7 @@ paths:
         person to send, edit or discard. A draft that is not scheduled is returned as it is (nothing will
         go out); 409 `ai_draft_state` when auto-answer already sent it.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: The draft, ready again
           content: {application/json: {schema: {$ref: '#/components/schemas/AIDraftEnvelope'}}}

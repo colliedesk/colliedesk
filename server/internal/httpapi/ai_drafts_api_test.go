@@ -167,8 +167,18 @@ func TestACustomerEmailGetsAnAIDraftFromTheKnowledgeBaseAndNeverAnotherWorkspace
 	if response := request(t, desk.api, http.MethodGet, "/api/v1/conversations/"+conversation+"/ai-draft", nil, other.admin, nil); response.Code != http.StatusNotFound {
 		t.Errorf("another workspace read the draft: status=%d", response.Code)
 	}
-	if response := request(t, desk.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-draft/"+got.ID+"/discard", nil, other.admin, nil); response.Code != http.StatusNotFound {
-		t.Errorf("another workspace discarded the draft: status=%d", response.Code)
+	for _, path := range []string{"", "/" + got.ID + "/discard", "/" + got.ID + "/apply-triage", "/" + got.ID + "/cancel-auto-answer"} {
+		if response := request(t, desk.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-draft"+path, nil, other.admin, nil); response.Code != http.StatusNotFound {
+			t.Errorf("another workspace reached POST ai-draft%s: status=%d", path, response.Code)
+		}
+	}
+	// Nor with its own conversation and this workspace's draft id.
+	otherConversation := other.email(t, "x@customer.example", "Other", "Hello?")
+	if response := request(t, desk.api, http.MethodPost, "/api/v1/conversations/"+otherConversation+"/ai-draft/"+got.ID+"/discard", nil, other.admin, nil); response.Code != http.StatusNotFound {
+		t.Errorf("a draft of another workspace was reached through a conversation of this one: status=%d", response.Code)
+	}
+	if after := desk.draft(t, desk.admin, conversation).Draft; after.Status != "ready" || after.TriageAppliedAt != nil {
+		t.Errorf("another workspace changed the draft: %+v", after)
 	}
 }
 

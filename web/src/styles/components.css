@@ -567,6 +567,14 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .reply-draft-recipients { display: grid; gap: 2px; color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
 .reply-draft-copies { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; font-size: var(--fs-small); }
 .reply-draft-copies legend { margin-bottom: var(--space-1); color: var(--text-2); }
+/* The AI draft reuses the reply draft card; its trust level is a quiet tag, its notes and sources secondary text. */
+.ai-draft-confidence { margin-left: var(--space-2); border: 1px solid var(--line-control); border-radius: 999px; padding: 0 var(--space-2); font-weight: 500; }
+.ai-draft[data-confidence="high"] .ai-draft-confidence { border-color: var(--accent); color: var(--accent-text); }
+.ai-draft-note, .ai-draft-sources, .ai-draft-triage { color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.ai-draft-ask { margin: 0 var(--space-6) var(--space-2); font-size: var(--fs-small); }
+@media (max-width: 40rem) { .ai-draft-ask { margin-inline: var(--space-3); } }
+.ai-topics { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+.ai-topics th, .ai-topics td { border-bottom: 1px solid var(--line); padding: var(--space-1) var(--space-2); text-align: left; }
 .request-recipients { color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
 
 /* Report a problem. */

@@ -123,3 +123,11 @@ test('a failed delivery says why in text, not only on hover', () => {
   expect(screen.getByText(reason)).toBeVisible();
   expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
 });
+
+test('a reply sent from an AI draft says so, and one auto-answer sent on its own says that', () => {
+  const reply = { ...base, kind: 'outgoing' as const, email: null, author_name: 'Ada', ai_draft_id: '33333333-3333-4333-8333-333333333333' };
+  const { rerender } = render(<MessageItem item={{ ...reply, author_agent_id: '44444444-4444-4444-8444-444444444444' }} timezone="UTC" />);
+  expect(screen.getByText('from an AI draft')).toBeInTheDocument();
+  rerender(<MessageItem item={{ ...reply, author_agent_id: null, author_name: null }} timezone="UTC" />);
+  expect(screen.getByText('Answered by AI on its own')).toBeInTheDocument();
+});

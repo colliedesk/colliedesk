@@ -5154,13 +5154,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The queued draft */
+            /** @description The queued draft; for an agent token below the draft tier, the agent request a person approves */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AIDraftEnvelope"];
+                    "application/json": components["schemas"]["AIDraftEnvelope"] | components["schemas"]["AgentRequestAccepted"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -5191,6 +5191,7 @@ export interface operations {
                     "application/json": components["schemas"]["AIDraftEnvelope"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
@@ -5222,6 +5223,7 @@ export interface operations {
                     };
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
@@ -5250,6 +5252,7 @@ export interface operations {
                     "application/json": components["schemas"]["AIDraftEnvelope"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];

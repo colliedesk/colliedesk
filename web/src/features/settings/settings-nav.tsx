@@ -28,7 +28,7 @@ const plainLink: RenderLink = (item, page) =>
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
 
-interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean }
+interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; ai?: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean }
 
 // settingsNavGroups lists what this person can see: their own account, then the shared workspace.
 export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] {
@@ -43,6 +43,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...section(messages.emailChannel, 'email-channel-heading', shown.email),
       ...section(messages.webForm, 'web-form-heading', shown.webForm),
       ...section(messages.savedReplies, 'saved-replies-heading', shown.savedReplies),
+      ...section(messages.aiDrafts, 'ai-heading', shown.ai),
       ...section(messages.helpCenter, 'help-center-heading', shown.helpCenter),
       ...section(messages.exportHeading, 'export-heading', shown.exportData),
       ...(shown.importData ? [{ label: messages.importFreshdesk, to: '/settings/import-freshdesk' as const, current: page === '/settings/import-freshdesk' }] : []),

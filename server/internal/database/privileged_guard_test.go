@@ -51,6 +51,7 @@ var privilegedCallSites = []string{
 // poolFiles may import pgxpool. Outside the database package they only open a pool or hand it to a
 // constructor that wraps it in a DB; queries never run on the raw pool.
 var poolFiles = []string{
+	"cmd/ai-eval/main.go",
 	"cmd/collie/billing.go",
 	"cmd/collie/commands.go",
 	"cmd/collie/email.go",
