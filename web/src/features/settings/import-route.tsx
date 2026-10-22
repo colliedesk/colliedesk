@@ -41,15 +41,21 @@ export function ImportRoute() {
   const cancel = useMutation({ mutationFn: importsApi.cancel, ...after });
   const setKey = useMutation({ mutationFn: ({ id, key }: { id: string; key: string }) => importsApi.setKey(id, key), ...after });
   const undo = useMutation({ mutationFn: importsApi.undo, ...after });
-  const failed = [preview, start, cancel, setKey, undo].find((mutation) => mutation.isError)?.error;
+  // Only the last action speaks: starting one clears what an earlier one said.
+  const all = [preview, start, cancel, setKey, undo];
+  const only = <T,>(mutation: { mutate: (value: T) => void }) => (value: T) => {
+    for (const other of all) if (other !== mutation) other.reset();
+    mutation.mutate(value);
+  };
+  const failed = all.find((mutation) => mutation.isError)?.error;
   const error = failed ? (failed instanceof InvalidRequestError ? failed.message : importMessages.actionFailed) : undefined;
-  const busy = [preview, start, cancel, setKey, undo].some((mutation) => mutation.isPending);
+  const busy = all.some((mutation) => mutation.isPending);
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   return <ImportPage isAdmin={isAdmin} showBilling={isAdmin && config.data?.billing.enabled === true}
     job={job} report={reportReady && parsed.success && job?.kind !== 'undo' ? importReportSchema.parse(report.data) : undefined}
     undoReport={reportReady && parsed.success && job?.kind === 'undo' ? undoReportSchema.parse(report.data) : undefined} history={items} timezone={me.data?.timezone ?? 'UTC'}
     loadFailed={imports.isError} error={error} busy={busy} connecting={connecting}
-    onPreview={(domain, key) => preview.mutate({ domain, key })} onStart={(id) => start.mutate(id)} onCancel={(id) => cancel.mutate(id)}
-    onSetKey={(id, key) => setKey.mutate({ id, key })} onUndo={(id) => undo.mutate(id)}
-    onNewImport={() => { for (const mutation of [preview, start, cancel, setKey, undo]) mutation.reset(); setConnecting(true); }} />;
+    onPreview={(domain, key) => only(preview)({ domain, key })} onStart={only(start)} onCancel={only(cancel)}
+    onSetKey={(id, key) => only(setKey)({ id, key })} onUndo={only(undo)}
+    onNewImport={() => { for (const mutation of all) mutation.reset(); setConnecting(true); }} />;
 }
