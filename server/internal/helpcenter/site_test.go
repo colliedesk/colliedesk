@@ -55,8 +55,21 @@ func TestAddresses(t *testing.T) {
 			t.Errorf("URL(%q, %q, %q) = %q, want %q", c.origin, c.domain, c.slug, got, c.want)
 		}
 	}
-	if got := ArticleURL("https://d.example", "", "acme", 12, "réinitialiser-mot-de-passe"); got != "https://d.example/help/acme/a/12-r%C3%A9initialiser-mot-de-passe" {
+	if got := ArticleURL("https://d.example", "", "acme", "", 12, "réinitialiser-mot-de-passe"); got != "https://d.example/help/acme/a/12-r%C3%A9initialiser-mot-de-passe" {
 		t.Errorf("ArticleURL = %q", got)
+	}
+	// An active custom domain wins over both other addresses, with the origin's scheme and port.
+	for _, c := range []struct{ origin, domain, slug, custom, want string }{
+		{"https://desk.example.com", "", "acme", "help.acme.example", "https://help.acme.example"},
+		{"https://app.example.com", "help.example.com", "acme", "help.acme.example", "https://help.acme.example"},
+		{"http://127.0.0.1:8080", "help.test", "www", "help.acme.test", "http://help.acme.test:8080"},
+	} {
+		if got := SiteURL(c.origin, c.domain, c.slug, c.custom); got != c.want {
+			t.Errorf("SiteURL(%q, %q, %q, %q) = %q, want %q", c.origin, c.domain, c.slug, c.custom, got, c.want)
+		}
+	}
+	if got := ArticleURL("https://d.example", "help.example.com", "acme", "help.acme.example", 3, "start"); got != "https://help.acme.example/a/3-start" {
+		t.Errorf("ArticleURL with a custom domain = %q", got)
 	}
 	for host, want := range map[string]string{"acme.help.example.com": "acme", "ACME.help.example.com:443": "acme", "acme.help.example.com.": "acme",
 		"app.help.example.com": "", "a.b.help.example.com": "", "help.example.com": "", "acme.example.com": "", "xn--abc.help.example.com": ""} {

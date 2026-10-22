@@ -101,7 +101,7 @@ export function SettingsRoute() {
     helpCenterSection={<section className="settings-card" aria-labelledby="help-center-heading">
       <div className="section-heading"><h2 id="help-center-heading">{messages.helpCenter}</h2><p>{messages.helpCenterDescription}</p></div>
       <div className="settings-body"><Part part={helpCenterPart} failed={<PartUnavailable />}
-        render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={isAdmin} workspaceName={me.data?.workspace.name} />} /></div>
+        render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={isAdmin} workspaceName={me.data?.workspace.name} timezone={me.data?.timezone ?? 'UTC'} />} /></div>
     </section>}
     webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} save={saveState(saveWebForm)} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
     inviteError={createInvite.error instanceof PlanLimitError || createInvite.error instanceof InvalidRequestError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}

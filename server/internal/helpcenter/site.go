@@ -69,6 +69,9 @@ type Config struct {
 	// Allow reports whether the client of request may load one more page (or run one more search),
 	// and how long to wait when not. Nil allows everything.
 	Allow func(request *http.Request, search bool) (bool, time.Duration)
+	// AllowLookup reports whether the client of request may make the server look up one more host
+	// name it does not know (a privileged query), and how long to wait when not. Nil allows everything.
+	AllowLookup func(request *http.Request) (bool, time.Duration)
 	// Client names the address a request comes from (behind trusted proxies), for the bound on videos
 	// sent at once; nil uses the connection's address.
 	Client func(request *http.Request) string
@@ -85,6 +88,8 @@ type Site struct {
 	notFound, notFoundOnHost []byte
 	// videos bounds the videos being sent at once (streams.go).
 	videos *streams
+	// hosts finds the workspaces of custom domains (custom-host.go).
+	hosts *customHosts
 }
 
 // New builds the help center from its configuration. It panics when a template is broken, which the
@@ -92,7 +97,7 @@ type Site struct {
 func New(config Config) *Site {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	config.Domain = strings.ToLower(strings.TrimSpace(config.Domain))
-	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams()}
+	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams(), hosts: newCustomHosts(time.Now)}
 	if parsed, err := url.Parse(config.Origin); err == nil {
 		site.originHost = strings.ToLower(parsed.Hostname())
 	}
@@ -101,12 +106,31 @@ func New(config Config) *Site {
 	return site
 }
 
-// Wrap answers help center requests and passes every other request to next: a host name below the
-// help center domain, and paths under /help/.
+// Wrap answers help center requests and passes the others to next (the app, the API and MCP). next
+// is reached only on APP_ORIGIN's host, and on loopback and IP address hosts (health checks, the
+// reverse proxy's certificate question): there the paths under /help/ are the help center and every
+// other path goes on. Every other host name belongs to the help center: a host name below the help
+// center domain, a claim's CNAME target, or an active custom domain serve it, whatever the path, and
+// any other name, such as a custom domain just removed, gets the help center's 404. So the app, its
+// sign-in and its session never answer on a name the server does not own. Requests to APP_ORIGIN's
+// host and below HELP_CENTER_DOMAIN never look a custom domain up.
 func (s *Site) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if slug, ok := hostSlug(request.Host, s.config.Domain, s.originHost); ok {
-			s.serve(response, request, slug, "", request.URL.Path)
+		host := requestHost(request.Host)
+		if slug, ok := hostSlug(host, s.config.Domain, s.originHost); ok {
+			s.serve(response, request, address{slug: slug, sub: request.URL.Path})
+			return
+		}
+		if _, ok := claimOfHost(host, s.config.Domain); ok {
+			s.serveHost(response, request, host, true)
+			return
+		}
+		if !s.appHost(host) {
+			if candidate, ok := s.customHostCandidate(host); ok {
+				s.serveHost(response, request, candidate, false)
+				return
+			}
+			s.writeNotFound(response, true)
 			return
 		}
 		if request.URL.Path == strings.TrimSuffix(pathPrefix, "/") {
@@ -115,16 +139,81 @@ func (s *Site) Wrap(next http.Handler) http.Handler {
 		}
 		if rest, ok := strings.CutPrefix(request.URL.Path, pathPrefix); ok {
 			slug, sub, _ := strings.Cut(rest, "/")
-			s.serve(response, request, slug, pathPrefix+slug, "/"+sub)
+			s.serve(response, request, address{slug: slug, base: pathPrefix + slug, sub: "/" + sub})
 			return
 		}
 		next.ServeHTTP(response, request)
 	})
 }
 
-// serve answers one request to the help center of slug; base is the path prefix the help center's
-// own links start with ("" on its own host) and sub the path below it.
-func (s *Site) serve(response http.ResponseWriter, request *http.Request, slug, base, sub string) {
+// appHost reports whether the app answers on a request's host name (requestHost): APP_ORIGIN's host,
+// localhost, or an IP address.
+func (s *Site) appHost(host string) bool {
+	return host == s.originHost || host == "localhost" || net.ParseIP(strings.Trim(host, "[]")) != nil
+}
+
+// serveHost answers a request on a host name that belongs to a workspace's help center through the
+// lookup (custom-host.go): an active custom domain, or a claim's CNAME target (claim), which moves to
+// the help center's address. A name that belongs to none is the help center's 404.
+func (s *Site) serveHost(response http.ResponseWriter, request *http.Request, host string, claim bool) {
+	workspaceID, found, wait, err := s.workspaceOfHost(request, host)
+	switch {
+	case err != nil:
+		s.writeError(response, err)
+	case wait > 0:
+		s.writeBusy(response, wait, "")
+	case !found:
+		s.writeNotFound(response, true)
+	default:
+		s.serve(response, request, address{workspaceID: workspaceID, host: host, claim: claim, sub: request.URL.Path})
+	}
+}
+
+// requestHost is a request's host name in lower case, without port or trailing dot.
+func requestHost(host string) string {
+	host = strings.ToLower(host)
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		host = name
+	}
+	return strings.TrimSuffix(host, ".")
+}
+
+// address is where a request reached a help center: a slug (on its host name or below /help/), or the
+// workspace and host name of an active custom domain or of a claim's CNAME target (claim). base is the
+// path prefix the help center's own links start with ("" on a host name of its own) and sub the path
+// below it.
+type address struct {
+	slug              string
+	workspaceID, host string
+	claim             bool
+	base, sub         string
+}
+
+// movedTo is where an old address of a help center with an active custom domain moves: the same path
+// (as the request escaped it) and query below the custom domain. Only the stored domain and the path
+// are used, never a host name the request names, so it cannot point anywhere else.
+func (s *Site) movedTo(request *http.Request, at address, site domain.HelpCenterSite) string {
+	sub := request.URL.EscapedPath()
+	if at.base != "" {
+		rest, ok := strings.CutPrefix(sub, at.base)
+		if !ok || rest != "" && rest[0] != '/' {
+			rest = (&url.URL{Path: at.sub}).EscapedPath()
+		}
+		sub = rest
+	}
+	if sub == "" {
+		sub = "/"
+	}
+	target := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost) + sub
+	if request.URL.RawQuery != "" {
+		target += "?" + request.URL.RawQuery
+	}
+	return target
+}
+
+// serve answers one request to the help center at address at.
+func (s *Site) serve(response http.ResponseWriter, request *http.Request, at address) {
+	slug, base, sub := at.slug, at.base, at.sub
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		securityHeaders(response.Header())
@@ -136,7 +225,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, slug, 
 		s.writeStyle(response, request, s.pages.style)
 		return
 	}
-	if !slugShape.MatchString(slug) {
+	if at.host == "" && !slugShape.MatchString(slug) {
 		s.writeNotFound(response, base == "")
 		return
 	}
@@ -146,25 +235,44 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, slug, 
 			return
 		}
 	}
-	// A server with a help center domain serves each help center on its own host; the path address
-	// moves there, whether or not the workspace exists, so the redirect tells nothing about it.
-	if base != "" && s.config.Domain != "" && email.ValidateHostedSlug(slug) == nil {
-		target := URL(s.config.Origin, s.config.Domain, slug) + sub
-		if request.URL.RawQuery != "" {
-			target += "?" + request.URL.RawQuery
-		}
-		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, target, http.StatusMovedPermanently)
-		return
-	}
 	ctx := request.Context()
-	site, open, err := s.config.Store.OpenHelpCenter(ctx, slug)
+	var site domain.HelpCenterSite
+	var open bool
+	var err error
+	if at.host != "" {
+		site, open, err = s.config.Store.OpenHelpCenterWorkspace(ctx, at.workspaceID)
+	} else {
+		site, open, err = s.config.Store.OpenHelpCenter(ctx, slug)
+	}
 	if err != nil {
 		s.writeError(response, err)
 		return
 	}
+	switch {
+	// A claim's CNAME target is only where the custom domain's DNS points: a visitor who opens it
+	// moves to the help center's address, the custom domain once it is active.
+	case at.claim && open:
+		response.Header().Set("Cache-Control", "no-store")
+		http.Redirect(response, request, s.movedTo(request, at, site), http.StatusMovedPermanently)
+		return
+	// A custom domain removed or replaced in another process may still be remembered here; the
+	// workspace's own row decides.
+	case at.host != "" && (at.claim || !open || site.CustomHost != at.host):
+		s.writeNotFound(response, true)
+		return
+	// An open help center with an active custom domain serves only there; its other addresses move.
+	case at.host == "" && open && site.CustomHost != "":
+		response.Header().Set("Cache-Control", "no-store")
+		http.Redirect(response, request, s.movedTo(request, at, site), http.StatusMovedPermanently)
+		return
+	// A server with a help center domain serves each help center on its own host; the path address
+	// moves there, whether or not the workspace exists, so the redirect tells nothing about it.
+	case base != "" && s.config.Domain != "" && email.ValidateHostedSlug(slug) == nil:
+		response.Header().Set("Cache-Control", "no-store")
+		http.Redirect(response, request, s.movedTo(request, at, domain.HelpCenterSite{Slug: slug}), http.StatusMovedPermanently)
+		return
 	// Unknown, off and locked are one answer, and none of them ever reaches the ETag.
-	if !open {
+	case !open:
 		s.writeNotFound(response, base == "")
 		return
 	}
@@ -211,10 +319,10 @@ func (s *Site) newView(site domain.HelpCenterSite, base string) view {
 	// title, language and name the header uses, the address and the brand. The brand counts what is
 	// shown, not only the saved theme: a logo moved to the trash changes no content version.
 	brand := newBrand(site)
+	address := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
 	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
-		site.Title, site.Locale, site.Name, base, s.config.Version, s.pages.fingerprint, brand.key}, "\x00")))
-	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: URL(s.config.Origin, s.config.Domain, site.Slug),
-		brand: brand}
+		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, brand.key}, "\x00")))
+	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: address, brand: brand}
 }
 
 func (v view) title() string {

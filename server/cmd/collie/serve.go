@@ -170,7 +170,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		apiConfig.AlertEmail = strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
 		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
 	}
+	apiConfig.LookupCNAME, apiConfig.LookupTXT = lookupCNAME, lookupTXT
 	api := httpapi.New(pool, apiConfig)
+	go recheckHelpCenterDomainsDaily(ctx, api)
 	if billing.Enabled() {
 		go refreshFoundingAtStart(ctx, api)
 	}
@@ -237,6 +239,35 @@ func sweepSignupAddresses(ctx context.Context, service *auth.Service) {
 	for {
 		if _, err := service.ClearSignupAddresses(ctx); err != nil && ctx.Err() == nil {
 			slog.Error("clear old sign-up addresses", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// lookupCNAME and lookupTXT answer the DNS questions of domain checks; nil uses the system resolver.
+// End-to-end builds replace them with a local stand-in (e2e_dns.go).
+var (
+	lookupCNAME func(ctx context.Context, host string) (string, error)
+	lookupTXT   func(ctx context.Context, name string) ([]string, error)
+)
+
+// recheckHelpCenterDomainsDaily looks up the DNS of every active custom help center domain at start
+// and then daily until ctx ends, and records what it finds: a failure warns on the domain, and a
+// domain no check has proved for 7 days goes back to pending.
+func recheckHelpCenterDomainsDaily(ctx context.Context, api *httpapi.Server) {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		checked, failed, released, err := api.RecheckHelpCenterDomains(ctx)
+		if err != nil && ctx.Err() == nil {
+			slog.Error("re-check help center domains", "error", err)
+		}
+		if failed > 0 {
+			slog.Warn("help center domains whose DNS no longer proves their workspace", "checked", checked, "failed", failed, "released", released)
 		}
 		select {
 		case <-ctx.Done():

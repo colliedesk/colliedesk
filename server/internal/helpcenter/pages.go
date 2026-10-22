@@ -225,7 +225,7 @@ func (v view) crumbs(n *node) []link {
 func (v view) articleLinks(articles []domain.PublicKBArticle, current int64) []articleLink {
 	links := make([]articleLink, 0, len(articles))
 	for _, article := range articles {
-		links = append(links, articleLink{Title: article.Title, URL: v.base + articlePath(article.Number, article.Slug), Current: article.Number == current})
+		links = append(links, articleLink{Title: article.Title, URL: v.base + ArticlePath(article.Number, article.Slug), Current: article.Number == current})
 	}
 	return links
 }
@@ -378,7 +378,7 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 	if match[2] != article.Slug {
 		response.Header().Del("ETag")
 		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, v.base+articlePath(article.Number, article.Slug), http.StatusMovedPermanently)
+		http.Redirect(response, request, v.base+ArticlePath(article.Number, article.Slug), http.StatusMovedPermanently)
 		return
 	}
 	data, plain, err := s.articlePage(request.Context(), v, article)
@@ -416,7 +416,7 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	collection := t.byID[article.CollectionID]
 	data = s.page(v, article.Title, v.crumbs(collection))
 	data.Heading, data.Body = article.Title, rendered.body
-	data.Description, data.Canonical = rendered.description, v.address+articlePath(article.Number, article.Slug)
+	data.Description, data.Canonical = rendered.description, v.address+ArticlePath(article.Number, article.Slug)
 	updated := article.UpdatedAt
 	data.Updated, data.UpdatedISO = updated.Format("2 Jan 2006"), updated.Format(time.RFC3339)
 	if collection != nil {
@@ -457,7 +457,7 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 			}
 		}
 		for _, article := range articles {
-			result := searchResult{Title: article.Title, URL: v.base + articlePath(article.Number, article.Slug), Excerpt: excerpt(article.Excerpt, excerptChars)}
+			result := searchResult{Title: article.Title, URL: v.base + ArticlePath(article.Number, article.Slug), Excerpt: excerpt(article.Excerpt, excerptChars)}
 			if collection := t.byID[article.CollectionID]; collection != nil {
 				result.Collection = collection.Name
 			}

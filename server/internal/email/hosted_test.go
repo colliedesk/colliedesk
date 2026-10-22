@@ -8,7 +8,8 @@ import (
 )
 
 func TestValidateHostedSlug(t *testing.T) {
-	for _, slug := range []string{"acme", "acme-support", "a1", "x", strings.Repeat("a", 63)} {
+	// A name that only starts like a custom domain's CNAME target is an ordinary slug ("HC Labs").
+	for _, slug := range []string{"acme", "acme-support", "a1", "x", strings.Repeat("a", 63), "hc-labs", "hc-0123456789abcdef0123456", "hc-0123456789abcdef012345678"} {
 		if err := email.ValidateHostedSlug(slug); err != nil {
 			t.Errorf("%q rejected: %v", slug, err)
 		}
@@ -31,6 +32,8 @@ func TestValidateHostedSlug(t *testing.T) {
 		"reserved clerk":   "clerk",
 		"reserved clkmail": "clkmail",
 		"punycode":         "xn--acme",
+		// hc-<24 hex digits> is the CNAME target of a custom help center domain's claim.
+		"claim target": "hc-0123456789abcdef01234567",
 	} {
 		if err := email.ValidateHostedSlug(slug); err == nil {
 			t.Errorf("%s (%q) accepted", name, slug)

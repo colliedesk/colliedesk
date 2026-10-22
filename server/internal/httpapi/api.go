@@ -80,6 +80,9 @@ type Config struct {
 	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
+	// LookupCNAME returns the end of a host name's CNAME chain, for the help center's custom domain
+	// check; nil uses the system resolver.
+	LookupCNAME func(ctx context.Context, host string) (string, error)
 	// MaxConcurrentExports caps workspace exports running at once on this server (default 2);
 	// more get 429. ExportWriteTimeout is how long one write to a slow client may block
 	// (default 60 s) before the export is aborted and its database connection released.
@@ -156,6 +159,12 @@ type API struct {
 	// helpCenterPages and helpCenterSearches count each client address's help center pages and searches.
 	helpCenterPages, helpCenterSearches *webFormLimiter
 	helpCenter                          *helpcenter.Site
+	// liveChecks bounds the DNS checks the reverse proxy's certificate question starts.
+	liveChecks *helpcenter.LiveChecks
+	// certificateNotes lets the certificate question record a certificate once an hour per host name.
+	certificateNotes *webFormLimiter
+	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
+	helpCenterHostLookups *webFormLimiter
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
@@ -201,6 +210,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if config.LookupTXT == nil {
 		config.LookupTXT = net.DefaultResolver.LookupTXT
 	}
+	if config.LookupCNAME == nil {
+		config.LookupCNAME = net.DefaultResolver.LookupCNAME
+	}
 	outbound := store.OutboundPolicy{
 		GmailEnabled:          config.Google.Enabled(),
 		Enabled:               config.Email.SMTP.Configured(),
@@ -222,6 +234,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
+		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
@@ -250,6 +263,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		api.polar = polar.NewClient(config.Billing)
 	}
 	api.helpCenter = api.newHelpCenter()
+	api.liveChecks = helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock)
 	mux := http.NewServeMux()
 	api.mux = mux
 	for _, route := range api.routeSpecs() {
@@ -371,6 +385,10 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/help-center/theme", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/help-center/theme/check", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/help-center/domain", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/help-center/domain", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/help-center/domain", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/help-center/domain/check", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/help-center/theme/preview", auth.PermissionConversationsRead},
 		{http.MethodGet, helpCenterTLSAskPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},

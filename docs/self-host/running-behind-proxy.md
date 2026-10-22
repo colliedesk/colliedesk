@@ -4,6 +4,23 @@ The server listens on `127.0.0.1` only. To reach it from outside the host, put a
 front of it that terminates TLS for your domain, for example Caddy or nginx, and set `APP_ORIGIN`
 to the public address (see [environment variables](environment-variables.md)).
 
+## The Host header
+
+The proxy **must** pass the visitor's `Host` header on unchanged: the server decides from it what to
+answer. It serves the app, the API, MCP and attachments only when `Host` is `APP_ORIGIN`'s host name,
+`localhost`, or an IP address (the shipped health check calls `http://127.0.0.1:8080/`, and Caddy asks
+its certificate question on `127.0.0.1`). Every other host name belongs to the
+[help center](#help-center-host-names): a workspace's help center host name or
+[custom domain](#custom-help-center-domains) serves it, and any other name gets the help center's
+`404`, never the app. A name the server does not own therefore never shows the sign-in page, even if
+its DNS still points at the proxy.
+
+- **Caddy** keeps `Host` by default.
+- **nginx** sends the upstream's name unless told otherwise; add `proxy_set_header Host $host;` to
+  every `location` that proxies to Colliedesk. Without it, a `proxy_pass http://colliedesk:8080;` sends
+  `Host: colliedesk:8080`, and every request gets `404`.
+- **Another proxy or load balancer:** forward the original `Host`, not the address of the upstream.
+
 ## Trusted proxies
 
 Behind a reverse proxy, Colliedesk must know the proxy to read the visitor's address from
@@ -78,3 +95,68 @@ example `acme.help.example.com`:
 Let's Encrypt issues at most 50 certificates per registered domain a week; a wildcard certificate
 (DNS challenge) avoids that limit if you serve many workspaces. Keep `APP_ORIGIN`'s own site block:
 a more specific site wins over the wildcard.
+
+## Custom help center domains
+
+A workspace can also serve its help center on a domain of its own, such as `help.example.com`
+([custom domain](../user/knowledge-base.md#custom-domain)). It works with or without
+`HELP_CENTER_DOMAIN`:
+
+- **With `HELP_CENTER_DOMAIN`**, the owner points the name with a `CNAME` to the target the card
+  shows, `hc-<claim>.<HELP_CENTER_DOMAIN>`, which also proves the workspace owns it. The target is
+  random, made when the domain is set and kept until it is removed or replaced, and no workspace
+  slug can take its shape; the wildcard record already covers it, so there is nothing to add for it.
+  The workspace's own `<slug>.<HELP_CENTER_DOMAIN>` proves nothing: a slug can be renamed and then
+  taken by another workspace. The wildcard record of `HELP_CENTER_DOMAIN` must be `A`/`AAAA` records,
+  not a `CNAME`: the check reads where the name's `CNAME` chain ends, and a wildcard that is itself a
+  `CNAME` makes every chain end elsewhere. The owner can always use the `TXT` record instead.
+- **Without it**, the owner points the name at the server (the card shows a `CNAME` to `APP_ORIGIN`'s
+  host, or an `A`/`AAAA` record when `APP_ORIGIN` is an IP address) and proves ownership with the `TXT`
+  record `_help-center-verify.<name>`.
+
+The proxy must send every other host name to the server and get its certificate on demand. The
+server answers the `ask` with `200` only for an active custom domain whose help center is on, or a
+pending one whose DNS check passes at that moment (it then becomes active, so one DNS change is
+enough). It runs at most 4 such checks at once and at most one per name every 30 seconds, asks DNS
+only for names a workspace has claimed, and records a certificate in the database at most once an
+hour per name; every other name gets `404`. With Caddy, add a catch-all site after your other sites:
+
+```caddyfile
+{
+	on_demand_tls {
+		ask http://127.0.0.1:8080/api/v1/public/help-center/tls-ask
+	}
+}
+
+desk.example.com {
+	reverse_proxy 127.0.0.1:8080
+}
+
+# Every other host name: custom help center domains. Caddy asks the server before it gets a certificate.
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+The proxy must keep the `Host` header ([the Host header](#the-host-header)): the server decides from it
+which help center to show. On a custom domain the server answers only help center pages; the app, the
+API and MCP stay on `APP_ORIGIN`. nginx cannot get certificates on demand: issue one per custom domain
+yourself and add a `server` block for it.
+
+A domain removed in Settings stops being served with the next request, on every server process:
+each page reads the domain's row. Each process remembers for up to 30 seconds which host names are
+custom domains and which workspace's address to give out, and forgets a name at once when a domain
+write through that process changes it. With several server processes behind one proxy, a domain that
+has just become active through one of them may therefore get the help center's `404` on another for
+up to 30 seconds, and API answers there may give the previous address for as long. A host name the
+server does not know costs one database lookup; each client address may cause at most 10 a minute
+(the help center's busy page beyond), so set [`TRUSTED_PROXIES`](#trusted-proxies) or every visitor
+shares the proxy's 10.
+
+The server checks every active custom domain at start and then daily. A domain whose records no
+check has found for 7 days goes back to pending: it stops serving, and its other addresses serve the
+help center again. Another workspace whose records prove a host name while the active workspace's
+records do not takes it over at once. Both show in Settings and in the API (`pending_reason`).

@@ -5,6 +5,7 @@ import { defineConfig } from '@playwright/test';
 import { attachmentsDir, databaseURL, goEnv, servers } from './e2e/support/cli';
 import { identity, jwksURL } from './e2e/support/identity-provider';
 import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
+import { dnsFile } from './e2e/support/dns';
 import { mailpit } from './e2e/support/mailpit';
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
@@ -42,7 +43,8 @@ export default defineConfig({
   webServer: [
     // The main server also imports in the app from the fake Freshdesk (-tags e2e lets it reach a loopback
     // address), with a key ring as a fresh install has one.
-    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=' }, 'e2e'),
+    // It also reads DNS from a file a journey writes, for the help center's custom domain check.
+    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', COLLIEDESK_E2E_DNS_FILE: dnsFile }, 'e2e'),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any' }),
     // The cloud server also imports in the app and sends replies by SMTP, for the golden path. Every server
     // with a relay runs an outbox worker that sends any workspace's queued reply, and the worker picks the
