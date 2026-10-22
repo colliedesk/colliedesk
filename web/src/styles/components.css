@@ -244,7 +244,7 @@
 .saved-reply-button kbd { margin-left: var(--space-1); }
 .saved-reply-button .ai-draft-badge { margin-left: var(--space-1); border-radius: 999px; background: var(--accent-soft); color: var(--text-1); padding: 0 var(--space-2); font-size: var(--fs-label); }
 @media (pointer: coarse) {
-  .saved-reply-button, .cc-button { --control: var(--touch); }
+  .saved-reply-button, .cc-button { --control: var(--touch); min-width: var(--touch); justify-content: center; }
 }
 /* Saved replies and Articles sit together on the left; the last of them pushes the rest to the right. */
 .saved-reply-button:has(+ .saved-reply-button) { margin-right: 0; }

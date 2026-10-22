@@ -259,7 +259,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           {aiDraftsFor && (
             <button type="button" className="saved-reply-button" disabled={disabled} aria-expanded={assist} onClick={() => setAssist((open) => !open)}>
               <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span>
-              {assistPart.status === 'ready' && !assist && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
+              {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
           )}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}

@@ -140,3 +140,12 @@ test('the button of the closed panel says a draft is ready', async () => {
   render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsFor={conversation} agentId={agent} />));
   expect(await screen.findByRole('button', { name: /^Draft with AI,\s*Draft ready$/ })).toBeInTheDocument();
 });
+
+test('the button says nothing about a draft once it is in the box, and follows a draft that became ready', async () => {
+  let ready = false;
+  serve((url) => (url.includes('?wait=') ? (ready = true, draft()) : { items: [ready ? draft() : draft({ status: 'running', text: null })] }));
+  render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsFor={conversation} agentId={agent} />));
+  fireEvent.click(await screen.findByRole('button', { name: /^Draft with AI/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Use draft' }));
+  expect(screen.getByRole('button', { name: 'Draft with AI' })).toBeInTheDocument();
+});

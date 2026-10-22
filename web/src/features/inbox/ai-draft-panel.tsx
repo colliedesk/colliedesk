@@ -55,6 +55,13 @@ export function AIDraftPanel({ conversationId, agentId, hasText, onUse, onClose 
     refetchInterval: (query) => (query.state.status === 'error' ? false : writing(query.state.data) ? 1 : false), refetchOnWindowFocus: false,
   });
   const draft = id ? current.data : undefined;
+  // The list (which the button's badge reads) follows the draft as it changes.
+  useEffect(() => {
+    if (!current.data) return;
+    const changed = current.data;
+    client.setQueryData<{ items: AIDraft[] }>(['ai-drafts', conversationId], (list) =>
+      list && { items: list.items.map((item) => (item.id === changed.id ? changed : item)) });
+  }, [client, conversationId, current.data]);
   const ask = useMutation({
     mutationFn: () => aiDraftApi.create(conversationId, prompt.trim()),
     onSuccess: (created) => {

@@ -76,6 +76,7 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
     // On a short laptop screen the draft's buttons and Send are on screen without scrolling.
     await expect(panel.getByRole('button', { name: 'Use draft' })).toBeInViewport();
     await expect(page.getByRole('button', { name: 'Send reply' })).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll with the panel open').toBeLessThanOrEqual(1280);
 
     const prompt = model.prompts.at(-1) ?? '';
     expect(prompt).toContain('Tell them where the parcel is');
