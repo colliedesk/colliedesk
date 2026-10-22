@@ -245,3 +245,18 @@ func TestAnotherWorkspaceCannotSeeOrTouchAJob(t *testing.T) {
 		t.Errorf("malformed id: %v", err)
 	}
 }
+
+func TestARefusedSetKeyLeavesTheKeyOfTheJobAlone(t *testing.T) {
+	e := newEnv(t, false)
+	job := e.started(t)
+	if _, err := e.service.SetKey(context.Background(), e.a.id, job.ID, "other"); !errors.Is(err, importjobs.ErrState) {
+		t.Fatalf("set key on a queued job: %v", err)
+	}
+	if _, err := e.service.SetKey(context.Background(), e.b.id, job.ID, "other"); !errors.Is(err, importjobs.ErrNotFound) {
+		t.Fatalf("set key from another workspace: %v", err)
+	}
+	key, err := importjobs.OpenKeyForTest(e.keys, e.a.id, job.ID, nil, "")
+	if err != nil || key != testKey {
+		t.Fatalf("the job's key = %q, %v: a refused call replaced or dropped it", key, err)
+	}
+}

@@ -85,12 +85,12 @@ func (s *Service) Preview(ctx context.Context, workspaceID, agentID, domain, api
 				created_by,created_at,updated_at,next_run_at)
 			VALUES($1,$2,'import','freshdesk',$3,'previewing','preview',$4,$5,$6,$7,$8,$9,$9,$9) RETURNING `+jobColumns,
 			id, workspaceID, host, encoded, sealed, keyID, s.keys.instance, nullable(agentID), now))
-		if err != nil {
-			s.keys.forget(id)
-		}
 		return err
 	})
 	s.keys.forget(discarded...)
+	if err == nil {
+		s.keys.keep(job.ID, apiKey)
+	}
 	return job, err
 }
 
@@ -224,9 +224,10 @@ func (s *Service) SetKey(ctx context.Context, workspaceID, id, apiKey string) (J
 			WHERE workspace_id=$1 AND id=$2 AND state='waiting_key' RETURNING `+jobColumns, workspaceID, id, sealed, keyID, s.keys.instance, now), nil
 	})
 	if err != nil {
-		s.keys.forget(id)
+		return Job{}, err
 	}
-	return job, err
+	s.keys.keep(id, apiKey)
+	return job, nil
 }
 
 // Undo queues an undo of an import that has ended: it removes what that Freshdesk account brought in,

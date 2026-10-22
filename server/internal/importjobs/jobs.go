@@ -166,12 +166,11 @@ func additionalData(workspaceID, jobID string) string {
 	return "freshdesk-import|" + workspaceID + "|" + jobID
 }
 
-// seal returns the sealed key and its key id, or (nil, nil) after keeping it in memory.
+// seal returns the sealed key and its key id, or (nil, nil) without a ring: the caller then keeps the
+// key in memory once the job row holds it, and never before, so a refused call cannot replace the key
+// of a job.
 func (k *Keys) seal(workspaceID, jobID, apiKey string) ([]byte, *string, error) {
 	if !k.ring.Configured() {
-		k.mu.Lock()
-		k.memory[jobID] = apiKey
-		k.mu.Unlock()
 		return nil, nil, nil
 	}
 	id, sealed, err := k.ring.Seal([]byte(apiKey), additionalData(workspaceID, jobID))
@@ -195,6 +194,16 @@ func (k *Keys) open(workspaceID, jobID string, sealed []byte, keyID *string) (st
 		return key, nil
 	}
 	return "", errKeyLost
+}
+
+// keep holds the key of a job in memory when the server has no ring.
+func (k *Keys) keep(jobID, apiKey string) {
+	if k.ring.Configured() {
+		return
+	}
+	k.mu.Lock()
+	k.memory[jobID] = apiKey
+	k.mu.Unlock()
 }
 
 // forget drops the in-memory copy of a job's key.
