@@ -107,6 +107,7 @@ export const aiMessages = {
   currentKey: 'Current key',
   newKey: 'New key',
   checkAndReplace: 'Check and replace',
+  addressStays: (url: string) => `The address stays ${url}. To use another address, add a new provider.`,
   oldKeyStays: (hint: string) => `Nothing changed: ••••${hint} is still in use.`,
 
   deleteHeading: (label: string) => `Delete ${label}?`,

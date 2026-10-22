@@ -359,6 +359,7 @@ function KeyDialog({ provider, onClose, onSetKey }: { provider: AIProvider; onCl
       footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={busy}>{busy ? m.checking : m.checkAndReplace}</button></>}>
       {provider.key_hint && <p className="ai-current"><KeyIcon />{m.currentKey} <span className="ai-mono">••••{provider.key_hint}</span> ·
         {provider.check_status === 'ok' ? <span className="status ai-st-ok">{m.working}</span> : <span className="status ai-st-err">{m.notWorking}</span>}</p>}
+      {provider.base_url && <p className="ai-address"><span>{m.addressStays(provider.base_url)}</span></p>}
       <Field label={m.newKey} id={`${id}-key`} error={error}>{(attrs) => <input {...attrs} type="password" autoComplete="off" value={key} onChange={(event) => setKey(event.target.value)} autoFocus />}</Field>
     </Dialog>
   );

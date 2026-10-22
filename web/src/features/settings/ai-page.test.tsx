@@ -119,6 +119,14 @@ test('a server that cannot store keys says so before anyone types one', () => {
   expect(within(dialog).getByRole('button', { name: 'Check and save' })).toBeDisabled();
 });
 
+test('changing a key keeps the address, and says how to use another one', () => {
+  page({ settings: settings({ providers: [provider({ kind: 'openai_compatible', base_url: 'https://openrouter.ai/api/v1' })] }) });
+  fireEvent.click(screen.getByRole('tab', { name: /Providers/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Change key' }));
+  const dialog = screen.getByRole('dialog', { name: 'Change the key of Team key' });
+  expect(within(dialog).getByText('The address stays https://openrouter.ai/api/v1. To use another address, add a new provider.')).toBeInTheDocument();
+});
+
 test('changing to a key that fails says the old key still works', async () => {
   const { onSetKey } = page({ settings: settings({ providers: [provider()] }) });
   onSetKey.mockResolvedValueOnce({ field: 'api_key', text: 'The provider refused this key.' });
