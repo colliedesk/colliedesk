@@ -58,7 +58,7 @@ queue's ids are uuids, not a sequence, so copied rows never collide with live on
 ## Ranking
 
 The query's words are folded and split like the text, the 16 longest kept. A search ranks two sets of
-candidates: the workspace's article rows, and its 10,000 newest conversation rows. For each word,
+candidates: the workspace's article rows, and its 5,000 newest conversation rows. For each word,
 `df` is how many candidates match it (as a prefix) and its weight is `ln((N + 1) / (df + 0.5))`; a
 candidate scores the sum over the words it matches. A word in every candidate weighs almost nothing,
 so no stop word list is needed in any language. `ts_rank` is not used: on stripped vectors it only

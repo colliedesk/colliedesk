@@ -28,9 +28,9 @@ const (
 const (
 	// aiRetrievalMaxTerms is how many words of a query count: the longest first, short words are the common ones.
 	aiRetrievalMaxTerms = 16
-	// aiRetrievalWindow is how many of the newest resolved conversations a search ranks: 20,000 took
-	// 160-280 ms with the knowledge base at its cap, past the budget (docs/internals/performance.md).
-	aiRetrievalWindow = 10000
+	// aiRetrievalWindow is how many of the newest resolved conversations a search ranks: 10,000 took
+	// 210 ms on the CI runner with the knowledge base at its cap, past the budget (docs/internals/performance.md).
+	aiRetrievalWindow = 5000
 	// aiWholeKBTokens: a knowledge base this small (its articles' own language) is sent whole.
 	aiWholeKBTokens = 15000
 	// aiKBExcerptRunes is the most of one article a search returns, about 1,500 tokens.
