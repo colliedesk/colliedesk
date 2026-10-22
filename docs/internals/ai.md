@@ -184,6 +184,11 @@ running calls at their hold and finished ones at their cost. Without the hold, c
 together, with no bound (`TestCallsRunningAtOnceNeverPassTheAllowance`). Now the allowance is passed
 only when a call costs more than its hold: a refusal fallback answering with an extra hop.
 
+A call that does not fit only because running calls hold the room (`ErrAllowanceHeld`: it would fit
+once they give it back) is not a spent allowance: its task goes back to the queue for 5 s, uncounted,
+for at most 10 minutes from when it was queued; a hold left by a dead process goes when the sweep
+closes its row. Only a call that would not fit with nothing running fails `ai_allowance_reached`.
+
 ## Reply drafts
 
 1. **The draft's state is its task's.** `ai_drafts.status` is only `pending`, `ready` or `cancelled`;

@@ -203,6 +203,13 @@ func (w *Worker) sweep(ctx context.Context) error {
 
 // run is one attempt of one task. Every write names the claim token: a task cancelled or leased again
 // meanwhile ignores what this attempt would record.
+// A task that only waits for other calls to give back what they hold tries again after heldRetry,
+// for at most heldWait from when it was queued.
+const (
+	heldRetry = 5 * time.Second
+	heldWait  = 10 * time.Minute
+)
+
 func (w *Worker) run(ctx context.Context, item claimedTask) {
 	task, err := w.load(ctx, item)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -259,6 +266,12 @@ func (w *Worker) run(ctx context.Context, item claimedTask) {
 		stop(TaskDone, "")
 	case errors.Is(err, ErrAllowanceReached):
 		stop(TaskFailed, CodeAllowanceReached)
+	case errors.Is(err, ErrAllowanceHeld) && w.service.now().Sub(task.CreatedAt) < heldWait:
+		// Room is held by calls still running: try again shortly, without counting an attempt. A call
+		// that never finishes gives its hold back when the sweep closes its row.
+		w.release(ctx, item, w.service.now().UTC().Add(heldRetry))
+	case errors.Is(err, ErrAllowanceHeld):
+		stop(TaskFailed, CodeAllowanceReached)
 	case errors.As(err, new(*TaskError)):
 		var taskErr *TaskError
 		errors.As(err, &taskErr)
@@ -277,9 +290,9 @@ func (w *Worker) load(ctx context.Context, item claimedTask) (Task, error) {
 	task := Task{ID: item.id, WorkspaceID: item.workspaceID}
 	err := w.db.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
 		var conversation, agent, token *string
-		if err := tx.QueryRow(ctx, `SELECT kind,conversation_id::text,automatic,requested_by_agent_id::text,requested_by_token_id::text,attempts
+		if err := tx.QueryRow(ctx, `SELECT kind,conversation_id::text,automatic,requested_by_agent_id::text,requested_by_token_id::text,attempts,created_at
 			FROM ai_tasks WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token).
-			Scan(&task.Kind, &conversation, &task.Automatic, &agent, &token, &task.Attempts); err != nil {
+			Scan(&task.Kind, &conversation, &task.Automatic, &agent, &token, &task.Attempts, &task.CreatedAt); err != nil {
 			return err
 		}
 		task.ConversationID, task.Actor.AgentID, task.Actor.TokenID = deref(conversation), deref(agent), deref(token)

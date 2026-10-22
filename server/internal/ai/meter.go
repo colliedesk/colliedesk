@@ -50,6 +50,10 @@ type Call struct {
 // nothing was sent. A workspace key is never limited this way.
 var ErrAllowanceReached = errors.New("this month's included AI is used up")
 
+// ErrAllowanceHeld means the call would fit once the calls still running finish and give back what
+// they hold: the task waits a moment instead of failing.
+var ErrAllowanceHeld = errors.New("the included AI left is held by calls still running")
+
 // monthStart is the first instant of the UTC calendar month of at: allowances reset then.
 func monthStart(at time.Time) time.Time {
 	at = at.UTC()
@@ -138,6 +142,14 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 				return err
 			}
 			if limited && (left <= 0 || hold > left) {
+				var held int64
+				if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND status='started'`,
+					call.WorkspaceID).Scan(&held); err != nil {
+					return err
+				}
+				if held > 0 && hold <= left+held {
+					return ErrAllowanceHeld
+				}
 				return ErrAllowanceReached
 			}
 			reserved = &hold
@@ -148,7 +160,7 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 			call.WorkspaceID, call.Feature, call.BilledTo, nullable(call.ProviderID), string(call.Kind), call.Label, model,
 			nullable(call.Actor.AgentID), nullable(call.Actor.TokenID), nullable(call.TaskID), call.Automatic, started, reserved).Scan(&usageID)
 	})
-	if errors.Is(err, ErrAllowanceReached) {
+	if errors.Is(err, ErrAllowanceReached) || errors.Is(err, ErrAllowanceHeld) {
 		return aiprovider.Response{}, err
 	}
 	if err != nil {
