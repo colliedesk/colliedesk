@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
-import { LogoMark } from '../../ui/logo';
+import { LogoMark, LogoWordmark } from '../../ui/logo';
 
 interface RedeemPageProps {
   token: string;
@@ -27,7 +27,7 @@ export function RedeemPage({
   return (
     <main className="redeem-page signin-split">
       <div className="signin-brand">
-        <div className="signin-brand-lockup"><LogoMark size={40} /><span className="wordmark"><b>collie</b>desk</span></div>
+        <div className="signin-brand-lockup"><LogoMark size={40} /><LogoWordmark /></div>
         <p className="signin-tagline">{messages.signInTagline}</p>
         <p className="signin-footnote">{messages.signInFootnote}</p>
       </div>

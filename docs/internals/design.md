@@ -54,7 +54,7 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   **Ctrl/Cmd + Enter** to send.
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise) beside the form; on narrow
   screens the brand side becomes a header.
-- The mascot is a collie head on an ink tile. Its colours are under review (icon options on design.hclabs.co).
+- The mascot is the headset collie on an ink tile (see Logo).
 
 ## Themes
 
@@ -105,15 +105,23 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 
 ## Logo
 
-- The mark (`web/src/ui/logo.tsx`) is the collie head: tipped ears, a white blaze into a long white
-  muzzle, a white ruff. The white parts vanish on a light surface, so the app always draws the mark
-  on its rounded dark tile (`--logo-tile`), the same shape as the favicon. 20 px or larger.
-- The favicon is `web/public/favicon.svg`: the mark on a dark tile. Use the tile for any light or
-  unknown background (browser tabs, GitHub, partner pages).
+Owner decision 22/10/2026, chosen from concepts that pair a collie trait with a help desk object.
+Source of every asset: `plans/261015-0932-colliedesk-brand-directions/logo-options/build-assets.py`
+in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and both wordmark files).
+
+- **Mark** (`web/src/ui/logo.tsx`, `LogoMark`): a collie in profile wearing a support headset. Wedge
+  muzzle, tipped ear, white ruff, the mic running along the muzzle. Greys only (ink and paper). The white
+  parts need a dark ground, so the mark always sits on its rounded tile (`--logo-tile`). 20 px or larger.
+- **Favicon** (`web/public/favicon.svg`, `.ico`): a shepherd's crook drawn as a question mark, with a
+  sheep for the dot. The headset collie turns to noise at 16 px; the crook stays legible. Same tile.
+  `apple-touch-icon.png` (180 px) uses the mark, full bleed.
+- **Wordmark** (`LogoWordmark` reads `web/public/wordmark-on-dark.svg`, kept out of the JS bundle; the
+  site uses `public/logo-wordmark.svg`): outlined IBM Plex Sans,
+  "collie" 700 and "desk" 400. The second "l" is tipped forward like a collie ear. Use the outlined
+  version, never retype it in a font. In running text write "Colliedesk".
 - Do not recolour, outline, rotate, glow or put a gradient on the mark. Do not put the bare mark
   (without its tile) on a photo, a light background or `--accent`.
-- Wordmark: "collie" Plex Sans 700 in `--text-1`, "desk" Plex Sans 400 in `--text-2`, one lowercase
-  word. In running text write "Colliedesk".
+- Trademark: not yet searched for this mark; search before any registration or print run.
 
 ## Rules
 
