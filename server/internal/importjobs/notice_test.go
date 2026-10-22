@@ -116,3 +116,27 @@ func TestWithoutMailTheEndOfAnImportIsOnlyOnThePage(t *testing.T) {
 		t.Fatalf("job = %+v", got)
 	}
 }
+
+func TestAnImportAPersonStopsIsNotMailed(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	mailer := &fakeMailer{}
+	w := e.mailingWorker(t, mailer)
+	running := make(chan struct{})
+	importjobs.StubImporter(w, func(ctx context.Context, _ freshdesk.Options) (*freshdesk.Report, error) {
+		close(running)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}, nil, nil)
+	if err := w.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	<-running
+	if _, err := e.service.Cancel(context.Background(), e.a.id, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	w.Wait()
+	if got := e.get(t, job.ID); got.State != importjobs.StateCancelled || len(mailer.sent) != 0 {
+		t.Fatalf("job = %s, mails = %d", got.State, len(mailer.sent))
+	}
+}
