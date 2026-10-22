@@ -9,6 +9,8 @@ BEGIN
     END IF;
 END $$;
 
+DROP TRIGGER ai_retrieval_contact_changed ON contacts;
+DROP FUNCTION ai_retrieval_contact_changed();
 DROP TRIGGER ai_retrieval_message_added ON messages;
 DROP TRIGGER ai_retrieval_conversation_inserted ON conversations;
 DROP TRIGGER ai_retrieval_conversation_updated ON conversations;
@@ -20,6 +22,7 @@ DROP FUNCTION ai_retrieval_message_added();
 DROP FUNCTION ai_retrieval_conversation_changed();
 DROP FUNCTION ai_retrieval_translation_changed();
 DROP FUNCTION ai_retrieval_article_changed();
+DROP TABLE ai_retrieval_former_names;
 DROP TABLE ai_retrieval_pending;
 DROP TABLE ai_retrieval_docs;
 

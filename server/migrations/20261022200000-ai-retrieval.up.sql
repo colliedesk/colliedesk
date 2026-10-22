@@ -70,6 +70,18 @@ CREATE TABLE ai_retrieval_pending (
 -- The worker finds the workspaces with rows, then reads the oldest rows of one.
 CREATE INDEX ai_retrieval_pending_workspace_idx ON ai_retrieval_pending(workspace_id, created_at, id);
 
+-- Every name and company a contact had since this release, so a conversation built again after a
+-- rename still masks what its text says. Only AI retrieval reads it; it goes with the contact.
+CREATE TABLE ai_retrieval_former_names (
+    workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    contact_id uuid NOT NULL,
+    kind text NOT NULL CHECK (kind IN ('name', 'organization')),
+    value text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, contact_id, kind, value),
+    FOREIGN KEY (workspace_id, contact_id) REFERENCES contacts(workspace_id, id) ON DELETE CASCADE
+);
+
 DO $$
 DECLARE
     app_role text;
@@ -80,7 +92,7 @@ BEGIN
     IF app_role IS NULL THEN
         RAISE EXCEPTION 'row-level security is not set up in this schema';
     END IF;
-    FOREACH ai_table IN ARRAY ARRAY['ai_retrieval_docs', 'ai_retrieval_pending'] LOOP
+    FOREACH ai_table IN ARRAY ARRAY['ai_retrieval_docs', 'ai_retrieval_pending', 'ai_retrieval_former_names'] LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', ai_table);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', ai_table);
         EXECUTE format($policy$CREATE POLICY workspace_isolation ON %1$I FOR ALL TO %2$I
@@ -154,6 +166,29 @@ END
 $$;
 CREATE TRIGGER ai_retrieval_message_added AFTER INSERT ON messages
     FOR EACH ROW WHEN (NEW.kind <> 'note' AND (NEW.kind = 'outgoing' OR NEW.origin IS NOT NULL)) EXECUTE FUNCTION ai_retrieval_message_added();
+
+-- A contact renamed, given another company, merged or unmerged: its resolved and closed conversations,
+-- and those of the contact it is merged into, are built again with the new details, and the old ones
+-- are kept to mask.
+CREATE FUNCTION ai_retrieval_contact_changed() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.name IS DISTINCT FROM NEW.name AND btrim(OLD.name) <> '' THEN
+        INSERT INTO ai_retrieval_former_names(workspace_id, contact_id, kind, value) VALUES (OLD.workspace_id, OLD.id, 'name', OLD.name)
+            ON CONFLICT DO NOTHING;
+    END IF;
+    IF OLD.organization IS DISTINCT FROM NEW.organization AND btrim(COALESCE(OLD.organization, '')) <> '' THEN
+        INSERT INTO ai_retrieval_former_names(workspace_id, contact_id, kind, value) VALUES (OLD.workspace_id, OLD.id, 'organization', OLD.organization)
+            ON CONFLICT DO NOTHING;
+    END IF;
+    INSERT INTO ai_retrieval_pending(workspace_id, conversation_id)
+        SELECT c.workspace_id, c.id FROM conversations c
+        WHERE c.workspace_id = NEW.workspace_id AND c.contact_id IN (NEW.id, NEW.merged_into_id, OLD.merged_into_id) AND c.status IN ('resolved', 'closed');
+    RETURN NULL;
+END
+$$;
+CREATE TRIGGER ai_retrieval_contact_changed AFTER UPDATE OF name, organization, merged_into_id ON contacts
+    FOR EACH ROW WHEN ((OLD.name, OLD.organization, OLD.merged_into_id) IS DISTINCT FROM (NEW.name, NEW.organization, NEW.merged_into_id))
+    EXECUTE FUNCTION ai_retrieval_contact_changed();
 
 -- What exists already is built by the server after the upgrade.
 INSERT INTO ai_retrieval_pending(workspace_id, kb_article_id)

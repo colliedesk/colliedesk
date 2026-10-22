@@ -1,6 +1,6 @@
 -- AI retrieval: acme's published article in its own language and in German, and a resolved
 -- conversation of beta, already built; beta keeps a published article away from AI, with the version
--- that says who did it; and a source of each kind still waiting to be built.
+-- that says who did it; a source of each kind still waiting to be built; and names contacts had.
 INSERT INTO kb_articles (id, workspace_id, collection_id, number, title, slug, body_md, status, published_at, author_agent_id, created_at, updated_at,
         ai_excluded, ai_excluded_at, ai_excluded_by_agent_id) VALUES
     (md5('kba-beta-3')::uuid, md5('ws-beta')::uuid, md5('kbc-beta-1')::uuid, 3, 'Internal refund rules', 'internal-refund-rules',
@@ -23,3 +23,8 @@ INSERT INTO ai_retrieval_docs (id, workspace_id, kb_article_id, kb_locale, conve
 INSERT INTO ai_retrieval_pending (workspace_id, kb_article_id, conversation_id, created_at) VALUES
     (md5('ws-acme')::uuid, md5('kba-acme-1')::uuid, NULL, '2026-10-22 12:01:00+00'),
     (md5('ws-beta')::uuid, NULL, md5('conv-beta-1')::uuid, '2026-10-22 12:01:00+00');
+
+-- A former name and company of a contact in each of two workspaces, still masked after a rename.
+INSERT INTO ai_retrieval_former_names (workspace_id, contact_id, kind, value, created_at) VALUES
+    (md5('ws-acme')::uuid, md5('contact-acme-2')::uuid, 'name', 'Old Name', '2026-10-22 12:02:00+00'),
+    (md5('ws-beta')::uuid, md5('contact-beta-4')::uuid, 'organization', 'Old Company', '2026-10-22 12:02:00+00');

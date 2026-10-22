@@ -436,3 +436,40 @@ func TestAIRetrievalMasksNamesWithoutEatingWords(t *testing.T) {
 		}
 	}
 }
+
+// A contact renamed, given a company, or merged after its conversation was resolved is masked under
+// every name it had: the rows are built again with the new details and keep masking the old ones.
+func TestAIRetrievalMasksAContactRenamedAfterTheConversation(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval Rename", "admin@retrieval-rename.example.com")
+	workspace := workspaceID(t, api, admin)
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "hoa.n", "email": "hoa@customer.example"})
+	seedResolvedConversation(t, api, pool, admin, workspace, contact, "Paper jam",
+		"Hello, I am Nguyen Thi Hoa from Lotus Trading, writing as hoa.n. The printer has a paper jam.", "note", "Open the tray.")
+	buildAIRetrieval(t, pool)
+	text := func() string {
+		t.Helper()
+		got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "printer paper jam", ConversationLimit: 3})
+		if len(got) != 1 {
+			t.Fatalf("search = %+v", got)
+		}
+		return got[0].Text
+	}
+	kbCall(t, api, http.MethodPatch, "/api/v1/contacts/"+contact, map[string]any{"name": "Nguyen Thi Hoa"}, admin, http.StatusOK, nil)
+	if _, err := pool.Exec(context.Background(), `UPDATE contacts SET organization='Lotus Trading' WHERE id=$1`, contact); err != nil {
+		t.Fatal(err)
+	}
+	buildAIRetrieval(t, pool)
+	got := text()
+	for _, leak := range []string{"Nguyen", "Lotus", "hoa.n"} {
+		if strings.Contains(got, leak) {
+			t.Errorf("after the rename the text holds %q:\n%s", leak, got)
+		}
+	}
+	// A later rename does not bring the earlier names back.
+	kbCall(t, api, http.MethodPatch, "/api/v1/contacts/"+contact, map[string]any{"name": "Hoa"}, admin, http.StatusOK, nil)
+	buildAIRetrieval(t, pool)
+	if got := text(); strings.Contains(got, "Nguyen") || strings.Contains(got, "hoa.n") {
+		t.Errorf("a second rename unmasked an earlier name:\n%s", got)
+	}
+}

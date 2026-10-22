@@ -510,11 +510,15 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 	if _, err := tx.Exec(ctx, `DELETE FROM ai_retrieval_docs WHERE workspace_id=$1 AND conversation_id=ANY($2::uuid[])`, workspaceID, ids); err != nil {
 		return err
 	}
-	// The names and companies of the contact and of the contacts merged into it: a merge moves their
-	// conversations, whose text still names them.
+	// The names and companies of the contact and of the contacts merged into it (a merge moves their
+	// conversations, whose text still names them), now and before a rename.
 	rows, err := tx.Query(ctx, `SELECT c.id::text, c.subject,
-			ARRAY(SELECT x.name FROM contacts x WHERE x.workspace_id=c.workspace_id AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)),
-			ARRAY(SELECT x.organization FROM contacts x WHERE x.workspace_id=c.workspace_id AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id) AND x.organization IS NOT NULL),
+			ARRAY(SELECT x.name FROM contacts x WHERE x.workspace_id=c.workspace_id AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)
+				UNION SELECT f.value FROM ai_retrieval_former_names f JOIN contacts x ON x.workspace_id=f.workspace_id AND x.id=f.contact_id
+				WHERE f.workspace_id=c.workspace_id AND f.kind='name' AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)),
+			ARRAY(SELECT x.organization FROM contacts x WHERE x.workspace_id=c.workspace_id AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id) AND x.organization IS NOT NULL
+				UNION SELECT f.value FROM ai_retrieval_former_names f JOIN contacts x ON x.workspace_id=f.workspace_id AND x.id=f.contact_id
+				WHERE f.workspace_id=c.workspace_id AND f.kind='organization' AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)),
 			c.updated_at,
 			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' ORDER BY m.created_at, m.id LIMIT 1),
 			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' ORDER BY m.created_at DESC, m.id DESC LIMIT 1)

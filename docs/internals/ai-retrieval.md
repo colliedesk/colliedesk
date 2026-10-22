@@ -16,7 +16,9 @@ database.
 2. A resolved or closed conversation: its subject, its first customer message (1,800 characters at
    most) and its last public reply, 4,000 characters in all. Private notes are never read. The names and companies
    of that conversation's contact and of the contacts merged into it become `[customer]` and
-   `[company]`: whole in any case, with or without accents, and each word of a name of two letters or
+   `[company]`, with every name and company the contact had since this release
+   (`ai_retrieval_former_names`, written by the trigger on `contacts`, so a rename never unmasks the
+   text; `TestAIRetrievalMasksAContactRenamedAfterTheConversation`): whole in any case, with or without accents, and each word of a name of two letters or
    more on its own only capitalized as a name ("Long", "Tran" for Trần), so English text about Trần
    Văn Long keeps "too long" (`TestAIRetrievalMasksNamesWithoutEatingWords`). Every email address
    becomes `[email]` and every run of six or more digits, with spaces, dots, dashes, slashes or
@@ -32,7 +34,8 @@ exclusive lock (13.8 s for 120,000 rows).
 
 Triggers queue a source in `ai_retrieval_pending` when it changes: an article's title, text, status,
 trash or exclusion; a translation written; a conversation's status, subject or contact while it is or
-becomes resolved or closed; a reply, or an imported message, on a resolved conversation (an import
+becomes resolved or closed; a contact renamed, given another company, merged or unmerged (its
+resolved conversations and those of the contact it is merged into); a reply, or an imported message, on a resolved conversation (an import
 writes the conversation before its messages, each in its own transaction). New mail from the inbox
 never fires one: it reopens the conversation instead. A conversation that is open, as every new one
 is, costs nothing.
