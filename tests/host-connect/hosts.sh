@@ -31,7 +31,7 @@ start=$(date +%s)
 sh -c "$(snippet claudeCodeCLI)" >/dev/null
 claude mcp list 2>&1 | grep '^colliedesk:'
 if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-  claude -p --allowedTools mcp__colliedesk__colliedesk_whoami "Call colliedesk_whoami and answer with the workspace name only."
+  claude -p --allowedTools mcp__colliedesk__colliedesk_whoami "Call colliedesk_whoami and answer with the workspace name only." </dev/null
 fi
 echo "Claude Code: $(( $(date +%s) - start ))s"
 
@@ -40,7 +40,7 @@ sh -c "$(snippet codex)" >/dev/null
 codex mcp list | grep colliedesk
 if [ -n "${OPENAI_API_KEY:-}" ]; then
   printenv OPENAI_API_KEY | codex login --with-api-key >/dev/null
-  codex exec --skip-git-repo-check -s read-only "Call the colliedesk_whoami tool and answer with the workspace name only."
+  codex exec --skip-git-repo-check -s read-only "Call the colliedesk_whoami tool and answer with the workspace name only." </dev/null
 fi
 echo "Codex: $(( $(date +%s) - start ))s"
 INNER
