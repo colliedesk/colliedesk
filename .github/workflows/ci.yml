@@ -212,19 +212,20 @@ jobs:
       - name: Install frozen dependencies
         working-directory: web
         run: corepack pnpm install --frozen-lockfile
+      # The Vite build and the servers' compile also run while Chromium installs: the test servers'
+      # `go run` then finds this commit's packages, embedded app included, in the Go cache. The
+      # tests wait for it, so it starts first and the checks below yield the cores to it (nice).
+      - name: Build the app and compile the test servers in the background
+        run: |
+          sh .github/scripts/ci-background.sh start app sh -c \
+            'cd web && corepack pnpm exec vite build && cd ../server && go build -tags e2e -o /dev/null ./cmd/collie && go build -o /dev/null ./cmd/collie'
       # The API drift and TypeScript checks of the web app, go vet and migration validation run here,
       # in the background while Chromium installs and the database starts: this job finished at 56
       # seconds, while each of them made the job it ran in end later (the web job, the Go shards).
       - name: Start the type check, go vet and migration validation in the background
         run: |
-          (cd web && sh ../.github/scripts/ci-background.sh start typecheck corepack pnpm typecheck)
-          (cd server && sh ../.github/scripts/ci-background.sh start vet sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
-      # The Vite build and the servers' compile also run while Chromium installs: the test servers'
-      # `go run` then finds this commit's packages, embedded app included, in the Go cache.
-      - name: Build the app and compile the test servers in the background
-        run: |
-          sh .github/scripts/ci-background.sh start app sh -c \
-            'cd web && corepack pnpm exec vite build && cd ../server && go build -tags e2e -o /dev/null ./cmd/collie && go build -o /dev/null ./cmd/collie'
+          (cd web && sh ../.github/scripts/ci-background.sh start typecheck nice -n 10 corepack pnpm typecheck)
+          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install --only-shell chromium
