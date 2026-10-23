@@ -3,6 +3,7 @@ package importjobs_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,6 +18,20 @@ func (e *env) worker(t *testing.T, keys *importjobs.Keys) *importjobs.Worker {
 	t.Helper()
 	return importjobs.NewWorker(importjobs.WorkerOptions{DB: e.db, Keys: keys, Interval: time.Hour,
 		Heartbeat: 20 * time.Millisecond, Flush: 10 * time.Millisecond, Lease: time.Minute})
+}
+
+// waitFor polls until condition holds; the deadline only bounds how long a failure takes.
+func waitFor(t *testing.T, condition func() (bool, string)) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		ok, state := condition()
+		if ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("still %s", state)
+		}
+	}
 }
 
 // tick runs one claim and waits for the jobs it started.
@@ -113,7 +128,6 @@ func TestTheRecentPassRunsFirstThenTheFullPassAndTheKeyIsErased(t *testing.T) {
 		if o.Mode == freshdesk.ModeRecent {
 			since = o.Since
 			o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 1, Total: 2, APICalls: 3})
-			time.Sleep(50 * time.Millisecond)
 			return &freshdesk.Report{Status: freshdesk.StatusInterim, Interim: true}, nil
 		}
 		if o.APIKey != testKey || o.WorkspaceSlug != e.a.slug || !o.ReserveRateLimit {
@@ -424,20 +438,20 @@ func TestProgressClearsTheCrashCount(t *testing.T) {
 	importjobs.StubImporter(w, func(ctx context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
 		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 1, Total: 3})
 		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 2, Total: 3})
-		time.Sleep(50 * time.Millisecond)
-		if n := e.column(t, job.ID, "attempts_without_progress").(int32); n != 0 {
-			t.Errorf("attempts_without_progress = %d after progress", n)
-		}
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}, nil, nil)
 	ctx, stop := context.WithCancel(context.Background())
+	defer w.Wait()
+	defer stop()
 	if err := w.Tick(ctx); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(100 * time.Millisecond)
-	stop()
-	w.Wait()
+	// Read while the job runs: a shutdown releases the claim and takes it back off the count.
+	waitFor(t, func() (bool, string) {
+		n := e.column(t, job.ID, "attempts_without_progress").(int32)
+		return n == 0, fmt.Sprintf("attempts_without_progress = %d after progress", n)
+	})
 }
 
 // unflushed is a worker whose flusher never runs while a test lasts: only the run's own ends write progress.
@@ -633,19 +647,22 @@ func TestAWaitForTheRateLimitKeepsTheCountsOfTheStep(t *testing.T) {
 	importjobs.StubImporter(w, func(ctx context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
 		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 72, Total: 300, APICalls: 200})
 		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", RateLimitUntil: &until, APICalls: 201})
-		time.Sleep(50 * time.Millisecond)
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}, nil, nil)
 	ctx, stop := context.WithCancel(context.Background())
+	defer w.Wait()
+	defer stop()
 	if err := w.Tick(ctx); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(120 * time.Millisecond)
-	got := e.get(t, job.ID)
-	stop()
-	w.Wait()
-	if p := got.Progress; p == nil || p.Done != 72 || p.Total != 300 || p.RateLimitUntil == nil {
+	// A flush between the two events writes the counts without the wait; the wait is the newest.
+	var p *importjobs.Progress
+	waitFor(t, func() (bool, string) {
+		p = e.get(t, job.ID).Progress
+		return p != nil && p.RateLimitUntil != nil, fmt.Sprintf("progress = %+v without the wait", p)
+	})
+	if p.Done != 72 || p.Total != 300 {
 		t.Fatalf("progress = %+v", p)
 	}
 }
