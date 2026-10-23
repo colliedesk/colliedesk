@@ -3,9 +3,9 @@
 // DROP SCHEMA ... CASCADE took a lock per object; CREATE DATABASE ... TEMPLATE copies the files in a
 // few milliseconds and DROP DATABASE takes no per-object locks. Only test files import it.
 //
-// The template is named after a hash of the migration files and the connecting role, so a changed
-// migration builds a new one, and processes that run at once (go test runs packages in parallel)
-// build it once between them under an advisory lock. Nothing may connect to the template: a clone
+// The template is named after a hash of the migration files, the connecting role and the base
+// database, so a changed migration builds a new one, and processes that run at once (go test runs
+// packages in parallel) build it once between them under an advisory lock. Nothing may connect to the template: a clone
 // fails while anyone is connected, so it is marked ALLOW_CONNECTIONS false once built.
 //
 // The migration that sets up row-level security names the app role after the database it runs in,
@@ -166,17 +166,16 @@ func setup(ctx context.Context, baseURL string) error {
 	if err != nil {
 		return fmt.Errorf("connect to TEST_DATABASE_URL: %w", err)
 	}
-	var role string
-	if err := pool.QueryRow(ctx, `SELECT current_user`).Scan(&role); err != nil {
+	var role, base string
+	if err := pool.QueryRow(ctx, `SELECT current_user, current_database()`).Scan(&role, &base); err != nil {
 		pool.Close()
 		return fmt.Errorf("connect to TEST_DATABASE_URL: %w", err)
 	}
-	sum, err := migrationsHash(role)
+	name, err := templateName(role, base)
 	if err != nil {
 		pool.Close()
 		return err
 	}
-	name := "colliedesk_tpl_" + sum[:16]
 	if err := ensureTemplate(ctx, pool, baseURL, name); err != nil {
 		pool.Close()
 		return err
@@ -185,9 +184,11 @@ func setup(ctx context.Context, baseURL string) error {
 	return nil
 }
 
-// migrationsHash covers every migration file by name and content, the role that owns the objects
-// (the privileged_access policies name it) and version.
-func migrationsHash(role string) (string, error) {
+// templateName hashes every migration file by name and content, the role that owns the objects (the
+// privileged_access policies name it), the base database and version. A database name is
+// cluster-wide but the advisory lock that guards the build covers only the base database, so two
+// base databases on one cluster each build their own template instead of dropping the other's.
+func templateName(role, base string) (string, error) {
 	entries, err := fs.ReadDir(migrations.Files, ".")
 	if err != nil {
 		return "", fmt.Errorf("read migrations: %w", err)
@@ -198,7 +199,7 @@ func migrationsHash(role string) (string, error) {
 	}
 	sort.Strings(names)
 	hash := sha256.New()
-	fmt.Fprintf(hash, "testdb %s\nrole %s\n", version, role)
+	fmt.Fprintf(hash, "testdb %s\nrole %s\ndatabase %s\n", version, role, base)
 	for _, name := range names {
 		contents, err := migrations.Files.ReadFile(name)
 		if err != nil {
@@ -207,7 +208,7 @@ func migrationsHash(role string) (string, error) {
 		fmt.Fprintf(hash, "%s %d\n", name, len(contents))
 		hash.Write(contents)
 	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
+	return "colliedesk_tpl_" + hex.EncodeToString(hash.Sum(nil))[:16], nil
 }
 
 // ensureTemplate builds the template under a session advisory lock on TEST_DATABASE_URL's database,
