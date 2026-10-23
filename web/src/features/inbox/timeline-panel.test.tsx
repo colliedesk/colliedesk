@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, expect, test, vi } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
@@ -131,4 +131,56 @@ test('a sent reply that missed a copied address says which one, without offering
   const item = screen.getByRole('article');
   expect(within(item).getByText(/not to: gone@customer\.example/i)).toBeInTheDocument();
   expect(within(item).queryByRole('button', { name: /retry delivery/i })).not.toBeInTheDocument();
+});
+
+// Resolving never needs the details pane: the thread header has it, one press, and the way back.
+const thread = { latest_reply_number: 0, id: '11111111-1111-4111-8111-111111111111', contact_id: '22222222-2222-4222-8222-222222222222',
+  contact_name: 'Mai Linh', subject: 'Refund', status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [],
+  channel: 'email' as const, origin: null, created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z' };
+
+test('an open or pending conversation has Resolve in its header, one press', async () => {
+  for (const status of ['open', 'pending'] as const) {
+    const onSetStatus = vi.fn().mockResolvedValue(undefined);
+    const { unmount } = render(<TimelinePanel conversation={{ ...thread, status }} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+    expect(onSetStatus).toHaveBeenCalledWith('resolved');
+    expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Resolve' })).not.toHaveAttribute('aria-disabled'));
+    unmount();
+  }
+});
+
+test('a resolved or closed conversation offers Reopen instead', async () => {
+  for (const status of ['resolved', 'closed'] as const) {
+    const onSetStatus = vi.fn().mockResolvedValue(undefined);
+    const { unmount } = render(<TimelinePanel conversation={{ ...thread, status }} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen' }));
+    expect(onSetStatus).toHaveBeenCalledWith('open');
+    expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reopen' })).not.toHaveAttribute('aria-disabled'));
+    unmount();
+  }
+});
+
+test('the header button ignores presses while the change runs, keeps the focus, and a failed change says so', async () => {
+  let refuse!: (error: Error) => void;
+  const onSetStatus = vi.fn(() => new Promise((_resolve, reject) => { refuse = reject; }));
+  render(<TimelinePanel conversation={thread} items={[]} timezone="UTC" onSetStatus={onSetStatus} />);
+  const resolve = screen.getByRole('button', { name: 'Resolve' });
+  resolve.focus();
+  fireEvent.click(resolve);
+  expect(resolve).toHaveAttribute('aria-disabled', 'true');
+  // It keeps the keyboard focus while the change runs, and a second press does nothing.
+  expect(resolve).toHaveFocus();
+  fireEvent.click(resolve);
+  expect(onSetStatus).toHaveBeenCalledTimes(1);
+  refuse(new Error('API 500'));
+  expect(await screen.findByRole('alert')).toHaveTextContent('The status could not be changed. Try again.');
+  expect(resolve).not.toHaveAttribute('aria-disabled');
+});
+
+test('no conversation, no status button', () => {
+  render(<TimelinePanel items={[]} timezone="UTC" onSetStatus={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument();
 });

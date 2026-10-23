@@ -135,10 +135,16 @@
 
 /* Thread. */
 .timeline-panel { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
-.timeline-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-6); }
+.timeline-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-6); }
 .timeline-header h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.005em; }
 .timeline-meta { display: flex; gap: var(--space-3); margin-top: var(--space-1); }
 .details-toggle, .drawer-close { display: none; }
+.timeline-header > div:first-child { flex: 1 1 14rem; min-width: 0; }
+/* Resolve (or Reopen) and Show details stay together; on a narrow thread they move under the title. */
+.timeline-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-left: auto; }
+.status-button svg { width: 14px; height: 14px; }
+.status-button[aria-disabled="true"] { opacity: 0.6; cursor: progress; }
+.status-button-error { flex-basis: 100%; margin: 0; text-align: right; font-size: var(--fs-label); }
 .timeline-scroll { overflow-y: auto; padding: var(--space-5) var(--space-6); }
 .timeline-stack { max-width: 46rem; margin: 0 auto; display: grid; gap: var(--space-4); }
 .message { border-radius: var(--radius-lg); background: var(--surface-2); padding: var(--space-4) var(--space-5); }
@@ -210,7 +216,8 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-tabs button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-1); }
 .composer-card[data-kind="note"] .composer-tabs button[aria-pressed="true"] { background: var(--surface-1); color: var(--note-text); box-shadow: inset 0 0 0 1px var(--note-line); }
 .composer-tabs kbd { margin-left: var(--space-1); }
-.composer-hint { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
+.composer-head-end { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2) var(--space-4); }
+.composer-hint { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-label); white-space: nowrap; }
 .composer-card[data-kind="note"] .composer-hint { color: var(--note-text); }
 .composer textarea { display: block; width: 100%; min-height: 3.5rem; max-height: 40vh; resize: vertical; border: 0; background: transparent; padding: var(--space-2) var(--space-4); line-height: 1.55; transition: min-height var(--dur) var(--ease); }
 .composer-card:focus-within textarea, .composer textarea:not(:placeholder-shown) { min-height: 7rem; }
@@ -239,10 +246,10 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-attachments-problem { flex-basis: 100%; margin: 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-label); }
 .composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
 /* A narrow reply box keeps every tool on screen: the tools show their icon only (the label stays their
-   accessible name) and the shortcut hint goes. */
+   accessible name) and their keycaps go. The shortcut hint lives in the composer head. */
 @container (max-width: 40rem) {
   .composer-actions .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .composer-actions .saved-reply-button kbd, .composer-actions .composer-hint { display: none; }
+  .composer-actions .saved-reply-button kbd { display: none; }
 }
 .composer-warning { margin: var(--space-2) var(--space-2) 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text);
   padding: var(--space-2) var(--space-3); font-size: var(--fs-small); overflow-wrap: anywhere; }
@@ -327,6 +334,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 75rem) {
   .details-toggle { display: inline-flex; }
+  /* The thread is narrow here: the buttons keep their room, the shortcut stays in their tooltips. */
+  .composer-keys { display: none; }
   .drawer-close { display: flex; margin: var(--space-3) var(--space-4) 0 auto; }
   .inbox-shell[data-details-open="true"] .details-panel {
     display: block; position: fixed; inset: var(--space-2) var(--space-2) var(--space-2) auto; z-index: 3; width: min(100% - var(--space-4), 20rem); box-shadow: var(--shadow-3);
@@ -336,9 +345,6 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .timeline-header, .timeline-scroll { padding-inline: var(--space-4); }
   .composer { padding-inline: var(--space-3); }
   .composer-notice { width: auto; margin-inline: var(--space-3); }
-  .composer-actions .composer-hint { display: none; }
-  /* Saved replies, Articles, Cc and Send wrap rather than push the card past the screen. */
-  .composer-actions { flex-wrap: wrap; row-gap: var(--space-2); }
   .saved-reply-button kbd { display: none; }
   .saved-reply-picker li { display: flex; align-items: center; min-height: var(--touch); }
   .status-tabs label { min-height: var(--touch); }

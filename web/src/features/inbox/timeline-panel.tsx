@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
+import { CheckCircleIcon, RotateCcwIcon } from '../../ui/icons';
 import { Part } from '../../ui/lazy-part';
 import { MessageItem } from './message-item';
 import { presenceViewPart } from './presence-part';
@@ -28,9 +30,31 @@ interface TimelinePanelProps {
   onOpenContact?: (contactId: string) => void;
   // The others who have this conversation open now, and whether one is writing a reply.
   viewers?: ConversationViewer[];
+  // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
+  onSetStatus?: (status: Conversation['status']) => Promise<unknown>;
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [] }: TimelinePanelProps) {
+// One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
+// closed one offers the way back. A failure says so beside the button.
+function StatusButton({ status, onSetStatus }: { status: Conversation['status']; onSetStatus: (status: Conversation['status']) => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const done = status === 'resolved' || status === 'closed';
+  const change = () => {
+    if (busy) return;
+    setBusy(true);
+    setFailed(false);
+    onSetStatus(done ? 'open' : 'resolved').catch(() => setFailed(true)).finally(() => setBusy(false));
+  };
+  return <>
+    {/* aria-disabled, not disabled: a disabled button drops the keyboard focus, and Reopen takes its place. */}
+    <button type="button" className="status-button" aria-disabled={busy || undefined} onClick={change}>
+      {done ? <RotateCcwIcon /> : <CheckCircleIcon />}{done ? messages.reopen : messages.resolve}</button>
+    {failed && <p role="alert" className="error-copy status-button-error">{messages.statusChangeFailed}</p>}
+  </>;
+}
+
+export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [], onSetStatus }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -43,10 +67,13 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
               {conversation.contact_name}</a></div>}
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
-        {conversation && onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
-          aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
-          aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
-          {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
+        {conversation && (onSetStatus || onToggleDetails) && <div className="timeline-actions">
+          {onSetStatus && <StatusButton key={conversation.id} status={conversation.status} onSetStatus={onSetStatus} />}
+          {onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
+            aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
+            aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
+            {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
+        </div>}
       </header>
       <div className="timeline-scroll">
         <div className="timeline-stack">

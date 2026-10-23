@@ -45,6 +45,9 @@ interface ReplyComposerProps {
   // Reply drafts are off: the box says so, with the way to turn them on (canManage) or whom to ask.
   aiDraftsOff?: boolean;
   agentId?: string;
+  // Sets the conversation Resolved. With it a reply offers Send and resolve (Ctrl/Cmd+Shift+Enter), which
+  // calls it only after the reply was accepted. A private note never resolves.
+  onResolve?: () => Promise<unknown>;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -77,7 +80,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -166,8 +169,19 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
   // An address typed into Cc that cannot be added would otherwise be dropped from the reply unseen.
   const ccHolds = kind === 'outgoing' && showCc && ccBlocking;
-  const submit = () => {
+  const canResolve = kind === 'outgoing' && Boolean(onResolve);
+  // Whether the last reply asked to resolve too, so Send anyway after a conflict keeps that choice.
+  const resolveAfter = useRef(false);
+  const cannotSend = sending || !body.trim() || Boolean(fileProblem) || ccHolds;
+  const submit = (resolve = false) => {
     if (!body.trim() || sending || fileProblem || ccHolds) return;
+    const resolving = resolve && canResolve;
+    resolveAfter.current = resolving;
+    // The reply stays sent when the status change fails; the person is told and can press Resolve. The button
+    // goes once the conversation is resolved, so focus that went with it comes back to the box.
+    const resolveNow = () => (resolving ? onResolve!().then(() => {
+      if (!document.activeElement || document.activeElement === document.body) field.current?.focus();
+    }, () => setProblem(messages.resolvedAfterReplyFailed)) : undefined);
     // A variable no saved reply filled in would reach the customer as written.
     const unfilled = kind === 'outgoing' ? [...new Set(body.match(/\{\{[^{}]*\}\}/g) ?? [])] : [];
     if (unfilled.length > 0 && !window.confirm(messages.unfilledVariables(unfilled))) return;
@@ -185,7 +199,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     if (fromDraft && typeof (result as Promise<unknown> | undefined)?.then === 'function') {
       result = (result as Promise<unknown>).catch((error: unknown) => (draftGone(error) ? send() : Promise.reject(error)));
     }
-    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); return; }
+    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); void resolveNow(); return; }
     setSending(true);
     setProblem(undefined);
     // Clear only what was sent: text typed while the request was in flight (a note right after a reply) stays.
@@ -195,7 +209,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
       setBody((current) => (current.trim() === sent ? '' : current));
       setFiles((current) => current.filter((file) => !sentFiles.includes(file)));
     };
-    (result as Promise<unknown>).then(clearSent, (error: unknown) => {
+    (result as Promise<unknown>).then(() => { clearSent(); return resolveNow(); }, (error: unknown) => {
       if (error instanceof ReplyConflictError) setConflict(error);
       else setProblem(replyRefusalText(error));
     }).finally(() => setSending(false));
@@ -217,7 +231,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   }, [disabled]);
   const onFieldKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (composing(event.nativeEvent)) return;
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); }
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(event.shiftKey); }
     if (event.key === '/' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setPicking('replies'); }
   };
   return (
@@ -230,7 +244,12 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
             <button type="button" aria-pressed={kind === 'note'} onClick={() => setKind('note')}>
               <LockIcon />{messages.noteMode}<kbd aria-hidden="true">N</kbd></button>
           </div>
-          {kind === 'note' && <span className="composer-hint">{messages.noteHint}</span>}
+          <div className="composer-head-end">
+            {kind === 'note' && <span className="composer-hint">{messages.noteHint}</span>}
+            {/* The keys sit up here, where there is room, so the buttons below keep one row. */}
+            <span className="composer-hint composer-keys" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}
+              {canResolve && <>{messages.resolveShortcutAdd} <kbd>Shift</kbd> {messages.resolveShortcut}</>}</span>
+          </div>
         </div>
         {aiWarnings.length > 0 && kind === 'outgoing' && (
           <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
@@ -248,7 +267,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
             onClose={() => { setAssist(false); field.current?.focus(); }} />)}
         {conflict && <Part part={presenceViewPart} failed={<p role="alert" className="composer-notice">{conflict.message}</p>}
           render={(view) => <view.ReplyConflict replies={conflict.newer} timezone={timezone}
-            onSendAnyway={() => { mark.current = conflict.latest; submit(); }}
+            onSendAnyway={() => { mark.current = conflict.latest; submit(resolveAfter.current); }}
             onEdit={() => { mark.current = conflict.latest; setConflict(undefined); field.current?.focus(); }} />} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
         {offNote && !aiDraftsFor && <p role="status" className="composer-notice">{messages.aiDraftsOffAgent}</p>}
@@ -279,8 +298,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>
           )}
-          <span className="composer-hint" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}</span>
-          <button className="primary-action" type="button" disabled={disabled || sending || !body.trim() || Boolean(fileProblem) || ccHolds} onClick={submit}>
+          {canResolve && <button type="button" className="send-and-resolve" disabled={disabled || cannotSend}
+            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter" title={`${messages.sendAndResolve} (Ctrl+Shift+Enter)`} onClick={() => submit(true)}>
+            {messages.sendAndResolve}</button>}
+          <button className="primary-action" type="button" disabled={disabled || cannotSend} onClick={() => submit()}>
             {kind === 'note' ? messages.privateNote : messages.reply}
           </button>
         </div>
