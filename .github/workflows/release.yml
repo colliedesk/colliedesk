@@ -216,9 +216,10 @@ jobs:
           prerelease=
           case "$TAG" in *-*) prerelease=--prerelease ;; esac
           if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG is already released"; exit 0; fi
-          gh release create "$TAG" --verify-tag --generate-notes $prerelease \
+          # With its client files from the start: the guides link releases/latest/download/<name>.
+          gh release create "$TAG" "$RUNNER_TEMP"/client/* --verify-tag --generate-notes $prerelease \
             --notes 'Self-hosted? Back up first, then follow the [upgrade guide](https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md); it also says how to roll back.'
-      # Also on a run that finishes an earlier one, so a release never lacks its client files.
+      # A run that finishes an earlier one finds the release made; this gives it its client files.
       - name: Attach the client files
         env:
           GH_TOKEN: ${{ github.token }}
