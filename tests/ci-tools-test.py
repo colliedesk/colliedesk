@@ -116,6 +116,26 @@ class Shards(unittest.TestCase):
             self.assertAlmostEqual(share, min(regular_counts) / 2, delta=1, msg=(regular_counts, latency_counts))
         self.assertTrue(all('--' not in lines for lines in shards[:6]))
 
+    def test_each_latency_runner_can_take_its_own_share(self):
+        latency = ['TestHelpCenterPagesLatencyBudget', 'TestInboxListLatencyBudget']
+        regular = [f'TestRegular{i:03d}' for i in range(130)]
+        listing = '\n'.join(regular + latency) + '\n'
+        shards = [run('go-test-shard.py', str(shard), '8', '--latency-shards', '2', '--parts', '3',
+                      '--latency-share', '0.5,0', stdin=listing) for shard in range(1, 9)]
+        for result in shards:
+            self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [result.stdout.split('\n')[:-1] for result in shards]
+        for name in regular + latency:
+            self.assertEqual(sum(bool(re.search(p, name)) for shard in lines for p in shard if p != '--'), 1, name)
+        # The second latency runner's gates take about as long as a regular shard: gates only.
+        self.assertEqual(len(lines[7]), 1)
+        self.assertRegex('TestInboxListLatencyBudget', lines[7][0])
+        count = lambda shard: sum(bool(re.search(p, name)) for p in shard if p != '--' for name in regular)
+        self.assertAlmostEqual(count(lines[6][2:]), count(lines[0]) / 2, delta=1)
+        for share in ('0.5,0,1', '0.5,x'):
+            self.assertNotEqual(run('go-test-shard.py', '1', '8', '--latency-shards', '2',
+                                    '--latency-share', share, stdin=listing).returncode, 0, share)
+
     def test_latency_share_defaults_to_none_and_rejects_negative(self):
         listing = self.listing + 'TestInboxListLatencyBudget\n'
         plain = run('go-test-shard.py', '3', '3', stdin=listing)

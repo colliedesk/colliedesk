@@ -11,8 +11,9 @@ parser.add_argument('--parts', type=int, default=1,
                     help='print a regular shard as this many disjoint patterns, one per line')
 parser.add_argument('--latency-shards', type=int, default=1,
                     help='how many of the last shards run the latency fixtures')
-parser.add_argument('--latency-share', type=float, default=0,
-                    help='regular tests a latency shard runs after its gates, as a fraction of a regular shard')
+parser.add_argument('--latency-share', default='0',
+                    help='regular tests a latency shard runs after its gates, as a fraction of a regular '
+                         'shard; one value for all latency shards, or one per latency shard, comma-separated')
 args = parser.parse_args()
 if not 1 <= args.shard <= args.total:
     parser.error('shard must be between 1 and total')
@@ -20,8 +21,15 @@ if args.parts < 1:
     parser.error('parts must be at least 1')
 if args.total > 1 and not 1 <= args.latency_shards < args.total:
     parser.error('latency shards must be at least 1 and leave a regular shard')
-if args.latency_share < 0:
-    parser.error('latency share cannot be negative')
+try:
+    shares = [float(share) for share in args.latency_share.split(',')]
+except ValueError:
+    parser.error('latency share must be numbers')
+latency_total = args.latency_shards
+if len(shares) == 1:
+    shares *= latency_total
+if len(shares) != latency_total or any(share < 0 for share in shares):
+    parser.error('latency share needs one non-negative value, or one per latency shard')
 names = sorted({line.strip() for line in sys.stdin
                 if re.fullmatch(r'(Test|Example|Fuzz)\w*', line.strip())})
 if not names:
@@ -44,9 +52,7 @@ regular_total = args.total - args.latency_shards
 # A latency shard ends 30 to 60 seconds before the regular ones, so it can take a share of the regular
 # tests once its gates are done. Smooth weighted round robin over the sorted names: each regular shard
 # weighs 1 and each latency shard the share, so every name has exactly one shard.
-weights = [1.0] * regular_total + [args.latency_share] * (args.total - regular_total)
-if args.total == 1 or args.latency_share == 0:
-    weights = [1.0] * regular_total + [0.0] * (args.total - regular_total)
+weights = [1.0] * regular_total + shares
 credit = [0.0] * args.total
 owner = {}
 for name in regular:
