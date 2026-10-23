@@ -64,6 +64,12 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
       'Tracking numbers for parcels shipped through Rotterdam', 'Delivery times for parcels from Rotterdam to your door']) {
       expect((await page.request.post(`${baseURL}/api/v1/kb/articles`, { headers, data: { collection_id: collection.id, title, body_md: `${title}: it arrives the next day.`, status: 'published' } })).status()).toBe(201);
     }
+    // Sources are indexed in the background a few seconds after an article is published or a ticket
+    // imported; the draft reads the index as it is. Wait for these four articles and the imported
+    // tickets to be in it, so the draft below can cite them.
+    await expect.poll(() => psql(`SELECT (SELECT count(*) FROM ai_retrieval_docs d WHERE d.workspace_id=w.id AND d.kb_article_id IS NOT NULL)::text||'/'||
+      (SELECT count(*) FROM ai_retrieval_docs d WHERE d.workspace_id=w.id AND d.conversation_id IS NOT NULL)::text FROM workspaces w WHERE w.slug='${workspace.slug}'`),
+    { timeout: 30_000 }).toMatch(/^4\/[1-9]/);
     await page.reload();
     await page.getByRole('searchbox', { name: 'Search conversations' }).fill('Rotterdam');
     await page.getByRole('button', { name: /Fixture ticket 42:/ }).click();
