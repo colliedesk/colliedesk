@@ -12,6 +12,11 @@ import (
 // reverse proxies whose X-Forwarded-For header may be believed. Empty means no proxy is trusted.
 // A bad entry is an error, so a typo cannot silently put every client behind one proxy address.
 func ParseTrustedProxies(value string) ([]netip.Prefix, error) {
+	return parsePrefixes("TRUSTED_PROXIES", value)
+}
+
+// parsePrefixes reads comma-separated CIDRs or single addresses; name labels a bad entry's error.
+func parsePrefixes(name, value string) ([]netip.Prefix, error) {
 	var prefixes []netip.Prefix
 	for _, entry := range strings.Split(value, ",") {
 		entry = strings.TrimSpace(entry)
@@ -22,7 +27,7 @@ func ParseTrustedProxies(value string) ([]netip.Prefix, error) {
 		if err != nil {
 			address, addressErr := netip.ParseAddr(entry)
 			if addressErr != nil {
-				return nil, fmt.Errorf("TRUSTED_PROXIES entry %q is not a CIDR or an IP address", entry)
+				return nil, fmt.Errorf("%s entry %q is not a CIDR or an IP address", name, entry)
 			}
 			prefix = netip.PrefixFrom(address, address.BitLen())
 		}

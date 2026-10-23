@@ -79,7 +79,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
-	internalSignups, err := httpapi.ParseInternalSignups(os.Getenv("INTERNAL_SIGNUP_EMAILS"))
+	internalSignups, err := httpapi.ParseInternalSignups(os.Getenv("INTERNAL_SIGNUP_EMAILS"), os.Getenv("INTERNAL_SIGNUP_NETWORKS"))
 	if err != nil {
 		return err
 	}
