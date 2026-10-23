@@ -159,13 +159,24 @@ jobs:
         # The type check runs in the e2e job, and the bundle budget after the e2e job's own Vite build
         # of the same commit: Vitest is this job's long pole.
         run: corepack pnpm test
+  # The browser tests outside onboarding, in shards: one job ran them in 48 of its 117 seconds
+  # (run 39902604105) and set the end of the whole run. With --fully-parallel Playwright splits by
+  # test, not by file. Each shard builds the app itself while Chromium installs, so sharing a build
+  # would only add a job in front of them. A third shard would pass the account's runner limit
+  # (RunnerConcurrency in tests/ci-tools-test.py).
   e2e:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
+      # The arguments of every shard's run, and of the check that the shards cover them.
+      E2E_ARGS: --grep-invert @onboarding --fully-parallel --workers=3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background
@@ -222,10 +233,23 @@ jobs:
       # The API drift and TypeScript checks of the web app, go vet and migration validation run here,
       # in the background while Chromium installs and the database starts: this job finished at 56
       # seconds, while each of them made the job it ran in end later (the web job, the Go shards).
+      # They run once, on the last shard, as does the check that the shards cover every test.
       - name: Start the type check, go vet and migration validation in the background
+        if: matrix.shard == strategy.job-total
         run: |
           (cd web && sh ../.github/scripts/ci-background.sh start typecheck nice -n 10 corepack pnpm typecheck)
           (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
+      # In the foreground it took 10 seconds before Chromium could install (run 39904636025).
+      - name: Start the check that the shards run every end-to-end test exactly once
+        if: matrix.shard == strategy.job-total
+        working-directory: web
+        env:
+          SHARDS: ${{ strategy.job-total }}
+        # E2E_ARGS is split into words on purpose, here and in the run below.
+        run: |
+          # shellcheck disable=SC2086
+          sh ../.github/scripts/ci-background.sh start shards nice -n 10 \
+            python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install --only-shell chromium
@@ -235,17 +259,25 @@ jobs:
         run: sh .github/scripts/ci-services.sh wait postgres
       - name: Run end-to-end workflows
         working-directory: web
-        run: sh ../.github/scripts/ci-background.sh wait app && corepack pnpm e2e --grep-invert @onboarding --fully-parallel --workers=3
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+        run: |
+          # shellcheck disable=SC2086
+          sh ../.github/scripts/ci-background.sh wait app && corepack pnpm e2e $E2E_ARGS --shard="$SHARD/$SHARDS"
       - name: The production bundle stays within its size budget
         if: ${{ !cancelled() }}
         working-directory: web
         run: corepack pnpm bundle:check
       - name: The web app type-checks and matches the API contract
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
         run: sh .github/scripts/ci-background.sh wait typecheck
       - name: go vet passes and the migrations are valid
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
         run: sh .github/scripts/ci-background.sh wait vet
+      - name: The shards run every end-to-end test exactly once
+        if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
+        run: sh .github/scripts/ci-background.sh wait shards
   # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
   # with the other end-to-end tests; every test runs in exactly one of the two jobs.
   onboarding:
@@ -423,8 +455,11 @@ jobs:
   # Fails a PR that brings in a dependency version with a known vulnerability (OSV database).
   # Compares the PR against its base, so an advisory published later for an existing
   # dependency does not block unrelated PRs; Scorecard reports those weekly.
+  # It starts when roadmap ends (about 40 seconds in) and takes about 20, well before the test jobs
+  # end: starting with them it would take the runner the second e2e shard needs.
   osv-scan:
-    if: github.event_name == 'pull_request'
+    needs: roadmap
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     permissions:
       actions: read
       contents: read
