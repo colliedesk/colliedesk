@@ -138,8 +138,8 @@
 .timeline-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-6); }
 .timeline-header h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.005em; }
 .timeline-meta { display: flex; gap: var(--space-3); margin-top: var(--space-1); }
-.details-toggle, .drawer-close { display: none; }
-.timeline-header > div:first-child { flex: 1 1 14rem; min-width: 0; }
+.details-toggle, .drawer-close, .thread-back { display: none; }
+.timeline-header > div:first-of-type { flex: 1 1 14rem; min-width: 0; }
 /* Resolve (or Reopen) and Show details stay together; on a narrow thread they move under the title. */
 .timeline-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-left: auto; }
 .status-button svg { width: 14px; height: 14px; }
@@ -265,7 +265,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .saved-reply-button kbd { margin-left: var(--space-1); }
 .saved-reply-button .ai-draft-badge { margin-left: var(--space-1); border-radius: 999px; background: var(--accent-soft); color: var(--text-1); padding: 0 var(--space-2); font-size: var(--fs-label); }
 @media (pointer: coarse) {
-  .saved-reply-button, .cc-button { --control: var(--touch); min-width: var(--touch); justify-content: center; }
+  .saved-reply-button, .cc-button, .attach-button, .composer-tabs button { --control: var(--touch); min-width: var(--touch); justify-content: center; }
 }
 /* Saved replies and Articles sit together on the left; the last of them pushes the rest to the right. */
 .saved-reply-button:has(+ .saved-reply-button) { margin-right: 0; }
@@ -346,6 +346,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 }
 @media (max-width: 44rem) {
   .timeline-header, .timeline-scroll { padding-inline: var(--space-4); }
+  /* Back sits alone on the first line of the header; the title takes the next. */
+  .thread-back { display: inline-flex; gap: var(--space-1); margin: calc(-1 * var(--space-2)) auto 0 calc(-1 * var(--space-2)); border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); padding: 0 var(--space-2); }
+  .thread-back svg { width: 16px; height: 16px; }
+  .timeline-header > .thread-back + div { flex-basis: 100%; }
   .composer { padding-inline: var(--space-3); }
   .composer-notice { width: auto; margin-inline: var(--space-3); }
   .saved-reply-button kbd { display: none; }
@@ -753,6 +757,6 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* On the details toggle of a narrow screen: a dot says an AI suggestion waits behind it (the button's name says so too). */
 .details-badge { flex: none; width: 8px; height: 8px; margin-left: var(--space-1); border-radius: 999px; background: var(--accent); }
 /* The title gives way to the toggle on a narrow screen instead of pushing it past the edge. */
-.timeline-header > :first-child { min-width: 0; }
+.timeline-header > div:first-of-type { min-width: 0; }
 .timeline-header h2 { overflow-wrap: anywhere; }
 .details-toggle { flex: none; }

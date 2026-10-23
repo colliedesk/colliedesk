@@ -788,3 +788,55 @@ test('Resolve and Reopen in the thread header change the status through the conv
   fireEvent.click(await screen.findByRole('button', { name: 'Reopen' }));
   await waitFor(() => expect(api.updateConversation).toHaveBeenLastCalledWith(alpha.id, { status: 'open' }));
 });
+
+// On a phone the list and the open conversation take turns on the screen; the layout reads which one from
+// data-view (layout.css), and the thread offers the way back to the list.
+const phoneInbox = (alpha: ReturnType<typeof conversation>) => {
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+};
+
+test('without a conversation in the address the inbox is the list, with no way back to show', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const { container } = phoneInbox(alpha);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  expect(container.querySelector('.inbox-shell')).toHaveAttribute('data-view', 'list');
+  expect(screen.queryByRole('button', { name: 'Back to Inbox' })).not.toBeInTheDocument();
+});
+
+test('a conversation reached by its address is the thread view, and Back to Inbox opens the list with the same filters', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  testRouter.params = { conversationId: alpha.id };
+  testRouter.search = { status: 'all', priority: 'urgent' };
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+  const { container } = phoneInbox(alpha);
+  expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(container.querySelector('.inbox-shell')).toHaveAttribute('data-view', 'thread');
+  fireEvent.click(screen.getByRole('button', { name: 'Back to Inbox' }));
+  // Nothing in this tab's history is the list (a shared link), so Back opens it rather than leaving the app.
+  expect(back).not.toHaveBeenCalled();
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/', search: { status: 'all', priority: 'urgent' } });
+  back.mockRestore();
+});
+
+test('Back to Inbox after opening a row goes back in the history, so the browser Back does not return to the thread', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  testRouter.search = { status: 'all' };
+  const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+  const view = phoneInbox(alpha);
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  // The route follows the address the row navigated to.
+  testRouter.params = { conversationId: alpha.id };
+  view.rerender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Back to Inbox' }));
+  expect(back).toHaveBeenCalledTimes(1);
+  back.mockRestore();
+});

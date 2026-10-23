@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
-import { CheckCircleIcon, RotateCcwIcon } from '../../ui/icons';
+import { CheckCircleIcon, ChevronLeftIcon, RotateCcwIcon } from '../../ui/icons';
 import { Part } from '../../ui/lazy-part';
 import { MessageItem } from './message-item';
 import { presenceViewPart } from './presence-part';
@@ -34,6 +34,8 @@ interface TimelinePanelProps {
   viewers?: ConversationViewer[];
   // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
   onSetStatus?: (status: Conversation['status']) => Promise<unknown>;
+  // Returns to the list; the button shows only where the thread replaces the list (a phone).
+  onBack?: () => void;
 }
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
@@ -56,11 +58,12 @@ function StatusButton({ status, onSetStatus }: { status: Conversation['status'];
   </>;
 }
 
-export function TimelinePanel({ conversation, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [], onSetStatus }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [], onSetStatus, onBack }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
+        {onBack && <button type="button" className="thread-back" onClick={onBack}><ChevronLeftIcon />{messages.backToInbox}</button>}
         <div>
           <h2>{conversation?.subject ?? messages.selectConversation}</h2>
           {conversation && <div className="timeline-meta"><StatusLabel status={conversation.status} /><PriorityLabel priority={conversation.priority} />
