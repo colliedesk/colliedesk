@@ -64,40 +64,66 @@ type message struct {
 func Run(ctx context.Context, cfg Config, stdin io.Reader, stdout io.Writer) error {
 	b := &bridge{cfg: cfg, client: cfg.Client, out: bufio.NewWriter(stdout)}
 	if b.client == nil {
-		b.client = &http.Client{Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: maxInFlight, IdleConnTimeout: 90 * time.Second,
-			TLSHandshakeTimeout: 10 * time.Second, ForceAttemptHTTP2: true,
-		}}
+		b.client = &http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: maxInFlight, IdleConnTimeout: 90 * time.Second,
+				TLSHandshakeTimeout: 10 * time.Second, ForceAttemptHTTP2: true,
+			},
+			// Never follow a redirect: Go keeps Authorization when only the scheme or port changes,
+			// so https to http on the same host would send the token in clear text.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
 	}
 	if b.cfg.Timeout <= 0 {
 		b.cfg.Timeout = 60 * time.Second
 	}
 	b.logf("collie mcp %s: forwarding to %s", cfg.Version, hostOf(cfg.Endpoint))
 
-	reader := bufio.NewReaderSize(stdin, 64*1024)
+	// Reading stdin blocks with no way to cancel it, so it runs on its own and Run waits for a line
+	// or for ctx: SIGTERM must end the bridge while the host sends nothing. A stop is not an error.
+	lines := make(chan []byte)
+	readErr := make(chan error, 1)
+	go func() {
+		reader := bufio.NewReaderSize(stdin, 64*1024)
+		for {
+			// ReadBytes has no line limit: an image upload is one line of several megabytes.
+			line, err := reader.ReadBytes('\n')
+			if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
+				select {
+				case lines <- trimmed:
+				case <-ctx.Done():
+					return
+				}
+			}
+			if err != nil {
+				readErr <- err
+				return
+			}
+		}
+	}()
 	slots := make(chan struct{}, maxInFlight)
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	for {
-		// ReadBytes has no line limit: an image upload is one line of several megabytes.
-		line, err := reader.ReadBytes('\n')
-		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
+		select {
+		case <-ctx.Done():
+			return nil
+		case err := <-readErr:
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return fmt.Errorf("read stdin: %w", err)
+		case line := <-lines:
 			select {
 			case slots <- struct{}{}:
 			case <-ctx.Done():
-				return ctx.Err()
+				return nil
 			}
 			wg.Add(1)
-			go func(line []byte) {
+			go func() {
 				defer func() { <-slots; wg.Done() }()
 				b.forward(ctx, line)
-			}(trimmed)
-		}
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read stdin: %w", err)
+			}()
 		}
 	}
 }
@@ -162,6 +188,8 @@ func (b *bridge) forward(ctx context.Context, line []byte) {
 		}
 	}
 	switch {
+	case resp.StatusCode >= 300 && resp.StatusCode < 400:
+		b.fail(msg, isCall, fmt.Sprintf("%s redirects to %s; use that address in the settings.", b.cfg.Endpoint, resp.Header.Get("Location")), fmt.Sprintf("HTTP %d", resp.StatusCode))
 	case resp.StatusCode == http.StatusNotFound || mediaType == "text/html":
 		b.fail(msg, isCall, b.cfg.Endpoint+" is not a Colliedesk MCP endpoint; check the URL.", fmt.Sprintf("HTTP %d", resp.StatusCode))
 	case resp.StatusCode >= 500:

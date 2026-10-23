@@ -337,3 +337,50 @@ func TestTheTokenNeverComesFromTheCommandLine(t *testing.T) {
 		t.Errorf("token file: %+v, %v", cfg, err)
 	}
 }
+
+// SIGTERM ends `collie mcp` while the host keeps stdin open and sends nothing.
+func TestRunStopsWhenItsContextEndsWhileStdinIsIdle(t *testing.T) {
+	stdin, writer := io.Pipe()
+	defer writer.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- mcpbridge.Run(ctx, mcpbridge.Config{Endpoint: "https://desk.example.com/mcp", Token: token}, stdin, io.Discard)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("a stop is not a failure: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run kept waiting on stdin after its context ended")
+	}
+}
+
+// A redirect, even to the same host over http, must not carry the token anywhere.
+func TestTheTokenNeverFollowsARedirect(t *testing.T) {
+	var leaked sync.Mutex
+	got := ""
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked.Lock()
+		got = r.Header.Get("Authorization")
+		leaked.Unlock()
+		echo(w, nil)
+	}))
+	defer elsewhere.Close()
+	f := &fake{answer: func(w http.ResponseWriter, _ []byte) {
+		w.Header().Set("Location", elsewhere.URL+"/mcp")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}}
+	stdout, _ := run(t, f, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	leaked.Lock()
+	defer leaked.Unlock()
+	if got != "" {
+		t.Errorf("the redirect target received %q", got)
+	}
+	if !strings.Contains(stdout, "redirects") {
+		t.Errorf("the host must learn the address moved: %q", stdout)
+	}
+}
