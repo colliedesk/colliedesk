@@ -212,13 +212,20 @@ jobs:
       - name: Install frozen dependencies
         working-directory: web
         run: corepack pnpm install --frozen-lockfile
+      # The Vite build and the servers' compile also run while Chromium installs: the test servers'
+      # `go run` then finds this commit's packages, embedded app included, in the Go cache. The
+      # tests wait for it, so it starts first and the checks below yield the cores to it (nice).
+      - name: Build the app and compile the test servers in the background
+        run: |
+          sh .github/scripts/ci-background.sh start app sh -c \
+            'cd web && corepack pnpm exec vite build && cd ../server && go build -tags e2e -o /dev/null ./cmd/collie && go build -o /dev/null ./cmd/collie'
       # The API drift and TypeScript checks of the web app, go vet and migration validation run here,
       # in the background while Chromium installs and the database starts: this job finished at 56
       # seconds, while each of them made the job it ran in end later (the web job, the Go shards).
       - name: Start the type check, go vet and migration validation in the background
         run: |
-          (cd web && sh ../.github/scripts/ci-background.sh start typecheck corepack pnpm typecheck)
-          (cd server && sh ../.github/scripts/ci-background.sh start vet sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
+          (cd web && sh ../.github/scripts/ci-background.sh start typecheck nice -n 10 corepack pnpm typecheck)
+          (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install --only-shell chromium
@@ -228,7 +235,7 @@ jobs:
         run: sh .github/scripts/ci-services.sh wait postgres
       - name: Run end-to-end workflows
         working-directory: web
-        run: corepack pnpm exec vite build && corepack pnpm e2e --grep-invert @onboarding --fully-parallel --workers=3
+        run: sh ../.github/scripts/ci-background.sh wait app && corepack pnpm e2e --grep-invert @onboarding --fully-parallel --workers=3
       - name: The production bundle stays within its size budget
         if: ${{ !cancelled() }}
         working-directory: web
@@ -342,9 +349,9 @@ jobs:
           sh .github/scripts/ci-background.sh start upgrade sh tests/upgrade-test.sh "$previous" colliedesk:ci
       - id: version
         run: echo "value=edge-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-      # A PR loads the image through the runner's own Docker driver: no builder container to start
-      # and no tarball export. main needs the container builder for the SBOM attestation on push.
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      # The container builder reads and writes the layer cache in the Actions cache (the runner's own
+      # Docker driver cannot) and carries the SBOM attestation on main's push.
+      - id: buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           # The runner is discarded after the job; removing the builder only costs time.
@@ -358,6 +365,10 @@ jobs:
           build-args: VERSION=${{ steps.version.outputs.value }}
           load: true
           tags: colliedesk:ci
+          # The Go dependency layer depends only on go.sum and the imported packages
+          # (server/Dockerfile), so most commits reuse it. image-cache.yml writes it for every main
+          # commit, outside this run's clock; a pull request reads its own entries, then main's.
+          cache-from: type=gha,scope=image
       # The boot and install checks run in the background while main pushes and attests the image
       # (about 15 seconds). sha-<commit> may therefore exist for a commit that then fails them;
       # nothing deploys it: edge, which self-hosters and Cloud pull, moves only after CI passed.
@@ -368,6 +379,12 @@ jobs:
         run: |
           sh .github/scripts/ci-background.sh start image-checks \
             sh -c 'sh tests/image-boot-test.sh colliedesk:ci "$VERSION" && sh tests/install-smoke.sh'
+      # compose.yaml as a contributor or "From a clone" self-hoster runs it, built by the builder that
+      # holds this commit's layers: only the stage with VERSION builds again.
+      - name: Start the stack from compose.yaml in the background
+        env:
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+        run: sh .github/scripts/ci-background.sh start compose-smoke sh tests/compose-smoke.sh
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -399,6 +416,8 @@ jobs:
         run: sh .github/scripts/ci-background.sh wait image-checks
       - name: The previous release upgrades to this image without losing a row or a file
         run: sh .github/scripts/ci-background.sh wait upgrade
+      - name: The stack from compose.yaml reached the server
+        run: sh .github/scripts/ci-background.sh wait compose-smoke
 
   # The one check to watch: adding or splitting jobs above never renames it.
   # Fails a PR that brings in a dependency version with a known vulnerability (OSV database).
@@ -425,11 +444,6 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # compose.yaml as a contributor or "From a clone" self-hoster runs it. It shares this runner so
-      # a pull request stays under the account's concurrent job limit, and runs in the background
-      # while the quick gates below run; the last step waits for it.
-      - name: Start the stack from compose.yaml in the background
-        run: sh .github/scripts/ci-background.sh start compose-smoke sh tests/compose-smoke.sh
       - name: CI shard and elapsed-time contracts
         run: python3 tests/ci-tools-test.py
       - name: Background checks pass on their output and exit status
@@ -475,8 +489,6 @@ jobs:
             echo "closes: ${ROADMAP_CLOSING:-none}"
           fi
           python3 -I .github/scripts/roadmap-check.py ROADMAP.md
-      - name: The stack from compose.yaml reached the server
-        run: sh .github/scripts/ci-background.sh wait compose-smoke
 
   codeql:
     needs: pr-verified
