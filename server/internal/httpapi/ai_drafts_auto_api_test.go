@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 )
 
 // autoDraftsOn lets workspace A's drafts write themselves when a customer writes.
@@ -167,5 +168,87 @@ func TestAutomaticDraftsStopAtTheirLimitsAndLeaveTriageAndPeople(t *testing.T) {
 	d.run(t)
 	if got := d.get(t, d.adminA, conversation, draft.ID); got.Status != ai.DraftReady {
 		t.Fatalf("a person's draft past the automatic limits = %+v", got)
+	}
+}
+
+// Automatic drafts do not count against the 30 drafts a minute people may ask for.
+func TestAutomaticDraftsLeavePeoplesMinuteCap(t *testing.T) {
+	d := newDraftDesk(t)
+	d.autoDraftsOn(t)
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_drafts(workspace_id,conversation_id,status,automatic)
+		SELECT $1,$2,'cancelled',true FROM generate_series(1,30)`, d.workspaceA, d.conversationA); err != nil {
+		t.Fatal(err)
+	}
+	d.fake.Script(draftAnswer("Hi.", nil, ""))
+	d.ask(t, d.adminA, d.conversationA, "")
+}
+
+// While an automatic draft is written: a teammate's reply sets it aside unseen; a newer customer message
+// queues a newer draft, which replaces it once written; a try again with a newer one waiting ends it.
+func TestAnAutomaticDraftOvertakenWhileWrittenIsNotShown(t *testing.T) {
+	d := newDraftDesk(t)
+	d.autoDraftsOn(t)
+	ctx := context.Background()
+	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
+
+	replied := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Replied"})
+	d.customerWrites(t, d.workspaceA, replied, "Printer jam?", nil)
+	d.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		if _, err := d.pool.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body) VALUES($1,$2,'outgoing','Already on it.')`, d.workspaceA, replied); err != nil {
+			t.Error(err)
+		}
+		return draftAnswer("Hi Lin.", nil, "").Response, nil
+	}
+	d.due(t, replied)
+	d.run(t)
+	if status := queryString(t, d.pool, `SELECT status FROM ai_drafts WHERE conversation_id=$1 AND automatic`, replied); status != "cancelled" {
+		t.Fatalf("automatic draft overtaken by a reply = %s", status)
+	}
+
+	newer := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Newer"})
+	d.customerWrites(t, d.workspaceA, newer, "Printer jam?", nil)
+	d.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		d.fake.Answer = nil
+		d.customerWrites(t, d.workspaceA, newer, "And the scanner too.", nil)
+		return draftAnswer("Hi Lin, about the printer.", nil, "").Response, nil
+	}
+	d.due(t, newer)
+	d.run(t)
+	d.fake.Script(draftAnswer("Hi Lin, about both.", nil, ""))
+	d.due(t, newer)
+	d.run(t)
+	if got := queryString(t, d.pool, `SELECT string_agg(status||'/'||COALESCE(outcome,'-'),',' ORDER BY created_at) FROM ai_drafts WHERE conversation_id=$1 AND automatic`, newer); got != "ready/superseded,ready/-" {
+		t.Fatalf("automatic drafts after a newer message = %s", got)
+	}
+
+	retried := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Retried"})
+	d.customerWrites(t, d.workspaceA, retried, "Printer jam?", nil)
+	d.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		d.fake.Answer = nil
+		d.customerWrites(t, d.workspaceA, retried, "Hello?", nil)
+		return aiprovider.Response{}, &aiprovider.Error{Code: aiprovider.ErrorOverloaded}
+	}
+	d.due(t, retried)
+	d.run(t)
+	if got := d.automaticTasks(t, retried); got != "2:cancelled/superseded,queued/-" {
+		t.Fatalf("automatic drafts after a try again with a newer one waiting = %s", got)
+	}
+
+	// A try again after a teammate replied is not written.
+	again := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Again"})
+	d.customerWrites(t, d.workspaceA, again, "Printer jam?", nil)
+	d.fake.Script(aiprovider.FakeReply{Err: &aiprovider.Error{Code: aiprovider.ErrorOverloaded}})
+	d.due(t, again)
+	d.run(t)
+	if _, err := d.pool.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body) VALUES($1,$2,'outgoing','Done.')`, d.workspaceA, again); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.pool.Exec(ctx, `UPDATE ai_tasks SET next_run_at=now()-interval '1 second' WHERE conversation_id=$1 AND state='queued'`, again); err != nil {
+		t.Fatal(err)
+	}
+	calls := len(d.draftRequests())
+	d.run(t)
+	if got := d.automaticTasks(t, again); got != "1:cancelled/answered" || len(d.draftRequests()) != calls {
+		t.Fatalf("try again after a reply = %s, %d calls", got, len(d.draftRequests())-calls)
 	}
 }

@@ -36,6 +36,8 @@ const (
 	CodeDraftLimit        = "draft_limit"
 	CodeConversationCap   = "conversation_cap"
 	CodeAllowanceReserved = "allowance_reserved"
+	// A newer automatic draft for the conversation waits in the queue; this one is not tried again.
+	CodeSuperseded = "superseded"
 
 	// codeMinuteFull is never stored: such a task waits for the next minute.
 	codeMinuteFull = "minute_full"

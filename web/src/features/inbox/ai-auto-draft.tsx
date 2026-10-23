@@ -49,7 +49,7 @@ const failures: Record<string, string> = {
 };
 
 // Stopped because it was no longer wanted: nothing to show.
-const quiet = ['answered', 'cancelled', 'automation_off', 'conversation_closed', 'feature_off', 'restored'];
+const quiet = ['answered', 'cancelled', 'automation_off', 'conversation_closed', 'feature_off', 'restored', 'superseded'];
 
 interface AutoDraftCardProps {
   conversationId: string;

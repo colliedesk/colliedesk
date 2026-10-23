@@ -229,7 +229,7 @@ func (s *Service) underMinuteCap(ctx context.Context, tx pgx.Tx, workspaceID str
 		return err
 	}
 	var recent int
-	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM ai_drafts WHERE workspace_id=$1 AND created_at>$2)
+	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM ai_drafts WHERE workspace_id=$1 AND NOT automatic AND created_at>$2)
 		+ (SELECT count(*) FROM ai_triage_suggestions WHERE workspace_id=$1 AND NOT automatic AND created_at>$2)`, workspaceID, now.Add(-time.Minute)).Scan(&recent); err != nil {
 		return err
 	}

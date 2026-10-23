@@ -291,6 +291,24 @@ func (s *Service) runDraft(ctx context.Context, run *Run) error {
 	encodedWarnings, _ := json.Marshal(warnings)
 	missing := strings.TrimSpace(answer.MissingInfo)
 	return run.Record(ctx, func(tx pgx.Tx) error {
+		// An automatic draft that a teammate's reply overtook while it was written is not wanted: it is
+		// set aside unseen (its call is spent and metered).
+		var overtaken bool
+		if err := tx.QueryRow(ctx, `SELECT d.automatic AND EXISTS (SELECT 1 FROM messages m WHERE m.workspace_id=d.workspace_id AND m.conversation_id=d.conversation_id
+				AND m.kind='outgoing' AND m.created_at>=COALESCE((SELECT a.created_at FROM messages a WHERE a.workspace_id=d.workspace_id AND a.id=d.answers_message_id),d.created_at))
+			FROM ai_drafts d WHERE d.workspace_id=$1 AND d.id=$2`, run.Task.WorkspaceID, c.draftID).Scan(&overtaken); err != nil {
+			return err
+		}
+		if overtaken {
+			_, err := tx.Exec(ctx, `UPDATE ai_drafts SET status='cancelled' WHERE workspace_id=$1 AND id=$2 AND status='pending'`, run.Task.WorkspaceID, c.draftID)
+			return err
+		}
+		// A newer automatic draft replaces the older ones nobody used: one waits on a conversation.
+		if _, err := tx.Exec(ctx, `UPDATE ai_drafts o SET outcome='superseded',decided_at=$3 FROM ai_drafts d
+			WHERE d.workspace_id=$1 AND d.id=$2 AND d.automatic AND o.workspace_id=d.workspace_id AND o.conversation_id=d.conversation_id
+				AND o.automatic AND o.id<>d.id AND o.status='ready' AND o.outcome IS NULL`, run.Task.WorkspaceID, c.draftID, s.now().UTC()); err != nil {
+			return err
+		}
 		// The model's view on whether a reply is needed matters only for a draft nobody asked for.
 		tag, err := tx.Exec(ctx, `UPDATE ai_drafts SET status='ready',text=$3,missing_info=$4,sources=$5,warnings=$6,model=$7,ready_at=$8,
 				reply_needed=CASE WHEN automatic THEN COALESCE($9,true) END
