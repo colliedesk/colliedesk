@@ -73,7 +73,7 @@ func TestAutomaticTriageIsOffUntilAnAdminTurnsItOnAndGoesOffWithTheFeature(t *te
 	agent := joinAsAgent(t, d.api, d.adminA, "sam@draft-a.example.com")
 	wantResponse(t, request(t, d.api, http.MethodPut, "/api/v1/ai/slots/triage", map[string]any{"source": "provider", "provider_id": settings.Providers[0].ID, "enabled": true, "automatic": true}, agent, nil),
 		http.StatusForbidden, "forbidden")
-	wantResponse(t, request(t, d.api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "provider", "provider_id": settings.Providers[0].ID, "enabled": true, "automatic": true}, d.adminA, nil),
+	wantResponse(t, request(t, d.api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "provider", "provider_id": settings.Providers[0].ID, "enabled": true, "auto_parts": []string{"tags"}}, d.adminA, nil),
 		http.StatusBadRequest, "invalid_request")
 
 	slot := d.autoTriageOn(t, nil)

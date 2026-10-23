@@ -280,6 +280,30 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    again from `undone` fills only what is still empty. `GET …/ai-triage` returns `auto_applied`, the
    newest suggestion AI applied, so a later one asked for by hand does not hide the line and its Undo.
 
+## Drafts written by themselves
+
+1. **Queued by a trigger.** `ai_draft_on_customer_message` (AFTER INSERT ON messages) queues an
+   automatic draft task and a pending `ai_drafts` row (`automatic`, `answers_message_id`) for each
+   customer message without `origin` and not failing its sender check, while the draft slot is on with
+   `automatic`. One task waits per conversation (unique partial index); a message before it runs moves
+   it a minute later (five at most from the first) and makes it answer the newest message. An
+   outgoing reply cancels the waiting one (`answered`). Everything is SQL in the transaction that
+   writes the message.
+   **Trap:** the ready draft is replaced only when the new one is written (`runDraft` supersedes the
+   older ready automatic drafts). Superseding it when the message arrives left a conversation with no
+   usable draft once the new one stopped at a limit or failed. A draft written after a newer one was
+   queued, or after a teammate replied, is set aside unseen (`cancelled`); a try again while a newer
+   one waits ends as `superseded`.
+2. **Checked again before the call.** `admitAutomaticDraft` (under the automatic lock) cancels it
+   without a call when the mode went off (`automation_off`), the conversation closed, someone replied
+   since (`answered`), the day's automatic drafts are used (`draft_limit`, `draft_per_day`), the
+   conversation had 5 in 24 hours (`conversation_cap`), or on the server's provider automatic drafts
+   spent half of the month's allowance, counting what running calls hold (`allowance_reserved`).
+   Triage is claimed before drafts among automatic tasks.
+3. **People first.** `CreateDraft` cancels the waiting automatic draft and supersedes a ready one;
+   automatic drafts never touch a person's. The model also says `reply_needed`, kept for automatic
+   drafts only.
+
 ## Testing
 
 `aiprovider.Fake` records every `Request` and answers from a script, without a network. Feature tests

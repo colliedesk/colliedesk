@@ -21,8 +21,8 @@ function provider(change: Partial<AIProvider> = {}): AIProvider {
 
 function settings(change: Partial<AISettings> = {}): AISettings {
   return { server: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
-    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null }, allowance: null,
-    auto_triage: { applied: 0, undone: 0 }, ...change };
+    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null }, allowance: null,
+    auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 0, draft_cost_micro_usd: null }, ...change };
 }
 
 function page(props: Partial<AIPageProps> = {}) {
@@ -179,12 +179,24 @@ test('the automatic runs are shown on triage and changed by an admin', async () 
   const dialog = screen.getByRole('dialog', { name: 'Automatic runs' });
   fireEvent.change(within(dialog).getByLabelText('A day (UTC)'), { target: { value: '500' } });
   await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Save' })); });
-  expect(onSetAutomatic).toHaveBeenCalledWith(500, 30);
+  expect(onSetAutomatic).toHaveBeenCalledWith(500, 30, 100);
+});
+
+test('a number out of range marks its own field', async () => {
+  const { onSetAutomatic } = page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })] }) });
+  fireEvent.click(screen.getByRole('button', { name: 'Change the automatic limits' }));
+  const dialog = screen.getByRole('dialog', { name: 'Automatic runs' });
+  fireEvent.change(within(dialog).getByLabelText('A minute'), { target: { value: '5000' } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Save' })); });
+  expect(onSetAutomatic).not.toHaveBeenCalled();
+  expect(within(dialog).getByLabelText('A minute')).toHaveAttribute('aria-invalid', 'true');
+  expect(within(dialog).getByLabelText('A minute')).toHaveAccessibleDescription('Enter a whole number from 0 to 1000.');
+  expect(within(dialog).getByLabelText('A day (UTC)')).not.toHaveAttribute('aria-invalid');
 });
 
 test('a paused day and a used-up allowance each say what happens and what to do', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true })],
-    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z' },
+    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null },
     allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 9_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 0 } }) });
   expect(screen.queryByText(/drafts left/)).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('Today’s limit of 300 is reached');
@@ -217,7 +229,7 @@ test('agents do not see the usage tab', () => {
 
 test('a paused feature says so on its row', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })],
-    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z' } }) });
+    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null } }) });
   expect(screen.getByText('Paused until tomorrow')).toBeInTheDocument();
 });
 
@@ -269,4 +281,30 @@ test('automatic triage waits for the feature to be on, and says when a provider 
   page({ settings: settings({ providers: [provider()], slots: [{ ...off, enabled: true, active: true }, slot({ slot: 'draft' })], events: [moved] }) });
   expect(screen.getByText(/Apply suggestions automatically turned off: Triage suggestions moved to Team key/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Turn on again' })).toBeInTheDocument();
+});
+
+test('an admin turns on automatic drafts only after a dialog estimates what they cost', async () => {
+  const onSetSlot = vi.fn();
+  const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true });
+  page({ settings: settings({ server, slots: [slot(), drafts], allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z', drafts_left: 140 },
+    auto_draft_estimate: { customer_messages: 412, draft_cost_micro_usd: 64_000 } }), onSetSlot });
+  fireEvent.click(screen.getByRole('switch', { name: 'Write a draft when a customer writes' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Write a draft for every customer message?' });
+  expect(within(dialog).getByText('412 customer messages')).toBeInTheDocument();
+  expect(within(dialog).getByText('$26.37 a month · $0.06 a draft')).toBeInTheDocument();
+  expect(within(dialog).getByText(/Automatic drafts may use half: \$4\.50, about 70 drafts/)).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+  expect(onSetSlot).toHaveBeenCalledWith('draft', expect.objectContaining({ source: 'server', enabled: true, automatic: true }));
+});
+
+test('automatic drafts paused for the day say so and offer to raise the limit', () => {
+  const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true, automatic: true });
+  const onSetAutomatic = vi.fn().mockResolvedValue(undefined);
+  page({ settings: settings({ server, slots: [slot(), drafts],
+    automatic: { per_day: 300, per_minute: 30, used_today: 100, paused_until: null, draft_per_day: 100, drafts_today: 100, drafts_paused_until: '2026-10-24T00:00:00Z', drafts_reserved_until: null } }),
+  onSetAutomatic });
+  expect(screen.getByText('100 of 100 automatic drafts today.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Raise the limit' }));
+  expect(screen.getByRole('dialog', { name: 'Automatic runs' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Automatic drafts a day')).toHaveValue(100);
 });

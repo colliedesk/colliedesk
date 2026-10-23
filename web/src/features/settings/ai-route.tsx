@@ -98,6 +98,6 @@ export function AIRoute() {
     onAdd={(input: AIProviderInput) => run(() => aiApi.add(input))}
     onSetKey={(id, key) => run(() => aiApi.setKey(id, key))}
     onRemove={(id) => run(() => aiApi.remove(id))}
-    onSetAutomatic={(perDay, perMinute) => run(() => aiApi.setAutomatic(perDay, perMinute))}
+    onSetAutomatic={(perDay, perMinute, draftPerDay) => run(() => aiApi.setAutomatic(perDay, perMinute, draftPerDay))}
     usage={usage.data} usageFailed={usage.isError} onUsageMonth={setUsageMonth} />;
 }

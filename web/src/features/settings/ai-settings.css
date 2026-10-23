@@ -229,3 +229,15 @@
   .ai-auto-desc { font-size: var(--fs-label); }
   .ai-auto-stat { margin-left: 0; font-size: var(--fs-label); }
 }
+.ai-auto-side { grid-area: side; display: flex; gap: var(--space-3); align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.ai-auto-warn b { color: var(--note-text, var(--text-1)); }
+.ai-estimate { display: grid; gap: var(--space-1); margin: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-2) var(--space-3); }
+.ai-estimate > div { display: flex; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.ai-estimate dt { color: var(--text-3); }
+.ai-estimate dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ai-estimate-note { margin: 0; color: var(--text-2); }
+@media (max-width: 44rem) { .ai-auto-side .ai-auto-stat { display: none; } }
+/* A link that does what a button does looks like one, and is a full touch target on a phone. */
+.ai-link-button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+  padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
+@media (pointer: coarse) { .ai-link-button { min-height: var(--touch); } }

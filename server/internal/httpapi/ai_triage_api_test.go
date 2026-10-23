@@ -323,7 +323,7 @@ func TestAcceptingAReplacedSuggestionChangesNothing(t *testing.T) {
 func TestAutomaticTriageStopsAtTheWorkspacesLimit(t *testing.T) {
 	d := newDraftDesk(t)
 	d.triageOn(t)
-	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 0, 30); err != nil {
+	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 0, 30, nil); err != nil {
 		t.Fatal(err)
 	}
 	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})

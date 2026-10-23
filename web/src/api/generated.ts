@@ -2615,7 +2615,7 @@ export interface components {
             /** @enum {string} */
             effort: "low" | "medium" | "high";
             enabled: boolean;
-            /** @description Triage only: suggestions of new tickets apply their auto_parts by themselves, filling only what nobody set. Off unless an admin turns it on; off with the feature and when it moves to another provider. */
+            /** @description The feature runs by itself: triage suggestions of new tickets apply their auto_parts, filling only what nobody set; drafts are written for every customer message (never sent). Off unless an admin turns it on; off with the feature and when it moves to another provider. */
             automatic: boolean;
             /** @description Triage only: what applies by itself. */
             auto_parts: ("tags" | "priority" | "assignee")[];
@@ -2670,6 +2670,19 @@ export interface components {
              * @description When today's limit is used up: the next UTC midnight.
              */
             paused_until: string | null;
+            /** @description Drafts written by themselves in a UTC day, counted inside per_day. Each conversation gets at most 5 in 24 hours. */
+            draft_per_day: number;
+            drafts_today: number;
+            /**
+             * Format: date-time
+             * @description When today's automatic drafts (or all automatic runs) are used up: the next UTC midnight.
+             */
+            drafts_paused_until: string | null;
+            /**
+             * Format: date-time
+             * @description When automatic drafts spent half of this month's allowance of the server's provider: the next month. The other half stays for drafts people ask for and for triage.
+             */
+            drafts_reserved_until: string | null;
         };
         AIAllowance: {
             /** @description About how many reply drafts what is left pays for, at the workspace's average cost of a draft over 30 days (before its first, a typical one); null when no price is known. */
@@ -2734,6 +2747,15 @@ export interface components {
             sent_message_id: string | null;
             /** Format: uuid */
             requested_by_agent_id: string | null;
+            /** @description Written by itself when a customer wrote (the draft feature's automatic mode), not asked for by a person; the whole team sees it. Never sent by itself. */
+            automatic: boolean;
+            /**
+             * Format: uuid
+             * @description The customer message an automatic draft answers.
+             */
+            answers_message_id: string | null;
+            /** @description For an automatic draft: false when the model thinks the message needs no reply (a thank-you). Null for a person's draft. */
+            reply_needed: boolean | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -2856,6 +2878,11 @@ export interface components {
             automatic: components["schemas"]["AIAutomaticLimits"];
             /** @description This month's allowance of the server's provider; null when the server sets none. */
             allowance: components["schemas"]["AIAllowance"] | null;
+            /** @description What a draft for every customer message would have meant in the last 30 days: the customer messages (imports left out), and a draft's cost on the server's provider (the workspace's average, or a typical one at the server's prices); null without a price. */
+            auto_draft_estimate: {
+                customer_messages: number;
+                draft_cost_micro_usd: number | null;
+            };
             /** @description Triage suggestions AI applied by itself in the last 30 days, and how many of those a person undid. */
             auto_triage: {
                 applied: number;
@@ -2890,7 +2917,7 @@ export interface components {
              */
             effort?: "low" | "medium" | "high";
             enabled: boolean;
-            /** @description Triage only. Left out: kept as it is (off when the feature turns off or moves to another provider). */
+            /** @description Left out: kept as it is (off when the feature turns off or moves to another provider). */
             automatic?: boolean;
             /** @description Triage only. Left out: kept; tags and priority when automatic turns on with none. */
             auto_parts?: ("tags" | "priority" | "assignee")[];
@@ -7352,6 +7379,8 @@ export interface operations {
                 "application/json": {
                     per_day: number;
                     per_minute: number;
+                    /** @description Kept when left out. */
+                    draft_per_day?: number;
                 };
             };
         };

@@ -146,12 +146,12 @@ func (w *Worker) claim(ctx context.Context, limit int) ([]claimedTask, error) {
 				SELECT workspace_id, count(*) AS n FROM ai_tasks WHERE state='running' AND lease_until>$1 GROUP BY workspace_id),
 			ranked AS (
 				SELECT t.id, t.automatic, t.next_run_at,
-					row_number() OVER (PARTITION BY t.workspace_id ORDER BY t.automatic, t.next_run_at) + COALESCE(r.n, 0) AS place
+					row_number() OVER (PARTITION BY t.workspace_id ORDER BY t.automatic, t.automatic AND t.kind='draft', t.next_run_at) + COALESCE(r.n, 0) AS place
 				FROM ai_tasks t LEFT JOIN running r ON r.workspace_id=t.workspace_id
 				WHERE t.state IN ('queued','running') AND t.next_run_at<=$1 AND (t.lease_until IS NULL OR t.lease_until<=$1)),
 			due AS (
 				SELECT t.id FROM ai_tasks t JOIN ranked k ON k.id=t.id WHERE k.place<=$4
-				ORDER BY k.automatic, k.next_run_at LIMIT $2 FOR UPDATE OF t SKIP LOCKED)
+				ORDER BY k.automatic, k.automatic AND t.kind='draft', k.next_run_at LIMIT $2 FOR UPDATE OF t SKIP LOCKED)
 			UPDATE ai_tasks t SET state='running', claim_token=gen_random_uuid(), lease_until=$1+$3::interval, attempts=t.attempts+1
 			FROM due WHERE t.id=due.id RETURNING t.id::text, t.workspace_id::text, t.claim_token::text`, now, limit, w.options.Lease.String(), w.options.PerWorkspace)
 		if err != nil {
@@ -171,6 +171,9 @@ func (w *Worker) claim(ctx context.Context, limit int) ([]claimedTask, error) {
 func (w *Worker) release(ctx context.Context, item claimedTask, at time.Time) {
 	ctx = context.WithoutCancel(ctx)
 	err := w.db.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
+		if done, err := w.endIfReplaced(ctx, tx, item); done || err != nil {
+			return err
+		}
 		_, err := tx.Exec(ctx, `UPDATE ai_tasks SET state='queued',claim_token=NULL,lease_until=NULL,attempts=greatest(attempts-1,0),next_run_at=$4
 			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token, at)
 		return err
@@ -343,6 +346,12 @@ func (w *Worker) admit(ctx context.Context, item claimedTask, task Task) (string
 			return err
 		}
 		if started {
+			// A try again of an automatic draft still asks whether it is wanted; its limits counted at its start.
+			if task.Automatic && task.Kind == SlotDraft {
+				var err error
+				code, err = w.service.automaticDraftWanted(ctx, tx, item.workspaceID, task)
+				return err
+			}
 			return nil
 		}
 		if task.Automatic {
@@ -362,11 +371,68 @@ func (w *Worker) admit(ctx context.Context, item claimedTask, task Task) (string
 				code = codeMinuteFull
 				return nil
 			}
+			if task.Kind == SlotDraft {
+				if code, err = w.service.admitAutomaticDraft(ctx, tx, item.workspaceID, task, limits, now); err != nil || code != "" {
+					return err
+				}
+			}
 		}
 		_, err := tx.Exec(ctx, `UPDATE ai_tasks SET started_at=$4 WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token, now)
 		return err
 	})
 	return code, err
+}
+
+// admitAutomaticDraft decides whether an automatic draft is still worth its call, and may be paid for:
+// the automatic mode still on, nobody replied since, the conversation open, under the day's and the
+// conversation's automatic drafts, and (on the server's provider) under half of the allowance.
+// automaticDraftWanted is the part of admitAutomaticDraft a try again asks too: the mode still on,
+// the conversation open, nobody replied since.
+func (s *Service) automaticDraftWanted(ctx context.Context, tx pgx.Tx, workspaceID string, task Task) (string, error) {
+	var on bool
+	var status string
+	var answered bool
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT enabled AND automatic FROM ai_slots WHERE workspace_id=$1 AND slot='draft'),false),
+			(SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2),
+			COALESCE((SELECT kind<>'incoming' FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind IN ('incoming','outgoing')
+				ORDER BY created_at DESC,id DESC LIMIT 1),false)`, workspaceID, task.ConversationID).Scan(&on, &status, &answered)
+	switch {
+	case err != nil:
+		return "", err
+	case !on:
+		return CodeAutomationOff, nil
+	case status == "resolved" || status == "closed":
+		return CodeConversationShut, nil
+	case answered:
+		return CodeAnswered, nil
+	}
+	return "", nil
+}
+
+func (s *Service) admitAutomaticDraft(ctx context.Context, tx pgx.Tx, workspaceID string, task Task, limits AutomaticLimits, now time.Time) (string, error) {
+	if code, err := s.automaticDraftWanted(ctx, tx, workspaceID, task); code != "" || err != nil {
+		return code, err
+	}
+	var server bool
+	var recent int
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT uses_server FROM ai_slots WHERE workspace_id=$1 AND slot='draft'),false),
+			(SELECT count(*) FROM ai_tasks WHERE workspace_id=$1 AND conversation_id=$2 AND kind='draft' AND automatic AND started_at>$3)`,
+		workspaceID, task.ConversationID, now.Add(-24*time.Hour)).Scan(&server, &recent)
+	switch {
+	case err != nil:
+		return "", err
+	case limits.DraftsToday >= limits.DraftPerDay:
+		return CodeDraftLimit, nil
+	case recent >= automaticDraftsPerConversation:
+		return CodeConversationCap, nil
+	}
+	if server {
+		reserved, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
+		if err != nil || reserved {
+			return CodeAllowanceReserved, err
+		}
+	}
+	return "", nil
 }
 
 // retry queues the task again after the provider's retry-after, or a backoff that doubles each attempt.
@@ -377,6 +443,9 @@ func (w *Worker) retry(ctx context.Context, item claimedTask, task Task, provide
 	}
 	ctx = context.WithoutCancel(ctx)
 	err := w.db.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
+		if done, err := w.endIfReplaced(ctx, tx, item); done || err != nil {
+			return err
+		}
 		_, err := tx.Exec(ctx, `UPDATE ai_tasks SET state='queued',claim_token=NULL,lease_until=NULL,error_code=$4,next_run_at=$5
 			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token, string(providerErr.Code), w.service.now().UTC().Add(wait))
 		return err
@@ -384,6 +453,16 @@ func (w *Worker) retry(ctx context.Context, item claimedTask, task Task, provide
 	if err != nil {
 		slog.Error("AI worker could not queue a task again", "task", item.id, "error", err)
 	}
+}
+
+// endIfReplaced ends an automatic draft that would go back to the queue while a newer one for the same
+// conversation already waits there: the newer one answers the newest message (one waits at a time).
+func (w *Worker) endIfReplaced(ctx context.Context, tx pgx.Tx, item claimedTask) (bool, error) {
+	tag, err := tx.Exec(ctx, `UPDATE ai_tasks t SET state='cancelled',error_code=$4,claim_token=NULL,lease_until=NULL,finished_at=$5
+		WHERE t.workspace_id=$1 AND t.id=$2 AND t.claim_token=$3 AND t.kind='draft' AND t.automatic
+			AND EXISTS (SELECT 1 FROM ai_tasks o WHERE o.workspace_id=t.workspace_id AND o.conversation_id=t.conversation_id AND o.kind='draft'
+				AND o.automatic AND o.state='queued' AND o.id<>t.id)`, item.workspaceID, item.id, item.token, CodeSuperseded, w.service.now().UTC())
+	return err == nil && tag.RowsAffected() == 1, err
 }
 
 func (w *Worker) finish(ctx context.Context, item claimedTask, state, code string) {
