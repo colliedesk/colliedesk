@@ -35,8 +35,8 @@ when they are started from such a terminal.
 
 ## Try it
 
-Ask Codex: "What can you do in Colliedesk?" It calls `colliedesk_whoami`, which answers
-with your workspace, the token's tier and the tools it may use. Then, for example: "Triage the
+Ask Codex: "Who am I in Colliedesk?" It calls `colliedesk_whoami`, which answers
+with your name, your workspace, the token's tier and the tools it may use. Then, for example: "Triage the
 open conversations nobody owns: tag billing questions with `billing` and leave a note with a
 summary."
 

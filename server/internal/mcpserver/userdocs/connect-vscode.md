@@ -48,8 +48,8 @@ The `colliedesk` tools then show in the tools picker of Copilot chat in agent mo
 
 ## Try it
 
-Ask VS Code: "What can you do in Colliedesk?" It calls `colliedesk_whoami`, which answers
-with your workspace, the token's tier and the tools it may use. Then, for example: "Triage the
+Ask VS Code: "Who am I in Colliedesk?" It calls `colliedesk_whoami`, which answers
+with your name, your workspace, the token's tier and the tools it may use. Then, for example: "Triage the
 open conversations nobody owns: tag billing questions with `billing` and leave a note with a
 summary."
 
