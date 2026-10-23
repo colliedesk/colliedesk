@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,8 +228,29 @@ func TestAnAutomaticDraftOvertakenWhileWrittenIsNotShown(t *testing.T) {
 	d.fake.Script(draftAnswer("Hi Lin, about both.", nil, ""))
 	d.due(t, newer)
 	d.run(t)
-	if got := queryString(t, d.pool, `SELECT string_agg(status||'/'||COALESCE(outcome,'-'),',' ORDER BY created_at) FROM ai_drafts WHERE conversation_id=$1 AND automatic`, newer); got != "cancelled/-,ready/-" {
+	if got := queryString(t, d.pool, `SELECT string_agg(status||'/'||COALESCE(outcome,'-'),',' ORDER BY created_at) FROM ai_drafts WHERE conversation_id=$1 AND automatic`, newer); got != "ready/superseded,ready/-" {
 		t.Fatalf("automatic drafts after a newer message = %s", got)
+	}
+
+	// A newer one queued while a draft was written, then stopped by the conversation's cap: the draft
+	// written stays usable.
+	capped := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Capped"})
+	d.customerWrites(t, d.workspaceA, capped, "Printer jam?", nil)
+	d.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		d.fake.Answer = nil
+		d.customerWrites(t, d.workspaceA, capped, "Hello?", nil)
+		if _, err := d.pool.Exec(ctx, `INSERT INTO ai_tasks(workspace_id,kind,conversation_id,automatic,state,started_at,finished_at)
+			SELECT $1,'draft',$2,true,'done',now()-g*interval '1 hour',now() FROM generate_series(1,5) g`, d.workspaceA, capped); err != nil {
+			t.Error(err)
+		}
+		return draftAnswer("Hi Lin, about the printer.", nil, "").Response, nil
+	}
+	d.due(t, capped)
+	d.run(t)
+	d.due(t, capped)
+	d.run(t)
+	if got := queryString(t, d.pool, `SELECT string_agg(status||'/'||COALESCE(outcome,'-'),',' ORDER BY created_at) FROM ai_drafts WHERE conversation_id=$1 AND automatic`, capped); got != "ready/-,pending/-" || !strings.Contains(d.automaticTasks(t, capped), "cancelled/conversation_cap") {
+		t.Fatalf("automatic drafts after a newer one hit the cap = %s, tasks %s", got, d.automaticTasks(t, capped))
 	}
 
 	// A slow call finishes after the newer draft was written: the older draft stays out of sight.
