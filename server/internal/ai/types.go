@@ -54,12 +54,15 @@ type Server struct {
 // Slot is one feature's setting. Active is whether it runs now: on, and its provider and model are
 // still there. A slot that is on but cannot run says why in OffReason.
 type Slot struct {
-	Slot        string     `json:"slot"`
-	Source      string     `json:"source"`
-	ProviderID  *string    `json:"provider_id"`
-	Model       *string    `json:"model"`
-	Effort      string     `json:"effort"`
-	Enabled     bool       `json:"enabled"`
+	Slot       string  `json:"slot"`
+	Source     string  `json:"source"`
+	ProviderID *string `json:"provider_id"`
+	Model      *string `json:"model"`
+	Effort     string  `json:"effort"`
+	Enabled    bool    `json:"enabled"`
+	// Automatic: triage suggestions apply by themselves (the AutoParts of them) as they come.
+	Automatic   bool       `json:"automatic"`
+	AutoParts   []string   `json:"auto_parts"`
 	Active      bool       `json:"active"`
 	OffReason   *string    `json:"off_reason"`
 	ConsentedBy *string    `json:"consented_by"`
@@ -97,6 +100,26 @@ type Settings struct {
 	// provider may still spend this month, null when the server sets no allowance.
 	Automatic AutomaticLimits `json:"automatic"`
 	Allowance *AllowanceView  `json:"allowance"`
+	// AutoTriage counts the suggestions AI applied by itself in the last 30 days, and how many of those
+	// a person undid.
+	AutoTriage AutoTriageStats `json:"auto_triage"`
+	// AutoDraftEstimate is what writing a draft for every customer message would have meant in the last
+	// 30 days, shown before an admin turns it on.
+	AutoDraftEstimate AutoDraftEstimate `json:"auto_draft_estimate"`
+}
+
+// AutoDraftEstimate: CustomerMessages came in the last 30 days (imports left out); DraftCostMicroUSD
+// is the workspace's average draft on the server's provider in that time, or a typical one at the
+// server's prices, null when there is no price to go by (a workspace's own key).
+type AutoDraftEstimate struct {
+	CustomerMessages  int    `json:"customer_messages"`
+	DraftCostMicroUSD *int64 `json:"draft_cost_micro_usd"`
+}
+
+// AutoTriageStats is how automatic triage went in the last 30 days.
+type AutoTriageStats struct {
+	Applied int `json:"applied"`
+	Undone  int `json:"undone"`
 }
 
 // AllowanceView is this month's allowance of the server's provider, in micro-dollars.

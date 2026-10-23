@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { ConflictError } from '../../api/client';
 import type { AIProvider, AISettings, AISlot } from '../../api/ai';
@@ -9,7 +9,7 @@ import { refusal } from './ai-route';
 const providerID = '11111111-1111-4111-8111-111111111111';
 
 function slot(change: Partial<AISlot> = {}): AISlot {
-  return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, active: false, off_reason: null,
+  return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, automatic: false, auto_parts: [], active: false, off_reason: null,
     consented_by: null, consented_at: null, updated_by: null, updated_at: null, ...change };
 }
 
@@ -21,7 +21,8 @@ function provider(change: Partial<AIProvider> = {}): AIProvider {
 
 function settings(change: Partial<AISettings> = {}): AISettings {
   return { server: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
-    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null }, allowance: null, ...change };
+    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null }, allowance: null,
+    auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 0, draft_cost_micro_usd: null }, ...change };
 }
 
 function page(props: Partial<AIPageProps> = {}) {
@@ -178,12 +179,24 @@ test('the automatic runs are shown on triage and changed by an admin', async () 
   const dialog = screen.getByRole('dialog', { name: 'Automatic runs' });
   fireEvent.change(within(dialog).getByLabelText('A day (UTC)'), { target: { value: '500' } });
   await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Save' })); });
-  expect(onSetAutomatic).toHaveBeenCalledWith(500, 30);
+  expect(onSetAutomatic).toHaveBeenCalledWith(500, 30, 100);
+});
+
+test('a number out of range marks its own field', async () => {
+  const { onSetAutomatic } = page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })] }) });
+  fireEvent.click(screen.getByRole('button', { name: 'Change the automatic limits' }));
+  const dialog = screen.getByRole('dialog', { name: 'Automatic runs' });
+  fireEvent.change(within(dialog).getByLabelText('A minute'), { target: { value: '5000' } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Save' })); });
+  expect(onSetAutomatic).not.toHaveBeenCalled();
+  expect(within(dialog).getByLabelText('A minute')).toHaveAttribute('aria-invalid', 'true');
+  expect(within(dialog).getByLabelText('A minute')).toHaveAccessibleDescription('Enter a whole number from 0 to 1000.');
+  expect(within(dialog).getByLabelText('A day (UTC)')).not.toHaveAttribute('aria-invalid');
 });
 
 test('a paused day and a used-up allowance each say what happens and what to do', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true })],
-    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z' },
+    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null },
     allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 9_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 0 } }) });
   expect(screen.queryByText(/drafts left/)).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('Today’s limit of 300 is reached');
@@ -216,7 +229,7 @@ test('agents do not see the usage tab', () => {
 
 test('a paused feature says so on its row', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })],
-    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z' } }) });
+    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null } }) });
   expect(screen.getByText('Paused until tomorrow')).toBeInTheDocument();
 });
 
@@ -228,4 +241,70 @@ test('a server allowance of nothing reads as none included', () => {
 test('the allowance says about how many reply drafts are left', () => {
   page({ settings: settings({ server, allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 2_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 1240 } }) });
   expect(screen.getByText('About 1,240 reply drafts left')).toBeInTheDocument();
+});
+
+test('an admin turns on automatic triage only through a dialog that says what it does', async () => {
+  const onSetSlot = vi.fn();
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true });
+  page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })] }), onSetSlot });
+  const toggle = screen.getByRole('switch', { name: 'Apply suggestions automatically' });
+  expect(toggle).not.toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Tags' })).toBeDisabled();
+  fireEvent.click(toggle);
+  const dialog = await screen.findByRole('dialog', { name: 'Apply triage suggestions automatically?' });
+  expect(within(dialog).getByText(/tags and priority as soon as they arrive/)).toBeInTheDocument();
+  expect(onSetSlot).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+  expect(onSetSlot).toHaveBeenCalledWith('triage', { source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', effort: 'low', enabled: true, automatic: true });
+});
+
+test('with automatic triage on, an admin picks what it applies, sees how it went, and turns it off at once', () => {
+  const onSetSlot = vi.fn();
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, automatic: true, auto_parts: ['tags', 'priority'] });
+  page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })], auto_triage: { applied: 212, undone: 9 } }), onSetSlot });
+  expect(screen.getByText('AI applied 212, undone 9')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Assignee' }));
+  expect(onSetSlot).toHaveBeenCalledWith('triage', expect.objectContaining({ auto_parts: ['tags', 'priority', 'assignee'] }));
+  fireEvent.click(screen.getByRole('switch', { name: 'Apply suggestions automatically' }));
+  expect(onSetSlot).toHaveBeenLastCalledWith('triage', expect.objectContaining({ automatic: false }));
+});
+
+test('automatic triage waits for the feature to be on, and says when a provider change turned it off', () => {
+  const off = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5' });
+  page({ settings: settings({ providers: [provider()], slots: [off, slot({ slot: 'draft' })] }) });
+  expect(screen.getByText('Turn on Triage suggestions first.')).toBeInTheDocument();
+  expect(screen.getByRole('switch', { name: 'Apply suggestions automatically' })).toBeDisabled();
+  cleanup();
+  const moved = { id: '33333333-3333-4333-8333-333333333333', kind: 'slot_changed' as const, actor_agent_id: null, actor_name: 'Mai Tran', via_token: false,
+    provider_id: providerID, provider_label: 'Team key', slot: 'triage' as const, created_at: '2026-10-22T10:00:00Z',
+    detail: { from: { enabled: true, automatic: true, provider_label: 'Colliedesk AI' }, to: { enabled: true, automatic: false, provider_label: 'Team key' } } };
+  page({ settings: settings({ providers: [provider()], slots: [{ ...off, enabled: true, active: true }, slot({ slot: 'draft' })], events: [moved] }) });
+  expect(screen.getByText(/Apply suggestions automatically turned off: Triage suggestions moved to Team key/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Turn on again' })).toBeInTheDocument();
+});
+
+test('an admin turns on automatic drafts only after a dialog estimates what they cost', async () => {
+  const onSetSlot = vi.fn();
+  const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true });
+  page({ settings: settings({ server, slots: [slot(), drafts], allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z', drafts_left: 140 },
+    auto_draft_estimate: { customer_messages: 412, draft_cost_micro_usd: 64_000 } }), onSetSlot });
+  fireEvent.click(screen.getByRole('switch', { name: 'Write a draft when a customer writes' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Write a draft for every customer message?' });
+  expect(within(dialog).getByText('412 customer messages')).toBeInTheDocument();
+  expect(within(dialog).getByText('$26.37 a month · $0.06 a draft')).toBeInTheDocument();
+  expect(within(dialog).getByText(/Automatic drafts may use half: \$4\.50, about 70 drafts/)).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+  expect(onSetSlot).toHaveBeenCalledWith('draft', expect.objectContaining({ source: 'server', enabled: true, automatic: true }));
+});
+
+test('automatic drafts paused for the day say so and offer to raise the limit', () => {
+  const drafts = slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true, automatic: true });
+  const onSetAutomatic = vi.fn().mockResolvedValue(undefined);
+  page({ settings: settings({ server, slots: [slot(), drafts],
+    automatic: { per_day: 300, per_minute: 30, used_today: 100, paused_until: null, draft_per_day: 100, drafts_today: 100, drafts_paused_until: '2026-10-24T00:00:00Z', drafts_reserved_until: null } }),
+  onSetAutomatic });
+  expect(screen.getByText('100 of 100 automatic drafts today.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Raise the limit' }));
+  expect(screen.getByRole('dialog', { name: 'Automatic runs' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Automatic drafts a day')).toHaveValue(100);
 });

@@ -157,7 +157,8 @@ script on its own schema and on a backup of the release before. It:
 Without `--replace` it refuses to overwrite a workspace that still exists. Running it again gives
 the same result. The workspace's sessions, agent tokens and unused invite links come back revoked:
 everyone in it signs in again (an admin prints a link with `collie pair`), and AI agents need new
-tokens. Anything that workspace wrote after the backup is gone.
+tokens. An AI feature's automatic mode (suggestions applied by themselves) comes back off; an admin turns it
+on again. Anything that workspace wrote after the backup is gone.
 
 ## From a clone
 

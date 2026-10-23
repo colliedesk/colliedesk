@@ -49,19 +49,20 @@ class Shards(unittest.TestCase):
             self.assertRegex(name, patterns[-1])
         self.assertNotRegex('TestAlpha', patterns[-1])
 
-    def test_parts_split_a_regular_shard_and_never_the_latency_one(self):
+    def test_parts_split_a_regular_shard_and_never_the_gates(self):
         listing = self.listing + 'TestDelta\nTestEpsilon\nTestZeta\nTestInboxListLatencyBudget\nTestTrialCapStaysFast\n'
-        whole = run('go-test-shard.py', '1', '2', stdin=listing).stdout.strip()
-        parted = run('go-test-shard.py', '1', '2', '--parts', '2', stdin=listing)
-        self.assertEqual(parted.returncode, 0, parted.stderr)
-        parts = parted.stdout.split()
-        self.assertEqual(len(parts), 2)
+        timings = {'TestInboxListLatencyBudget': 20, 'TestTrialCapStaysFast': 20,
+                   **{name: 1 for name in ['TestAlpha', 'TestBeta', 'TestGamma', 'TestDelta', 'TestEpsilon']}}
+        whole = self.shards(listing, 2, timings=timings)
+        parted = self.shards(listing, 2, '--parts', '2', timings=timings)
+        self.assertEqual(len(whole[0]), 1)
+        self.assertEqual(len(parted[0]), 2)
         for name in ['TestAlpha', 'TestBeta', 'TestGamma', 'TestDelta', 'TestEpsilon', 'TestZeta',
                      'FuzzBytes', 'ExampleClient']:
-            self.assertEqual(sum(bool(re.search(p, name)) for p in parts), int(bool(re.search(whole, name))), name)
-        latency = run('go-test-shard.py', '2', '2', '--parts', '2', stdin=listing).stdout.split()
-        self.assertEqual(latency, [run('go-test-shard.py', '2', '2', stdin=listing).stdout.strip()])
-        self.assertEqual(run('go-test-shard.py', '1', '2', '--parts', '1', stdin=listing).stdout.strip(), whole)
+            self.assertRegex(name, whole[0][0])
+        # The gates run in one process however many parts a regular shard has.
+        self.assertEqual(parted[1], ['^(TestInboxListLatencyBudget|TestTrialCapStaysFast)$'])
+        self.assertEqual(whole[1], parted[1])
         self.assertNotEqual(run('go-test-shard.py', '1', '2', '--parts', '0', stdin=listing).returncode, 0)
 
     def test_latency_fixtures_split_over_their_own_runners_with_the_kb_seed_on_one(self):
@@ -86,55 +87,107 @@ class Shards(unittest.TestCase):
         for name in latency[3:]:
             self.assertRegex(name, shards[3][0])
 
-    def test_latency_runners_take_a_share_of_regular_tests_only_after_their_gates(self):
-        latency = ['TestHelpCenterPagesLatencyBudget', 'TestInboxListLatencyBudget', 'TestTrialCapStaysFast']
-        regular = [f'TestRegular{i:03d}' for i in range(140)] + ['FuzzBytes', 'ExampleClient']
-        listing = '\n'.join(regular + latency) + '\n'
-        shards = []
-        for shard in range(1, 9):
-            result = run('go-test-shard.py', str(shard), '8', '--latency-shards', '2', '--parts', '3',
-                         '--latency-share', '0.5', stdin=listing)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            shards.append(result.stdout.split('\n')[:-1])
-        for name in regular + latency:
-            hits = [i for i, lines in enumerate(shards) for p in lines if p != '--' and re.search(p, name)]
-            self.assertEqual(len(hits), 1, name)
-        for lines in shards[6:]:
-            # The gates run alone; the regular slice starts once they finished (the '--' line).
-            self.assertEqual(lines[1], '--', lines)
-            self.assertFalse(any(re.search(lines[0], name) for name in regular))
-            self.assertEqual(len(lines[2:]), 3)
-        self.assertRegex('TestHelpCenterPagesLatencyBudget', shards[6][0])
-        for name in latency[1:]:
-            self.assertRegex(name, shards[7][0])
-        # Each latency runner takes about half of what a regular runner takes.
-        count = lambda lines: sum(bool(re.search(p, name)) for p in lines if p != '--' for name in regular)
-        regular_counts = [count(lines) for lines in shards[:6]]
-        latency_counts = [count(lines[2:]) for lines in shards[6:]]
-        self.assertLessEqual(max(regular_counts) - min(regular_counts), 1, regular_counts)
-        for share in latency_counts:
-            self.assertAlmostEqual(share, min(regular_counts) / 2, delta=1, msg=(regular_counts, latency_counts))
-        self.assertTrue(all('--' not in lines for lines in shards[:6]))
+    def shards(self, listing, total, *args, timings=None):
+        """Each shard's pattern lines, after checking every name runs exactly once."""
+        extra = []
+        if timings is not None:
+            path = pathlib.Path(self.tmp.name) / 'timings.json'
+            path.write_text(json.dumps(timings))
+            extra = ['--timings', str(path)]
+        result = []
+        for shard in range(1, total + 1):
+            run_ = run('go-test-shard.py', str(shard), str(total), *args, *extra, stdin=listing)
+            self.assertEqual(run_.returncode, 0, run_.stderr)
+            result.append(run_.stdout.split('\n')[:-1])
+        for name in {line.strip() for line in listing.splitlines()} - {''}:
+            if re.fullmatch(r'(Test|Example|Fuzz)\w*', name):
+                hits = [i for i, lines in enumerate(result) for p in lines if p != '--' and re.search(p, name)]
+                self.assertEqual(len(hits), 1, name)
+        return result
 
-    def test_each_latency_runner_can_take_its_own_share(self):
-        latency = ['TestHelpCenterPagesLatencyBudget', 'TestInboxListLatencyBudget']
-        regular = [f'TestRegular{i:03d}' for i in range(130)]
-        listing = '\n'.join(regular + latency) + '\n'
-        shards = [run('go-test-shard.py', str(shard), '8', '--latency-shards', '2', '--parts', '3',
-                      '--latency-share', '0.5,0', stdin=listing) for shard in range(1, 9)]
-        for result in shards:
-            self.assertEqual(result.returncode, 0, result.stderr)
-        lines = [result.stdout.split('\n')[:-1] for result in shards]
-        for name in regular + latency:
-            self.assertEqual(sum(bool(re.search(p, name)) for shard in lines for p in shard if p != '--'), 1, name)
-        # The second latency runner's gates take about as long as a regular shard: gates only.
-        self.assertEqual(len(lines[7]), 1)
-        self.assertRegex('TestInboxListLatencyBudget', lines[7][0])
-        count = lambda shard: sum(bool(re.search(p, name)) for p in shard if p != '--' for name in regular)
-        self.assertAlmostEqual(count(lines[6][2:]), count(lines[0]) / 2, delta=1)
-        for share in ('0.5,0,1', '0.5,x'):
-            self.assertNotEqual(run('go-test-shard.py', '1', '8', '--latency-shards', '2',
-                                    '--latency-share', share, stdin=listing).returncode, 0, share)
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_measured_times_balance_the_shards(self):
+        # One long regular test fills a shard by itself; the short ones go to the other.
+        short = [f'TestShort{i:02d}' for i in range(12)]
+        listing = '\n'.join(['TestHeavy', *short, 'TestInboxListLatencyBudget', 'TestTrialCapStaysFast']) + '\n'
+        timings = {'TestHeavy': 12, 'TestInboxListLatencyBudget': 6, 'TestTrialCapStaysFast': 6,
+                   **{name: 1 for name in short}}
+        shards = self.shards(listing, 3, '--latency-shards', '1', timings=timings)
+        self.assertEqual(shards[0], ['^(TestHeavy)$'])
+        self.assertEqual(shards[1], ['^(' + '|'.join(short) + ')$'])
+        self.assertEqual(shards[2], ['^(TestInboxListLatencyBudget|TestTrialCapStaysFast)$'])
+
+    def test_measured_times_balance_the_parts_of_a_shard(self):
+        listing = 'TestA\nTestB\nTestC\nTestD\nTestInboxListLatencyBudget\n'
+        timings = {'TestA': 6, 'TestB': 3, 'TestC': 2, 'TestD': 1, 'TestInboxListLatencyBudget': 20}
+        shards = self.shards(listing, 2, '--parts', '2', timings=timings)
+        self.assertEqual(shards[0], ['^(TestA)$', '^(TestB|TestC|TestD)$'])
+
+    def test_a_latency_runner_takes_regular_tests_only_after_its_gates_and_only_when_they_end_early(self):
+        regular = [f'TestRegular{i:03d}' for i in range(40)]
+        listing = '\n'.join(regular + ['TestHelpCenterPagesLatencyBudget', 'TestInboxListLatencyBudget']) + '\n'
+        timings = {'TestHelpCenterPagesLatencyBudget': 3, 'TestInboxListLatencyBudget': 30,
+                   **{name: 1 for name in regular}}
+        shards = self.shards(listing, 4, '--latency-shards', '2', '--parts', '2', timings=timings)
+        # The short gates leave room: the regular tests start once they finished (the '--' line).
+        self.assertEqual(shards[2][0], '^(TestHelpCenterPagesLatencyBudget)$')
+        self.assertEqual(shards[2][1], '--')
+        self.assertEqual(len(shards[2][2:]), 2)
+        self.assertFalse(any(re.search(shards[2][0], name) for name in regular))
+        # The long gates take as long as a regular shard: gates only, in one process.
+        self.assertEqual(shards[3], ['^(TestInboxListLatencyBudget)$'])
+        self.assertTrue(all('--' not in lines for lines in shards[:2]))
+
+    def test_a_part_counts_its_overlapping_tests_and_its_process_start(self):
+        regular = ['TestA', 'TestB', 'TestC', 'TestD', 'TestE', 'TestF']
+        listing = '\n'.join(regular + ['TestInboxListLatencyBudget']) + '\n'
+        timings = {'TestInboxListLatencyBudget': 8, **{name: 4 for name in regular}}
+        # A part's packages run at once (go test -p), so its tests take about half their summed time;
+        # a part pays 3 seconds to start its process. The gates run one after another.
+        shards = self.shards(listing, 2, '--parallel', '2', '--process-seconds', '3', timings=timings)
+        self.assertEqual(shards[0], ['^(TestA|TestB|TestC|TestD|TestE)$'])
+        self.assertEqual(shards[1], ['^(TestInboxListLatencyBudget)$', '--', '^(TestF)$'])
+        for bad in (('--parallel', '0'), ('--process-seconds', '-1')):
+            self.assertNotEqual(run('go-test-shard.py', '1', '2', *bad, stdin=listing).returncode, 0, bad)
+
+    def test_gates_spread_by_time_and_the_kb_seed_stays_on_the_first_latency_runner(self):
+        kb = ['TestHelpCenterPagesLatencyBudget', 'TestKnowledgeBaseSearchLatencyBudget']
+        others = ['TestInboxListLatencyBudget', 'TestStorageUsageStaysFast', 'TestTrialCapStaysFast']
+        listing = '\n'.join(['TestAlpha', *kb, *others]) + '\n'
+        timings = {kb[0]: 5, kb[1]: 5, others[0]: 8, others[1]: 4, others[2]: 4, 'TestAlpha': 1}
+        shards = self.shards(listing, 3, '--latency-shards', '2', timings=timings)
+        # 10 seconds of seed gates; 8, 4 and 4 longest first onto the runner that ends earlier.
+        self.assertEqual(shards[1], ['^(TestHelpCenterPagesLatencyBudget|TestKnowledgeBaseSearchLatencyBudget|TestTrialCapStaysFast)$'])
+        self.assertEqual(shards[2], ['^(TestInboxListLatencyBudget|TestStorageUsageStaysFast)$'])
+
+    def test_tests_without_a_measurement_weigh_the_median(self):
+        listing = 'TestOld1\nTestOld2\nTestOld3\nTestOld4\nTestNew1\nTestNew2\nTestInboxListLatencyBudget\n'
+        timings = {'TestOld1': 1, 'TestOld2': 2, 'TestOld3': 2, 'TestOld4': 9, 'TestInboxListLatencyBudget': 30}
+        shards = self.shards(listing, 3, '--latency-shards', '1', timings=timings)
+        # The median is 2: TestOld4 (9) alone; 2+2+2+2+1 on the other shard.
+        self.assertEqual(shards[0], ['^(TestOld4)$'])
+        self.assertEqual(shards[1], ['^(TestNew1|TestNew2|TestOld1|TestOld2|TestOld3)$'])
+
+    def test_a_broken_timings_file_fails_closed(self):
+        for content in ['not json', '[]', '{"TestA": -1}', '{"TestA": "slow"}']:
+            path = pathlib.Path(self.tmp.name) / 'bad.json'
+            path.write_text(content)
+            result = run('go-test-shard.py', '1', '2', '--timings', str(path), stdin=self.listing)
+            self.assertNotEqual(result.returncode, 0, content)
+        missing = run('go-test-shard.py', '1', '2', '--timings', str(pathlib.Path(self.tmp.name) / 'none.json'),
+                      stdin=self.listing)
+        self.assertNotEqual(missing.returncode, 0)
+
+    def test_the_go_job_balances_by_the_checked_in_timings(self):
+        go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
+        self.assertIn('--timings ../.github/go-test-timings.json', go)
+        timings = json.loads((ROOT / '.github/go-test-timings.json').read_text())
+        self.assertGreater(len(timings), 100)
+        # -v prints each test's time, which go-test-timings.py reads back from the job logs.
+        self.assertRegex(go, r'go test -count=1 -run "\$pattern" -v \./\.\.\. &')
 
     def test_the_go_job_starts_a_latency_shards_regular_tests_only_after_its_gates_exit(self):
         go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
@@ -158,14 +211,6 @@ class Shards(unittest.TestCase):
         self.assertLess(log.index('end GATE'), log.index('start B'), log)
         self.assertNotIn('start --', log)
 
-    def test_latency_share_defaults_to_none_and_rejects_negative(self):
-        listing = self.listing + 'TestInboxListLatencyBudget\n'
-        plain = run('go-test-shard.py', '3', '3', stdin=listing)
-        zero = run('go-test-shard.py', '3', '3', '--latency-share', '0', stdin=listing)
-        self.assertEqual(plain.stdout, zero.stdout)
-        self.assertEqual(len(plain.stdout.split()), 1)
-        self.assertNotEqual(run('go-test-shard.py', '3', '3', '--latency-share', '-1', stdin=listing).returncode, 0)
-
     def test_latency_shards_leave_at_least_one_regular_shard(self):
         for args in (('1', '2', '--latency-shards', '2'), ('1', '3', '--latency-shards', '0')):
             self.assertNotEqual(run('go-test-shard.py', *args, stdin=self.listing).returncode, 0, args)
@@ -179,6 +224,55 @@ class Shards(unittest.TestCase):
         result = run('go-test-shard.py', '3', '3', stdin='TestOnly\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIsNone(re.search(result.stdout.strip(), 'TestOnly'))
+
+
+class GoTimings(unittest.TestCase):
+    """go-test-timings.py reads the go jobs' -v logs back into the file go-test-shard.py balances by."""
+    log = (
+        'go (1)\tTest\t2026-10-23T04:40:01.1Z === RUN   TestAlpha\n'
+        'go (1)\tTest\t2026-10-23T04:40:01.2Z --- PASS: TestAlpha (1.50s)\n'
+        'go (1)\tTest\t2026-10-23T04:40:01.3Z     --- PASS: TestAlpha/sub (9.00s)\n'
+        'go (1)\tTest\t2026-10-23T04:40:01.4Z --- FAIL: TestBeta (2.25s)\n'
+        'go (2)\tTest\t2026-10-23T04:40:01.5Z --- SKIP: TestGamma (0.00s)\n'
+        'go (2)\tTest\t2026-10-23T04:40:01.6Z --- PASS: TestAlpha (0.50s)\n'
+        'go (2)\tTest\t2026-10-23T04:40:01.7Z ok  \tgithub.com/x/pkg\t3.1s\n'
+        'go (2)\tTest\t2026-10-23T04:40:01.8Z --- PASS: ExampleClient (0.01s)\n'
+        'go (2)\tTest\t2026-10-23T04:40:01.9Z noise --- PASS: TestNoise (5.00s)\n'
+    )
+
+    def timings(self, *logs):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = []
+            for i, log in enumerate(logs):
+                path = pathlib.Path(tmp) / f'{i}.log'
+                path.write_text(log)
+                paths.append(str(path))
+            return run('go-test-timings.py', *paths)
+
+    def test_top_level_times_summed_over_packages(self):
+        result = self.timings(self.log)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout),
+                         {'ExampleClient': 0.01, 'TestAlpha': 2.0, 'TestBeta': 2.25, 'TestGamma': 0.0})
+        self.assertEqual(result.stdout, json.dumps(json.loads(result.stdout), indent=1, sort_keys=True) + '\n')
+
+    def test_several_runs_take_the_median_and_a_name_in_one_run_keeps_its_time(self):
+        # A slow runner or a run beside heavier tests slows everything it measures; the median of
+        # several runs keeps one such run from setting a test's weight.
+        runs = [f'go (3)\tTest\t2026-10-23T05:00:00.0Z --- PASS: TestAlpha ({s:.2f}s)\n' for s in (4, 30)]
+        result = self.timings(self.log, *runs)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        timings = json.loads(result.stdout)
+        self.assertEqual(timings['TestAlpha'], 4.0)
+        self.assertEqual(timings['TestBeta'], 2.25)
+        two = json.loads(self.timings(self.log, runs[0]).stdout)
+        self.assertEqual(two['TestAlpha'], 3.0)
+
+    def test_a_log_without_test_times_fails_closed(self):
+        for log in ['', 'go (1)\tTest\t2026-10-23T04:40:01.7Z ok  \tgithub.com/x/pkg\t3.1s\n']:
+            result = self.timings(log)
+            self.assertNotEqual(result.returncode, 0, log)
+            self.assertEqual(result.stdout, '')
 
 
 class GoRelease(unittest.TestCase):
@@ -491,13 +585,13 @@ class GoBuildCache(unittest.TestCase):
         condition = ' '.join(line.strip() for line in
                              re.search(r'if: >-\n((?:          .*\n)+)', step).group(1).splitlines())
         self.assertIn("github.event_name == 'pull_request'", condition)
-        # A latency runner: it ends 30 to 60 seconds before the regular shards, so the upload is free.
+        # One shard uploads, a latency shard (6, 7 and 8 of 8).
         self.assertIn('matrix.shard == 7', condition)
         self.assertIn("!startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', "
                       "runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))", condition)
         go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
         self.assertIn('id: go-cache', go)
-        self.assertRegex(go, r"latency-shards 2\b")
+        self.assertRegex(go, r"latency-shards 3\b")
         self.assertIn("SHARDS: ${{ strategy.job-total }}", go)
         self.assertRegex(go, r'shard: \[1, 2, 3, 4, 5, 6, 7, 8\]')
 

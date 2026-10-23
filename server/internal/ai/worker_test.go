@@ -167,7 +167,7 @@ func TestAutomaticTasksStopAtTheDailyLimitAndPeopleDoNot(t *testing.T) {
 	q := newQueueEnv(t, nil)
 	q.turnOn(t, q.a, ai.SlotTriage)
 	q.turnOn(t, q.a, ai.SlotDraft)
-	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 2, 30); err != nil {
+	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 2, 30, nil); err != nil {
 		t.Fatal(err)
 	}
 	var automatic []string
@@ -334,7 +334,7 @@ func TestAStoppingProcessPutsItsTaskBackWithoutCountingIt(t *testing.T) {
 func TestABurstPastTheMinuteLimitWaitsForTheNextMinute(t *testing.T) {
 	q := newQueueEnv(t, nil)
 	q.turnOn(t, q.a, ai.SlotTriage)
-	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1); err != nil {
+	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotTriage, Automatic: true})
@@ -410,7 +410,7 @@ func TestTheMinuteLimitLooksAcrossMidnight(t *testing.T) {
 	q := newQueueEnv(t, nil)
 	q.clock.now = time.Date(2026, 10, 22, 23, 59, 40, 0, time.UTC)
 	q.turnOn(t, q.a, ai.SlotTriage)
-	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1); err != nil {
+	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	before := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotTriage, Automatic: true})
@@ -660,5 +660,54 @@ func TestADraftThatCouldNeverFitWhatIsLeftIsRefusedAtOnce(t *testing.T) {
 	}
 	if n := q.count(t, `SELECT count(*) FROM ai_tasks WHERE workspace_id=$1`, q.a.id); n != 0 {
 		t.Fatalf("%d tasks queued", n)
+	}
+}
+
+// Automatic drafts on the server's provider may spend half of the month's allowance; the other half
+// stays for the drafts people ask for.
+func TestAutomaticDraftsStopAtHalfTheAllowance(t *testing.T) {
+	server := *testServer
+	server.Allowance = &ai.Allowance{PerWorkspace: 1} // 1,000,000 micro-dollars
+	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
+	ctx := context.Background()
+	automatic := true
+	if _, err := q.service.SetSlot(ctx, q.a.id, q.actor(q.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceServer, Enabled: true, Automatic: &automatic}); err != nil {
+		t.Fatal(err)
+	}
+	var conversation string
+	if err := q.pool.QueryRow(ctx, `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ada','ada@example.com') RETURNING id)
+		INSERT INTO conversations(workspace_id,contact_id,subject) SELECT $1,id,'Hello' FROM c RETURNING id::text`, q.a.id).Scan(&conversation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.pool.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body) VALUES($1,$2,'incoming','Hi')`, q.a.id, conversation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.pool.Exec(ctx, `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_kind,provider_label,model,status,started_at,finished_at,cost_micro_usd,automatic)
+		VALUES($1,'draft','server','anthropic','Colliedesk AI','claude-sonnet-5-5','ok',$2,$2,500000,true)`, q.a.id, q.clock.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.pool.Exec(ctx, `UPDATE ai_tasks SET next_run_at=$2 WHERE workspace_id=$1 AND automatic`, q.a.id, q.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	q.tick(t)
+	var state, code string
+	if err := q.pool.QueryRow(ctx, `SELECT state,error_code FROM ai_tasks WHERE workspace_id=$1 AND automatic AND kind='draft'`, q.a.id).Scan(&state, &code); err != nil {
+		t.Fatal(err)
+	}
+	if state != "cancelled" || code != "allowance_reserved" {
+		t.Fatalf("automatic draft past half the allowance: %s %s", state, code)
+	}
+	settings, err := q.service.Settings(ctx, q.a.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Automatic.DraftsReservedUntil == nil {
+		t.Fatalf("automatic limits = %+v", settings.Automatic)
+	}
+	// A person's draft still runs.
+	id := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft, ConversationID: conversation, Actor: q.actor(q.a)})
+	q.tick(t)
+	if state, _ := q.state(t, id); state != "done" {
+		t.Fatalf("a person's draft = %s", state)
 	}
 }
