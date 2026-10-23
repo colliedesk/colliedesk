@@ -197,7 +197,7 @@ On 2026-10-22 Settings → AI (#89: AI providers and features) became its own la
 
 The same day its Usage tab, the paused and allowance notices and the automatic-runs dialog grew `ai-route` to 12,071 bytes gzip plus 2,854 of CSS; the first bundle did not change. The usage of a month is asked for only when the tab opens. AI work runs as background tasks (`ai.Worker`): no request waits for a provider.
 
-On 2026-10-23 the results page (#100) became its own lazy part, `results-route` (its strings, schemas, page and CSS); the first bundle keeps the rail link with its chart icon, the route, the `result` inbox filter and the strings of its chip-less error: 201,489 → 201,903 bytes (+414). Its CSS went from 15,890 to 15,847: the mobile filter chips now wrap instead of scrolling sideways, so a filter is never out of view.
+On 2026-10-23 the results page (#100) became its own lazy part, `results-route` (its strings, schemas, page and CSS); the first bundle keeps the rail link with its chart icon, the route, the `result` inbox filter, the public share page's route and the strings of a refreshed list: 201,489 → 202,048 bytes (+559); the share page is a lazy part of its own. Its CSS went from 15,890 to 15,893: the mobile filter chips now wrap instead of scrolling sideways, so a filter is never out of view.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 

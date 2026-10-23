@@ -1126,6 +1126,7 @@
  "TestResendWebhookNeedsAValidSignature": 0.27,
  "TestResolvingAConversationStopsADraftStillBeingWritten": 1.46,
  "TestRestoringAnOldVersionAddsAVersionAndNeverRewritesHistory": 0.14,
+ "TestResultsComputeAndReadStayInBudget": 12.0,
  "TestResumeAfterInterruptionImportsTheRestWithoutDuplicates": 1.17,
  "TestResumingOnlyReleasesRepliesTheHoldDelayedNotOnesInErrorBackoff": 1.0,
  "TestResumingSendingDeliversTheHeldReplyAtOnce": 0.99,

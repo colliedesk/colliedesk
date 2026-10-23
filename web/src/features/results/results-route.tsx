@@ -16,11 +16,12 @@ const numberLink: NumberLink = ({ result, className, children }) => <Link to="/"
 // The period is in the address (?window=7d), so a number opened from it comes back to the same period.
 export function ResultsRoute({ window = '30d', onWindow }: { window?: WindowKey; onWindow: (window: WindowKey) => void }) {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  // The numbers are computed in the background; while the first ones or the baseline are being worked
-  // out, the page asks again every 30 seconds so it updates by itself.
+  // The numbers are computed in the background (the worker looks every 15 seconds); while the first ones
+  // or the baseline are being worked out, the page asks again every 3 seconds so it updates by itself.
+  // The read is one stored row (20 ms budget), so this costs nothing that matters.
   const results = useQuery({
     queryKey: ['results'], queryFn: resultsApi.get, enabled: Boolean(me.data),
-    refetchInterval: (query) => (query.state.data && (query.state.data.current === null || query.state.data.baseline_state === 'computing') ? 30_000 : false),
+    refetchInterval: (query) => (query.state.data && (query.state.data.current === null || query.state.data.baseline_state === 'computing') ? 3_000 : false),
   });
   // "Updated 40 min ago" moves with the clock.
   const [now, setNow] = useState(() => new Date());
