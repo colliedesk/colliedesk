@@ -458,7 +458,9 @@ class ImageLayerCache(unittest.TestCase):
         self.assertIn('cache-from: type=gha,scope=image', image)
         self.assertNotIn('cache-to:', image)
         writer = (ROOT / '.github/workflows/image-cache.yml').read_text()
-        self.assertIn('branches: [main]', writer)
+        # After CI, never beside it: a full main push already takes 20 runners with go-cache and Scorecard.
+        self.assertIn('workflows: [CI]', writer)
+        self.assertNotIn('push:', writer)
         self.assertIn('cache-to: type=gha,scope=image,mode=max', writer)
 
     def test_the_dependency_compile_depends_only_on_the_imported_packages(self):
