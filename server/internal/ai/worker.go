@@ -189,14 +189,26 @@ func (w *Worker) sweep(ctx context.Context) error {
 			WHERE status='started' AND started_at<$2`, now, now.Add(-w.options.Lease-2*time.Minute)); err != nil {
 			return err
 		}
-		// A ready draft nobody decided on for a week expired; 90 days after a draft ended, its text and
-		// prompt are erased and its numbers stay.
+		// A ready draft or suggestion nobody decided on for a week expired (a suggestion partly applied
+		// counts as partly accepted, one that named nothing stays without an outcome); 90 days after a draft ended, its text and prompt are erased and
+		// its numbers stay.
 		if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET outcome='expired',decided_at=$1 WHERE status='ready' AND outcome IS NULL AND ready_at<$2`,
 			now, now.Add(-draftExpiry)); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `UPDATE ai_drafts SET text=NULL,prompt='',missing_info=NULL,warnings='[]',text_cleared_at=$1
-			WHERE text_cleared_at IS NULL AND (decided_at IS NOT NULL OR status<>'ready') AND COALESCE(decided_at,created_at)<$2`, now, now.Add(-draftTextRetention))
+		if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET outcome=CASE WHEN `+triageAppliedSome+` THEN 'partly_accepted' ELSE 'expired' END,decided_at=$1
+			WHERE status='ready' AND outcome IS NULL AND ready_at<$2 AND (tag_ids<>'{}' OR priority IS NOT NULL OR assignee_agent_id IS NOT NULL)`,
+			now, now.Add(-triageExpiry)); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET text=NULL,prompt='',missing_info=NULL,warnings='[]',text_cleared_at=$1
+			WHERE text_cleared_at IS NULL AND (decided_at IS NOT NULL OR status<>'ready') AND COALESCE(decided_at,created_at)<$2`, now, now.Add(-draftTextRetention)); err != nil {
+			return err
+		}
+		// A suggestion's reason, the only generated text it holds, goes 90 days after it ended too.
+		// An open one has expired long before (one naming nothing never does, so it goes by its age).
+		_, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET reason=NULL WHERE reason IS NOT NULL AND COALESCE(decided_at,created_at)<$1`,
+			now.Add(-draftTextRetention))
 		return err
 	})
 }

@@ -238,6 +238,12 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/conversations/{id}/ai-drafts":                    tier(auth.ScopeRead),
 	"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":          tier(auth.ScopeRead),
 	"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard": tier(auth.ScopeDraft),
+	// A triage suggestion changes nothing until accepted; accepting changes tags, priority and assignee,
+	// like PATCH /api/v1/conversations/{id} (draft).
+	"GET /api/v1/conversations/{id}/ai-triage":                         tier(auth.ScopeRead),
+	"POST /api/v1/conversations/{id}/ai-triage":                        tier(auth.ScopeDraft),
+	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  tier(auth.ScopeDraft),
+	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": tier(auth.ScopeDraft),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.

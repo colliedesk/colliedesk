@@ -26,24 +26,11 @@
   padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
 .ai-draft-check ul { margin: 0; padding-left: var(--space-4); }
 .ai-draft-check code { font-family: var(--font-mono); overflow-wrap: anywhere; }
-.ai-draft-sources { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; color: var(--text-3); font-size: var(--fs-small); }
-.ai-draft-sources { flex-wrap: nowrap; min-width: 0; overflow: hidden; }
-.ai-draft-sources > span { flex: none; }
-/* Sources sit on one line that scrolls sideways, faded at its end, without a bar. */
-.ai-draft-sources ul { display: flex; flex: 1; gap: var(--space-3); margin: 0; padding: 0; list-style: none; min-width: 0; overflow-x: auto; scrollbar-width: none;
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
-.ai-draft-sources ul::-webkit-scrollbar { display: none; }
-/* Positioned, so a visually hidden label inside (absolutely positioned) stays in the scrolling line
-   instead of widening the page. */
-.ai-draft-sources ul, .ai-draft-sources li { position: relative; }
-.ai-draft-sources li { flex: none; white-space: nowrap; }
-.ai-draft-sources a { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
-.ai-draft-sources a > svg { flex: none; width: 14px; height: 14px; }
 .ai-draft-quiet { margin: 0; color: var(--text-3); font-size: var(--fs-small); }
 .ai-draft-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .ai-draft-again { margin-left: auto; }
 @media (pointer: coarse) {
-  .ai-draft button, .ai-draft-sources a { min-height: var(--touch); }
+  .ai-draft button { min-height: var(--touch); }
 }
 /* A phone: the panel is a sheet at the foot of the screen, its buttons always in view. */
 @media (max-width: 44rem) {

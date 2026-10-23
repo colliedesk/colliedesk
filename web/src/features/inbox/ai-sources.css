@@ -1,0 +1,17 @@
+/* The sources of an AI draft or triage suggestion. Loaded with their lazy parts. */
+.ai-sources { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: nowrap; min-width: 0; overflow: hidden; color: var(--text-3); font-size: var(--fs-small); }
+.ai-sources > span { flex: none; }
+/* Sources sit on one line that scrolls sideways, faded at its end, without a bar. */
+.ai-sources ul { display: flex; flex: 1; gap: var(--space-3); margin: 0; padding: 0; list-style: none; min-width: 0; overflow-x: auto; scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.ai-sources ul::-webkit-scrollbar { display: none; }
+/* Positioned, so a visually hidden label inside (absolutely positioned) stays in the scrolling line
+   instead of widening the page. */
+.ai-sources ul, .ai-sources li { position: relative; }
+.ai-sources li { flex: none; white-space: nowrap; }
+.ai-sources a { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.ai-sources a > svg { flex: none; width: 14px; height: 14px; }
+.ai-sources-none { color: var(--text-3); }
+@media (pointer: coarse) {
+  .ai-sources a { min-height: var(--touch); }
+}

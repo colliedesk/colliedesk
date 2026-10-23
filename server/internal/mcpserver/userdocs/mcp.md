@@ -176,6 +176,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
 | `colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list` | Shows an AI draft (waiting up to 20 seconds while it is written), or a conversation's newest drafts | `read` |
 | `colliedesk_ai_draft_discard` | Stops an AI draft being written or discards a ready one | `draft` |
+| `colliedesk_ai_triage_get` | Shows a conversation's newest [AI triage suggestion](ai.md#triage-suggestions): tags, priority, assignee and a reason | `read` |
+| `colliedesk_ai_triage_create` | Asks for a triage suggestion again | `draft` |
+| `colliedesk_ai_triage_accept`, `colliedesk_ai_triage_dismiss` | Applies a suggestion (all of it, or the parts named) to its conversation, or dismisses it | `draft` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

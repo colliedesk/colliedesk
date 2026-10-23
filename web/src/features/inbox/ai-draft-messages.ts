@@ -17,8 +17,6 @@ export const aiDraftMessages = {
   discard: 'Discard',
   again: 'New draft',
   tryAgain: 'Try again',
-  openSettings: 'Open AI settings',
-  askAdmin: 'Ask an admin to check Settings → AI.',
   missingInfo: 'Missing information',
   checkHeading: 'Check before sending',
   checkBody: 'Not in this conversation:',

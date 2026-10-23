@@ -52,6 +52,7 @@ func newDraftDesk(t *testing.T) draftDesk {
 	d := draftDesk{api: api, pool: pool, fake: fake, service: server.AI()}
 	d.worker = ai.NewWorker(server.AI(), database.New(pool), ai.WorkerOptions{})
 	d.worker.Handle(ai.SlotDraft, server.AI().DraftHandler())
+	d.worker.Handle(ai.SlotTriage, server.AI().TriageHandler())
 	d.adminA = createSession(t, api, service, "Draft Desk A", "admin@draft-a.example.com")
 	d.adminB = createSession(t, api, service, "Draft Desk B", "admin@draft-b.example.com")
 	d.workspaceA, d.workspaceB = workspaceID(t, api, d.adminA), workspaceID(t, api, d.adminB)

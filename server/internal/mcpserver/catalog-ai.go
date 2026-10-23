@@ -246,3 +246,76 @@ func aiDraftDiscardSpec() Spec {
 		run:    aiDraftDiscard,
 	}
 }
+
+const (
+	aiTriageIDProperty = `"suggestion_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_triage_get or colliedesk_ai_triage_create."}`
+
+	aiTriageSchema = `{"type":"object","required":["id","conversation_id","status"],"properties":{"id":{"type":"string"},"conversation_id":{"type":"string"},` +
+		`"status":{"type":"string","enum":["queued","running","ready","failed","cancelled"]},"error_code":{"type":["string","null"]},"automatic":{"type":"boolean"},` +
+		`"tag_ids":{"type":"array","items":{"type":"string"}},"priority":{"type":["string","null"]},"assignee_agent_id":{"type":["string","null"]},` +
+		`"reason":{"type":["string","null"],"description":"Generated text, not something a customer wrote."},` +
+		`"sources":{"type":"array","description":"The articles and solved conversations the reason rests on.","items":{"type":"object","properties":{"kind":{"type":"string"},"id":{"type":"string"},"title":{"type":"string"}}}},` +
+		`"stale":{"type":"object","description":"What a person set before the suggestion came; that field is not suggested."},` +
+		`"outcome":{"type":["string","null"],"description":"Null while open, also after a part was applied."},"applied":{"type":"object","description":"What was applied so far."}}}`
+
+	aiTriageOutput = `{"type":"object","required":["suggestion"],"properties":{"suggestion":` + aiTriageSchema + `}}`
+)
+
+func aiTriageGetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_triage_get",
+		Title: "Show a conversation's AI triage suggestion",
+		Description: `Show the newest AI triage suggestion of a conversation (tags, priority, assignee, a one-sentence reason), or null. ` +
+			`A new ticket gets one by itself when triage is on. Nothing is applied until someone accepts it.` +
+			"\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:   []string{"GET /api/v1/conversations/{id}/ai-triage"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
+		Output: `{"type":"object","required":["suggestion"],"properties":{"suggestion":{"oneOf":[{"type":"null"},` + aiTriageSchema + `]}}}`,
+		run:    aiTriageGet,
+	}
+}
+
+func aiTriageCreateSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_triage_create",
+		Title: "Ask Colliedesk AI for a triage suggestion",
+		Description: `Ask the workspace's AI provider again for tags, a priority and an assignee for a conversation; it replaces the open suggestion ` +
+			`and is written in the background (poll colliedesk_ai_triage_get). Fails with ai_feature_off when triage is off.` +
+			"\n\nTier: draft.",
+		Tier:   "draft",
+		REST:   []string{"POST /api/v1/conversations/{id}/ai-triage"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
+		Output: aiTriageOutput,
+		run:    aiTriageCreate,
+	}
+}
+
+func aiTriageAcceptSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_triage_accept",
+		Title: "Accept an AI triage suggestion",
+		Description: `Apply an open triage suggestion to its conversation: the rest of it, or only the tag_ids, priority or assignee_agent_id you pass (each from the suggestion). ` +
+			`A part applied leaves the rest open until it is all applied or dismissed. Tags are added, never removed; undo with colliedesk_conversation_update.` +
+			"\n\nTier: draft.",
+		Tier: "draft", Idempotent: true,
+		REST: []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","suggestion_id"],"properties":{` + aiDraftConversationProperty + `,` + aiTriageIDProperty + `,` +
+			`"tag_ids":{"type":"array","items":{"type":"string",` + uuid + `}},"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee_agent_id":{"type":"string",` + uuid + `}}}`,
+		Output: aiTriageOutput,
+		run:    aiTriageAccept,
+	}
+}
+
+func aiTriageDismissSpec() Spec {
+	return Spec{
+		Name:        "colliedesk_ai_triage_dismiss",
+		Title:       "Dismiss an AI triage suggestion",
+		Description: `Dismiss the rest of a triage suggestion, or stop one being written. Nothing changes on the conversation.` + "\n\nTier: draft.",
+		Tier:        "draft", Idempotent: true,
+		REST:   []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id","suggestion_id"],"properties":{` + aiDraftConversationProperty + `,` + aiTriageIDProperty + `}}`,
+		Output: aiTriageOutput,
+		run:    aiTriageDismiss,
+	}
+}

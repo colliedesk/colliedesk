@@ -18,6 +18,8 @@ interface TimelinePanelProps {
   timezone: string;
   onRetryDelivery?: (messageId: string) => void;
   detailsOpen?: boolean;
+  // An AI triage suggestion waits in the details, which a narrow screen hides behind the toggle.
+  suggestionWaiting?: boolean;
   onToggleDetails?: () => void;
   detailsToggleRef?: RefObject<HTMLButtonElement | null>;
   // Team member names by id, to name the person who approved a reply an AI agent drafted.
@@ -28,7 +30,7 @@ interface TimelinePanelProps {
   viewers?: ConversationViewer[];
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [] }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [] }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -42,7 +44,9 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
         {conversation && onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
-          aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}>{messages.showDetails}</button>}
+          aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
+          aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
+          {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
       </header>
       <div className="timeline-scroll">
         <div className="timeline-stack">

@@ -416,6 +416,31 @@ type AIDraft struct {
 	TextClearedAt      *time.Time      `json:"text_cleared_at"`
 }
 
+// AITriage is one AI triage suggestion and what a person did with it.
+type AITriage struct {
+	ID                 string          `json:"id"`
+	ConversationID     string          `json:"conversation_id"`
+	TaskID             *string         `json:"task_id"`
+	Automatic          bool            `json:"automatic"`
+	RequestedByAgentID *string         `json:"requested_by_agent_id"`
+	RequestedByTokenID *string         `json:"requested_by_token_id"`
+	Status             string          `json:"status"`
+	TagIDs             []string        `json:"tag_ids"`
+	Priority           *string         `json:"priority"`
+	AssigneeAgentID    *string         `json:"assignee_agent_id"`
+	Reason             *string         `json:"reason"`
+	Sources            json.RawMessage `json:"sources"`
+	Base               json.RawMessage `json:"base"`
+	Stale              json.RawMessage `json:"stale"`
+	Model              *string         `json:"model"`
+	Outcome            *string         `json:"outcome"`
+	Applied            json.RawMessage `json:"applied"`
+	CreatedAt          time.Time       `json:"created_at"`
+	ReadyAt            *time.Time      `json:"ready_at"`
+	DecidedAt          *time.Time      `json:"decided_at"`
+	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
+}
+
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
 // server reads the bytes from and never leaves the server.
 type Attachment struct {
@@ -473,7 +498,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -500,6 +525,7 @@ type Sink interface {
 	AISettingsEvent(AISettingsEvent) error
 	AIUsage(AIUsage) error
 	AIDraft(AIDraft) error
+	AITriage(AITriage) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry) error

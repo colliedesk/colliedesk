@@ -187,6 +187,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	// AI tasks run in this process with the API's service, so a queued task wakes the worker at once.
 	aiWorker := ai.NewWorker(api.AI(), db, ai.WorkerOptions{})
 	aiWorker.Handle(ai.SlotDraft, api.AI().DraftHandler())
+	aiWorker.Handle(ai.SlotTriage, api.AI().TriageHandler())
 	go aiWorker.Run(ctx)
 	if billing.Enabled() {
 		go refreshFoundingAtStart(ctx, api)
