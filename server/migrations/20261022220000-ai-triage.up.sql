@@ -44,7 +44,11 @@ CREATE TABLE ai_triage_suggestions (
 );
 CREATE INDEX ai_triage_conversation ON ai_triage_suggestions(workspace_id, conversation_id, created_at DESC);
 CREATE INDEX ai_triage_task ON ai_triage_suggestions(workspace_id, task_id) WHERE task_id IS NOT NULL;
-CREATE INDEX ai_triage_undecided ON ai_triage_suggestions(ready_at) WHERE status = 'ready' AND outcome IS NULL;
+-- The sweeps: an open suggestion with a part to accept expires after a week (one naming nothing never
+-- does), and a reason is erased 90 days after the suggestion ended.
+CREATE INDEX ai_triage_undecided ON ai_triage_suggestions(ready_at) WHERE status = 'ready' AND outcome IS NULL
+    AND (tag_ids <> '{}' OR priority IS NOT NULL OR assignee_agent_id IS NOT NULL);
+CREATE INDEX ai_triage_reason_due ON ai_triage_suggestions((COALESCE(decided_at, created_at))) WHERE reason IS NOT NULL;
 
 -- The first customer message of a conversation queues a suggestion when triage is on. Every way a
 -- conversation starts (email, web form, the API) inserts that message; an import sets origin.

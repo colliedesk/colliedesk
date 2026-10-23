@@ -276,6 +276,59 @@ func TestATriageSuggestionDropsADeletedTagAndADeactivatedTeammate(t *testing.T) 
 	wantResponse(t, request(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage/"+empty.ID+"/accept", nil, d.adminA, nil), http.StatusConflict, "ai_triage_nothing")
 }
 
+// Tags that differ only in case are told apart, and the reason never shows the prompt's source ids.
+func TestATriageSuggestionTellsCaseTagsApartAndHidesSourceIDs(t *testing.T) {
+	d := newDraftDesk(t)
+	d.triageOn(t)
+	upper := create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "Bug"})
+	lower := create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "bug"})
+	only := create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "Printer"})
+	answer := triageAnswer([]string{"bug", "BUG", "printer"}, "high", "")
+	answer.Response.JSON = strings.Replace(answer.Response.JSON, "The printer is down for the whole office.", "Same as kb1 and past1, see KB12.", 1)
+	d.fake.Script(answer)
+	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
+	conversation := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer jam"})
+	d.customerWrites(t, d.workspaceA, conversation, "My printer jams on tray two.", nil)
+	d.run(t)
+	got := d.triage(t, d.adminA, conversation)
+	if !slices.Contains(got.TagIDs, lower) || slices.Contains(got.TagIDs, upper) || !slices.Contains(got.TagIDs, only) {
+		t.Fatalf("tags = %v, want bug %s and Printer %s, not Bug %s", got.TagIDs, lower, only, upper)
+	}
+	if got.Reason == nil || *got.Reason != "Same as “Printer paper jams” and a similar solved ticket, see an article." {
+		t.Fatalf("reason = %v", got.Reason)
+	}
+}
+
+// A part applied while someone else dismissed or replaced the suggestion is still recorded.
+func TestAPartAppliedWhileTheSuggestionWasReplacedIsRecorded(t *testing.T) {
+	d := newDraftDesk(t)
+	d.triageOn(t)
+	ctx := context.Background()
+	d.fake.Script(triageAnswer(nil, "urgent", ""))
+	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
+	conversation := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer down"})
+	d.customerWrites(t, d.workspaceA, conversation, "The office printer is down.", nil)
+	d.run(t)
+	first := d.triage(t, d.adminA, conversation)
+	urgent := "urgent"
+	set, err := d.service.TriageToApply(ctx, d.workspaceA, conversation, first.ID, ai.TriageSet{Priority: &urgent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kbCall(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage", nil, d.adminA, http.StatusAccepted, nil)
+	before := queryString(t, d.pool, `SELECT decided_at::text FROM ai_triage_suggestions WHERE id=$1`, first.ID)
+	got, err := d.service.AcceptedTriage(ctx, d.workspaceA, ai.Actor{}, conversation, first.ID, set)
+	if err != nil {
+		t.Fatalf("recording a part applied while it was replaced: %v", err)
+	}
+	if got.Outcome == nil || *got.Outcome != "accepted" || got.Applied.Priority == nil {
+		t.Fatalf("replaced while applied = %+v", got)
+	}
+	if after := queryString(t, d.pool, `SELECT decided_at::text FROM ai_triage_suggestions WHERE id=$1`, first.ID); after != before {
+		t.Fatalf("decided_at moved from %s to %s", before, after)
+	}
+}
+
 // Past the workspace's automatic limit a new ticket gets no suggestion and no provider call; the
 // suggestion says why, and a person can still ask for one.
 func TestAutomaticTriageStopsAtTheWorkspacesLimit(t *testing.T) {

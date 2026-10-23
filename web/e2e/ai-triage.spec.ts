@@ -86,6 +86,10 @@ test('a new ticket by email gets an AI triage suggestion that changes nothing un
     await page.setViewportSize({ width: 390, height: 844 });
     const toggle = page.getByRole('button', { name: 'Show details, AI suggestion' });
     await expect(toggle).toBeVisible();
+    // Nothing is cut at the right edge: the page cannot scroll sideways, and the conversation pane clips.
+    const box = await toggle.boundingBox();
+    expect(box && box.x + box.width).toBeLessThanOrEqual(390);
+    expect(await page.getByRole('region', { name: 'Timeline' }).evaluate((element) => element.getBoundingClientRect().right)).toBeLessThanOrEqual(390);
     await toggle.click();
     await expect(card.getByRole('button', { name: 'Accept all' })).toBeInViewport();
     await card.getByRole('button', { name: 'Accept all' }).click();

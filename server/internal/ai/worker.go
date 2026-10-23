@@ -206,8 +206,9 @@ func (w *Worker) sweep(ctx context.Context) error {
 			return err
 		}
 		// A suggestion's reason, the only generated text it holds, goes 90 days after it ended too.
-		_, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET reason=NULL WHERE reason IS NOT NULL AND (decided_at IS NOT NULL OR status<>'ready')
-			AND COALESCE(decided_at,created_at)<$1`, now.Add(-draftTextRetention))
+		// An open one has expired long before (one naming nothing never does, so it goes by its age).
+		_, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET reason=NULL WHERE reason IS NOT NULL AND COALESCE(decided_at,created_at)<$1`,
+			now.Add(-draftTextRetention))
 		return err
 	})
 }

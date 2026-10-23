@@ -1,19 +1,22 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Tag, TeamMember } from '../../api/schemas';
-import { formatDate } from '../../lib/format-date';
+import { InvalidRequestError, PlanLimitError } from '../../api/client';
+import { formatDate, formatShortDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { CheckIcon, SparklesIcon } from '../../ui/icons';
+import { CheckIcon } from '../../ui/icons';
 import { aiTriageApi } from './ai-triage-api';
 import type { AITriage, TriagePick } from './ai-triage-api';
-import { refusalCode, SettingsWay } from './ai-failure';
+import { isSettingsFailure, refusalCode, SettingsWay } from './ai-failure';
 import { AISources } from './ai-sources';
 import './ai-triage.css';
 
 // Strings of the suggestion card; it is a lazy part, so they live in its chunk.
 const text = {
   heading: 'Suggested by AI',
+  headingShort: 'Suggested',
+  appliedPart: 'Applied. The rest of the suggestion is still open.',
   writing: 'Suggesting tags, priority and assignee…',
   keepWorking: 'Keep working; it appears here when ready.',
   cancel: 'Cancel',
@@ -46,7 +49,7 @@ const text = {
   superseded: 'Replaced by a newer suggestion.',
   stopped: 'Stopped.',
   loadFailed: 'The suggestion could not be loaded. Try again in a moment.',
-  refusedFallback: 'The suggestion could not be asked for. Try again in a moment.',
+  refusedFallback: 'Nothing was changed: the request did not reach Colliedesk. Check your connection, then try again.',
   generated: 'Written by AI: check it. Nothing changes until you accept.',
   paused: (until: string) => `Automatic suggestions are paused until ${until}: the daily limit is reached. You can still ask for one.`,
   failed: (code: string | null) => failures[code ?? ''] ?? 'No suggestion this time: the AI provider did not answer. Try again in a moment.',
@@ -58,6 +61,9 @@ const failures: Record<string, string> = {
   auth: 'No suggestion: the AI provider refused its key. An admin can change it in Settings → AI.',
   quota_exhausted: 'No suggestion: the AI provider account is out of credit. An admin can check it in Settings → AI.',
   refused: 'No suggestion: the model declined this ticket. Sort it by hand, or try again.',
+  too_long: 'No suggestion: the model’s answer ran too long. Try again; fewer tags in the workspace make it shorter.',
+  empty_answer: 'No suggestion: the model returned nothing. Try again.',
+  internal: 'No suggestion: Colliedesk could not save it. Try again.',
   invalid_answer: 'No suggestion: the model’s answer could not be read. Try again.',
   restored: 'This suggestion was lost when the workspace was restored. Ask for a new one.',
   workspace_locked: 'No suggestion: the workspace is locked.',
@@ -116,10 +122,20 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
   }, [onWaiting, waiting]);
   useEffect(() => () => onWaiting?.(false), [onWaiting]);
   const set = (next: AITriage) => client.setQueryData(key, { suggestion: next });
+  // After an action its button goes: focus moves to the card's heading, and a status says what happened (the
+  // card's own closing line, or this one when a part was applied and the rest is still open).
+  const heading = useRef<HTMLHeadingElement>(null);
+  const [announcement, setAnnouncement] = useState('');
+  const settled = (next: AITriage, said: string) => {
+    set(next);
+    setAnnouncement(said);
+    heading.current?.focus();
+  };
   const ask = useMutation({ mutationFn: () => aiTriageApi.create(conversationId), onSuccess: set });
   const accept = useMutation({ mutationFn: ({ target, pick }: { target: AITriage; pick?: TriagePick }) => aiTriageApi.accept(conversationId, target.id, pick),
-    onSuccess: (next) => { set(next); onApplied(); } });
-  const dismiss = useMutation({ mutationFn: (target: AITriage) => aiTriageApi.dismiss(conversationId, target.id), onSuccess: set });
+    onSuccess: (next) => { settled(next, next.outcome === null ? text.appliedPart : ''); onApplied(); } });
+  const dismiss = useMutation({ mutationFn: (target: AITriage) => aiTriageApi.dismiss(conversationId, target.id),
+    onSuccess: (next) => settled(next, '') });
   const refused = [ask, accept, dismiss].find((mutation) => mutation.isError)?.error;
   const busy = ask.isPending || accept.isPending || dismiss.isPending;
   const askButton = (label: string) => <button type="button" disabled={busy} onClick={() => ask.mutate()}>{label}</button>;
@@ -144,10 +160,13 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
   } else if (suggestion.status === 'failed') {
     // The daily limit counts UTC days: paused until the next midnight UTC, shown in the agent's timezone.
     const message = suggestion.error_code === 'automatic_limit' ? text.paused(formatDate(nextUTCMidnight(suggestion.created_at), timezone)) : text.failed(suggestion.error_code);
-    body = <p className="ai-triage-message">{message} <SettingsWay code={suggestion.error_code} canManage={canManage} /></p>;
-    actions = askButton(suggestion.error_code === 'automatic_limit' ? text.suggestNow : text.tryAgain);
+    const paused = suggestion.error_code === 'automatic_limit';
+    body = <p className={paused ? 'ai-triage-message' : 'ai-triage-message error-copy'}>{message}</p>;
+    // A setting causes it: asking again fails the same way, so the way to the setting is the action.
+    actions = isSettingsFailure(suggestion.error_code) ? <SettingsWay code={suggestion.error_code} canManage={canManage} />
+      : askButton(paused ? text.suggestNow : text.tryAgain);
   } else if (suggestion.status === 'cancelled') {
-    body = <p className="ai-triage-message">{text.stopped}</p>;
+    body = <p className="ai-triage-message" role="status">{text.stopped}</p>;
     actions = askButton(text.again);
   } else {
     const open = suggestion.outcome === null;
@@ -181,16 +200,19 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
           : suggestion.outcome === 'partly_accepted' ? text.partly
           : suggestion.outcome === 'expired' ? text.expired
           : suggestion.outcome === 'superseded' ? text.superseded : text.dismissed;
-        body = <>{body}<p className="muted-copy">{after}</p></>;
+        body = <>{body}<p className="muted-copy" role="status">{after}</p></>;
         actions = suggestion.outcome === 'accepted' ? null : askButton(text.again);
       }
     }
   }
   return (
     <section className="details-section ai-triage" aria-label={text.heading} aria-busy={latest.isPending || writing(suggestion)}>
-      <h2><SparklesIcon />{text.heading}</h2>
+      <h2 ref={heading} tabIndex={-1}><span className="ai-chip" aria-hidden="true">AI</span>{text.headingShort}
+        {suggestion && <time className="ai-triage-time" dateTime={suggestion.ready_at ?? suggestion.created_at}>{formatShortDate(suggestion.ready_at ?? suggestion.created_at, timezone)}</time>}</h2>
       {body}
-      {refused && <p role="alert" className="error-copy">{refused instanceof Error && refused.message ? refused.message : text.refusedFallback}
+      <p className="sr-only" role="status">{announcement}</p>
+      {/* A refusal Colliedesk explains is shown as it is; anything else (no connection) changed nothing. */}
+      {refused && <p role="alert" className="error-copy">{(refused instanceof InvalidRequestError || refused instanceof PlanLimitError) && refused.message ? refused.message : text.refusedFallback}
         {' '}<SettingsWay code={refusalCode(refused)} canManage={canManage} /></p>}
       {actions && <div className="ai-triage-actions">{actions}</div>}
     </section>

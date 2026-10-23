@@ -280,7 +280,9 @@ func (s *Service) AcceptedTriage(ctx context.Context, workspaceID string, actor 
 		if err != nil {
 			return err
 		}
-		if t.Status != DraftReady || t.Outcome != nil {
+		// Dismissed, replaced or expired while the part was being applied: what was applied is still
+		// recorded, so the suggestion never says nothing was done when something was.
+		if t.Status != DraftReady {
 			return ErrTriageDecided
 		}
 		if len(t.TagIDs) == 0 && t.Priority == nil && t.AssigneeAgentID == nil {
@@ -303,8 +305,15 @@ func (s *Service) AcceptedTriage(ctx context.Context, workspaceID string, actor 
 			all = all && slices.Contains(merged.TagIDs, tag)
 		}
 		var outcome, decidedAt, decidedBy any
-		if all {
+		switch {
+		case t.Outcome == nil && all:
 			outcome, decidedAt, decidedBy = "accepted", s.now().UTC(), nullable(actor.AgentID)
+		case t.Outcome != nil:
+			// Already closed: its time and who closed it stay; the outcome says what was applied.
+			outcome, decidedAt, decidedBy = "partly_accepted", t.DecidedAt, t.DecidedByAgentID
+			if all {
+				outcome = "accepted"
+			}
 		}
 		if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET applied=$3,outcome=$4,decided_at=$5,decided_by_agent_id=$6 WHERE workspace_id=$1 AND id=$2`,
 			workspaceID, id, merged, outcome, decidedAt, decidedBy); err != nil {

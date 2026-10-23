@@ -133,6 +133,40 @@ test('a failure a setting causes sends an admin to AI settings', async () => {
   expect(screen.getByRole('link', { name: 'Open AI settings' })).toHaveAttribute('href', '/settings/ai');
 });
 
+test('a failure a setting causes offers only the way to the setting, not another try', async () => {
+  serve(() => ({ suggestion: suggestion({ status: 'failed', error_code: 'auth', ...empty, ready_at: null }) }));
+  show(vi.fn(), false);
+  expect(await screen.findByText(/refused its key/)).toBeInTheDocument();
+  expect(screen.getByText('Ask an admin to check Settings → AI.')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+});
+
+test('an answer too long says so', async () => {
+  serve(() => ({ suggestion: suggestion({ status: 'failed', error_code: 'too_long', ...empty, ready_at: null }) }));
+  show();
+  expect(await screen.findByText(/answer ran too long/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+});
+
+test('a dropped connection says nothing changed and what to do; an accepted part moves focus and is announced', async () => {
+  let fail = true;
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (String(url).endsWith('/accept')) {
+      if (fail) throw new TypeError('Failed to fetch');
+      return new Response(JSON.stringify(suggestion({ applied: { ...nothingApplied, priority: 'urgent' } })), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ suggestion: suggestion() }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Accept priority Urgent' }));
+  expect(await screen.findByText(/Nothing was changed: the request did not reach Colliedesk\. Check your connection, then try again\./)).toBeInTheDocument();
+  expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
+  fail = false;
+  fireEvent.click(screen.getByRole('button', { name: 'Accept priority Urgent' }));
+  expect(await screen.findByText('Applied. The rest of the suggestion is still open.')).toBeInTheDocument();
+  expect(document.activeElement).toBe(screen.getByRole('heading', { name: /Suggested/ }));
+});
+
 test('without a suggestion a person asks for one, and dismissing changes nothing', async () => {
   let current: AITriage | null = null;
   serve((url, init) => {

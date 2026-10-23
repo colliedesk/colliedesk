@@ -1,8 +1,9 @@
 /* The AI triage suggestion at the top of the details panel. Loaded with its lazy part; scrollbars follow base.css. */
 .ai-triage { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); border: 1px dashed var(--line-strong); border-radius: var(--radius);
   background: var(--accent-soft); padding: var(--space-3); min-width: 0; }
-.ai-triage h2 { display: flex; align-items: center; gap: var(--space-1); margin: 0; }
-.ai-triage h2 > svg { flex: none; color: var(--text-3); }
+.ai-triage h2 { display: flex; align-items: center; gap: var(--space-2); margin: 0; }
+.ai-triage h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ai-triage-time { margin-left: auto; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; }
 .ai-triage p { margin: 0; }
 .ai-triage-rows { display: grid; grid-template-columns: minmax(0, 1fr); }
 .ai-triage-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-1) 0; }
@@ -15,8 +16,17 @@
 .ai-triage-row button { --control: 28px; padding: 0 var(--space-2); }
 .ai-triage-done { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); font-size: var(--fs-label); font-weight: 500; }
 .ai-triage-done > svg { width: 14px; height: 14px; }
-.ai-triage-reason { color: var(--text-2); font-size: var(--fs-label); line-height: 1.5; }
-.ai-triage-message { color: var(--text-2); font-size: var(--fs-small); }
+.ai-triage-reason { color: var(--text-2); font-size: var(--fs-label); line-height: 1.5; overflow-wrap: anywhere; }
+.ai-triage-message { color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.ai-triage-message.error-copy { color: var(--danger); }
+/* In the narrow details every source shows: they wrap instead of scrolling sideways. */
+.ai-triage .ai-sources { flex-wrap: wrap; }
+.ai-triage .ai-sources ul { flex-wrap: wrap; row-gap: var(--space-1); overflow: visible; mask-image: none; }
+.ai-triage .ai-sources li { white-space: normal; overflow-wrap: anywhere; }
+/* The way to Settings → AI is the action of a failure a setting causes: a button, not a link in a sentence. */
+.ai-triage-actions a { display: inline-flex; align-items: center; min-height: var(--control, 36px); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-1); font-weight: 500; text-decoration: none; }
+.ai-triage-actions > span { color: var(--text-2); font-size: var(--fs-small); }
 .ai-triage-note { font-size: var(--fs-label); }
 .ai-triage-writing { display: grid; gap: var(--space-1); }
 .ai-triage-writing > span:first-child { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
@@ -24,6 +34,7 @@
 @keyframes ai-triage-pulse { 50% { opacity: 0.3; } }
 @media (prefers-reduced-motion: reduce) { .ai-triage-pulse { animation: none; } }
 .ai-triage-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ai-triage-actions .ghost { border-color: transparent; background: transparent; box-shadow: none; }
 @media (pointer: coarse) {
   .ai-triage button, .ai-triage-actions a { min-height: var(--touch); }
   .ai-triage-row button { --control: var(--touch); min-width: var(--touch); }

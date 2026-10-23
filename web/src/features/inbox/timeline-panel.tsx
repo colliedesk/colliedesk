@@ -46,7 +46,7 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
         {conversation && onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
           aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
           aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
-          {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true">{messages.aiSuggestionWaiting}</span>}</button>}
+          {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
       </header>
       <div className="timeline-scroll">
         <div className="timeline-stack">

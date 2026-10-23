@@ -7,6 +7,11 @@ const text = { openSettings: 'Open AI settings', askAdmin: 'Ask an admin to chec
 // Failures a setting causes: the provider's key or credit, the included AI, the feature turned off.
 const settingsCodes = ['auth', 'permission', 'quota_exhausted', 'model_not_found', 'ai_allowance_reached', 'feature_off', 'ai_feature_off'];
 
+// isSettingsFailure says whether a setting causes the failure, so trying again fails the same way.
+export function isSettingsFailure(code: string | null): boolean {
+  return Boolean(code && settingsCodes.includes(code));
+}
+
 // refusalCode is the error code of a refused request.
 export function refusalCode(error: unknown): string | null {
   const detail = (error as { detail?: { code?: unknown } } | null)?.detail;
@@ -17,6 +22,6 @@ export function refusalCode(error: unknown): string | null {
 
 // SettingsWay is the next step for a failure a setting causes: Settings → AI for an admin, ask an admin otherwise.
 export function SettingsWay({ code, canManage }: { code: string | null; canManage: boolean }) {
-  if (!code || !settingsCodes.includes(code)) return null;
+  if (!isSettingsFailure(code)) return null;
   return canManage ? <a href="/settings/ai" target="_blank" rel="noopener">{text.openSettings}</a> : <span>{text.askAdmin}</span>;
 }
