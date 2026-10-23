@@ -90,13 +90,14 @@ func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (
 
 // LoadBaseline reads the imported side of source measured at the anchor: its customer-started
 // conversations (through the import ledger, so only that account), their imported stats and time
-// entries. The windows end at the newest ticket created by the anchor.
+// entries. The windows end at the newest customer-started ticket created by the anchor.
 func LoadBaseline(ctx context.Context, tx pgx.Tx, workspaceID, source string, anchor time.Time) (Input, error) {
 	in := Input{Side: Baseline, Measured: anchor}
 	const imported = `FROM import_items i JOIN conversations c ON c.workspace_id=i.workspace_id AND c.id=i.target_id `
 	var newest *time.Time
-	// The span of the imported history (any ticket, so years of history cost no message lookups).
-	if err := tx.QueryRow(ctx, `SELECT min(c.created_at),max(c.created_at) `+imported+`
+	// The span of the customer-started history: a ticket the team started does not move where the
+	// windows end. One message lookup per imported ticket (100,000 take a few hundred milliseconds).
+	if err := tx.QueryRow(ctx, `SELECT min(c.created_at),max(c.created_at) `+imported+customerStarted+`
 		WHERE i.workspace_id=$1 AND i.source=$3 AND i.entity='ticket' AND c.created_at<=$2`,
 		workspaceID, anchor, source).Scan(&in.First, &newest); err != nil {
 		return in, fmt.Errorf("read the imported history: %w", err)

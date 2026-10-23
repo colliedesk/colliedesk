@@ -143,6 +143,9 @@ func TestWorkerStoresTheNumbersAndTheConversationsBehindThem(t *testing.T) {
 	b3 := ticket("3", anchor.Add(-10*Day), stats("resolved", anchor.Add(-10*Day+3*time.Hour)), 25, 30*time.Minute)
 	b4 := ticket("4", anchor.Add(-11*Day), nil, 0, 40*time.Minute)
 	b5 := ticket("5", anchor.Add(-12*Day), stats("open", anchor.Add(-12*Day+time.Hour)), 0, 50*time.Minute)
+	// A ticket the team started after b1 (outbound) does not move where the windows end.
+	ticketOutbound := f.conversation("imported", anchor.Add(-Day), []byte(`{"system":"freshdesk","external_id":"7"}`), out(0), in(time.Hour))
+	f.exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,target_id,status) VALUES($1,'freshdesk:account:9','ticket','7',$2,'done')`, f.workspace, ticketOutbound)
 	// Created after the anchor (Freshdesk kept running), and a ticket of another account: neither counts.
 	ticket("6", anchor.Add(Day), stats("resolved", anchor.Add(Day+time.Hour)), 0, time.Minute)
 	f.exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,target_id,status) VALUES($1,'freshdesk:account:10','ticket','1',$2,'done')`,
