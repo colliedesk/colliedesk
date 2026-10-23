@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ShareLink } from '../../api/results';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { resultsMessages as m } from './results-messages';
@@ -24,8 +24,16 @@ export interface ResultsAdminProps {
 export function ResultsAdmin(props: ResultsAdminProps) {
   const { timezone, link, linkFailed, created, replacedOld, busy, shareFailed, onCreate, onTurnOff, weekly, weeklyBusy, weeklyFailed, onWeekly } = props;
   const [copied, setCopied] = useState(false);
-  // Turning the link off removes its button: the focus moves to the button that stays.
+  // The buttons are disabled while a change runs, which drops the focus; when it ends the focus goes to
+  // Copy link (a new link) or to the create button (the link turned off), never back to the page top.
   const createButton = useRef<HTMLButtonElement>(null);
+  const copyButton = useRef<HTMLButtonElement>(null);
+  const focusAfter = useRef<'copy' | 'create'>(undefined);
+  useEffect(() => {
+    if (busy || !focusAfter.current) return;
+    (focusAfter.current === 'copy' && copyButton.current ? copyButton.current : createButton.current)?.focus();
+    focusAfter.current = undefined;
+  }, [busy, created, link]);
   const copy = async () => {
     if (!created) return;
     try {
@@ -49,13 +57,13 @@ export function ResultsAdmin(props: ResultsAdminProps) {
             <div className="results-share-copy">
               {/* The whole address wraps: nothing of the token is hidden behind a scroll. */}
               <p className="results-share-url" aria-label={m.admin.linkLabel}><code>{created}</code></p>
-              <button type="button" onClick={() => void copy()}><span role="status">{copied ? m.admin.copied : m.admin.copy}</span></button>
+              <button type="button" ref={copyButton} onClick={() => void copy()}><span role="status">{copied ? m.admin.copied : m.admin.copy}</span></button>
             </div>
             {replacedOld && <p className="results-muted">{m.admin.oldTurnedOff}</p>}
           </div>}
           <div className="button-row">
-            <button type="button" ref={createButton} disabled={busy} onClick={() => { setCopied(false); onCreate(); }}>{link ? m.admin.createNew : m.admin.create}</button>
-            {link && <button type="button" className="danger-action" disabled={busy} onClick={() => { createButton.current?.focus(); onTurnOff(); }}>{m.admin.turnOff}</button>}
+            <button type="button" ref={createButton} disabled={busy} onClick={() => { setCopied(false); focusAfter.current = 'copy'; onCreate(); }}>{link ? m.admin.createNew : m.admin.create}</button>
+            {link && <button type="button" className="danger-action" disabled={busy} onClick={() => { focusAfter.current = 'create'; onTurnOff(); }}>{m.admin.turnOff}</button>}
           </div>
           {shareFailed && <p role="alert" className="error-copy">{m.admin.shareFailed}</p>}
           <p className="results-muted">{link ? m.admin.onceNote : m.admin.offNote}</p>

@@ -14,12 +14,26 @@ function renderAdmin(props: Partial<ResultsAdminProps> = {}) {
 }
 
 describe('ResultsAdmin', () => {
+  it('keeps the focus on the share buttons when a change ends', () => {
+    const props = { timezone: 'Europe/Berlin', linkFailed: false, replacedOld: false, shareFailed: false, weekly, weeklyBusy: false, weeklyFailed: false,
+      onCreate: vi.fn(), onTurnOff: vi.fn(), onWeekly: vi.fn() };
+    const { rerender } = render(<ResultsAdmin {...props} link={link} busy={false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    rerender(<ResultsAdmin {...props} link={link} busy />);
+    (document.activeElement as HTMLElement | null)?.blur();
+    rerender(<ResultsAdmin {...props} link={null} busy={false} />);
+    expect(screen.getByRole('button', { name: 'Create link' })).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+    rerender(<ResultsAdmin {...props} link={null} busy />);
+    rerender(<ResultsAdmin {...props} link={link} created="https://desk.example/r#new" busy={false} />);
+    expect(screen.getByRole('button', { name: 'Copy link' })).toHaveFocus();
+  });
+
   it('shows the link state and turns it off or replaces it', () => {
     const handlers = renderAdmin();
     expect(screen.getByText(/On · created Oct 20, 2026 by Mai Tran · last viewed Oct 22/)).toBeVisible();
     expect(screen.queryByText(/r#/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
-    expect(screen.getByRole('button', { name: 'Create a new link' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: 'Create a new link' }));
     expect(handlers.onTurnOff).toHaveBeenCalled();
     expect(handlers.onCreate).toHaveBeenCalled();
