@@ -2643,10 +2643,10 @@ export interface components {
                 number?: number;
                 title: string;
             }[];
-            /** @description An email address, a number or another customer's name in the draft that this conversation does not hold. Check before sending. */
+            /** @description An email address, a number, another customer's name, or a word in an alphabet the conversation does not use, in the draft but not in this conversation. Check before sending. */
             warnings: {
                 /** @enum {string} */
-                kind: "email" | "number" | "name";
+                kind: "email" | "number" | "name" | "script";
                 value: string;
             }[];
             model: string | null;

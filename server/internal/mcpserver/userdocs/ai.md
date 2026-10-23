@@ -83,7 +83,8 @@ The draft arrives as plain text with:
 2. **Missing information**: what the reply needs that no source said, instead of a guess.
 3. **Check before sending**: an email address, a number of six digits or more, or another customer's
    name that is in the draft but not in this conversation. A model can copy one from a past ticket or
-   be told to add one by a message; read them before you send.
+   be told to add one by a message; read them before you send. A word in an alphabet the conversation
+   does not use (a model slipping into another language) is listed too.
 
 **Replace** puts the draft in the reply box in place of what you typed; **Insert below** adds it under
 your text; **Discard** throws it away. Nothing is sent until you press **Send**, and you can edit

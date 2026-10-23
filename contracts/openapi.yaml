@@ -4511,12 +4511,12 @@ components:
               title: {type: string}
         warnings:
           type: array
-          description: An email address, a number or another customer's name in the draft that this conversation does not hold. Check before sending.
+          description: An email address, a number, another customer's name, or a word in an alphabet the conversation does not use, in the draft but not in this conversation. Check before sending.
           items:
             type: object
             required: [kind, value]
             properties:
-              kind: {type: string, enum: [email, number, name]}
+              kind: {type: string, enum: [email, number, name, script]}
               value: {type: string}
         model: {type: [string, 'null']}
         outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, discarded, superseded, expired, null]}
