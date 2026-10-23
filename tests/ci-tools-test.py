@@ -86,6 +86,44 @@ class Shards(unittest.TestCase):
         for name in latency[3:]:
             self.assertRegex(name, shards[3][0])
 
+    def test_latency_runners_take_a_share_of_regular_tests_only_after_their_gates(self):
+        latency = ['TestHelpCenterPagesLatencyBudget', 'TestInboxListLatencyBudget', 'TestTrialCapStaysFast']
+        regular = [f'TestRegular{i:03d}' for i in range(140)] + ['FuzzBytes', 'ExampleClient']
+        listing = '\n'.join(regular + latency) + '\n'
+        shards = []
+        for shard in range(1, 9):
+            result = run('go-test-shard.py', str(shard), '8', '--latency-shards', '2', '--parts', '3',
+                         '--latency-share', '0.5', stdin=listing)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            shards.append(result.stdout.split('\n')[:-1])
+        for name in regular + latency:
+            hits = [i for i, lines in enumerate(shards) for p in lines if p != '--' and re.search(p, name)]
+            self.assertEqual(len(hits), 1, name)
+        for lines in shards[6:]:
+            # The gates run alone; the regular slice starts once they finished (the '--' line).
+            self.assertEqual(lines[1], '--', lines)
+            self.assertFalse(any(re.search(lines[0], name) for name in regular))
+            self.assertEqual(len(lines[2:]), 3)
+        self.assertRegex('TestHelpCenterPagesLatencyBudget', shards[6][0])
+        for name in latency[1:]:
+            self.assertRegex(name, shards[7][0])
+        # Each latency runner takes about half of what a regular runner takes.
+        count = lambda lines: sum(bool(re.search(p, name)) for p in lines if p != '--' for name in regular)
+        regular_counts = [count(lines) for lines in shards[:6]]
+        latency_counts = [count(lines[2:]) for lines in shards[6:]]
+        self.assertLessEqual(max(regular_counts) - min(regular_counts), 1, regular_counts)
+        for share in latency_counts:
+            self.assertAlmostEqual(share, min(regular_counts) / 2, delta=1, msg=(regular_counts, latency_counts))
+        self.assertTrue(all('--' not in lines for lines in shards[:6]))
+
+    def test_latency_share_defaults_to_none_and_rejects_negative(self):
+        listing = self.listing + 'TestInboxListLatencyBudget\n'
+        plain = run('go-test-shard.py', '3', '3', stdin=listing)
+        zero = run('go-test-shard.py', '3', '3', '--latency-share', '0', stdin=listing)
+        self.assertEqual(plain.stdout, zero.stdout)
+        self.assertEqual(len(plain.stdout.split()), 1)
+        self.assertNotEqual(run('go-test-shard.py', '3', '3', '--latency-share', '-1', stdin=listing).returncode, 0)
+
     def test_latency_shards_leave_at_least_one_regular_shard(self):
         for args in (('1', '2', '--latency-shards', '2'), ('1', '3', '--latency-shards', '0')):
             self.assertNotEqual(run('go-test-shard.py', *args, stdin=self.listing).returncode, 0, args)
@@ -298,25 +336,59 @@ class PublishEdge(unittest.TestCase):
 class GoBuildCache(unittest.TestCase):
     """actions/cache tries every key on the pull request's own ref before main's. CodeQL's setup-go
     saves a build-only setup-go-* entry on that ref, so a restore key matching it shadowed main's
-    entry with the test builds, and every Go shard compiled the tests again (24 to 42 seconds)."""
+    entry with the test builds, and every Go shard compiled the tests again (24 to 42 seconds).
+    Main saved only from a Go shard, which a merge pr-verified passes skips, so a go.sum change (the
+    Anthropic SDK: 17 modules, about 23 seconds of compiling per job) never reached the cache."""
 
-    def test_go_jobs_restore_only_entries_main_saves(self):
+    def saves(self):
+        found = []
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            for name, body in workflow_jobs(path):
+                text = '\n'.join(body) + '\n'
+                for step in re.findall(r'^      - (?:(?!\n      - ).)*?uses: actions/cache/save@.*?(?=\n      - |\Z)', text, re.S | re.M):
+                    found.append((path.name, name, step))
+        return found
+
+    def test_go_jobs_restore_only_entries_the_go_cache_saves(self):
+        saves = self.saves()
+        self.assertTrue(saves)
+        prefixes = {re.search(r'key: (.+?)\$\{\{ github\.sha \}\}', step).group(1) for _, _, step in saves}
+        self.assertEqual(len(prefixes), 1, prefixes)
+        prefix = prefixes.pop().split('${{')[0]
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        saved = re.findall(r'uses: actions/cache/save@\S+.*?\n\s+key: (.+?)\$\{\{ github\.sha \}\}', workflow, re.S)
-        self.assertTrue(saved)
-        main_prefix = saved[0].split('${{')[0]
         restores = re.findall(r'restore-keys: \|\n((?:\s{12}\S.*\n)+)', workflow)
         self.assertEqual(len(restores), 3, 'the go, e2e and onboarding jobs restore the Go cache')
         for block in restores:
             for key in (line.strip() for line in block.splitlines()):
-                self.assertTrue(key.startswith(main_prefix), f'{key} can match an entry a pull request saved')
+                self.assertTrue(key.startswith(prefix), f'{key} can match an entry setup-go saved')
 
-    def test_only_a_push_saves_the_go_build_cache(self):
-        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        saves = re.findall(r'^      - (.*)\n(?:        .*\n)*?        uses: actions/cache/save@', workflow, re.M)
-        self.assertTrue(saves)
-        for condition in saves:
-            self.assertRegex(condition, r"^if: github\.event_name == 'push'", condition)
+    def test_every_push_to_main_saves_the_test_builds_even_when_ci_skips_the_go_jobs(self):
+        workflow = (ROOT / '.github/workflows/go-cache.yml').read_text()
+        self.assertRegex(workflow, r'on:\n  push:\n    branches: \[main\]\n')
+        self.assertNotIn('pull_request', workflow)
+        self.assertNotIn('needs:', workflow)
+        self.assertRegex(workflow, r'go test -c -o \S+ \./\.\.\.')
+        self.assertEqual([job for path, job, _ in self.saves() if path == 'go-cache.yml'], ['go-cache'])
+
+    def test_a_pull_request_saves_once_for_a_go_sum_main_has_not_cached(self):
+        ci = [(job, step) for path, job, step in self.saves() if path == 'ci.yml']
+        self.assertEqual(len(ci), 1, ci)
+        job, step = ci[0]
+        self.assertEqual(job, 'go')
+        condition = ' '.join(line.strip() for line in
+                             re.search(r'if: >-\n((?:          .*\n)+)', step).group(1).splitlines())
+        self.assertIn("github.event_name == 'pull_request'", condition)
+        # A latency runner: it ends 30 to 60 seconds before the regular shards, so the upload is free.
+        self.assertIn('matrix.shard == 7', condition)
+        self.assertIn("!startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', "
+                      "runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))", condition)
+        go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
+        self.assertIn('id: go-cache', go)
+        self.assertRegex(go, r"latency-shards 2\b")
+        self.assertIn("SHARDS: ${{ strategy.job-total }}", go)
+        self.assertRegex(go, r'shard: \[1, 2, 3, 4, 5, 6, 7, 8\]')
+
+    def test_setup_go_saves_no_cache_of_its_own_outside_codeql(self):
         # setup-go saves its own cache unless told not to: only CodeQL, whose setup-go- entries the Go
         # jobs never restore, may leave it on.
         for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
