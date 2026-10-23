@@ -53,14 +53,17 @@ type run struct {
 	warnings          []*Warning
 	internalErr       error
 
-	listedContacts     int
-	probeAhead         int
-	probed             int
-	highestExisting    int64
-	highestProbed      int64
-	unclassified       []string
-	unchanged          []string
-	pendingStats       []pendingStats
+	listedContacts  int
+	probeAhead      int
+	probed          int
+	highestExisting int64
+	highestProbed   int64
+	unclassified    []string
+	unchanged       []string
+	pendingStats    []pendingStats
+	// statsFrozen: this source's first full run has finished (the results anchor), so the stats it
+	// read stay and a run only fills tickets without them.
+	statsFrozen        bool
 	archiveUnavailable atomic.Bool
 	verification       Verifications
 	progress           *progress
@@ -100,6 +103,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 			return nil, err
 		}
 		defer release()
+		if r.statsFrozen, err = r.anchored(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if options.Mode == ModeRecent {
 		if err := r.importRecent(ctx); err != nil {
@@ -188,6 +194,13 @@ func (r *run) finish(ctx context.Context, report *Report) (*Report, error) {
 	}
 	if options.DryRun {
 		return report, r.checkDryRunStorage(ctx, report)
+	}
+	// A full run finished: the results page measures its baseline from it. The import is committed;
+	// a failure here is logged and the next run marks it again.
+	if options.Mode != ModeRecent {
+		if err := r.markResults(ctx, report.Status); err != nil {
+			log.Printf("freshdesk import: results baseline not marked for workspace %s: %v", options.WorkspaceSlug, err)
+		}
 	}
 	// The import is already committed; a failed extension must not hide its report. A rerun retries.
 	extendedTo, err := r.extendTrial(ctx)

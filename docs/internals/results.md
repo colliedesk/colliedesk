@@ -24,3 +24,15 @@ moved. Resolution time and reopen rate need both, so every change now leaves a r
 Trap: a writer that changes a status inside a transaction where another writer already set
 `app.actor_agent_id` must call `setStatusActor` itself, or the change is recorded under the
 previous name.
+
+## The baseline's import (anchor)
+
+`results_state` names the import the baseline is measured from: `baseline_source` (the ledger source,
+`freshdesk:account:<id>`), `baseline_anchor_at` and the reconcile status of its latest run. The first
+source whose full run finishes becomes the baseline and its finish time the anchor; a later run of that
+source never moves it, only marks the baseline to compute again (`baseline_dirty`) with its new status.
+The recent pass of an in-app import is not a full run. Undo of that import clears all three, and the
+next full run to finish becomes the baseline. A failure to mark is logged and the next run marks again:
+the import itself is already committed. Ticket stats are frozen from the anchor
+(`docs/internals/freshdesk-import.md`), so the baseline cannot move with Freshdesk work done after the
+move.
