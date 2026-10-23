@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { InvalidRequestError } from '../../api/client';
+import { InvalidRequestError, PlanLimitError, UnauthorizedError, WorkspaceLockedError } from '../../api/client';
 import { AgentTokensSection } from './agent-tokens-section';
 
 const origin = 'https://acme.example.com';
@@ -59,15 +59,28 @@ test('a token without a name is refused at the form, and nothing is sent', () =>
   expect(screen.getByRole('alert')).toHaveTextContent('Name the token so you can tell it apart in Sessions.');
 });
 
-test('a failed request says no token was created, keeps the form and can be pressed again', async () => {
+test('a request whose outcome is unknown does not claim that no token exists, keeps the form and can be pressed again', async () => {
   const onCreate = show(true, vi.fn().mockRejectedValueOnce(new Error('API 503')).mockResolvedValueOnce(created('draft')));
   fireEvent.change(nameField(), { target: { value: 'Codex' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('no token was created');
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Colliedesk did not confirm the token. If Sessions below lists it, revoke it, then press Create token again.');
+  expect(alert).not.toHaveTextContent(/no token was created|connection/i);
   expect(nameField()).toHaveValue('Codex');
   fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
   expect(await screen.findByDisplayValue(token)).toBeInTheDocument();
   expect(onCreate).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+  ['an ended session', new UnauthorizedError(), 'Your session ended, so no token was created. Sign in again to create one.'],
+  ['a locked workspace', new WorkspaceLockedError('This workspace is locked.'), 'This workspace is locked.'],
+  ['a plan limit', new PlanLimitError('This action is not included in your plan.'), 'This action is not included in your plan.'],
+])('%s is said as such, never as a connection problem', async (_, error, message) => {
+  show(true, vi.fn().mockRejectedValue(error));
+  fireEvent.change(nameField(), { target: { value: 'Codex' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
 });
 
 test('a refusal shows the server reason', async () => {

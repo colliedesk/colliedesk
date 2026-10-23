@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { InvalidRequestError } from '../../api/client';
+import { InvalidRequestError, PlanLimitError, UnauthorizedError } from '../../api/client';
 import type { AgentToken, TokenScope } from '../../api/schemas';
 import { agentTokenMessages as text } from './agent-tokens-messages';
 import { connectHosts, connectSnippets, exampleOrigin, mcpServerName } from './connect-snippets.generated';
@@ -22,6 +22,14 @@ interface AgentTokensSectionProps {
 function cursorInstallLink(origin: string, token: string): string {
   const config = btoa(JSON.stringify({ url: `${origin}/mcp`, headers: { Authorization: `Bearer ${token}` } }));
   return `cursor://anysphere.cursor-deeplink/mcp/install?${new URLSearchParams({ name: mcpServerName, config }).toString()}`;
+}
+
+// refusal says why no token came back. A refusal the server explained created nothing; any other failure
+// may have come after the server created one, so it points to Sessions instead of saying none exists.
+function refusal(error: unknown): string {
+  if (error instanceof InvalidRequestError || error instanceof PlanLimitError) return error.message;
+  if (error instanceof UnauthorizedError) return text.signedOut;
+  return text.createUnconfirmed;
 }
 
 // AgentTokensSection creates an agent token and shows it once, then how each AI host uses it. The token
@@ -61,7 +69,7 @@ export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.l
       setCreated({ token: answer.token, label: name });
       setFocus('token');
     } catch (caught) {
-      setError({ message: caught instanceof InvalidRequestError ? caught.message : text.createFailed, field: false });
+      setError({ message: refusal(caught), field: false });
     } finally {
       setPending(false);
     }

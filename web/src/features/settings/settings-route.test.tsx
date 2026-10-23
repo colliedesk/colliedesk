@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SettingsRoute } from './settings-route';
@@ -171,6 +171,19 @@ test('an agent creates an agent token above Sessions; the list reloads to show i
   expect(await within(screen.getByRole('region', { name: 'Sessions' })).findByTitle('Claude Code')).toBeInTheDocument();
   const cached = JSON.stringify([...client.getQueryCache().getAll().map((query) => query.state.data), ...client.getMutationCache().getAll().map((mutation) => mutation.state.data)]);
   expect(cached).not.toContain('cdk_agent_routetoken');
+});
+
+// The app's mutation cache turns a 401 into the signed-out screen and a 402 into the locked one; a
+// refused token request goes through it like every other action.
+test('a refused token request reaches the app-wide handling of signed-out and locked workspaces', async () => {
+  const onError = vi.fn();
+  const refused = new Error('API 401');
+  show('admin', [], undefined, new QueryClient({ defaultOptions: { queries: { retry: false } }, mutationCache: new MutationCache({ onError }) }));
+  api.createAgentToken.mockRejectedValue(refused);
+  const card = await screen.findByRole('region', { name: 'AI agents' });
+  fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Codex' } });
+  fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
+  await waitFor(() => expect(onError.mock.calls[0]?.[0]).toBe(refused));
 });
 
 const withChannel = {
