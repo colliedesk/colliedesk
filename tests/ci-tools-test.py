@@ -450,6 +450,31 @@ class BundleBudget(unittest.TestCase):
         self.assertGreater(check, build, 'bundle:check must run after the Vite build of the same job')
 
 
+class ImageLayerCache(unittest.TestCase):
+    def test_the_image_job_builds_from_the_layer_cache_and_writes_it_off_the_build_path(self):
+        # Without it every run compiled the Go dependencies again: 52 s of a 117-second image job.
+        image = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['image'])
+        build = image.find('name: Build image')
+        checks = image.find('ci-background.sh start image-checks')
+        self.assertIn('cache-from: type=gha,scope=image', image[build:checks])
+        self.assertNotIn('cache-to:', image[build:checks], 'the cache upload would delay the checks')
+        self.assertEqual(image.count('cache-to: type=gha,scope=image,mode=max,ignore-error=true'), 2)
+        self.assertGreater(image.find('cache-to:'), checks)
+
+    def test_the_dependency_compile_depends_only_on_the_imported_packages(self):
+        dockerfile = (ROOT / 'server/Dockerfile').read_text()
+        go = dockerfile[dockerfile.index(' AS go\n'):]
+        self.assertLess(go.index('go build -trimpath $(cat /deps.txt)'), go.index('COPY server ./'))
+
+    def test_compose_smoke_runs_where_the_layers_are(self):
+        jobs = dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))
+        image = '\n'.join(jobs['image'])
+        self.assertIn('start compose-smoke sh tests/compose-smoke.sh', image)
+        self.assertIn('BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}', image)
+        self.assertIn('wait compose-smoke', image)
+        self.assertNotIn('compose-smoke', '\n'.join(jobs['roadmap']))
+
+
 class PackageManager(unittest.TestCase):
     def test_workflows_run_pnpm_through_corepack_only(self):
         # corepack reads packageManager; pnpm/action-setup installed a second pnpm from npm on
