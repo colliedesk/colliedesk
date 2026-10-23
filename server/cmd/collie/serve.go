@@ -156,6 +156,8 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		return err
 	}
 	go sweepMailImageCache(ctx, store.NewWithDB(db).WithObjects(storage), mailImageCacheBytes)
+	// What AI features may quote is built from a queue the database fills (docs/internals/ai-retrieval.md).
+	go store.NewWithDB(db).RunAIRetrieval(ctx, 2*time.Second, func(err error) { slog.Error("build AI retrieval", "error", err) })
 	kbVideoMaxBytes, err := kbVideoMaxBytesFromEnv(os.Getenv)
 	if err != nil {
 		return err
