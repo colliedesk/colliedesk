@@ -60,8 +60,10 @@ const text = {
   again: 'Suggest again',
   tryAgain: 'Try again',
   nothing: 'Nothing to change: the tags, priority and assignee already fit.',
-  stalePriority: (value: string) => `Not suggested: you set ${value} before this arrived.`,
-  staleAssignee: (name: string) => `Not suggested: you assigned ${name} before this arrived.`,
+  stalePriority: (value: string) => `Not suggested: a person set ${value} before this arrived.`,
+  staleAssignee: (name: string) => `Not suggested: a person assigned ${name} before this arrived.`,
+  undoneNote: 'Undone.',
+  appliedAgainBy: (who: string) => `applied again by ${who}`,
   acceptedBy: (who: string, at: string) => `Accepted by ${who}, ${at}. Change a field below to undo.`,
   you: 'you',
   someone: 'a teammate',
@@ -179,7 +181,7 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
   const dismiss = useMutation({ mutationFn: (target: AITriage) => aiTriageApi.dismiss(conversationId, target.id),
     onSuccess: (next) => settled(next, '') });
   const undo = useMutation({ mutationFn: ({ target, parts }: { target: AITriage; parts?: TriagePart[] }) => aiTriageApi.undo(conversationId, target.id, parts),
-    onSuccess: (next) => { settled(next, appliedByAI(next) ? text.appliedPart : ''); onApplied(); } });
+    onSuccess: (next) => { settled(next, undoneByAI(next) ? '' : text.undoneNote); onApplied(); } });
   const refused = [ask, accept, dismiss, undo].find((mutation) => mutation.isError)?.error;
   const busy = ask.isPending || accept.isPending || dismiss.isPending || undo.isPending;
   const name = (id: string | null) => {
@@ -227,6 +229,7 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
       body = (
         <>
           <UndoneRows suggestion={suggestion} tags={tags} agents={agents} />
+          <p className="muted-copy ai-triage-note">{text.undoneBy(name(suggestion.undone_by_agent_id), formatShortDate(suggestion.undone_at ?? suggestion.created_at, timezone))}</p>
           {suggestion.reason && <p className="ai-triage-reason">{suggestion.reason}</p>}
           <AISources sources={suggestion.sources} />
         </>
@@ -241,7 +244,7 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
             onUndo={(part) => undo.mutate({ target: suggestion, parts: [part] })} />
           {suggestion.reason && <p className="ai-triage-reason">{suggestion.reason}</p>}
           <AISources sources={suggestion.sources} />
-          {open && <p className="muted-copy ai-triage-note">{text.generated}</p>}
+          {open && !byAI && <p className="muted-copy ai-triage-note">{text.generated}</p>}
         </>
       );
       if (byAI) {
@@ -320,9 +323,11 @@ function AppliedLine({ suggestion, tags, agents, timezone, busy, name, onUndo, o
   return (
     <div role="group" aria-label={undone ? text.headingUndone : text.headingApplied} className="ai-triage-line">
       <span className="ai-chip" aria-hidden="true">AI</span><b>{undone ? text.headingUndone : text.headingApplied}</b>
+      {/* Undone says who undid it and when; applied says what, when, and who applied it again after an undo. */}
       <span className="ai-triage-line-sum">{undone ? text.undoneBy(name(suggestion.undone_by_agent_id), formatShortDate(suggestion.undone_at ?? '', timezone))
-        : summary(suggestion.auto_applied, tags, agents)}</span>
-      <time dateTime={suggestion.auto_applied_at ?? undefined}>{formatShortDate(suggestion.auto_applied_at ?? suggestion.created_at, timezone)}</time>
+        : suggestion.undone_at ? `${summary(suggestion.auto_applied, tags, agents)} · ${text.appliedAgainBy(name(suggestion.decided_by_agent_id))}`
+          : summary(suggestion.auto_applied, tags, agents)}</span>
+      {!undone && <time dateTime={suggestion.auto_applied_at ?? undefined}>{formatShortDate(suggestion.auto_applied_at ?? suggestion.created_at, timezone)}</time>}
       {undone ? <button type="button" disabled={busy} onClick={onApplyAgain}>{text.applyAgain}</button>
         : <button type="button" disabled={busy} aria-label={`${text.undo} ${summary(suggestion.auto_applied, tags, agents)}`} onClick={onUndo}>{text.undo}</button>}
     </div>

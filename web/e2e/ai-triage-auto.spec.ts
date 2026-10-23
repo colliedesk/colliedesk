@@ -70,7 +70,9 @@ test('an admin lets triage apply by itself; a new ticket gets its tag and priori
     await card.scrollIntoViewIfNeeded();
     await expect(card.getByRole('button', { name: 'Apply again' })).toBeInViewport();
     await card.getByRole('button', { name: 'Apply again' }).click();
-    await expect(card.getByText(/Accepted by you/)).toBeVisible();
+    // Applied again it is AI's again, with its Undo; nothing becomes a one-way door.
+    await expect(card.getByRole('heading', { name: /Applied by AI/ })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Undo all' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   } finally {
     model.close();

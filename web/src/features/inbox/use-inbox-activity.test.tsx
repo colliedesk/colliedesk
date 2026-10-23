@@ -321,3 +321,15 @@ test('the inbox reads who has which conversation open from the same poll, from i
   expect(alone.result.current.size).toBe(0);
   expect(api.inboxActivity).not.toHaveBeenCalled();
 });
+
+test('a new conversation AI assigns a poll later is one notification that says both', async () => {
+  api.inboxActivity.mockResolvedValueOnce(idle('2026-10-15T10:00:00Z'))
+    .mockResolvedValueOnce({ now: '2026-10-15T10:00:20Z', new_conversations: [created(id(1), 'Printer')], assigned_to_me: [], updated: [] })
+    .mockResolvedValueOnce({ now: '2026-10-15T10:00:40Z', new_conversations: [], assigned_to_me: [{ ...assigned(id(1), 'Printer', true), assigned_at: '2026-10-15T10:00:30Z' }], updated: [] })
+    .mockResolvedValue(idle('2026-10-15T10:01:00Z'));
+  renderHook(() => useInboxActivity(true, me), { wrapper });
+  await tick(0);
+  await tick(20_000);
+  await tick(20_000);
+  expect(notifications.map((entry) => [entry.title, entry.options?.tag])).toEqual([['New conversation', id(1)], ['New conversation · assigned to you by AI', id(1)]]);
+});

@@ -116,8 +116,7 @@ func (t Triage) open() TriageSet {
 // AcceptTriage applies what a person accepts of a suggestion (want nil or naming nothing: the rest of
 // it) to the conversation and records it, in one transaction under the suggestion's lock. Each part
 // must be the suggestion's own; a part applied already is not applied again. After an undo, accepting
-// again ("Apply again") fills only what is still empty: the priority when the conversation still has
-// the one it had before AI, the assignee when nobody is assigned.
+// is "Apply again" (applyAgain).
 func (s *Service) AcceptTriage(ctx context.Context, workspaceID string, actor Actor, conversationID, id string, want *TriageSet) (Triage, error) {
 	if !isUUID(conversationID) || !isUUID(id) {
 		return Triage{}, ErrTriageNotFound
@@ -136,7 +135,10 @@ func (s *Service) AcceptTriage(ctx context.Context, workspaceID string, actor Ac
 			case "accepted":
 				triage = t // accepting all of it again changes nothing
 				return nil
-			case "auto_applied", "undone":
+			case "undone":
+				triage, err = s.applyAgain(ctx, tx, workspaceID, actor, conversationID, t)
+				return err
+			case "auto_applied":
 			default:
 				return ErrTriageDecided
 			}
@@ -173,21 +175,8 @@ func (s *Service) AcceptTriage(ctx context.Context, workspaceID string, actor Ac
 				set.AssigneeAgentID = rest.AssigneeAgentID
 			}
 		}
-		now, err := lockConversation(ctx, tx, workspaceID, conversationID)
-		if err != nil {
+		if _, err := lockConversation(ctx, tx, workspaceID, conversationID); err != nil {
 			return err
-		}
-		if t.UndoneAt != nil {
-			base, err := readBase(ctx, tx, workspaceID, id)
-			if err != nil {
-				return err
-			}
-			if set.Priority != nil && base.Priority != nil && now.priority != *base.Priority {
-				set.Priority = nil
-			}
-			if set.AssigneeAgentID != nil && now.assignee != nil {
-				set.AssigneeAgentID = nil
-			}
 		}
 		if err := applyParts(ctx, tx, workspaceID, conversationID, actor.AgentID, set); err != nil {
 			return err
@@ -209,6 +198,79 @@ func (s *Service) AcceptTriage(ctx context.Context, workspaceID string, actor Ac
 		return err
 	})
 	return triage, err
+}
+
+// applyAgain applies once more what an undo took back ("Apply again"), filling only what is still
+// empty, and records it as AI's again so it shows with its own Undo: the tags; the priority while the
+// conversation still has the one it had before AI; the assignee while nobody is assigned. What a
+// person set since is left, and the suggestion says why.
+func (s *Service) applyAgain(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, conversationID string, t Triage) (Triage, error) {
+	now, err := lockConversation(ctx, tx, workspaceID, conversationID)
+	if err != nil {
+		return Triage{}, err
+	}
+	base, err := readBase(ctx, tx, workspaceID, t.ID)
+	if err != nil {
+		return Triage{}, err
+	}
+	set, skipped := TriageSet{TagIDs: []string{}}, map[string]TriageSkip{}
+	for _, tag := range t.UndoneParts.TagIDs {
+		if slices.Contains(t.TagIDs, tag) { // a tag deleted since is gone from the suggestion
+			set.TagIDs = append(set.TagIDs, tag)
+		}
+	}
+	if t.UndoneParts.Priority != nil {
+		priority := now.priority
+		if base.Priority != nil && now.priority == *base.Priority {
+			set.Priority = t.UndoneParts.Priority
+		} else {
+			skipped["priority"] = TriageSkip{Reason: "set_by_person", Value: &priority}
+		}
+	}
+	if t.UndoneParts.AssigneeAgentID != nil {
+		if now.assignee == nil && t.AssigneeAgentID != nil {
+			set.AssigneeAgentID = t.UndoneParts.AssigneeAgentID
+		} else if now.assignee != nil {
+			skipped["assignee"] = TriageSkip{Reason: "already_assigned", Value: now.assignee}
+		}
+	}
+	// What a person kept at the undo is theirs: it says so as a part AI left.
+	if t.Kept.Priority != nil && set.Priority == nil && skipped["priority"].Reason == "" {
+		skipped["priority"] = TriageSkip{Reason: "set_by_person", Value: t.Kept.Priority}
+	}
+	if t.Kept.AssigneeAgentID != nil && set.AssigneeAgentID == nil && skipped["assignee"].Reason == "" {
+		skipped["assignee"] = TriageSkip{Reason: "already_assigned", Value: t.Kept.AssigneeAgentID}
+	}
+	if err := applyParts(ctx, tx, workspaceID, conversationID, actor.AgentID, set); err != nil {
+		return Triage{}, err
+	}
+	at := s.now().UTC()
+	priority, assignee := t.Priority, t.AssigneeAgentID
+	if _, ok := skipped["priority"]; ok {
+		priority = nil
+	}
+	if _, ok := skipped["assignee"]; ok {
+		assignee = nil
+	}
+	applied := merge(t.Applied, set)
+	open := Triage{TagIDs: t.TagIDs, Priority: priority, AssigneeAgentID: assignee, Applied: applied}.open()
+	var outcome, decidedAt, autoAt any
+	if !set.empty() {
+		autoAt = at
+	}
+	if open.empty() {
+		outcome, decidedAt = "auto_applied", at
+		if set.empty() {
+			outcome = "undone" // nothing could be applied again: it stays undone
+			decidedAt = t.DecidedAt
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET priority=$3,assignee_agent_id=$4,applied=$5,auto_applied=$6,auto_applied_at=COALESCE($7,auto_applied_at),
+			skipped=$8,kept='{"priority":null,"assignee_agent_id":null}',outcome=$9,decided_at=$10,decided_by_agent_id=$11 WHERE workspace_id=$1 AND id=$2`,
+		workspaceID, t.ID, priority, assignee, applied, set, autoAt, skipped, outcome, decidedAt, nullable(actor.AgentID)); err != nil {
+		return Triage{}, err
+	}
+	return scanTriage(tx.QueryRow(ctx, `SELECT `+triageColumns+` WHERE s.workspace_id=$1 AND s.id=$2`, workspaceID, t.ID))
 }
 
 // UndoTriage takes back what AI applied by itself: parts names tags, priority or assignee (none: all

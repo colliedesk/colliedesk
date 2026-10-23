@@ -65,6 +65,10 @@ export function recentMonths(now: Date = new Date()): string[] {
 
 const slotLabel = (slot: string) => m.slotName[slot as AISlotName] ?? slot;
 
+// focusSwitch puts focus back on an automatic mode's switch once its dialog closes (the dialog is gone
+// from the page, so the browser would leave it on the body).
+const focusSwitch = (slot: AISlotName) => requestAnimationFrame(() => document.getElementById(`ai-auto-${slot}`)?.focus());
+
 export function AIPage(props: AIPageProps) {
   const { settings, isAdmin } = props;
   const [tab, setTab] = useState<AITab>('features');
@@ -118,10 +122,10 @@ export function AIPage(props: AIPageProps) {
       {dialog?.kind === 'key' && <KeyDialog provider={dialog.provider} onClose={() => setDialog(undefined)} onSetKey={props.onSetKey} />}
       {dialog?.kind === 'automatic' && settings && <AutomaticDialog settings={settings} onClose={() => setDialog(undefined)} onSave={props.onSetAutomatic} />}
       {dialog?.kind === 'delete' && settings && <DeleteDialog provider={dialog.provider} settings={settings} onClose={() => setDialog(undefined)} onRemove={props.onRemove} />}
-      {dialog?.kind === 'auto-draft' && settings && <AutoDraftDialog slot={dialog.slot} settings={settings} onClose={() => setDialog(undefined)}
-        onTurnOn={() => { setDialog(undefined); props.onSetSlot('draft', { ...slotInput(dialog.slot), automatic: true }); }} />}
-      {dialog?.kind === 'auto-triage' && <AutoTriageDialog slot={dialog.slot} onClose={() => setDialog(undefined)}
-        onTurnOn={() => { setDialog(undefined); props.onSetSlot('triage', { ...slotInput(dialog.slot), automatic: true }); }} />}
+      {dialog?.kind === 'auto-draft' && settings && <AutoDraftDialog slot={dialog.slot} settings={settings} onClose={() => { setDialog(undefined); focusSwitch('draft'); }}
+        onTurnOn={() => { setDialog(undefined); props.onSetSlot('draft', { ...slotInput(dialog.slot), automatic: true }); focusSwitch('draft'); }} />}
+      {dialog?.kind === 'auto-triage' && <AutoTriageDialog slot={dialog.slot} onClose={() => { setDialog(undefined); focusSwitch('triage'); }}
+        onTurnOn={() => { setDialog(undefined); props.onSetSlot('triage', { ...slotInput(dialog.slot), automatic: true }); focusSwitch('triage'); }} />}
     </main>
   );
 }
@@ -270,17 +274,18 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
   return (
     <div className="ai-auto">
       <div className="ai-auto-lead"><strong id={id}>{m.autoTitle}</strong>
-        {on ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>}</div>
+        <span aria-live="polite">{on ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>}</span></div>
       {why ? <p className="ai-auto-desc muted-copy">{why}</p>
         : <p className="ai-auto-desc"><span className="ai-long">{m.autoDesc} </span><b>{m.autoDescStrong}</b>{m.autoDescRest}</p>}
       {!why && <fieldset className="ai-auto-parts"><legend className="sr-only">{m.autoParts}</legend>
         {parts.map((part) => <label key={part} className="ai-pick"><input type="checkbox" checked={chosen.includes(part)}
           disabled={!on || locked || (chosen.length === 1 && chosen.includes(part))} title={chosen.length === 1 && chosen.includes(part) ? m.autoLastPart : undefined}
           onChange={() => toggle(part)} />{m.autoPart[part]}</label>)}
+        {on && chosen.length === 1 && <span className="muted-copy ai-auto-hint">{m.autoLastPart}</span>}
         {on ? <span className="ai-auto-stat">{m.autoStat(settings.auto_triage.applied, settings.auto_triage.undone)} <span className="muted-copy">{m.autoStatWhen}</span></span>
           : isAdmin && <span className="ai-auto-stat muted-copy ai-long">{m.autoPickLater}</span>}
       </fieldset>}
-      <label className="ai-switch ai-auto-switch"><input type="checkbox" role="switch" aria-labelledby={id} checked={on} disabled={locked || !slot.enabled}
+      <label className="ai-switch ai-auto-switch"><input type="checkbox" role="switch" id="ai-auto-triage" aria-label={m.autoTitle} checked={on} disabled={locked || !slot.enabled}
         onChange={(event) => (event.target.checked ? onTurnOn() : onSet({ automatic: false }))} /></label>
     </div>
   );
@@ -292,7 +297,6 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
 function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onOff, onRaise }: { slot: AISlot; settings: AISettings; isAdmin: boolean; locked: boolean;
   hasProvider: boolean; onTurnOn: () => void; onOff: () => void; onRaise: () => void }) {
   const on = slot.enabled && slot.automatic;
-  const id = useId();
   const limits = settings.automatic;
   const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.autoDraftNeedsFeature : undefined;
   const pausedDay = on && limits.drafts_paused_until !== null;
@@ -302,7 +306,7 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
       : on ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>;
   return (
     <div className="ai-auto">
-      <div className="ai-auto-lead"><strong id={id}>{m.autoDraftTitle}</strong>{status}</div>
+      <div className="ai-auto-lead"><strong>{m.autoDraftTitle}</strong><span aria-live="polite">{status}</span></div>
       {why ? <p className="ai-auto-desc muted-copy">{why}</p>
         : pausedDay ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedDayDesc(limits.drafts_today, limits.draft_per_day)}</b>{m.autoDraftPausedDayRest}</p>
           : pausedHalf ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedHalfDesc}</b>{m.autoDraftPausedHalfRest}</p>
@@ -311,7 +315,7 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
         {on && !pausedDay && !pausedHalf && <span className="ai-auto-stat">{m.autoDraftToday(limits.drafts_today, limits.draft_per_day)}</span>}
         {pausedDay && isAdmin && <button type="button" onClick={onRaise}>{m.autoDraftRaise}</button>}
         {pausedHalf && isAdmin && <a className="button" href="/settings/ai?add=1">{m.autoDraftAddKey}</a>}
-        <label className="ai-switch"><input type="checkbox" role="switch" aria-labelledby={id} checked={on} disabled={locked || !slot.enabled}
+        <label className="ai-switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
           onChange={(event) => (event.target.checked ? onTurnOn() : onOff())} /></label>
       </div>
     </div>
