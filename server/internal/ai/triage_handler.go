@@ -243,6 +243,23 @@ func (s *Service) runTriage(ctx context.Context, run *Run) error {
 		if err != nil {
 			return err
 		}
+		// A tag deleted or a teammate deactivated while the model answered is not suggested.
+		var live []string
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(array_agg(id::text),'{}') FROM tags WHERE workspace_id=$1 AND id=ANY($2::uuid[])`,
+			run.Task.WorkspaceID, tagIDs).Scan(&live); err != nil {
+			return err
+		}
+		tagIDs = slices.DeleteFunc(tagIDs, func(id string) bool { return !slices.Contains(live, id) })
+		if assignee != nil {
+			var active bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND id=$2 AND deactivated_at IS NULL)`,
+				run.Task.WorkspaceID, *assignee).Scan(&active); err != nil {
+				return err
+			}
+			if !active {
+				assignee = nil
+			}
+		}
 		// Compared with the conversation as it is now: what it already has is not suggested, and a
 		// field a person changed since the suggestion was asked for is theirs (stale).
 		tagIDs = slices.DeleteFunc(tagIDs, func(id string) bool { return slices.Contains(now.tagIDs, id) })

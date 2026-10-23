@@ -97,7 +97,7 @@ test('accept all sends no body and then says who accepted it and how to undo', a
 test('a field a person set first is not suggested, and says so', async () => {
   serve(() => ({ suggestion: suggestion({ priority: null, stale: { priority: 'urgent', assignee_agent_id: null } }), auto_applied: null }));
   show();
-  expect(await screen.findByText('Not suggested: you set Urgent before this arrived.')).toBeInTheDocument();
+  expect(await screen.findByText('Not suggested: a person set Urgent before this arrived.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Accept the rest' })).toBeInTheDocument();
 });
 
@@ -221,4 +221,16 @@ test('on the timeline, what AI applied shows as a line with Undo, even after a n
   const line = await screen.findByRole('group', { name: 'Applied by AI' });
   expect(within(line).getByText(/hardware/)).toBeInTheDocument();
   expect(within(line).getAllByRole('button', { name: /^Undo/ }).length).toBeGreaterThan(0);
+});
+
+test('applied again after an undo, it is AI’s again with Undo, and the timeline says who applied it again', async () => {
+  const again = appliedByAI({ outcome: 'auto_applied', undone_at: '2026-10-22T10:45:00Z', undone_by_agent_id: me, decided_by_agent_id: me,
+    applied: { tag_ids: [hardware], priority: null, assignee_agent_id: null }, auto_applied: { tag_ids: [hardware], priority: null, assignee_agent_id: null }, priority: null,
+    skipped: { priority: { reason: 'set_by_person', value: 'high' } } });
+  serve(() => ({ suggestion: again, auto_applied: again }));
+  show(vi.fn(), false, undefined, 'timeline');
+  const line = await screen.findByRole('group', { name: 'Applied by AI' });
+  expect(within(line).getByText(/applied again by you/)).toBeInTheDocument();
+  expect(within(line).getByRole('button', { name: /^Undo/ })).toBeInTheDocument();
+  expect(within(screen.getByRole('group', { name: 'Priority' })).getByText('Not set: a person had set it to High.')).toBeInTheDocument();
 });

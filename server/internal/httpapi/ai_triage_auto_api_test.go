@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 )
 
 // autoTriageOn lets workspace A's triage suggestions apply the parts by themselves.
@@ -222,11 +223,21 @@ func TestUndoTakesBackWhatAIAppliedAndKeepsWhatAPersonChanged(t *testing.T) {
 	if again.UndoneAt == nil || !again.UndoneAt.Equal(*got.UndoneAt) {
 		t.Fatalf("undo again = %+v", again)
 	}
-	// Apply again fills only what is still empty: the tags, not the priority a person set.
+	// Apply again applies what the undo took back, filling only what is still empty: the tag, not the
+	// priority a person set, nor the tag a person removed. It is AI's again, with its own Undo.
 	kbCall(t, d.api, http.MethodPost, path+"/accept", nil, d.adminA, http.StatusOK, &again)
 	priority, _, tags = d.conversationState(t, conversation)
-	if priority != "urgent" || !slices.Contains(tags, hardware) || !slices.Contains(tags, office) {
+	if priority != "urgent" || !slices.Contains(tags, hardware) || slices.Contains(tags, office) {
 		t.Fatalf("after apply again: priority %s, tags %v", priority, tags)
+	}
+	// The tag a person removed stays a part anyone can accept again.
+	if again.Outcome != nil || again.AutoAppliedAt == nil || !slices.Equal(again.AutoApplied.TagIDs, []string{hardware}) ||
+		again.Skipped["priority"].Reason != "set_by_person" || again.UndoneAt == nil {
+		t.Fatalf("applied again = %+v", again)
+	}
+	kbCall(t, d.api, http.MethodPost, path+"/undo", nil, d.adminA, http.StatusOK, &again)
+	if _, _, tags = d.conversationState(t, conversation); slices.Contains(tags, hardware) || again.Outcome == nil || *again.Outcome != "undone" {
+		t.Fatalf("undo after apply again: %v %+v", tags, again)
 	}
 
 	// Undo of one part, then the rest.
@@ -281,5 +292,41 @@ func TestATeammateAIAssignsSeesItWasAI(t *testing.T) {
 	decode(t, request(t, d.api, http.MethodGet, "/api/v1/inbox/activity?since="+url.QueryEscape(since), nil, sam, nil), &activity)
 	if len(activity.AssignedToMe) != 1 || activity.AssignedToMe[0].ID != conversation || !activity.AssignedToMe[0].ByAI {
 		t.Fatalf("assigned to Sam = %+v", activity.AssignedToMe)
+	}
+	// A person who assigns Sam afterwards is a person, not AI.
+	since = activity.Now
+	var admin struct {
+		Agent struct {
+			ID string `json:"id"`
+		} `json:"agent"`
+	}
+	decode(t, request(t, d.api, http.MethodGet, "/api/v1/auth/me", nil, d.adminA, nil), &admin)
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/conversations/"+conversation, map[string]any{"assignee_id": admin.Agent.ID}, d.adminA, http.StatusOK, nil)
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/conversations/"+conversation, map[string]any{"assignee_id": me.Agent.ID}, d.adminA, http.StatusOK, nil)
+	decode(t, request(t, d.api, http.MethodGet, "/api/v1/inbox/activity?since="+url.QueryEscape(since), nil, sam, nil), &activity)
+	if len(activity.AssignedToMe) != 1 || activity.AssignedToMe[0].ByAI {
+		t.Fatalf("assigned to Sam by a person = %+v", activity.AssignedToMe)
+	}
+}
+
+// A tag deleted while the model answers is not applied, and the suggestion still comes.
+func TestATagDeletedWhileTheModelAnswersIsLeftOut(t *testing.T) {
+	d := newDraftDesk(t)
+	d.triageOn(t)
+	d.autoTriageOn(t, nil)
+	hardware := create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "hardware"})
+	create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "office"})
+	d.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		if _, err := d.pool.Exec(context.Background(), `DELETE FROM tags WHERE id=$1`, hardware); err != nil {
+			t.Error(err)
+		}
+		return triageAnswer([]string{"hardware", "office"}, "high", "").Response, nil
+	}
+	conversation := d.customerTicket(t, "printer", "normal")
+	d.customerWrites(t, d.workspaceA, conversation, "The printer is down.", nil)
+	d.run(t)
+	got := d.triage(t, d.adminA, conversation)
+	if got.Status != ai.DraftReady || len(got.AutoApplied.TagIDs) != 1 || slices.Contains(got.AutoApplied.TagIDs, hardware) {
+		t.Fatalf("suggestion after its tag was deleted = %+v", got)
 	}
 }
