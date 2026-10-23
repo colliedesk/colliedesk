@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -159,6 +160,8 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "No conversation with that id in this workspace.")
 	case errors.Is(err, ai.ErrTriageNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No AI triage suggestion with that id on this conversation.")
+	case errors.Is(err, ai.ErrTriageNothing):
+		writeError(response, http.StatusConflict, "ai_triage_nothing", "This suggestion names nothing to apply: the conversation already has it, or a person set it first.")
 	case errors.Is(err, ai.ErrTriageDecided):
 		writeError(response, http.StatusConflict, "ai_triage_decided", "This suggestion is not ready, or was already accepted, dismissed or replaced.")
 	case errors.Is(err, ai.ErrDraftDecided):
@@ -314,13 +317,18 @@ func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request
 		writeJSON(response, http.StatusOK, current)
 		return
 	}
-	want := ai.TriageSet{TagIDs: current.TagIDs, Priority: current.Priority, AssigneeAgentID: current.AssigneeAgentID}
-	if request.ContentLength != 0 {
-		want = ai.TriageSet{}
-		if err := decodeJSON(request, &want); err != nil {
-			writeError(response, http.StatusBadRequest, "invalid_request", "Send tag_ids, priority and assignee_agent_id to accept, each from the suggestion; no body accepts the rest of it.")
-			return
-		}
+	// No body, or one naming nothing, accepts the rest of it.
+	var want ai.TriageSet
+	// A call from MCP without arguments has no body at all.
+	if request.Body == nil {
+		request.Body = http.NoBody
+	}
+	if err := decodeJSON(request, &want); err != nil && !errors.Is(err, io.EOF) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send tag_ids, priority and assignee_agent_id to accept, each from the suggestion; no body accepts the rest of it.")
+		return
+	}
+	if want.TagIDs == nil && want.Priority == nil && want.AssigneeAgentID == nil {
+		want = ai.TriageSet{TagIDs: current.TagIDs, Priority: current.Priority, AssigneeAgentID: current.AssigneeAgentID}
 	}
 	set, err := a.ai.TriageToApply(request.Context(), workspace, conversation, id, want)
 	if err != nil {

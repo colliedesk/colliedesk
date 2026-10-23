@@ -230,6 +230,52 @@ func TestATriageSuggestionLeavesWhatAPersonSetBeforeItCame(t *testing.T) {
 	}
 }
 
+// A tag deleted or a teammate deactivated after the suggestion came is no longer suggested: accepting
+// the rest (no body, or a body naming nothing) applies what is left and records it accepted.
+func TestATriageSuggestionDropsADeletedTagAndADeactivatedTeammate(t *testing.T) {
+	d := newDraftDesk(t)
+	d.triageOn(t)
+	hardware := create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "hardware"})
+	office := create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "office"})
+	sam := joinAsAgent(t, d.api, d.adminA, "sam@draft-a.example.com")
+	var me struct {
+		Agent struct {
+			ID string `json:"id"`
+		} `json:"agent"`
+	}
+	decode(t, request(t, d.api, http.MethodGet, "/api/v1/auth/me", nil, sam, nil), &me)
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/agents/"+me.Agent.ID, map[string]any{"display_name": "Sam Rivera"}, d.adminA, http.StatusOK, nil)
+	d.fake.Script(triageAnswer([]string{"hardware", "office"}, "high", "Sam Rivera"))
+	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
+	conversation := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer down"})
+	d.customerWrites(t, d.workspaceA, conversation, "The office printer is down.", nil)
+	d.run(t)
+	got := d.triage(t, d.adminA, conversation)
+	if len(got.TagIDs) != 2 || got.AssigneeAgentID == nil {
+		t.Fatalf("suggestion = %+v", got)
+	}
+	kbCall(t, d.api, http.MethodDelete, "/api/v1/tags/"+office, nil, d.adminA, http.StatusNoContent, nil)
+	if _, err := d.pool.Exec(context.Background(), `UPDATE agents SET deactivated_at=now() WHERE id=$1`, me.Agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	got = d.triage(t, d.adminA, conversation)
+	if len(got.TagIDs) != 1 || got.TagIDs[0] != hardware || got.AssigneeAgentID != nil {
+		t.Fatalf("suggestion after the tag and teammate went = %+v", got)
+	}
+	var accepted ai.Triage
+	decode(t, request(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage/"+got.ID+"/accept", map[string]any{}, d.adminA, nil), &accepted)
+	if accepted.Outcome == nil || *accepted.Outcome != "accepted" || len(accepted.Applied.TagIDs) != 1 || accepted.Applied.Priority == nil {
+		t.Fatalf("accepted with an empty body = %+v", accepted)
+	}
+
+	// A suggestion naming nothing has nothing to accept, and never expires as unused.
+	d.fake.Script(triageAnswer(nil, "high", ""))
+	kbCall(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage", nil, d.adminA, http.StatusAccepted, nil)
+	d.run(t)
+	empty := d.triage(t, d.adminA, conversation)
+	wantResponse(t, request(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage/"+empty.ID+"/accept", nil, d.adminA, nil), http.StatusConflict, "ai_triage_nothing")
+}
+
 // Past the workspace's automatic limit a new ticket gets no suggestion and no provider call; the
 // suggestion says why, and a person can still ask for one.
 func TestAutomaticTriageStopsAtTheWorkspacesLimit(t *testing.T) {

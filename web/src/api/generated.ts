@@ -1485,7 +1485,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Applies an open suggestion to the conversation, as a person's change would: without a body the rest of it; with one, only what it names (each from the suggestion; 400 otherwise). A part applied leaves the rest open; when all of it is applied the outcome is accepted. Tags are added, never removed; a part already applied is not applied again. Undo is an ordinary conversation change. Accepting an accepted one again changes nothing; 409 `ai_triage_decided` when it is not ready or was dismissed, replaced or expired. */
+        /** @description Applies an open suggestion to the conversation, as a person's change would: without a body the rest of it; with one, only what it names (each from the suggestion; 400 otherwise). A part applied leaves the rest open; when all of it is applied the outcome is accepted. Tags are added, never removed; a part already applied is not applied again. Undo is an ordinary conversation change. Accepting an accepted one again changes nothing; 409 `ai_triage_decided` when it is not ready or was dismissed, replaced or expired, `ai_triage_nothing` when it names nothing to apply (a tag deleted or a teammate deactivated since is not named). */
         post: operations["acceptAITriage"];
         delete?: never;
         options?: never;

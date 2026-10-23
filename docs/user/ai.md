@@ -114,10 +114,11 @@ left alone: the card says "Not suggested: you set Urgent before this arrived".
 
 Nothing changes until someone accepts. Each part (tags, priority, assignee) has **Accept**; **Accept
 all** (or **Accept the rest**) takes what is left, and **Dismiss** drops it. Tags are added, never
-removed, and anything accepted is changed back like any other change. **Suggest again** asks by hand.
-When the automatic limit below is reached, the card says automatic suggestions are paused until
-midnight UTC and **Suggest now** still asks for one. A failure says why and what to do next, for
-example to open **Settings > AI** when the included AI is used up.
+removed, and anything accepted is changed back like any other change. **Suggest again** asks by
+hand. When the automatic limit below is reached, the card says automatic suggestions are paused
+until the next midnight UTC (shown in your timezone) and **Suggest now** still asks for one. A
+failure says why and what to do next, for example to open **Settings > AI** when the included AI is
+used up.
 
 Imported tickets get no suggestion. A suggestion nobody used for 7 days expires; its reason is erased
 90 days after it ended. Colliedesk keeps whether each one was accepted, in part, or dismissed.

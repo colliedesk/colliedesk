@@ -48,11 +48,11 @@ const text = {
   loadFailed: 'The suggestion could not be loaded. Try again in a moment.',
   refusedFallback: 'The suggestion could not be asked for. Try again in a moment.',
   generated: 'Written by AI: check it. Nothing changes until you accept.',
+  paused: (until: string) => `Automatic suggestions are paused until ${until}: the daily limit is reached. You can still ask for one.`,
   failed: (code: string | null) => failures[code ?? ''] ?? 'No suggestion this time: the AI provider did not answer. Try again in a moment.',
 };
 
 const failures: Record<string, string> = {
-  automatic_limit: 'Automatic suggestions are paused until midnight UTC: today’s limit is reached. You can still ask for one.',
   ai_allowance_reached: 'No suggestion: this month’s included AI is used up. An admin can add your own provider in Settings → AI.',
   feature_off: 'No suggestion: triage suggestions were turned off. An admin turns them on in Settings → AI.',
   auth: 'No suggestion: the AI provider refused its key. An admin can change it in Settings → AI.',
@@ -88,6 +88,11 @@ function openParts(suggestion: AITriage) {
     priority: Boolean(suggestion.priority && !applied.priority),
     assignee: Boolean(suggestion.assignee_agent_id && !applied.assignee_agent_id),
   };
+}
+
+function nextUTCMidnight(at: string) {
+  const day = new Date(at);
+  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() + 1)).toISOString();
 }
 
 function hasOpenPart(suggestion: AITriage) {
@@ -137,7 +142,9 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
     );
     actions = <button type="button" className="ghost" disabled={busy} onClick={() => dismiss.mutate(suggestion)}>{text.cancel}</button>;
   } else if (suggestion.status === 'failed') {
-    body = <p className="ai-triage-message">{text.failed(suggestion.error_code)} <SettingsWay code={suggestion.error_code} canManage={canManage} /></p>;
+    // The daily limit counts UTC days: paused until the next midnight UTC, shown in the agent's timezone.
+    const message = suggestion.error_code === 'automatic_limit' ? text.paused(formatDate(nextUTCMidnight(suggestion.created_at), timezone)) : text.failed(suggestion.error_code);
+    body = <p className="ai-triage-message">{message} <SettingsWay code={suggestion.error_code} canManage={canManage} /></p>;
     actions = askButton(suggestion.error_code === 'automatic_limit' ? text.suggestNow : text.tryAgain);
   } else if (suggestion.status === 'cancelled') {
     body = <p className="ai-triage-message">{text.stopped}</p>;

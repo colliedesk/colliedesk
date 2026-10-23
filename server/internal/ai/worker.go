@@ -190,13 +190,14 @@ func (w *Worker) sweep(ctx context.Context) error {
 			return err
 		}
 		// A ready draft or suggestion nobody decided on for a week expired (a suggestion partly applied
-		// counts as partly accepted); 90 days after a draft ended, its text and prompt are erased and
+		// counts as partly accepted, one that named nothing stays without an outcome); 90 days after a draft ended, its text and prompt are erased and
 		// its numbers stay.
 		if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET outcome='expired',decided_at=$1 WHERE status='ready' AND outcome IS NULL AND ready_at<$2`,
 			now, now.Add(-draftExpiry)); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET outcome=CASE WHEN `+triageAppliedSome+` THEN 'partly_accepted' ELSE 'expired' END,decided_at=$1 WHERE status='ready' AND outcome IS NULL AND ready_at<$2`,
+		if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET outcome=CASE WHEN `+triageAppliedSome+` THEN 'partly_accepted' ELSE 'expired' END,decided_at=$1
+			WHERE status='ready' AND outcome IS NULL AND ready_at<$2 AND (tag_ids<>'{}' OR priority IS NOT NULL OR assignee_agent_id IS NOT NULL)`,
 			now, now.Add(-triageExpiry)); err != nil {
 			return err
 		}

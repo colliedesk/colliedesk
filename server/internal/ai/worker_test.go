@@ -594,6 +594,11 @@ func TestUndecidedSuggestionsExpireAndOldReasonsAreErased(t *testing.T) {
 	untouched := suggestion(now.Add(-8*day), `{}`, nil, nil)
 	part := suggestion(now.Add(-8*day), `{"tag_ids":[],"priority":"high","assignee_agent_id":null}`, nil, nil)
 	fresh := suggestion(now.Add(-day), `{}`, nil, nil)
+	var nothing string
+	if err := q.pool.QueryRow(ctx, `INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,status,created_at,ready_at)
+		VALUES($1,$2,'ready',$3,$3) RETURNING id::text`, q.a.id, conversation, now.Add(-8*day)).Scan(&nothing); err != nil {
+		t.Fatal(err)
+	}
 	ended := suggestion(now.Add(-100*day), `{}`, &old, &dismissed)
 	q.tick(t)
 	state := func(id string) string {
@@ -610,7 +615,7 @@ func TestUndecidedSuggestionsExpireAndOldReasonsAreErased(t *testing.T) {
 		}
 		return result + " kept"
 	}
-	for id, want := range map[string]string{untouched: "expired kept", part: "partly_accepted kept", fresh: "- kept", ended: "dismissed erased"} {
+	for id, want := range map[string]string{untouched: "expired kept", part: "partly_accepted kept", fresh: "- kept", ended: "dismissed erased", nothing: "- erased"} {
 		if got := state(id); got != want {
 			t.Fatalf("suggestion %s = %q, want %q", id, got, want)
 		}

@@ -119,9 +119,10 @@ test('while it is written a person keeps working, or cancels it', async () => {
 });
 
 test('past the daily limit it says automatic suggestions are paused and a person can still ask', async () => {
-  serve(() => ({ suggestion: suggestion({ status: 'failed', error_code: 'automatic_limit', ...empty, ready_at: null }) }));
+  serve(() => ({ suggestion: suggestion({ status: 'failed', error_code: 'automatic_limit', ...empty, ready_at: null, created_at: '2026-10-22T22:30:00Z' }) }));
   show();
-  expect(await screen.findByText('Automatic suggestions are paused until midnight UTC: today’s limit is reached. You can still ask for one.')).toBeInTheDocument();
+  // Midnight UTC after it, in the agent's timezone (UTC here).
+  expect(await screen.findByText(/^Automatic suggestions are paused until .*12:00\sAM.*: the daily limit is reached\. You can still ask for one\.$/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Suggest now' })).toBeInTheDocument();
 });
 

@@ -14,6 +14,8 @@ var (
 	ErrTriageNotFound = errors.New("no AI triage suggestion with that id on this conversation")
 	// ErrTriageDecided means the suggestion was already accepted, dismissed or replaced, or is not ready.
 	ErrTriageDecided = errors.New("this AI triage suggestion is not ready or was already accepted, dismissed or replaced")
+	// ErrTriageNothing means the suggestion names nothing to apply.
+	ErrTriageNothing = errors.New("this AI triage suggestion names nothing to apply")
 )
 
 // triageAppliedSome is true for a suggestion of which a person applied a part.
@@ -65,7 +67,8 @@ type TriageSet struct {
 
 // triageColumns read a suggestion with the state its task gives it, as draftColumns do. A task the
 // worker stopped (the automatic limit, the feature turned off) reads as failed with its reason; only a
-// person's stop reads as cancelled.
+// person's stop reads as cancelled. A tag deleted or a teammate deactivated since is no longer
+// suggested, so accepting the rest never fails on it.
 const triageColumns = `s.id::text,s.conversation_id::text,
 	CASE WHEN s.status<>'pending' THEN s.status
 		WHEN t.state IN ('queued','running') THEN t.state
@@ -73,7 +76,10 @@ const triageColumns = `s.id::text,s.conversation_id::text,
 	CASE WHEN s.status='pending' AND t.id IS NULL THEN 'restored'
 		WHEN s.status='pending' AND t.state='done' THEN 'internal'
 		WHEN s.status='pending' AND t.state IN ('failed','cancelled') THEN t.error_code END,
-	s.automatic,s.tag_ids::text[],s.priority,s.assignee_agent_id::text,s.reason,s.sources,s.stale,s.model,s.outcome,s.applied,s.created_at,s.ready_at,s.decided_at,s.decided_by_agent_id::text
+	s.automatic,
+	ARRAY(SELECT x.id::text FROM unnest(s.tag_ids) WITH ORDINALITY x(id,n) WHERE EXISTS (SELECT 1 FROM tags g WHERE g.workspace_id=s.workspace_id AND g.id=x.id) ORDER BY x.n),
+	s.priority,
+	(SELECT a.id::text FROM agents a WHERE a.workspace_id=s.workspace_id AND a.id=s.assignee_agent_id AND a.deactivated_at IS NULL),s.reason,s.sources,s.stale,s.model,s.outcome,s.applied,s.created_at,s.ready_at,s.decided_at,s.decided_by_agent_id::text
 	FROM ai_triage_suggestions s LEFT JOIN ai_tasks t ON t.workspace_id=s.workspace_id AND t.id=s.task_id`
 
 func scanTriage(row pgx.Row) (Triage, error) {
@@ -276,6 +282,9 @@ func (s *Service) AcceptedTriage(ctx context.Context, workspaceID string, actor 
 		}
 		if t.Status != DraftReady || t.Outcome != nil {
 			return ErrTriageDecided
+		}
+		if len(t.TagIDs) == 0 && t.Priority == nil && t.AssigneeAgentID == nil {
+			return ErrTriageNothing
 		}
 		merged := t.Applied
 		for _, tag := range applied.TagIDs {

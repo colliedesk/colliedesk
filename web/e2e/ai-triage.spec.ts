@@ -84,7 +84,7 @@ test('a new ticket by email gets an AI triage suggestion that changes nothing un
     await card.getByRole('button', { name: 'Suggest again' }).click();
     await expect(card.getByRole('button', { name: 'Accept assignee Sam Rivera' })).toBeVisible({ timeout: 30_000 });
     await page.setViewportSize({ width: 390, height: 844 });
-    const toggle = page.getByRole('button', { name: /Show details.*AI suggestion/ });
+    const toggle = page.getByRole('button', { name: 'Show details, AI suggestion' });
     await expect(toggle).toBeVisible();
     await toggle.click();
     await expect(card.getByRole('button', { name: 'Accept all' })).toBeInViewport();

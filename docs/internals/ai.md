@@ -243,11 +243,15 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    → `accepted`. Dismiss, a newer suggestion, or the 7-day sweep close an open one as
    `partly_accepted` when a part was applied, else `dismissed`/`superseded`/`expired`. A part already
    applied is not applied again: "Accept the rest" after a person changed an accepted field leaves it.
-6. **Failed, not cancelled.** A task the worker stopped (automatic limit, feature off) reads as
+6. **What it no longer names.** A tag deleted or a teammate deactivated after the answer is filtered
+   out when the suggestion is read, so accepting the rest never fails halfway on it. A suggestion
+   that names nothing (all filtered as above, or stale) cannot be accepted (409 `ai_triage_nothing`)
+   and never expires: nobody failed to use it, so it does not count as unused.
+7. **Failed, not cancelled.** A task the worker stopped (automatic limit, feature off) reads as
    `failed` with its code; only a person's stop (`cancelled`) reads as cancelled.
-7. **One minute cap.** Drafts and suggestions asked for by hand share the 30-a-minute cap; automatic
+8. **One minute cap.** Drafts and suggestions asked for by hand share the 30-a-minute cap; automatic
    ones are bounded by the automatic limits instead.
-8. **Restore.** `restore-workspace.sh` copies rows with `session_replication_role = replica`, so the
+9. **Restore.** `restore-workspace.sh` copies rows with `session_replication_role = replica`, so the
    trigger does not fire for restored messages, and it deletes `ai_tasks` first (a pending suggestion
    reads `restored`).
 

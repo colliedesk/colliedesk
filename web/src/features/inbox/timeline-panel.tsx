@@ -44,8 +44,9 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
         {conversation && onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
-          aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}>
-          {messages.showDetails}{suggestionWaiting && <span className="details-badge"><span className="sr-only">, </span>{messages.aiSuggestionWaiting}</span>}</button>}
+          aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}
+          aria-label={suggestionWaiting ? `${messages.showDetails}, ${messages.aiSuggestionWaiting}` : undefined}>
+          {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true">{messages.aiSuggestionWaiting}</span>}</button>}
       </header>
       <div className="timeline-scroll">
         <div className="timeline-stack">
