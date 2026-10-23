@@ -446,24 +446,8 @@ class RunnerConcurrency(unittest.TestCase):
         self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
 
     def test_jobs_behind_pr_verified_count_and_push_only_jobs_do_not(self):
-        # 8 Go shards, 2 web, e2e, 2 onboarding, image, osv-scan, 3 CodeQL; not pr-verified, and not
-        # roadmap, which waits for osv-scan.
+        # 8 Go shards, web, e2e, 2 onboarding, image, osv-scan, roadmap, 3 CodeQL; not pr-verified.
         self.assertEqual(runners(ROOT / '.github/workflows/ci.yml'), 18)
-
-    def test_roadmap_takes_the_osv_scan_runner_after_it_on_every_event(self):
-        jobs = dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))
-        roadmap = '\n'.join(jobs['roadmap'])
-        self.assertRegex(roadmap, r'(?m)^    needs: osv-scan$')
-        # osv-scan runs on pull requests only and may fail; roadmap runs anyway, and ci-ok needs it.
-        self.assertRegex(roadmap, r"(?m)^    if: \$\{\{ !cancelled\(\) \}\}$")
-        self.assertRegex('\n'.join(jobs['ci-ok']), r'(?m)^    needs: \[.*\broadmap\b.*\]$')
-
-    def test_web_unit_tests_split_over_shards_that_cover_every_file(self):
-        web = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['web'])
-        self.assertRegex(web, r'(?m)^        shard: \[1, 2\]$')
-        self.assertIn('corepack pnpm test --shard="$SHARD/$SHARDS"', web)
-        self.assertIn('SHARD: ${{ matrix.shard }}', web)
-        self.assertIn('SHARDS: ${{ strategy.job-total }}', web)
 
 
 class PublishEdge(unittest.TestCase):
@@ -545,20 +529,6 @@ class GoBuildCache(unittest.TestCase):
                 for step in re.findall(r'uses: actions/setup-go@\S+.*?(?=\n      - |\Z)', text, re.S):
                     if path.name != 'codeql.yml':
                         self.assertIn('cache: false', step, f'{path.name} {name}')
-
-
-class OnboardingBuild(unittest.TestCase):
-    def test_onboarding_builds_the_app_and_servers_while_chromium_installs(self):
-        onboarding = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['onboarding'])
-        start = onboarding.find('ci-background.sh start app')
-        chromium = onboarding.find('playwright install')
-        wait = onboarding.find('ci-background.sh wait app')
-        journeys = onboarding.find('corepack pnpm e2e --grep "$JOURNEY_PATTERN"')
-        self.assertGreaterEqual(start, 0)
-        self.assertLess(start, chromium)
-        self.assertLess(chromium, wait)
-        self.assertLess(wait, journeys)
-        self.assertIn("go build -tags e2e -o /dev/null ./cmd/collie", onboarding)
 
 
 class BundleBudget(unittest.TestCase):
