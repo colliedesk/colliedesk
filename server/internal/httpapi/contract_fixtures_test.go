@@ -50,6 +50,9 @@ type contractFixture struct {
 	aiProviderID string
 	// aiDraftID is a draft of conversationID, still queued: read, then discarded by the cases.
 	aiDraftID string
+	// aiTriageID is a ready suggestion of conversationID (high priority), accepted by the cases;
+	// aiTriageOtherID a ready one of another conversation, dismissed.
+	aiTriageID, aiTriageOtherID, aiTriageOtherConversation, aiTriageNewConversation, aiDraftsProviderID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -202,7 +205,22 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatalf("ask for an AI draft: %d %s", queued.Code, queued.Body.String())
 	}
 	aiDraftID := draft.ID
-	return contractFixture{aiDraftID: aiDraftID, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	if response := request(t, api, http.MethodPut, "/api/v1/ai/slots/triage", map[string]any{"source": "provider", "provider_id": draftsProvider, "enabled": true}, adminToken, nil); response.Code != http.StatusOK {
+		t.Fatalf("turn triage on: %d %s", response.Code, response.Body.String())
+	}
+	readyTriage := func(conversation string) string {
+		var id string
+		if err := pool.QueryRow(context.Background(), `INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,status,priority,reason,model,ready_at)
+			SELECT workspace_id,id,'ready','high','Printer down','claude-haiku-5-5',now() FROM conversations WHERE id=$1 RETURNING id::text`, conversation).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	aiTriageID := readyTriage(conversationID)
+	otherTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage contract"})
+	aiTriageOtherID := readyTriage(otherTriageConversation)
+	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
+	return contractFixture{aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }

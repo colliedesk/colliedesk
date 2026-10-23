@@ -571,6 +571,57 @@ func TestUndecidedDraftsExpireAndOldDraftTextIsErased(t *testing.T) {
 	}
 }
 
+func TestUndecidedSuggestionsExpireAndOldReasonsAreErased(t *testing.T) {
+	q := newQueueEnv(t, nil)
+	ctx := context.Background()
+	var conversation string
+	if err := q.pool.QueryRow(ctx, `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ada','ada@example.com') RETURNING id)
+		INSERT INTO conversations(workspace_id,contact_id,subject) SELECT $1,id,'Hello' FROM c RETURNING id::text`, q.a.id).Scan(&conversation); err != nil {
+		t.Fatal(err)
+	}
+	now := q.clock.Now()
+	day := 24 * time.Hour
+	suggestion := func(ready time.Time, applied string, decided *time.Time, outcome *string) string {
+		var id string
+		if err := q.pool.QueryRow(ctx, `INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,status,priority,reason,created_at,ready_at,applied,decided_at,outcome)
+			VALUES($1,$2,'ready','high','Printer down',$3,$3,$4,$5,$6) RETURNING id::text`, q.a.id, conversation, ready, applied, decided, outcome).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	dismissed := "dismissed"
+	old := now.Add(-91 * day)
+	untouched := suggestion(now.Add(-8*day), `{}`, nil, nil)
+	part := suggestion(now.Add(-8*day), `{"tag_ids":[],"priority":"high","assignee_agent_id":null}`, nil, nil)
+	fresh := suggestion(now.Add(-day), `{}`, nil, nil)
+	var nothing string
+	if err := q.pool.QueryRow(ctx, `INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,status,created_at,ready_at)
+		VALUES($1,$2,'ready',$3,$3) RETURNING id::text`, q.a.id, conversation, now.Add(-8*day)).Scan(&nothing); err != nil {
+		t.Fatal(err)
+	}
+	ended := suggestion(now.Add(-100*day), `{}`, &old, &dismissed)
+	q.tick(t)
+	state := func(id string) string {
+		var outcome, reason *string
+		if err := q.pool.QueryRow(ctx, `SELECT outcome, reason FROM ai_triage_suggestions WHERE id=$1`, id).Scan(&outcome, &reason); err != nil {
+			t.Fatal(err)
+		}
+		result := "-"
+		if outcome != nil {
+			result = *outcome
+		}
+		if reason == nil {
+			return result + " erased"
+		}
+		return result + " kept"
+	}
+	for id, want := range map[string]string{untouched: "expired kept", part: "partly_accepted kept", fresh: "- kept", ended: "dismissed erased", nothing: "- erased"} {
+		if got := state(id); got != want {
+			t.Fatalf("suggestion %s = %q, want %q", id, got, want)
+		}
+	}
+}
+
 func TestTheAllowanceSaysAboutHowManyDraftsAreLeft(t *testing.T) {
 	server := *testServer
 	server.Allowance = &ai.Allowance{PerWorkspace: 1} // 1,000,000 micro-dollars

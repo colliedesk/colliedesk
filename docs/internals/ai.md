@@ -218,6 +218,43 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
 6. **Drafts left.** The allowance shows about how many drafts what is left pays for, at the workspace's
    average draft cost over 30 days, or a typical draft (6,000 tokens in, 500 out) before its first.
 
+## Triage suggestions
+
+1. **Queued by a trigger.** `ai_triage_on_first_message` (AFTER INSERT ON messages) queues an automatic
+   task and a pending suggestion for the first `incoming` message of a conversation when triage is on.
+   Every way a conversation starts inserts that message; an import sets `origin`, so it queues nothing.
+   A trigger, not a call in each path: the five paths that create messages cannot forget it. The worker
+   is not woken by it; it finds the task at its next look (5 s).
+2. **Context.** The prompt holds the ticket's subject and first customer message, the workspace's tags
+   and active teammates, and `AIRetrieve` (3 articles, 3 solved conversations) with how each solved
+   conversation was sorted (priority, tags, assignee). Private notes never go.
+3. **Checked against the database.** The model answers with tag and teammate names from the lists in
+   the prompt; unknown names, another workspace's tags and deactivated teammates are dropped. A prose
+   answer (no structured output) fails the task (`invalid_answer`): names in prose cannot be checked.
+   Sources come from the ids the prompt gave (`citedSources`, shared with drafts), never from the model.
+4. **Compared with the conversation when the answer lands.** The trigger and `CreateTriage` store
+   `base` (priority and assignee at that moment). In `Record`: a tag the conversation has, or a
+   priority or assignee equal to the current one, is dropped; a field that differs from `base` was set
+   by a person meanwhile, so it is dropped and kept in `stale` for the card to say so.
+5. **Applied part by part through the ordinary changes.** Accepting adds each tag with
+   `AddConversationTag` (a tag someone added meanwhile stays) and sets priority and assignee with
+   `UpdateConversation` as the person (`assigned_by` recorded), then `AcceptedTriage` merges the part
+   into `applied` under the row lock, so two people accepting two parts both count. All of it applied
+   → `accepted`. Dismiss, a newer suggestion, or the 7-day sweep close an open one as
+   `partly_accepted` when a part was applied, else `dismissed`/`superseded`/`expired`. A part already
+   applied is not applied again: "Accept the rest" after a person changed an accepted field leaves it.
+6. **What it no longer names.** A tag deleted or a teammate deactivated after the answer is filtered
+   out when the suggestion is read, so accepting the rest never fails halfway on it. A suggestion
+   that names nothing (all filtered as above, or stale) cannot be accepted (409 `ai_triage_nothing`)
+   and never expires: nobody failed to use it, so it does not count as unused.
+7. **Failed, not cancelled.** A task the worker stopped (automatic limit, feature off) reads as
+   `failed` with its code; only a person's stop (`cancelled`) reads as cancelled.
+8. **One minute cap.** Drafts and suggestions asked for by hand share the 30-a-minute cap; automatic
+   ones are bounded by the automatic limits instead.
+9. **Restore.** `restore-workspace.sh` copies rows with `session_replication_role = replica`, so the
+   trigger does not fire for restored messages, and it deletes `ai_tasks` first (a pending suggestion
+   reads `restored`).
+
 ## Testing
 
 `aiprovider.Fake` records every `Request` and answers from a script, without a network. Feature tests

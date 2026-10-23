@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PlanLimitError } from '../../api/client';
 import { aiDraftApi, writing } from './ai-draft-api';
 import type { AIDraft } from './ai-draft-api';
 import { aiDraftMessages as text } from './ai-draft-messages';
-import { BookIcon, InboxIcon, SparklesIcon, XIcon } from '../../ui/icons';
+import { SparklesIcon, XIcon } from '../../ui/icons';
+import { AISources } from './ai-sources';
+import { refusalCode, SettingsWay } from './ai-failure';
 import './ai-draft.css';
 
 export type DraftUse = 'replace' | 'below';
@@ -159,19 +160,7 @@ function ReadyDraft({ draft, hasText, onUse, onDiscard, onAgain, busy }: { draft
       )}
       <p className="ai-draft-text" tabIndex={0}>{draft.text}</p>
       {draft.missing_info && <p className="ai-draft-missing"><strong>{text.missingInfo}:</strong> {draft.missing_info}</p>}
-      <div className="ai-draft-sources">
-        <span>{text.sources}</span>
-        {draft.sources.length === 0 ? <span className="ai-draft-quiet">{text.noSources}</span> : (
-          <ul>{draft.sources.map((source) => (
-            <li key={source.kind + source.id}>
-              <a href={source.kind === 'kb_article' ? `/knowledge/articles/${source.id}` : `/conversations/${source.id}`} target="_blank" rel="noopener">
-                {source.kind === 'kb_article' ? <BookIcon /> : <InboxIcon />}
-                <span className="sr-only">{source.kind === 'kb_article' ? text.article : text.ticket}: </span>{source.title}
-              </a>
-            </li>
-          ))}</ul>
-        )}
-      </div>
+      <AISources sources={draft.sources} empty={text.noSources} />
       <p className="ai-draft-quiet">{text.editable}</p>
       <div className="ai-draft-actions">
         <button type="button" className="primary-action" title={hasText ? text.replaceTitle : undefined} onClick={() => onUse('replace')}>{hasText ? text.replace : text.useDraft}</button>
@@ -181,20 +170,4 @@ function ReadyDraft({ draft, hasText, onUse, onDiscard, onAgain, busy }: { draft
       </div>
     </div>
   );
-}
-
-// Failures a setting causes: the provider's key or credit, the included AI, the feature turned off.
-const settingsCodes = ['auth', 'permission', 'quota_exhausted', 'model_not_found', 'ai_allowance_reached', 'feature_off', 'ai_feature_off'];
-
-function refusalCode(error: unknown): string | null {
-  const detail = (error as { detail?: { code?: unknown } } | null)?.detail;
-  if (typeof detail?.code === 'string') return detail.code;
-  // A 402 carries no detail: the included AI is used up.
-  return error instanceof PlanLimitError ? 'ai_allowance_reached' : null;
-}
-
-// SettingsWay is the next step for a failure a setting causes: Settings → AI for an admin, ask an admin otherwise.
-function SettingsWay({ code, canManage }: { code: string | null; canManage: boolean }) {
-  if (!code || !settingsCodes.includes(code)) return null;
-  return canManage ? <a href="/settings/ai" target="_blank" rel="noopener">{text.openSettings}</a> : <span>{text.askAdmin}</span>;
 }

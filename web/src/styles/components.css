@@ -744,3 +744,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 }
 .import-invite-link { grid-column: 1 / -1; display: grid; gap: var(--space-1); }
 .import-invite-link input { flex: 1 1 14rem; min-width: 0; }
+/* On the details toggle of a narrow screen: a dot says an AI suggestion waits behind it (the button's name says so too). */
+.details-badge { flex: none; width: 8px; height: 8px; margin-left: var(--space-1); border-radius: 999px; background: var(--accent); }
+/* The title gives way to the toggle on a narrow screen instead of pushing it past the edge. */
+.timeline-header > :first-child { min-width: 0; }
+.timeline-header h2 { overflow-wrap: anywhere; }
+.details-toggle { flex: none; }

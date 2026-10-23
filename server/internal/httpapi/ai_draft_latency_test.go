@@ -13,8 +13,9 @@ import (
 // other per-conversation reads (docs/internals/performance.md).
 const aiDraftReadBudget = 20 * time.Millisecond
 
-// TestAIDraftReadLatencyBudget reads a draft, lists a conversation's drafts and counts an article's
-// drafts this month in a workspace with 10,000 drafts and tasks, 100 on the conversation read, beside
+// TestAIDraftReadLatencyBudget reads a draft, lists a conversation's drafts, counts an article's drafts
+// this month and reads a conversation's triage suggestion in a workspace with 10,000 drafts, 10,000
+// suggestions and their tasks, 100 of each on the conversation read, beside
 // another workspace as large. It lives here, not in internal/ai, so the latency shard builds no other
 // test binary for it.
 func TestAIDraftReadLatencyBudget(t *testing.T) {
@@ -34,11 +35,19 @@ func TestAIDraftReadLatencyBudget(t *testing.T) {
 			SELECT $1,t.conversation_id,t.id,'ready','say hi',repeat('Hello there. ',80),t.created_at,t.created_at,t.created_at,'discarded' FROM t`, w); err != nil {
 			t.Fatal(err)
 		}
+		// As many triage suggestions, each with its task: the card's read.
+		if _, err := pool.Exec(ctx, `WITH t AS (INSERT INTO ai_tasks(workspace_id,kind,conversation_id,state,created_at,finished_at)
+				SELECT $1,'triage',c.id,'done',now()-g*interval '1 minute',now() FROM conversations c, generate_series(1,100) g WHERE c.workspace_id=$1
+				RETURNING id,conversation_id,created_at)
+			INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,task_id,status,priority,reason,created_at,ready_at,decided_at,outcome)
+			SELECT $1,t.conversation_id,t.id,'ready','high','Printer down for the office.',t.created_at,t.created_at,t.created_at,'dismissed' FROM t`, w); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := pool.QueryRow(ctx, `SELECT conversation_id::text, id::text FROM ai_drafts WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 1`, workspaceA).Scan(&target, &draft); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `ANALYZE ai_drafts; ANALYZE ai_tasks`); err != nil {
+	if _, err := pool.Exec(ctx, `ANALYZE ai_drafts; ANALYZE ai_tasks; ANALYZE ai_triage_suggestions`); err != nil {
 		t.Fatal(err)
 	}
 	measure := func(name string, read func() error) {
@@ -71,6 +80,13 @@ func TestAIDraftReadLatencyBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	measure("article", func() error { _, err := service.ArticleDraftsThisMonth(ctx, workspaceA, article); return err })
+	measure("triage", func() error {
+		suggestion, err := service.LatestTriage(ctx, workspaceA, target)
+		if err == nil && suggestion == nil {
+			t.Fatal("no suggestion read")
+		}
+		return err
+	})
 	measure("get", func() error { _, err := service.GetDraft(ctx, workspaceA, target, draft); return err })
 	measure("list", func() error {
 		drafts, err := service.ListDrafts(ctx, workspaceA, target)

@@ -1453,6 +1453,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/ai-triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The conversation's newest AI triage suggestion (tags, priority, assignee), or null. A new ticket's first customer message queues one by itself when triage is on (never an imported message). */
+        get: operations["getAITriage"];
+        put?: never;
+        /** @description Asks for a triage suggestion by hand (202, `status` queued), replacing the open one. Refused at once like an AI draft: 409 `ai_feature_off`, 402 `ai_allowance_reached`, 429 `ai_drafts_rate_limited` (30 drafts and suggestions a minute in the workspace). */
+        post: operations["createAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Applies an open suggestion to the conversation, as a person's change would: without a body the rest of it; with one, only what it names (each from the suggestion; 400 otherwise). A part applied leaves the rest open; when all of it is applied the outcome is accepted. Tags are added, never removed; a part already applied is not applied again. Undo is an ordinary conversation change. Accepting an accepted one again changes nothing; 409 `ai_triage_decided` when it is not ready or was dismissed, replaced or expired, `ai_triage_nothing` when it names nothing to apply (a tag deleted or a teammate deactivated since is not named). */
+        post: operations["acceptAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stops a suggestion still being written, or dismisses the rest of an open one (outcome dismissed, or partly_accepted when a part was applied); nothing changes on the conversation. Again on one already stopped or dismissed it changes nothing. */
+        post: operations["dismissAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -2634,15 +2694,7 @@ export interface components {
             /** @description What the draft needs that the sources did not say. */
             missing_info: string | null;
             /** @description The articles and solved conversations the draft used, named from the database. */
-            sources: {
-                /** @enum {string} */
-                kind: "kb_article" | "conversation";
-                /** Format: uuid */
-                id: string;
-                locale?: string;
-                number?: number;
-                title: string;
-            }[];
+            sources: components["schemas"]["AISource"][];
             /** @description An email address, a number, another customer's name, a word in an alphabet the conversation does not use, or a masked detail ([email], [number], [company]) copied from a past conversation, in the draft but not in this conversation. Check before sending. */
             warnings: {
                 /** @enum {string} */
@@ -2664,6 +2716,72 @@ export interface components {
             ready_at: string | null;
             /** Format: date-time */
             decided_at: string | null;
+        };
+        /** @description An article or a solved conversation an AI draft or suggestion read, named from the database, never by the model. */
+        AISource: {
+            /** @enum {string} */
+            kind: "kb_article" | "conversation";
+            /** Format: uuid */
+            id: string;
+            locale?: string;
+            number?: number;
+            title: string;
+        };
+        AITriage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed" | "cancelled";
+            /** @description Why it failed or stopped: automatic_limit (the workspace's daily limit of automatic suggestions), ai_allowance_reached, feature_off, refused, invalid_answer, a provider error code, restored, cancelled… */
+            error_code: string | null;
+            /** @description Queued by a new ticket rather than asked for by a person. */
+            automatic: boolean;
+            /** @description Tags of the workspace the suggestion names that the conversation did not have when it came. */
+            tag_ids: string[];
+            /**
+             * @description Null when it matches the conversation's or a person set it first.
+             * @enum {string|null}
+             */
+            priority: "low" | "normal" | "high" | "urgent" | null;
+            /**
+             * Format: uuid
+             * @description Null when it matches the conversation's or a person set it first.
+             */
+            assignee_agent_id: string | null;
+            /** @description One sentence a teammate can check; generated text, erased 90 days after it was decided. */
+            reason: string | null;
+            /** @description The articles and solved conversations the reason rests on. */
+            sources: components["schemas"]["AISource"][];
+            /** @description What a person set on the conversation after the suggestion was asked for and before it came; that field is not suggested. */
+            stale: {
+                /** @enum {string|null} */
+                priority: "low" | "normal" | "high" | "urgent" | null;
+                /** Format: uuid */
+                assignee_agent_id: string | null;
+            };
+            model: string | null;
+            /**
+             * @description Null while open, also after a part was applied. accepted: all of it applied; partly_accepted: a part applied, the rest dismissed, replaced or expired after 7 days.
+             * @enum {string|null}
+             */
+            outcome: "accepted" | "partly_accepted" | "dismissed" | "superseded" | "expired" | null;
+            /** @description What people applied of it so far. */
+            applied: {
+                tag_ids: string[];
+                priority: string | null;
+                /** Format: uuid */
+                assignee_agent_id: string | null;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            ready_at: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: uuid */
+            decided_by_agent_id: string | null;
         };
         AISettings: {
             /** @description The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none. */
@@ -7301,6 +7419,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest suggestion */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        suggestion: null | components["schemas"]["AITriage"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The suggestion, queued; or an agent request when the token is below the draft tier */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"] | components["schemas"]["AgentRequestAccepted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    acceptAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    tag_ids?: string[];
+                    /** @enum {string|null} */
+                    priority?: "low" | "normal" | "high" | "urgent" | null;
+                    /** Format: uuid */
+                    assignee_agent_id?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The suggestion, with what was applied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    dismissAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The suggestion */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"];
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];

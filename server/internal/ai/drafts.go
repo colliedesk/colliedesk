@@ -23,8 +23,8 @@ const (
 
 const (
 	maxPromptRunes = 2000
-	// draftsPerMinute caps the drafts one workspace asks for in a minute: a looping agent token must
-	// not burn a workspace's own key, which no allowance bounds.
+	// draftsPerMinute caps the drafts and suggestions one workspace asks for by hand in a minute: a
+	// looping agent token must not burn a workspace's own key, which no allowance bounds.
 	draftsPerMinute = 30
 	// maxDraftWait bounds a long poll: one request, no connection held while it waits.
 	maxDraftWait = 20 * time.Second
@@ -40,7 +40,7 @@ var (
 	// ErrDraftDecided means the draft was already sent, discarded or replaced.
 	ErrDraftDecided = errors.New("this AI draft was already sent, discarded or replaced")
 	// ErrDraftsRateLimited means the workspace asked for draftsPerMinute drafts in the last minute.
-	ErrDraftsRateLimited = fmt.Errorf("at most %d AI drafts a minute in a workspace", draftsPerMinute)
+	ErrDraftsRateLimited = fmt.Errorf("at most %d AI drafts and suggestions a minute in a workspace", draftsPerMinute)
 	// ErrConversationNotFound means no conversation with that id in this workspace.
 	ErrConversationNotFound = errors.New("no conversation with that id in this workspace")
 )
@@ -141,15 +141,8 @@ func (s *Service) CreateDraft(ctx context.Context, workspaceID string, actor Act
 				return err
 			}
 		}
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ai-drafts:"+workspaceID); err != nil {
+		if err := s.underMinuteCap(ctx, tx, workspaceID, now); err != nil {
 			return err
-		}
-		var recent int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM ai_drafts WHERE workspace_id=$1 AND created_at>$2`, workspaceID, now.Add(-time.Minute)).Scan(&recent); err != nil {
-			return err
-		}
-		if recent >= draftsPerMinute {
-			return ErrDraftsRateLimited
 		}
 		if actor.AgentID != "" {
 			// Only the asker's own: an agent token acting for a person never replaces the person's draft.
