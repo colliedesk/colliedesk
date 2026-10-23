@@ -111,6 +111,9 @@ export const messageAgentTokenSchema = z.object({
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
   author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), agent_request_id: z.string().uuid().nullable(),
+  // An older server sends no draft id.
+  ai_draft_id: z.string().uuid().nullable().catch(null),
+  ai_draft_outcome: z.enum(['sent_unchanged', 'sent_edited']).nullable().catch(null),
   kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
@@ -162,6 +165,8 @@ export const meSchema = z.object({
   agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']).nullable(),
   // An older server sends no goal; a goal this client does not know yet orders nothing.
   onboarding_goal: onboardingGoalSchema.nullable().catch(null),
+  // An older server offers no AI feature.
+  ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;

@@ -232,6 +232,12 @@ var tokenTiers = map[string]TokenAccess{
 	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
 	"GET /api/v1/ai/usage":            tier(auth.ScopeAdmin),
 	"PUT /api/v1/ai/automatic-limits": tier(auth.ScopeAdmin),
+	// An AI draft never reaches a customer: a person edits and sends it, like a note, so asking for one
+	// and discarding one are draft; reading them is read.
+	"POST /api/v1/conversations/{id}/ai-drafts":                   tier(auth.ScopeDraft),
+	"GET /api/v1/conversations/{id}/ai-drafts":                    tier(auth.ScopeRead),
+	"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":          tier(auth.ScopeRead),
+	"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard": tier(auth.ScopeDraft),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.

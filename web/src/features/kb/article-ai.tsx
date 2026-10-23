@@ -43,6 +43,7 @@ export function ArticleAIBox({ article, timezone, onChanged, headingId }: Articl
       <p className="kb-side-status">{exclusion
         ? kbMessages.aiExcludedSince(formatDay(exclusion.at, timezone), exclusion.by?.name)
         : article.status === 'published' ? kbMessages.aiIncluded : kbMessages.aiIncludedDraft}</p>
+      {Boolean(article.ai_drafts_this_month) && <p className="kb-side-status">{kbMessages.aiDraftsThisMonth(article.ai_drafts_this_month ?? 0)}</p>}
       {/* aria-disabled, not disabled: a disabled button drops the keyboard focus to the page. */}
       <button id={`${headingId}-button`} type="button" aria-disabled={busy || undefined} onClick={() => void change(!exclusion)}>
         <Icon name={exclusion ? 'eye' : 'eyeOff'} />{exclusion ? kbMessages.includeInAI : kbMessages.excludeFromAI}</button>

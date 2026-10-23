@@ -436,6 +436,10 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/ai/usage", auth.PermissionBillingManage},
 		{http.MethodPut, "/api/v1/ai/automatic-limits", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts/{draftId}", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts/{draftId}/discard", auth.PermissionConversationsWrite},
 	}
 }
 

@@ -25,6 +25,7 @@ export const aiAutomaticSchema = z.object({
 }) satisfies z.ZodType<Generated<'AIAutomaticLimits'>>;
 const aiAllowanceSchema = z.object({
   limit_micro_usd: z.number().int(), used_micro_usd: z.number().int(), resets_at: z.string().datetime(),
+  drafts_left: z.number().int().nullable(),
 }) satisfies z.ZodType<Generated<'AIAllowance'>>;
 export const aiUsageSchema = z.object({
   month: z.string(), allowance: aiAllowanceSchema.nullable(),

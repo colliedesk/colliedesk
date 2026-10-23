@@ -19,13 +19,15 @@ const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_
 	COALESCE(m.author_name,NULLIF(aa.display_name,''),aa.email,
 		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
-	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number
+	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number,
+	m.ai_draft_id::text,ad.outcome
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
 	LEFT JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 	LEFT JOIN email_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
 	LEFT JOIN sessions t ON t.workspace_id=m.workspace_id AND t.id=m.agent_token_id
-	LEFT JOIN agents ta ON ta.workspace_id=t.workspace_id AND ta.id=t.agent_id`
+	LEFT JOIN agents ta ON ta.workspace_id=t.workspace_id AND ta.id=t.agent_id
+	LEFT JOIN ai_drafts ad ON ad.workspace_id=m.workspace_id AND ad.id=m.ai_draft_id`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -39,7 +41,7 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	var sentAt *time.Time
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
-		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber); err != nil {
+		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
@@ -116,6 +118,8 @@ type Actor struct {
 	TokenID string
 	// RequestID is the agent request whose approval writes the message; empty otherwise.
 	RequestID string
+	// AIDraftID is the AI draft a reply was written from; empty otherwise.
+	AIDraftID string
 }
 
 // CreateMessage stores a reply or note with files already written to attachment storage (only
@@ -175,11 +179,25 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		return domain.Message{}, err
 	}
 	var messageID string
-	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,agent_request_id,kind,body,cc)
-		SELECT $1,c.id,$3,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
-		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc, actor.RequestID).Scan(&messageID)
+	if actor.AIDraftID != "" && kind != "outgoing" {
+		return domain.Message{}, domain.ErrAIDraftNotReady
+	}
+	// The draft is read and locked before the reply names it: another conversation's or another
+	// workspace's id never reaches the insert.
+	draft, err := lockAIDraft(ctx, tx, workspaceID, conversationID, actor.AIDraftID)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,agent_request_id,kind,body,cc,ai_draft_id)
+		SELECT $1,c.id,$3,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7,NULLIF($9,'')::uuid FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
+		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc, actor.RequestID, actor.AIDraftID).Scan(&messageID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("create message: %w", err)
+	}
+	if kind == "outgoing" {
+		if err := recordAIDraftSend(ctx, tx, workspaceID, conversationID, actor, messageID, draft, body); err != nil {
+			return domain.Message{}, err
+		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE conversations SET updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID); err != nil {
 		return domain.Message{}, fmt.Errorf("touch conversation: %w", err)

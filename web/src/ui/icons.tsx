@@ -32,3 +32,4 @@ export const UserIcon = () => <Icon><circle cx="12" cy="8" r="4" /><path d="M4 2
 export const TagIcon = () => <Icon><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4Z" /><circle cx="7.5" cy="7.5" r="1" /></Icon>;
 export const CheckIcon = () => <Icon><path d="M20 6 9 17l-5-5" /></Icon>;
 export const MinusIcon = () => <Icon><path d="M5 12h14" /></Icon>;
+export const SparklesIcon = () => <Icon><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.1 2.1M15.6 15.6l2.1 2.1M6.3 17.7l2.1-2.1M15.6 8.4l2.1-2.1" /></Icon>;

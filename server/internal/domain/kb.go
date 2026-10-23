@@ -118,6 +118,9 @@ type KBArticle struct {
 	// MissingMedia is set only in the answer to a save: media ids the text names that the library
 	// does not have.
 	MissingMedia []string `json:"missing_media,omitempty"`
+	// AIDraftsThisMonth is set only when one article is read: the AI reply drafts this UTC month that
+	// used it as a source.
+	AIDraftsThisMonth *int `json:"ai_drafts_this_month,omitempty"`
 }
 
 // KBAIExclusion is since when, and by whom, an article is kept away from AI.

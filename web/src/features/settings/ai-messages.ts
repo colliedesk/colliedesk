@@ -20,6 +20,7 @@ export const aiMessages = {
   allowanceUsedBody: (resets: string) => `Features on it stop until ${resets}. Add your own provider to keep them running.`,
   allowanceUsed: (used: string, limit: string) => `${used} of ${limit} used`,
   resets: (day: string) => `resets ${day}`,
+  draftsLeft: (n: number) => `About ${n.toLocaleString('en')} reply ${n === 1 ? 'draft' : 'drafts'} left`,
   includedUsed: 'Allowance used this month',
   thisMonth: 'This month',
   month: 'Month',
@@ -78,7 +79,7 @@ export const aiMessages = {
   slotName: { triage: 'Triage suggestions', draft: 'Reply drafts' } as Record<'triage' | 'draft', string>,
   slotHelp: {
     triage: 'When a new ticket arrives, suggests tags, priority and an assignee. An agent accepts or dismisses each one.',
-    draft: 'An agent writes a short prompt; the model drafts a reply from the ticket, matching KB articles and similar solved tickets. The agent edits and sends.',
+    draft: 'Someone on your team asks for a draft, with a short prompt if they like; the model drafts a reply from the ticket, matching KB articles and similar solved tickets. They edit it and send it.',
   } as Record<'triage' | 'draft', string>,
   statusOn: 'On',
   statusOff: 'Off',

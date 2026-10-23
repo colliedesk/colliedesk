@@ -37,6 +37,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listImportPeople, a.linkImportPerson, a.unlinkImportPerson,
 		a.getAISettings, a.addAIProvider, a.updateAIProvider, a.setAIProviderKey, a.checkAIProvider, a.setAISlot, a.removeAIProvider,
 		a.getAIUsage, a.setAIAutomaticLimits,
+		a.createAIDraft, a.listAIDrafts, a.getAIDraft, a.discardAIDraft,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

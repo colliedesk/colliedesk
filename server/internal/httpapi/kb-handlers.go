@@ -256,6 +256,12 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	a.addressKBArticle(request, &article.KBArticleSummary)
+	drafts, err := a.ai.ArticleDraftsThisMonth(request.Context(), principal(request).Workspace.ID, article.ID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	article.AIDraftsThisMonth = &drafts
 	writeJSON(response, http.StatusOK, article)
 }
 

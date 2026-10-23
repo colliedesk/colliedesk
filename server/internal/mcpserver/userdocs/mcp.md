@@ -171,6 +171,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_provider_update`, `colliedesk_ai_provider_check` | Renames an AI provider or changes its models; runs a check | `admin` |
 | `colliedesk_ai_provider_remove` | Deletes an AI provider and erases its key; its features turn off. Cannot be undone | `admin` |
 | `colliedesk_ai_slot_set_request` | Asks to set an AI feature: its provider and model, on or off | `read` |
+| `colliedesk_ai_usage_get` | Shows a month of AI usage per feature and provider, and what is left of the included AI | `admin` |
+| `colliedesk_ai_automatic_limits_set` | Changes how many automatic AI runs a workspace allows a day and a minute | `admin` |
+| `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
+| `colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list` | Shows an AI draft (waiting up to 20 seconds while it is written), or a conversation's newest drafts | `read` |
+| `colliedesk_ai_draft_discard` | Stops an AI draft being written or discards a ready one | `draft` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

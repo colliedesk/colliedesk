@@ -191,6 +191,7 @@ export const kbMessages = {
   usedByAI: 'Used by AI',
   aiChip: 'AI',
   aiIncluded: 'When AI is on, reply drafts and suggestions can quote this article.',
+  aiDraftsThisMonth: (n: number) => `Used in ${n.toLocaleString('en')} AI ${n === 1 ? 'draft' : 'drafts'} this month.`,
   aiIncludedDraft: 'When AI is on, reply drafts and suggestions can quote this article once it is published.',
   aiExcludedSince: (date: string, name?: string) => (name ? `Off for this article since ${date}, by ${name}.` : `Off for this article since ${date}.`),
   excludeFromAI: 'Exclude from AI',

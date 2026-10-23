@@ -169,9 +169,9 @@ func (r *Run) Record(ctx context.Context, write func(pgx.Tx) error) error {
 	})
 }
 
-// Complete sends a request for this task through the metered layer, with the feature's model and
+// Metered sends a request for this task through the metered layer, with the feature's model and
 // effort unless the request names them.
-func (r *Run) Complete(ctx context.Context, request aiprovider.Request) (aiprovider.Response, error) {
+func (r *Run) Metered(ctx context.Context, request aiprovider.Request) (aiprovider.Response, error) {
 	if request.Model == "" {
 		request.Model = r.Binding.Model
 	}

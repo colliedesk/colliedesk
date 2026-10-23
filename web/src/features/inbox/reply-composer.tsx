@@ -6,19 +6,19 @@ import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
-import { ReplyConflictError } from '../../api/client';
+import { ConflictError, ReplyConflictError } from '../../api/client';
 import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
-import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon } from '../../ui/icons';
+import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 
 interface ReplyComposerProps {
   disabled?: boolean;
   // May return a promise: the text is kept, with the reason shown, when it rejects.
   // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
-  // only for a reply that copies someone.
-  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number) => void | Promise<unknown>;
+  // only for a reply that copies someone. aiDraft (last) names the AI draft a reply was written from.
+  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string) => void | Promise<unknown>;
   // The addresses the customer copied on their latest message; the field starts with them until the agent edits it.
   suggestedCc?: string[];
   // The server's per-message file limits; the composer warns and holds the send while they are exceeded.
@@ -40,6 +40,11 @@ interface ReplyComposerProps {
   // with Send anyway and Edit reply. timezone formats its time.
   latestReplyNumber?: number;
   timezone?: string;
+  // Reply drafts are on: the box offers Draft with AI for this conversation. agentId finds the person's own drafts.
+  aiDraftsFor?: string;
+  // Reply drafts are off: the box says so, with the way to turn them on (canManage) or whom to ask.
+  aiDraftsOff?: boolean;
+  agentId?: string;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -66,8 +71,13 @@ const noAddresses: string[] = [];
 // The lists under the box are a chunk of their own, so the first bundle carries neither. The composer
 // starts loading it when it mounts, which is when a conversation opens: a click a moment later finds it.
 export const replyPickersPart = lazyPart(() => import('./reply-pickers'));
+// The AI draft panel loads the same way, only where reply drafts are on.
+export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, timezone = 'UTC' }: ReplyComposerProps) {
+// A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
+const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
+
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -90,6 +100,16 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   const field = useRef<HTMLTextAreaElement>(null);
   const [picking, setPicking] = useState<Picker | null>(null);
   const pickers = replyPickersPart.use();
+  const [assist, setAssist] = useState(false);
+  // A draft is being written in the open panel: the button says so and keeps the panel (and its Stop) open.
+  const [drafting, setDrafting] = useState(false);
+  const [offNote, setOffNote] = useState(false);
+  // The AI draft the reply was written from, until it is sent or the box is emptied.
+  const [aiDraft, setAIDraft] = useState<string>();
+  // What the draft put in the box that the conversation does not hold: shown until it is sent or the box is emptied.
+  const [aiWarnings, setAIWarnings] = useState<string[]>([]);
+  const assistPart = aiDraftPart.use(Boolean(aiDraftsFor));
+  useEffect(() => { if (!body.trim()) { setAIDraft(undefined); setAIWarnings([]); } }, [body]);
   const toggle = (picker: Picker) => setPicking((open) => (open === picker ? null : picker));
   // Where the cursor goes once an inserted reply is in the box.
   const caret = useRef<number | null>(null);
@@ -122,7 +142,16 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     field.current?.setSelectionRange(caret.current, caret.current);
     caret.current = null;
   }, [body, picking]);
-  useEffect(() => { if (disabled) setPicking(null); }, [disabled]);
+  useEffect(() => { if (disabled) { setPicking(null); setAssist(false); } }, [disabled]);
+  const applyDraft = (text: string, how: 'replace' | 'below', id: string, warnings: string[] = []) => {
+    setAssist(false);
+    setKind('outgoing');
+    setAIDraft(id);
+    setAIWarnings(warnings);
+    const next = how === 'replace' || !body.trim() ? text : `${body.trimEnd()}\n\n${text}`;
+    caret.current = next.length;
+    setBody(next);
+  };
   const reply = kind === 'outgoing' ? body.trim() : '';
   const writing = reply !== '';
   useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
@@ -146,16 +175,23 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     const sentFiles = files;
     const sentCc = kind === 'outgoing' ? cc : [];
     const seen = kind === 'outgoing' && latestReplyNumber !== undefined ? mark.current ?? latestReplyNumber : undefined;
+    const fromDraft = kind === 'outgoing' ? aiDraft : undefined;
     setConflict(undefined);
-    const result = seen !== undefined ? onSubmit?.(kind, sent, sentFiles, sentCc, seen)
+    const send = (draftId?: string) => draftId ? onSubmit?.(kind, sent, sentFiles, sentCc, seen, draftId)
+      : seen !== undefined ? onSubmit?.(kind, sent, sentFiles, sentCc, seen)
       : sentCc.length > 0 ? onSubmit?.(kind, sent, sentFiles, sentCc)
       : sentFiles.length > 0 ? onSubmit?.(kind, sent, sentFiles) : onSubmit?.(kind, sent);
+    let result = send(fromDraft);
+    if (fromDraft && typeof (result as Promise<unknown> | undefined)?.then === 'function') {
+      result = (result as Promise<unknown>).catch((error: unknown) => (draftGone(error) ? send() : Promise.reject(error)));
+    }
     if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); return; }
     setSending(true);
     setProblem(undefined);
     // Clear only what was sent: text typed while the request was in flight (a note right after a reply) stays.
     // The files go with it; files picked meanwhile stay.
     const clearSent = () => {
+      if (fromDraft) { setAIDraft(undefined); setAIWarnings([]); }
       setBody((current) => (current.trim() === sent ? '' : current));
       setFiles((current) => current.filter((file) => !sentFiles.includes(file)));
     };
@@ -196,6 +232,9 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           </div>
           {kind === 'note' && <span className="composer-hint">{messages.noteHint}</span>}
         </div>
+        {aiWarnings.length > 0 && kind === 'outgoing' && (
+          <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
+        )}
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
         {picking && !disabled && (pickers.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
@@ -203,21 +242,39 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
           : picking === 'replies' ? <pickers.module.SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />
           : <pickers.module.ArticleLinkPicker box={field} onInsert={insertText} onClose={closePicker} canManage={canManage} />)}
+        {assist && aiDraftsFor && !disabled && (assistPart.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
+          : assistPart.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
+          : <assistPart.module.AIDraftPanel conversationId={aiDraftsFor} agentId={agentId} hasText={Boolean(body.trim())} onUse={applyDraft} canManage={canManage} onWriting={setDrafting}
+            onClose={() => { setAssist(false); field.current?.focus(); }} />)}
         {conflict && <Part part={presenceViewPart} failed={<p role="alert" className="composer-notice">{conflict.message}</p>}
           render={(view) => <view.ReplyConflict replies={conflict.newer} timezone={timezone}
             onSendAnyway={() => { mark.current = conflict.latest; submit(); }}
             onEdit={() => { mark.current = conflict.latest; setConflict(undefined); field.current?.focus(); }} />} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
+        {offNote && !aiDraftsFor && <p role="status" className="composer-notice">{messages.aiDraftsOffAgent}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
           <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
-            <BookmarkIcon />{messages.insertSavedReply}<kbd aria-hidden="true">/</kbd></button>
+            <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>
           <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
-            <BookIcon />{messages.articles}</button>
+            <BookIcon /><span className="tool-label">{messages.articles}</span></button>
+          {aiDraftsFor && (
+            <button type="button" className="saved-reply-button" disabled={disabled} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
+              onClick={() => { if (!(assist && drafting)) setAssist((open) => !open); }}>
+              <SparklesIcon /><span className="tool-label">{assist && drafting ? messages.drafting : messages.draftWithAI}</span>
+              {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
+          )}
+          {!aiDraftsFor && aiDraftsOff && (canManage
+            // Its name says what it is (the app's own Settings link keeps the name "Settings"); how to turn
+            // drafts on is its description.
+            ? <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} title={messages.aiDraftsOffAdmin}>
+                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>
+            : <button type="button" className="saved-reply-button" aria-disabled="true" title={messages.aiDraftsOffAgent} onClick={() => setOffNote((shown) => !shown)}>
+                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></button>)}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>

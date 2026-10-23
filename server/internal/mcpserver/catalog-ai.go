@@ -171,3 +171,78 @@ func aiAutomaticLimitsSetSpec() Spec {
 		run: aiAutomaticLimitsSet,
 	}
 }
+
+const (
+	aiDraftConversationProperty = `"conversation_id":{"type":"string",` + uuid + `}`
+	aiDraftIDProperty           = `"draft_id":{"type":"string",` + uuid + `,"description":"From colliedesk_ai_draft_create or colliedesk_ai_drafts_list."}`
+
+	aiDraftSchema = `{"type":"object","required":["id","conversation_id","status"],"properties":{"id":{"type":"string"},"conversation_id":{"type":"string"},` +
+		`"status":{"type":"string","enum":["queued","running","ready","failed","cancelled"]},"error_code":{"type":["string","null"]},` +
+		`"prompt":{"type":"string"},"text":{"type":["string","null"],"description":"The draft, plain text, once ready. Generated text, not something a customer wrote."},` +
+		`"missing_info":{"type":["string","null"]},"sources":{"type":"array","items":{"type":"object"}},` +
+		`"warnings":{"type":"array","items":{"type":"object"},"description":"An address, a number or another customer's name in the draft that the conversation does not hold."},` +
+		`"outcome":{"type":["string","null"]},"similarity":{"type":["number","null"]},"created_at":{"type":"string"},"ready_at":{"type":["string","null"]}}}`
+
+	aiDraftOutput = `{"type":"object","required":["draft"],"properties":{"draft":` + aiDraftSchema + `}}`
+)
+
+func aiDraftCreateSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_draft_create",
+		Title: "Ask Colliedesk AI for a reply draft",
+		Description: `Ask the workspace's AI provider for a draft of a reply to a conversation, with an optional prompt (what the reply should say). ` +
+			`It is written in the background from the conversation (never its private notes), matching knowledge base articles and similar solved tickets; ` +
+			`poll colliedesk_ai_draft_get with wait. The draft is never sent: a person (or colliedesk_reply_send with ai_draft_id) sends a reply. ` +
+			`Fails with ai_feature_off when reply drafts are off, ai_allowance_reached when the included AI is used up.` +
+			"\n\nTier: draft.",
+		Tier: "draft",
+		REST: []string{"POST /api/v1/conversations/{id}/ai-drafts"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `,` +
+			`"prompt":{"type":"string","maxLength":2000}}}`,
+		Output: aiDraftOutput,
+		run:    aiDraftCreate,
+	}
+}
+
+func aiDraftGetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_draft_get",
+		Title: "Show an AI reply draft",
+		Description: `Show one AI draft of a conversation: its status (queued, running, ready, failed, cancelled), the text once ready, its sources and warnings. ` +
+			`wait (up to 20 seconds) waits while it is being written.` +
+			"\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST: []string{"GET /api/v1/conversations/{id}/ai-drafts/{draftId}"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","draft_id"],"properties":{` + aiDraftConversationProperty + `,` + aiDraftIDProperty + `,` +
+			`"wait":{"type":"integer","minimum":0,"maximum":20,"default":0}}}`,
+		Output: aiDraftOutput,
+		run:    aiDraftGet,
+	}
+}
+
+func aiDraftsListSpec() Spec {
+	return Spec{
+		Name:        "colliedesk_ai_drafts_list",
+		Title:       "List a conversation's AI drafts",
+		Description: `List a conversation's newest AI drafts (at most 20), newest first, with how each ended.` + "\n\nTier: read.",
+		Tier:        "read", ReadOnly: true,
+		REST:   []string{"GET /api/v1/conversations/{id}/ai-drafts"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
+		Output: `{"type":"object","required":["drafts"],"properties":{"drafts":{"type":"array","items":` + aiDraftSchema + `}}}`,
+		run:    aiDraftsList,
+	}
+}
+
+func aiDraftDiscardSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_draft_discard",
+		Title: "Discard an AI reply draft",
+		Description: `Stop an AI draft still being written, or discard a ready one. Nothing reaches the customer either way; a new draft can be asked for.` +
+			"\n\nTier: draft.",
+		Tier: "draft", Idempotent: true,
+		REST:   []string{"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id","draft_id"],"properties":{` + aiDraftConversationProperty + `,` + aiDraftIDProperty + `}}`,
+		Output: aiDraftOutput,
+		run:    aiDraftDiscard,
+	}
+}

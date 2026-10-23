@@ -52,6 +52,8 @@ type messageFields struct {
 	contactName, contactEmail string
 	// seen is the seen_reply_number field: the latest reply the sender had seen; nil when not sent.
 	seen *int
+	// aiDraft is the ai_draft_id field: the AI draft the reply was written from.
+	aiDraft string
 }
 
 // newContact is the customer the fields add, or nil when they name a contact of the workspace.
@@ -133,6 +135,7 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		writeFilesNeedApproval(response)
 		return
 	}
+	actor.AIDraftID = fields.aiDraft
 	cc, refusal := a.cleanCC(request.Context(), workspaceID, fields.kind, fields.cc)
 	if refusal != nil {
 		a.writeUploadError(response, refusal)
@@ -255,7 +258,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			return fields, nil, invalidUpload(err)
 		}
 		switch name := part.FormName(); {
-		case name == "kind" && !fields.opening, name == "body", name == "cc", name == "seen_reply_number" && !fields.opening,
+		case name == "kind" && !fields.opening, name == "body", name == "cc", name == "seen_reply_number" && !fields.opening, name == "ai_draft_id" && !fields.opening,
 			fields.opening && (name == "contact_id" || name == "subject" || name == "contact_name" || name == "contact_email"):
 			text, err := readField(part)
 			if err != nil {
@@ -274,6 +277,8 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				fields.contactEmail = text
 			case "body":
 				fields.body = text
+			case "ai_draft_id":
+				fields.aiDraft = text
 			case "seen_reply_number":
 				seen, err := strconv.Atoi(text)
 				if err != nil {

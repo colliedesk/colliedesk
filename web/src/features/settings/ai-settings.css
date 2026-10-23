@@ -206,3 +206,4 @@
   .ai-narrow { display: none; }
   .ai-add { width: var(--touch); justify-content: center; padding: 0; }
 }
+.ai-meter-left { color: var(--text-3); font-size: var(--fs-label); }
