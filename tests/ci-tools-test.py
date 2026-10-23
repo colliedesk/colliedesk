@@ -225,6 +225,76 @@ class Onboarding(unittest.TestCase):
             self.assertEqual([bool(re.search(p, title)) for p in patterns], expected, title)
 
 
+FAKE_PLAYWRIGHT = '''import json, os, re, sys
+lists = json.loads(os.environ['FAKE_E2E_LISTS'])
+if '--list' not in sys.argv or '--reporter=json' not in sys.argv:
+    sys.exit('fake playwright: expected --list --reporter=json')
+shard = next((re.fullmatch(r'--shard=(\\d+)/(\\d+)', a) for a in sys.argv if a.startswith('--shard=')), None)
+key = f'{shard.group(1)}/{shard.group(2)}' if shard else 'all'
+if key not in lists:
+    sys.exit(f'fake playwright: no listing for {key}')
+suites = {}
+for file, title, *line in lists[key]:
+    suites.setdefault(file, []).append({'title': title, 'file': file, 'line': (line or [1])[0], 'column': 1,
+                                        'tests': [{'projectName': ''}]})
+print('npm noise before the report')
+print(json.dumps({'suites': [{'title': f, 'file': f, 'specs': specs, 'suites': []} for f, specs in suites.items()],
+                  'errors': []}))
+'''
+
+
+class E2EShards(unittest.TestCase):
+    """The browser tests run in shards: every test outside the onboarding jobs runs in exactly one
+    shard, so splitting the job never drops or doubles a test."""
+    tests = [['a.spec.ts', 'one'], ['a.spec.ts', 'two'], ['b.spec.ts', 'three'], ['c.spec.ts', 'four']]
+
+    def check(self, lists, shards='2'):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = pathlib.Path(tmp) / 'playwright.py'
+            fake.write_text(FAKE_PLAYWRIGHT)
+            env = {**os.environ, 'FAKE_E2E_LISTS': json.dumps(lists)}
+            return subprocess.run([sys.executable, str(ROOT / '.github/scripts/e2e-shard-check.py'), shards,
+                                   '--', sys.executable, str(fake), '--grep-invert', '@onboarding'],
+                                  text=True, capture_output=True, env=env)
+
+    def test_shards_that_cover_every_test_once_pass(self):
+        result = self.check({'all': self.tests, '1/2': self.tests[:2], '2/2': self.tests[2:]})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('4 tests', result.stdout)
+
+    def test_a_test_reported_at_another_line_is_still_the_same_test(self):
+        # Run 39904337642 listed bulk-actions.spec.ts at line 7 unsharded and line 5 in its shard.
+        moved = [['a.spec.ts', 'one', 5]] + self.tests[1:2]
+        result = self.check({'all': self.tests, '1/2': moved, '2/2': self.tests[2:]})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_a_missing_or_doubled_test_fails_and_names_it(self):
+        for name, lists, culprit in [
+            ('missing', {'all': self.tests, '1/2': self.tests[:2], '2/2': self.tests[3:]}, 'three'),
+            ('doubled', {'all': self.tests, '1/2': self.tests[:3], '2/2': self.tests[2:]}, 'three'),
+            ('unknown', {'all': self.tests, '1/2': self.tests[:2], '2/2': self.tests[2:] + [['d.spec.ts', 'five']]}, 'five'),
+        ]:
+            result = self.check(lists)
+            self.assertNotEqual(result.returncode, 0, name)
+            self.assertIn(culprit, result.stderr, name)
+
+    def test_no_tests_a_failed_listing_or_a_bad_shard_count_fail_closed(self):
+        for shards, lists in [('2', {'all': [], '1/2': [], '2/2': []}), ('2', {'all': self.tests, '1/2': self.tests}),
+                              ('0', {'all': self.tests}), ('x', {'all': self.tests})]:
+            self.assertNotEqual(self.check(lists, shards).returncode, 0, (shards, lists))
+
+    def test_the_e2e_job_runs_its_shard_with_the_arguments_the_check_lists(self):
+        e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
+        self.assertRegex(e2e, r'(?m)^        shard: \[1, 2\]$')
+        self.assertRegex(e2e, r'(?m)^    timeout-minutes: 2$')
+        self.assertRegex(e2e, r"(?m)^      E2E_ARGS: --grep-invert @onboarding --fully-parallel --workers=3$")
+        self.assertIn('corepack pnpm e2e $E2E_ARGS --shard="$SHARD/$SHARDS"', e2e)
+        self.assertIn('python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS', e2e)
+        self.assertEqual(e2e.count('SHARDS: ${{ strategy.job-total }}'), 2, 'the run and the check use the matrix size')
+        self.assertIn('ci-background.sh wait shards', e2e, 'the job waits for the check it started')
+        self.assertEqual(e2e.count('corepack pnpm e2e '), 1, 'one Playwright run per shard')
+
+
 class Budget(unittest.TestCase):
     def test_queue_time_counts_toward_the_120_second_limit(self):
         for now, expected in [('2026-10-19T13:01:59Z', 0), ('2026-10-19T13:02:00Z', 0),
@@ -356,7 +426,8 @@ class RunnerConcurrency(unittest.TestCase):
         self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
 
     def test_jobs_behind_pr_verified_count_and_push_only_jobs_do_not(self):
-        # 8 Go shards, web, e2e, 2 onboarding, image, osv-scan, roadmap, 3 CodeQL; not pr-verified.
+        # 8 Go shards, web, 2 e2e shards, 2 onboarding, image, roadmap, 3 CodeQL; not pr-verified,
+        # and not osv-scan, which starts when roadmap ends.
         self.assertEqual(runners(ROOT / '.github/workflows/ci.yml'), 18)
 
 
