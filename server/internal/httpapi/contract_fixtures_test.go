@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -45,6 +46,8 @@ type contractFixture struct {
 	approveRequestID, rejectRequestID, cancelRequestID string
 	kb                                                 contractKB
 	imports                                            importJobs
+	// aiProviderID is changed, checked and finally deleted by the AI cases.
+	aiProviderID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -64,6 +67,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		config.ProblemReportWorkspace = "contract-support"
 		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
 		config.Google = google.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Keys: keys, Base: "http://127.0.0.1:1"}
+		config.AI = fakeAIConfig(&aiprovider.Fake{})
 	})
 	createSession(t, api, service, "Contract Support", "support@contract-support.example.com")
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")
@@ -181,7 +185,8 @@ func newContractFixture(t *testing.T) contractFixture {
 		}
 	}
 	imports := seedImportJobs(t, pool, workspaceID(t, api, adminToken))
-	return contractFixture{imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	aiProviderID := create(t, api, adminToken, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Contract key", "api_key": "sk-contract-0001", "models": []string{"claude-sonnet-5-5", "claude-haiku-5-5"}})
+	return contractFixture{aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }

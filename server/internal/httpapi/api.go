@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
@@ -50,7 +51,10 @@ type Config struct {
 	Google google.Config
 	// ImportKeys holds the Freshdesk keys of in-app imports; the worker of the process shares it. Nil
 	// makes one from Google.Keys (tests).
-	ImportKeys  *importjobs.Keys
+	ImportKeys *importjobs.Keys
+	// AI is the server's AI provider and the rules for workspace providers (AI_SERVER_*,
+	// AI_ALLOW_PRIVATE_BASE_URLS). Without its own key ring it seals keys with Google.Keys.
+	AI          ai.Config
 	Attachments attachments.Storage
 	// MailImages fetches the remote images of incoming email for the image proxy; nil uses the
 	// production fetcher (public addresses only). MailImageConcurrency caps fetches running at once
@@ -174,6 +178,8 @@ type API struct {
 	kbUploadStart sync.Mutex
 	// imports starts and reads in-app imports; the worker in `collie serve` runs them.
 	imports *importjobs.Service
+	// ai reads and changes the workspace's AI providers and features.
+	ai *ai.Service
 	// mux serves every route; an approved agent request is replayed through it as the approver.
 	mux *http.ServeMux
 }
@@ -191,6 +197,9 @@ type Server struct {
 	http.Handler
 	api *API
 }
+
+// AI is the service of the workspaces' AI settings and task queue, which the worker of the process shares.
+func (s *Server) AI() *ai.Service { return s.api.ai }
 
 // RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
 // does nothing when billing is off.
@@ -231,6 +240,13 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	api.imports = importjobs.NewService(db, importKeys)
 	api.imports.SetClock(clock)
+	aiConfig := config.AI
+	if !aiConfig.Keys.Configured() {
+		aiConfig.Keys = config.Google.Keys
+	}
+	aiConfig.PlanLimits = limits
+	api.ai = ai.NewService(db, aiConfig)
+	api.ai.SetClock(clock)
 	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
 	api.mailImageFetcher = config.MailImages
 	if api.mailImageFetcher == nil {
@@ -411,6 +427,15 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/imports/{id}/people", auth.PermissionWorkspaceImport},
 		{http.MethodPut, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
 		{http.MethodDelete, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
+		{http.MethodGet, "/api/v1/ai", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/ai/providers", auth.PermissionAccessWrite},
+		{http.MethodPatch, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
+		{http.MethodPut, "/api/v1/ai/providers/{id}/key", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/ai/providers/{id}/check", auth.PermissionAccessWrite},
+		{http.MethodPut, "/api/v1/ai/slots/{slot}", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/ai/usage", auth.PermissionBillingManage},
+		{http.MethodPut, "/api/v1/ai/automatic-limits", auth.PermissionAccessWrite},
 	}
 }
 

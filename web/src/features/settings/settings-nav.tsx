@@ -4,7 +4,7 @@ import { track } from '../../lib/product-analytics';
 import type { SettingsSection } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 
-export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk';
+export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai';
 export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean }
 interface NavGroup { label: string; items: NavItem[] }
 
@@ -19,7 +19,7 @@ const sectionByHash: Record<string, SettingsSection> = {
   'invites-heading': 'invites', 'sessions-heading': 'sessions', 'email-channel-heading': 'email_channel', 'web-form-heading': 'web_form',
   'saved-replies-heading': 'saved_replies', 'help-center-heading': 'help_center', 'export-heading': 'export',
 };
-const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : undefined);
+const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : item.to === '/settings/ai' ? 'ai' : undefined);
 
 type RenderLink = (item: NavItem, page: SettingsPath) => ReactNode;
 const plainLink: RenderLink = (item, page) =>
@@ -28,7 +28,7 @@ const plainLink: RenderLink = (item, page) =>
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
 
-interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean }
+export interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean }
 
 // settingsNavGroups lists what this person can see: their own account, then the shared workspace.
 export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] {
@@ -36,6 +36,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
   return [
     { label: messages.settingsYourAccount, items: [...section(messages.profile, 'profile-heading'), ...section(messages.preferences, 'preferences-heading')] },
     { label: messages.settingsWorkspace, items: [
+      ...(shown.ai ? [{ label: messages.aiSettings, to: '/settings/ai' as const, current: page === '/settings/ai' }] : []),
       ...section(messages.general, 'general-heading', shown.general),
       ...section(messages.team, 'team-heading', shown.team),
       ...section(messages.invites, 'invites-heading'),

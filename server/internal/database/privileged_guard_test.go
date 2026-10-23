@@ -18,6 +18,7 @@ import (
 // Adding a line here is a security review: say why the path must cross workspaces and keep it to
 // the lookup that resolves a workspace. docs/internals/workspace-isolation.md lists the same set.
 var privilegedCallSites = []string{
+	"internal/ai/worker.go: PrivilegeAIJobClaim",
 	"internal/auth/cloud.go: PrivilegeCloudIdentity",
 	"internal/auth/links.go: PrivilegeLinkToken",
 	"internal/auth/service.go: PrivilegeCreateWorkspace",
@@ -61,6 +62,7 @@ var poolFiles = []string{
 	"cmd/collie/trial.go",
 	"cmd/collie/undo.go",
 	"internal/auth/service.go",
+	"internal/database/databasetest/databasetest.go", // tests only: clones and drops test databases
 	"internal/database/migrate.go",
 	"internal/database/scope.go",
 	"internal/freshdesk/importer.go",

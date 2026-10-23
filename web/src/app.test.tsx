@@ -30,7 +30,7 @@ const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
   timezone: 'UTC', scope: null, plan,
 });
 const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
-  product_analytics: { enabled: false, key: null, host: null, realm: null } };
+  product_analytics: { enabled: false, key: null, host: null, realm: null }, ai: { server_provider: false } };
 // Founding is full in these fixtures, so the server sells the plan ladder.
 const billing = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,

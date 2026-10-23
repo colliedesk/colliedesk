@@ -12,6 +12,15 @@ import (
 // toolNames is the list a client sees, written out by hand: the SDK lists tools by name.
 var toolNames = []string{
 	"colliedesk_agents_list",
+	"colliedesk_ai_automatic_limits_set",
+	"colliedesk_ai_provider_add",
+	"colliedesk_ai_provider_check",
+	"colliedesk_ai_provider_key_set",
+	"colliedesk_ai_provider_remove",
+	"colliedesk_ai_provider_update",
+	"colliedesk_ai_settings_get",
+	"colliedesk_ai_slot_set_request",
+	"colliedesk_ai_usage_get",
 	"colliedesk_attachment_get",
 	"colliedesk_billing_get",
 	"colliedesk_billing_request",
@@ -255,6 +264,15 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_email_channel_update":             {idempotent: true, tier: "admin"},
 	"colliedesk_email_domain_verify":              {idempotent: true, tier: "admin"},
 	"colliedesk_billing_get":                      {readOnly: true, tier: "admin"},
+	"colliedesk_ai_settings_get":                  {readOnly: true, tier: "read"},
+	"colliedesk_ai_provider_add":                  {tier: "admin"},
+	"colliedesk_ai_provider_update":               {idempotent: true, tier: "admin"},
+	"colliedesk_ai_provider_key_set":              {tier: "admin"},
+	"colliedesk_ai_provider_check":                {tier: "admin"},
+	"colliedesk_ai_provider_remove":               {destructive: true, tier: "admin"},
+	"colliedesk_ai_slot_set_request":              {tier: "read"},
+	"colliedesk_ai_usage_get":                     {readOnly: true, tier: "admin"},
+	"colliedesk_ai_automatic_limits_set":          {idempotent: true, tier: "admin"},
 }
 
 func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {

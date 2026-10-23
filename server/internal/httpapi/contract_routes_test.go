@@ -250,7 +250,16 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/imports/{id}/people":                      {path: "/api/v1/imports/" + f.imports.finished + "/people", token: admin, status: 200},
 		"PUT /api/v1/imports/{id}/people/{externalId}/link":    {path: "/api/v1/imports/" + f.imports.finished + "/people/102/link", body: map[string]any{"agent_id": f.agentID}, token: admin, status: 200},
 		"DELETE /api/v1/imports/{id}/people/{externalId}/link": {path: "/api/v1/imports/" + f.imports.finished + "/people/102/link", token: admin, status: 200},
-		"POST /api/v1/public/forms/{workspace_slug}":           {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
+		"GET /api/v1/ai":                             {path: "/api/v1/ai", token: admin, status: 200},
+		"POST /api/v1/ai/providers":                  {path: "/api/v1/ai/providers", body: map[string]any{"kind": "openai_compatible", "label": "Contract router", "base_url": "https://openrouter.ai/api/v1", "api_key": "sk-contract-0002", "models": []string{"openai/gpt-5"}}, token: admin, status: 201},
+		"PATCH /api/v1/ai/providers/{id}":            {path: "/api/v1/ai/providers/" + f.aiProviderID, body: map[string]any{"label": "Contract key renamed"}, token: admin, status: 200},
+		"PUT /api/v1/ai/providers/{id}/key":          {path: "/api/v1/ai/providers/" + f.aiProviderID + "/key", body: map[string]any{"api_key": "sk-contract-0003"}, token: admin, status: 200},
+		"POST /api/v1/ai/providers/{id}/check":       {path: "/api/v1/ai/providers/" + f.aiProviderID + "/check", token: admin, status: 200},
+		"PUT /api/v1/ai/slots/{slot}":                {path: "/api/v1/ai/slots/draft", body: map[string]any{"source": "provider", "provider_id": f.aiProviderID, "enabled": true}, token: admin, status: 200},
+		"DELETE /api/v1/ai/providers/{id}":           {path: "/api/v1/ai/providers/" + f.aiProviderID, token: admin, status: 200},
+		"GET /api/v1/ai/usage":                       {path: "/api/v1/ai/usage?month=2026-10", token: admin, status: 200},
+		"PUT /api/v1/ai/automatic-limits":            {path: "/api/v1/ai/automatic-limits", body: map[string]any{"per_day": 200, "per_minute": 20}, token: admin, status: 200},
+		"POST /api/v1/public/forms/{workspace_slug}": {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
 	}
 	maps.Copy(cases, kbContractCases(f))
 	return cases
