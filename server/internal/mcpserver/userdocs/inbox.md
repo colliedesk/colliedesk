@@ -27,7 +27,15 @@ cannot be loaded, it says so with **Try again** instead.
 - When nothing matches, **Clear filters** below the message resets the search and every filter, and
   returns to **Open**, in one step.
 - By default the list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
+- A row under **Today** shows only its time; an earlier row shows its date. Days follow your timezone
+  (see [Timezones](timezones.md)). The full date and time are in the tooltip of the row and are read out
+  by a screen reader.
 - Dates from an earlier year show the year, for example imported history.
+- **Move with the keyboard:** press **J** to open the next conversation in the list and **K** for the
+  previous one. While a row (or its box) has the focus, **Down arrow** and **Up arrow** do the same. The
+  focus moves to the row you opened. With no conversation open, **J** opens the first one. The keys do
+  nothing while you type in a box, while you hold Ctrl, Cmd, Alt or Shift, or at the first and last row of the
+  page; use **Next page** to go on.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
   You do not need to reload to see new mail.
 
@@ -161,6 +169,13 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   connected, it is also emailed to the contact and shows **Queued**, **Sent** or
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
+- **Send reply** (or Ctrl/Cmd + Enter) sends what you wrote.
+- **Send and resolve**, next to **Send reply** (or Ctrl/Cmd + Shift + Enter), sends the reply and then sets
+  the conversation to **Resolved**, in one step. The status changes only after the reply was accepted: if the
+  reply is refused, nothing changes and your text stays in the box with the reason. If the reply was sent but
+  the status could not be changed, a message says so; press **Resolve** above the thread to try again.
+- A private note has no **Send and resolve**, because a note is often written while the work goes on. Add
+  the note, then press **Resolve** above the thread.
 - Messages support Markdown.
 - **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
   tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
@@ -201,7 +216,12 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - AI agents start one with the MCP tool `colliedesk_conversation_start`, or the API
   `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 
-**Change the conversation** (details pane)
+**Change the conversation**
+- **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
+  screen width, without opening the details. A resolved or closed conversation shows **Reopen** there
+  instead, which sets it back to Open. If the change fails, a message under the button says so.
+
+In the details pane (**Show details** on a narrower screen):
 - **Status**: every status can be changed back, for example Resolved → Open to reopen.
 - **Priority**: Low, Normal, High, Urgent.
 - **Assignee**: assign to a teammate or set back to unassigned.
