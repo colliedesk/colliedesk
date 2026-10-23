@@ -732,3 +732,59 @@ test('the open ticket is announced only after its own requests and the side list
     testRouter.params = {};
   }
 });
+
+test('Send and resolve posts the reply first and resolves through the conversation update only after it', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.updateConversation.mockReset();
+  api.createMessage.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  let current: { status: 'open' | 'resolved' } & Omit<typeof alpha, 'status'> = alpha;
+  api.conversations.mockImplementation(async () => ({ items: [current], page: 1, page_size: 50 }));
+  api.createMessage.mockResolvedValue({ id: '77777777-7777-4777-8777-777777777777' });
+  api.updateConversation.mockImplementation(async () => { current = { ...alpha, status: 'resolved' }; return current; });
+  renderRoute();
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'All done' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send and resolve' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledWith(alpha.id, { status: 'resolved' }));
+  expect(api.createMessage).toHaveBeenCalledWith(alpha.id, 'outgoing', 'All done', [], [], 0, undefined);
+  expect(api.createMessage.mock.invocationCallOrder[0]).toBeLessThan(api.updateConversation.mock.invocationCallOrder[0]);
+  // Resolved, the header offers the way back.
+  expect(await screen.findByRole('button', { name: 'Reopen' })).toBeInTheDocument();
+});
+
+test('a reply refused on Send and resolve never changes the status', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.updateConversation.mockReset();
+  api.createMessage.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.createMessage.mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted', 'server text'));
+  renderRoute();
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Not yet' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true, shiftKey: true });
+  expect(await screen.findByRole('alert')).toHaveTextContent(/verify your sending domain/i);
+  expect(body).toHaveValue('Not yet');
+  expect(api.updateConversation).not.toHaveBeenCalled();
+});
+
+test('Resolve and Reopen in the thread header change the status through the conversation update', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.updateConversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  // The list answers with the status the server holds now.
+  let current: { status: 'open' | 'resolved' } & Omit<typeof alpha, 'status'> = alpha;
+  api.conversations.mockImplementation(async () => ({ items: [current], page: 1, page_size: 50 }));
+  api.updateConversation.mockImplementation(async (_id: string, changes: { status: 'open' | 'resolved' }) => { current = { ...alpha, status: changes.status }; return current; });
+  renderRoute();
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenCalledWith(alpha.id, { status: 'resolved' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Reopen' }));
+  await waitFor(() => expect(api.updateConversation).toHaveBeenLastCalledWith(alpha.id, { status: 'open' }));
+});

@@ -49,11 +49,22 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   second Escape clears the selection. Success clears the selection and writes `role="status"`; failure
   writes `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes
   to **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
-- Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`).
+- Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`). The time is
+  the time alone for today and the date otherwise; without hover (no tooltip) an earlier row shows date and
+  time, a row from today still only its time. The full stamp is the tooltip and the accessible name.
+- List keys, as in Gmail and Help Scout: **J** / **K** anywhere outside a text field, **Down** / **Up** while
+  a row has the focus; each opens the next or previous conversation and moves the focus to its row (the
+  inset amber ring). Modifier keys and dialogs keep their own meaning (`use-list-keys.ts`).
 - Thread: incoming messages on `--surface-2`, our replies on white with a 1px ring (`--surface-1`,
   `--shadow-1`), private notes amber.
   Composer: a raised card with Reply / Private note tabs (keys **R** and **N**) and
-  **Ctrl/Cmd + Enter** to send.
+  **Ctrl/Cmd + Enter** to send. A reply also offers **Send and resolve** (secondary button beside the
+  primary **Send reply**; **Ctrl/Cmd + Shift + Enter**), as Freshdesk's "Send and set as" and Help Scout's
+  status-on-send do: the status changes only after the reply was accepted. A note has none. The keycap hint sits
+  in the composer head, so the button row stays one line on desktop; below 75 rem the hint hides and the
+  row wraps instead of clipping.
+- Thread header: **Resolve** (or **Reopen** once resolved or closed), a secondary button with an icon, so
+  resolving never needs the details drawer.
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise) beside the form; on narrow
   screens the brand side becomes a header.
 - The mascot is the headset collie on an ink tile (see Logo).

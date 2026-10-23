@@ -2,7 +2,6 @@ package httpapi_test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -37,14 +37,14 @@ func seedKBBudget(t *testing.T, ctx context.Context, exec func(sql string, args 
 
 // kbBudget is the knowledge base at the article cap, seeded once per test binary and shared by the
 // gates that read it: seeding is most of their time in CI, where every second counts against the
-// 120-second budget. TestMain drops its schema.
+// 120-second budget. TestMain drops its database.
 var kbBudget struct {
-	once   sync.Once
-	ready  bool
-	pool   *pgxpool.Pool
-	schema string
-	token  string
-	slug   string
+	once  sync.Once
+	ready bool
+	pool  *pgxpool.Pool
+	db    *databasetest.Database
+	token string
+	slug  string
 }
 
 // sharedKBBudget returns an API on the shared fixture: workspaces "KB Budget A" and "KB Budget B", each
@@ -52,26 +52,19 @@ var kbBudget struct {
 // seedKBMediaBudget; the session token and slug are workspace A's.
 func sharedKBBudget(t *testing.T) (http.Handler, *pgxpool.Pool, string, string) {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL API test")
-	}
+	databaseURL := databasetest.BaseURL(t)
 	kbBudget.once.Do(func() {
 		ctx := context.Background()
-		config, err := pgxpool.ParseConfig(databaseURL)
+		db, err := databasetest.Create(ctx, databaseURL)
 		if err != nil {
 			t.Fatal(err)
 		}
-		kbBudget.schema = fmt.Sprintf("test_kb_budget_%d", time.Now().UnixNano())
-		config.ConnConfig.RuntimeParams["search_path"] = kbBudget.schema
-		pool, err := pgxpool.NewWithConfig(ctx, config)
+		kbBudget.db = db
+		pool, err := pgxpool.New(ctx, db.URL)
 		if err != nil {
 			t.Fatal(err)
 		}
 		kbBudget.pool = pool
-		if _, err := pool.Exec(ctx, "CREATE SCHEMA "+kbBudget.schema); err != nil {
-			t.Fatal(err)
-		}
 		api, service, _, _ := testAPIOnPool(t, pool, nil)
 		kbBudget.token = createSession(t, api, service, "KB Budget A", "admin@kb-budget-a.example.com")
 		_ = createSession(t, api, service, "KB Budget B", "admin@kb-budget-b.example.com")
@@ -99,8 +92,10 @@ func sharedKBBudget(t *testing.T) (http.Handler, *pgxpool.Pool, string, string) 
 func TestMain(m *testing.M) {
 	code := m.Run()
 	if kbBudget.pool != nil {
-		_, _ = kbBudget.pool.Exec(context.Background(), "DROP SCHEMA "+kbBudget.schema+" CASCADE")
 		kbBudget.pool.Close()
+	}
+	if kbBudget.db != nil {
+		_ = kbBudget.db.Drop(context.Background())
 	}
 	os.Exit(code)
 }

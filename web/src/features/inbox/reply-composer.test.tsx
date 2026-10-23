@@ -660,7 +660,7 @@ test('someone replied meanwhile: the text stays, their reply shows, and Send any
   expect(warning).toHaveTextContent('Your refund left today.');
   expect(within(warning).getByRole('list', { name: 'New replies' })).toHaveAttribute('tabindex', '0');
   // The safe choice takes the focus, so the warning is where the person is.
-  expect(within(warning).getByRole('button', { name: 'Edit reply' })).toHaveFocus();
+  await waitFor(() => expect(within(warning).getByRole('button', { name: 'Edit reply' })).toHaveFocus());
   expect(body).toHaveValue('Refund on its way');
   fireEvent.click(within(warning).getByRole('button', { name: 'Edit reply' }));
   expect(screen.queryByRole('region', { name: 'New replies' })).toBeNull();
@@ -686,4 +686,126 @@ test('Send anyway sends the same text with the newest reply number', async () =>
   fireEvent.click(within(warning).getByRole('button', { name: 'Send anyway' }));
   await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('outgoing', 'Refund on its way', [], [], 3));
   await waitFor(() => expect(screen.getByLabelText('Message body')).toHaveValue(''));
+});
+
+// Send and resolve: the reply goes first; the status changes only once the server accepted the reply.
+const deferred = () => {
+  let settle!: { resolve: (value?: unknown) => void; reject: (error: unknown) => void };
+  const promise = new Promise((resolve, reject) => { settle = { resolve, reject }; });
+  return { promise, ...settle };
+};
+
+test('Send and resolve sends the reply, then resolves only after the send succeeded', async () => {
+  const send = deferred();
+  const onSubmit = vi.fn(() => send.promise);
+  const onResolve = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} onResolve={onResolve} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'All sorted.' } });
+  // One primary action stays Send reply; Send and resolve is the secondary one next to it.
+  expect(screen.getByRole('button', { name: 'Send reply' })).toHaveClass('primary-action');
+  const both = screen.getByRole('button', { name: 'Send and resolve' });
+  expect(both).not.toHaveClass('primary-action');
+  expect(both).toHaveAttribute('aria-keyshortcuts', 'Control+Shift+Enter Meta+Shift+Enter');
+  fireEvent.click(both);
+  expect(onSubmit).toHaveBeenCalledWith('outgoing', 'All sorted.');
+  expect(onResolve).not.toHaveBeenCalled();
+  send.resolve();
+  await waitFor(() => expect(onResolve).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(body).toHaveValue(''));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('Ctrl or Cmd + Shift + Enter sends and resolves; Ctrl + Enter alone only sends', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  const onResolve = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} onResolve={onResolve} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'First' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(body).toHaveValue(''));
+  expect(onResolve).not.toHaveBeenCalled();
+  fireEvent.change(body, { target: { value: 'Second' } });
+  fireEvent.keyDown(body, { key: 'Enter', metaKey: true, shiftKey: true });
+  await waitFor(() => expect(onResolve).toHaveBeenCalledTimes(1));
+  expect(onSubmit).toHaveBeenLastCalledWith('outgoing', 'Second');
+});
+
+test('a reply the server refuses leaves the status alone and keeps the text with the reason', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new Error('API 500'));
+  const onResolve = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} onResolve={onResolve} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Keep me' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send and resolve' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(/could not be sent/i);
+  expect(body).toHaveValue('Keep me');
+  expect(onResolve).not.toHaveBeenCalled();
+});
+
+test('a reply sent but not resolved says so, and the reply stays sent', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  const onResolve = vi.fn().mockRejectedValue(new Error('API 500'));
+  render(<ReplyComposer onSubmit={onSubmit} onResolve={onResolve} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Done here' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true, shiftKey: true });
+  expect(await screen.findByRole('alert')).toHaveTextContent('Your reply was sent, but the conversation could not be resolved. Press Resolve to try again.');
+  expect(body).toHaveValue('');
+  expect(onSubmit).toHaveBeenCalledTimes(1);
+});
+
+test('a private note offers no Send and resolve, and Ctrl+Shift+Enter only adds the note', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  const onResolve = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} onResolve={onResolve} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  expect(screen.queryByRole('button', { name: 'Send and resolve' })).not.toBeInTheDocument();
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Called them' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true, shiftKey: true });
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('note', 'Called them'));
+  await waitFor(() => expect(body).toHaveValue(''));
+  expect(onResolve).not.toHaveBeenCalled();
+});
+
+test('without a way to resolve there is no Send and resolve', () => {
+  render(<ReplyComposer onSubmit={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Send and resolve' })).not.toBeInTheDocument();
+});
+
+test('Send anyway after someone replied still resolves when the reply was sent with Send and resolve', async () => {
+  const onSubmit = vi.fn<(...args: unknown[]) => Promise<unknown>>()
+    .mockRejectedValueOnce(new ReplyConflictError('Someone replied', 3, [lanReply]))
+    .mockResolvedValue(undefined);
+  const onResolve = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} onResolve={onResolve} latestReplyNumber={2} timezone="UTC" />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Refund on its way' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send and resolve' }));
+  const warning = await screen.findByRole('region', { name: 'New replies' });
+  expect(onResolve).not.toHaveBeenCalled();
+  fireEvent.click(within(warning).getByRole('button', { name: 'Send anyway' }));
+  await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('outgoing', 'Refund on its way', [], [], 3));
+  await waitFor(() => expect(onResolve).toHaveBeenCalledTimes(1));
+});
+
+test('Ctrl+Shift+Enter from the Cc box sends and resolves', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  const onResolve = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} onResolve={onResolve} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Copied' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Cc' }));
+  fireEvent.keyDown(screen.getByLabelText('Add Cc address'), { key: 'Enter', ctrlKey: true, shiftKey: true });
+  await waitFor(() => expect(onResolve).toHaveBeenCalledTimes(1));
+});
+
+test('after Send and resolve the focus comes back to the box, since the button goes with the open status', async () => {
+  const onResolve = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={vi.fn().mockResolvedValue(undefined)} onResolve={onResolve} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Closing this' } });
+  body.blur();
+  fireEvent.click(screen.getByRole('button', { name: 'Send and resolve' }));
+  await waitFor(() => expect(onResolve).toHaveBeenCalled());
+  await waitFor(() => expect(body).toHaveFocus());
 });

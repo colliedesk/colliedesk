@@ -4644,12 +4644,12 @@ components:
           items: {$ref: '#/components/schemas/AISource'}
         warnings:
           type: array
-          description: An email address, a number or another customer's name in the draft that this conversation does not hold. Check before sending.
+          description: An email address, a number, another customer's name, a word in an alphabet the conversation does not use, or a masked detail ([email], [number], [company]) copied from a past conversation, in the draft but not in this conversation. Check before sending.
           items:
             type: object
             required: [kind, value]
             properties:
-              kind: {type: string, enum: [email, number, name]}
+              kind: {type: string, enum: [email, number, name, script, placeholder]}
               value: {type: string}
         model: {type: [string, 'null']}
         outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, discarded, superseded, expired, null]}

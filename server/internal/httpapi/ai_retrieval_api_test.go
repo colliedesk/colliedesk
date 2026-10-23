@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -490,5 +491,98 @@ func TestAIRetrievalKeepsALongFormerName(t *testing.T) {
 	got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "printer paper jam", ConversationLimit: 3})
 	if len(got) != 1 || strings.Contains(got[0].Text, long[:40]) {
 		t.Fatalf("after renaming a long name = %+v", got)
+	}
+}
+
+// The worker builds sources while a large delete (an import undone) removes some of them, as undo
+// does: its conversations first, then its articles. Neither waits for the other in a cycle: the
+// worker leaves what the delete holds for later instead of waiting for it.
+func TestAIRetrievalBuildsBesideALargeDeleteWithoutDeadlock(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval delete", "admin@retrieval-delete.example.com")
+	workspace := workspaceID(t, api, admin)
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Ada", "email": "ada@retrieval-delete.example"})
+	conversation := seedResolvedConversation(t, api, pool, admin, workspace, contact, "Printer jams", "My printer jams.", "Note.", "Open tray two.")
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Help"}).ID
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Scanner jams", "body_md": "Lift the lid.", "status": "published"})
+	buildAIRetrieval(t, pool)
+	ctx := context.Background()
+	// Both queued again: the worker's next batch holds the article and the conversation.
+	if _, err := pool.Exec(ctx, `UPDATE kb_articles SET title=title||' again' WHERE id=$1`, article.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE conversations SET subject=subject||' again' WHERE id=$1`, conversation); err != nil {
+		t.Fatal(err)
+	}
+
+	undo, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer undo.Rollback(ctx)
+	if _, err := undo.Exec(ctx, `DELETE FROM conversations WHERE id=$1`, conversation); err != nil {
+		t.Fatal(err)
+	}
+	built := make(chan error, 1)
+	go func() {
+		_, err := store.New(pool).BuildAIRetrieval(ctx)
+		built <- err
+	}()
+	// Give the worker time to reach the rows the delete holds.
+	time.Sleep(500 * time.Millisecond)
+	if _, err := undo.Exec(ctx, `DELETE FROM kb_articles WHERE id=$1`, article.ID); err != nil {
+		t.Fatalf("delete beside the worker: %v", err)
+	}
+	if err := undo.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-built; err != nil {
+		t.Fatalf("worker beside the delete: %v", err)
+	}
+	buildAIRetrieval(t, pool)
+	if n := queryString(t, pool, `SELECT count(*)::text FROM ai_retrieval_docs WHERE workspace_id=$1`, workspace); n != "0" {
+		t.Fatalf("%s sources of deleted rows", n)
+	}
+	if n := queryString(t, pool, `SELECT count(*)::text FROM ai_retrieval_pending WHERE workspace_id=$1`, workspace); n != "0" {
+		t.Fatalf("%s queued rows of deleted rows", n)
+	}
+}
+
+// A workspace deleted (retention, or on request) while the worker builds its sources: the worker
+// leaves it, and the delete takes the sources and the queue with it.
+func TestAIRetrievalLeavesAWorkspaceBeingDeleted(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval gone", "admin@retrieval-gone.example.com")
+	workspace := workspaceID(t, api, admin)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Help"}).ID
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Printer jams", "body_md": "Open tray two.", "status": "published"})
+	buildAIRetrieval(t, pool)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE kb_articles SET title=title||' again' WHERE id=$1`, article.ID); err != nil {
+		t.Fatal(err)
+	}
+	gone, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gone.Rollback(ctx)
+	if _, err := gone.Exec(ctx, `DELETE FROM workspaces WHERE id=$1`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	built := make(chan error, 1)
+	go func() {
+		_, err := store.New(pool).BuildAIRetrieval(ctx)
+		built <- err
+	}()
+	select {
+	case err := <-built:
+		if err != nil {
+			t.Fatalf("worker beside a workspace being deleted: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the worker waited for a workspace being deleted")
+	}
+	if err := gone.Commit(ctx); err != nil {
+		t.Fatal(err)
 	}
 }

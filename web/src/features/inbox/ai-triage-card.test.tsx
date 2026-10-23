@@ -202,6 +202,21 @@ test('what AI applied by itself shows with an undo for each part and for all of 
   expect(screen.getByRole('button', { name: 'Undo all' })).toBeInTheDocument();
 });
 
+// The page may read the conversation a moment before AI applies, and the card a moment after: the card
+// reads it again, once, even when it never saw the suggestion being written.
+test('a suggestion AI already applied when the card first reads it has the conversation read again, once', async () => {
+  const first = appliedByAI({ id: '99999999-9999-4999-8999-999999999999', auto_applied_at: '2026-10-22T11:00:00Z' });
+  serve(() => ({ suggestion: first, auto_applied: first }));
+  const onApplied = vi.fn();
+  const { unmount } = show(onApplied);
+  expect(await screen.findByRole('heading', { name: /Applied by AI/ })).toBeInTheDocument();
+  await waitFor(() => expect(onApplied).toHaveBeenCalledTimes(1));
+  unmount();
+  show(onApplied);
+  expect(await screen.findByRole('heading', { name: /Applied by AI/ })).toBeInTheDocument();
+  expect(onApplied).toHaveBeenCalledTimes(1);
+});
+
 test('after an undo the card says what went back and what was kept, and applies it again on request', async () => {
   const undone = appliedByAI({ outcome: 'undone', auto_applied: nothingApplied, applied: nothingApplied, undone_parts: { tag_ids: [hardware], priority: null, assignee_agent_id: null },
     kept: { priority: 'urgent', assignee_agent_id: null }, undone_at: '2026-10-22T10:45:00Z', undone_by_agent_id: me });

@@ -55,7 +55,7 @@ test('a customer found by search, then the subject, the message and the copies s
   fireEvent.click(send);
   await waitFor(() => expect(onStart).toHaveBeenCalledWith(pat.id, 'Your renewal', { body: 'It renews next week.', files: [], cc: ['boss@prospect.example'] }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(opener).toHaveFocus();
+  await waitFor(() => expect(opener).toHaveFocus());
 });
 
 test('a new customer goes with the conversation; a refusal keeps every field, and the address of a customer offers that customer', async () => {
