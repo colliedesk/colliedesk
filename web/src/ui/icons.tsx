@@ -33,3 +33,4 @@ export const TagIcon = () => <Icon><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0
 export const CheckIcon = () => <Icon><path d="M20 6 9 17l-5-5" /></Icon>;
 export const RotateCcwIcon = () => <Icon><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></Icon>;
 export const MinusIcon = () => <Icon><path d="M5 12h14" /></Icon>;
+export const SparklesIcon = () => <Icon><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.1 2.1M15.6 15.6l2.1 2.1M6.3 17.7l2.1-2.1M15.6 8.4l2.1-2.1" /></Icon>;

@@ -190,7 +190,11 @@ type Message struct {
 	AuthorName     *string       `json:"author_name"`
 	AgentToken     *MessageToken `json:"agent_token"`
 	// AgentRequestID names the agent request a person approved to send this message (a reply draft).
-	AgentRequestID *string        `json:"agent_request_id"`
+	AgentRequestID *string `json:"agent_request_id"`
+	// AIDraftID names the AI draft a reply was written from.
+	AIDraftID *string `json:"ai_draft_id"`
+	// AIDraftOutcome says whether the reply was sent as the draft was written or edited.
+	AIDraftOutcome *string        `json:"ai_draft_outcome"`
 	Kind           string         `json:"kind"`
 	Body           string         `json:"body"`
 	BodyHTML       *string        `json:"body_html"`

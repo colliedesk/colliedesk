@@ -748,7 +748,7 @@ test('Send and resolve posts the reply first and resolves through the conversati
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'All done' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send and resolve' }));
   await waitFor(() => expect(api.updateConversation).toHaveBeenCalledWith(alpha.id, { status: 'resolved' }));
-  expect(api.createMessage).toHaveBeenCalledWith(alpha.id, 'outgoing', 'All done', [], [], 0);
+  expect(api.createMessage).toHaveBeenCalledWith(alpha.id, 'outgoing', 'All done', [], [], 0, undefined);
   expect(api.createMessage.mock.invocationCallOrder[0]).toBeLessThan(api.updateConversation.mock.invocationCallOrder[0]);
   // Resolved, the header offers the way back.
   expect(await screen.findByRole('button', { name: 'Reopen' })).toBeInTheDocument();

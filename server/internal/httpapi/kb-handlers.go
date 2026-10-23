@@ -256,6 +256,12 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	a.addressKBArticle(request, &article.KBArticleSummary)
+	drafts, err := a.ai.ArticleDraftsThisMonth(request.Context(), principal(request).Workspace.ID, article.ID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	article.AIDraftsThisMonth = &drafts
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -341,6 +347,25 @@ func (a *API) restoreKBArticle(response http.ResponseWriter, request *http.Reque
 		writeError(response, http.StatusNotFound, "not_found", "No article with this id is in the trash.")
 		return
 	}
+	if err != nil {
+		writeKBError(response, err)
+		return
+	}
+	a.addressKBArticle(request, &article.KBArticleSummary)
+	writeJSON(response, http.StatusOK, article)
+}
+
+func (a *API) excludeKBArticleFromAI(response http.ResponseWriter, request *http.Request) {
+	a.setKBArticleAIExcluded(response, request, true)
+}
+
+func (a *API) includeKBArticleInAI(response http.ResponseWriter, request *http.Request) {
+	a.setKBArticleAIExcluded(response, request, false)
+}
+
+func (a *API) setKBArticleAIExcluded(response http.ResponseWriter, request *http.Request, excluded bool) {
+	who := principal(request)
+	article, err := a.store.SetKBArticleAIExcluded(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), excluded)
 	if err != nil {
 		writeKBError(response, err)
 		return

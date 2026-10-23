@@ -185,8 +185,18 @@ func (w *Worker) release(ctx context.Context, item claimedTask, at time.Time) {
 func (w *Worker) sweep(ctx context.Context) error {
 	now := w.service.now().UTC()
 	return w.db.Privileged(ctx, database.PrivilegeAIJobClaim, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE ai_usage SET status='error',error_code='unknown',finished_at=$1
-			WHERE status='started' AND started_at<$2`, now, now.Add(-w.options.Lease-2*time.Minute))
+		if _, err := tx.Exec(ctx, `UPDATE ai_usage SET status='error',error_code='unknown',finished_at=$1
+			WHERE status='started' AND started_at<$2`, now, now.Add(-w.options.Lease-2*time.Minute)); err != nil {
+			return err
+		}
+		// A ready draft nobody decided on for a week expired; 90 days after a draft ended, its text and
+		// prompt are erased and its numbers stay.
+		if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET outcome='expired',decided_at=$1 WHERE status='ready' AND outcome IS NULL AND ready_at<$2`,
+			now, now.Add(-draftExpiry)); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE ai_drafts SET text=NULL,prompt='',missing_info=NULL,warnings='[]',text_cleared_at=$1
+			WHERE text_cleared_at IS NULL AND (decided_at IS NOT NULL OR status<>'ready') AND COALESCE(decided_at,created_at)<$2`, now, now.Add(-draftTextRetention))
 		return err
 	})
 }
@@ -262,6 +272,10 @@ func (w *Worker) run(ctx context.Context, item claimedTask) {
 		w.release(ctx, item, w.service.now().UTC().Add(heldRetry))
 	case errors.Is(err, ErrAllowanceHeld):
 		stop(TaskFailed, CodeAllowanceReached)
+	case errors.As(err, new(*TaskError)):
+		var taskErr *TaskError
+		errors.As(err, &taskErr)
+		stop(TaskFailed, taskErr.Code)
 	case errors.As(err, &providerErr) && providerErr.Retryable() && task.Attempts < w.options.MaxAttempts && ctx.Err() == nil:
 		w.retry(ctx, item, task, providerErr)
 	case errors.As(err, &providerErr):

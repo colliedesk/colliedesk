@@ -223,3 +223,49 @@ func nullable(value string) any {
 	}
 	return value
 }
+
+// A typical reply draft: the conversation, a few articles and excerpts in, a short reply out.
+const typicalDraftInput, typicalDraftOutput = 6000, 500
+
+func (s *Service) allowanceView(ctx context.Context, tx pgx.Tx, workspaceID string, left, limit int64, resets time.Time) (*AllowanceView, error) {
+	view := &AllowanceView{LimitMicroUSD: limit, UsedMicroUSD: limit - left, ResetsAt: resets}
+	var average *float64
+	if err := tx.QueryRow(ctx, `SELECT avg(cost_micro_usd)::float8 FROM ai_usage WHERE workspace_id=$1 AND feature='draft' AND billed_to='server'
+		AND cost_micro_usd>0 AND started_at>=$2`, workspaceID, s.now().Add(-30*24*time.Hour)).Scan(&average); err != nil {
+		return nil, err
+	}
+	if average == nil && s.config.Server != nil {
+		if models := s.config.Server.ModelsFor(SlotDraft); len(models) > 0 {
+			if price, ok := s.config.Server.Prices[models[0]]; ok {
+				typical := typicalDraftInput*price.Input + typicalDraftOutput*price.Output
+				average = &typical
+			}
+		}
+	}
+	if average != nil && *average > 0 {
+		drafts := int64(float64(max(left, 0)) / *average)
+		view.DraftsLeft = &drafts
+	}
+	return view, nil
+}
+
+// typicalCallFits refuses a call of that size that could not fit what is left of the allowance even
+// with nothing else running: what a person asks for is refused at once, not after it was queued.
+func (s *Service) typicalCallFits(ctx context.Context, tx pgx.Tx, workspaceID, model string, input, output int64) error {
+	if s.config.Server == nil {
+		return nil
+	}
+	left, _, limited, err := s.allowanceLeft(ctx, tx, workspaceID)
+	if err != nil || !limited {
+		return err
+	}
+	var held int64
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND status='started'`,
+		workspaceID).Scan(&held); err != nil {
+		return err
+	}
+	if left+held <= 0 || estimateMicroUSD(s.config.Server.Prices, model, input, output) > left+held {
+		return ErrAllowanceReached
+	}
+	return nil
+}

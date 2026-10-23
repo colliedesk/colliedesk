@@ -13,6 +13,10 @@ import (
 var toolNames = []string{
 	"colliedesk_agents_list",
 	"colliedesk_ai_automatic_limits_set",
+	"colliedesk_ai_draft_create",
+	"colliedesk_ai_draft_discard",
+	"colliedesk_ai_draft_get",
+	"colliedesk_ai_drafts_list",
 	"colliedesk_ai_provider_add",
 	"colliedesk_ai_provider_check",
 	"colliedesk_ai_provider_key_set",
@@ -62,6 +66,8 @@ var toolNames = []string{
 	"colliedesk_invite_create",
 	"colliedesk_invite_revoke",
 	"colliedesk_invites_list",
+	"colliedesk_kb_article_ai_exclude",
+	"colliedesk_kb_article_ai_include",
 	"colliedesk_kb_article_create",
 	"colliedesk_kb_article_delete",
 	"colliedesk_kb_article_get",
@@ -186,6 +192,8 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_import_people_list":               {readOnly: true, tier: "admin"},
 	"colliedesk_import_person_link":               {idempotent: true, tier: "admin"},
 	"colliedesk_import_person_unlink":             {idempotent: true, tier: "admin"},
+	"colliedesk_kb_article_ai_exclude":            {idempotent: true, tier: "send"},
+	"colliedesk_kb_article_ai_include":            {idempotent: true, tier: "send"},
 	"colliedesk_kb_article_create":                {tier: "send"},
 	"colliedesk_kb_article_delete":                {tier: "send"},
 	"colliedesk_kb_article_get":                   {readOnly: true, tier: "read"},
@@ -269,6 +277,10 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_ai_slot_set_request":              {tier: "read"},
 	"colliedesk_ai_usage_get":                     {readOnly: true, tier: "admin"},
 	"colliedesk_ai_automatic_limits_set":          {idempotent: true, tier: "admin"},
+	"colliedesk_ai_draft_create":                  {tier: "draft"},
+	"colliedesk_ai_draft_get":                     {readOnly: true, tier: "read"},
+	"colliedesk_ai_drafts_list":                   {readOnly: true, tier: "read"},
+	"colliedesk_ai_draft_discard":                 {idempotent: true, tier: "draft"},
 }
 
 func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {

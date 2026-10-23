@@ -104,6 +104,9 @@ type AllowanceView struct {
 	LimitMicroUSD int64     `json:"limit_micro_usd"`
 	UsedMicroUSD  int64     `json:"used_micro_usd"`
 	ResetsAt      time.Time `json:"resets_at"`
+	// DraftsLeft is about how many reply drafts what is left pays for, at the workspace's own average
+	// cost of a draft over 30 days or, before its first, a typical one; nil when no price is known.
+	DraftsLeft *int64 `json:"drafts_left"`
 }
 
 // Actor is who changes the settings: the agent, and the token's session when a token did.

@@ -86,9 +86,14 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 		writeStoreError(response, err)
 		return
 	}
+	features, err := a.ai.ActiveFeatures(request.Context(), identity.Workspace.ID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
 	writeJSON(response, http.StatusOK, map[string]any{
 		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "scope": scope, "plan": plan,
-		"onboarding_goal": goal,
+		"onboarding_goal": goal, "ai_features": features,
 	})
 }
 

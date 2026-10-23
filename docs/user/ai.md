@@ -2,9 +2,9 @@
 
 Colliedesk can use a language model to suggest how to sort a new ticket (tags, priority, assignee)
 and to draft a reply an agent edits and sends. A model only suggests and drafts: a person accepts each
-suggestion, and nothing reaches a customer until someone presses **Send**. The features themselves are
-being built ([#89](https://github.com/colliedesk/colliedesk/issues/89)); **Settings > AI** already
-decides which model each one uses and records who agreed to send data to it.
+suggestion, and nothing reaches a customer until someone presses **Send**. Reply drafts are here;
+triage suggestions are being built ([#89](https://github.com/colliedesk/colliedesk/issues/89)).
+**Settings > AI** decides which model each feature uses and records who agreed to send data to it.
 
 ## Every feature starts off
 
@@ -68,6 +68,40 @@ Suggestions and drafts run as background tasks, so no screen waits for a model: 
 busy provider tries again a little later (three times at most), and one whose feature was turned off
 meanwhile is dropped without calling anyone. A locked workspace runs none.
 
+## Reply drafts
+
+With **Reply drafts** on, the reply box of a conversation has **Draft with AI**; while they are off it
+says **Off**, and takes an admin to **Settings > AI** (others are told to ask an admin). Say what the reply
+should say (optional, up to 2,000 characters: "offer a refund", "ask for the order number"), or leave
+it empty for a reply to the customer's newest message. You keep working while it is written; the
+conversation never waits for the model.
+
+The draft arrives as plain text with:
+
+1. **Sources**: the knowledge base articles and solved tickets it used, named by Colliedesk, never by
+   the model. A source the model invents is dropped.
+2. **Missing information**: what the reply needs that no source said, instead of a guess.
+3. **Check before sending**: an email address, a number of six digits or more, or another customer's
+   name that is in the draft but not in this conversation. A model can copy one from a past ticket or
+   be told to add one by a message; read them before you send. A word in an alphabet the conversation
+   does not use (a model slipping into another language) is listed too, and so is a masked detail
+   (`[email]`, `[number]`, `[company]`) copied from a past ticket for you to fill in. Where the model
+   copied `[customer]`, Colliedesk puts this customer's name (or leaves the greeting without one).
+
+**Replace** puts the draft in the reply box in place of what you typed; **Insert below** adds it under
+your text; **Discard** throws it away. Nothing is sent until you press **Send**, and you can edit
+every word. Asking again replaces your earlier draft. **Stop** ends one still being written; it is not
+counted. A draft nobody used for 7 days expires, and resolving or closing the conversation discards
+it.
+
+Colliedesk keeps how each draft ended (sent nearly as written, sent edited, discarded, replaced,
+expired), so a team can see whether drafts help, and an article's **Used by AI** box says how many
+drafts used it this month. A reply sent from a draft says so on the timeline: **from an AI draft, sent as written** or
+**from an AI draft, edited**. A draft that failed says why, with **Try again** (the same prompt) and,
+when a setting is the cause (the provider's key or credit, the included AI), the way to Settings > AI.
+A draft's text and prompt are erased 90 days after it ended; the numbers stay. At most 30 drafts a
+minute are asked for in a workspace.
+
 ## Limits
 
 1. **Automatic runs.** Work Colliedesk starts on its own (a triage suggestion for each new ticket)
@@ -91,7 +125,10 @@ Usage** sums a month per feature and provider. Both are in the [export](export.m
 
 ## Agents and AI agents
 
-Agents see these settings but only admins change them. Through [MCP](mcp.md), an AI agent with a read
+Agents see these settings but only admins change them. An AI agent with a draft token asks for a
+reply draft, reads it and discards it like a person (`colliedesk_ai_draft_create`,
+`colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list`, `colliedesk_ai_draft_discard`); sending a
+reply still needs the send tier or a person's approval. Through [MCP](mcp.md), an AI agent with a read
 token can read them, and one with an admin token can add, check, change and delete providers (a token
 below admin is refused outright on the two calls that carry a key, so a key never waits in a request).
 Turning a feature on or moving it always becomes a [request a person approves](agent-requests.md).

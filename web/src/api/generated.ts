@@ -1393,6 +1393,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/ai-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The conversation's newest AI drafts (at most 20), newest first, with how each ended. */
+        get: operations["listAIDrafts"];
+        put?: never;
+        /** @description Asks for an AI draft of a reply, with an optional prompt (what the reply should say). The draft is written in the background (202, `status` queued); read it with `GET …/ai-drafts/{draftId}?wait=`. It uses the conversation (never its private notes), matching knowledge base articles and similar solved tickets, and is plain text a person edits and sends: the AI never sends. The person's earlier draft on the conversation is replaced. 409 `ai_feature_off` when reply drafts are off, 402 `ai_allowance_reached` when the server's provider spent this month's allowance, 429 `ai_drafts_rate_limited` past 30 drafts a minute in the workspace. */
+        post: operations["createAIDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-drafts/{draftId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        /** @description One AI draft. With `wait` (1 to 20 seconds) the answer waits while the draft is queued or running, and comes back as soon as it is ready, failed or cancelled. */
+        get: operations["getAIDraft"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-drafts/{draftId}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stops a draft still being written (`status` cancelled, which does not count as discarded: nobody saw it) or discards a ready one (`outcome` discarded); again on a draft already stopped or discarded it changes nothing. 409 `ai_draft_decided` once it was sent or replaced. */
+        post: operations["discardAIDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -1742,6 +1802,26 @@ export interface paths {
         /** @description Take an article out of the trash, as it was when deleted (a published article is published again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is not in the trash. */
         post: operations["restoreKBArticle"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/ai-exclusion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Keep the article away from AI, in every language: reply drafts and triage suggestions no longer read or quote it, from this call on. People and the help center still see it. The change is a version of the article (kind `ai_exclude`, who and when), and `ai_exclusion` says since when and by whom; the text and `updated_at` do not change, so nobody's open edit is refused. Excluding an excluded article changes nothing. Undo with DELETE. */
+        post: operations["excludeKBArticleFromAI"];
+        /** @description Let AI read the article again (a version of kind `ai_include`). A published article is found again within seconds. Including an article that is not excluded changes nothing. */
+        delete: operations["includeKBArticleInAI"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2508,6 +2588,8 @@ export interface components {
             paused_until: string | null;
         };
         AIAllowance: {
+            /** @description About how many reply drafts what is left pays for, at the workspace's average cost of a draft over 30 days (before its first, a typical one); null when no price is known. */
+            drafts_left: number | null;
             /** @description This month's allowance of the server's provider, in millionths of a US dollar. */
             limit_micro_usd: number;
             /** @description Spent so far; calls still running are not counted yet. */
@@ -2535,6 +2617,53 @@ export interface components {
                 /** @description Only for the server's provider. */
                 cost_micro_usd: number | null;
             }[];
+        };
+        AIDraft: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed" | "cancelled";
+            /** @description Why a draft failed or stopped: feature_off, ai_allowance_reached, refused, too_long, empty_answer, a provider error code, restored, cancelled… */
+            error_code: string | null;
+            /** @description What the person asked for; erased 90 days after the draft ended. */
+            prompt: string;
+            /** @description The draft, plain text; null until ready, and 90 days after it ended. */
+            text: string | null;
+            /** @description What the draft needs that the sources did not say. */
+            missing_info: string | null;
+            /** @description The articles and solved conversations the draft used, named from the database. */
+            sources: {
+                /** @enum {string} */
+                kind: "kb_article" | "conversation";
+                /** Format: uuid */
+                id: string;
+                locale?: string;
+                number?: number;
+                title: string;
+            }[];
+            /** @description An email address, a number, another customer's name, a word in an alphabet the conversation does not use, or a masked detail ([email], [number], [company]) copied from a past conversation, in the draft but not in this conversation. Check before sending. */
+            warnings: {
+                /** @enum {string} */
+                kind: "email" | "number" | "name" | "script" | "placeholder";
+                value: string;
+            }[];
+            model: string | null;
+            /** @enum {string|null} */
+            outcome: "sent_unchanged" | "sent_edited" | "discarded" | "superseded" | "expired" | null;
+            /** @description How close the sent reply stayed to the draft, 0 to 1 by words; 0.9 and above is sent_unchanged. */
+            similarity: number | null;
+            /** Format: uuid */
+            sent_message_id: string | null;
+            /** Format: uuid */
+            requested_by_agent_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            ready_at: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
         };
         AISettings: {
             /** @description The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none. */
@@ -2834,6 +2963,11 @@ export interface components {
          */
         OnboardingSource: "x" | "email" | "search" | "reddit" | "github" | "referral" | "other";
         Me: {
+            /** @description Which AI features can run now in the workspace (on, with a working provider); the web app offers only those. */
+            ai_features: {
+                triage: boolean;
+                draft: boolean;
+            };
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
             timezone: string;
@@ -3113,10 +3247,10 @@ export interface components {
         KBArticleChange: {
             version: number;
             /**
-             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone.
+             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change).
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
             /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
@@ -3163,6 +3297,12 @@ export interface components {
              */
             url: string;
         };
+        KBArticleAIExclusion: {
+            /** Format: date-time */
+            at: string;
+            /** @description Who excluded it; null when that person was removed. */
+            by: null | components["schemas"]["SavedReplyPerson"];
+        };
         KBArticleTranslation: {
             locale: string;
             title: string;
@@ -3171,6 +3311,8 @@ export interface components {
             updated_at: string;
         };
         KBArticle: {
+            /** @description Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source. */
+            ai_drafts_this_month?: number;
             /** Format: uuid */
             id: string;
             number: number;
@@ -3203,6 +3345,8 @@ export interface components {
              * @description Set while the article is in the trash.
              */
             deleted_at: string | null;
+            /** @description Null while AI may read the article (when it is published); set while it is excluded from AI. */
+            ai_exclusion: null | components["schemas"]["KBArticleAIExclusion"];
             /** @description Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through. */
             missing_media?: string[];
         };
@@ -3241,7 +3385,7 @@ export interface components {
         KBArticleVersion: {
             version: number;
             /** @enum {string} */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -3582,6 +3726,16 @@ export interface components {
             }[];
         };
         Message: {
+            /**
+             * Format: uuid
+             * @description The AI draft the reply was written from.
+             */
+            ai_draft_id: string | null;
+            /**
+             * @description Whether the reply kept the draft's words (sent_unchanged, 90 % or more) or was edited; null without a draft.
+             * @enum {string|null}
+             */
+            ai_draft_outcome: "sent_unchanged" | "sent_edited" | null;
             /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
             reply_number: number | null;
             /** Format: uuid */
@@ -4790,6 +4944,11 @@ export interface operations {
                     cc?: components["schemas"]["CopiedAddresses"];
                     /** @description The newest reply number the sender had seen; 0 when there was none. */
                     seen_reply_number?: number;
+                    /**
+                     * Format: uuid
+                     * @description The AI draft this reply was written from (outgoing replies sent directly only): the draft records how close the reply stayed to it. 409 ai_draft_not_ready when it is not this conversation's ready, undecided draft.
+                     */
+                    ai_draft_id?: string;
                     /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
                     draft?: boolean;
                 };
@@ -4799,6 +4958,8 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /** Format: uuid */
+                    ai_draft_id?: string;
                     files?: string[];
                 };
             };
@@ -7030,6 +7191,125 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    listAIDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI drafts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AIDraft"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAIDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    prompt?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The draft, queued; or an agent request when the token is below the draft tier */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"] | components["schemas"]["AgentRequestAccepted"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    getAIDraft: {
+        parameters: {
+            query?: {
+                wait?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    discardAIDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     exportWorkspace: {
         parameters: {
             query?: never;
@@ -7902,6 +8182,58 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    excludeKBArticleFromAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article, excluded from AI */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    includeKBArticleInAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article, readable by AI */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listKBArticleVersions: {

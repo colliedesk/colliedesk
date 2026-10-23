@@ -131,6 +131,9 @@ type KBArticle struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 	DeletedAt        *time.Time      `json:"deleted_at"`
 	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+	// AIExcludedAt is set while AI may not read the article (in any language), by AIExcludedByAgentID.
+	AIExcludedAt        *time.Time `json:"ai_excluded_at"`
+	AIExcludedByAgentID *string    `json:"ai_excluded_by_agent_id"`
 }
 
 // KBArticleVersion is one version of an article: what it said after a change and who made it.
@@ -389,6 +392,30 @@ type AIUsage struct {
 	ReservedMicroUSD *int64 `json:"reserved_micro_usd"`
 }
 
+// AIDraft is one AI reply draft and how it ended. Its text and prompt are empty 90 days after it ended.
+type AIDraft struct {
+	ID                 string          `json:"id"`
+	ConversationID     string          `json:"conversation_id"`
+	TaskID             *string         `json:"task_id"`
+	RequestedByAgentID *string         `json:"requested_by_agent_id"`
+	RequestedByTokenID *string         `json:"requested_by_token_id"`
+	Prompt             string          `json:"prompt"`
+	Status             string          `json:"status"`
+	Text               *string         `json:"text"`
+	MissingInfo        *string         `json:"missing_info"`
+	Sources            json.RawMessage `json:"sources"`
+	Warnings           json.RawMessage `json:"warnings"`
+	Model              *string         `json:"model"`
+	Outcome            *string         `json:"outcome"`
+	Similarity         *float64        `json:"similarity"`
+	SentMessageID      *string         `json:"sent_message_id"`
+	CreatedAt          time.Time       `json:"created_at"`
+	ReadyAt            *time.Time      `json:"ready_at"`
+	DecidedAt          *time.Time      `json:"decided_at"`
+	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
+	TextClearedAt      *time.Time      `json:"text_cleared_at"`
+}
+
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
 // server reads the bytes from and never leaves the server.
 type Attachment struct {
@@ -415,6 +442,8 @@ type Message struct {
 	EmailMeta      json.RawMessage       `json:"email_meta"`
 	// AgentRequestID names the agent request a person approved to send this reply.
 	AgentRequestID *string `json:"agent_request_id"`
+	// AIDraftID names the AI draft the reply was written from.
+	AIDraftID *string `json:"ai_draft_id"`
 	// CC is the list a reply was copied to; null when it copied no one.
 	CC          []string     `json:"cc"`
 	CreatedAt   time.Time    `json:"created_at"`
@@ -444,7 +473,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -470,6 +499,7 @@ type Sink interface {
 	AISlot(AISlot) error
 	AISettingsEvent(AISettingsEvent) error
 	AIUsage(AIUsage) error
+	AIDraft(AIDraft) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry) error

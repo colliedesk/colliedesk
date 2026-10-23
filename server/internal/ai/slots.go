@@ -128,7 +128,9 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 		if left, limit, limited, err := s.allowanceLeft(ctx, tx, workspaceID); err != nil {
 			return err
 		} else if limited {
-			settings.Allowance = &AllowanceView{LimitMicroUSD: limit, UsedMicroUSD: limit - left, ResetsAt: monthStart(s.now()).AddDate(0, 1, 0)}
+			if settings.Allowance, err = s.allowanceView(ctx, tx, workspaceID, left, limit, monthStart(s.now()).AddDate(0, 1, 0)); err != nil {
+				return err
+			}
 		}
 		events, err := tx.Query(ctx, `SELECT e.id::text,e.kind,e.actor_agent_id::text,COALESCE(NULLIF(a.display_name,''),a.email),e.actor_token_id IS NOT NULL,
 				e.provider_id::text,e.provider_label,e.slot,e.detail,e.created_at
@@ -319,4 +321,20 @@ func stringPointer(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+// ActiveFeatures says which features can run now in the workspace: what the web app offers on screen.
+func (s *Service) ActiveFeatures(ctx context.Context, workspaceID string) (map[string]bool, error) {
+	active := map[string]bool{}
+	for _, slot := range Slots {
+		active[slot] = false
+	}
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		slots, err := readSlots(ctx, tx, workspaceID, false)
+		for slot, row := range slots {
+			active[slot] = s.view(slot, row, true).Active
+		}
+		return err
+	})
+	return active, err
 }

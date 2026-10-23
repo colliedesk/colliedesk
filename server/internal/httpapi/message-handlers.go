@@ -51,6 +51,8 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		// SeenReplyNumber is the latest reply the sender had seen when they started writing; a newer one
 		// refuses the reply (409 reply_conflict). Without it nothing is checked.
 		SeenReplyNumber *int `json:"seen_reply_number"`
+		// AIDraftID is the AI draft the reply was written from: its outcome is recorded with the reply.
+		AIDraftID string `json:"ai_draft_id"`
 	}
 	if err := decodeJSON(request, &input); err != nil || (input.Kind != "outgoing" && input.Kind != "note") || strings.TrimSpace(input.Body) == "" ||
 		(input.SeenReplyNumber != nil && *input.SeenReplyNumber < 0) {
@@ -63,6 +65,12 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	actor, allowed := messageActor(request.Context(), identity, input.Kind)
+	if input.AIDraftID != "" && (!allowed || input.Draft || input.Kind != "outgoing") {
+		// A reply that waits for approval is written by whoever approves it; it is not this AI draft sent.
+		writeError(response, http.StatusBadRequest, "invalid_request", "ai_draft_id goes only with a reply sent directly, not with a note or a reply that waits for approval.")
+		return
+	}
+	actor.AIDraftID = input.AIDraftID
 	if !allowed || input.Draft {
 		a.fileMessageRequest(response, request, identity, input.Kind, input.Body, input.CC)
 		return

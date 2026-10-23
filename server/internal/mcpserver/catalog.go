@@ -36,7 +36,7 @@ func Catalog() []Spec {
 		savedViewsListSpec(), savedViewCreateSpec(), savedViewUpdateSpec(), savedViewDeleteSpec(), savedViewRestoreSpec(),
 		kbCollectionsListSpec(), kbCollectionCreateSpec(), kbCollectionUpdateSpec(), kbCollectionDeleteSpec(), kbCollectionsTrashSpec(), kbCollectionUndeleteSpec(),
 		kbArticlesSearchSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
-		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbImageUploadSpec(), kbImageGetSpec(),
+		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbImageUploadSpec(), kbImageGetSpec(),
 		kbMediaListSpec(), kbMediaGetSpec(), kbMediaUpdateSpec(), kbMediaTrashSpec(), kbMediaTrashListSpec(), kbMediaUndeleteSpec(), kbMediaPurgeSpec(), kbMediaReplaceSpec(), kbMediaReplaceUndoSpec(),
 		kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
@@ -49,6 +49,7 @@ func Catalog() []Spec {
 		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoRequestSpec(),
 		importPeopleListSpec(), importPersonLinkSpec(), importPersonUnlinkSpec(),
 		aiSettingsGetSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetRequestSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
+		aiDraftCreateSpec(), aiDraftGetSpec(), aiDraftsListSpec(), aiDraftDiscardSpec(),
 	}
 }
 

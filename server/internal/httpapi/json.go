@@ -52,6 +52,9 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	case errors.As(err, &database) && (database.Code == "40P01" || database.Code == "40001"):
 		writeError(response, http.StatusConflict, "conflict", "Another change was in progress on the same conversations. Nothing was changed; try again.")
 		return
+	case errors.Is(err, domain.ErrAIDraftNotReady):
+		writeError(response, http.StatusConflict, "ai_draft_not_ready", "That AI draft is not ready to send from this conversation: it is still being written, or it was already sent, discarded or replaced. Send the reply without ai_draft_id, or ask for a new draft.")
+		return
 	case errors.Is(err, domain.ErrLastAdmin):
 		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Make another agent an admin first.")
 		return

@@ -48,6 +48,8 @@ type contractFixture struct {
 	imports                                            importJobs
 	// aiProviderID is changed, checked and finally deleted by the AI cases.
 	aiProviderID string
+	// aiDraftID is a draft of conversationID, still queued: read, then discarded by the cases.
+	aiDraftID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -186,7 +188,21 @@ func newContractFixture(t *testing.T) contractFixture {
 	}
 	imports := seedImportJobs(t, pool, workspaceID(t, api, adminToken))
 	aiProviderID := create(t, api, adminToken, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Contract key", "api_key": "sk-contract-0001", "models": []string{"claude-sonnet-5-5", "claude-haiku-5-5"}})
-	return contractFixture{aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	// Reply drafts run on a provider of their own, which the provider cases leave alone.
+	draftsProvider := create(t, api, adminToken, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Contract drafts", "api_key": "sk-contract-0004", "models": []string{"claude-sonnet-5-5"}})
+	if response := request(t, api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "provider", "provider_id": draftsProvider, "enabled": true}, adminToken, nil); response.Code != http.StatusOK {
+		t.Fatalf("turn reply drafts on: %d %s", response.Code, response.Body.String())
+	}
+	queued := request(t, api, http.MethodPost, "/api/v1/conversations/"+conversationID+"/ai-drafts", map[string]any{"prompt": "Contract draft"}, adminToken, nil)
+	var draft struct {
+		ID string `json:"id"`
+	}
+	decode(t, queued, &draft)
+	if queued.Code != http.StatusAccepted || draft.ID == "" {
+		t.Fatalf("ask for an AI draft: %d %s", queued.Code, queued.Body.String())
+	}
+	aiDraftID := draft.ID
+	return contractFixture{aiDraftID: aiDraftID, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }

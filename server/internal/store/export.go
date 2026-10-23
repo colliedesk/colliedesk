@@ -476,7 +476,7 @@ func exportPageTimeEntries(ctx context.Context, tx pgx.Tx, workspaceID string, i
 
 // exportMessages streams one conversation's messages, one row in memory at a time.
 func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, files map[string][]export.Attachment, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,author_agent_id::text,author_name,kind,body,body_html,origin,email_message_id,email_meta,cc,created_at,agent_request_id::text
+	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,author_agent_id::text,author_name,kind,body,body_html,origin,email_message_id,email_meta,cc,created_at,agent_request_id::text,ai_draft_id::text
 		FROM messages WHERE workspace_id=$1 AND conversation_id=$2 ORDER BY created_at,id`, workspaceID, conversationID)
 	if err != nil {
 		return fmt.Errorf("export messages: %w", err)
@@ -486,7 +486,7 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		var record export.Message
 		var meta []byte
 		if err := rows.Scan(&record.ID, &record.ConversationID, &record.AuthorAgentID, &record.AuthorName, &record.Kind, &record.Body,
-			&record.BodyHTML, &record.Origin, &record.EmailMessageID, &meta, &record.CC, &record.CreatedAt, &record.AgentRequestID); err != nil {
+			&record.BodyHTML, &record.Origin, &record.EmailMessageID, &meta, &record.CC, &record.CreatedAt, &record.AgentRequestID, &record.AIDraftID); err != nil {
 			return fmt.Errorf("export messages: %w", err)
 		}
 		record.CreatedAt = domain.UTC(record.CreatedAt)
@@ -529,7 +529,7 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	rows, err = tx.Query(ctx, `SELECT a.id::text,a.collection_id::text,a.number,a.title,a.slug,a.body_md,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
 			COALESCE((SELECT array_agg(l.media_id::text ORDER BY l.media_id) FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
 				WHERE l.workspace_id=a.workspace_id AND l.article_id=a.id AND m.kind='image'), '{}'),
-			a.created_at,a.updated_at,a.deleted_at,a.deleted_by_agent_id::text
+			a.created_at,a.updated_at,a.deleted_at,a.deleted_by_agent_id::text,a.ai_excluded_at,a.ai_excluded_by_agent_id::text
 		FROM kb_articles a WHERE a.workspace_id=$1 ORDER BY a.number`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base articles: %w", err)
@@ -538,13 +538,15 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		var record export.KBArticle
 		var meta []byte
 		if err := rows.Scan(&record.ID, &record.CollectionID, &record.Number, &record.Title, &record.Slug, &record.BodyMD, &record.Status, &record.PublishedAt,
-			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
+			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID,
+			&record.AIExcludedAt, &record.AIExcludedByAgentID); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base articles: %w", err)
 		}
 		record.SourceMeta = meta
 		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
 		record.PublishedAt, record.DeletedAt = domain.UTCOptional(record.PublishedAt), domain.UTCOptional(record.DeletedAt)
+		record.AIExcludedAt = domain.UTCOptional(record.AIExcludedAt)
 		if err := sink.KBArticle(record); err != nil {
 			rows.Close()
 			return err
@@ -764,5 +766,29 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 			return err
 		}
 	}
-	return rowsError("export AI usage", usage)
+	if err := rowsError("export AI usage", usage); err != nil {
+		return err
+	}
+	usage.Close()
+	drafts, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,task_id::text,requested_by_agent_id::text,requested_by_token_id::text,prompt,status,text,missing_info,
+			sources,warnings,model,outcome,similarity::float8,sent_message_id::text,created_at,ready_at,decided_at,decided_by_agent_id::text,text_cleared_at
+		FROM ai_drafts WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export AI drafts: %w", err)
+	}
+	defer drafts.Close()
+	for drafts.Next() {
+		var r export.AIDraft
+		var sources, warnings []byte
+		if err := drafts.Scan(&r.ID, &r.ConversationID, &r.TaskID, &r.RequestedByAgentID, &r.RequestedByTokenID, &r.Prompt, &r.Status, &r.Text, &r.MissingInfo,
+			&sources, &warnings, &r.Model, &r.Outcome, &r.Similarity, &r.SentMessageID, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID, &r.TextClearedAt); err != nil {
+			return fmt.Errorf("export AI drafts: %w", err)
+		}
+		r.Sources, r.Warnings = sources, warnings
+		r.CreatedAt, r.ReadyAt, r.DecidedAt, r.TextClearedAt = domain.UTC(r.CreatedAt), domain.UTCOptional(r.ReadyAt), domain.UTCOptional(r.DecidedAt), domain.UTCOptional(r.TextClearedAt)
+		if err := sink.AIDraft(r); err != nil {
+			return err
+		}
+	}
+	return rowsError("export AI drafts", drafts)
 }

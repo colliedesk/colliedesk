@@ -3,6 +3,8 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 )
@@ -145,6 +147,17 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ai_provider_name_taken", "Another provider of this workspace has that name.")
 	case errors.Is(err, ai.ErrNoServerProvider):
 		writeError(response, http.StatusConflict, "no_server_provider", "This server has no AI provider for that feature. Add your own provider, or ask the server operator.")
+	case errors.Is(err, ai.ErrFeatureOff):
+		writeError(response, http.StatusConflict, "ai_feature_off", "Reply drafts are off in this workspace, or their provider is gone. An admin turns them on in Settings → AI.")
+	case errors.Is(err, ai.ErrDraftsRateLimited):
+		response.Header().Set("Retry-After", "60")
+		writeError(response, http.StatusTooManyRequests, "ai_drafts_rate_limited", "At most 30 AI drafts a minute in a workspace; try again shortly.")
+	case errors.Is(err, ai.ErrDraftNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "No AI draft with that id on this conversation.")
+	case errors.Is(err, ai.ErrConversationNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "No conversation with that id in this workspace.")
+	case errors.Is(err, ai.ErrDraftDecided):
+		writeError(response, http.StatusConflict, "ai_draft_decided", "This AI draft was already sent, discarded or replaced.")
 	case errors.Is(err, ai.ErrAllowanceReached):
 		writeError(response, http.StatusPaymentRequired, "ai_allowance_reached", "This month's included AI is used up. Add your own provider in Settings → AI, or move to a larger plan.")
 	case errors.Is(err, ai.ErrCheckRateLimited):
@@ -207,4 +220,58 @@ func (a *API) setAIAutomaticLimits(response http.ResponseWriter, request *http.R
 		return
 	}
 	writeJSON(response, http.StatusOK, limits)
+}
+
+func (a *API) createAIDraft(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		Prompt string `json:"prompt"`
+	}
+	if request.ContentLength != 0 {
+		if err := decodeJSON(request, &input); err != nil {
+			writeError(response, http.StatusBadRequest, "invalid_request", "Send prompt, what the reply should say (optional, at most 2000 characters).")
+			return
+		}
+	}
+	draft, err := a.ai.CreateDraft(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"), input.Prompt)
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusAccepted, draft)
+}
+
+func (a *API) listAIDrafts(response http.ResponseWriter, request *http.Request) {
+	drafts, err := a.ai.ListDrafts(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": drafts})
+}
+
+func (a *API) getAIDraft(response http.ResponseWriter, request *http.Request) {
+	wait := 0
+	if value := request.URL.Query().Get("wait"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 || parsed > 20 {
+			writeError(response, http.StatusBadRequest, "invalid_request", "wait is 0 to 20 seconds.")
+			return
+		}
+		wait = parsed
+	}
+	draft, err := a.ai.WaitDraft(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), request.PathValue("draftId"), time.Duration(wait)*time.Second)
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, draft)
+}
+
+func (a *API) discardAIDraft(response http.ResponseWriter, request *http.Request) {
+	draft, err := a.ai.DiscardDraft(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"), request.PathValue("draftId"))
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, draft)
 }
