@@ -117,7 +117,9 @@ replaces the automatic one.
 The draft waits above the reply box for everyone on the team, with its sources: **Use draft** puts it
 in an empty reply box; with text in the box, **Insert below** or **Replace my text**; **Discard**
 throws it away. **AI never sends**: a person reads it and presses **Send**. When the model thinks the
-message needs no reply (a thank-you), the draft is folded with **Show draft**.
+message needs no reply (a thank-you), the draft is folded with **Show draft**. On a short screen
+every draft starts folded to one line with its buttons, so the conversation stays in view; **Hide**
+folds an open one.
 
 Automatic drafts stop at 100 a day (UTC; admins change it in **Automatic runs**), at 5 per
 conversation in 24 hours, and, on the server's provider, once they used half of the month's included

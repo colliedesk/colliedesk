@@ -64,3 +64,11 @@
   .ai-auto-draft-row button, .ai-auto-draft-acts > * { flex: 1; }
   .ai-auto-draft-acts { width: 100%; margin-left: 0; }
 }
+/* A notice about a newer message inside the card of the draft still to use: one line, no box of its own. */
+.ai-auto-draft > .ai-auto-draft-strip { font-size: var(--fs-label); margin: 0; border: 0; border-radius: 0; padding: 0 0 var(--space-2); border-bottom: 1px solid var(--line); background: transparent; }
+.ai-auto-draft > .ai-auto-draft-strip.note, .ai-auto-draft > .ai-auto-draft-strip.note b { color: var(--note-text); }
+/* A short screen keeps the conversation in view: the draft shows fewer lines (it scrolls). */
+@media (max-height: 820px) { .ai-auto-draft-text { max-height: 4.5rem; } }
+/* In the card of a draft to use, Draft with AI is not the way on. */
+.ai-auto-draft > .ai-auto-draft-strip .ai-auto-draft-rest { display: none; }
+.ai-auto-draft-hide { margin-left: auto; --control: 24px; padding: 0 var(--space-2); font-size: var(--fs-label); }

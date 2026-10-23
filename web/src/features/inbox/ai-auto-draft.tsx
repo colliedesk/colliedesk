@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDate, formatShortDate } from '../../lib/format-date';
 import { aiDraftApi, writing } from './ai-draft-api';
@@ -27,12 +28,14 @@ const text = {
   noReply: 'No reply needed',
   noReplyRest: ', AI thinks. The draft is here if you want it.',
   showDraft: 'Show draft',
+  hide: 'Hide',
   pausedDay: (until: string) => `Automatic drafts are paused until ${until}:`,
-  pausedDayRest: ' today’s are used. Draft with AI below still works.',
+  pausedDayRest: ' today’s are used.',
+  stillWorks: ' Draft with AI below still works.',
   pausedMonth: (until: string) => `Automatic drafts are paused until ${until}:`,
-  pausedMonthRest: ' they used their half of this month’s included AI. Draft with AI below still works.',
+  pausedMonthRest: ' they used their half of this month’s included AI.',
   capped: 'No automatic draft for this message:',
-  cappedRest: ' this conversation had 5 in 24 hours. Draft with AI below still works.',
+  cappedRest: ' this conversation had 5 in 24 hours.',
   failed: 'The automatic draft failed:',
   failedWhy: (code: string | null) => failures[code ?? ''] ?? 'the AI provider did not answer.',
   failedNext: ' Reply yourself, or use Draft with AI.',
@@ -104,10 +107,11 @@ export function AutoDraftCard({ conversationId, customerName, timezone, hasText,
   const ready = automatic.find((item) => item.status === 'ready' && item.outcome === null && item.text);
   if (!latest) return null;
   const who = customerName || text.customer;
-  const card = ready && <ReadyAutoDraft key={ready.id} draft={ready} title={text.draftFor(who, formatShortDate(ready.created_at, timezone))} hasText={hasText}
-    busy={discard.isPending} onDiscard={() => discard.mutate(ready)} onUse={(how) => onUse(ready.text ?? '', how, ready.id, ready.warnings.map((warning) => warning.value))} />;
-  if (latest === ready || hidden.includes(latest.id)) return card || null;
-  return <>{notice(latest)}{card}</>;
+  const card = (note?: ReactNode) => ready && <ReadyAutoDraft key={ready.id} draft={ready} title={text.draftFor(who, formatShortDate(ready.created_at, timezone))} hasText={hasText}
+    busy={discard.isPending} note={note} onDiscard={() => discard.mutate(ready)} onUse={(how) => onUse(ready.text ?? '', how, ready.id, ready.warnings.map((warning) => warning.value))} />;
+  if (latest === ready || hidden.includes(latest.id)) return card() || null;
+  // With a draft to use, the notice about the newer message is a line in its card, not a box of its own.
+  return ready ? card(notice(latest)) : notice(latest);
 
   function notice(draft: AIDraft) {
     const at = formatShortDate(draft.created_at, timezone);
@@ -123,13 +127,13 @@ export function AutoDraftCard({ conversationId, customerName, timezone, hasText,
     const code = draft.error_code;
     if ((draft.status !== 'failed' && draft.status !== 'cancelled') || code === null || quiet.includes(code)) return null;
     if (code === 'draft_limit' || code === 'automatic_limit') {
-      return <div className="ai-auto-draft ai-auto-draft-strip note" role="status"><span><b>{text.pausedDay(formatDate(nextUTCMidnight(draft.created_at), timezone))}</b>{text.pausedDayRest}</span></div>;
+      return <div className="ai-auto-draft ai-auto-draft-strip note" role="status"><span><b>{text.pausedDay(formatDate(nextUTCMidnight(draft.created_at), timezone))}</b>{text.pausedDayRest}<span className="ai-auto-draft-rest">{text.stillWorks}</span></span></div>;
     }
     if (code === 'allowance_reserved') {
-      return <div className="ai-auto-draft ai-auto-draft-strip note" role="status"><span><b>{text.pausedMonth(formatDate(nextUTCMonth(draft.created_at), timezone))}</b>{text.pausedMonthRest}</span></div>;
+      return <div className="ai-auto-draft ai-auto-draft-strip note" role="status"><span><b>{text.pausedMonth(formatDate(nextUTCMonth(draft.created_at), timezone))}</b>{text.pausedMonthRest}<span className="ai-auto-draft-rest">{text.stillWorks}</span></span></div>;
     }
     if (code === 'conversation_cap') {
-      return <div className="ai-auto-draft ai-auto-draft-strip note" role="status"><span><b>{text.capped}</b>{text.cappedRest}</span></div>;
+      return <div className="ai-auto-draft ai-auto-draft-strip note" role="status"><span><b>{text.capped}</b>{text.cappedRest}<span className="ai-auto-draft-rest">{text.stillWorks}</span></span></div>;
     }
     return (
       <div className="ai-auto-draft ai-auto-draft-strip danger" role="alert">
@@ -147,26 +151,38 @@ function UsedNote() {
   return <div className="ai-auto-draft ai-auto-draft-strip" role="status"><span className="ai-chip" aria-hidden="true">AI</span><span>{text.used}</span></div>;
 }
 
-function ReadyAutoDraft({ draft, title, hasText, busy, onDiscard, onUse }: { draft: AIDraft; title: string; hasText: boolean; busy: boolean;
-  onDiscard: () => void; onUse: (how: DraftUse) => void }) {
-  // A draft the model thinks needs no reply starts folded; Show draft opens it.
-  const [shown, setShown] = useState(draft.reply_needed !== false);
+// A short screen (a laptop at 720 pixels) keeps the conversation in view: the draft starts folded.
+const shortScreen = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-height: 800px)').matches;
+
+function ReadyAutoDraft({ draft, title, hasText, busy, note, onDiscard, onUse }: { draft: AIDraft; title: string; hasText: boolean; busy: boolean;
+  note?: ReactNode; onDiscard: () => void; onUse: (how: DraftUse) => void }) {
+  // A draft the model thinks needs no reply starts folded, and so does any draft on a short screen;
+  // Show draft opens it, Hide folds it again.
+  const [shown, setShown] = useState(() => draft.reply_needed !== false && !shortScreen());
   const [used, setUsed] = useState(false);
   if (used) return <UsedNote />;
   const use = (how: DraftUse) => { setUsed(true); onUse(how); };
+  const useButtons = hasText ? <><button type="button" onClick={() => use('below')}>{text.insertBelow}</button>
+    <button type="button" className="primary-action" onClick={() => use('replace')}>{text.replace}</button></>
+    : <button type="button" className="primary-action" onClick={() => use('replace')}>{text.useDraft}</button>;
   if (!shown) {
+    const noReply = draft.reply_needed === false;
     return (
       <section className="ai-auto-draft ai-auto-draft-strip" aria-label={text.label}>
-        <span className="ai-chip" aria-hidden="true">AI</span><span><b>{text.noReply}</b>{text.noReplyRest}</span>
+        {note}
+        <span className="ai-chip" aria-hidden="true">AI</span>
+        {noReply ? <span><b>{text.noReply}</b>{text.noReplyRest}</span> : <span><b>{title}</b></span>}
         <span className="ai-auto-draft-acts"><button type="button" className="ghost" disabled={busy} onClick={onDiscard}>{text.discard}</button>
-          <button type="button" onClick={() => setShown(true)}>{text.showDraft}</button></span>
+          <button type="button" onClick={() => setShown(true)}>{text.showDraft}</button>{!noReply && useButtons}</span>
       </section>
     );
   }
   return (
     <section className="ai-auto-draft" aria-label={text.label}>
+      {note}
       <div className="ai-auto-draft-head"><span className="ai-chip" aria-hidden="true">AI</span><b>{title}</b>
-        <span className="muted-copy">{hasText ? text.overText : text.team}</span></div>
+        <span className="muted-copy">{hasText ? text.overText : text.team}</span>
+        <button type="button" className="ghost ai-auto-draft-hide" onClick={() => setShown(false)}>{text.hide}</button></div>
       {draft.warnings.length > 0 && <p className="ai-draft-check" role="alert">{draft.warnings.map((warning) => warning.value).join(', ')}</p>}
       <p className="ai-auto-draft-text" tabIndex={0}>{draft.text}</p>
       {draft.missing_info && <p className="ai-draft-missing"><strong>{text.missing}</strong> {draft.missing_info}</p>}
@@ -174,9 +190,7 @@ function ReadyAutoDraft({ draft, title, hasText, busy, onDiscard, onUse }: { dra
       <div className="ai-auto-draft-row">
         <span className="muted-copy ai-long">{text.neverSends}</span>
         <button type="button" className="ghost" disabled={busy} onClick={onDiscard}>{text.discard}</button>
-        {hasText ? <><button type="button" onClick={() => use('below')}>{text.insertBelow}</button>
-          <button type="button" className="primary-action" onClick={() => use('replace')}>{text.replace}</button></>
-          : <button type="button" className="primary-action" onClick={() => use('replace')}>{text.useDraft}</button>}
+        {useButtons}
       </div>
     </section>
   );

@@ -41,6 +41,19 @@ test('a draft AI wrote for the customer waits above the reply box, and Use draft
   expect(screen.queryByRole('button', { name: 'Use draft' })).not.toBeInTheDocument();
 });
 
+test('Hide folds the draft to one line that still has its buttons; Show draft opens it', async () => {
+  serve([draft()]);
+  const onUse = vi.fn();
+  show({ onUse });
+  fireEvent.click(await screen.findByRole('button', { name: 'Hide' }));
+  expect(screen.queryByText('Hi Jordan, I refunded INV-20932.')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Show draft' }));
+  expect(screen.getByText('Hi Jordan, I refunded INV-20932.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Use draft' }));
+  expect(onUse).toHaveBeenCalledWith('Hi Jordan, I refunded INV-20932.', 'replace', draft().id, []);
+});
+
 test('what AI could not find is shown with the draft', async () => {
   serve([draft({ missing_info: 'Whether the printer is under warranty.' })]);
   show();

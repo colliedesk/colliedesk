@@ -62,7 +62,9 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
 
     await page.goto(`${baseURL}/conversations/${conversation}`);
     const card = page.getByRole('region', { name: 'Automatic AI draft' });
-    await expect(card).toContainText('Hi Erin, the office printer is back', { timeout: 30_000 });
+    // On this 720-pixel screen it starts folded, with its buttons; Show draft opens it.
+    await card.getByRole('button', { name: 'Show draft' }).click({ timeout: 30_000 });
+    await expect(card).toContainText('Hi Erin, the office printer is back');
     expect(psql(`SELECT count(*) FROM messages WHERE conversation_id='${conversation}' AND kind='outgoing'`)).toBe('0');
     await card.getByRole('button', { name: 'Use draft' }).click();
     await expect(page.getByRole('textbox', { name: 'Message body' })).toHaveValue(/Hi Erin, the office printer is back/);
@@ -70,6 +72,31 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     await expect(page.getByRole('article').filter({ hasText: 'Hi Erin, the office printer is back' })).toBeVisible();
     expect(psql(`SELECT outcome FROM ai_drafts WHERE conversation_id='${conversation}' AND automatic`)).toMatch(/^sent_/);
     expect(model.calls() - before).toBe(1);
+
+    // The customer writes twice more; the second time the conversation had its 5 automatic drafts in a
+    // day. The draft for the first stays usable, the limit is a line in its card, and on a short laptop
+    // screen the draft folds to a line so the conversation keeps the column.
+    const customerWrites = (body: string) => psql(`INSERT INTO messages(workspace_id,conversation_id,kind,body)
+      SELECT workspace_id,id,'incoming','${body}' FROM conversations WHERE id='${conversation}'`);
+    customerWrites('Thanks, and the scanner?');
+    psql(`UPDATE ai_tasks SET next_run_at=now() WHERE conversation_id='${conversation}' AND kind='draft' AND automatic AND state='queued'`);
+    await page.reload();
+    await expect(card.getByRole('button', { name: 'Use draft' })).toBeVisible({ timeout: 30_000 });
+    psql(`INSERT INTO ai_tasks(workspace_id,kind,conversation_id,automatic,state,started_at,finished_at)
+      SELECT workspace_id,'draft',id,true,'done',now()-g*interval '1 hour',now() FROM conversations, generate_series(1,4) g WHERE id='${conversation}'`);
+    customerWrites('Hello? Anyone there for the scanner too?');
+    psql(`UPDATE ai_tasks SET next_run_at=now() WHERE conversation_id='${conversation}' AND kind='draft' AND automatic AND state='queued'`);
+    await expect.poll(() => psql(`SELECT count(*) FROM ai_tasks WHERE conversation_id='${conversation}' AND error_code='conversation_cap'`), { timeout: 30_000 }).toBe('1');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.reload();
+    await expect(card.getByText('No automatic draft for this message:')).toBeVisible();
+    // Folded on a short screen: one line with its buttons, the rest of the column is the conversation.
+    await expect(card.getByRole('button', { name: 'Use draft' })).toBeInViewport();
+    expect((await card.boundingBox())!.height).toBeLessThan(140);
+    await card.getByRole('button', { name: 'Show draft' }).click();
+    await expect(card).toContainText('Hi Erin, the office printer is back');
+    await card.getByRole('button', { name: 'Hide' }).click();
+    expect(model.calls() - before).toBe(2);
 
     // A phone: the card's buttons are in reach and nothing scrolls sideways.
     await page.setViewportSize({ width: 390, height: 844 });
