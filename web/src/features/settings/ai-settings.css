@@ -142,6 +142,7 @@
 .ai-dialog-body p { color: var(--text-2); font-size: var(--fs-small); }
 .ai-dialog .field input { width: 100%; }
 .ai-field-note { font-size: var(--fs-label); }
+.field .ai-field-note.error-copy { color: var(--danger); }
 .ai-field-bad input { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 .ai-dialog-footer { align-items: center; justify-content: flex-end; }
 .ai-dialog-left { margin-right: auto; color: var(--text-3); font-size: var(--fs-label); }

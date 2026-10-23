@@ -76,7 +76,7 @@ export const aiMessages = {
   estHow: 'How the estimate works',
   estHalfRest: ' Then they pause until next month; Draft with AI and triage keep working. To draft every message, add your own key.',
   estAtMost: 'At most',
-  estAtMostDay: (n: number) => `${n} drafts a day`,
+  estAtMostDay: (n: number) => `${n} ${n === 1 ? 'draft' : 'drafts'} a day`,
   estByo: (label: string) => `Billed to your key, ${label}.`,
   estByoRest: ' Colliedesk does not cap the month; lower the daily limit to spend less.',
   autoDraftFacts: (perDay: number) => [
