@@ -196,21 +196,30 @@ func digits(text string) string {
 }
 
 // scripts are the alphabets a draft's words are checked against: a word in one the conversation never
-// used is a model slipping into another language.
-var scripts = []*unicode.RangeTable{unicode.Latin, unicode.Cyrillic, unicode.Greek, unicode.Arabic, unicode.Hebrew, unicode.Han,
+// used is a model slipping into another language. Latin is left out: links, product names and codes
+// are written in it whatever the language.
+var scripts = []*unicode.RangeTable{unicode.Cyrillic, unicode.Greek, unicode.Arabic, unicode.Hebrew, unicode.Han,
 	unicode.Hiragana, unicode.Katakana, unicode.Hangul, unicode.Thai, unicode.Devanagari, unicode.Armenian, unicode.Georgian}
 
 func scriptOf(r rune) *unicode.RangeTable {
 	for _, table := range scripts {
 		if unicode.Is(table, r) {
+			// Japanese writes kanji and kana together, Chinese only Han: one family.
+			if table == unicode.Hiragana || table == unicode.Katakana {
+				return unicode.Han
+			}
 			return table
 		}
 	}
 	return nil
 }
 
-// foreignWords are the draft's words written in an alphabet the conversation does not use.
+var linkPattern = regexp.MustCompile(`\bhttps?://\S+`)
+
+// foreignWords are the draft's words written in an alphabet the conversation does not use; links and
+// email addresses are not words.
 func foreignWords(reply, known string) []string {
+	reply = emailPattern.ReplaceAllString(linkPattern.ReplaceAllString(reply, " "), " ")
 	used := map[*unicode.RangeTable]bool{}
 	for _, r := range known {
 		if table := scriptOf(r); table != nil {
