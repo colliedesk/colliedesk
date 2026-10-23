@@ -37,3 +37,12 @@ export function dayGroup(value: string, timeZone: string, now = new Date()): 'to
   const day = (input: Date) => format(input, timeZone, { year: 'numeric', month: 'numeric', day: 'numeric' });
   return day(new Date(value)) === day(now) ? 'today' : 'earlier';
 }
+
+// formatListTime is a list row's stamp where no tooltip can show more (a touch screen): the time alone
+// for today, under the Today heading, and the full date and time for anything earlier. The day is the
+// calendar day in the agent's timezone, the same one the Today and Earlier groups use.
+export function formatListTime(value: string, timeZone: string, now = new Date()): string {
+  const label = dayGroup(value, timeZone, now) === 'today' ? format(new Date(value), timeZone, { hour: 'numeric', minute: '2-digit' })
+    : formatDate(value, timeZone, now);
+  return label.replace(/\s/g, ' ');
+}

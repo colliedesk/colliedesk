@@ -400,13 +400,16 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .tag-check:has(input:checked) { border: 2px solid Highlight; }
 }
 
-/* Row time: the short form for a mouse, the full stamp for a screen reader, keyboard focus (tooltip over the time) and touch. */
+/* Row time: the short form for a mouse (the full stamp in the tooltip and for keyboard focus), the full stamp
+   for a screen reader. Without hover there is no tooltip: a row from today shows its time (the Today heading
+   gives the day), an earlier row its date and time. */
 .conversation-row[data-tip]::after { left: auto; right: var(--space-3); top: var(--space-1); translate: 0 0; }
 .conversation-row .time-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.conversation-row .time-touch { display: none; }
 @media (hover: none) {
   .conversation-row[data-tip]::after { display: none; }
   .conversation-row .time-short { display: none; }
-  .conversation-row .time-full { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+  .conversation-row .time-touch { display: inline; }
 }
 
 /* Plan notices: the trial banner under the identity bar. */
