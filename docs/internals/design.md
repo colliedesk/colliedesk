@@ -149,6 +149,13 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
   6 % so it fills the tile at 16 px. `apple-touch-icon.png` (180 px) is the same on a full-bleed tile
   (iOS rounds the corners). Icon links in `web/index.html` carry `?v=` = the first 10 hex of the file's
   sha256 (`src/favicon-version.test.ts`), because browsers keep a favicon per URL.
+- **Emails.** The sign-in code and new-device emails come from Clerk (`notifications@` / `noreply@colliedesk.com`)
+  and carry the mark (Clerk dashboard, Customization, Branding: the 180 px `apple-touch-icon.png`, primary colour
+  ink `#171717`). Notices the server sends itself (import ended, workspace deletion, billing alerts) are plain
+  text with no styling. Replies a team sends its own customers are white-label: no Colliedesk mark or colour.
+- **Help center** (`server/internal/helpcenter/static/site.css`): the customer's public site, white-label ink
+  and paper (neutral greys, ink links and buttons, no orange). `web/scripts/brand-rules.test.mjs` fails when
+  one of its palette tokens carries a hue.
 - **Wordmark** (`LogoWordmark` reads `web/public/wordmark-on-dark.svg`, kept out of the JS bundle; the
   site uses `public/logo-wordmark.svg`): outlined IBM Plex Sans,
   "collie" 700 and "desk" 400. The second "l" is tipped forward like a collie ear. Use the outlined

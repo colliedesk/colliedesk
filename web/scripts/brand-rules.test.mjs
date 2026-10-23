@@ -99,3 +99,13 @@ test('the high priority chip is neutral, not the warning orange', () => {
   expect(high).toMatch(/background:\s*var\(--text-2\)/);
   expect(high).toMatch(/color:\s*var\(--surface-1\)/);
 });
+
+// The public help center is the customer's own site: white-label, so it carries neither the Colliedesk
+// orange nor a hue of its own. Its paper, ink, lines and accent are neutral greys in both themes.
+test('the help center palette is ink and paper', () => {
+  const css = readFileSync(new URL('../../server/internal/helpcenter/static/site.css', import.meta.url), 'utf8');
+  const tinted = [...css.matchAll(/--(paper|surface|ink|muted|rule|accent|accent-ink|accent-soft|tab):\s*#([0-9a-f]{6})/gi)]
+    .filter(([, , hex]) => !(hex.slice(0, 2) === hex.slice(2, 4) && hex.slice(2, 4) === hex.slice(4, 6)))
+    .map(([, name, hex]) => `--${name} #${hex}`);
+  expect(tinted).toEqual([]);
+});
