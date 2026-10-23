@@ -79,6 +79,7 @@ jobs:
       # match setup-go-*: actions/cache searches the pull request's ref before main's, and CodeQL's
       # setup-go saves a build-only entry there, which shadowed main's entry with the test builds.
       - name: Restore the Go build cache of the newest main run
+        id: go-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -101,24 +102,36 @@ jobs:
           if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
-          # Six regular shards of three go test processes each, and two latency shards of one process
-          # each (go-test-shard.py says why).
-          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 2 < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
+          # Six regular shards of three go test processes each, and two latency shards that run their
+          # gates as one process, then half a regular shard's tests in three (go-test-shard.py says why).
+          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 2 --latency-share 0.5 < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
       - name: Wait for test services
         run: sh .github/scripts/ci-services.sh wait postgres
       - name: Test
         working-directory: server
+        # Patterns run at once; a '--' line waits for the ones before it.
         run: |
           pids=()
+          status=0
           while IFS= read -r pattern; do
+            if [ "$pattern" = '--' ]; then
+              for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+              pids=()
+              continue
+            fi
             go test -count=1 -run "$pattern" ./... &
             pids+=($!)
           done < "$RUNNER_TEMP/go-test-patterns.txt"
-          status=0
           for pid in "${pids[@]}"; do wait "$pid" || status=1; done
           exit "$status"
-      - if: github.event_name == 'push' && matrix.shard == 1
-        name: Save the Go build cache for later runs
+      # go-cache.yml saves main's entry on every push. A pull request whose go.sum main has not cached
+      # yet (a new module) saves once, on its own ref, so its next runs skip compiling that module
+      # (the Anthropic SDK: about 23 seconds per job). Shard 7 runs the knowledge-base gates and ends
+      # 30 to 60 seconds before the regular shards, so the upload does not lengthen the run.
+      - if: >-
+          github.event_name == 'pull_request' && matrix.shard == 7 &&
+          !startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))
+        name: Save the Go build cache of a new go.sum
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
