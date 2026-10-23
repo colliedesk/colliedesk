@@ -27,6 +27,15 @@ const (
 	CodeNoHandler         = "no_handler"
 	CodeInternal          = "internal"
 	CodeCancelledByPerson = "cancelled"
+	// An automatic draft is not written when it would not be used or may not be: someone replied
+	// (answered), the conversation closed, the automatic mode went off, the day's or the
+	// conversation's automatic drafts are used, or they spent their half of the allowance.
+	CodeAnswered          = "answered"
+	CodeConversationShut  = "conversation_closed"
+	CodeAutomationOff     = "automation_off"
+	CodeDraftLimit        = "draft_limit"
+	CodeConversationCap   = "conversation_cap"
+	CodeAllowanceReserved = "allowance_reserved"
 
 	// codeMinuteFull is never stored: such a task waits for the next minute.
 	codeMinuteFull = "minute_full"
@@ -39,6 +48,12 @@ var ErrClaimLost = errors.New("the AI task was cancelled or taken over while it 
 const (
 	DefaultAutomaticPerDay    = 300
 	DefaultAutomaticPerMinute = 30
+	// DefaultAutomaticDraftsPerDay bounds the drafts written by themselves in a UTC day; a draft costs
+	// about ten triage suggestions.
+	DefaultAutomaticDraftsPerDay = 100
+	// automaticDraftsPerConversation bounds the automatic drafts of one conversation in 24 hours, so a
+	// back-and-forth the mail loop guard lets through cannot spend all day.
+	automaticDraftsPerConversation = 5
 )
 
 // Task is one queued piece of AI work.
@@ -201,6 +216,14 @@ type AutomaticLimits struct {
 	PerMinute   int        `json:"per_minute"`
 	UsedToday   int        `json:"used_today"`
 	PausedUntil *time.Time `json:"paused_until"`
+	// DraftPerDay bounds the automatic drafts of a UTC day, inside PerDay; DraftsToday counts them.
+	// Automatic drafts pause until the next day past DraftPerDay (DraftsPausedUntil), and until the
+	// next month once they spent half of the server's allowance (DraftsReservedUntil): the other half
+	// stays for drafts people ask for and for triage.
+	DraftPerDay         int        `json:"draft_per_day"`
+	DraftsToday         int        `json:"drafts_today"`
+	DraftsPausedUntil   *time.Time `json:"drafts_paused_until"`
+	DraftsReservedUntil *time.Time `json:"drafts_reserved_until"`
 }
 
 func dayStart(at time.Time) time.Time {
@@ -211,28 +234,55 @@ func dayStart(at time.Time) time.Time {
 // automaticLimits reads the limits and counts the automatic tasks that started today and in the last
 // minute. Tasks count, not calls: retrying a task does not use more of the limit.
 func (s *Service) automaticLimits(ctx context.Context, tx pgx.Tx, workspaceID string) (AutomaticLimits, int, error) {
-	limits := AutomaticLimits{PerDay: DefaultAutomaticPerDay, PerMinute: DefaultAutomaticPerMinute}
-	err := tx.QueryRow(ctx, `SELECT per_day,per_minute FROM ai_automatic_limits WHERE workspace_id=$1`, workspaceID).Scan(&limits.PerDay, &limits.PerMinute)
+	limits := AutomaticLimits{PerDay: DefaultAutomaticPerDay, PerMinute: DefaultAutomaticPerMinute, DraftPerDay: DefaultAutomaticDraftsPerDay}
+	err := tx.QueryRow(ctx, `SELECT per_day,per_minute,draft_per_day FROM ai_automatic_limits WHERE workspace_id=$1`, workspaceID).Scan(&limits.PerDay, &limits.PerMinute, &limits.DraftPerDay)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return AutomaticLimits{}, 0, err
 	}
 	now := s.now().UTC()
 	var minute int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE started_at>=$2), count(*) FILTER (WHERE started_at>$3)
-		FROM ai_tasks WHERE workspace_id=$1 AND automatic AND started_at>=LEAST($2,$3)`, workspaceID, dayStart(now), now.Add(-time.Minute)).Scan(&limits.UsedToday, &minute); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE started_at>=$2), count(*) FILTER (WHERE started_at>$3), count(*) FILTER (WHERE started_at>=$2 AND kind='draft')
+		FROM ai_tasks WHERE workspace_id=$1 AND automatic AND started_at>=LEAST($2,$3)`, workspaceID, dayStart(now), now.Add(-time.Minute)).Scan(&limits.UsedToday, &minute, &limits.DraftsToday); err != nil {
 		return AutomaticLimits{}, 0, err
 	}
+	next := dayStart(now).Add(24 * time.Hour)
 	if limits.UsedToday >= limits.PerDay {
-		next := dayStart(now).Add(24 * time.Hour)
 		limits.PausedUntil = &next
+	}
+	if limits.DraftsToday >= limits.DraftPerDay || limits.UsedToday >= limits.PerDay {
+		limits.DraftsPausedUntil = &next
+	}
+	reserved, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
+	if err != nil {
+		return AutomaticLimits{}, 0, err
+	}
+	if reserved {
+		month := monthStart(now).AddDate(0, 1, 0)
+		limits.DraftsReservedUntil = &month
 	}
 	return limits, minute, nil
 }
 
-// SetAutomaticLimits changes how many automatic tasks the workspace runs a day and a minute.
-func (s *Service) SetAutomaticLimits(ctx context.Context, workspaceID string, actor Actor, perDay, perMinute int) (AutomaticLimits, error) {
-	if perDay < 0 || perDay > 10000 || perMinute < 0 || perMinute > 1000 {
-		return AutomaticLimits{}, invalid("per_day is 0 to 10000 and per_minute 0 to 1000.")
+// automaticDraftsReserved says whether automatic drafts spent half of this month's allowance of the
+// server's provider (what their calls cost, or hold while running).
+func (s *Service) automaticDraftsReserved(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
+	_, limit, limited, err := s.allowanceLeft(ctx, tx, workspaceID)
+	if err != nil || !limited {
+		return false, err
+	}
+	var spent int64
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(CASE WHEN status='started' THEN COALESCE(reserved_micro_usd,0) ELSE COALESCE(cost_micro_usd,0) END),0)
+		FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature='draft' AND automatic AND started_at>=$2`, workspaceID, monthStart(s.now())).Scan(&spent); err != nil {
+		return false, err
+	}
+	return spent*2 >= limit, nil
+}
+
+// SetAutomaticLimits changes how many automatic tasks the workspace runs a day and a minute, and how
+// many of them a day are drafts (nil: kept).
+func (s *Service) SetAutomaticLimits(ctx context.Context, workspaceID string, actor Actor, perDay, perMinute int, draftPerDay *int) (AutomaticLimits, error) {
+	if perDay < 0 || perDay > 10000 || perMinute < 0 || perMinute > 1000 || (draftPerDay != nil && (*draftPerDay < 0 || *draftPerDay > 10000)) {
+		return AutomaticLimits{}, invalid("per_day is 0 to 10000, per_minute 0 to 1000 and draft_per_day 0 to 10000.")
 	}
 	now := s.now().UTC()
 	var limits AutomaticLimits
@@ -241,19 +291,25 @@ func (s *Service) SetAutomaticLimits(ctx context.Context, workspaceID string, ac
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO ai_automatic_limits(workspace_id,per_day,per_minute,updated_by,updated_at) VALUES($1,$2,$3,$4,$5)
-			ON CONFLICT (workspace_id) DO UPDATE SET per_day=EXCLUDED.per_day,per_minute=EXCLUDED.per_minute,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at`,
-			workspaceID, perDay, perMinute, nullable(actor.AgentID), now); err != nil {
+		drafts := before.DraftPerDay
+		if draftPerDay != nil {
+			drafts = *draftPerDay
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO ai_automatic_limits(workspace_id,per_day,per_minute,draft_per_day,updated_by,updated_at) VALUES($1,$2,$3,$4,$5,$6)
+			ON CONFLICT (workspace_id) DO UPDATE SET per_day=EXCLUDED.per_day,per_minute=EXCLUDED.per_minute,draft_per_day=EXCLUDED.draft_per_day,
+				updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at`,
+			workspaceID, perDay, perMinute, drafts, nullable(actor.AgentID), now); err != nil {
 			return err
 		}
 		if limits, _, err = s.automaticLimits(ctx, tx, workspaceID); err != nil {
 			return err
 		}
-		if before.PerDay == perDay && before.PerMinute == perMinute {
+		if before.PerDay == perDay && before.PerMinute == perMinute && before.DraftPerDay == drafts {
 			return nil
 		}
 		return addEvent(ctx, tx, workspaceID, "automatic_limits_changed", actor, "", "", "", map[string]any{
-			"from": map[string]any{"per_day": before.PerDay, "per_minute": before.PerMinute}, "to": map[string]any{"per_day": perDay, "per_minute": perMinute}}, now)
+			"from": map[string]any{"per_day": before.PerDay, "per_minute": before.PerMinute, "draft_per_day": before.DraftPerDay},
+			"to":   map[string]any{"per_day": perDay, "per_minute": perMinute, "draft_per_day": drafts}}, now)
 	})
 	return limits, err
 }

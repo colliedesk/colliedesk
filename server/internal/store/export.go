@@ -771,7 +771,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	usage.Close()
 	drafts, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,task_id::text,requested_by_agent_id::text,requested_by_token_id::text,prompt,status,text,missing_info,
-			sources,warnings,model,outcome,similarity::float8,sent_message_id::text,created_at,ready_at,decided_at,decided_by_agent_id::text,text_cleared_at
+			sources,warnings,model,outcome,similarity::float8,sent_message_id::text,automatic,answers_message_id::text,reply_needed,created_at,ready_at,decided_at,decided_by_agent_id::text,text_cleared_at
 		FROM ai_drafts WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export AI drafts: %w", err)
@@ -781,7 +781,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		var r export.AIDraft
 		var sources, warnings []byte
 		if err := drafts.Scan(&r.ID, &r.ConversationID, &r.TaskID, &r.RequestedByAgentID, &r.RequestedByTokenID, &r.Prompt, &r.Status, &r.Text, &r.MissingInfo,
-			&sources, &warnings, &r.Model, &r.Outcome, &r.Similarity, &r.SentMessageID, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID, &r.TextClearedAt); err != nil {
+			&sources, &warnings, &r.Model, &r.Outcome, &r.Similarity, &r.SentMessageID, &r.Automatic, &r.AnswersMessageID, &r.ReplyNeeded, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID, &r.TextClearedAt); err != nil {
 			return fmt.Errorf("export AI drafts: %w", err)
 		}
 		r.Sources, r.Warnings = sources, warnings

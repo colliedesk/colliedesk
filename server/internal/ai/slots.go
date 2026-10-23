@@ -129,6 +129,9 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 		if settings.Automatic, _, err = s.automaticLimits(ctx, tx, workspaceID); err != nil {
 			return err
 		}
+		if settings.AutoDraftEstimate, err = s.autoDraftEstimate(ctx, tx, workspaceID); err != nil {
+			return err
+		}
 		if err := tx.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE undone_at IS NOT NULL) FROM ai_triage_suggestions
 			WHERE workspace_id=$1 AND auto_applied_at>$2`, workspaceID, s.now().Add(-30*24*time.Hour)).Scan(&settings.AutoTriage.Applied, &settings.AutoTriage.Undone); err != nil {
 			return err
@@ -347,13 +350,8 @@ func nextAutomatic(slot string, next *slotRow, current slotRow, sameRecipient bo
 	if next.autoParts == nil {
 		next.autoParts = []string{}
 	}
-	if slot != SlotTriage {
-		if next.automatic {
-			return invalid("Only triage suggestions can apply by themselves.")
-		}
-		if len(next.autoParts) > 0 {
-			return invalid("auto_parts is for triage only.")
-		}
+	if slot != SlotTriage && len(next.autoParts) > 0 {
+		return invalid("auto_parts is for triage only.")
 	}
 	if next.automatic && !next.enabled {
 		if input.Automatic != nil {

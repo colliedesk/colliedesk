@@ -146,12 +146,12 @@ func (w *Worker) claim(ctx context.Context, limit int) ([]claimedTask, error) {
 				SELECT workspace_id, count(*) AS n FROM ai_tasks WHERE state='running' AND lease_until>$1 GROUP BY workspace_id),
 			ranked AS (
 				SELECT t.id, t.automatic, t.next_run_at,
-					row_number() OVER (PARTITION BY t.workspace_id ORDER BY t.automatic, t.next_run_at) + COALESCE(r.n, 0) AS place
+					row_number() OVER (PARTITION BY t.workspace_id ORDER BY t.automatic, t.automatic AND t.kind='draft', t.next_run_at) + COALESCE(r.n, 0) AS place
 				FROM ai_tasks t LEFT JOIN running r ON r.workspace_id=t.workspace_id
 				WHERE t.state IN ('queued','running') AND t.next_run_at<=$1 AND (t.lease_until IS NULL OR t.lease_until<=$1)),
 			due AS (
 				SELECT t.id FROM ai_tasks t JOIN ranked k ON k.id=t.id WHERE k.place<=$4
-				ORDER BY k.automatic, k.next_run_at LIMIT $2 FOR UPDATE OF t SKIP LOCKED)
+				ORDER BY k.automatic, k.automatic AND t.kind='draft', k.next_run_at LIMIT $2 FOR UPDATE OF t SKIP LOCKED)
 			UPDATE ai_tasks t SET state='running', claim_token=gen_random_uuid(), lease_until=$1+$3::interval, attempts=t.attempts+1
 			FROM due WHERE t.id=due.id RETURNING t.id::text, t.workspace_id::text, t.claim_token::text`, now, limit, w.options.Lease.String(), w.options.PerWorkspace)
 		if err != nil {
@@ -362,11 +362,54 @@ func (w *Worker) admit(ctx context.Context, item claimedTask, task Task) (string
 				code = codeMinuteFull
 				return nil
 			}
+			if task.Kind == SlotDraft {
+				if code, err = w.service.admitAutomaticDraft(ctx, tx, item.workspaceID, task, limits, now); err != nil || code != "" {
+					return err
+				}
+			}
 		}
 		_, err := tx.Exec(ctx, `UPDATE ai_tasks SET started_at=$4 WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`, item.workspaceID, item.id, item.token, now)
 		return err
 	})
 	return code, err
+}
+
+// admitAutomaticDraft decides whether an automatic draft is still worth its call, and may be paid for:
+// the automatic mode still on, nobody replied since, the conversation open, under the day's and the
+// conversation's automatic drafts, and (on the server's provider) under half of the allowance.
+func (s *Service) admitAutomaticDraft(ctx context.Context, tx pgx.Tx, workspaceID string, task Task, limits AutomaticLimits, now time.Time) (string, error) {
+	var on, server bool
+	var status string
+	var answered bool
+	var recent int
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT enabled AND automatic FROM ai_slots WHERE workspace_id=$1 AND slot='draft'),false),
+			COALESCE((SELECT uses_server FROM ai_slots WHERE workspace_id=$1 AND slot='draft'),false),
+			(SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2),
+			COALESCE((SELECT kind<>'incoming' FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind IN ('incoming','outgoing')
+				ORDER BY created_at DESC,id DESC LIMIT 1),false),
+			(SELECT count(*) FROM ai_tasks WHERE workspace_id=$1 AND conversation_id=$2 AND kind='draft' AND automatic AND started_at>$3)`,
+		workspaceID, task.ConversationID, now.Add(-24*time.Hour)).Scan(&on, &server, &status, &answered, &recent)
+	switch {
+	case err != nil:
+		return "", err
+	case !on:
+		return CodeAutomationOff, nil
+	case status == "resolved" || status == "closed":
+		return CodeConversationShut, nil
+	case answered:
+		return CodeAnswered, nil
+	case limits.DraftsToday >= limits.DraftPerDay:
+		return CodeDraftLimit, nil
+	case recent >= automaticDraftsPerConversation:
+		return CodeConversationCap, nil
+	}
+	if server {
+		reserved, err := s.automaticDraftsReserved(ctx, tx, workspaceID)
+		if err != nil || reserved {
+			return CodeAllowanceReserved, err
+		}
+	}
+	return "", nil
 }
 
 // retry queues the task again after the provider's retry-after, or a backoff that doubles each attempt.

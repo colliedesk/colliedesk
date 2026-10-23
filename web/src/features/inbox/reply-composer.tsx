@@ -42,6 +42,8 @@ interface ReplyComposerProps {
   timezone?: string;
   // Reply drafts are on: the box offers Draft with AI for this conversation. agentId finds the person's own drafts.
   aiDraftsFor?: string;
+  // The id of the customer's newest message: when it changes, the automatic draft is read again.
+  latestCustomerMessage?: string;
   // Reply drafts are off: the box says so, with the way to turn them on (canManage) or whom to ask.
   aiDraftsOff?: boolean;
   agentId?: string;
@@ -77,7 +79,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -222,6 +224,8 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   };
   return (
     <div className="composer">
+      {aiDraftsFor && !disabled && assistPart.status === 'ready' && <assistPart.module.AutoDraftCard conversationId={aiDraftsFor} customerName={customerName}
+        timezone={timezone} hasText={Boolean(body.trim())} canManage={canManage} latestCustomerMessage={latestCustomerMessage} onUse={applyDraft} />}
       <div className="composer-card" data-kind={kind} ref={card}>
         <div className="composer-head">
           <div className="composer-tabs" role="group" aria-label={messages.messageKind}>

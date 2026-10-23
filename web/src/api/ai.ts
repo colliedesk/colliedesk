@@ -23,6 +23,7 @@ export const aiSlotSchema = z.object({
 }) satisfies z.ZodType<Generated<'AISlot'>>;
 export const aiAutomaticSchema = z.object({
   per_day: z.number().int(), per_minute: z.number().int(), used_today: z.number().int(), paused_until: nullableDate,
+  draft_per_day: z.number().int(), drafts_today: z.number().int(), drafts_paused_until: nullableDate, drafts_reserved_until: nullableDate,
 }) satisfies z.ZodType<Generated<'AIAutomaticLimits'>>;
 const aiAllowanceSchema = z.object({
   limit_micro_usd: z.number().int(), used_micro_usd: z.number().int(), resets_at: z.string().datetime(),
@@ -47,6 +48,7 @@ export const aiSettingsSchema = z.object({
   providers: z.array(aiProviderSchema), slots: z.array(aiSlotSchema), events: z.array(aiEventSchema),
   provider_limit: z.number().int(), can_store_keys: z.boolean(), allow_private_base_urls: z.boolean(),
   automatic: aiAutomaticSchema, allowance: aiAllowanceSchema.nullable(), auto_triage: z.object({ applied: z.number().int(), undone: z.number().int() }),
+  auto_draft_estimate: z.object({ customer_messages: z.number().int(), draft_cost_micro_usd: z.number().int().nullable() }),
 }) satisfies z.ZodType<JsonResponse<'getAISettings', 200>>;
 const removedSchema = z.object({ turned_off: z.array(aiSlotNameSchema) }) satisfies z.ZodType<JsonResponse<'removeAIProvider', 200>>;
 
@@ -72,6 +74,7 @@ export const aiApi = {
   remove: (id: string) => request(`/api/v1/ai/providers/${id}`, removedSchema, { method: 'DELETE' }),
   setSlot: (slot: AISlotName, input: AISlotInput) => request(`/api/v1/ai/slots/${slot}`, aiSlotSchema, { method: 'PUT', body: json<'setAISlot'>(input) }),
   usage: (month: string) => request(`/api/v1/ai/usage?month=${encodeURIComponent(month)}`, aiUsageSchema),
-  setAutomatic: (perDay: number, perMinute: number) =>
-    request('/api/v1/ai/automatic-limits', aiAutomaticSchema, { method: 'PUT', body: json<'setAIAutomaticLimits'>({ per_day: perDay, per_minute: perMinute }) }),
+  setAutomatic: (perDay: number, perMinute: number, draftPerDay?: number) =>
+    request('/api/v1/ai/automatic-limits', aiAutomaticSchema, { method: 'PUT',
+      body: json<'setAIAutomaticLimits'>({ per_day: perDay, per_minute: perMinute, ...(draftPerDay === undefined ? {} : { draft_per_day: draftPerDay }) }) }),
 };

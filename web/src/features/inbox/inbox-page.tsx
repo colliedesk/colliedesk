@@ -95,6 +95,7 @@ interface InboxPageProps {
 
 export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
+  const latestCustomerMessage = useMemo(() => [...timeline].reverse().find((item) => item.kind === 'incoming')?.id, [timeline]);
   const [detailsOpen, setDetailsOpen] = useState(false);
   // The details' AI triage card says when its suggestion has a part nobody accepted yet.
   const [triageWaiting, setTriageWaiting] = useState(false);
@@ -209,6 +210,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
+          latestCustomerMessage={latestCustomerMessage}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
           canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
           aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId} />
