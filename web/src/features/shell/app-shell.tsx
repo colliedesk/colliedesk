@@ -11,8 +11,6 @@ interface AppShellProps {
   appVersion?: string;
   brand?: ReactNode;
   links?: ReactNode;
-  // signIn is shown on the signed-out screen of instances with cloud sign-in.
-  signIn?: ReactNode;
   // notice sits under the identity bar on every view, for example the trial banner.
   notice?: ReactNode;
   // lockedScreen replaces the view when the workspace is locked; the identity bar stays.
@@ -44,12 +42,12 @@ function useDismissibleTooltips() {
   }, []);
 }
 
-export function AppShell({ me, appVersion, signedOut = false, brand, links, signIn, notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
+export function AppShell({ me, appVersion, signedOut = false, brand, links, notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
   useDismissibleTooltips();
   const view = signedOut
     ? <main className="redeem-page"><section className="redeem-panel">
         <p role="alert" className="error-copy">{messages.signedOut}</p>
-        {signIn ?? <p className="muted-copy">{messages.signedOutSelfHosted}</p>}
+        <p className="muted-copy">{messages.signedOutSelfHosted}</p>
       </section></main>
     : lockedScreen ?? children;
   return (
@@ -61,7 +59,8 @@ export function AppShell({ me, appVersion, signedOut = false, brand, links, sign
         {me && !signedOut && <AccountMenu me={me} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut} />}
       </nav>
       <div className="app-main">
-        {me && <section className="identity-bar" aria-label={messages.signedInAs}>
+        {/* Signed out, the old session's identity would be a false claim, so the bar goes with it. */}
+        {me && !signedOut && <section className="identity-bar" aria-label={messages.signedInAs}>
           <strong>{me.workspace.name}</strong><span>{me.agent.email}</span>
         </section>}
         {me && !signedOut && !lockedScreen && notice}

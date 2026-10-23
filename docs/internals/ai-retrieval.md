@@ -89,3 +89,11 @@ by default, never the one being answered.
    Anthropic has no embeddings model.
 4. Indexing runs for every workspace, AI on or off, so turning AI on finds history at once. The rows
    do not count toward the storage cap (only attachments and media do).
+5. The worker never waits for a row someone else holds. A delete that removes many sources (an
+   import undone: its conversations, then its articles) takes the parent row, then its sources; the
+   worker used to take sources (deleting and writing them), then wait for a parent the delete held,
+   and the delete then came for those sources: a deadlock (`40P01`) that failed `collie import undo`.
+   Now a batch first locks its workspace, articles (with their translations) and conversations
+   `FOR KEY SHARE SKIP LOCKED`, builds only what it locked, and leaves the rest queued for a later
+   batch (`TestAIRetrievalBuildsBesideALargeDeleteWithoutDeadlock`). Never add a step that waits on
+   a parent row after a source row is touched.

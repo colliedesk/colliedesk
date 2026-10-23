@@ -98,3 +98,51 @@ test('renders the combined sign-in-or-up flow with and without Colliedesk sign-u
   render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} onSignUp={vi.fn()} />);
   expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({ withSignUp: true }));
 });
+
+// Arriving right after a Colliedesk sign-out, an identity session still open in this browser is ended
+// first; otherwise the page would exchange it and sign the same person straight back in.
+test('arriving signed out ends the open identity session before anything is exchanged, then shows the form', async () => {
+  clerk.signOut.mockImplementation(() => { clerk.signedIn = false; return Promise.resolve(); });
+  const onSessionToken = vi.fn().mockResolvedValue(undefined);
+  render(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={onSessionToken} />);
+
+  await waitFor(() => expect(clerk.signOut).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+  expect(clerk.getToken).not.toHaveBeenCalled();
+  expect(onSessionToken).not.toHaveBeenCalled();
+});
+
+test('a sign-in completed after arriving signed out is exchanged, not signed out again', async () => {
+  clerk.signedIn = false;
+  clerk.getToken.mockResolvedValue('fresh-token');
+  const onSessionToken = vi.fn().mockResolvedValue(undefined);
+  const view = render(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={onSessionToken} />);
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+
+  clerk.signedIn = true;
+  view.rerender(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={onSessionToken} />);
+  await waitFor(() => expect(onSessionToken).toHaveBeenCalledWith('fresh-token'));
+  expect(clerk.signOut).not.toHaveBeenCalled();
+});
+
+test('the form returns to the sign-in page without the signed-out marker, so finishing sign-in never signs out again', () => {
+  window.history.pushState({}, '', '/sign-in?signed_out=true&buy=founding');
+  clerk.signedIn = false;
+  render(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={vi.fn()} />);
+  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({
+    forceRedirectUrl: '/sign-in?buy=founding',
+    signUpForceRedirectUrl: '/sign-in?buy=founding',
+  }));
+});
+
+test('an identity sign-out that fails is said aloud, nothing is exchanged, and it can be tried again', async () => {
+  clerk.signOut.mockRejectedValueOnce(new Error('offline')).mockImplementationOnce(() => { clerk.signedIn = false; return Promise.resolve(); });
+  const onSessionToken = vi.fn();
+  render(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={onSessionToken} />);
+
+  expect(await screen.findByText(/sign out failed/i)).toBeInTheDocument();
+  expect(onSessionToken).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+  expect(onSessionToken).not.toHaveBeenCalled();
+});

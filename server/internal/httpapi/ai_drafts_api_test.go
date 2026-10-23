@@ -255,6 +255,29 @@ func TestADraftWarnsOfWhatTheConversationDoesNotHold(t *testing.T) {
 	if _, ok := kinds["name:Ada Lovelace"]; ok {
 		t.Fatal("the conversation's own customer is warned about")
 	}
+
+	// A word in an alphabet the conversation does not use is a slip into another language.
+	d.fake.Script(draftAnswer("Hi Ada, your order هنوز waits in the tray.", nil, ""))
+	slip := d.ask(t, d.adminA, d.conversationA, "")
+	d.run(t)
+	got = d.get(t, d.adminA, d.conversationA, slip.ID)
+	if len(got.Warnings) != 1 || got.Warnings[0].Kind != "script" || got.Warnings[0].Value != "هنوز" {
+		t.Fatalf("warnings of a draft with a Persian word = %+v", got.Warnings)
+	}
+	// A mask copied from a past ticket: [customer] becomes this customer's name, the rest is flagged.
+	d.fake.Script(draftAnswer("Hi [customer], your order [number] ships today.", nil, ""))
+	masked := d.ask(t, d.adminA, d.conversationA, "")
+	d.run(t)
+	got = d.get(t, d.adminA, d.conversationA, masked.ID)
+	if got.Text == nil || *got.Text != "Hi Ada Lovelace, your order [number] ships today." || len(got.Warnings) != 1 || got.Warnings[0].Kind != "placeholder" || got.Warnings[0].Value != "[number]" {
+		t.Fatalf("draft with masks = %v %+v", got.Text, got.Warnings)
+	}
+	if requests := d.draftRequests(); !strings.Contains(requests[len(requests)-1].System, "never mix in a word of another language") {
+		t.Fatal("system turn does not keep the draft to one language")
+	}
+	if _, ok := kinds["name:Ada Lovelace"]; ok {
+		t.Fatal("the conversation's own customer is warned about")
+	}
 }
 
 func TestADraftEndsAsItWasUsed(t *testing.T) {
