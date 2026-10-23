@@ -49,7 +49,12 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   second Escape clears the selection. Success clears the selection and writes `role="status"`; failure
   writes `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes
   to **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
-- Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`).
+- Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`). The time is
+  the time alone for today and the date otherwise; without hover (no tooltip) an earlier row shows date and
+  time, a row from today still only its time. The full stamp is the tooltip and the accessible name.
+- List keys, as in Gmail and Help Scout: **J** / **K** anywhere outside a text field, **Down** / **Up** while
+  a row has the focus; each opens the next or previous conversation and moves the focus to its row (the
+  inset amber ring). Modifier keys and dialogs keep their own meaning (`use-list-keys.ts`).
 - Thread: incoming messages on `--surface-2`, our replies on white with a 1px ring (`--surface-1`,
   `--shadow-1`), private notes amber.
   Composer: a raised card with Reply / Private note tabs (keys **R** and **N**) and
