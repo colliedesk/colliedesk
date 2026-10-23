@@ -101,16 +101,26 @@ minute are asked for in a workspace.
 ## Triage suggestions
 
 With **Triage suggestions** on, a new ticket's first customer message (by email, the web form or the
-API) asks the model for tags, a priority and the teammate best placed to answer. The suggestion appears
-under **Suggested by AI** in the conversation's details within a few seconds, with a one-sentence
-reason. It names only your own tags and active teammates; anything else the model names is dropped.
+API) asks the model for tags, a priority and the teammate best placed to answer. It reads the ticket,
+your matching knowledge base articles, and how your team sorted similar solved tickets. The suggestion
+appears at the top of the conversation's details as **Suggested by AI** within a few seconds, with a
+one-sentence reason and the articles and tickets it rests on. While it is written you keep working;
+**Cancel** stops it. On a narrow screen the **Show details** button says **AI suggestion** while one
+waits.
 
-Nothing changes until someone applies it. Each part has a box: **Apply** sets all of them,
-**Apply selected** only the ones left checked, **Dismiss** none. Tags are added, never removed, and
-anything applied is changed back like any other change. **Suggest tags and priority** asks again by
-hand. Imported tickets get no suggestion, and automatic suggestions count against the automatic limits
-below. A suggestion nobody used for 7 days expires. Colliedesk keeps whether each one was applied, in
-part, or dismissed.
+It names only your own tags and active teammates; anything else the model names is dropped. What the
+conversation already has is not suggested, and a field someone changed before the suggestion came is
+left alone: the card says "Not suggested: you set Urgent before this arrived".
+
+Nothing changes until someone accepts. Each part (tags, priority, assignee) has **Accept**; **Accept
+all** (or **Accept the rest**) takes what is left, and **Dismiss** drops it. Tags are added, never
+removed, and anything accepted is changed back like any other change. **Suggest again** asks by hand.
+When the automatic limit below is reached, the card says automatic suggestions are paused until
+midnight UTC and **Suggest now** still asks for one. A failure says why and what to do next, for
+example to open **Settings > AI** when the included AI is used up.
+
+Imported tickets get no suggestion. A suggestion nobody used for 7 days expires; its reason is erased
+90 days after it ended. Colliedesk keeps whether each one was accepted, in part, or dismissed.
 
 ## Limits
 

@@ -429,6 +429,9 @@ type AITriage struct {
 	Priority           *string         `json:"priority"`
 	AssigneeAgentID    *string         `json:"assignee_agent_id"`
 	Reason             *string         `json:"reason"`
+	Sources            json.RawMessage `json:"sources"`
+	Base               json.RawMessage `json:"base"`
+	Stale              json.RawMessage `json:"stale"`
 	Model              *string         `json:"model"`
 	Outcome            *string         `json:"outcome"`
 	Applied            json.RawMessage `json:"applied"`

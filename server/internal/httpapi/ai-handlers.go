@@ -3,7 +3,6 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"slices"
 	"strconv"
 	"time"
 
@@ -300,8 +299,8 @@ func (a *API) createAITriage(response http.ResponseWriter, request *http.Request
 	writeJSON(response, http.StatusAccepted, triage)
 }
 
-// acceptAITriage applies what the person accepts of a ready suggestion (all of it without a body)
-// to the conversation, through the same update as a person's change, then records it.
+// acceptAITriage applies what the person accepts of an open suggestion (the rest of it without a
+// body) to the conversation, through the same changes as a person's own, then records it.
 func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request) {
 	identity := principal(request)
 	workspace, conversation, id := identity.Workspace.ID, request.PathValue("id"), request.PathValue("suggestionId")
@@ -310,55 +309,42 @@ func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request
 		writeAIError(response, err)
 		return
 	}
-	// Accepting again changes nothing.
-	if current.Outcome != nil && (*current.Outcome == "accepted" || *current.Outcome == "partly_accepted") {
+	// Accepting all of it again changes nothing.
+	if current.Outcome != nil && *current.Outcome == "accepted" {
 		writeJSON(response, http.StatusOK, current)
 		return
 	}
-	var want ai.TriageSet
-	all := request.ContentLength == 0
-	if !all {
+	want := ai.TriageSet{TagIDs: current.TagIDs, Priority: current.Priority, AssigneeAgentID: current.AssigneeAgentID}
+	if request.ContentLength != 0 {
+		want = ai.TriageSet{}
 		if err := decodeJSON(request, &want); err != nil {
-			writeError(response, http.StatusBadRequest, "invalid_request", "Send tag_ids, priority and assignee_agent_id to accept, each from the suggestion; no body accepts all of it.")
+			writeError(response, http.StatusBadRequest, "invalid_request", "Send tag_ids, priority and assignee_agent_id to accept, each from the suggestion; no body accepts the rest of it.")
 			return
 		}
-	}
-	if all {
-		want = ai.TriageSet{TagIDs: current.TagIDs, Priority: current.Priority, AssigneeAgentID: current.AssigneeAgentID}
 	}
 	set, err := a.ai.TriageToApply(request.Context(), workspace, conversation, id, want)
 	if err != nil {
 		writeAIError(response, err)
 		return
 	}
+	// Tags are added one by one, as a person adds them: a tag someone added meanwhile stays.
+	for _, tag := range set.TagIDs {
+		if _, err := a.store.AddConversationTag(request.Context(), workspace, conversation, tag); err != nil {
+			writeStoreError(response, err)
+			return
+		}
+	}
 	update := store.ConversationUpdate{Priority: set.Priority, ActorID: identity.Agent.ID}
 	if set.AssigneeAgentID != nil {
 		update.AssigneeID = &set.AssigneeAgentID
 	}
-	if len(set.TagIDs) > 0 {
-		current, err := a.store.GetConversation(request.Context(), workspace, conversation)
-		if err != nil {
-			writeStoreError(response, err)
-			return
-		}
-		tags := []string{}
-		for _, tag := range current.Tags {
-			tags = append(tags, tag.ID)
-		}
-		for _, tag := range set.TagIDs {
-			if !slices.Contains(tags, tag) {
-				tags = append(tags, tag)
-			}
-		}
-		update.TagIDs = &tags
-	}
-	if update.Priority != nil || update.AssigneeID != nil || update.TagIDs != nil {
+	if update.Priority != nil || update.AssigneeID != nil {
 		if _, err := a.store.UpdateConversation(request.Context(), workspace, conversation, update); err != nil {
 			writeStoreError(response, err)
 			return
 		}
 	}
-	triage, err := a.ai.DecideTriage(request.Context(), workspace, aiActor(request), conversation, id, set, false)
+	triage, err := a.ai.AcceptedTriage(request.Context(), workspace, aiActor(request), conversation, id, set)
 	if err != nil {
 		writeAIError(response, err)
 		return
@@ -367,7 +353,7 @@ func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request
 }
 
 func (a *API) dismissAITriage(response http.ResponseWriter, request *http.Request) {
-	triage, err := a.ai.DecideTriage(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"), request.PathValue("suggestionId"), ai.TriageSet{}, true)
+	triage, err := a.ai.DismissTriage(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"), request.PathValue("suggestionId"))
 	if err != nil {
 		writeAIError(response, err)
 		return

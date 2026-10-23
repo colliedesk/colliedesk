@@ -95,6 +95,8 @@ interface InboxPageProps {
 export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // The details' AI triage card says when its suggestion has a part nobody accepted yet.
+  const [triageWaiting, setTriageWaiting] = useState(false);
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
   const [focusSignal, setFocusSignal] = useState(0);
   const clearFilters = () => { setFocusSignal((current) => current + 1); onQuery?.({}); };
@@ -195,7 +197,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
       </section>
       <div className="conversation-center panel">
         <TimelinePanel conversation={selected} items={timeline} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
-          viewers={openViewers} detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
+          viewers={openViewers} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={() => onOpenSettings()}>{messages.openSettings}</button></>}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
@@ -208,7 +210,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
           aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId} />
       </div>
-      <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied}
+      <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied} currentAgentId={currentAgentId} canManage={canManage} onTriageWaiting={setTriageWaiting}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}
         onShowContactConversations={onQuery ? (contact) => onQuery({ contact, status: 'all' }) : undefined} />
     </main>

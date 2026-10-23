@@ -27,7 +27,7 @@ async function triageModel() {
   return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, prompts, close: () => server.close() };
 }
 
-test('a new ticket by email gets an AI triage suggestion that changes nothing until someone applies it', async ({ page }) => {
+test('a new ticket by email gets an AI triage suggestion that changes nothing until someone accepts a part of it', async ({ page }) => {
   const suffix = uniqueSuffix();
   const support = `support-${suffix}@acme.example`;
   const workspace = createWorkspaceWithSlug(`E2E Triage ${suffix}`, `admin-${suffix}@acme.example`);
@@ -56,24 +56,41 @@ test('a new ticket by email gets an AI triage suggestion that changes nothing un
 
     await page.goto(`${baseURL}/conversations/${conversation}`);
     const card = page.getByRole('region', { name: 'Suggested by AI' });
-    await expect(card.getByRole('checkbox', { name: 'hardware' })).toBeChecked({ timeout: 30_000 });
-    await expect(card.getByRole('checkbox', { name: 'Priority: Urgent' })).toBeVisible();
-    await expect(card.getByRole('checkbox', { name: 'Assign to Sam Rivera' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Accept tags hardware' })).toBeVisible({ timeout: 30_000 });
+    await expect(card.getByRole('group', { name: 'Priority' })).toContainText('Urgent');
+    await expect(card.getByRole('group', { name: 'Assignee' })).toContainText('Sam Rivera');
     await expect(card.getByText('made-up')).toHaveCount(0);
     expect(model.prompts.at(-1)).toContain('The office printer is down for everyone.');
     // Nothing applied yet.
     let shown = await (await page.request.get(`${baseURL}/api/v1/conversations/${conversation}`)).json() as { priority: string; assignee_id: string | null; tags: unknown[] };
     expect(shown).toMatchObject({ priority: 'normal', assignee_id: null, tags: [] });
 
-    await card.getByRole('checkbox', { name: 'Assign to Sam Rivera' }).uncheck();
-    await card.getByRole('button', { name: 'Apply selected' }).click();
-    await expect(card.getByText('Applied. Change anything above as usual.')).toBeVisible();
+    // One part, then the rest but the assignee: dismissing it leaves the suggestion partly accepted.
+    await card.getByRole('button', { name: 'Accept priority Urgent' }).click();
+    await expect(card.getByRole('group', { name: 'Priority' })).toContainText('Set');
+    await expect(page.getByRole('combobox', { name: 'Priority' })).toHaveValue('urgent');
+    await card.getByRole('button', { name: 'Accept tags hardware' }).click();
+    await expect(card.getByRole('group', { name: 'Tags' })).toContainText('Added');
+    await card.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(card.getByText('Part of it was applied; the rest was dismissed.')).toBeVisible();
     shown = await (await page.request.get(`${baseURL}/api/v1/conversations/${conversation}`)).json() as typeof shown;
     expect(shown.priority).toBe('urgent');
     expect(shown.assignee_id).toBeNull();
     expect(shown.tags).toHaveLength(1);
-    await expect(page.getByRole('combobox', { name: 'Priority' })).toHaveValue('urgent');
     expect(psql(`SELECT outcome FROM ai_triage_suggestions s JOIN workspaces w ON w.id=s.workspace_id WHERE w.slug='${workspace.slug}'`)).toBe('partly_accepted');
+
+    // Asked again by hand, on a phone: the details hide behind a toggle that says a suggestion waits, and
+    // the suggestion's buttons are on screen once it opens.
+    await card.getByRole('button', { name: 'Suggest again' }).click();
+    await expect(card.getByRole('button', { name: 'Accept assignee Sam Rivera' })).toBeVisible({ timeout: 30_000 });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const toggle = page.getByRole('button', { name: /Show details.*AI suggestion/ });
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(card.getByRole('button', { name: 'Accept all' })).toBeInViewport();
+    await card.getByRole('button', { name: 'Accept all' }).click();
+    await expect(card.getByText(/Accepted by you, .* Change a field below to undo\./)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   } finally {
     model.close();
   }

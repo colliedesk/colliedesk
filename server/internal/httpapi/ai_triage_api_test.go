@@ -142,40 +142,118 @@ func TestATriageSuggestionNamesOnlyTheWorkspacesTagsAndTeammatesAndIsAppliedOnly
 		t.Fatalf("conversation changed before anyone accepted: %+v", conv)
 	}
 
+	// It read the team's article and solved ticket, with how that ticket was sorted, and cites them.
+	if !strings.Contains(prompt, "Printer paper jams") || !strings.Contains(prompt, "Sorted as: priority") {
+		t.Fatalf("triage prompt lacks the article or the solved ticket:\n%s", prompt)
+	}
+	if usage := queryString(t, d.pool, `SELECT count(*)::text||' '||bool_and(automatic)::text FROM ai_usage WHERE workspace_id=$1 AND feature='triage'`, d.workspaceA); usage != "1 true" {
+		t.Fatalf("triage usage rows = %s, want one automatic", usage)
+	}
+
 	path := "/api/v1/conversations/" + conversation + "/ai-triage/" + got.ID
 	wantResponse(t, request(t, d.api, http.MethodPost, path+"/accept", map[string]any{"tag_ids": []string{hardware, "5f9b9f0e-0000-4000-8000-000000000000"}}, d.adminA, nil), http.StatusBadRequest, "invalid_request")
 	wantResponse(t, request(t, d.api, http.MethodPost, path+"/accept", nil, d.adminB, nil), http.StatusNotFound, "not_found")
+	// One part at a time: the suggestion stays open for the rest.
 	var accepted ai.Triage
-	decode(t, request(t, d.api, http.MethodPost, path+"/accept", map[string]any{"tag_ids": []string{hardware}, "priority": "urgent"}, d.adminA, nil), &accepted)
-	if accepted.Outcome == nil || *accepted.Outcome != "partly_accepted" || len(accepted.Applied.TagIDs) != 1 || accepted.Applied.AssigneeAgentID != nil {
-		t.Fatalf("partly accepted = %+v", accepted)
+	decode(t, request(t, d.api, http.MethodPost, path+"/accept", map[string]any{"tag_ids": []string{hardware}}, d.adminA, nil), &accepted)
+	decode(t, request(t, d.api, http.MethodPost, path+"/accept", map[string]any{"priority": "urgent"}, d.adminA, nil), &accepted)
+	if accepted.Outcome != nil || len(accepted.Applied.TagIDs) != 1 || accepted.Applied.Priority == nil || accepted.Applied.AssigneeAgentID != nil {
+		t.Fatalf("after two parts = %+v", accepted)
 	}
 	decode(t, request(t, d.api, http.MethodGet, "/api/v1/conversations/"+conversation, nil, d.adminA, nil), &conv)
 	if conv.Priority != "urgent" || conv.AssigneeID != nil || len(conv.Tags) != 1 || conv.Tags[0].ID != hardware {
-		t.Fatalf("conversation after a partial accept = %+v", conv)
+		t.Fatalf("conversation after two parts = %+v", conv)
 	}
-	// Accepting again changes nothing; dismissing a decided one is refused.
+	// A person changes the priority again; accepting the rest leaves it and their tag alone.
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/conversations/"+conversation, map[string]any{"priority": "low"}, d.adminA, http.StatusOK, nil)
+	decode(t, request(t, d.api, http.MethodPost, path+"/accept", nil, d.adminA, nil), &accepted)
+	if accepted.Outcome == nil || *accepted.Outcome != "accepted" || len(accepted.Applied.TagIDs) != 2 || accepted.Applied.AssigneeAgentID == nil {
+		t.Fatalf("after the rest = %+v", accepted)
+	}
+	decode(t, request(t, d.api, http.MethodGet, "/api/v1/conversations/"+conversation, nil, d.adminA, nil), &conv)
+	if conv.Priority != "low" || conv.AssigneeID == nil || *conv.AssigneeID != me.Agent.ID || len(conv.Tags) != 2 {
+		t.Fatalf("conversation after the rest = %+v", conv)
+	}
+	assignedBy := queryString(t, d.pool, `SELECT COALESCE(assigned_by_agent_id::text,'') FROM conversations WHERE id=$1`, conversation)
+	if assignedBy == "" {
+		t.Fatal("the assignment the suggestion made records no one, unlike a person's")
+	}
+	// Accepting again changes nothing; dismissing an accepted one is refused.
 	kbCall(t, d.api, http.MethodPost, path+"/accept", nil, d.adminA, http.StatusOK, nil)
 	wantResponse(t, request(t, d.api, http.MethodPost, path+"/dismiss", nil, d.adminA, nil), http.StatusConflict, "ai_triage_decided")
 
-	// Asked for again by hand: all of it accepted at once.
-	d.fake.Script(triageAnswer([]string{"office"}, "high", ""))
+	// Asked for again by hand, a part accepted, the rest dismissed: partly accepted.
+	d.fake.Script(triageAnswer([]string{"office", "hardware"}, "high", ""))
 	again := request(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage", nil, d.adminA, nil)
 	if again.Code != http.StatusAccepted {
 		t.Fatalf("ask again: %d %s", again.Code, again.Body.String())
 	}
 	d.run(t)
 	second := d.triage(t, d.adminA, conversation)
-	if second.Automatic || second.AssigneeAgentID != nil {
-		t.Fatalf("second suggestion = %+v", second)
+	if second.Automatic || second.AssigneeAgentID != nil || len(second.TagIDs) != 0 || second.Priority == nil || *second.Priority != "high" {
+		t.Fatalf("second suggestion (tags the conversation has are not suggested) = %+v", second)
 	}
-	kbCall(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage/"+second.ID+"/accept", nil, d.adminA, http.StatusOK, nil)
-	decode(t, request(t, d.api, http.MethodGet, "/api/v1/conversations/"+conversation, nil, d.adminA, nil), &conv)
-	if conv.Priority != "high" || len(conv.Tags) != 2 {
-		t.Fatalf("conversation after accepting all = %+v", conv)
-	}
+	kbCall(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage/"+second.ID+"/accept", map[string]any{"priority": "high"}, d.adminA, http.StatusOK, nil)
 	if outcome := queryString(t, d.pool, `SELECT outcome FROM ai_triage_suggestions WHERE id=$1`, second.ID); outcome != "accepted" {
 		t.Fatalf("second outcome = %s", outcome)
+	}
+}
+
+// A field a person set before the answer came is not suggested over them, and a suggestion that
+// names only what the conversation already has suggests nothing.
+func TestATriageSuggestionLeavesWhatAPersonSetBeforeItCame(t *testing.T) {
+	d := newDraftDesk(t)
+	d.triageOn(t)
+	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
+	conversation := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer down"})
+	d.customerWrites(t, d.workspaceA, conversation, "The office printer is down.", nil)
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/conversations/"+conversation, map[string]any{"priority": "urgent"}, d.adminA, http.StatusOK, nil)
+	d.fake.Script(triageAnswer(nil, "high", ""))
+	d.run(t)
+	got := d.triage(t, d.adminA, conversation)
+	if got.Status != ai.DraftReady || got.Priority != nil || got.Stale.Priority == nil || *got.Stale.Priority != "urgent" {
+		t.Fatalf("suggestion after a person set the priority = %+v", got)
+	}
+	// Nothing left to accept: dismissing it says dismissed, not partly accepted.
+	var dismissed ai.Triage
+	decode(t, request(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage/"+got.ID+"/dismiss", nil, d.adminA, nil), &dismissed)
+	if dismissed.Outcome == nil || *dismissed.Outcome != "dismissed" {
+		t.Fatalf("dismissed = %+v", dismissed)
+	}
+
+	d.fake.Script(triageAnswer(nil, "urgent", ""))
+	kbCall(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage", nil, d.adminA, http.StatusAccepted, nil)
+	d.run(t)
+	same := d.triage(t, d.adminA, conversation)
+	if same.Status != ai.DraftReady || same.Priority != nil || same.Stale.Priority != nil || len(same.TagIDs) != 0 || same.AssigneeAgentID != nil {
+		t.Fatalf("a suggestion of what the conversation has = %+v", same)
+	}
+}
+
+// Past the workspace's automatic limit a new ticket gets no suggestion and no provider call; the
+// suggestion says why, and a person can still ask for one.
+func TestAutomaticTriageStopsAtTheWorkspacesLimit(t *testing.T) {
+	d := newDraftDesk(t)
+	d.triageOn(t)
+	if _, err := d.service.SetAutomaticLimits(context.Background(), d.workspaceA, ai.Actor{}, 0, 30); err != nil {
+		t.Fatal(err)
+	}
+	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
+	conversation := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer down"})
+	d.customerWrites(t, d.workspaceA, conversation, "The office printer is down.", nil)
+	d.run(t)
+	got := d.triage(t, d.adminA, conversation)
+	if got.Status != "failed" || got.ErrorCode == nil || *got.ErrorCode != ai.CodeAutomaticLimit {
+		t.Fatalf("suggestion past the limit = %+v", got)
+	}
+	if calls := len(d.triageRequests()); calls != 0 {
+		t.Fatalf("%d provider calls past the limit", calls)
+	}
+	d.fake.Script(triageAnswer(nil, "high", ""))
+	kbCall(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-triage", nil, d.adminA, http.StatusAccepted, nil)
+	d.run(t)
+	if asked := d.triage(t, d.adminA, conversation); asked.Status != ai.DraftReady {
+		t.Fatalf("asked by hand past the automatic limit = %+v", asked)
 	}
 }
 

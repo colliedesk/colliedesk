@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { aiSourceSchema } from './ai-sources';
 import { request } from '../../api/client';
 import type { Generated, JsonResponse } from '../../api/schemas';
 
@@ -8,7 +9,7 @@ const nullableDate = z.string().datetime().nullable();
 export const aiDraftSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), status: z.enum(['queued', 'running', 'ready', 'failed', 'cancelled']),
   error_code: z.string().nullable(), prompt: z.string(), text: z.string().nullable(), missing_info: z.string().nullable(),
-  sources: z.array(z.object({ kind: z.enum(['kb_article', 'conversation']), id: z.string().uuid(), locale: z.string().optional(), number: z.number().int().optional(), title: z.string() })),
+  sources: z.array(aiSourceSchema),
   warnings: z.array(z.object({ kind: z.enum(['email', 'number', 'name']), value: z.string() })),
   model: z.string().nullable(), outcome: z.enum(['sent_unchanged', 'sent_edited', 'discarded', 'superseded', 'expired']).nullable(),
   similarity: z.number().nullable(), sent_message_id: z.string().uuid().nullable(), requested_by_agent_id: z.string().uuid().nullable(),

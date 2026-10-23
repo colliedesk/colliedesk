@@ -795,7 +795,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 	drafts.Close()
 	triage, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,task_id::text,automatic,requested_by_agent_id::text,requested_by_token_id::text,status,tag_ids::text[],
-			priority,assignee_agent_id::text,reason,model,outcome,applied,created_at,ready_at,decided_at,decided_by_agent_id::text
+			priority,assignee_agent_id::text,reason,sources,base,stale,model,outcome,applied,created_at,ready_at,decided_at,decided_by_agent_id::text
 		FROM ai_triage_suggestions WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export AI triage: %w", err)
@@ -803,12 +803,12 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	defer triage.Close()
 	for triage.Next() {
 		var r export.AITriage
-		var applied []byte
+		var applied, sources, base, stale []byte
 		if err := triage.Scan(&r.ID, &r.ConversationID, &r.TaskID, &r.Automatic, &r.RequestedByAgentID, &r.RequestedByTokenID, &r.Status, &r.TagIDs,
-			&r.Priority, &r.AssigneeAgentID, &r.Reason, &r.Model, &r.Outcome, &applied, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID); err != nil {
+			&r.Priority, &r.AssigneeAgentID, &r.Reason, &sources, &base, &stale, &r.Model, &r.Outcome, &applied, &r.CreatedAt, &r.ReadyAt, &r.DecidedAt, &r.DecidedByAgentID); err != nil {
 			return fmt.Errorf("export AI triage: %w", err)
 		}
-		r.Applied = applied
+		r.Applied, r.Sources, r.Base, r.Stale = applied, sources, base, stale
 		r.CreatedAt, r.ReadyAt, r.DecidedAt = domain.UTC(r.CreatedAt), domain.UTCOptional(r.ReadyAt), domain.UTCOptional(r.DecidedAt)
 		if err := sink.AITriage(r); err != nil {
 			return err

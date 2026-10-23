@@ -1,6 +1,6 @@
 -- AI triage suggestions (#89). A new ticket's first customer message queues an automatic task that
--- suggests tags, a priority and an assignee; a person accepts all, some or none. Nothing is applied
--- until someone accepts. An imported message (origin set) queues nothing.
+-- suggests tags, a priority and an assignee; a person accepts each part, all of it, or none. Nothing
+-- is applied until someone accepts. An imported message (origin set) queues nothing.
 CREATE TABLE ai_triage_suggestions (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -16,9 +16,17 @@ CREATE TABLE ai_triage_suggestions (
     priority text CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
     assignee_agent_id uuid,
     reason text,
+    -- The articles and solved tickets the suggestion read, as the database names them: kind, id, title.
+    sources jsonb NOT NULL DEFAULT '[]',
+    -- The conversation's priority and assignee when the suggestion was asked for. A field a person
+    -- changed before the answer came is not suggested: stale holds what they set instead.
+    base jsonb NOT NULL DEFAULT '{}',
+    stale jsonb NOT NULL DEFAULT '{}',
     model text,
     outcome text CHECK (outcome IN ('accepted', 'partly_accepted', 'dismissed', 'superseded', 'expired')),
-    -- What was applied: {"tag_ids": [...], "priority": "...", "assignee_agent_id": "..."}.
+    -- What was applied so far: {"tag_ids": [...], "priority": "...", "assignee_agent_id": "..."}. A part
+    -- applied leaves the rest open; the outcome is set when all of it is applied, or the rest is
+    -- dismissed, replaced or expires (partly_accepted when some was applied).
     applied jsonb NOT NULL DEFAULT '{}',
     created_at timestamptz NOT NULL DEFAULT now(),
     ready_at timestamptz,
@@ -56,8 +64,10 @@ BEGIN
     END IF;
     INSERT INTO ai_tasks(workspace_id, kind, conversation_id, automatic, state)
         VALUES (NEW.workspace_id, 'triage', NEW.conversation_id, true, 'queued') RETURNING id INTO task;
-    INSERT INTO ai_triage_suggestions(workspace_id, conversation_id, task_id, automatic, status)
-        VALUES (NEW.workspace_id, NEW.conversation_id, task, true, 'pending');
+    INSERT INTO ai_triage_suggestions(workspace_id, conversation_id, task_id, automatic, status, base)
+        SELECT NEW.workspace_id, NEW.conversation_id, task, true, 'pending',
+            jsonb_build_object('priority', c.priority, 'assignee_agent_id', c.assignee_id)
+        FROM conversations c WHERE c.workspace_id = NEW.workspace_id AND c.id = NEW.conversation_id;
     RETURN NULL;
 END
 $$;

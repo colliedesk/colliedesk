@@ -75,9 +75,10 @@ window was cut twice instead of raising the budget: 20,000 conversations took 16
 ## AI draft read budget
 
 `TestAIDraftReadLatencyBudget` holds the reads the reply box polls, `ai.Service.GetDraft` and
-`ListDrafts` and the article's monthly count (`ArticleDraftsThisMonth`), to 20 ms p95 in the store,
-like the other per-conversation reads. Two workspaces with 10,000 drafts and tasks each, 100 of them on
-the conversation read: 1–8 ms locally. It is in `internal/httpapi`, which the latency shard builds
+`ListDrafts` and the article's monthly count (`ArticleDraftsThisMonth`), and the triage card's read
+(`LatestTriage`, which loads after the conversation and polls while a suggestion is written), to 20 ms
+p95 in the store, like the other per-conversation reads. Two workspaces with 10,000 drafts, 10,000
+suggestions and their tasks each, 100 of each on the conversation read: 1–8 ms locally. It is in `internal/httpapi`, which the latency shard builds
 anyway; a test in another package would add a test binary to the slowest shard. A
 draft's own wait (`?wait=` up to 20 s) is a loop of these reads in short transactions, never a held
 connection. The draft itself is written in the background: its sources are the AI retrieval budget

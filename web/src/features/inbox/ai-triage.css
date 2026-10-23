@@ -1,14 +1,30 @@
-/* The AI triage suggestion in the details panel. Loaded with its lazy part; scrollbars follow base.css. */
-.ai-triage { display: grid; gap: var(--space-2); border-radius: var(--radius); background: var(--accent-soft); padding: var(--space-3); }
+/* The AI triage suggestion at the top of the details panel. Loaded with its lazy part; scrollbars follow base.css. */
+.ai-triage { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  background: var(--accent-soft); padding: var(--space-3); min-width: 0; }
 .ai-triage h2 { display: flex; align-items: center; gap: var(--space-1); margin: 0; }
 .ai-triage h2 > svg { flex: none; color: var(--text-3); }
 .ai-triage p { margin: 0; }
-.ai-triage-items { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-.ai-triage-items label { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; cursor: pointer; }
-.ai-triage-reason { color: var(--text-2); font-size: var(--fs-small); }
+.ai-triage-rows { display: grid; grid-template-columns: minmax(0, 1fr); }
+.ai-triage-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: var(--space-1) 0; }
+.ai-triage-row + .ai-triage-row { border-top: 1px solid var(--line); }
+.ai-triage-key { color: var(--text-3); font-size: var(--fs-label); }
+.ai-triage-value { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; min-width: 0; font-size: var(--fs-small); font-weight: 500; overflow-wrap: anywhere; }
+.ai-triage-row.stale .ai-triage-value { color: var(--text-3); font-weight: 400; }
+.ai-triage-tag { display: inline-flex; align-items: center; min-height: 22px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-1);
+  padding: 0 var(--space-2); font-size: var(--fs-label); }
+.ai-triage-row button { --control: 28px; padding: 0 var(--space-2); }
+.ai-triage-done { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); font-size: var(--fs-label); font-weight: 500; }
+.ai-triage-done > svg { width: 14px; height: 14px; }
+.ai-triage-reason { color: var(--text-2); font-size: var(--fs-label); line-height: 1.5; }
+.ai-triage-message { color: var(--text-2); font-size: var(--fs-small); }
 .ai-triage-note { font-size: var(--fs-label); }
+.ai-triage-writing { display: grid; gap: var(--space-1); }
+.ai-triage-writing > span:first-child { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
+.ai-triage-pulse { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); animation: ai-triage-pulse 1.2s ease-in-out infinite; }
+@keyframes ai-triage-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .ai-triage-pulse { animation: none; } }
 .ai-triage-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.ai-triage-actions:empty { display: none; }
 @media (pointer: coarse) {
-  .ai-triage-items label, .ai-triage-actions button { min-height: var(--touch); }
+  .ai-triage button, .ai-triage-actions a { min-height: var(--touch); }
+  .ai-triage-row button { --control: var(--touch); min-width: var(--touch); }
 }

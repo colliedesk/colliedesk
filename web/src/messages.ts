@@ -199,6 +199,7 @@ export const messages = {
   dayGroups: { today: 'Today', earlier: 'Earlier' },
   showDetails: 'Show details',
   hideDetails: 'Hide details',
+  aiSuggestionWaiting: 'AI suggestion',
   noTagsYet: 'No tags yet.',
   settingsDescription: 'Your own account first, then what everyone in the workspace shares.',
   settingsSections: 'Settings sections',

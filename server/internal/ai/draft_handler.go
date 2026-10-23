@@ -148,6 +148,51 @@ func escapeData(text string) string {
 	return strings.NewReplacer("<", "‹", ">", "›").Replace(text)
 }
 
+// writeSources puts the retrieved articles and past conversations in the prompt, each with the id the
+// model cites it by (kb1, past1, …), and records those ids. about adds a line to a past conversation.
+func writeSources(b *strings.Builder, sources []store.AIRetrievedDoc, ids map[string]store.AIRetrievedDoc, about func(store.AIRetrievedDoc) string) {
+	k, p := 0, 0
+	for _, doc := range sources {
+		switch doc.Kind {
+		case store.AIRetrievedKBArticle:
+			k++
+			id := fmt.Sprintf("kb%d", k)
+			ids[id] = doc
+			fmt.Fprintf(b, "<kb_article id=%q title=%q>\n%s\n</kb_article>\n", id, escapeData(doc.Title), escapeData(doc.Text))
+		case store.AIRetrievedConversation:
+			p++
+			id := fmt.Sprintf("past%d", p)
+			ids[id] = doc
+			text := doc.Text
+			if about != nil {
+				if line := about(doc); line != "" {
+					text += "\n" + line
+				}
+			}
+			fmt.Fprintf(b, "<past_conversation id=%q>\n%s\n</past_conversation>\n", id, escapeData(text))
+		}
+	}
+}
+
+// citedSources are the sources the model cites, each once, named as the database names them.
+func citedSources(ids map[string]store.AIRetrievedDoc, cited []string) []DraftSource {
+	sources := []DraftSource{}
+	for _, id := range cited {
+		doc, ok := ids[id]
+		if !ok {
+			continue
+		}
+		delete(ids, id)
+		switch doc.Kind {
+		case store.AIRetrievedKBArticle:
+			sources = append(sources, DraftSource{Kind: doc.Kind, ID: doc.KBArticleID, Locale: doc.KBLocale, Number: doc.Number, Title: doc.Title})
+		case store.AIRetrievedConversation:
+			sources = append(sources, DraftSource{Kind: doc.Kind, ID: doc.ConversationID, Title: doc.Title})
+		}
+	}
+	return sources
+}
+
 func draftUserTurn(c draftContext) (string, map[string]store.AIRetrievedDoc) {
 	ids := map[string]store.AIRetrievedDoc{}
 	var b strings.Builder
@@ -156,21 +201,7 @@ func draftUserTurn(c draftContext) (string, map[string]store.AIRetrievedDoc) {
 		b.WriteString("Customer name: " + escapeData(c.contactName) + "\n")
 	}
 	b.WriteString(escapeData(c.threadText) + "\n</untrusted_customer_content>\n")
-	k, p := 0, 0
-	for _, doc := range c.sources {
-		switch doc.Kind {
-		case store.AIRetrievedKBArticle:
-			k++
-			id := fmt.Sprintf("kb%d", k)
-			ids[id] = doc
-			fmt.Fprintf(&b, "<kb_article id=%q title=%q>\n%s\n</kb_article>\n", id, escapeData(doc.Title), escapeData(doc.Text))
-		case store.AIRetrievedConversation:
-			p++
-			id := fmt.Sprintf("past%d", p)
-			ids[id] = doc
-			fmt.Fprintf(&b, "<past_conversation id=%q>\n%s\n</past_conversation>\n", id, escapeData(doc.Text))
-		}
-	}
+	writeSources(&b, c.sources, ids, nil)
 	prompt := c.prompt
 	if prompt == "" {
 		prompt = "Draft a helpful reply to the customer's newest message."
@@ -252,20 +283,7 @@ func (s *Service) runDraft(ctx context.Context, run *Run) error {
 	if reply == "" {
 		return &TaskError{Code: "empty_answer"}
 	}
-	sources := []DraftSource{}
-	for _, id := range answer.SourceIDs {
-		doc, ok := ids[id]
-		if !ok {
-			continue
-		}
-		delete(ids, id)
-		switch doc.Kind {
-		case store.AIRetrievedKBArticle:
-			sources = append(sources, DraftSource{Kind: doc.Kind, ID: doc.KBArticleID, Locale: doc.KBLocale, Number: doc.Number, Title: doc.Title})
-		case store.AIRetrievedConversation:
-			sources = append(sources, DraftSource{Kind: doc.Kind, ID: doc.ConversationID, Title: doc.Title})
-		}
-	}
+	sources := citedSources(ids, answer.SourceIDs)
 	warnings := draftWarnings(reply, c)
 	encodedSources, _ := json.Marshal(sources)
 	encodedWarnings, _ := json.Marshal(warnings)

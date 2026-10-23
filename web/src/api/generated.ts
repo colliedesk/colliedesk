@@ -1485,7 +1485,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Applies a ready suggestion to the conversation, as a person's change would: without a body all of it; with one, only what it names (each from the suggestion; 400 otherwise). Tags are added, never removed. Undo is an ordinary conversation change. 409 `ai_triage_decided` when it is not ready or was already decided. */
+        /** @description Applies an open suggestion to the conversation, as a person's change would: without a body the rest of it; with one, only what it names (each from the suggestion; 400 otherwise). A part applied leaves the rest open; when all of it is applied the outcome is accepted. Tags are added, never removed; a part already applied is not applied again. Undo is an ordinary conversation change. Accepting an accepted one again changes nothing; 409 `ai_triage_decided` when it is not ready or was dismissed, replaced or expired. */
         post: operations["acceptAITriage"];
         delete?: never;
         options?: never;
@@ -1505,7 +1505,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Stops a suggestion still being written or dismisses a ready one; nothing changes on the conversation. Again on one already stopped or dismissed it changes nothing. */
+        /** @description Stops a suggestion still being written, or dismisses the rest of an open one (outcome dismissed, or partly_accepted when a part was applied); nothing changes on the conversation. Again on one already stopped or dismissed it changes nothing. */
         post: operations["dismissAITriage"];
         delete?: never;
         options?: never;
@@ -2694,15 +2694,7 @@ export interface components {
             /** @description What the draft needs that the sources did not say. */
             missing_info: string | null;
             /** @description The articles and solved conversations the draft used, named from the database. */
-            sources: {
-                /** @enum {string} */
-                kind: "kb_article" | "conversation";
-                /** Format: uuid */
-                id: string;
-                locale?: string;
-                number?: number;
-                title: string;
-            }[];
+            sources: components["schemas"]["AISource"][];
             /** @description An email address, a number or another customer's name in the draft that this conversation does not hold. Check before sending. */
             warnings: {
                 /** @enum {string} */
@@ -2725,6 +2717,16 @@ export interface components {
             /** Format: date-time */
             decided_at: string | null;
         };
+        /** @description An article or a solved conversation an AI draft or suggestion read, named from the database, never by the model. */
+        AISource: {
+            /** @enum {string} */
+            kind: "kb_article" | "conversation";
+            /** Format: uuid */
+            id: string;
+            locale?: string;
+            number?: number;
+            title: string;
+        };
         AITriage: {
             /** Format: uuid */
             id: string;
@@ -2732,21 +2734,40 @@ export interface components {
             conversation_id: string;
             /** @enum {string} */
             status: "queued" | "running" | "ready" | "failed" | "cancelled";
+            /** @description Why it failed or stopped: automatic_limit (the workspace's daily limit of automatic suggestions), ai_allowance_reached, feature_off, refused, invalid_answer, a provider error code, restored, cancelled… */
             error_code: string | null;
             /** @description Queued by a new ticket rather than asked for by a person. */
             automatic: boolean;
-            /** @description Tags of the workspace the suggestion names. */
+            /** @description Tags of the workspace the suggestion names that the conversation did not have when it came. */
             tag_ids: string[];
-            /** @enum {string|null} */
+            /**
+             * @description Null when it matches the conversation's or a person set it first.
+             * @enum {string|null}
+             */
             priority: "low" | "normal" | "high" | "urgent" | null;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Null when it matches the conversation's or a person set it first.
+             */
             assignee_agent_id: string | null;
-            /** @description One sentence a teammate can check; generated text. */
+            /** @description One sentence a teammate can check; generated text, erased 90 days after it was decided. */
             reason: string | null;
+            /** @description The articles and solved conversations the reason rests on. */
+            sources: components["schemas"]["AISource"][];
+            /** @description What a person set on the conversation after the suggestion was asked for and before it came; that field is not suggested. */
+            stale: {
+                /** @enum {string|null} */
+                priority: "low" | "normal" | "high" | "urgent" | null;
+                /** Format: uuid */
+                assignee_agent_id: string | null;
+            };
             model: string | null;
-            /** @enum {string|null} */
+            /**
+             * @description Null while open, also after a part was applied. accepted: all of it applied; partly_accepted: a part applied, the rest dismissed, replaced or expired after 7 days.
+             * @enum {string|null}
+             */
             outcome: "accepted" | "partly_accepted" | "dismissed" | "superseded" | "expired" | null;
-            /** @description What a person applied of it. */
+            /** @description What people applied of it so far. */
             applied: {
                 tag_ids: string[];
                 priority: string | null;
@@ -7484,7 +7505,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The suggestion, decided */
+            /** @description The suggestion, with what was applied */
             200: {
                 headers: {
                     [name: string]: unknown;
