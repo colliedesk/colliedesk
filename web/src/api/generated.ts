@@ -3815,6 +3815,15 @@ export interface components {
             first_response_due_at: string | null;
             cc: string[];
             forwarded_to: string[];
+            /** @description What the source helpdesk reported about the ticket (Freshdesk `include=stats`), read once: a later import keeps the first values it read and only fills a ticket that has none. Missing on imports that predate it, on archived Freshdesk tickets and on other sources. The results page reads `resolved_at` for the imported baseline (docs/user/results.md). */
+            stats?: {
+                /** Format: date-time */
+                resolved_at: string | null;
+                /** Format: date-time */
+                first_responded_at: string | null;
+                /** Format: date-time */
+                closed_at: string | null;
+            };
         };
         BulkConversationUpdate: {
             ids: string[];

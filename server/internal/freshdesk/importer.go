@@ -23,6 +23,8 @@ type ticketRef struct {
 	id        int64
 	updatedAt time.Time
 	archived  bool
+	// stats are the ticket stats the list returned; nil for an archived ticket.
+	stats *fdStats
 }
 
 type run struct {
@@ -56,6 +58,7 @@ type run struct {
 	highestProbed      int64
 	unclassified       []string
 	unchanged          []string
+	pendingStats       []pendingStats
 	archiveUnavailable atomic.Bool
 	verification       Verifications
 	progress           *progress

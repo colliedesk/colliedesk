@@ -19,6 +19,7 @@ from the public Freshdesk API v2 documentation (developers.freshdesk.com/api) on
 | Conversation `source`: 0 reply, 2 note, 8 forwarded email | A forward (`source` 8, not incoming) went to a third party and a public note (`source` 2, not private) was not an email to the customer: both become Colliedesk notes. `origin.kind` keeps the Freshdesk meaning |
 | Time entries of archived tickets: no documented endpoint | Warning per ticket; listed under "not imported" |
 | View Account (`/api/v2/account`) gives `account_id` | Required. The ledger is keyed by it |
+| `include=stats` (List All Tickets, +2 credits per page) documents only `closed_at`, `resolved_at`, `first_responded_at`; no reopen history; the archived view has none | Asked on every list page and kept in `conversations.origin.stats` for the results baseline (`docs/internals/results.md`). Nothing else is read from stats |
 
 ## Completeness (never OK from our own listing)
 
@@ -185,6 +186,11 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
 - **Downloads are never rendered inline.** `GET /api/v1/attachments/{id}` answers
   `application/octet-stream`, `Content-Disposition: attachment` (RFC 5987 `filename*`) and
   `nosniff`, and refuses a row whose storage key belongs to another workspace.
+- **Ticket stats are read once.** The first `stats` read for a ticket stay in `origin.stats`: the
+  re-run `UPDATE` keeps them (`origin = $new || {stats: old}`), and a ticket the run skips as
+  unchanged gets them only when it has none (an import that predates them), in batches of 500,
+  without touching `updated_at`. A later value is newer Freshdesk work (a reopen and resolve after
+  the move), which must not shift the baseline the results page measured at the first import.
 
 ## In-app import (#97): importer hooks
 

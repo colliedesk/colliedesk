@@ -54,6 +54,9 @@ type fakeFreshdesk struct {
 	stallPath            string
 	extraReplyOnTicket6  bool
 	ticket1Updated       bool
+	// stats are the ticket stats the list returns with include=stats, by ticket id; a listed ticket
+	// without an entry gets stats whose fields are all null.
+	stats map[string]map[string]any
 	// canned serves the canned response fixtures; without it the account has no canned responses.
 	canned bool
 	// cannedExtra are responses added to folder 801; cannedCountBoost is added to its responses_count.
@@ -222,7 +225,19 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 			f.newestTickets(w, r)
 			return
 		}
-		f.page(w, r, f.ticketList(r.URL.Query().Get("updated_since")))
+		items := f.ticketList(r.URL.Query().Get("updated_since"))
+		if r.URL.Query().Get("include") == "stats" {
+			f.mu.Lock()
+			for _, item := range items {
+				stats := f.stats[fmt.Sprint(item["id"])]
+				if stats == nil {
+					stats = map[string]any{"resolved_at": nil, "first_responded_at": nil, "closed_at": nil}
+				}
+				item["stats"] = stats
+			}
+			f.mu.Unlock()
+		}
+		f.page(w, r, items)
 	case f.noTickets && parts[0] == "tickets":
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "not found"})
 	case len(parts) == 3 && parts[1] == "archived":

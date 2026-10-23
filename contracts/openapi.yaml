@@ -5662,6 +5662,18 @@ components:
         first_response_due_at: {type: [string, 'null'], format: date-time}
         cc: {type: array, items: {type: string}}
         forwarded_to: {type: array, items: {type: string}}
+        stats:
+          type: object
+          description: >-
+            What the source helpdesk reported about the ticket (Freshdesk `include=stats`), read once: a
+            later import keeps the first values it read and only fills a ticket that has none. Missing on
+            imports that predate it, on archived Freshdesk tickets and on other sources. The results page
+            reads `resolved_at` for the imported baseline (docs/user/results.md).
+          required: [resolved_at, first_responded_at, closed_at]
+          properties:
+            resolved_at: {type: [string, 'null'], format: date-time}
+            first_responded_at: {type: [string, 'null'], format: date-time}
+            closed_at: {type: [string, 'null'], format: date-time}
     BulkConversationUpdate:
       type: object
       required: [ids, changes]

@@ -15,7 +15,7 @@ func (r *run) importTickets(ctx context.Context) error {
 		}
 		r.progress.tick("importing tickets", index+1, len(r.refs))
 	}
-	return nil
+	return r.flushStats(ctx)
 }
 
 // importTicket brings one ticket over with its messages, attachments and time
@@ -28,6 +28,9 @@ func (r *run) importTicket(ctx context.Context, ref ticketRef) error {
 		return err
 	}
 	if found && entry.Status == ledgerDone && entry.SourceUpdatedAt != nil && !ref.updatedAt.After(*entry.SourceUpdatedAt) {
+		if ref.stats != nil && entry.TargetID != nil {
+			return r.fillStats(ctx, *entry.TargetID, ref.stats)
+		}
 		return nil
 	}
 	ticket, err := r.fetchTicket(ctx, ref)
@@ -59,6 +62,7 @@ func (r *run) importTicket(ctx context.Context, ref ticketRef) error {
 	if found {
 		existing = entry.TargetID
 	}
+	ticket.Stats = ref.stats
 	conversationID, err := r.writeConversation(ctx, ticket, contactID, existing, ref.archived)
 	if err != nil {
 		return r.ticketFailed(ctx, key, err)

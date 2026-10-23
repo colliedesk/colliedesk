@@ -67,6 +67,15 @@ type fdTicket struct {
 	ToEmails        []string       `json:"to_emails"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
+	// Stats comes only from the list (include=stats); the archived view has none.
+	Stats *fdStats `json:"stats"`
+}
+
+// fdStats holds the three ticket stats the public API documents for include=stats.
+type fdStats struct {
+	ResolvedAt       *time.Time `json:"resolved_at"`
+	FirstRespondedAt *time.Time `json:"first_responded_at"`
+	ClosedAt         *time.Time `json:"closed_at"`
 }
 
 type fdConversation struct {
