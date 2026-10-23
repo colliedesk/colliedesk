@@ -103,15 +103,15 @@ jobs:
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
           # Six regular shards of three go test processes each, and two latency shards that run their
-          # gates as one process. Shard 7's knowledge-base gates took 24 seconds, so it then runs half a
-          # regular shard's tests in three processes; shard 8's took 45 (run 39881311707), so it runs
-          # only its gates (go-test-shard.py says why).
-          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 2 --latency-share 0.5,0 < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
+          # gates as one process, then regular tests if their gates end early. Each test weighs its time
+          # in CI (go-test-timings.json; go-test-shard.py and go-test-timings.py say how).
+          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 2 --timings ../.github/go-test-timings.json < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
       - name: Wait for test services
         run: sh .github/scripts/ci-services.sh wait postgres
       - name: Test
         working-directory: server
-        # Patterns run at once; a '--' line waits for the ones before it.
+        # Patterns run at once; a '--' line waits for the ones before it. -v prints each test's time
+        # for go-test-timings.py.
         run: |
           pids=()
           status=0
@@ -121,15 +121,14 @@ jobs:
               pids=()
               continue
             fi
-            go test -count=1 -run "$pattern" ./... &
+            go test -count=1 -run "$pattern" -v ./... &
             pids+=($!)
           done < "$RUNNER_TEMP/go-test-patterns.txt"
           for pid in "${pids[@]}"; do wait "$pid" || status=1; done
           exit "$status"
       # go-cache.yml saves main's entry on every push. A pull request whose go.sum main has not cached
       # yet (a new module) saves once, on its own ref, so its next runs skip compiling that module
-      # (the Anthropic SDK: about 23 seconds per job). Shard 7 runs the knowledge-base gates and ends
-      # 30 to 60 seconds before the regular shards, so the upload does not lengthen the run.
+      # (the Anthropic SDK: about 23 seconds per job). Only shard 7 uploads, so one job pays for it.
       - if: >-
           github.event_name == 'pull_request' && matrix.shard == 7 &&
           !startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))
@@ -140,9 +139,15 @@ jobs:
             /home/runner/go/pkg/mod
             /home/runner/.cache/go-build
           key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
+  # Vitest kept a 4-core runner's three workers busy for 89 seconds (run 39901392514), so the test
+  # files split over two runners (--shard), each running about half of them.
   web:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -158,7 +163,10 @@ jobs:
         working-directory: web
         # The type check runs in the e2e job, and the bundle budget after the e2e job's own Vite build
         # of the same commit: Vitest is this job's long pole.
-        run: corepack pnpm test
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
+        run: corepack pnpm test --shard="$SHARD/$SHARDS"
   e2e:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
@@ -313,6 +321,12 @@ jobs:
       - name: Install frozen dependencies
         working-directory: web
         run: corepack pnpm install --frozen-lockfile
+      # As in the e2e job: the Vite build and the servers' compile run while Chromium installs and the
+      # services start, instead of in the journey step before its first test.
+      - name: Build the app and compile the test servers in the background
+        run: |
+          sh .github/scripts/ci-background.sh start app sh -c \
+            'cd web && corepack pnpm exec vite build && cd ../server && go build -tags e2e -o /dev/null ./cmd/collie && go build -o /dev/null ./cmd/collie'
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install --only-shell chromium
@@ -324,7 +338,7 @@ jobs:
         working-directory: web
         env:
           JOURNEY_PATTERN: ${{ matrix.pattern }}
-        run: corepack pnpm exec vite build && corepack pnpm e2e --grep "$JOURNEY_PATTERN"
+        run: sh ../.github/scripts/ci-background.sh wait app && corepack pnpm e2e --grep "$JOURNEY_PATTERN"
   # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
   # On main the image is pushed as sha-<commit>; publish-edge.yml retags that digest after CI.
   image:
@@ -435,7 +449,11 @@ jobs:
 
   # ROADMAP.md is read by people deciding whether to move to Colliedesk: every linked item must be
   # an open issue labelled for its section (.github/scripts/roadmap-check.py).
+  # It waits for osv-scan, a short job, and then takes its runner: a pull request starts one job fewer
+  # at once (RUNNER_LIMIT in tests/ci-tools-test.py) and roadmap still ends long before the tests.
   roadmap:
+    needs: osv-scan
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
