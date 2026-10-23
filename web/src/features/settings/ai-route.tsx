@@ -81,6 +81,8 @@ export function AIRoute() {
       return refusal(error);
     }
   };
+  const [usageMonth, setUsageMonth] = useState<string>();
+  const usage = useQuery({ queryKey: ['ai-usage', usageMonth], queryFn: () => aiApi.usage(usageMonth ?? ''), enabled: isAdmin && Boolean(usageMonth) });
   const failed = [slot, consent, check].find((mutation) => mutation.isError)?.error;
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   const error = failed ? refusal(failed).text : undefined;
@@ -95,5 +97,7 @@ export function AIRoute() {
     onCheck={(id) => { slot.reset(); consent.reset(); check.mutate(id); }}
     onAdd={(input: AIProviderInput) => run(() => aiApi.add(input))}
     onSetKey={(id, key) => run(() => aiApi.setKey(id, key))}
-    onRemove={(id) => run(() => aiApi.remove(id))} />;
+    onRemove={(id) => run(() => aiApi.remove(id))}
+    onSetAutomatic={(perDay, perMinute) => run(() => aiApi.setAutomatic(perDay, perMinute))}
+    usage={usage.data} usageFailed={usage.isError} onUsageMonth={setUsageMonth} />;
 }

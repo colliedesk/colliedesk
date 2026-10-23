@@ -57,6 +57,9 @@ type Config struct {
 	Build func(Spec) (aiprovider.Provider, error)
 	// CheckTimeout bounds one check; zero is 20 seconds.
 	CheckTimeout time.Duration
+	// PlanLimits is true on the hosted cloud, where a trial and a lock apply: the allowance reads
+	// the plan, and the worker cancels the tasks of a locked workspace.
+	PlanLimits bool
 }
 
 // Service reads and changes a workspace's AI settings. Every call names the workspace; a provider of
@@ -66,6 +69,8 @@ type Service struct {
 	config Config
 	now    func() time.Time
 	checks checkLimiter
+	// wakeup tells the worker a task was queued, so it does not wait for its next tick.
+	wakeup chan struct{}
 }
 
 // NewService uses db (request pool).
@@ -73,7 +78,7 @@ func NewService(db *database.DB, config Config) *Service {
 	if config.CheckTimeout <= 0 {
 		config.CheckTimeout = defaultCheckTimeout
 	}
-	return &Service{db: db, config: config, now: time.Now, checks: checkLimiter{seen: map[string][]time.Time{}}}
+	return &Service{db: db, config: config, now: time.Now, checks: checkLimiter{seen: map[string][]time.Time{}}, wakeup: make(chan struct{}, 1)}
 }
 
 // SetClock replaces the clock; tests use it.

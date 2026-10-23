@@ -21,13 +21,14 @@ function provider(change: Partial<AIProvider> = {}): AIProvider {
 
 function settings(change: Partial<AISettings> = {}): AISettings {
   return { server: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
-    allow_private_base_urls: false, ...change };
+    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null }, allowance: null, ...change };
 }
 
 function page(props: Partial<AIPageProps> = {}) {
   const handlers = {
     onSetSlot: vi.fn(), onConsent: vi.fn(), onDismissConsent: vi.fn(), onCheck: vi.fn(),
     onAdd: vi.fn().mockResolvedValue(undefined), onSetKey: vi.fn().mockResolvedValue(undefined), onRemove: vi.fn().mockResolvedValue(undefined),
+    onSetAutomatic: vi.fn().mockResolvedValue(undefined), onUsageMonth: vi.fn(),
   };
   render(<AIPage isAdmin workspaceName="Northwind" timezone="UTC" shown={{ general: true, team: true, email: true, webForm: true, savedReplies: true, exportData: true, billing: false, ai: true }}
     showConsent={false} settings={settings()} {...handlers} {...props} />);
@@ -167,4 +168,58 @@ test('a failed check is placed under the field it is about', () => {
   expect(refusal(new ConflictError('no model', { code: 'ai_check_failed', check_error_code: 'model_not_found' }))).toEqual({ field: 'models', text: 'no model' });
   expect(refusal(new ConflictError('taken', { code: 'ai_provider_name_taken' }))).toEqual({ field: 'label', text: 'taken' });
   expect(refusal(new Error('API 500')).field).toBe('form');
+});
+
+test('the automatic runs are shown on triage and changed by an admin', async () => {
+  const { onSetAutomatic } = page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })] }) });
+  expect(screen.getByText('300 a day · 30 a minute')).toBeInTheDocument();
+  expect(screen.getByText('None: only when an agent asks')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Change the automatic limits' }));
+  const dialog = screen.getByRole('dialog', { name: 'Automatic runs' });
+  fireEvent.change(within(dialog).getByLabelText('A day (UTC)'), { target: { value: '500' } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Save' })); });
+  expect(onSetAutomatic).toHaveBeenCalledWith(500, 30);
+});
+
+test('a paused day and a used-up allowance each say what happens and what to do', () => {
+  page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true })],
+    automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z' },
+    allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 9_000_000, resets_at: '2026-11-01T00:00:00Z' } }) });
+  expect(screen.getByRole('status')).toHaveTextContent('Today’s limit of 300 is reached');
+  expect(screen.getByRole('button', { name: 'Raise the daily limit' })).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('This month’s Colliedesk AI allowance is used up');
+  expect(screen.getByRole('meter', { name: 'Allowance used this month' })).toHaveAttribute('aria-valuetext', '$9.00 of $9.00 used');
+  expect(screen.getAllByText('Stopped: allowance used')).toHaveLength(2);
+  expect(document.querySelector('.ai-st-ok')).toBeNull();
+});
+
+test('the usage tab is asked for when it opens and sums each feature', () => {
+  const { onUsageMonth } = page({ usage: { month: '2026-10', allowance: null, rows: [
+    { feature: 'draft', billed_to: 'server', provider_label: 'Colliedesk AI', calls: 87, failed: 1, automatic: 0, input_tokens: 740_000, output_tokens: 98_000, cost_micro_usd: 2_150_000 },
+    { feature: 'check', billed_to: 'workspace_key', provider_label: 'Team key', calls: 6, failed: 2, automatic: 0, input_tokens: 400, output_tokens: 100, cost_micro_usd: null },
+  ] } });
+  fireEvent.click(screen.getByRole('tab', { name: 'Usage' }));
+  expect(onUsageMonth).toHaveBeenCalled();
+  const rows = screen.getAllByRole('row');
+  expect(rows[1]).toHaveTextContent('Reply drafts');
+  expect(rows[1]).toHaveTextContent('$2.15');
+  expect(rows[1]).toHaveTextContent('740.0k · 98.0k');
+  expect(rows[2]).toHaveTextContent('Your key');
+  expect(rows[2]).toHaveTextContent('—');
+});
+
+test('agents do not see the usage tab', () => {
+  page({ isAdmin: false });
+  expect(screen.queryByRole('tab', { name: 'Usage' })).not.toBeInTheDocument();
+});
+
+test('a paused feature says so on its row', () => {
+  page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })],
+    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z' } }) });
+  expect(screen.getByText('Paused until tomorrow')).toBeInTheDocument();
+});
+
+test('a server allowance of nothing reads as none included', () => {
+  page({ settings: settings({ server, allowance: { limit_micro_usd: 0, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z' } }) });
+  expect(screen.getByText(/No AI is included on this server/)).toBeInTheDocument();
 });

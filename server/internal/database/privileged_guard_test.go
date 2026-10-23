@@ -18,6 +18,7 @@ import (
 // Adding a line here is a security review: say why the path must cross workspaces and keep it to
 // the lookup that resolves a workspace. docs/internals/workspace-isolation.md lists the same set.
 var privilegedCallSites = []string{
+	"internal/ai/worker.go: PrivilegeAIJobClaim",
 	"internal/auth/cloud.go: PrivilegeCloudIdentity",
 	"internal/auth/links.go: PrivilegeLinkToken",
 	"internal/auth/service.go: PrivilegeCreateWorkspace",

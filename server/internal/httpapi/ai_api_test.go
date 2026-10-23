@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -187,5 +188,38 @@ func TestABaseURLNeverChangesUnderAStoredKey(t *testing.T) {
 	}
 	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM ai_providers WHERE base_url='https://api.good.example/v1'`); n != "1" {
 		t.Fatal("the base URL changed")
+	}
+}
+
+func TestAIUsageAndAutomaticLimitsStayInTheirWorkspace(t *testing.T) {
+	desk := newAIDesk(t, nil)
+	var usage ai.Usage
+	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage", nil, desk.adminA, nil), &usage)
+	if len(usage.Rows) != 1 || usage.Rows[0].ProviderLabel != "Team key" || usage.Rows[0].Feature != "check" || usage.Rows[0].Calls != 1 || usage.Rows[0].CostMicroUSD != nil {
+		t.Fatalf("A's usage = %+v", usage)
+	}
+	// A call still running is neither done nor failed.
+	if _, err := desk.pool.Exec(context.Background(), `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_id,provider_kind,provider_label,model,status,started_at)
+		SELECT workspace_id,feature,billed_to,provider_id,provider_kind,provider_label,model,'started',now() FROM ai_usage WHERE workspace_id=$1 LIMIT 1`, desk.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage", nil, desk.adminA, nil), &usage)
+	if usage.Rows[0].Calls != 2 || usage.Rows[0].Failed != 0 {
+		t.Fatalf("A's usage with a call running = %+v", usage.Rows[0])
+	}
+	wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage?month=October", nil, desk.adminA, nil), http.StatusBadRequest, "invalid_request")
+	agent := joinAsAgent(t, desk.api, desk.adminA, "agent@ai-a.example.com")
+	wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage", nil, agent, nil), http.StatusForbidden, "forbidden")
+	wantResponse(t, request(t, desk.api, http.MethodPut, "/api/v1/ai/automatic-limits", map[string]any{"per_day": 5, "per_minute": 1}, agent, nil), http.StatusForbidden, "forbidden")
+
+	limits := request(t, desk.api, http.MethodPut, "/api/v1/ai/automatic-limits", map[string]any{"per_day": 5, "per_minute": 1}, desk.adminA, nil)
+	if limits.Code != http.StatusOK || !strings.Contains(limits.Body.String(), `"per_day":5`) {
+		t.Fatalf("set limits: %d %s", limits.Code, limits.Body.String())
+	}
+	wantResponse(t, request(t, desk.api, http.MethodPut, "/api/v1/ai/automatic-limits", map[string]any{"per_day": -1, "per_minute": 1}, desk.adminA, nil), http.StatusBadRequest, "invalid_request")
+	var settingsB ai.Settings
+	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/ai", nil, desk.adminB, nil), &settingsB)
+	if settingsB.Automatic.PerDay != ai.DefaultAutomaticPerDay {
+		t.Fatalf("B's limits changed with A's: %+v", settingsB.Automatic)
 	}
 }

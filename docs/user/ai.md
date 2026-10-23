@@ -62,12 +62,32 @@ policy; read it before you add one, for example [Anthropic's](https://www.anthro
 To keep data on your own servers, add an OpenAI-compatible provider on your network (vLLM, Ollama)
 and use it for every feature.
 
+## Work runs in the background
+
+Suggestions and drafts run as background tasks, so no screen waits for a model: a task that hits a
+busy provider tries again a little later (three times at most), and one whose feature was turned off
+meanwhile is dropped without calling anyone. A locked workspace runs none.
+
+## Limits
+
+1. **Automatic runs.** Work Colliedesk starts on its own (a triage suggestion for each new ticket)
+   stops at 300 a day (UTC) and 30 a minute in a workspace, whichever provider runs it, so a flood of
+   tickets cannot run up a bill. Past the daily limit automatic suggestions wait until 00:00 UTC; what
+   an agent asks for still runs. Admins change both numbers in **Settings > AI > Features**
+   (**Automatic runs**, **Change**). Each task counts once, however many times it is retried.
+2. **Included AI.** The server's provider can come with a monthly allowance (on Colliedesk Cloud,
+   included in your plan). When it is used up, features on the server's provider stop until the first
+   day of the next month (UTC), and Settings says so; your own providers keep working. **Settings > AI >
+   Usage** shows what is used. A call that starts sets aside the most it can cost, so calls running at
+   the same time never spend more than is left; the last few cents of a month can stay unused.
+
 ## History and usage
 
 **Settings > AI > History** lists who added, changed or deleted a provider or a key, and who turned a
 feature on, off or elsewhere, with keys shown only by their last 4 characters. Every call to a provider
-leaves one usage record (the feature, the model, tokens in and out, whether it failed), never the text
-sent or received. Both are in the [export](export.md).
+leaves one usage record (the feature, the model, tokens in and out, whether it failed, and for the
+server's provider its cost at that day's prices), never the text sent or received. **Settings > AI >
+Usage** sums a month per feature and provider. Both are in the [export](export.md).
 
 ## Agents and AI agents
 

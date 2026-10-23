@@ -23,6 +23,12 @@ func workspaceAccess(ctx context.Context, tx pgx.Tx, workspaceID string, now tim
 	return domain.NewAccess(subscriptions, trialEndsAt, now), nil
 }
 
+// WorkspaceAccess is the plan in effect for the workspace at now, read inside a workspace-scoped tx:
+// the AI worker reads it before each task, so a workspace locked since the task was queued spends nothing.
+func WorkspaceAccess(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (domain.Access, error) {
+	return workspaceAccess(ctx, tx, workspaceID, now)
+}
+
 // pendingSeatEmails counts the people who hold a seat only through an invite: distinct invited
 // addresses that are not active agents. Two invites to one address are one person, and inviting
 // someone who is already an active agent (a role change) takes no seat. An invite to a deactivated

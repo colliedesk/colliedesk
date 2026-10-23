@@ -226,6 +226,10 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/ai/providers/{id}/check": tier(auth.ScopeAdmin),
 	"DELETE /api/v1/ai/providers/{id}":     tier(auth.ScopeAdmin),
 	"PUT /api/v1/ai/slots/{slot}":          approvalRequired,
+	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or
+	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
+	"GET /api/v1/ai/usage":            tier(auth.ScopeAdmin),
+	"PUT /api/v1/ai/automatic-limits": tier(auth.ScopeAdmin),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.

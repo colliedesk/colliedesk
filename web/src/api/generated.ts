@@ -1359,6 +1359,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One UTC calendar month of the workspace's AI calls, summed per feature and provider: calls, failed calls, automatic calls, tokens in and out, and for the server's provider its cost in micro-dollars (a workspace key's calls are billed by that provider). The current month also carries the allowance of the server's provider when the server sets one. Admins only. */
+        get: operations["getAIUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/automatic-limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Sets how many automatic AI tasks (started by the server, such as a triage suggestion for a new ticket) the workspace runs a UTC day and a minute; the defaults are 300 and 30. Past the daily limit automatic tasks wait for the next day; tasks a person asks for are never limited this way. */
+        put: operations["setAIAutomaticLimits"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -2444,7 +2478,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "provider_added" | "provider_changed" | "provider_key_changed" | "provider_removed" | "slot_changed";
+            kind: "provider_added" | "provider_changed" | "provider_key_changed" | "provider_removed" | "slot_changed" | "automatic_limits_changed";
             /** Format: uuid */
             actor_agent_id: string | null;
             actor_name: string | null;
@@ -2461,6 +2495,46 @@ export interface components {
             };
             /** Format: date-time */
             created_at: string;
+        };
+        AIAutomaticLimits: {
+            per_day: number;
+            per_minute: number;
+            /** @description Automatic tasks that started today (UTC). Tasks count, not calls, so a retry uses no more. */
+            used_today: number;
+            /**
+             * Format: date-time
+             * @description When today's limit is used up: the next UTC midnight.
+             */
+            paused_until: string | null;
+        };
+        AIAllowance: {
+            /** @description This month's allowance of the server's provider, in millionths of a US dollar. */
+            limit_micro_usd: number;
+            /** @description Spent so far; calls still running are not counted yet. */
+            used_micro_usd: number;
+            /**
+             * Format: date-time
+             * @description The first instant of the next UTC month.
+             */
+            resets_at: string;
+        };
+        AIUsage: {
+            month: string;
+            allowance: components["schemas"]["AIAllowance"] | null;
+            rows: {
+                /** @enum {string} */
+                feature: "check" | "triage" | "draft";
+                /** @enum {string} */
+                billed_to: "server" | "workspace_key";
+                provider_label: string;
+                calls: number;
+                failed: number;
+                automatic: number;
+                input_tokens: number;
+                output_tokens: number;
+                /** @description Only for the server's provider. */
+                cost_micro_usd: number | null;
+            }[];
         };
         AISettings: {
             /** @description The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none. */
@@ -2481,6 +2555,9 @@ export interface components {
             can_store_keys: boolean;
             /** @description True when the operator lets workspace providers use private addresses and plain http. */
             allow_private_base_urls: boolean;
+            automatic: components["schemas"]["AIAutomaticLimits"];
+            /** @description This month's allowance of the server's provider; null when the server sets none. */
+            allowance: components["schemas"]["AIAllowance"] | null;
         };
         AIProviderInput: {
             kind: components["schemas"]["AIProviderKind"];
@@ -6893,6 +6970,64 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getAIUsage: {
+        parameters: {
+            query?: {
+                /** @description YYYY-MM; the current UTC month when left out. */
+                month?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The month's usage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIUsage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setAIAutomaticLimits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    per_day: number;
+                    per_minute: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The limits and today's use */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIAutomaticLimits"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     exportWorkspace: {

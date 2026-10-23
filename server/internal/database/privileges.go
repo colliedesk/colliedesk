@@ -76,4 +76,8 @@ const (
 	// address, after a workspace dropped its own. Google revokes an account's whole grant to the project, so
 	// the grant is revoked only when no workspace holds it. Only a yes or no leaves the transaction.
 	PrivilegeMailboxGrantShared Privilege = "mailbox-grant-shared"
+	// PrivilegeAIJobClaim leases due AI tasks of every workspace for the AI worker, and closes the usage
+	// rows a dead process left started. Only task ids, workspace ids and claim tokens leave the claim;
+	// each task is then read, run and recorded in its own workspace.
+	PrivilegeAIJobClaim Privilege = "ai-job-claim"
 )

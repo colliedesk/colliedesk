@@ -122,6 +122,14 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 				}
 			}
 		}
+		if settings.Automatic, _, err = s.automaticLimits(ctx, tx, workspaceID); err != nil {
+			return err
+		}
+		if left, limit, limited, err := s.allowanceLeft(ctx, tx, workspaceID); err != nil {
+			return err
+		} else if limited {
+			settings.Allowance = &AllowanceView{LimitMicroUSD: limit, UsedMicroUSD: limit - left, ResetsAt: monthStart(s.now()).AddDate(0, 1, 0)}
+		}
 		events, err := tx.Query(ctx, `SELECT e.id::text,e.kind,e.actor_agent_id::text,COALESCE(NULLIF(a.display_name,''),a.email),e.actor_token_id IS NOT NULL,
 				e.provider_id::text,e.provider_label,e.slot,e.detail,e.created_at
 			FROM ai_settings_events e LEFT JOIN agents a ON a.workspace_id=e.workspace_id AND a.id=e.actor_agent_id

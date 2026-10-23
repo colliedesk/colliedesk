@@ -257,6 +257,8 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/ai/providers/{id}/check":       {path: "/api/v1/ai/providers/" + f.aiProviderID + "/check", token: admin, status: 200},
 		"PUT /api/v1/ai/slots/{slot}":                {path: "/api/v1/ai/slots/draft", body: map[string]any{"source": "provider", "provider_id": f.aiProviderID, "enabled": true}, token: admin, status: 200},
 		"DELETE /api/v1/ai/providers/{id}":           {path: "/api/v1/ai/providers/" + f.aiProviderID, token: admin, status: 200},
+		"GET /api/v1/ai/usage":                       {path: "/api/v1/ai/usage?month=2026-10", token: admin, status: 200},
+		"PUT /api/v1/ai/automatic-limits":            {path: "/api/v1/ai/automatic-limits", body: map[string]any{"per_day": 200, "per_minute": 20}, token: admin, status: 200},
 		"POST /api/v1/public/forms/{workspace_slug}": {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
 	}
 	maps.Copy(cases, kbContractCases(f))

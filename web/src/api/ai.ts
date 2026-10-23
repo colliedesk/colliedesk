@@ -20,8 +20,22 @@ export const aiSlotSchema = z.object({
   off_reason: z.enum(['server_provider_missing', 'model_not_offered']).nullable(),
   consented_by: z.string().uuid().nullable(), consented_at: nullableDate, updated_by: z.string().uuid().nullable(), updated_at: nullableDate,
 }) satisfies z.ZodType<Generated<'AISlot'>>;
+export const aiAutomaticSchema = z.object({
+  per_day: z.number().int(), per_minute: z.number().int(), used_today: z.number().int(), paused_until: nullableDate,
+}) satisfies z.ZodType<Generated<'AIAutomaticLimits'>>;
+const aiAllowanceSchema = z.object({
+  limit_micro_usd: z.number().int(), used_micro_usd: z.number().int(), resets_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'AIAllowance'>>;
+export const aiUsageSchema = z.object({
+  month: z.string(), allowance: aiAllowanceSchema.nullable(),
+  rows: z.array(z.object({
+    feature: z.enum(['check', 'triage', 'draft']), billed_to: z.enum(['server', 'workspace_key']), provider_label: z.string(),
+    calls: z.number().int(), failed: z.number().int(), automatic: z.number().int(), input_tokens: z.number().int(), output_tokens: z.number().int(),
+    cost_micro_usd: z.number().int().nullable(),
+  })),
+}) satisfies z.ZodType<Generated<'AIUsage'>>;
 const aiEventSchema = z.object({
-  id: z.string().uuid(), kind: z.enum(['provider_added', 'provider_changed', 'provider_key_changed', 'provider_removed', 'slot_changed']),
+  id: z.string().uuid(), kind: z.enum(['provider_added', 'provider_changed', 'provider_key_changed', 'provider_removed', 'slot_changed', 'automatic_limits_changed']),
   actor_agent_id: z.string().uuid().nullable(), actor_name: z.string().nullable(), via_token: z.boolean(),
   provider_id: z.string().uuid().nullable(), provider_label: z.string().nullable(), slot: aiSlotNameSchema.nullable(),
   detail: z.record(z.string(), z.unknown()), created_at: z.string().datetime(),
@@ -30,6 +44,7 @@ export const aiSettingsSchema = z.object({
   server: z.object({ kind: kindSchema, label: z.string(), models: z.record(z.string(), z.array(z.string())) }).nullable(),
   providers: z.array(aiProviderSchema), slots: z.array(aiSlotSchema), events: z.array(aiEventSchema),
   provider_limit: z.number().int(), can_store_keys: z.boolean(), allow_private_base_urls: z.boolean(),
+  automatic: aiAutomaticSchema, allowance: aiAllowanceSchema.nullable(),
 }) satisfies z.ZodType<JsonResponse<'getAISettings', 200>>;
 const removedSchema = z.object({ turned_off: z.array(aiSlotNameSchema) }) satisfies z.ZodType<JsonResponse<'removeAIProvider', 200>>;
 
@@ -38,10 +53,12 @@ export type AIProvider = z.infer<typeof aiProviderSchema>;
 export type AISlot = z.infer<typeof aiSlotSchema>;
 export type AIEvent = z.infer<typeof aiEventSchema>;
 export type AISlotName = z.infer<typeof aiSlotNameSchema>;
+export type AIUsage = z.infer<typeof aiUsageSchema>;
+export type AIAutomatic = z.infer<typeof aiAutomaticSchema>;
 export type AIProviderInput = RequestBody<'addAIProvider'>;
 export type AISlotInput = RequestBody<'setAISlot'>;
 
-const json = <Operation extends 'addAIProvider' | 'updateAIProvider' | 'setAIProviderKey' | 'setAISlot'>(value: RequestBody<Operation>): string => JSON.stringify(value);
+const json = <Operation extends 'addAIProvider' | 'updateAIProvider' | 'setAIProviderKey' | 'setAISlot' | 'setAIAutomaticLimits'>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
 export const aiApi = {
   settings: () => request('/api/v1/ai', aiSettingsSchema),
@@ -52,4 +69,7 @@ export const aiApi = {
   check: (id: string) => request(`/api/v1/ai/providers/${id}/check`, aiProviderSchema, { method: 'POST' }),
   remove: (id: string) => request(`/api/v1/ai/providers/${id}`, removedSchema, { method: 'DELETE' }),
   setSlot: (slot: AISlotName, input: AISlotInput) => request(`/api/v1/ai/slots/${slot}`, aiSlotSchema, { method: 'PUT', body: json<'setAISlot'>(input) }),
+  usage: (month: string) => request(`/api/v1/ai/usage?month=${encodeURIComponent(month)}`, aiUsageSchema),
+  setAutomatic: (perDay: number, perMinute: number) =>
+    request('/api/v1/ai/automatic-limits', aiAutomaticSchema, { method: 'PUT', body: json<'setAIAutomaticLimits'>({ per_day: perDay, per_minute: perMinute }) }),
 };

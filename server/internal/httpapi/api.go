@@ -198,6 +198,9 @@ type Server struct {
 	api *API
 }
 
+// AI is the service of the workspaces' AI settings and task queue, which the worker of the process shares.
+func (s *Server) AI() *ai.Service { return s.api.ai }
+
 // RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
 // does nothing when billing is off.
 func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refreshFounding(ctx) }
@@ -241,6 +244,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if !aiConfig.Keys.Configured() {
 		aiConfig.Keys = config.Google.Keys
 	}
+	aiConfig.PlanLimits = limits
 	api.ai = ai.NewService(db, aiConfig)
 	api.ai.SetClock(clock)
 	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
@@ -428,6 +432,8 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/ai/providers/{id}/check", auth.PermissionAccessWrite},
 		{http.MethodPut, "/api/v1/ai/slots/{slot}", auth.PermissionAccessWrite},
 		{http.MethodDelete, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/ai/usage", auth.PermissionBillingManage},
+		{http.MethodPut, "/api/v1/ai/automatic-limits", auth.PermissionAccessWrite},
 	}
 }
 

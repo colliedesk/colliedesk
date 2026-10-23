@@ -382,6 +382,11 @@ type AIUsage struct {
 	StartedAt         time.Time       `json:"started_at"`
 	FinishedAt        *time.Time      `json:"finished_at"`
 	LatencyMS         *int            `json:"latency_ms"`
+	TaskID            *string         `json:"task_id"`
+	Automatic         bool            `json:"automatic"`
+	CostMicroUSD      *int64          `json:"cost_micro_usd"`
+	// ReservedMicroUSD is the most the call could cost, held against the allowance while it ran.
+	ReservedMicroUSD *int64 `json:"reserved_micro_usd"`
 }
 
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
