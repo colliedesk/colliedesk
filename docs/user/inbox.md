@@ -208,10 +208,12 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - AI agents start one with the MCP tool `colliedesk_conversation_start`, or the API
   `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 
-**Change the conversation** (details pane)
+**Change the conversation**
 - **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
   screen width, without opening the details. A resolved or closed conversation shows **Reopen** there
   instead, which sets it back to Open. If the change fails, a message under the button says so.
+
+In the details pane (**Show details** on a narrower screen):
 - **Status**: every status can be changed back, for example Resolved → Open to reopen.
 - **Priority**: Low, Normal, High, Urgent.
 - **Assignee**: assign to a teammate or set back to unassigned.
