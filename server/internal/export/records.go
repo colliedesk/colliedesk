@@ -342,6 +342,8 @@ type AISlot struct {
 	Model       *string    `json:"model"`
 	Effort      string     `json:"effort"`
 	Enabled     bool       `json:"enabled"`
+	Automatic   bool       `json:"automatic"`
+	AutoParts   []string   `json:"auto_parts"`
 	ConsentedBy *string    `json:"consented_by"`
 	ConsentedAt *time.Time `json:"consented_at"`
 	UpdatedBy   *string    `json:"updated_by"`
@@ -435,6 +437,13 @@ type AITriage struct {
 	Model              *string         `json:"model"`
 	Outcome            *string         `json:"outcome"`
 	Applied            json.RawMessage `json:"applied"`
+	AutoAppliedAt      *time.Time      `json:"auto_applied_at"`
+	AutoApplied        json.RawMessage `json:"auto_applied"`
+	Skipped            json.RawMessage `json:"skipped"`
+	UndoneParts        json.RawMessage `json:"undone_parts"`
+	Kept               json.RawMessage `json:"kept"`
+	UndoneAt           *time.Time      `json:"undone_at"`
+	UndoneByAgentID    *string         `json:"undone_by_agent_id"`
 	CreatedAt          time.Time       `json:"created_at"`
 	ReadyAt            *time.Time      `json:"ready_at"`
 	DecidedAt          *time.Time      `json:"decided_at"`

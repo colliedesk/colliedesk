@@ -2540,9 +2540,14 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [suggestion]
+                required: [suggestion, auto_applied]
                 properties:
                   suggestion:
+                    oneOf:
+                      - {type: 'null'}
+                      - {$ref: '#/components/schemas/AITriage'}
+                  auto_applied:
+                    description: The newest suggestion AI applied by itself; a later one asked for by hand does not hide it.
                     oneOf:
                       - {type: 'null'}
                       - {$ref: '#/components/schemas/AITriage'}
@@ -2574,8 +2579,10 @@ paths:
       operationId: acceptAITriage
       x-permission: conversations:write
       description: >
-        Applies an open suggestion to the conversation, as a person's change would: without a body the
-        rest of it; with one, only what it names (each from the suggestion; 400 otherwise). A part applied
+        Applies an open suggestion to the conversation, as a person's change would: without a body (or
+        one naming nothing) the rest of it; with one, only what it names (each from the suggestion; 400
+        otherwise). After AI applied part of it, or after an undo ("Apply again", which fills only what
+        is still empty), the rest can be accepted too. A part applied
         leaves the rest open; when all of it is applied the outcome is accepted. Tags are added, never
         removed; a part already applied is not applied again. Undo is an ordinary conversation change.
         Accepting an accepted one again changes nothing; 409 `ai_triage_decided` when it is not ready or
@@ -2615,6 +2622,39 @@ paths:
           description: The suggestion
           content: {application/json: {schema: {$ref: '#/components/schemas/AITriage'}}}
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: suggestionId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: undoAITriage
+      x-permission: conversations:write
+      description: >
+        Takes back what AI applied of a suggestion by itself: the parts named, or all of it without a
+        body. A part goes back only while it is still what AI set (a tag AI added is removed if it is
+        still there, the priority returns to what it was before AI, the assignee is unassigned); a part
+        a person changed since is kept and listed under kept. Undoing again changes nothing; accept
+        applies it again, filling only what is still empty. 409 `ai_triage_not_auto_applied` when AI
+        applied none of it.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}}
+      responses:
+        '200':
+          description: The suggestion, with what was undone and kept
+          content: {application/json: {schema: {$ref: '#/components/schemas/AITriage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -4515,7 +4555,7 @@ components:
         used_by: {type: array, items: {$ref: '#/components/schemas/AISlotName'}, description: 'The features set to this provider, on or off.'}
     AISlot:
       type: object
-      required: [slot, source, provider_id, model, effort, enabled, active, off_reason, consented_by, consented_at, updated_by, updated_at]
+      required: [slot, source, provider_id, model, effort, enabled, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at]
       properties:
         slot: {$ref: '#/components/schemas/AISlotName'}
         source: {type: string, enum: [server, provider, none]}
@@ -4523,6 +4563,8 @@ components:
         model: {type: [string, 'null']}
         effort: {type: string, enum: [low, medium, high]}
         enabled: {type: boolean}
+        automatic: {type: boolean, description: 'Triage only: suggestions of new tickets apply their auto_parts by themselves, filling only what nobody set. Off unless an admin turns it on; off with the feature and when it moves to another provider.'}
+        auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only: what applies by itself.'}
         active: {type: boolean, description: 'On, and its provider and model are still there: the feature runs.'}
         off_reason: {type: [string, 'null'], enum: [server_provider_missing, model_not_offered, null], description: Why a feature that is on cannot run.}
         consented_by: {type: [string, 'null'], format: uuid, description: Who agreed that this feature's data goes to its current provider.}
@@ -4624,7 +4666,8 @@ components:
         title: {type: string}
     AITriage:
       type: object
-      required: [id, conversation_id, status, error_code, automatic, tag_ids, priority, assignee_agent_id, reason, sources, stale, model, outcome, applied, created_at, ready_at, decided_at, decided_by_agent_id]
+      required: [id, conversation_id, status, error_code, automatic, tag_ids, priority, assignee_agent_id, reason, sources, stale, model, outcome, applied, created_at, ready_at, decided_at, decided_by_agent_id,
+        auto_applied_at, auto_applied, skipped, undone_parts, kept, undone_at, undone_by_agent_id]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
@@ -4644,19 +4687,42 @@ components:
             priority: {type: [string, 'null'], enum: [low, normal, high, urgent, null]}
             assignee_agent_id: {type: [string, 'null'], format: uuid}
         model: {type: [string, 'null']}
-        outcome: {type: [string, 'null'], enum: [accepted, partly_accepted, dismissed, superseded, expired, null], description: 'Null while open, also after a part was applied. accepted: all of it applied; partly_accepted: a part applied, the rest dismissed, replaced or expired after 7 days.'}
+        outcome: {type: [string, 'null'], enum: [accepted, partly_accepted, dismissed, superseded, expired, auto_applied, undone, null], description: 'Null while open, also after a part was applied. accepted: all of it applied; partly_accepted: a part applied, the rest dismissed, replaced or expired after 7 days; auto_applied: AI applied all of it by itself; undone: what AI applied was taken back.'}
         applied:
-          type: object
-          required: [tag_ids, priority, assignee_agent_id]
-          description: What people applied of it so far.
-          properties:
-            tag_ids: {type: array, items: {type: string, format: uuid}}
-            priority: {type: [string, 'null']}
-            assignee_agent_id: {type: [string, 'null'], format: uuid}
+          description: What was applied of it so far, by people or by AI.
+          allOf: [{$ref: '#/components/schemas/AITriageSet'}]
         created_at: {type: string, format: date-time}
         ready_at: {type: [string, 'null'], format: date-time}
         decided_at: {type: [string, 'null'], format: date-time}
         decided_by_agent_id: {type: [string, 'null'], format: uuid}
+        auto_applied_at: {type: [string, 'null'], format: date-time, description: When AI applied a part by itself (automatic apply).}
+        auto_applied: {$ref: '#/components/schemas/AITriageSet'}
+        skipped:
+          type: object
+          description: 'The parts AI did not apply by itself because the conversation had them set: priority (set_by_person, agent_conversation) or assignee (already_assigned), with the value it had.'
+          additionalProperties:
+            type: object
+            required: [reason, value]
+            properties:
+              reason: {type: string, enum: [set_by_person, agent_conversation, already_assigned]}
+              value: {type: [string, 'null']}
+        undone_parts: {$ref: '#/components/schemas/AITriageSet'}
+        kept:
+          type: object
+          required: [priority, assignee_agent_id]
+          description: What an undo left because a person changed it after AI, with its value then.
+          properties:
+            priority: {type: [string, 'null'], enum: [low, normal, high, urgent, null]}
+            assignee_agent_id: {type: [string, 'null'], format: uuid}
+        undone_at: {type: [string, 'null'], format: date-time}
+        undone_by_agent_id: {type: [string, 'null'], format: uuid}
+    AITriageSet:
+      type: object
+      required: [tag_ids, priority, assignee_agent_id]
+      properties:
+        tag_ids: {type: array, items: {type: string, format: uuid}}
+        priority: {type: [string, 'null']}
+        assignee_agent_id: {type: [string, 'null'], format: uuid}
     AISettings:
       type: object
       required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance]
@@ -4708,6 +4774,8 @@ components:
         model: {type: string, maxLength: 200}
         effort: {type: string, enum: [low, medium, high], description: Low when left out.}
         enabled: {type: boolean}
+        automatic: {type: boolean, description: 'Triage only. Left out: kept as it is (off when the feature turns off or moves to another provider).'}
+        auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only. Left out: kept; tags and priority when automatic turns on with none.'}
     ExportLink:
       type: object
       required: [url, expires_in_seconds]

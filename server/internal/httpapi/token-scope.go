@@ -244,6 +244,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/conversations/{id}/ai-triage":                        tier(auth.ScopeDraft),
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  tier(auth.ScopeDraft),
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": tier(auth.ScopeDraft),
+	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    tier(auth.ScopeDraft),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.

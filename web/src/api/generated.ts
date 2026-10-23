@@ -1485,7 +1485,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Applies an open suggestion to the conversation, as a person's change would: without a body the rest of it; with one, only what it names (each from the suggestion; 400 otherwise). A part applied leaves the rest open; when all of it is applied the outcome is accepted. Tags are added, never removed; a part already applied is not applied again. Undo is an ordinary conversation change. Accepting an accepted one again changes nothing; 409 `ai_triage_decided` when it is not ready or was dismissed, replaced or expired, `ai_triage_nothing` when it names nothing to apply (a tag deleted or a teammate deactivated since is not named). */
+        /** @description Applies an open suggestion to the conversation, as a person's change would: without a body (or one naming nothing) the rest of it; with one, only what it names (each from the suggestion; 400 otherwise). After AI applied part of it, or after an undo ("Apply again", which fills only what is still empty), the rest can be accepted too. A part applied leaves the rest open; when all of it is applied the outcome is accepted. Tags are added, never removed; a part already applied is not applied again. Undo is an ordinary conversation change. Accepting an accepted one again changes nothing; 409 `ai_triage_decided` when it is not ready or was dismissed, replaced or expired, `ai_triage_nothing` when it names nothing to apply (a tag deleted or a teammate deactivated since is not named). */
         post: operations["acceptAITriage"];
         delete?: never;
         options?: never;
@@ -1507,6 +1507,26 @@ export interface paths {
         put?: never;
         /** @description Stops a suggestion still being written, or dismisses the rest of an open one (outcome dismissed, or partly_accepted when a part was applied); nothing changes on the conversation. Again on one already stopped or dismissed it changes nothing. */
         post: operations["dismissAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Takes back what AI applied of a suggestion by itself: the parts named, or all of it without a body. A part goes back only while it is still what AI set (a tag AI added is removed if it is still there, the priority returns to what it was before AI, the assignee is unassigned); a part a person changed since is kept and listed under kept. Undoing again changes nothing; accept applies it again, filling only what is still empty. 409 `ai_triage_not_auto_applied` when AI applied none of it. */
+        post: operations["undoAITriage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2595,6 +2615,10 @@ export interface components {
             /** @enum {string} */
             effort: "low" | "medium" | "high";
             enabled: boolean;
+            /** @description Triage only: suggestions of new tickets apply their auto_parts by themselves, filling only what nobody set. Off unless an admin turns it on; off with the feature and when it moves to another provider. */
+            automatic: boolean;
+            /** @description Triage only: what applies by itself. */
+            auto_parts: ("tags" | "priority" | "assignee")[];
             /** @description On, and its provider and model are still there: the feature runs. */
             active: boolean;
             /**
@@ -2763,17 +2787,12 @@ export interface components {
             };
             model: string | null;
             /**
-             * @description Null while open, also after a part was applied. accepted: all of it applied; partly_accepted: a part applied, the rest dismissed, replaced or expired after 7 days.
+             * @description Null while open, also after a part was applied. accepted: all of it applied; partly_accepted: a part applied, the rest dismissed, replaced or expired after 7 days; auto_applied: AI applied all of it by itself; undone: what AI applied was taken back.
              * @enum {string|null}
              */
-            outcome: "accepted" | "partly_accepted" | "dismissed" | "superseded" | "expired" | null;
-            /** @description What people applied of it so far. */
-            applied: {
-                tag_ids: string[];
-                priority: string | null;
-                /** Format: uuid */
-                assignee_agent_id: string | null;
-            };
+            outcome: "accepted" | "partly_accepted" | "dismissed" | "superseded" | "expired" | "auto_applied" | "undone" | null;
+            /** @description What was applied of it so far, by people or by AI. */
+            applied: components["schemas"]["AITriageSet"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -2782,6 +2801,38 @@ export interface components {
             decided_at: string | null;
             /** Format: uuid */
             decided_by_agent_id: string | null;
+            /**
+             * Format: date-time
+             * @description When AI applied a part by itself (automatic apply).
+             */
+            auto_applied_at: string | null;
+            auto_applied: components["schemas"]["AITriageSet"];
+            /** @description The parts AI did not apply by itself because the conversation had them set: priority (set_by_person, agent_conversation) or assignee (already_assigned), with the value it had. */
+            skipped: {
+                [key: string]: {
+                    /** @enum {string} */
+                    reason: "set_by_person" | "agent_conversation" | "already_assigned";
+                    value: string | null;
+                };
+            };
+            undone_parts: components["schemas"]["AITriageSet"];
+            /** @description What an undo left because a person changed it after AI, with its value then. */
+            kept: {
+                /** @enum {string|null} */
+                priority: "low" | "normal" | "high" | "urgent" | null;
+                /** Format: uuid */
+                assignee_agent_id: string | null;
+            };
+            /** Format: date-time */
+            undone_at: string | null;
+            /** Format: uuid */
+            undone_by_agent_id: string | null;
+        };
+        AITriageSet: {
+            tag_ids: string[];
+            priority: string | null;
+            /** Format: uuid */
+            assignee_agent_id: string | null;
         };
         AISettings: {
             /** @description The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none. */
@@ -2834,6 +2885,10 @@ export interface components {
              */
             effort?: "low" | "medium" | "high";
             enabled: boolean;
+            /** @description Triage only. Left out: kept as it is (off when the feature turns off or moves to another provider). */
+            automatic?: boolean;
+            /** @description Triage only. Left out: kept; tags and priority when automatic turns on with none. */
+            auto_parts?: ("tags" | "priority" | "assignee")[];
         };
         ExportLink: {
             /** @description Path on this server, for example /api/v1/export/download/<token>. */
@@ -7447,6 +7502,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         suggestion: null | components["schemas"]["AITriage"];
+                        /** @description The newest suggestion AI applied by itself; a later one asked for by hand does not hide it. */
+                        auto_applied: null | components["schemas"]["AITriage"];
                     };
                 };
             };
@@ -7544,6 +7601,41 @@ export interface operations {
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    undoAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    parts?: ("tags" | "priority" | "assignee")[];
+                };
+            };
+        };
+        responses: {
+            /** @description The suggestion, with what was undone and kept */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

@@ -3,10 +3,12 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -227,38 +229,63 @@ func (s *Service) runTriage(ctx context.Context, run *Run) error {
 	reason := cut(strings.TrimSpace(readableReason(answer.Reason, ids)), 500)
 	sources, _ := json.Marshal(citedSources(ids, answer.SourceIDs))
 	return run.Record(ctx, func(tx pgx.Tx) error {
-		// Compared with the conversation as it is now: what it already has is not suggested, and a
-		// field a person changed since the suggestion was asked for is theirs (stale).
-		var base, stale struct {
-			Priority        *string `json:"priority"`
-			AssigneeAgentID *string `json:"assignee_agent_id"`
-		}
-		var nowPriority string
-		var nowAssignee *string
-		var nowTags []string
-		if err := tx.QueryRow(ctx, `SELECT s.base,cv.priority,cv.assignee_id::text,
-				COALESCE((SELECT array_agg(tag_id::text) FROM conversation_tags ct WHERE ct.workspace_id=cv.workspace_id AND ct.conversation_id=cv.id),'{}')
-			FROM ai_triage_suggestions s JOIN conversations cv ON cv.workspace_id=s.workspace_id AND cv.id=s.conversation_id
-			WHERE s.workspace_id=$1 AND s.id=$2`, run.Task.WorkspaceID, c.suggestionID).Scan(&base, &nowPriority, &nowAssignee, &nowTags); err != nil {
+		// The suggestion, then its conversation, locked in the order every accept and undo takes them.
+		var base, stale TriageStale
+		var automatic bool
+		if err := tx.QueryRow(ctx, `SELECT base,automatic FROM ai_triage_suggestions WHERE workspace_id=$1 AND id=$2 AND status='pending' FOR UPDATE`,
+			run.Task.WorkspaceID, c.suggestionID).Scan(&base, &automatic); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil // stopped meanwhile
+			}
 			return err
 		}
-		tagIDs = slices.DeleteFunc(tagIDs, func(id string) bool { return slices.Contains(nowTags, id) })
-		if base.Priority != nil && *base.Priority != nowPriority {
-			stale.Priority, priority = &nowPriority, nil
-		} else if priority != nil && *priority == nowPriority {
+		now, err := lockConversation(ctx, tx, run.Task.WorkspaceID, run.Task.ConversationID)
+		if err != nil {
+			return err
+		}
+		// Compared with the conversation as it is now: what it already has is not suggested, and a
+		// field a person changed since the suggestion was asked for is theirs (stale).
+		tagIDs = slices.DeleteFunc(tagIDs, func(id string) bool { return slices.Contains(now.tagIDs, id) })
+		if base.Priority != nil && *base.Priority != now.priority {
+			stale.Priority, priority = &now.priority, nil
+		} else if priority != nil && *priority == now.priority {
 			priority = nil
 		}
-		if !samePointer(base.AssigneeAgentID, nowAssignee) {
-			if nowAssignee != nil && assignee != nil {
-				stale.AssigneeAgentID = nowAssignee
+		if !samePointer(base.AssigneeAgentID, now.assignee) {
+			if now.assignee != nil && assignee != nil {
+				stale.AssigneeAgentID = now.assignee
 			}
 			assignee = nil
-		} else if samePointer(assignee, nowAssignee) {
+		} else if samePointer(assignee, now.assignee) {
 			assignee = nil
 		}
-		_, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET status='ready',tag_ids=$3::uuid[],priority=$4,assignee_agent_id=$5,reason=$6,model=$7,ready_at=$8,sources=$9,stale=$10
-			WHERE workspace_id=$1 AND id=$2 AND status='pending'`, run.Task.WorkspaceID, c.suggestionID, tagIDs, priority, assignee, nullable(reason),
-			nullable(response.Model), s.now().UTC(), sources, stale)
+		set := TriageSet{TagIDs: tagIDs, Priority: priority, AssigneeAgentID: assignee}
+		applied, skipped, autoApplied, autoAt := TriageSet{TagIDs: []string{}}, map[string]TriageSkip{}, TriageSet{TagIDs: []string{}}, (*time.Time)(nil)
+		var outcome, decidedAt any
+		readyAt := s.now().UTC()
+		if automatic {
+			var left TriageSet
+			if autoApplied, skipped, left, err = s.autoApply(ctx, tx, run.Task.WorkspaceID, run.Task.ConversationID, c.suggestionID, base, set); err != nil {
+				return err
+			}
+			// What AI left because a person had set it is not suggested either.
+			if _, ok := skipped["priority"]; ok {
+				set.Priority = nil
+			}
+			if _, ok := skipped["assignee"]; ok {
+				set.AssigneeAgentID = nil
+			}
+			if !autoApplied.empty() {
+				applied, autoAt = autoApplied, &readyAt
+				if left.empty() {
+					outcome, decidedAt = "auto_applied", readyAt
+				}
+			}
+		}
+		_, err = tx.Exec(ctx, `UPDATE ai_triage_suggestions SET status='ready',tag_ids=$3::uuid[],priority=$4,assignee_agent_id=$5,reason=$6,model=$7,ready_at=$8,sources=$9,stale=$10,
+				applied=$11,auto_applied=$12,auto_applied_at=$13,skipped=$14,outcome=$15,decided_at=$16
+			WHERE workspace_id=$1 AND id=$2 AND status='pending'`, run.Task.WorkspaceID, c.suggestionID, set.TagIDs, set.Priority, set.AssigneeAgentID, nullable(reason),
+			nullable(response.Model), readyAt, sources, stale, applied, autoApplied, autoAt, skipped, outcome, decidedAt)
 		return err
 	})
 }

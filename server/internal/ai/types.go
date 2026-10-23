@@ -54,12 +54,15 @@ type Server struct {
 // Slot is one feature's setting. Active is whether it runs now: on, and its provider and model are
 // still there. A slot that is on but cannot run says why in OffReason.
 type Slot struct {
-	Slot        string     `json:"slot"`
-	Source      string     `json:"source"`
-	ProviderID  *string    `json:"provider_id"`
-	Model       *string    `json:"model"`
-	Effort      string     `json:"effort"`
-	Enabled     bool       `json:"enabled"`
+	Slot       string  `json:"slot"`
+	Source     string  `json:"source"`
+	ProviderID *string `json:"provider_id"`
+	Model      *string `json:"model"`
+	Effort     string  `json:"effort"`
+	Enabled    bool    `json:"enabled"`
+	// Automatic: triage suggestions apply by themselves (the AutoParts of them) as they come.
+	Automatic   bool       `json:"automatic"`
+	AutoParts   []string   `json:"auto_parts"`
 	Active      bool       `json:"active"`
 	OffReason   *string    `json:"off_reason"`
 	ConsentedBy *string    `json:"consented_by"`
