@@ -195,6 +195,9 @@ func WeeklyText(workspace string, page Page, timezone, origin string, now time.T
 	fmt.Fprintf(&b, "Weekly results for %s\n%s. Dates in workspace time (%s).\n\n", workspace, now.In(loc).Format("Monday, Jan 2, 2006"), timezone)
 	if before != nil {
 		fmt.Fprintf(&b, "Last 30 days, next to %s (median unless it says otherwise)\n\n", source)
+		if page.Baseline.ImportStatus == "UNVERIFIED" {
+			fmt.Fprintf(&b, "The %s numbers come from an UNVERIFIED import: it could not check that every ticket arrived. The import report says why.\n\n", source)
+		}
 	} else {
 		b.WriteString("Last 30 days (median unless it says otherwise)\n\n")
 	}

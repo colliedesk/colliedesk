@@ -421,6 +421,17 @@ type AIDraft struct {
 	TextClearedAt      *time.Time      `json:"text_cleared_at"`
 }
 
+// ResultsBaseline is the baseline the results page measures against (docs/user/results.md): the import
+// it comes from, when that import's first full run finished, its reconcile status (null for an import
+// made before results existed) and the numbers as stored.
+type ResultsBaseline struct {
+	Source       string          `json:"source"`
+	AnchorAt     time.Time       `json:"anchor_at"`
+	ImportStatus *string         `json:"import_status"`
+	ComputedAt   *time.Time      `json:"computed_at"`
+	Numbers      json.RawMessage `json:"numbers"`
+}
+
 // AITriage is one AI triage suggestion and what a person did with it.
 type AITriage struct {
 	ID                 string          `json:"id"`
@@ -522,7 +533,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, ResultsBaseline*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -550,6 +561,7 @@ type Sink interface {
 	AIUsage(AIUsage) error
 	AIDraft(AIDraft) error
 	AITriage(AITriage) error
+	ResultsBaseline(ResultsBaseline) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error

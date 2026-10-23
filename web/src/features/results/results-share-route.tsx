@@ -15,7 +15,7 @@ function asResults(shared: SharedResults): Results {
   const side = (value: SharedResults['current'], extra: object) => (value ? { id: '', computed_at: shared.computed_at ?? value.measured_at, measured_at: value.measured_at, windows: value.windows, ...extra } : null);
   return {
     current: side(shared.current, {}),
-    baseline: side(shared.baseline, { source: shared.baseline_from === 'helpscout' ? 'helpscout:' : 'freshdesk:', import_status: 'OK', stats_read: 1 }),
+    baseline: side(shared.baseline, { source: shared.baseline_from === 'helpscout' ? 'helpscout:' : 'freshdesk:', import_status: shared.baseline_import_status ?? 'OK', stats_read: 1 }),
     baseline_state: shared.baseline ? 'ready' : 'none',
     hours_saved: shared.hours_saved,
     error: null,

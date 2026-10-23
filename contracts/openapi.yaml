@@ -4799,9 +4799,13 @@ components:
     SharedResults:
       type: object
       additionalProperties: false
-      required: [workspace_name, computed_at, baseline_from, current, baseline, hours_saved]
+      required: [workspace_name, computed_at, baseline_from, baseline_import_status, current, baseline, hours_saved]
       properties:
         workspace_name: {type: string}
+        baseline_import_status:
+          type: [string, 'null']
+          enum: [OK, UNVERIFIED, null]
+          description: UNVERIFIED when the baseline's import could not check that every ticket arrived (the page labels it); null for an import made before results existed.
         computed_at: {type: [string, 'null'], format: date-time}
         baseline_from:
           type: [string, 'null']

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -92,6 +93,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 		return err
 	}
 	if err := exportAI(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
+	if err := exportResultsBaseline(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
 	return exportConversations(ctx, tx, workspaceID, sink)
@@ -843,4 +847,26 @@ func exportPageStatusChanges(ctx context.Context, tx pgx.Tx, workspaceID string,
 		into[conversationID] = append(into[conversationID], item)
 	}
 	return rowsError("export status changes", rows)
+}
+
+// exportResultsBaseline writes the results baseline, when there is one: the numbers are derived, but the
+// anchor and the import's status are not, and the numbers measured at the anchor cannot be measured again.
+func exportResultsBaseline(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	var record export.ResultsBaseline
+	var numbers []byte
+	err := tx.QueryRow(ctx, `SELECT s.baseline_source,s.baseline_anchor_at,s.baseline_import_status,b.computed_at,b.data
+		FROM results_state s LEFT JOIN LATERAL (SELECT computed_at,data FROM results_snapshots
+			WHERE workspace_id=s.workspace_id AND kind='baseline' ORDER BY computed_at DESC LIMIT 1) b ON true
+		WHERE s.workspace_id=$1 AND s.baseline_source IS NOT NULL`, workspaceID).Scan(&record.Source, &record.AnchorAt, &record.ImportStatus, &record.ComputedAt, &numbers)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("export results baseline: %w", err)
+	}
+	record.AnchorAt, record.ComputedAt, record.Numbers = domain.UTC(record.AnchorAt), domain.UTCOptional(record.ComputedAt), numbers
+	if record.Numbers == nil {
+		record.Numbers = json.RawMessage("null")
+	}
+	return sink.ResultsBaseline(record)
 }

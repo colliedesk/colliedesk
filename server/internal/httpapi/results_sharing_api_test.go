@@ -108,7 +108,7 @@ func TestResultsShareLinkShowsTotalsOnlyAndCanBeTurnedOff(t *testing.T) {
 	}
 	keys := map[string]bool{}
 	keysOf("", document, keys)
-	allowed := map[string]bool{"workspace_name": true, "computed_at": true, "baseline_from": true, "current": true, "baseline": true, "hours_saved": true,
+	allowed := map[string]bool{"workspace_name": true, "computed_at": true, "baseline_from": true, "baseline_import_status": true, "current": true, "baseline": true, "hours_saved": true,
 		"hours_saved.<window>": true, "current.measured_at": true, "current.windows": true, "current.windows.<window>": true}
 	for _, field := range []string{"created", "created.from", "created.to", "resolved_created", "resolved_created.from", "resolved_created.to", "available_on",
 		"first_response", "first_response.median_seconds", "first_response.p90_seconds", "first_response.answered", "first_response.waiting",

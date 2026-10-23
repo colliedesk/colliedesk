@@ -9,12 +9,15 @@ import (
 // medians and sample sizes only. It carries no snapshot id (so no list of conversations), no ledger
 // source (it names an account) and no compute error. A test pins every key it may hold.
 type Shared struct {
-	WorkspaceName string                 `json:"workspace_name"`
-	ComputedAt    *time.Time             `json:"computed_at"`
-	BaselineFrom  *string                `json:"baseline_from"`
-	Current       *SharedSide            `json:"current"`
-	Baseline      *SharedSide            `json:"baseline"`
-	HoursSaved    map[string]*HoursSaved `json:"hours_saved"`
+	WorkspaceName string     `json:"workspace_name"`
+	ComputedAt    *time.Time `json:"computed_at"`
+	BaselineFrom  *string    `json:"baseline_from"`
+	// BaselineImportStatus is UNVERIFIED when the baseline's import could not check every ticket arrived,
+	// so the page labels it as the team's page does; OK otherwise, null for an earlier import or none.
+	BaselineImportStatus *string                `json:"baseline_import_status"`
+	Current              *SharedSide            `json:"current"`
+	Baseline             *SharedSide            `json:"baseline"`
+	HoursSaved           map[string]*HoursSaved `json:"hours_saved"`
 }
 
 // SharedSide is one side's windows, as the page shows them.
@@ -37,6 +40,9 @@ func SharedFrom(page Page, workspaceName string) Shared {
 			from = "helpscout"
 		}
 		shared.BaselineFrom = &from
+		if status := page.Baseline.ImportStatus; status != "" {
+			shared.BaselineImportStatus = &status
+		}
 		shared.Baseline = &SharedSide{MeasuredAt: page.Baseline.MeasuredAt, Windows: page.Baseline.Windows}
 		shared.HoursSaved = page.HoursSaved
 	}

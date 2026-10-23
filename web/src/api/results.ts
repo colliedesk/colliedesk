@@ -35,6 +35,7 @@ const shareLinkCreatedSchema = z.object({ link: shareLinkSchema, url: z.string()
 const sharedSideSchema = z.object({ measured_at: date, windows: z.object({ '30d': resultsWindowSchema, '7d': resultsWindowSchema }) });
 export const sharedResultsSchema = z.object({
   workspace_name: z.string(), computed_at: date.nullable(), baseline_from: z.enum(['freshdesk', 'helpscout']).nullable(),
+  baseline_import_status: z.enum(['OK', 'UNVERIFIED']).nullable(),
   current: sharedSideSchema.nullable(), baseline: sharedSideSchema.nullable(),
   hours_saved: z.object({ '30d': hoursSavedSchema.optional(), '7d': hoursSavedSchema.optional() }),
 }) satisfies z.ZodType<JsonResponse<'getSharedResults', 200>>;

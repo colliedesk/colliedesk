@@ -153,6 +153,7 @@ export const resultsMessages = {
     failed: 'These numbers did not load. Check your connection, then try again.',
     loading: 'Loading the shared results…',
     madeWith: 'Made with Colliedesk, the open-source helpdesk.',
+    unverified: 'The Freshdesk numbers come from an UNVERIFIED import: it could not check that every ticket arrived.',
     definitions: 'How these numbers are counted',
   },
 };

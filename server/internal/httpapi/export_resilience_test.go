@@ -228,6 +228,7 @@ func (s idleSink) AISettingsEvent(export.AISettingsEvent) error                 
 func (s idleSink) AIUsage(export.AIUsage) error                                    { return nil }
 func (s idleSink) AIDraft(export.AIDraft) error                                    { return nil }
 func (s idleSink) AITriage(export.AITriage) error                                  { return nil }
+func (s idleSink) ResultsBaseline(export.ResultsBaseline) error                    { return nil }
 func (s idleSink) BeginConversation(export.ConversationHead) error                 { return nil }
 func (s idleSink) Message(export.Message) error                                    { return nil }
 func (s idleSink) EndConversation([]domain.TimeEntry, []export.StatusChange) error { return nil }

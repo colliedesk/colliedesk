@@ -236,6 +236,7 @@ export function ResultsPage(props: ResultsPageProps) {
   return <main className="settings-page results-page">
     {header}
     {notices.length > 0 && !shared && <div className="results-notices">{notices}</div>}
+    {shared && withBaseline && status === 'UNVERIFIED' && <p className="results-notice results-notice-warn">{m.share.unverified}</p>}
     {!showBaseline && !shared && <section className="results-card results-empty" aria-labelledby="results-no-import">
       <h2 id="results-no-import">{m.noImport.heading}</h2><p>{m.noImport.body}</p>{isAdmin ? importLink : <p className="results-muted">{m.noImport.agent}</p>}
     </section>}

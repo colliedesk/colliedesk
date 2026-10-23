@@ -2823,6 +2823,11 @@ export interface components {
         };
         SharedResults: {
             workspace_name: string;
+            /**
+             * @description UNVERIFIED when the baseline's import could not check that every ticket arrived (the page labels it); null for an import made before results existed.
+             * @enum {string|null}
+             */
+            baseline_import_status: "OK" | "UNVERIFIED" | null;
             /** Format: date-time */
             computed_at: string | null;
             /**

@@ -179,3 +179,27 @@ func runResultsWorker(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatal(err)
 	}
 }
+
+// The baseline leaves with the export: the import it comes from, its anchor and status, and its numbers.
+func TestResultsBaselineLeavesWithTheExport(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Export Results Desk", "admin@export-results.example.com")
+	workspace := workspaceID(t, api, admin)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO results_state(workspace_id,baseline_source,baseline_anchor_at,baseline_import_status,baseline_dirty)
+		VALUES($1,'freshdesk:account:9',now() - interval '3 days','UNVERIFIED',true)`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	runResultsWorker(t, pool)
+	response := request(t, api, http.MethodGet, "/api/v1/export", nil, admin, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("export = %d", response.Code)
+	}
+	lines := ndjsonLines(t, unzip(t, response.Body.Bytes())["results-baselines.ndjson"])
+	if len(lines) != 1 || lines[0]["source"] != "freshdesk:account:9" || lines[0]["import_status"] != "UNVERIFIED" || lines[0]["anchor_at"] == nil {
+		t.Fatalf("results-baselines.ndjson = %v", lines)
+	}
+	numbers, _ := lines[0]["numbers"].(map[string]any)
+	if numbers == nil || numbers["windows"] == nil {
+		t.Fatalf("exported baseline numbers = %v", lines[0]["numbers"])
+	}
+}
