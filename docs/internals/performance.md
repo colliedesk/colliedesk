@@ -118,6 +118,18 @@ images, and emphasis runs (goldmark's quadratic paths: up to 24 s before `tame`,
 then 20 visits (not 50, to spare the shared latency runner) read the kept page (4–12 ms).
 `TestHelpCenterRenderedPagesAreNeverSharedAcrossWorkspaces` keeps that memory per workspace.
 
+## Results compute budget
+
+`TestResultsComputeStaysInBudget` (in `internal/httpapi`, so the latency shard builds no new test
+binary) holds the background compute of one workspace's results page to 2 s, best of three: no screen
+waits for it (the page reads a stored snapshot), but it holds a connection. The fixture is a busy team:
+5,000 Colliedesk conversations over 30 days (a customer message and a reply each, half resolved) and
+20,000 imported Freshdesk tickets in the baseline's window, with stats and time logged on a quarter.
+Measured on the dev host: current numbers 130 ms, baseline 507 ms; seeding takes about 5 s. The
+baseline cost is mostly writing the ~65,000 rows of the conversations behind its numbers; a foreign
+key from those rows to conversations tripled it and was dropped (`docs/internals/results.md`). Do not
+widen the 2 s.
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind

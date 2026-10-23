@@ -85,4 +85,8 @@ const (
 	// queued for AI retrieval to build. Only workspace ids leave the transaction; each is built in its
 	// own scope.
 	PrivilegeAIRetrievalQueue Privilege = "ai-retrieval-queue"
+	// PrivilegeResultsClaim adds a results_state row for every workspace without one and leases the
+	// workspaces whose results page numbers are due. Only workspace ids leave the transaction; each is
+	// computed and stored in its own scope.
+	PrivilegeResultsClaim Privilege = "results-claim"
 )

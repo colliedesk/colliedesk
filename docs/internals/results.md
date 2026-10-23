@@ -36,3 +36,40 @@ next full run to finish becomes the baseline. A failure to mark is logged and th
 the import itself is already committed. Ticket stats are frozen from the anchor
 (`docs/internals/freshdesk-import.md`), so the baseline cannot move with Freshdesk work done after the
 move.
+
+## Counting
+
+The rules are in `docs/user/results.md`; `internal/results/metrics.go` applies them, and its tests
+work every number out by hand. Decisions behind them (agreed in the #100 design review):
+
+| Decision | Why |
+|---|---|
+| One rule for both sides: customer-started conversations (first public message incoming) created in a window, measured at a moment M; only events at or before M count | Different cohorts or measuring moments make Colliedesk look faster by construction: a 7-day-old conversation cannot take 20 days to resolve |
+| Resolution uses conversations created in the window ending at M − 7 days | A resolution counts only once it stayed for 7 days; younger ones are "still settling", never counted and never subtracted later |
+| At most one resolution per conversation: the last one that stuck | Freshdesk's `resolved_at` is its last resolution; the same rule on our side keeps the two comparable |
+| Live leaves out conversations an import created (`channel = 'imported'`) and problem reports | An imported ticket's `created_at` is from before the move; counting it would put Freshdesk's work on Colliedesk's side |
+| The baseline's windows end at the newest ticket created by the anchor; it reads only the baseline source's tickets (through `import_items`) | An old history (or the e2e fixture from 2024) ends long before the import; a second account's tickets are not that team's history |
+| No baseline reopen rate | Freshdesk documents no reopen history (owner agreed, scope note on #100) |
+| A median or p90 needs 5 values; p90 is nearest-rank | A small team's 7 days often hold fewer; the page says "Too few (n)" instead of a number that swings |
+| Resolution and reopen windows that need status history from before `status_history_since` say when they will be ready | A number built on a gap is wrong, not small |
+
+## Snapshots and the worker
+
+The page never computes: `results.Worker` (started by `serve`, every five minutes) leases due
+workspaces through `PrivilegeResultsClaim` (`results_state.claimed_until`, so two servers never compute
+one at once) and computes each in its own workspace transaction with a 30-second statement timeout.
+Due means: the baseline is dirty, never computed, or an hour old; an hour-old workspace whose inputs
+(newest `conversations.updated_at`, status change, AI draft decision, and the UTC day, since
+resolutions settle with time alone) did not change is only checked again in an hour. A failure is
+kept in `results_state.error` for admins and retried after the lease.
+
+`results_snapshots` holds the numbers (`data`, returned by the API as stored) and `results_members`
+the conversations each number counts (`<window>.<metric>`), so every number opens its list. A current
+snapshot stays 24 hours after it is replaced, so a number clicked on a page loaded before a refresh
+still opens. Members have no foreign key to conversations: a baseline writes tens of thousands of
+rows at once and the key tripled that write; the list joins conversations, so a deleted one never
+shows.
+
+A workspace that imported before results existed gets, on its first compute only, the import whose
+first run finished first as its baseline (by its in-app job, or when its CLI ledger last changed),
+with an unknown reconcile status. Later an undone baseline does not come back.

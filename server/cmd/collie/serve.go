@@ -30,6 +30,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
+	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 	"github.com/colliedesk/colliedesk/server/internal/webui"
@@ -151,6 +152,8 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
 	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
 	go sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage))
+	// The results page only reads numbers this worker computes (docs/internals/results.md).
+	go results.NewWorker(db).Run(ctx)
 	mailImageCacheBytes, err := mailImageCacheBytesFromEnv(os.Getenv)
 	if err != nil {
 		return err
