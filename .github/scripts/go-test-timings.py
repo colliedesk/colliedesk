@@ -2,16 +2,18 @@
 """Seconds per top-level Go test from go test -v logs, as JSON for go-test-shard.py --timings.
 
 Each file is one CI run's log (or a local go test -v output); a name's times in one run are summed
-over its packages, and runs are averaged. Refresh after the suite has grown, from green runs:
+over its packages, and a name takes its median over the runs: a slow runner, or a run beside heavier
+tests, slows every test it measures. Refresh after the suite has grown, from green runs:
   gh run view RUN -R colliedesk/colliedesk --log > run.log   (once per run)
   python3 .github/scripts/go-test-timings.py run*.log > .github/go-test-timings.json
 """
 import json
 import re
+import statistics
 import sys
 
 # A job log line is "job<TAB>step<TAB>timestamp text"; subtests are indented, so they never match.
-LINE = re.compile(r'^(?:[^\t]*\t[^\t]*\t﻿?\S+Z )?--- (?:PASS|FAIL|SKIP): ((?:Test|Example|Fuzz)\w*) \((\d+(?:\.\d+)?)s\)$')
+LINE = re.compile(r'^(?:[^\t]*\t[^\t]*\t\ufeff?\S+Z )?--- (?:PASS|FAIL|SKIP): ((?:Test|Example|Fuzz)\w*) \((\d+(?:\.\d+)?)s\)$')
 
 if len(sys.argv) < 2:
     sys.exit(__doc__)
@@ -30,5 +32,5 @@ if not names:
 timings = {}
 for name in names:
     measured = [seconds[name] for seconds in runs if name in seconds]
-    timings[name] = round(sum(measured) / len(measured), 2)
+    timings[name] = round(statistics.median(measured), 2)
 print(json.dumps(timings, indent=1, sort_keys=True))

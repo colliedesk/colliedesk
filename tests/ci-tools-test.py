@@ -256,13 +256,17 @@ class GoTimings(unittest.TestCase):
                          {'ExampleClient': 0.01, 'TestAlpha': 2.0, 'TestBeta': 2.25, 'TestGamma': 0.0})
         self.assertEqual(result.stdout, json.dumps(json.loads(result.stdout), indent=1, sort_keys=True) + '\n')
 
-    def test_several_runs_average_and_a_name_in_one_run_keeps_its_time(self):
-        other = 'go (3)\tTest\t2026-10-23T05:00:00.0Z --- PASS: TestAlpha (4.00s)\n'
-        result = self.timings(self.log, other)
+    def test_several_runs_take_the_median_and_a_name_in_one_run_keeps_its_time(self):
+        # A slow runner or a run beside heavier tests slows everything it measures; the median of
+        # several runs keeps one such run from setting a test's weight.
+        runs = [f'go (3)\tTest\t2026-10-23T05:00:00.0Z --- PASS: TestAlpha ({s:.2f}s)\n' for s in (4, 30)]
+        result = self.timings(self.log, *runs)
         self.assertEqual(result.returncode, 0, result.stderr)
         timings = json.loads(result.stdout)
-        self.assertEqual(timings['TestAlpha'], 3.0)
+        self.assertEqual(timings['TestAlpha'], 4.0)
         self.assertEqual(timings['TestBeta'], 2.25)
+        two = json.loads(self.timings(self.log, runs[0]).stdout)
+        self.assertEqual(two['TestAlpha'], 3.0)
 
     def test_a_log_without_test_times_fails_closed(self):
         for log in ['', 'go (1)\tTest\t2026-10-23T04:40:01.7Z ok  \tgithub.com/x/pkg\t3.1s\n']:
