@@ -65,8 +65,9 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   row wraps instead of clipping.
 - Thread header: **Resolve** (or **Reopen** once resolved or closed), a secondary button with an icon, so
   resolving never needs the details drawer.
-- Sign-in: a dark brand side (mascot, wordmark, one line of promise) beside the form; on narrow
-  screens the brand side becomes a header.
+- Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
+  is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
+  Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
 - The mascot is the headset collie on an ink tile (see Logo).
 
 ## Themes

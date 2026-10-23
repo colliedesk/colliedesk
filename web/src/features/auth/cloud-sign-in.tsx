@@ -38,6 +38,14 @@ function clerkAppearance() {
       colorInputText: token('--text-1'), colorNeutral: token('--text-1'), colorDanger: token('--danger'),
       fontFamily: token('--font-sans'), borderRadius: token('--radius'),
     },
+    elements: {
+      // The page's own h1 already titles the first step, so Clerk's "Continue to Colliedesk" header goes.
+      // Later steps keep theirs: it says "Check your email" and shows the address with a way to change it.
+      card: { '&.cl-signIn-start .cl-header': { display: 'none' } },
+      // Clerk's card has a fixed width; it fills the panel instead, so a phone never scrolls sideways.
+      rootBox: { width: '100%' },
+      cardBox: { width: '100%', maxWidth: '100%' },
+    },
   };
 }
 
