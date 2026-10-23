@@ -291,6 +291,7 @@ class E2EShards(unittest.TestCase):
         self.assertIn('corepack pnpm e2e $E2E_ARGS --shard="$SHARD/$SHARDS"', e2e)
         self.assertIn('python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS', e2e)
         self.assertEqual(e2e.count('SHARDS: ${{ strategy.job-total }}'), 2, 'the run and the check use the matrix size')
+        self.assertIn('ci-background.sh wait shards', e2e, 'the job waits for the check it started')
         self.assertEqual(e2e.count('corepack pnpm e2e '), 1, 'one Playwright run per shard')
 
 

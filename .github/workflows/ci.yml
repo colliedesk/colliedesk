@@ -239,7 +239,8 @@ jobs:
         run: |
           (cd web && sh ../.github/scripts/ci-background.sh start typecheck nice -n 10 corepack pnpm typecheck)
           (cd server && sh ../.github/scripts/ci-background.sh start vet nice -n 10 sh -c 'go vet ./... && go run ./cmd/migration-check --repo=..')
-      - name: The shards run every end-to-end test exactly once
+      # In the foreground it took 10 seconds before Chromium could install (run 39904636025).
+      - name: Start the check that the shards run every end-to-end test exactly once
         if: matrix.shard == strategy.job-total
         working-directory: web
         env:
@@ -247,7 +248,8 @@ jobs:
         # E2E_ARGS is split into words on purpose, here and in the run below.
         run: |
           # shellcheck disable=SC2086
-          python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS
+          sh ../.github/scripts/ci-background.sh start shards nice -n 10 \
+            python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install --only-shell chromium
@@ -273,6 +275,9 @@ jobs:
       - name: go vet passes and the migrations are valid
         if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
         run: sh .github/scripts/ci-background.sh wait vet
+      - name: The shards run every end-to-end test exactly once
+        if: ${{ !cancelled() && matrix.shard == strategy.job-total }}
+        run: sh .github/scripts/ci-background.sh wait shards
   # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
   # with the other end-to-end tests; every test runs in exactly one of the two jobs.
   onboarding:
