@@ -266,7 +266,7 @@ func (s *Service) applyAgain(ctx context.Context, tx pgx.Tx, workspaceID string,
 		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET priority=$3,assignee_agent_id=$4,applied=$5,auto_applied=$6,auto_applied_at=COALESCE($7,auto_applied_at),
-			skipped=$8,kept='{"priority":null,"assignee_agent_id":null}',outcome=$9,decided_at=$10,decided_by_agent_id=$11 WHERE workspace_id=$1 AND id=$2`,
+			skipped=$8,kept='{"priority":null,"assignee_agent_id":null}',undone_parts='{"tag_ids":[],"priority":null,"assignee_agent_id":null}',outcome=$9,decided_at=$10,decided_by_agent_id=$11 WHERE workspace_id=$1 AND id=$2`,
 		workspaceID, t.ID, priority, assignee, applied, set, autoAt, skipped, outcome, decidedAt, nullable(actor.AgentID)); err != nil {
 		return Triage{}, err
 	}

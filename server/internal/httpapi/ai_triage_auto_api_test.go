@@ -239,6 +239,14 @@ func TestUndoTakesBackWhatAIAppliedAndKeepsWhatAPersonChanged(t *testing.T) {
 	if _, _, tags = d.conversationState(t, conversation); slices.Contains(tags, hardware) || again.Outcome == nil || *again.Outcome != "undone" {
 		t.Fatalf("undo after apply again: %v %+v", tags, again)
 	}
+	// A second round undoes only what the second application did: nothing of the first comes back.
+	if !slices.Equal(again.UndoneParts.TagIDs, []string{hardware}) || again.UndoneParts.Priority != nil {
+		t.Fatalf("second undo's parts = %+v", again.UndoneParts)
+	}
+	kbCall(t, d.api, http.MethodPost, path+"/accept", nil, d.adminA, http.StatusOK, &again)
+	if _, _, tags = d.conversationState(t, conversation); !slices.Contains(tags, hardware) || slices.Contains(tags, office) {
+		t.Fatalf("second apply again: %v", tags)
+	}
 
 	// Undo of one part, then the rest.
 	second := d.customerTicket(t, "scanner", "normal")
