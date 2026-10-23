@@ -11,7 +11,8 @@ const api = vi.hoisted(() => ({
   savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
   connectGmail: vi.fn(), disconnectGmail: vi.fn(), createAgentToken: vi.fn(),
 }));
-vi.mock('../../api/client', () => ({ api, PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {} }));
+const errors = vi.hoisted(() => ({ PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {}, UnauthorizedError: class extends Error {} }));
+vi.mock('../../api/client', () => ({ api, ...errors }));
 // The help center card has tests of its own (features/kb); here it stands for itself in the page.
 vi.mock('../kb/help-center-card', () => ({ HelpCenterSettings: () => <p>Help center card</p> }));
 
@@ -177,13 +178,14 @@ test('an agent creates an agent token above Sessions; the list reloads to show i
 // refused token request goes through it like every other action.
 test('a refused token request reaches the app-wide handling of signed-out and locked workspaces', async () => {
   const onError = vi.fn();
-  const refused = new Error('API 401');
+  const refused = new errors.UnauthorizedError('API 401');
   show('admin', [], undefined, new QueryClient({ defaultOptions: { queries: { retry: false } }, mutationCache: new MutationCache({ onError }) }));
   api.createAgentToken.mockRejectedValue(refused);
   const card = await screen.findByRole('region', { name: 'AI agents' });
   fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Codex' } });
   fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
   await waitFor(() => expect(onError.mock.calls[0]?.[0]).toBe(refused));
+  expect(await within(card).findByRole('alert')).toHaveTextContent('Your session ended, so no token was created.');
 });
 
 const withChannel = {
