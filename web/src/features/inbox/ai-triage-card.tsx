@@ -138,6 +138,9 @@ function hasOpenPart(suggestion: AITriage) {
   return parts.tags.length > 0 || parts.priority || parts.assignee;
 }
 
+// conversationsReadAfterAI are the applied suggestions whose conversation was read again since.
+const conversationsReadAfterAI = new Set<string>();
+
 // AITriageCard shows the conversation's newest AI triage suggestion: tags, priority and assignee, each
 // with Accept, then Accept all or Dismiss, its reason and its sources. A new ticket gets one by itself;
 // a person can ask again. Nothing changes on the conversation until someone accepts.
@@ -153,13 +156,16 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
     onWaiting?.(waiting);
   }, [onWaiting, waiting]);
   useEffect(() => () => onWaiting?.(false), [onWaiting]);
-  // When AI applies a suggestion by itself while the conversation is open, the conversation is read again.
-  const wasWriting = useRef(false);
-  const justApplied = placement === 'details' && suggestion?.status === 'ready' && appliedByAI(suggestion);
+  // When AI applied a suggestion by itself, the conversation is read again: it may have been read
+  // before AI applied it, while the card was written or in the same moment the page opened (the two
+  // reads race). Once per suggestion applied, for the life of the page.
+  const appliedId = placement === 'details' && suggestion?.status === 'ready' && appliedByAI(suggestion) ? `${suggestion.id}@${suggestion.auto_applied_at}` : null;
   useEffect(() => {
-    if (justApplied && wasWriting.current) onApplied();
-    wasWriting.current = writing(suggestion);
-  }, [justApplied, suggestion, onApplied]);
+    if (appliedId && !conversationsReadAfterAI.has(appliedId)) {
+      conversationsReadAfterAI.add(appliedId);
+      onApplied();
+    }
+  }, [appliedId, onApplied]);
   // The answer replaces the suggestion it is, which may be the newest one, the one AI applied, or both.
   const set = (next: AITriage) => client.setQueryData<{ suggestion: AITriage | null; auto_applied: AITriage | null }>(key, (current) => ({
     suggestion: !current?.suggestion || current.suggestion.id === next.id ? next : current.suggestion,
