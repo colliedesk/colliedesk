@@ -141,6 +141,18 @@ class Shards(unittest.TestCase):
         self.assertEqual(shards[3], ['^(TestInboxListLatencyBudget)$'])
         self.assertTrue(all('--' not in lines for lines in shards[:2]))
 
+    def test_a_part_counts_its_overlapping_tests_and_its_process_start(self):
+        regular = ['TestA', 'TestB', 'TestC', 'TestD', 'TestE', 'TestF']
+        listing = '\n'.join(regular + ['TestInboxListLatencyBudget']) + '\n'
+        timings = {'TestInboxListLatencyBudget': 8, **{name: 4 for name in regular}}
+        # A part's packages run at once (go test -p), so its tests take about half their summed time;
+        # a part pays 3 seconds to start its process. The gates run one after another.
+        shards = self.shards(listing, 2, '--parallel', '2', '--process-seconds', '3', timings=timings)
+        self.assertEqual(shards[0], ['^(TestA|TestB|TestC|TestD|TestE)$'])
+        self.assertEqual(shards[1], ['^(TestInboxListLatencyBudget)$', '--', '^(TestF)$'])
+        for bad in (('--parallel', '0'), ('--process-seconds', '-1')):
+            self.assertNotEqual(run('go-test-shard.py', '1', '2', *bad, stdin=listing).returncode, 0, bad)
+
     def test_gates_spread_by_time_and_the_kb_seed_stays_on_the_first_latency_runner(self):
         kb = ['TestHelpCenterPagesLatencyBudget', 'TestKnowledgeBaseSearchLatencyBudget']
         others = ['TestInboxListLatencyBudget', 'TestStorageUsageStaysFast', 'TestTrialCapStaysFast']
@@ -514,13 +526,13 @@ class GoBuildCache(unittest.TestCase):
         condition = ' '.join(line.strip() for line in
                              re.search(r'if: >-\n((?:          .*\n)+)', step).group(1).splitlines())
         self.assertIn("github.event_name == 'pull_request'", condition)
-        # A latency runner: it ends 30 to 60 seconds before the regular shards, so the upload is free.
+        # One shard uploads, a latency shard (6, 7 and 8 of 8).
         self.assertIn('matrix.shard == 7', condition)
         self.assertIn("!startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', "
                       "runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))", condition)
         go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
         self.assertIn('id: go-cache', go)
-        self.assertRegex(go, r"latency-shards 2\b")
+        self.assertRegex(go, r"latency-shards 3\b")
         self.assertIn("SHARDS: ${{ strategy.job-total }}", go)
         self.assertRegex(go, r'shard: \[1, 2, 3, 4, 5, 6, 7, 8\]')
 

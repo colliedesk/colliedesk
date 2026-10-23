@@ -15,11 +15,18 @@ parser.add_argument('--latency-shards', type=int, default=1,
                     help='how many of the last shards run the latency fixtures')
 parser.add_argument('--timings', help='JSON object of seconds per test name (go-test-timings.py writes it); '
                                       'a name it lacks weighs the median. Without it every name weighs 1')
+parser.add_argument('--parallel', type=float, default=1,
+                    help="how many of a part's tests run at once: its packages' test binaries overlap (go test -p), "
+                         'so a part takes its summed test time divided by this; the gates count in full')
+parser.add_argument('--process-seconds', type=float, default=0,
+                    help='what a part with tests adds to its shard for starting its go test process')
 args = parser.parse_args()
 if not 1 <= args.shard <= args.total:
     parser.error('shard must be between 1 and total')
 if args.parts < 1:
     parser.error('parts must be at least 1')
+if args.parallel <= 0 or args.process_seconds < 0:
+    parser.error('parallel must be positive and process seconds non-negative')
 if args.total > 1 and not 1 <= args.latency_shards < args.total:
     parser.error('latency shards must be at least 1 and leave a regular shard')
 timings = {}
@@ -51,7 +58,7 @@ TIMED = ('LatencyBudget', 'StaysInBudget', 'StaysFast')
 latency = [name for name in names if any(marker in name for marker in TIMED)]
 regular = [name for name in names if name not in latency]
 regular_total = args.total - args.latency_shards
-# A shard's clock: its gates in one process, then its parts at once, each a sum of its tests' times.
+# A shard's clock: its gates in one process, one after another, then its parts at once.
 gates = [[] for _ in range(args.total)]
 if args.total == 1:
     regular = names
@@ -68,13 +75,17 @@ else:
         gates[shard].append(name)
 # Longest processing time first: each regular name goes to the part that would end first, so a long
 # test fills a part by itself and a latency runner takes regular tests only when its gates end early.
+# In run 39903507509 a regular shard's test step took about 11 s plus 0.37 times its fullest part's
+# summed test times, and a latency shard's gates their summed times (the workflow's options).
 parts = [[[] for _ in range(args.parts)] for _ in range(args.total)]
 load = {(shard, part): sum(weight[name] for name in gates[shard])
         for shard in range(args.total) for part in range(args.parts)}
 for name in longest_first(regular):
-    shard, part = min(load, key=lambda bin: (load[bin], bin))
+    end = lambda bin: (load[bin] + weight[name] / args.parallel
+                       + (0 if parts[bin[0]][bin[1]] else args.process_seconds))
+    shard, part = min(load, key=lambda bin: (end(bin), bin))
+    load[shard, part] = end((shard, part))
     parts[shard][part].append(name)
-    load[shard, part] += weight[name]
 mine_gates = sorted(gates[args.shard - 1])
 mine = [sorted(chosen) for chosen in parts[args.shard - 1]]
 # A regular shard's tests mostly wait on PostgreSQL, one test at a time in each package binary, and

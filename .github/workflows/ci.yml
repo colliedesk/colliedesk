@@ -102,10 +102,11 @@ jobs:
           if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
-          # Six regular shards of three go test processes each, and two latency shards that run their
-          # gates as one process, then regular tests if their gates end early. Each test weighs its time
-          # in CI (go-test-timings.json; go-test-shard.py and go-test-timings.py say how).
-          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 2 --timings ../.github/go-test-timings.json < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
+          # Five regular shards of three go test processes each, and three latency shards that run their
+          # gates as one process (about 100 seconds of gates in run 39903507509), then regular tests if
+          # their gates end early. Each test weighs its time in CI (go-test-timings.json);
+          # go-test-shard.py says how a shard's time is estimated, go-test-timings.py how to refresh it.
+          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 3 --parallel 2.7 --process-seconds 11 --timings ../.github/go-test-timings.json < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
       - name: Wait for test services
         run: sh .github/scripts/ci-services.sh wait postgres
       - name: Test
