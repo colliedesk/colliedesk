@@ -3,6 +3,9 @@ name: colliedesk
 services:
   postgres:
     image: postgres:17-bookworm
+    # Every test builds its own schema with all migrations; the default lock table (64 per
+    # connection) runs out once many of them run at once ("out of shared memory", 53200).
+    command: ["postgres", "-c", "max_locks_per_transaction=256"]
     environment:
       POSTGRES_DB: colliedesk
       POSTGRES_USER: colliedesk
