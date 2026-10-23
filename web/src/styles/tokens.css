@@ -38,6 +38,13 @@
   --track-label: 0.05em;
   --icon-stroke: 1.5;
 
+  /* Avatars: one muted hue per person (ui/avatar.tsx picks it from the name) tells people apart on the
+     timeline. Low chroma, the same in both themes, never used for status. */
+  --avatar-lightness: 0.42;
+  --avatar-chroma: 0.07;
+  --avatar-text-lightness: 0.96;
+  --avatar-text-chroma: 0.02;
+
   /* Motion */
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 120ms;
@@ -77,7 +84,7 @@
   --on-brand-panel: #fafafa;
   --on-brand-panel-2: #a3a3a3;
 
-  /* Focus and notes: amber (never used for status) */
+  /* Focus and notes: amber means focus, private notes and the pending status, nothing else */
   --focus: #b86e00;
   --focus-ring: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--focus);
   --note-bg: #fff6e0;
@@ -138,7 +145,7 @@
   --on-brand-panel: #fafafa;
   --on-brand-panel-2: #a3a3a3;
 
-  /* Focus and notes: amber (never used for status) */
+  /* Focus and notes: amber means focus, private notes and the pending status, nothing else */
   --focus: #f0b44c;
   --focus-ring: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--focus);
   --note-bg: #2a2213;
