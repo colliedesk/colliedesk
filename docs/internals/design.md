@@ -161,7 +161,11 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - The list groups rows under Today and Earlier by the day in the agent's timezone. The list shows
   only what the API returns: there are no SLA timers or ticket numbers because the backend has none.
 - Below 75 rem the details pane becomes a drawer opened by **Show details**; below 44 rem the
-  panes stack and the rail becomes a top bar.
+  rail becomes a top bar and the list and the conversation take turns (`data-view` on `.inbox-shell`):
+  the list scrolls with the page, and a conversation opened by its address fills the screen under the
+  bars like on a wide screen, with **Back to Inbox** above its title. Back steps back in the history
+  when the list is behind it, and the list returns to where it was scrolled (`list-return.ts`).
+  `web/e2e/phone-thread.spec.ts` checks this with touch at 390 and 768 px.
 - Customer email stays plain text (see `plain-text-body.tsx`); the original HTML opens in a
   sandboxed frame that keeps a white page so the customer's own styling stays readable. Avatars are
   initials, never images, so the timeline loads nothing remote.
@@ -186,8 +190,10 @@ They are a gap finder, not a spec: where a list conflicts with a rule above, the
 
 The workspace name and the signed-in address are always visible in a bar above every page
 (`identity-bar`, landmark "Signed in as"). It guards against acting in the wrong workspace after a
-link switched it. Never move it into a tooltip or hide it at any width. `web/e2e/identity-visible.spec.ts`
-checks opacity and position, because Playwright counts text with opacity 0 as visible.
+link switched it. Never move it into a tooltip or hide it at any width. Below 44 rem, where the page
+scrolls, it is sticky under the top bar. `web/e2e/identity-visible.spec.ts` checks opacity, position in
+the viewport and that nothing covers it, also after scrolling a phone screen, because Playwright counts
+text with opacity 0 or scrolled away as visible.
 
 ## Contrast
 

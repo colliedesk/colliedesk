@@ -4,6 +4,11 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
+On a phone the list and the conversation take turns. A conversation you open fills the screen, with its
+subject at the top and the composer at the bottom. **Back to Inbox** above the subject, or the browser's
+Back, returns to the list with the same filters and scrolled to where you left it. The workspace name
+and your address stay at the top while the page scrolls.
+
 A new workspace has no conversations yet. The list then links to the next steps: **Connect your
 support email**, **Import from Freshdesk** and **Invite your team** (admins see all three). If the list
 cannot be loaded, it says so with **Try again** instead.

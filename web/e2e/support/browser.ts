@@ -23,7 +23,7 @@ export function appNavigationWith(page: Page, text: string) {
 }
 
 // expectIdentityVisible proves a person can read the workspace and address. Playwright counts text
-// with opacity 0 as visible, so this also checks opacity, clipping and size.
+// with opacity 0 or scrolled out of the viewport as visible, so this also checks opacity, position and size.
 export async function expectIdentityVisible(page: Page, ...texts: string[]): Promise<void> {
   const bar = page.getByRole('region', { name: 'Signed in as' });
   await expect(bar).toBeVisible();
@@ -33,8 +33,11 @@ export async function expectIdentityVisible(page: Page, ...texts: string[]): Pro
     await expect(part).toHaveCSS('opacity', '1');
     const readable = await part.evaluate((element) => {
       const box = element.getBoundingClientRect();
+      // On screen (not scrolled away) and on top: nothing, such as a sticky bar, covers it.
+      const hit = document.elementFromPoint(box.left + Math.min(box.width / 2, 8), box.top + box.height / 2);
       return element.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && box.width > 8 && box.height > 8
-        && box.right <= window.innerWidth && box.left >= 0;
+        && box.right <= window.innerWidth && box.left >= 0 && box.top >= 0 && box.bottom <= window.innerHeight
+        && hit !== null && (hit === element || element.contains(hit));
     });
     expect(readable, `${text} is readable on screen`).toBe(true);
   }
