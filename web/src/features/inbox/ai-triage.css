@@ -40,3 +40,20 @@
   .ai-triage button, .ai-triage-actions a { min-height: var(--touch); }
   .ai-triage-row button { --control: var(--touch); min-width: var(--touch); }
 }
+.ai-triage-help { color: var(--text-3); font-size: var(--fs-label); }
+/* On the timeline: a line for what AI applied on wide screens (the details card has each part), and
+   the whole suggestion on narrow screens, where the details hide behind a toggle. */
+.ai-triage-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  background: var(--accent-soft); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); min-width: 0; }
+.ai-triage-line b { font-weight: 600; }
+.ai-triage-line-sum { min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.ai-triage-line time { color: var(--text-3); font-size: var(--fs-label); }
+.ai-triage-line button { margin-left: auto; --control: 30px; padding: 0 var(--space-3); }
+.ai-triage-timeline { display: none; }
+/* A phone shows the whole suggestion on the timeline, where it is reached without opening the
+   details sheet; a tablet keeps the line, and the details drawer whose toggle says a suggestion waits. */
+@media (max-width: 44rem) {
+  .ai-triage-line { display: none; }
+  .ai-triage-timeline { display: grid; }
+}
+@media (pointer: coarse) { .ai-triage-line button { min-height: var(--touch); } }

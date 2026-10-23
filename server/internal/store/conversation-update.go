@@ -23,6 +23,11 @@ func (s *Store) UpdateConversation(ctx context.Context, workspaceID, id string, 
 	})
 }
 
+// UpdateConversationIn changes a conversation in the caller's transaction, as UpdateConversation does.
+func UpdateConversationIn(ctx context.Context, tx pgx.Tx, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
+	return updateConversation(ctx, tx, workspaceID, id, update)
+}
+
 func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
 	if update.TagIDs != nil {
 		seen := make(map[string]bool, len(*update.TagIDs))

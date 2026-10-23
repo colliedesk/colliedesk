@@ -101,6 +101,35 @@ when a setting is the cause (the provider's key or credit, the included AI), the
 A draft's text and prompt are erased 90 days after it ended; the numbers stay. At most 30 drafts a
 minute are asked for in a workspace.
 
+### Write a draft when a customer writes
+
+Admins can let drafts write themselves: **Settings > AI**, under **Reply drafts**, turn on **Write a
+draft when a customer writes**. A dialog says first what it would have meant in the last 30 days (how
+many customer messages, about what a draft costs, and how much of the included AI it may use, or that
+your own key is billed). It is off until an admin turns it on, and it turns off when drafts turn off
+or move to another provider; it stays off until an admin turns it on again.
+
+Each new customer message (by email, the web form or a problem report) then gets a draft. It waits a
+minute for more messages from the customer, so several in a row get one draft, which answers them
+all. Imported tickets, auto-replies, bounces and mail that fails its sender check get none, and
+neither does a message a teammate has answered by the time the draft would be written. A newer
+customer message replaces a draft nobody used once its new draft is written (until then, and if a
+limit stops the new one, the earlier draft stays); a person who asks for a draft with **Draft with AI**
+replaces the automatic one.
+
+The draft waits above the reply box for everyone on the team, with its sources: **Use draft** puts it
+in an empty reply box; with text in the box, **Insert below** or **Replace my text**; **Discard**
+throws it away. **AI never sends**: a person reads it and presses **Send**. When the model thinks the
+message needs no reply (a thank-you), the draft is folded with **Show draft**. On a short screen
+every draft starts folded to one line with its buttons, so the conversation stays in view; **Hide**
+folds an open one.
+
+Automatic drafts stop at 100 a day (UTC; admins change it in **Automatic runs**), at 5 per
+conversation in 24 hours, and, on the server's provider, once they used half of the month's included
+AI: the other half stays for drafts people ask for and for triage. Paused, the conversation and
+Settings say until when; **Draft with AI** keeps working. Restoring a workspace from a backup turns
+the automatic mode off.
+
 ## Triage suggestions
 
 With **Triage suggestions** on, a new ticket's first customer message (by email, the web form or the
@@ -126,10 +155,32 @@ used up.
 Imported tickets get no suggestion. A suggestion nobody used for 7 days expires; its reason is erased
 90 days after it ended. Colliedesk keeps whether each one was accepted, in part, or dismissed.
 
+### Apply suggestions automatically
+
+Admins can let suggestions apply by themselves: **Settings > AI**, under **Triage suggestions**, turn on
+**Apply suggestions automatically** (a dialog says what it does first). It is off until an admin turns
+it on, and it turns off when triage turns off or moves to another provider; it stays off until an admin
+turns it on again. Pick what applies by itself: **Tags** and **Priority** (the default) and
+**Assignee**. A part not picked waits for someone to accept it, as above.
+
+It only fills what nobody set: tags are added, never removed; the priority is set only while it is
+still Normal on a ticket a customer started (by email, the web form or a problem report); a teammate is
+assigned only when nobody is. What it leaves says why on the card ("Not set: Sam Ortiz was already
+assigned"). Only the suggestion a new ticket gets applies by itself; one asked for with **Suggest
+again** waits for a person.
+
+Each change shows **Applied by AI** on the conversation's timeline and in its details, with **Undo**
+for each part and **Undo all**. Undo takes back only what is still AI's: a part someone changed since
+is kept, and the card says so. **Apply again** applies it once more, filling only what is still
+empty. A teammate AI assigns gets the "Assigned to you by AI" notification. It costs nothing more: it
+uses the suggestion already made. Settings shows how many suggestions AI applied and how many were
+undone in the last 30 days. Restoring a workspace from a backup turns the automatic mode off.
+
 ## Limits
 
-1. **Automatic runs.** Work Colliedesk starts on its own (a triage suggestion for each new ticket)
-   stops at 300 a day (UTC) and 30 a minute in a workspace, whichever provider runs it, so a flood of
+1. **Automatic runs.** Work Colliedesk starts on its own (a triage suggestion for each new ticket, a
+   draft for each customer message when that is on) stops at 300 a day (UTC) and 30 a minute in a
+   workspace, of which 100 a day may be drafts, whichever provider runs it, so a flood of
    tickets cannot run up a bill. Past the daily limit automatic suggestions wait until 00:00 UTC; what
    an agent asks for still runs. Admins change both numbers in **Settings > AI > Features**
    (**Automatic runs**, **Change**). Each task counts once, however many times it is retried.

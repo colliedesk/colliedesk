@@ -132,11 +132,14 @@ func aiProviderRemoveSpec() Spec {
 func aiSlotSetRequestSpec() Spec {
 	return approvalSpec("colliedesk_ai_slot_set_request", "Ask to set an AI feature",
 		`Ask to set one AI feature (triage suggestions or reply drafts): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. `+
-			`Turning a feature on sends that feature's ticket data to its provider, so a person always decides.`,
+			`automatic lets the feature run by itself: triage suggestions apply the auto_parts (tags, priority, assignee), filling only what nobody set; drafts are written for every customer message, never sent. Left out, it stays as it is. `+
+			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets, so a person always decides.`,
 		[]string{"PUT /api/v1/ai/slots/{slot}"},
 		`{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":{"type":"string","enum":["triage","draft"]},`+
 			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",`+uuid+`},"model":{"type":"string","maxLength":200},`+
-			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"}}}`, aiSlotSetRequest)
+			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},`+
+			`"automatic":{"type":"boolean","description":"The feature runs by itself. Off with the feature and when it moves to another provider."},`+
+			`"auto_parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]},"description":"Triage only: what applies by itself; tags and priority when left out as automatic turns on."}}}`, aiSlotSetRequest)
 }
 
 func aiUsageGetSpec() Spec {
@@ -165,9 +168,11 @@ func aiAutomaticLimitsSetSpec() Spec {
 		Tier: "admin", Idempotent: true,
 		REST: []string{"PUT /api/v1/ai/automatic-limits"},
 		Input: `{"type":"object","additionalProperties":false,"required":["per_day","per_minute"],"properties":{` +
-			`"per_day":{"type":"integer","minimum":0,"maximum":10000},"per_minute":{"type":"integer","minimum":0,"maximum":1000}}}`,
+			`"per_day":{"type":"integer","minimum":0,"maximum":10000},"per_minute":{"type":"integer","minimum":0,"maximum":1000},` +
+			`"draft_per_day":{"type":"integer","minimum":0,"maximum":10000,"description":"Automatic drafts a day, inside per_day; kept when left out."}}}`,
 		Output: `{"type":"object","required":["automatic"],"properties":{"automatic":{"type":"object","required":["per_day","per_minute","used_today"],"properties":{` +
-			`"per_day":{"type":"integer"},"per_minute":{"type":"integer"},"used_today":{"type":"integer"},"paused_until":{"type":["string","null"]}}}}}`,
+			`"per_day":{"type":"integer"},"per_minute":{"type":"integer"},"used_today":{"type":"integer"},"paused_until":{"type":["string","null"]},` +
+			`"draft_per_day":{"type":"integer"},"drafts_today":{"type":"integer"},"drafts_paused_until":{"type":["string","null"]},"drafts_reserved_until":{"type":["string","null"]}}}}}`,
 		run: aiAutomaticLimitsSet,
 	}
 }
@@ -256,7 +261,10 @@ const (
 		`"reason":{"type":["string","null"],"description":"Generated text, not something a customer wrote."},` +
 		`"sources":{"type":"array","description":"The articles and solved conversations the reason rests on.","items":{"type":"object","properties":{"kind":{"type":"string"},"id":{"type":"string"},"title":{"type":"string"}}}},` +
 		`"stale":{"type":"object","description":"What a person set before the suggestion came; that field is not suggested."},` +
-		`"outcome":{"type":["string","null"],"description":"Null while open, also after a part was applied."},"applied":{"type":"object","description":"What was applied so far."}}}`
+		`"outcome":{"type":["string","null"],"description":"Null while open, also after a part was applied; auto_applied when AI applied all of it; undone after an undo."},` +
+		`"applied":{"type":"object","description":"What was applied so far."},` +
+		`"auto_applied_at":{"type":["string","null"]},"auto_applied":{"type":"object","description":"What AI applied by itself; colliedesk_ai_triage_undo takes it back."},` +
+		`"skipped":{"type":"object","description":"What AI left because a person had set it, with why."},"kept":{"type":"object","description":"What an undo kept because a person changed it after AI."}}}`
 
 	aiTriageOutput = `{"type":"object","required":["suggestion"],"properties":{"suggestion":` + aiTriageSchema + `}}`
 )
@@ -269,10 +277,11 @@ func aiTriageGetSpec() Spec {
 			`A new ticket gets one by itself when triage is on. Nothing is applied until someone accepts it.` +
 			"\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/conversations/{id}/ai-triage"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
-		Output: `{"type":"object","required":["suggestion"],"properties":{"suggestion":{"oneOf":[{"type":"null"},` + aiTriageSchema + `]}}}`,
-		run:    aiTriageGet,
+		REST:  []string{"GET /api/v1/conversations/{id}/ai-triage"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` + aiDraftConversationProperty + `}}`,
+		Output: `{"type":"object","required":["suggestion"],"properties":{"suggestion":{"oneOf":[{"type":"null"},` + aiTriageSchema + `]},` +
+			`"auto_applied":{"description":"The newest suggestion AI applied by itself, which a later one asked for by hand does not hide.","oneOf":[{"type":"null"},` + aiTriageSchema + `]}}}`,
+		run: aiTriageGet,
 	}
 }
 
@@ -304,6 +313,23 @@ func aiTriageAcceptSpec() Spec {
 			`"tag_ids":{"type":"array","items":{"type":"string",` + uuid + `}},"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee_agent_id":{"type":"string",` + uuid + `}}}`,
 		Output: aiTriageOutput,
 		run:    aiTriageAccept,
+	}
+}
+
+func aiTriageUndoSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_triage_undo",
+		Title: "Undo what AI applied of a triage suggestion",
+		Description: `Take back what AI applied of a triage suggestion by itself: the parts named (tags, priority, assignee), or all of it. ` +
+			`A part goes back only while it is still what AI set; a part a person changed since is kept, and the suggestion lists it under kept. ` +
+			`Undoing again changes nothing; colliedesk_ai_triage_accept applies it again.` +
+			"\n\nTier: draft.",
+		Tier: "draft", Idempotent: true,
+		REST: []string{"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","suggestion_id"],"properties":{` + aiDraftConversationProperty + `,` + aiTriageIDProperty + `,` +
+			`"parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]}}}}`,
+		Output: aiTriageOutput,
+		run:    aiTriageUndo,
 	}
 }
 

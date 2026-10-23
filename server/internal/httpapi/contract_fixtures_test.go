@@ -53,6 +53,8 @@ type contractFixture struct {
 	// aiTriageID is a ready suggestion of conversationID (high priority), accepted by the cases;
 	// aiTriageOtherID a ready one of another conversation, dismissed.
 	aiTriageID, aiTriageOtherID, aiTriageOtherConversation, aiTriageNewConversation, aiDraftsProviderID string
+	// aiTriageAutoID is a suggestion AI applied by itself on aiTriageAutoConversation, undone by its case.
+	aiTriageAutoID, aiTriageAutoConversation string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -219,8 +221,18 @@ func newContractFixture(t *testing.T) contractFixture {
 	aiTriageID := readyTriage(conversationID)
 	otherTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage contract"})
 	aiTriageOtherID := readyTriage(otherTriageConversation)
+	// One AI applied by itself (the priority), on a conversation of its own: the undo case takes it back.
+	autoTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "AI applied"})
+	var aiTriageAutoID string
+	if err := pool.QueryRow(context.Background(), `WITH c AS (UPDATE conversations SET priority='urgent' WHERE id=$1 RETURNING workspace_id,id)
+		INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,status,automatic,priority,reason,base,ready_at,applied,auto_applied,auto_applied_at,outcome,decided_at)
+		SELECT workspace_id,id,'ready',true,'urgent','Printer down','{"priority":"normal","assignee_agent_id":null}',now(),
+			'{"tag_ids":[],"priority":"urgent","assignee_agent_id":null}','{"tag_ids":[],"priority":"urgent","assignee_agent_id":null}',now(),'auto_applied',now() FROM c
+		RETURNING id::text`, autoTriageConversation).Scan(&aiTriageAutoID); err != nil {
+		t.Fatal(err)
+	}
 	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
-	return contractFixture{aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }

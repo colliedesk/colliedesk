@@ -38,3 +38,37 @@
     box-shadow: var(--shadow-2); padding-bottom: env(safe-area-inset-bottom); }
   .ai-draft-again { margin-left: 0; }
 }
+/* The automatic draft above the reply box: for the whole team, never in the box until someone uses it. */
+.ai-auto-draft { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0 var(--space-2) var(--space-2); border: 1px dashed var(--line-strong);
+  border-radius: var(--radius); background: var(--accent-soft); padding: var(--space-2) var(--space-3); min-width: 0; }
+.ai-auto-draft-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); color: var(--text-2); font-size: var(--fs-small); }
+.ai-auto-draft-strip > span:not(.ai-chip):not(.ai-draft-pulse):not(.ai-auto-draft-acts) { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; }
+.ai-auto-draft-strip b { color: var(--text-1); font-weight: 600; }
+.ai-auto-draft-strip.note { border: 1px solid var(--note-line); background: var(--note-bg); color: var(--note-text); }
+.ai-auto-draft-strip.note b { color: var(--note-text); }
+.ai-auto-draft-strip.danger { border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); }
+.ai-auto-draft-strip.danger b { color: var(--danger); }
+.ai-auto-draft-acts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-left: auto; }
+.ai-auto-draft-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--fs-small); min-width: 0; }
+.ai-auto-draft-head b { font-weight: 600; }
+.ai-auto-draft-head .muted-copy { font-size: var(--fs-label); }
+.ai-auto-draft-text { max-height: 7.5rem; margin: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1);
+  padding: var(--space-2) var(--space-3); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-small); }
+.ai-auto-draft-text:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ai-auto-draft-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.ai-auto-draft-row > .muted-copy { flex: 1 1 12rem; font-size: var(--fs-label); }
+@media (pointer: coarse) { .ai-auto-draft button, .ai-auto-draft a { min-height: var(--touch); } }
+@media (max-width: 44rem) {
+  .ai-auto-draft { margin: 0 0 var(--space-2); }
+  .ai-auto-draft-text { max-height: 5.5rem; }
+  .ai-auto-draft-row button, .ai-auto-draft-acts > * { flex: 1; }
+  .ai-auto-draft-acts { width: 100%; margin-left: 0; }
+}
+/* A notice about a newer message inside the card of the draft still to use: one line, no box of its own. */
+.ai-auto-draft > .ai-auto-draft-strip { font-size: var(--fs-label); margin: 0; border: 0; border-radius: 0; padding: 0 0 var(--space-2); border-bottom: 1px solid var(--line); background: transparent; }
+.ai-auto-draft > .ai-auto-draft-strip.note, .ai-auto-draft > .ai-auto-draft-strip.note b { color: var(--note-text); }
+/* A short screen keeps the conversation in view: the draft shows fewer lines (it scrolls). */
+@media (max-height: 820px) { .ai-auto-draft-text { max-height: 4.5rem; } }
+/* In the card of a draft to use, Draft with AI is not the way on. */
+.ai-auto-draft > .ai-auto-draft-strip .ai-auto-draft-rest { display: none; }
+.ai-auto-draft-hide { margin-left: auto; --control: 24px; padding: 0 var(--space-2); font-size: var(--fs-label); }

@@ -112,6 +112,11 @@ BEGIN
     IF to_regclass('ai_tasks') IS NOT NULL THEN
         DELETE FROM ai_tasks WHERE workspace_id = '$wid';
     END IF;
+    -- Nor does an automatic mode: AI applying suggestions or writing drafts by itself is turned on
+    -- again by an admin, not by a restore.
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'ai_slots' AND column_name = 'automatic') THEN
+        UPDATE ai_slots SET automatic = false WHERE workspace_id = '$wid';
+    END IF;
 END
 \$\$;
 SQL

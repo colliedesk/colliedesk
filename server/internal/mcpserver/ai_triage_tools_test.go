@@ -52,3 +52,43 @@ func TestDraftTokenAcceptsATriageSuggestion(t *testing.T) {
 		t.Fatalf("accept one part = %v", part)
 	}
 }
+
+// An AI agent undoes what AI applied of a suggestion by itself, and an agent of another workspace cannot.
+func TestDraftTokenUndoesWhatAIApplied(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Undo Desk", "admin@undo.example.com")
+	other := e.newWorkspace("Other Desk", "admin@other-undo.example.com")
+	ctx := context.Background()
+	var conversation, tag, suggestion string
+	if err := e.pool.QueryRow(ctx, `WITH ct AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Lin','lin@customer.example') RETURNING id)
+		INSERT INTO conversations(workspace_id,contact_id,subject,priority) SELECT $1,id,'Printer down','urgent' FROM ct RETURNING id::text`, w.id).Scan(&conversation); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.pool.QueryRow(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,'hardware') RETURNING id::text`, w.id).Scan(&tag); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3)`, w.id, conversation, tag); err != nil {
+		t.Fatal(err)
+	}
+	set := `{"tag_ids":["` + tag + `"],"priority":"urgent","assignee_agent_id":null}`
+	if err := e.pool.QueryRow(ctx, `INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,status,automatic,tag_ids,priority,base,ready_at,applied,auto_applied,auto_applied_at,outcome,decided_at)
+		VALUES($1,$2,'ready',true,ARRAY[$3::uuid],'urgent','{"priority":"normal","assignee_agent_id":null}',now(),$4,$4,now(),'auto_applied',now()) RETURNING id::text`,
+		w.id, conversation, tag, set).Scan(&suggestion); err != nil {
+		t.Fatal(err)
+	}
+	if message := e.fails(e.connect(other.draft, ""), "colliedesk_ai_triage_undo", map[string]any{"conversation_id": conversation, "suggestion_id": suggestion}); message == "" {
+		t.Fatal("another workspace undid it")
+	}
+	undone := e.ok(e.connect(w.draft, ""), "colliedesk_ai_triage_undo", map[string]any{"conversation_id": conversation, "suggestion_id": suggestion})
+	if at(t, undone, "suggestion", "outcome") != "undone" {
+		t.Fatalf("undo = %v", undone)
+	}
+	var priority string
+	var tags int
+	if err := e.pool.QueryRow(ctx, `SELECT priority,(SELECT count(*) FROM conversation_tags WHERE conversation_id=$1) FROM conversations WHERE id=$1`, conversation).Scan(&priority, &tags); err != nil {
+		t.Fatal(err)
+	}
+	if priority != "normal" || tags != 0 {
+		t.Fatalf("conversation after undo = %s, %d tags", priority, tags)
+	}
+}

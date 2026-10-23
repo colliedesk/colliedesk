@@ -13,7 +13,7 @@ function draft(change: Partial<AIDraft> = {}): AIDraft {
   return { id: '55555555-5555-4555-8555-555555555555', conversation_id: conversation, status: 'ready', error_code: null, prompt: '', text: 'Hi Ada, open tray two.',
     missing_info: 'Which printer model?', sources: [{ kind: 'kb_article', id: article, number: 4, title: 'Printer paper jams' }],
     warnings: [{ kind: 'email', value: 'grace@other.example' }], model: 'claude-sonnet-5-5', outcome: null, similarity: null, sent_message_id: null,
-    requested_by_agent_id: agent, created_at: '2026-10-22T10:00:00Z', ready_at: '2026-10-22T10:00:05Z', decided_at: null, ...change };
+    requested_by_agent_id: agent, automatic: false, answers_message_id: null, reply_needed: null, created_at: '2026-10-22T10:00:00Z', ready_at: '2026-10-22T10:00:05Z', decided_at: null, ...change };
 }
 
 type Route = (url: string, init?: RequestInit) => unknown;

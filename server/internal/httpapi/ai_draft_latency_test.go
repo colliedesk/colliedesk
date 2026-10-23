@@ -81,7 +81,7 @@ func TestAIDraftReadLatencyBudget(t *testing.T) {
 	}
 	measure("article", func() error { _, err := service.ArticleDraftsThisMonth(ctx, workspaceA, article); return err })
 	measure("triage", func() error {
-		suggestion, err := service.LatestTriage(ctx, workspaceA, target)
+		suggestion, _, err := service.LatestTriage(ctx, workspaceA, target)
 		if err == nil && suggestion == nil {
 			t.Fatal("no suggestion read")
 		}
