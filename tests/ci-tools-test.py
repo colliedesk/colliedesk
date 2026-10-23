@@ -234,8 +234,8 @@ key = f'{shard.group(1)}/{shard.group(2)}' if shard else 'all'
 if key not in lists:
     sys.exit(f'fake playwright: no listing for {key}')
 suites = {}
-for file, title in lists[key]:
-    suites.setdefault(file, []).append({'title': title, 'file': file, 'line': 1, 'column': 1,
+for file, title, *line in lists[key]:
+    suites.setdefault(file, []).append({'title': title, 'file': file, 'line': (line or [1])[0], 'column': 1,
                                         'tests': [{'projectName': ''}]})
 print('npm noise before the report')
 print(json.dumps({'suites': [{'title': f, 'file': f, 'specs': specs, 'suites': []} for f, specs in suites.items()],
@@ -261,6 +261,12 @@ class E2EShards(unittest.TestCase):
         result = self.check({'all': self.tests, '1/2': self.tests[:2], '2/2': self.tests[2:]})
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('4 tests', result.stdout)
+
+    def test_a_test_reported_at_another_line_is_still_the_same_test(self):
+        # Run 39904337642 listed bulk-actions.spec.ts at line 7 unsharded and line 5 in its shard.
+        moved = [['a.spec.ts', 'one', 5]] + self.tests[1:2]
+        result = self.check({'all': self.tests, '1/2': moved, '2/2': self.tests[2:]})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_a_missing_or_doubled_test_fails_and_names_it(self):
         for name, lists, culprit in [

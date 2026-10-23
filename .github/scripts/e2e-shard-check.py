@@ -24,12 +24,14 @@ if not command:
 
 
 def specs(suite, path):
-    """Yields one key per test: file, location, title path and project."""
+    """Yields one key per test: file, project and title path. Playwright refuses two tests with one
+    title path in a file. The line is left out: in run 39904337642 the unsharded listing put a test at
+    line 7 of its file and the shard's listing at line 5."""
     path = path + [suite['title']] if suite.get('title') else path
     for spec in suite.get('specs', []):
         for test in spec.get('tests', []):
             name = ' › '.join(path + [spec['title']])
-            yield f"{spec['file']}:{spec['line']}:{spec['column']} [{test.get('projectName', '')}] {name}"
+            yield f"{spec['file']} [{test.get('projectName', '')}] {name}"
     for child in suite.get('suites', []):
         yield from specs(child, path)
 
