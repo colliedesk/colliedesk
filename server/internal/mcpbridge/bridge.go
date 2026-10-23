@@ -44,6 +44,7 @@ type bridge struct {
 	client  *http.Client
 	out     *bufio.Writer
 	outMu   sync.Mutex
+	errMu   sync.Mutex // requests fail at once; one line each on stderr
 	version struct {
 		sync.Mutex
 		negotiated string // from the initialize result, for the requests after it
@@ -317,6 +318,8 @@ func (b *bridge) reply(id json.RawMessage, code int, text string) {
 
 func (b *bridge) logf(format string, args ...any) {
 	if b.cfg.Stderr != nil {
+		b.errMu.Lock()
+		defer b.errMu.Unlock()
 		fmt.Fprintf(b.cfg.Stderr, format+"\n", args...)
 	}
 }
