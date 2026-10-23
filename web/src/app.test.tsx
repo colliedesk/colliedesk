@@ -10,17 +10,19 @@ import { presenceViewPart } from './features/inbox/presence-part';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
 // Clerk draws its own sign-in form from the network; the page around it is what is under test here.
+// Clerk is the identity provider, the external boundary: its session state and sign-out are faked here.
+const clerk = vi.hoisted(() => ({ signedIn: false, signOut: vi.fn() }));
 vi.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
   SignIn: () => <div>Clerk widget</div>,
-  useAuth: () => ({ getToken: vi.fn(), isLoaded: true, isSignedIn: false }),
-  useClerk: () => ({ signOut: vi.fn() }),
+  useAuth: () => ({ getToken: vi.fn(), isLoaded: true, isSignedIn: clerk.signedIn }),
+  useClerk: () => ({ signOut: clerk.signOut }),
 }));
 vi.mock('./lib/product-analytics', async (original) => ({ ...(await original<typeof import('./lib/product-analytics')>()), resetProductAnalytics: vi.fn() }));
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
-afterEach(() => { fetchMock.mockReset(); window.sessionStorage.clear(); });
+afterEach(() => { fetchMock.mockReset(); window.sessionStorage.clear(); clerk.signedIn = false; clerk.signOut.mockReset(); });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const locked = { error: { code: 'workspace_locked', message: 'This workspace is locked because its trial or subscription ended.' } };
@@ -31,6 +33,7 @@ const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
 });
 const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null }, ai: { server_provider: false } };
+const selfHostedConfig = { ...config, cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false } };
 // Founding is full in these fixtures, so the server sells the plan ladder.
 const billing = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
@@ -127,15 +130,30 @@ test('the billing link with buy=founding sends a signed-out visitor straight to 
   expect(readCheckoutIntent()).toBe('founding');
 });
 
-test('a signed-out visit without a plan to buy keeps the signed-out screen and its sign-in link', async () => {
+// On the cloud the way back in is the sign-in page itself, for a known page and an unknown one alike.
+for (const path of ['/settings/billing', '/no-such-route']) {
+  test(`a signed-out visit to ${path} on the cloud lands on the sign-in page`, async () => {
+    serve({
+      '/api/v1/auth/me': () => json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }),
+      '/api/v1/config': () => json(200, config),
+    });
+    const router = open(path);
+    expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/sign-in');
+    expect(screen.getByRole('alert')).toHaveTextContent('You are signed out.');
+    expect(screen.queryByText(/ask your workspace admin for a new link/i)).not.toBeInTheDocument();
+  });
+}
+
+test('a signed-out visit to an unknown page on a self-hosted server keeps the signed-out screen and its pairing hint', async () => {
   serve({
     '/api/v1/auth/me': () => json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }),
-    '/api/v1/config': () => json(200, config),
+    '/api/v1/config': () => json(200, selfHostedConfig),
   });
-  const router = open('/settings/billing');
+  const router = open('/no-such-route');
   expect(await screen.findByRole('alert')).toHaveTextContent('You are signed out. Ask your workspace admin for a new link.');
-  expect(await screen.findByRole('link', { name: 'Sign in' })).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe('/settings/billing');
+  expect(screen.getByText(/collie pair/)).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/no-such-route');
 });
 
 test('the billing link with buy=founding starts the founding checkout for a signed-in trial admin', async () => {
@@ -306,4 +324,97 @@ test('Settings shows its title at once while its own chunk loads, then the secti
   // The sections arrive with the chunk; the title stays where it was.
   await waitFor(() => expect(document.querySelector('.settings-page[aria-busy="true"]')).toBeNull());
   expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+});
+
+// The server answers me until the session ends, then 401, as after a real sign-out.
+function serveUntilSignedOut(meResponse: () => Response, appConfig: unknown, extra: Record<string, () => Response> = {}) {
+  let loggedOut = false;
+  fetchMock.mockImplementation((url: string) => {
+    const path = url.split('?')[0];
+    if (path === '/api/v1/auth/logout') { loggedOut = true; return Promise.resolve(new Response(null, { status: 204 })); }
+    if (path === '/api/v1/auth/me') return Promise.resolve(loggedOut ? json(401, { error: { code: 'unauthorized', message: 'no' } }) : meResponse());
+    if (path === '/api/v1/config') return Promise.resolve(json(200, appConfig));
+    const handler = extra[path];
+    return Promise.resolve(handler ? handler() : json(200, { items: [], page: 1, page_size: 50 }));
+  });
+}
+
+test('on the cloud, sign out from the account menu lands on the sign-in page and ends the identity provider session too', async () => {
+  clerk.signedIn = true;
+  clerk.signOut.mockImplementation(() => { clerk.signedIn = false; return Promise.resolve(); });
+  serveUntilSignedOut(() => json(200, meBody('agent', null)), config);
+  const router = open('/settings');
+  fireEvent.click(await screen.findByRole('button', { name: /account|sam@example.com/i }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+  expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/sign-in');
+  expect(screen.getByRole('alert')).toHaveTextContent('You are signed out.');
+  await waitFor(() => expect(clerk.signOut).toHaveBeenCalledTimes(1));
+  // The next sign-in shows the form instead of signing the same person straight back in.
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Signed in as' })).not.toBeInTheDocument();
+});
+
+test('on the cloud, sign out from the locked screen ends the identity provider session too', async () => {
+  clerk.signedIn = true;
+  clerk.signOut.mockImplementation(() => { clerk.signedIn = false; return Promise.resolve(); });
+  serveUntilSignedOut(() => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })), config,
+    { '/api/v1/billing': () => json(200, billing) });
+  const router = open();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeInTheDocument();
+  fireEvent.click(screen.getAllByRole('button', { name: 'Sign out' })[0]);
+
+  expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/sign-in');
+  await waitFor(() => expect(clerk.signOut).toHaveBeenCalledTimes(1));
+});
+
+test('signing in again after being signed out opens the inbox instead of bouncing back to sign-in', async () => {
+  let signedIn = false;
+  fetchMock.mockImplementation((url: string) => {
+    const path = url.split('?')[0];
+    if (path === '/api/v1/auth/redeem') { signedIn = true; return Promise.resolve(json(200, { agent: meBody('agent', null).agent, workspace: meBody('agent', null).workspace })); }
+    if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, meBody('agent', null)) : json(401, { error: { code: 'unauthorized', message: 'no' } }));
+    if (path === '/api/v1/config') return Promise.resolve(json(200, config));
+    if (path === '/api/v1/inbox/activity') return Promise.resolve(json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }));
+    return Promise.resolve(json(200, { items: [], page: 1, page_size: 50 }));
+  });
+  const router = open('/');
+  await waitFor(() => expect(router.state.location.pathname).toBe('/sign-in'));
+  await router.navigate({ to: '/sign-in', search: { token: 'invite-token' } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Continue to Colliedesk' }));
+
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(router.state.location.pathname).toBe('/');
+  expect(clerk.signOut).not.toHaveBeenCalled();
+});
+
+test('on a self-hosted server, signing out leaves no identity of the old session on screen', async () => {
+  serveUntilSignedOut(() => json(200, meBody('agent', null)), selfHostedConfig);
+  open('/settings');
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  fireEvent.click(await screen.findByRole('button', { name: /account|sam@example.com/i }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('You are signed out. Ask your workspace admin for a new link.');
+  expect(screen.getByText(/collie pair/)).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Signed in as' })).not.toBeInTheDocument();
+});
+
+test('an unknown page says so with a title and a way back to the inbox, and no rail destination is current', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', null)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+  });
+  const router = open('/no-such-route');
+  const main = await screen.findByRole('main');
+  expect(within(main).getByRole('heading', { level: 1, name: 'Page not found' })).toBeInTheDocument();
+  expect(within(main).getByText('There is no page at this address.')).toBeInTheDocument();
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  for (const link of within(rail).getAllByRole('link')) expect(link).not.toHaveAttribute('aria-current');
+  fireEvent.click(within(main).getByRole('link', { name: 'Back to Inbox' }));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+  expect(within(rail).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
 });

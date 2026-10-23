@@ -18,10 +18,12 @@ interface RedeemPageProps {
   onSelectWorkspace?: (slug: string) => void;
   // buying is the plan a visitor came from the website to buy; the page then greets a buyer.
   buying?: string;
+  // signedOut is true when the browser arrived here because its session ended.
+  signedOut?: boolean;
 }
 
 export function RedeemPage({
-  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying,
+  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying, signedOut = false,
 }: RedeemPageProps) {
   const buyer = !token && cloudEnabled && buying !== undefined;
   return (
@@ -33,6 +35,7 @@ export function RedeemPage({
       </div>
       <section className="redeem-panel">
         <div className="brand-lockup"><LogoMark size={36} /><span>{messages.brand}</span></div>
+        {signedOut && <p role="alert" className="muted-copy">{messages.signedOutCloud}</p>}
         {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
         <h1>{buyer ? messages.buyingTitle(buying) : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
         <p>{buyer ? messages.buyingExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
