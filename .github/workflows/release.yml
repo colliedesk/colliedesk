@@ -7,6 +7,8 @@ name: Release
 # - Or push a v0.0.N tag on a main commit whose CI run passed.
 # The image is rebuilt with the tag stamped as its version, booted, then published as X.Y.Z, X.Y
 # and (for the highest release) latest. Release notes come from the merged pull request titles.
+# The release also carries the client collie, the Claude Desktop extension and SHA256SUMS, with
+# build provenance (.github/scripts/client-assets.txt).
 on:
   push:
     tags: ['v*']
@@ -132,6 +134,21 @@ jobs:
             exit 0
           fi
           sh "$RUNNER_TEMP/upgrade-test/tests/upgrade-test.sh" "$previous" colliedesk:release
+      # The client collie (collie mcp for a person's computer) for each system, the Claude Desktop
+      # extension and SHA256SUMS: the files of client-assets.txt, which the user guides link as
+      # releases/latest/download/<name>. Built before anything is published, so a failure stops
+      # the release with nothing out.
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: '1.27.x'
+          cache: false
+      - name: Build the client collie and the Claude Desktop extension
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        run: sh .github/scripts/client-release.sh "$TAG" "$RUNNER_TEMP/client"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/client/*
       # Another release may have taken this number while the image built.
       - name: Require the tag to be free or already this commit
         env:
@@ -201,3 +218,9 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG is already released"; exit 0; fi
           gh release create "$TAG" --verify-tag --generate-notes $prerelease \
             --notes 'Self-hosted? Back up first, then follow the [upgrade guide](https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md); it also says how to roll back.'
+      # Also on a run that finishes an earlier one, so a release never lacks its client files.
+      - name: Attach the client files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.target.outputs.tag }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP"/client/* --clobber
