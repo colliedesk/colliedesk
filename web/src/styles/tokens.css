@@ -78,7 +78,7 @@
   --accent-text: #171717;
   --accent-soft: #efefef;
   --accent-strong: #171717;          /* graphics only */
-  --logo-tile: #171717;              /* the mark always sits on a dark tile */
+  --logo-tile: #c2410c;              /* the mark is a white collie head on this orange tile, both themes */
   --line-control: #adadad;           /* secondary button outline, 2.3:1 on white so a button reads as a button */
   --brand-panel: #0a0a0a;            /* sign-in brand side */
   --on-brand-panel: #fafafa;
@@ -139,7 +139,7 @@
   --accent-text: #fafafa;            /* links and brand-coloured text on any surface */
   --accent-soft: #222222;            /* selected row, AI hint background */
   --accent-strong: #e5e5e5;          /* graphics only (mark, bars); never text on dark */
-  --logo-tile: #1c1c1c;
+  --logo-tile: #c2410c;
   --line-control: #4d4d4d;           /* 2.3:1 on the dark panel */
   --brand-panel: #141414;
   --on-brand-panel: #fafafa;
