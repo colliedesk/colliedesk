@@ -13,8 +13,9 @@ a client that sends no browser name shows **Browser session** or **Cloud sign-in
 - Agents see their own sessions. Admins see and can revoke every session in the workspace.
 
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
-shows **You are signed out** instead of the inbox; on instances with cloud sign-in it links to **Sign in**. To sign in again on a revoked device, ask an
-admin for a new link.
+shows **You are signed out** instead of the inbox. On instances with cloud sign-in it opens the
+sign-in page instead and signs the browser out of the sign-in provider too, so the next sign-in
+asks for a code again. To sign in again on a revoked device, ask an admin for a new link.
 
 ## Agent tokens
 

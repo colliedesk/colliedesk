@@ -90,8 +90,9 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   await expect(page.getByRole('alert')).toContainText('already used or has expired');
   await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
 
-  // Signing out ends the session.
+  // Signing out ends the session and lands on the sign-in page.
   await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(`${baseURL}/sign-in?signed_out=true`);
   await expect(page.getByRole('alert')).toContainText('You are signed out');
   expect((await page.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
 });

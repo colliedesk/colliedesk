@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api, CloudWorkspaceChoiceError, PlanLimitError } from '../../api/client';
 import { NotAnAgentError } from '../../api/cloud-signup';
@@ -12,13 +12,17 @@ import { RedeemPage } from './redeem-page';
 const CloudSignIn = lazy(() => import('./cloud-sign-in').then((module) => ({ default: module.CloudSignIn })));
 
 // buy is the plan named in the sign-in address when a visitor came from the website to buy it.
-export function RedeemRoute({ token, buy }: { token: string; buy?: string }) {
+// signedOut marks the arrival right after the browser's session ended.
+export function RedeemRoute({ token, buy, signedOut = false }: { token: string; buy?: string; signedOut?: boolean }) {
   const navigate = useNavigate();
+  const client = useQueryClient();
   // A visitor who came to buy a plan lands on the billing page, which carries the purchase out.
-  const goAfterSignIn = useCallback(
-    () => (readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: '/' })),
-    [navigate],
-  );
+  // The new session starts from a fresh me: the refused answer of the ended one would send the app
+  // straight back here.
+  const goAfterSignIn = useCallback(async () => {
+    await client.resetQueries({ queryKey: ['me'] });
+    return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: '/' });
+  }, [client, navigate]);
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const [workspaceSlug, setWorkspaceSlug] = useState<string>();
   const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
@@ -48,10 +52,10 @@ export function RedeemRoute({ token, buy }: { token: string; buy?: string }) {
   const buying = buy ?? readCheckoutIntent();
 
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
-    buying={buying} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
+    buying={buying} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
     cloudSignIn={cloudEnabled && <Suspense fallback={<p>{messages.loadingCloudSignIn}</p>}>
       <CloudSignIn key={workspaceSlug ?? 'default'} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange}
-        onSignUp={config.data?.signup.enabled ? signUp : undefined} buying={buying !== undefined} />
+        onSignUp={config.data?.signup.enabled ? signUp : undefined} buying={buying !== undefined} endSession={signedOut} />
     </Suspense>} />;
 }
