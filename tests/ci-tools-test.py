@@ -463,6 +463,18 @@ class ImageLayerCache(unittest.TestCase):
         self.assertNotIn('push:', writer)
         self.assertIn('cache-to: type=gha,scope=image,mode=max', writer)
 
+    def test_a_ci_run_that_timed_out_still_writes_the_layer_cache(self):
+        # A cold image job passes the 2-minute timeout, and GitHub ends that run as cancelled. Skipping
+        # cancelled runs left main cold for good: run 39893295025 timed out, 39893508473 was skipped.
+        image_cache = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/image-cache.yml'))['image-cache'])
+        condition = ' '.join(line.strip() for line in
+                             re.search(r'^    if: >-\n((?:      .*\n)+)', image_cache + '\n', re.M).group(1).splitlines())
+        self.assertNotIn('conclusion', condition)
+        for guard in ["github.event_name == 'workflow_dispatch'",
+                      "github.event.workflow_run.event == 'push'",
+                      'github.event.workflow_run.head_repository.full_name == github.repository']:
+            self.assertIn(guard, condition)
+
     def test_the_dependency_compile_depends_only_on_the_imported_packages(self):
         dockerfile = (ROOT / 'server/Dockerfile').read_text()
         go = dockerfile[dockerfile.index(' AS go\n'):]

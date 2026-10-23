@@ -5,7 +5,10 @@ name: Image cache
 # them), which a two-minute job cannot hold. It runs after CI, never beside it: a main push that
 # runs every CI job already takes 18 runners, go-cache and Scorecard two more, and a 21st would
 # queue a CI job against the 120-second clock (docs/internals/performance.md, CI phase budget).
-# Every finished run writes, a red one too: a cold image job is what turns main red.
+# Every finished run writes, a red or cancelled one too: a cold image job passes its 2-minute timeout,
+# GitHub ends that run as cancelled, and skipping it kept main cold for good (runs 39893295025 and
+# 39893508473). A waiting run that a newer main push replaces ends cancelled and writes too; the
+# concurrency group below holds that to one running write and one waiting.
 on:
   workflow_run:
     workflows: [CI]
@@ -28,7 +31,6 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.conclusion != 'cancelled' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     # A cold write builds the Go dependencies and uploads them: about two and a half minutes.
