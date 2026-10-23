@@ -2,7 +2,7 @@
 
 Decisions behind the look of `web/`. The brand is **ink and paper** (owner decision 19/10/2026, replacing
 Blue Merle): neutral grey surfaces, ink for text and the primary action, and colour only where it carries
-meaning (status, focus, private notes; on colliedesk.com also the price). Light is the default theme and
+meaning (status, focus, private notes; on colliedesk.com also the price), plus the logo's orange tile. Light is the default theme and
 dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
 
 ## Brand guideline
@@ -17,7 +17,8 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
    focus (amber) and private notes (amber) keep their colours; nothing else is coloured. Amber means focus,
    private notes and the pending status, and nothing else: a warning uses `--warn` / `--warn-soft` (or a
    neutral card with a `--warn` icon), never the note colours. `web/scripts/brand-rules.test.mjs` checks it. On the site the
-   price has its own colour (`--price`, orange) and nothing else does.
+   price has its own colour (`--price`, orange) and nothing else does, except the logo tile (`--logo-tile`,
+   the same orange, see Logo).
 3. **Serif for titles only.** IBM Plex Serif 500 (`--font-display`) sets page titles (Inbox, Settings,
    Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Every control, label and
    body line stays IBM Plex Sans. One Plex skeleton for serif, sans and mono (owner 22/10/2026): it
@@ -72,7 +73,7 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
   is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
-- The mascot is the headset collie on an ink tile (see Logo).
+- The mascot is the white collie head on the orange tile (see Logo).
 
 ## Themes
 
@@ -98,7 +99,7 @@ the Clerk form.) Do not create a second palette.
 | Surfaces | `--surface-0` page and rail, `--surface-1` list, panels, cards, `--surface-2` hover, `--surface-3` active rail item and tag, `--surface-inverse` tooltip | Separate layers by surface step first. Add shadow only to floating layers. |
 | Lines | `--line` hairline dividers and panel edges, `--line-control` secondary button outline, `--line-strong` input borders | Inputs keep `--line-strong` (3:1). Buttons are identified by their label, but their outline is about 2.3:1 so they do not look faded (owner feedback 16/10/2026: buttons looked washed out at 1.5:1). |
 | Text | `--text-1` primary, `--text-2` secondary, `--text-3` meta and labels, `--text-inverse` on the tooltip | `--text-3` is the lowest text tone. |
-| Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile`, `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on ink `#171717`. Dark: near-black on `#fafafa`. `--accent-text` is ink; inline links are underlined. |
+| Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile` (orange `#c2410c`, the one brand hue), `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on ink `#171717`. Dark: near-black on `#fafafa`. `--accent-text` is ink; inline links are underlined. |
 | Focus and note | `--focus`, `--focus-ring`, `--note-bg`, `--note-line`, `--note-text` | Amber means focus, private notes and the pending status (`--pending`), and nothing else. Warnings use `--warn`. |
 | Status | `--danger`, `--warn`, `--ok`, `--open`, `--pending` and `*-soft` backgrounds | A dot or icon plus a word. Never colour alone. `--warn` also marks a warning (unverified sender, help center off). |
 | Avatars | `--avatar-lightness`, `--avatar-chroma`, `--avatar-text-lightness`, `--avatar-text-chroma` with a per-person `--avatar-hue` | See Rules: the hue tells people apart, low chroma, never on status. |
@@ -125,23 +126,28 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 
 ## Logo
 
-Owner decision 22/10/2026, chosen from concepts that pair a collie trait with a help desk object.
+Owner decision 24/10/2026: the favicon's orange tile with a solid white collie head is the logo
+everywhere (app, site wordmark, favicon, apple-touch icon). It replaced the grey headset collie on an
+ink tile (22/10/2026), which blurred to a grey blob at 16 px and blended in with the black icons of
+Zendesk, Intercom and Gorgias; a saturated tile with one high-contrast shape is what makes hunter.io and
+PostHog easy to find in a row of tabs. A question-mark crook and about 20 redrawn collies (profile,
+front, emblem) were tried and dropped.
 Source of every asset: `plans/261015-0932-colliedesk-brand-directions/logo-options/build-assets.py`
 in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and both wordmark files).
 
-- **Mark** (`web/src/ui/logo.tsx`, `LogoMark`): a collie in profile wearing a support headset. Wedge
-  muzzle, tipped ear, white ruff, the mic running along the muzzle. Greys only (ink and paper). The white
-  parts need a dark ground, so the mark always sits on its rounded tile (`--logo-tile`). 20 px or larger.
-- **Favicon** (`web/public/favicon.svg`, `.ico` with 16 and 32 px): the mark itself on its tile, scaled
-  down, same paths as `LogoMark`. The tab icon must look like the logo: a question-mark crook and a
-  white head silhouette were tried and dropped because they did not read as Colliedesk.
-  `apple-touch-icon.png` (180 px) uses the mark too. Icon links in `web/index.html` carry `?v=` = the
-  first 10 hex of the file's sha256 (`src/favicon-version.test.ts`), because browsers keep a favicon per URL.
+- **Mark** (`web/src/ui/logo.tsx`, `LogoMark`): the collie head in profile (wedge muzzle, tipped ear)
+  as one solid white shape on its rounded orange tile (`--logo-tile`, `#c2410c`, the site's price
+  colour; white on it is 5:1). The eye and nose are cut out in the tile colour. The tile is part of
+  the mark and is the logo's only colour; the rest of the UI stays ink and paper. 16 px or larger.
+- **Favicon** (`web/public/favicon.svg`, `.ico` with 16 and 32 px): the same mark, the head enlarged
+  6 % so it fills the tile at 16 px. `apple-touch-icon.png` (180 px) is the same on a full-bleed tile
+  (iOS rounds the corners). Icon links in `web/index.html` carry `?v=` = the first 10 hex of the file's
+  sha256 (`src/favicon-version.test.ts`), because browsers keep a favicon per URL.
 - **Wordmark** (`LogoWordmark` reads `web/public/wordmark-on-dark.svg`, kept out of the JS bundle; the
   site uses `public/logo-wordmark.svg`): outlined IBM Plex Sans,
   "collie" 700 and "desk" 400. The second "l" is tipped forward like a collie ear. Use the outlined
   version, never retype it in a font. In running text write "Colliedesk".
-- Do not recolour, outline, rotate, glow or put a gradient on the mark. Do not put the bare mark
+- Do not recolour, outline, rotate, glow or put a gradient on the mark. Do not put the bare white head
   (without its tile) on a photo, a light background or `--accent`.
 - Trademark: not yet searched for this mark; search before any registration or print run.
 
