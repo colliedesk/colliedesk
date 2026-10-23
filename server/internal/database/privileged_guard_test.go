@@ -60,6 +60,7 @@ var poolFiles = []string{
 	"cmd/collie/trial.go",
 	"cmd/collie/undo.go",
 	"internal/auth/service.go",
+	"internal/database/databasetest/databasetest.go", // tests only: clones and drops test databases
 	"internal/database/migrate.go",
 	"internal/database/scope.go",
 	"internal/freshdesk/importer.go",
