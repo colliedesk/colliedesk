@@ -185,6 +185,11 @@
   names come from `.github/scripts/client-assets.txt`; `TestHostGuidesHoldValidJSONAndRealFileNames`
   parses every JSON block and checks every `releases/latest/download/` link against that list. The
   plugin and skills live in `plugins/colliedesk` (`TestSkillsNameRealToolsAtTheirTier`).
+- **Host checks by hand.** `tests/host-connect/tools-list.sh` compares `tools/list` over HTTP with
+  the same call through `collie mcp` (no model needed). `tests/host-connect/hosts.sh` runs the
+  Claude Code and Codex commands of the guides in a clean `node:22` container and, given a model API
+  key, asks each to call `colliedesk_whoami`. Neither is in CI: CI has no model key, and the hosts
+  are downloaded at pinned versions that a person bumps when checking a guide.
 - **SDK dependency.** `github.com/modelcontextprotocol/go-sdk` v1.8.0 (Apache-2.0, compatible with
   AGPL-3.0-only). It pulls `golang.org/x/sys` v0.41.0, which carries an OSV advisory (Windows
   only); `go.mod` pins v0.44.0 so the PR gate stays clean. The SDK's stateless-session behaviour
