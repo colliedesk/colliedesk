@@ -132,10 +132,13 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - **Mark** (`web/src/ui/logo.tsx`, `LogoMark`): a collie in profile wearing a support headset. Wedge
   muzzle, tipped ear, white ruff, the mic running along the muzzle. Greys only (ink and paper). The white
   parts need a dark ground, so the mark always sits on its rounded tile (`--logo-tile`). 20 px or larger.
-- **Favicon** (`web/public/favicon.svg`, `.ico` with 16 and 32 px): the mark itself on its tile, scaled
-  down, same paths as `LogoMark`. The tab icon must look like the logo: a question-mark crook and a
-  white head silhouette were tried and dropped because they did not read as Colliedesk.
-  `apple-touch-icon.png` (180 px) uses the mark too. Icon links in `web/index.html` carry `?v=` = the
+- **Favicon** (`web/public/favicon.svg`, `.ico` with 16 and 32 px): the mark's head as one solid white
+  shape on an orange tile (`#c2410c`, the site's price colour), without the headset and ruff. Owner
+  decision 23/10/2026: the grey head on the ink tile blurred to a grey blob at 16 px and blended in with
+  the black icons of Zendesk, Intercom and Gorgias; a saturated tile with one high-contrast shape is what
+  makes hunter.io and PostHog easy to find in a row of tabs. The favicon is the one place the logo uses
+  colour. A question-mark crook was tried earlier and dropped because it did not read as Colliedesk.
+  `apple-touch-icon.png` (180 px) uses the full mark on the ink tile. Icon links in `web/index.html` carry `?v=` = the
   first 10 hex of the file's sha256 (`src/favicon-version.test.ts`), because browsers keep a favicon per URL.
 - **Wordmark** (`LogoWordmark` reads `web/public/wordmark-on-dark.svg`, kept out of the JS bundle; the
   site uses `public/logo-wordmark.svg`): outlined IBM Plex Sans,
