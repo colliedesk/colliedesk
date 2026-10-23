@@ -267,14 +267,24 @@ func (s *Service) runTriage(ctx context.Context, run *Run) error {
 // hours" or "KB 12" in a reason is ordinary text and stays.
 var sourceID = regexp.MustCompile(`(?i)\b(kb|past)(\d+)\b`)
 
-// markdownMarks is emphasis or code around a few words: **bold**, *italic*, __bold__, `code`.
-var markdownMarks = regexp.MustCompile(`\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|__([^_\n]+)__|` + "`([^`\n]+)`")
+// markdownMarks are emphasis or code around a few words, as Markdown reads them: **bold**, *italic*,
+// __bold__ and `code` open after a space or punctuation and close before one, with no space just
+// inside, so "2*3*4" or an order code with stars stays as written.
+var markdownMarks = func() []*regexp.Regexp {
+	var marks []*regexp.Regexp
+	for _, mark := range []string{`\*\*`, `__`, `\*`, "`"} {
+		marks = append(marks, regexp.MustCompile(`(^|[^\pL\pN*_`+"`"+`])`+mark+`([^\s*_`+"`"+`](?:[^\n]*?[^\s*_`+"`"+`])?)`+mark+`($|[^\pL\pN*_`+"`"+`])`))
+	}
+	return marks
+}()
 
 // readableReason puts an article's title where the reason names it by the prompt's id (kb1), and "a
 // similar solved ticket" for a past conversation, so a person never reads the prompt's ids.
 func readableReason(reason string, ids map[string]store.AIRetrievedDoc) string {
 	// The card shows plain text: Markdown emphasis or code marks around words would show as they are.
-	reason = markdownMarks.ReplaceAllString(reason, "$1$2$3$4")
+	for _, mark := range markdownMarks {
+		reason = mark.ReplaceAllString(reason, "$1$2$3")
+	}
 	return sourceID.ReplaceAllStringFunc(reason, func(match string) string {
 		parts := sourceID.FindStringSubmatch(match)
 		kind := strings.ToLower(parts[1])
