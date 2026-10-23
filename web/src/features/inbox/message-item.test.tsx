@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import type { Message } from '../../api/schemas';
@@ -122,4 +123,28 @@ test('a failed delivery says why in text, not only on hover', () => {
   render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 1, last_error: reason, sent_at: null } }} timezone="UTC" />);
   expect(screen.getByText(reason)).toBeVisible();
   expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
+});
+
+// jsdom draws no list markers and orders its cascade by source alone, so this reads the shipped stylesheet: the last
+// rule in components.css that matches the rendered element and sets the property is the one that applies.
+function declared(element: Element, property: 'list-style-type' | 'padding-left') {
+  const style = document.createElement('style');
+  style.textContent = readFileSync('src/styles/components.css', 'utf8');
+  document.head.append(style);
+  const rules = [...style.sheet!.cssRules].filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule);
+  style.remove();
+  return rules.filter((rule) => element.matches(rule.selectorText) && rule.style.getPropertyValue(property)).at(-1)?.style.getPropertyValue(property);
+}
+
+test('a reply or note written as a Markdown list keeps its numbers and bullets on the timeline', () => {
+  for (const kind of ['outgoing', 'note'] as const) {
+    const { container, unmount } = render(<MessageItem item={{ ...base, kind, email: null, body: 'Steps:\n\n1. Open settings\n2. Turn it on\n   - first\n   - second\n\nThanks' }} timezone="UTC" />);
+    const ol = container.querySelector('.markdown-body ol')!;
+    expect(declared(ol, 'list-style-type')).toBe('decimal');
+    expect(declared(ol, 'padding-left')).toBe('var(--space-6)');
+    expect(declared(ol.querySelector('ul')!, 'list-style-type')).toBe('circle');
+    unmount();
+  }
+  const { container } = render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, body: '- one\n- two' }} timezone="UTC" />);
+  expect(declared(container.querySelector('.markdown-body ul')!, 'list-style-type')).toBe('disc');
 });
