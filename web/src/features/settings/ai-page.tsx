@@ -315,6 +315,7 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
   const on = slot.enabled && slot.automatic;
   const limits = settings.automatic;
   const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.autoDraftNeedsFeature : undefined;
+  const half = settings.allowance ? money(Math.floor(settings.allowance.limit_micro_usd / 2)) : null;
   const pausedDay = on && limits.drafts_paused_until !== null;
   const pausedHalf = on && !pausedDay && limits.drafts_reserved_until !== null;
   const status = pausedDay ? <span className="status ai-st-warn">{m.autoDraftPausedDay(formatDate(limits.drafts_paused_until ?? '', 'UTC'))}</span>
@@ -325,14 +326,15 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
       <div className="ai-auto-lead"><strong>{m.autoDraftTitle}</strong><span aria-live="polite">{status}</span></div>
       {why ? <p className="ai-auto-desc muted-copy" id="ai-auto-draft-why">{why}</p>
         : pausedDay ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedDayDesc(limits.drafts_today, limits.draft_per_day)}</b>{m.autoDraftPausedDayRest}</p>
-          : pausedHalf ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedHalfDesc}</b>{m.autoDraftPausedHalfRest}</p>
+          : pausedHalf ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedHalfDesc(half)}</b>{m.autoDraftPausedHalfRest}</p>
             : <p className="ai-auto-desc"><span className="ai-long">{m.autoDraftDesc} </span><b>{m.autoDraftStrong}</b>{m.autoDraftCost(limits.draft_per_day)}</p>}
       <div className="ai-auto-side">
         {on && !pausedDay && !pausedHalf && <span className="ai-auto-stat">{m.autoDraftToday(limits.drafts_today, limits.draft_per_day)}</span>}
         {pausedDay && isAdmin && <button type="button" onClick={onRaise}>{m.autoDraftRaise}</button>}
-        {pausedHalf && isAdmin && <a className="button" href="/settings/ai?add=1">{m.autoDraftAddKey}</a>}
+        {pausedHalf && isAdmin && <a className="button ai-link-button" href="/settings/ai?add=1">{m.autoDraftAddKey}</a>}
+        {locked && !why && <span className="sr-only" id="ai-auto-draft-why">{m.autoAdminsOnly}</span>}
         <label className="ai-switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
-          aria-describedby={why ? 'ai-auto-draft-why' : undefined}
+          aria-describedby={why || locked ? 'ai-auto-draft-why' : undefined}
           onChange={(event) => (event.target.checked ? onTurnOn() : onOff())} /></label>
       </div>
     </div>
@@ -359,6 +361,7 @@ function AutoDraftDialog({ slot, settings, onClose, onTurnOn }: { slot: AISlot; 
       {server && half !== null ? <p className="ai-estimate-note"><b>{m.estHalf(money(half), each ? Math.floor(half / each) : null)}</b>{m.estHalfRest}</p>
         : !server && <p className="ai-estimate-note"><b>{m.estByo(provider?.label ?? '')}</b>{m.estByoRest}</p>}
       <ul className="ai-facts">{m.autoDraftFacts(perDay).map((fact) => <li key={fact}>{fact}</li>)}</ul>
+      <p><a href="https://github.com/colliedesk/colliedesk/blob/main/docs/user/ai.md#write-a-draft-when-a-customer-writes" target="_blank" rel="noopener noreferrer">{m.estHow}</a></p>
     </Dialog>
   );
 }
@@ -433,13 +436,18 @@ function AutomaticDialog({ settings, onClose, onSave }: { settings: AISettings; 
   const [perMinute, setPerMinute] = useState(String(settings.automatic.per_minute));
   const [draftsPerDay, setDraftsPerDay] = useState(String(settings.automatic.draft_per_day));
   const [error, setError] = useState<string>();
+  const [bad, setBad] = useState<{ day?: string; minute?: string; drafts?: string }>({});
   const [busy, setBusy] = useState(false);
   const id = useId();
   const submit = async () => {
     const day = Number(perDay);
     const minute = Number(perMinute);
     const drafts = Number(draftsPerDay);
-    if (!Number.isInteger(day) || day < 0 || day > 10000 || !Number.isInteger(minute) || minute < 0 || minute > 1000 || !Number.isInteger(drafts) || drafts < 0 || drafts > 10000) {
+    const out = (value: number, max: number) => (!Number.isInteger(value) || value < 0 || value > max ? m.wholeNumber(max) : undefined);
+    const marked = { day: perDay === '' ? m.wholeNumber(10000) : out(day, 10000), minute: perMinute === '' ? m.wholeNumber(1000) : out(minute, 1000),
+      drafts: draftsPerDay === '' ? m.wholeNumber(10000) : out(drafts, 10000) };
+    setBad(marked);
+    if (marked.day || marked.minute || marked.drafts) {
       setError(m.automaticInvalid);
       return;
     }
@@ -453,10 +461,10 @@ function AutomaticDialog({ settings, onClose, onSave }: { settings: AISettings; 
       footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={busy}>{m.save}</button></>}>
       {error && <p role="alert" className="error-copy">{error}</p>}
       <div className="ai-two">
-        <Field label={m.perDay} id={`${id}-day`}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={perDay} onChange={(event) => setPerDay(event.target.value)} autoFocus />}</Field>
-        <Field label={m.perMinute} id={`${id}-minute`}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={1000} value={perMinute} onChange={(event) => setPerMinute(event.target.value)} />}</Field>
+        <Field label={m.perDay} id={`${id}-day`} error={bad.day}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={perDay} onChange={(event) => setPerDay(event.target.value)} autoFocus />}</Field>
+        <Field label={m.perMinute} id={`${id}-minute`} error={bad.minute}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={1000} value={perMinute} onChange={(event) => setPerMinute(event.target.value)} />}</Field>
       </div>
-      <Field label={m.draftsPerDay} id={`${id}-drafts`} help={m.draftsPerDayHelp}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={draftsPerDay}
+      <Field label={m.draftsPerDay} id={`${id}-drafts`} help={m.draftsPerDayHelp} error={bad.drafts}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={draftsPerDay}
         onChange={(event) => setDraftsPerDay(event.target.value)} />}</Field>
       <p>{m.usedToday(settings.automatic.used_today)}</p>
     </Dialog>

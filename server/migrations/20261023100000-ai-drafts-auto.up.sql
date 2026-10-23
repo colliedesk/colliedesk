@@ -49,8 +49,8 @@ BEGIN
         UPDATE ai_drafts SET answers_message_id = NEW.id WHERE workspace_id = NEW.workspace_id AND task_id = waiting;
         RETURN NULL;
     END IF;
-    UPDATE ai_drafts SET outcome = 'superseded', decided_at = now()
-        WHERE workspace_id = NEW.workspace_id AND conversation_id = NEW.conversation_id AND automatic AND status = 'ready' AND outcome IS NULL;
+    -- The ready draft stays usable until the new one is written: a new draft that is never written
+    -- (a limit, a failure) leaves the team the one it had.
     INSERT INTO ai_tasks(workspace_id, kind, conversation_id, automatic, state, next_run_at)
         VALUES (NEW.workspace_id, 'draft', NEW.conversation_id, true, 'queued', now() + interval '60 seconds') RETURNING id INTO task;
     INSERT INTO ai_drafts(workspace_id, conversation_id, task_id, status, automatic, answers_message_id)

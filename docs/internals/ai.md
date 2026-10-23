@@ -286,9 +286,14 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    automatic draft task and a pending `ai_drafts` row (`automatic`, `answers_message_id`) for each
    customer message without `origin` and not failing its sender check, while the draft slot is on with
    `automatic`. One task waits per conversation (unique partial index); a message before it runs moves
-   it a minute later (five at most from the first) and makes it answer the newest message. A new one
-   supersedes the ready automatic draft nobody decided on. An outgoing reply cancels the waiting one
-   (`answered`). Everything is SQL in the transaction that writes the message.
+   it a minute later (five at most from the first) and makes it answer the newest message. An
+   outgoing reply cancels the waiting one (`answered`). Everything is SQL in the transaction that
+   writes the message.
+   **Trap:** the ready draft is replaced only when the new one is written (`runDraft` supersedes the
+   older ready automatic drafts). Superseding it when the message arrives left a conversation with no
+   usable draft once the new one stopped at a limit or failed. A draft written after a newer one was
+   queued, or after a teammate replied, is set aside unseen (`cancelled`); a try again while a newer
+   one waits ends as `superseded`.
 2. **Checked again before the call.** `admitAutomaticDraft` (under the automatic lock) cancels it
    without a call when the mode went off (`automation_off`), the conversation closed, someone replied
    since (`answered`), the day's automatic drafts are used (`draft_limit`, `draft_per_day`), the

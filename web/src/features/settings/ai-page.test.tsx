@@ -182,6 +182,18 @@ test('the automatic runs are shown on triage and changed by an admin', async () 
   expect(onSetAutomatic).toHaveBeenCalledWith(500, 30, 100);
 });
 
+test('a number out of range marks its own field', async () => {
+  const { onSetAutomatic } = page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })] }) });
+  fireEvent.click(screen.getByRole('button', { name: 'Change the automatic limits' }));
+  const dialog = screen.getByRole('dialog', { name: 'Automatic runs' });
+  fireEvent.change(within(dialog).getByLabelText('A minute'), { target: { value: '5000' } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Save' })); });
+  expect(onSetAutomatic).not.toHaveBeenCalled();
+  expect(within(dialog).getByLabelText('A minute')).toHaveAttribute('aria-invalid', 'true');
+  expect(within(dialog).getByLabelText('A minute')).toHaveAccessibleDescription('Enter a whole number from 0 to 1000.');
+  expect(within(dialog).getByLabelText('A day (UTC)')).not.toHaveAttribute('aria-invalid');
+});
+
 test('a paused day and a used-up allowance each say what happens and what to do', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true })],
     automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z', draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null },

@@ -225,7 +225,8 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   return (
     <div className="composer">
       {aiDraftsFor && !disabled && assistPart.status === 'ready' && <assistPart.module.AutoDraftCard conversationId={aiDraftsFor} customerName={customerName}
-        timezone={timezone} hasText={Boolean(body.trim())} canManage={canManage} latestCustomerMessage={latestCustomerMessage} onUse={applyDraft} />}
+        timezone={timezone} hasText={Boolean(body.trim())} canManage={canManage} latestCustomerMessage={latestCustomerMessage} onUse={applyDraft}
+        onTryAgain={() => setAssist(true)} />}
       <div className="composer-card" data-kind={kind} ref={card}>
         <div className="composer-head">
           <div className="composer-tabs" role="group" aria-label={messages.messageKind}>
@@ -267,7 +268,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
             <BookIcon /><span className="tool-label">{messages.articles}</span></button>
           {aiDraftsFor && (
-            <button type="button" className="saved-reply-button" disabled={disabled} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
+            <button type="button" className="saved-reply-button ai-tool" disabled={disabled} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
               onClick={() => { if (!(assist && drafting)) setAssist((open) => !open); }}>
               <SparklesIcon /><span className="tool-label">{assist && drafting ? messages.drafting : messages.draftWithAI}</span>
               {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>

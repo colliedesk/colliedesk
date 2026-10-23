@@ -36,6 +36,41 @@ test('a draft AI wrote for the customer waits above the reply box, and Use draft
   expect(screen.getByText('Written automatically · your team sees it')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Use draft' }));
   expect(onUse).toHaveBeenCalledWith('Hi Jordan, I refunded INV-20932.', 'replace', draft().id, []);
+  // Once in the reply box it is not offered again.
+  expect(screen.getByText('In your reply box. Edit it there, then send it.')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Use draft' })).not.toBeInTheDocument();
+});
+
+test('what AI could not find is shown with the draft', async () => {
+  serve([draft({ missing_info: 'Whether the printer is under warranty.' })]);
+  show();
+  expect(await screen.findByText('Whether the printer is under warranty.')).toBeInTheDocument();
+  expect(screen.getByText('Not found by AI:')).toBeInTheDocument();
+});
+
+test('a newer draft stopped at a limit leaves the earlier one usable', async () => {
+  serve([draft({ id: '77777777-7777-4777-8777-777777777777', status: 'cancelled', error_code: 'conversation_cap', text: null, ready_at: null }), draft()]);
+  show();
+  expect(await screen.findByText('No automatic draft for this message:')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Use draft' })).toBeInTheDocument();
+});
+
+test('a failed draft can be tried again, which opens Draft with AI, or dismissed', async () => {
+  const asked = vi.fn();
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'POST') { asked(); return new Response(JSON.stringify(draft({ automatic: false, status: 'queued', text: null })), { status: 201, headers: { 'Content-Type': 'application/json' } }); }
+    return new Response(JSON.stringify({ items: [draft({ status: 'failed', error_code: 'refused', text: null })] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }));
+  const onTryAgain = vi.fn();
+  const { unmount } = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <AutoDraftCard conversationId={conversation} timezone="UTC" hasText={false} onUse={vi.fn()} onTryAgain={onTryAgain} /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+  await waitFor(() => expect(onTryAgain).toHaveBeenCalled());
+  expect(asked).toHaveBeenCalledTimes(1);
+  unmount();
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 test('with text in the reply box nothing is replaced until a person picks', async () => {
@@ -43,15 +78,18 @@ test('with text in the reply box nothing is replaced until a person picks', asyn
   const onUse = vi.fn();
   show({ hasText: true, onUse });
   expect(await screen.findByText('Your reply box has text, so nothing was replaced.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Replace my text' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Insert below' }));
   expect(onUse).toHaveBeenCalledWith(expect.any(String), 'below', draft().id, []);
-  expect(screen.getByRole('button', { name: 'Replace my text' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Insert below' })).not.toBeInTheDocument();
 });
 
 test('while it is written, after the customer wrote again, and when no reply is needed', async () => {
-  serve([draft({ id: '77777777-7777-4777-8777-777777777777', status: 'queued', text: null, ready_at: null }), draft({ outcome: 'superseded', decided_at: '2026-10-22T10:36:00Z' })]);
+  // The draft for the earlier message stays usable until the new one is written.
+  serve([draft({ id: '77777777-7777-4777-8777-777777777777', status: 'queued', text: null, ready_at: null }), draft()]);
   const { unmount } = show();
   expect(await screen.findByText(/Jordan wrote again at/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Use draft' })).toBeInTheDocument();
   unmount();
   serve([draft({ reply_needed: false })]);
   show();

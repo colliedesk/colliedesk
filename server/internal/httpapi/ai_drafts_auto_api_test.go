@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
@@ -103,9 +104,9 @@ func TestADraftWritesItselfWhenACustomerWritesOnlyWhenAnAdminLetsIt(t *testing.T
 		t.Fatalf("%s replies were sent", sent)
 	}
 
-	// The customer writes again: the ready one is replaced, a new one waits.
+	// The customer writes again: a new one waits; the ready one stays usable until the new one is written.
 	d.customerWrites(t, d.workspaceA, conversation, "Still jammed.", nil)
-	if outcome := queryString(t, d.pool, `SELECT outcome FROM ai_drafts WHERE id=$1`, got.ID); outcome != "superseded" {
+	if outcome := queryString(t, d.pool, `SELECT COALESCE(outcome,'open') FROM ai_drafts WHERE id=$1`, got.ID); outcome != "open" {
 		t.Fatalf("old automatic draft outcome = %s", outcome)
 	}
 	// A person asks for a draft: the waiting automatic one stops, no call spent.
@@ -156,11 +157,20 @@ func TestAutomaticDraftsStopAtTheirLimitsAndLeaveTriageAndPeople(t *testing.T) {
 		SELECT $1,'draft',$2,true,'done',now()-g*interval '1 hour',now() FROM generate_series(1,5) g`, d.workspaceA, conversation); err != nil {
 		t.Fatal(err)
 	}
+	// The fifth was written and nobody used it yet.
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_drafts(workspace_id,conversation_id,status,automatic,text,ready_at,reply_needed)
+		VALUES ($1,$2,'ready',true,'Hi Lin, the fifth.',now(),true)`, d.workspaceA, conversation); err != nil {
+		t.Fatal(err)
+	}
 	d.customerWrites(t, d.workspaceA, conversation, "Hello again.", nil)
 	d.due(t, conversation)
 	d.run(t)
 	if code := queryString(t, d.pool, `SELECT error_code FROM ai_tasks WHERE conversation_id=$1 AND kind='draft' AND automatic ORDER BY created_at DESC LIMIT 1`, conversation); code != "conversation_cap" {
 		t.Fatalf("sixth automatic draft = %s", code)
+	}
+	// The draft the team had stays usable: a new one replaces it only once written.
+	if got := queryString(t, d.pool, `SELECT status||'/'||COALESCE(outcome,'-') FROM ai_drafts WHERE conversation_id=$1 AND text='Hi Lin, the fifth.'`, conversation); got != "ready/-" {
+		t.Fatalf("the fifth draft after the sixth message = %s", got)
 	}
 	// A person still gets one.
 	d.fake.Script(draftAnswer("Hi Lin.", nil, ""))
@@ -217,8 +227,33 @@ func TestAnAutomaticDraftOvertakenWhileWrittenIsNotShown(t *testing.T) {
 	d.fake.Script(draftAnswer("Hi Lin, about both.", nil, ""))
 	d.due(t, newer)
 	d.run(t)
-	if got := queryString(t, d.pool, `SELECT string_agg(status||'/'||COALESCE(outcome,'-'),',' ORDER BY created_at) FROM ai_drafts WHERE conversation_id=$1 AND automatic`, newer); got != "ready/superseded,ready/-" {
+	if got := queryString(t, d.pool, `SELECT string_agg(status||'/'||COALESCE(outcome,'-'),',' ORDER BY created_at) FROM ai_drafts WHERE conversation_id=$1 AND automatic`, newer); got != "cancelled/-,ready/-" {
 		t.Fatalf("automatic drafts after a newer message = %s", got)
+	}
+
+	// A slow call finishes after the newer draft was written: the older draft stays out of sight.
+	slow := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Slow"})
+	d.customerWrites(t, d.workspaceA, slow, "Printer jam?", nil)
+	d.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		d.fake.Answer = nil
+		d.customerWrites(t, d.workspaceA, slow, "And the scanner too.", nil)
+		d.fake.Script(draftAnswer("Hi Lin, about both.", nil, ""))
+		d.due(t, slow)
+		if err := d.worker.Tick(context.Background()); err != nil {
+			t.Error(err)
+		}
+		for range 100 {
+			if queryString(t, d.pool, `SELECT count(*)::text FROM ai_drafts WHERE conversation_id=$1 AND status='ready'`, slow) == "1" {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		return draftAnswer("Hi Lin, about the printer.", nil, "").Response, nil
+	}
+	d.due(t, slow)
+	d.run(t)
+	if got := queryString(t, d.pool, `SELECT string_agg(status||'/'||COALESCE(outcome,'-')||'/'||COALESCE(text,''),',' ORDER BY created_at) FROM ai_drafts WHERE conversation_id=$1 AND automatic`, slow); got != "cancelled/-/,ready/-/Hi Lin, about both." {
+		t.Fatalf("automatic drafts after a slow call = %s", got)
 	}
 
 	retried := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Retried"})

@@ -36,6 +36,10 @@ const text = {
   failed: 'The automatic draft failed:',
   failedWhy: (code: string | null) => failures[code ?? ''] ?? 'the AI provider did not answer.',
   failedNext: ' Reply yourself, or use Draft with AI.',
+  tryAgain: 'Try again',
+  dismiss: 'Dismiss',
+  used: 'In your reply box. Edit it there, then send it.',
+  missing: 'Not found by AI:',
   customer: 'the customer',
 };
 
@@ -61,6 +65,8 @@ interface AutoDraftCardProps {
   // Changes when a new customer message arrives, so the card asks again.
   latestCustomerMessage?: string;
   onUse: (draftText: string, use: DraftUse, draftId: string, warnings: string[]) => void;
+  // Opens Draft with AI, where the draft Try again asks for is written.
+  onTryAgain?: () => void;
 }
 
 function nextUTCMidnight(at: string) {
@@ -76,7 +82,7 @@ function nextUTCMonth(at: string) {
 // AutoDraftCard is the draft AI wrote by itself for the customer's newest message, above the reply box
 // for everyone on the team. It never goes into the box by itself and is never sent: a person uses it,
 // below their text or in its place, or discards it.
-export function AutoDraftCard({ conversationId, customerName, timezone, hasText, canManage = false, latestCustomerMessage, onUse }: AutoDraftCardProps) {
+export function AutoDraftCard({ conversationId, customerName, timezone, hasText, canManage = false, latestCustomerMessage, onUse, onTryAgain }: AutoDraftCardProps) {
   const client = useQueryClient();
   const key = ['ai-drafts', conversationId];
   const list = useQuery({ queryKey: key, queryFn: () => aiDraftApi.list(conversationId),
@@ -87,24 +93,35 @@ export function AutoDraftCard({ conversationId, customerName, timezone, hasText,
   }, [latestCustomerMessage, conversationId, client]);
   const discard = useMutation({ mutationFn: (draft: AIDraft) => aiDraftApi.discard(conversationId, draft.id),
     onSuccess: () => void client.invalidateQueries({ queryKey: key }) });
+  // Try again asks for a draft as a person would (Draft with AI shows it); a failure can be put away.
+  const again = useMutation({ mutationFn: () => aiDraftApi.create(conversationId, ''),
+    onSuccess: () => { void client.invalidateQueries({ queryKey: key }); onTryAgain?.(); } });
+  const [hidden, setHidden] = useState<string[]>([]);
   const automatic = (list.data?.items ?? []).filter((item) => item.automatic);
-  const draft = automatic[0];
-  if (!draft) return null;
+  const latest = automatic[0];
+  // A ready draft nobody used stays until a newer one is written; a newer one that never is (a limit,
+  // a failure) says so above it.
+  const ready = automatic.find((item) => item.status === 'ready' && item.outcome === null && item.text);
+  if (!latest) return null;
   const who = customerName || text.customer;
-  const at = formatShortDate(draft.created_at, timezone);
-  if (writing(draft)) {
-    const replaced = automatic.find((item) => item.outcome === 'superseded');
-    return (
-      <div className="ai-auto-draft ai-auto-draft-strip" role="status">
-        <span className="ai-draft-pulse" aria-hidden="true" />
-        {replaced ? <span><b>{text.wroteAgain(who, at)}</b>{text.wroteAgainRest}</span>
-          : <span><b>{text.drafting}</b>{text.draftingTo(who, at)}<span className="ai-long">{text.draftingRest}</span></span>}
-      </div>
-    );
-  }
-  if (draft.status === 'failed' || draft.status === 'cancelled') {
+  const card = ready && <ReadyAutoDraft key={ready.id} draft={ready} title={text.draftFor(who, formatShortDate(ready.created_at, timezone))} hasText={hasText}
+    busy={discard.isPending} onDiscard={() => discard.mutate(ready)} onUse={(how) => onUse(ready.text ?? '', how, ready.id, ready.warnings.map((warning) => warning.value))} />;
+  if (latest === ready || hidden.includes(latest.id)) return card || null;
+  return <>{notice(latest)}{card}</>;
+
+  function notice(draft: AIDraft) {
+    const at = formatShortDate(draft.created_at, timezone);
+    if (writing(draft)) {
+      return (
+        <div className="ai-auto-draft ai-auto-draft-strip" role="status">
+          <span className="ai-draft-pulse" aria-hidden="true" />
+          {ready ? <span><b>{text.wroteAgain(who, at)}</b>{text.wroteAgainRest}</span>
+            : <span><b>{text.drafting}</b>{text.draftingTo(who, at)}<span className="ai-long">{text.draftingRest}</span></span>}
+        </div>
+      );
+    }
     const code = draft.error_code;
-    if (code === null || quiet.includes(code)) return null;
+    if ((draft.status !== 'failed' && draft.status !== 'cancelled') || code === null || quiet.includes(code)) return null;
     if (code === 'draft_limit' || code === 'automatic_limit') {
       return <div className="ai-auto-draft ai-auto-draft-strip note" role="status"><span><b>{text.pausedDay(formatDate(nextUTCMidnight(draft.created_at), timezone))}</b>{text.pausedDayRest}</span></div>;
     }
@@ -117,19 +134,26 @@ export function AutoDraftCard({ conversationId, customerName, timezone, hasText,
     return (
       <div className="ai-auto-draft ai-auto-draft-strip danger" role="alert">
         <span><b>{text.failed}</b> {text.failedWhy(code)}{text.failedNext}</span>
-        <span className="ai-auto-draft-acts"><SettingsWay code={code} canManage={canManage} /></span>
+        <span className="ai-auto-draft-acts"><SettingsWay code={code} canManage={canManage} />
+          <button type="button" disabled={again.isPending} onClick={() => { setHidden((list) => [...list, draft.id]); again.mutate(); }}>{text.tryAgain}</button>
+          <button type="button" className="ghost" onClick={() => setHidden((list) => [...list, draft.id])}>{text.dismiss}</button></span>
       </div>
     );
   }
-  if (draft.status !== 'ready' || draft.outcome !== null || !draft.text) return null;
-  return <ReadyAutoDraft key={draft.id} draft={draft} title={text.draftFor(who, at)} hasText={hasText} busy={discard.isPending}
-    onDiscard={() => discard.mutate(draft)} onUse={(how) => onUse(draft.text ?? '', how, draft.id, draft.warnings.map((warning) => warning.value))} />;
+}
+
+// After a person puts it in the reply box, the card says so instead of offering it again.
+function UsedNote() {
+  return <div className="ai-auto-draft ai-auto-draft-strip" role="status"><span className="ai-chip" aria-hidden="true">AI</span><span>{text.used}</span></div>;
 }
 
 function ReadyAutoDraft({ draft, title, hasText, busy, onDiscard, onUse }: { draft: AIDraft; title: string; hasText: boolean; busy: boolean;
   onDiscard: () => void; onUse: (how: DraftUse) => void }) {
   // A draft the model thinks needs no reply starts folded; Show draft opens it.
   const [shown, setShown] = useState(draft.reply_needed !== false);
+  const [used, setUsed] = useState(false);
+  if (used) return <UsedNote />;
+  const use = (how: DraftUse) => { setUsed(true); onUse(how); };
   if (!shown) {
     return (
       <section className="ai-auto-draft ai-auto-draft-strip" aria-label={text.label}>
@@ -145,13 +169,14 @@ function ReadyAutoDraft({ draft, title, hasText, busy, onDiscard, onUse }: { dra
         <span className="muted-copy">{hasText ? text.overText : text.team}</span></div>
       {draft.warnings.length > 0 && <p className="ai-draft-check" role="alert">{draft.warnings.map((warning) => warning.value).join(', ')}</p>}
       <p className="ai-auto-draft-text" tabIndex={0}>{draft.text}</p>
+      {draft.missing_info && <p className="ai-draft-missing"><strong>{text.missing}</strong> {draft.missing_info}</p>}
       <AISources sources={draft.sources} />
       <div className="ai-auto-draft-row">
         <span className="muted-copy ai-long">{text.neverSends}</span>
         <button type="button" className="ghost" disabled={busy} onClick={onDiscard}>{text.discard}</button>
-        {hasText ? <><button type="button" onClick={() => onUse('below')}>{text.insertBelow}</button>
-          <button type="button" className="primary-action" onClick={() => onUse('replace')}>{text.replace}</button></>
-          : <button type="button" className="primary-action" onClick={() => onUse('replace')}>{text.useDraft}</button>}
+        {hasText ? <><button type="button" onClick={() => use('below')}>{text.insertBelow}</button>
+          <button type="button" className="primary-action" onClick={() => use('replace')}>{text.replace}</button></>
+          : <button type="button" className="primary-action" onClick={() => use('replace')}>{text.useDraft}</button>}
       </div>
     </section>
   );

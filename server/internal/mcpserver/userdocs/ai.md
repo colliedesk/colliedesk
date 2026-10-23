@@ -110,7 +110,8 @@ Each new customer message (by email, the web form or a problem report) then gets
 minute for more messages from the customer, so several in a row get one draft, which answers them
 all. Imported tickets, auto-replies, bounces and mail that fails its sender check get none, and
 neither does a message a teammate has answered by the time the draft would be written. A newer
-customer message replaces a draft nobody used; a person who asks for a draft with **Draft with AI**
+customer message replaces a draft nobody used once its new draft is written (until then, and if a
+limit stops the new one, the earlier draft stays); a person who asks for a draft with **Draft with AI**
 replaces the automatic one.
 
 The draft waits above the reply box for everyone on the team, with its sources: **Use draft** puts it
