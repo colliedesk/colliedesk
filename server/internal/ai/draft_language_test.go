@@ -30,7 +30,7 @@ func TestFillPlaceholdersNamesThisCustomerOrNobody(t *testing.T) {
 	for _, c := range []struct{ reply, name, want string }{
 		{"Chào chị [customer],", "Kiều Thị Dung", "Chào chị Kiều Thị Dung,"},
 		{"Chào chị [customer],", "", "Chào chị,"},
-		{"[customer], hello", "", ", hello"},
+		{"[customer], xin chào", "", "xin chào"},
 		{"Hi [company] team", "Ada", "Hi [company] team"},
 	} {
 		if got := fillPlaceholders(c.reply, c.name); got != c.want {

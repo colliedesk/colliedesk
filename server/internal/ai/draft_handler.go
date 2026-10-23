@@ -255,7 +255,7 @@ func fillPlaceholders(reply, contactName string) string {
 			return strings.TrimSuffix(match, "[customer]") + name
 		})
 	}
-	return strings.TrimSpace(customerPlaceholder.ReplaceAllString(reply, ""))
+	return strings.TrimLeft(strings.TrimSpace(customerPlaceholder.ReplaceAllString(reply, "")), ",;: ")
 }
 
 // draftWarnings lists what the draft says that the conversation does not: an email address, a number
