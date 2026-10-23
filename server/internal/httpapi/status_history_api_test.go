@@ -88,3 +88,41 @@ func TestEveryWayAStatusChangesIsRecordedWithWhoChangedIt(t *testing.T) {
 		t.Fatalf("exported change = %v", firstChange)
 	}
 }
+
+// Changes are in the order they happened, also several in one transaction: the time is when the
+// status changed, not when the transaction began.
+func TestStatusChangesKeepTheOrderTheyHappenedIn(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Order Desk", "admin@order.example.com")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Fay", "email": "fay@customer.example"})
+	conversationID := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Order"})
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []string{"resolved", "open", "closed", "pending"} {
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=$2 WHERE id=$1`, conversationID, status); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := pool.Query(ctx, `SELECT to_status FROM conversation_status_changes WHERE conversation_id=$1 ORDER BY changed_at,id`, conversationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, status)
+	}
+	rows.Close()
+	if strings.Join(got, ",") != "resolved,open,closed,pending" {
+		t.Fatalf("history order = %v", got)
+	}
+}

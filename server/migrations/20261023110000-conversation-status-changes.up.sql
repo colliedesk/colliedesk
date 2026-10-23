@@ -15,7 +15,7 @@ CREATE TABLE conversation_status_changes (
     conversation_id uuid NOT NULL,
     from_status text NOT NULL,
     to_status text NOT NULL,
-    changed_at timestamptz NOT NULL DEFAULT now(),
+    changed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     actor_agent_id uuid,
     source text NOT NULL DEFAULT 'colliedesk' CHECK (source IN ('colliedesk', 'import')),
     PRIMARY KEY (workspace_id, id),
@@ -35,8 +35,11 @@ ALTER TABLE workspaces ADD COLUMN status_history_since timestamptz NOT NULL DEFA
 
 CREATE FUNCTION conversation_status_changes_record() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    INSERT INTO conversation_status_changes(workspace_id, conversation_id, from_status, to_status, actor_agent_id, source)
-        VALUES (NEW.workspace_id, NEW.id, OLD.status, NEW.status,
+    -- clock_timestamp(), not now(): now() is when the transaction began, so a change committed after
+    -- another (a customer reply whose transaction started first, or several changes in one transaction)
+    -- would sort before it.
+    INSERT INTO conversation_status_changes(workspace_id, conversation_id, from_status, to_status, changed_at, actor_agent_id, source)
+        VALUES (NEW.workspace_id, NEW.id, OLD.status, NEW.status, clock_timestamp(),
                 NULLIF(current_setting('app.actor_agent_id', true), '')::uuid,
                 COALESCE(NULLIF(current_setting('app.status_source', true), ''), 'colliedesk'));
     RETURN NULL;
