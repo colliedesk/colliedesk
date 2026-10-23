@@ -64,6 +64,32 @@ class Shards(unittest.TestCase):
         self.assertEqual(run('go-test-shard.py', '1', '2', '--parts', '1', stdin=listing).stdout.strip(), whole)
         self.assertNotEqual(run('go-test-shard.py', '1', '2', '--parts', '0', stdin=listing).returncode, 0)
 
+    def test_latency_fixtures_split_over_their_own_runners_with_the_kb_seed_on_one(self):
+        latency = ['TestHelpCenterPagesLatencyBudget', 'TestKnowledgeBaseSearchLatencyBudget',
+                   'TestKBMediaLibraryLatencyBudget', 'TestInboxListLatencyBudget',
+                   'TestStorageUsageStaysFastWithAHugeAttachmentTable', 'TestTrialCapStaysFast']
+        listing = self.listing + 'TestDelta\n' + '\n'.join(latency) + '\n'
+        shards = []
+        for shard in range(1, 5):
+            result = run('go-test-shard.py', str(shard), '4', '--latency-shards', '2', '--parts', '3', stdin=listing)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            shards.append(result.stdout.split())
+        for name in ['TestAlpha', 'TestBeta', 'TestGamma', 'TestDelta', 'FuzzBytes', 'ExampleClient'] + latency:
+            hits = [i for i, patterns in enumerate(shards) if any(re.search(p, name) for p in patterns)]
+            self.assertEqual(len(hits), 1, name)
+            self.assertEqual(hits[0] >= 2, name in latency, name)
+        # One process on each latency runner, so a gate never measures beside another test binary
+        # of its own shard; the tests that build the shared knowledge-base seed stay together.
+        self.assertEqual([len(patterns) for patterns in shards[2:]], [1, 1])
+        for name in latency[:3]:
+            self.assertRegex(name, shards[2][0])
+        for name in latency[3:]:
+            self.assertRegex(name, shards[3][0])
+
+    def test_latency_shards_leave_at_least_one_regular_shard(self):
+        for args in (('1', '2', '--latency-shards', '2'), ('1', '3', '--latency-shards', '0')):
+            self.assertNotEqual(run('go-test-shard.py', *args, stdin=self.listing).returncode, 0, args)
+
     def test_empty_inventory_and_invalid_shards_fail_closed(self):
         for args, listing in [(('0', '3'), self.listing), (('4', '3'), self.listing),
                               (('1', '0'), self.listing), (('1', '3'), '? pkg [no test files]')]:
@@ -268,6 +294,47 @@ class PublishEdge(unittest.TestCase):
         self.assertIn('ci-budget.py --phase cd', workflow)
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertIsNone(re.search(r'^  publish-edge:', ci, re.M), 'ci.yml still defines publish-edge')
+
+class GoBuildCache(unittest.TestCase):
+    """actions/cache tries every key on the pull request's own ref before main's. CodeQL's setup-go
+    saves a build-only setup-go-* entry on that ref, so a restore key matching it shadowed main's
+    entry with the test builds, and every Go shard compiled the tests again (24 to 42 seconds)."""
+
+    def test_go_jobs_restore_only_entries_main_saves(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        saved = re.findall(r'uses: actions/cache/save@\S+.*?\n\s+key: (.+?)\$\{\{ github\.sha \}\}', workflow, re.S)
+        self.assertTrue(saved)
+        main_prefix = saved[0].split('${{')[0]
+        restores = re.findall(r'restore-keys: \|\n((?:\s{12}\S.*\n)+)', workflow)
+        self.assertEqual(len(restores), 3, 'the go, e2e and onboarding jobs restore the Go cache')
+        for block in restores:
+            for key in (line.strip() for line in block.splitlines()):
+                self.assertTrue(key.startswith(main_prefix), f'{key} can match an entry a pull request saved')
+
+    def test_only_a_push_saves_the_go_build_cache(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        saves = re.findall(r'^      - (.*)\n(?:        .*\n)*?        uses: actions/cache/save@', workflow, re.M)
+        self.assertTrue(saves)
+        for condition in saves:
+            self.assertRegex(condition, r"^if: github\.event_name == 'push'", condition)
+        # setup-go saves its own cache unless told not to: only CodeQL, whose setup-go- entries the Go
+        # jobs never restore, may leave it on.
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            for name, body in workflow_jobs(path):
+                text = '\n'.join(body)
+                for step in re.findall(r'uses: actions/setup-go@\S+.*?(?=\n      - |\Z)', text, re.S):
+                    if path.name != 'codeql.yml':
+                        self.assertIn('cache: false', step, f'{path.name} {name}')
+
+
+class BundleBudget(unittest.TestCase):
+    def test_e2e_checks_the_bundle_it_built(self):
+        e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
+        build = e2e.find('corepack pnpm exec vite build')
+        check = e2e.find('corepack pnpm bundle:check')
+        self.assertGreaterEqual(build, 0)
+        self.assertGreater(check, build, 'bundle:check must run after the Vite build of the same job')
+
 
 class PackageManager(unittest.TestCase):
     def test_workflows_run_pnpm_through_corepack_only(self):
