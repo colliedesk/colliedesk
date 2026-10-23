@@ -55,7 +55,8 @@ work every number out by hand. Decisions behind them (agreed in the #100 design 
 
 ## Snapshots and the worker
 
-The page never computes: `results.Worker` (started by `serve`, every five minutes) leases due
+The page never computes: `results.Worker` (started by `serve`, every 15 seconds, so a finished import's
+baseline shows within seconds; a look that finds nothing due is one small query) leases due
 workspaces through `PrivilegeResultsClaim` (`results_state.claimed_until`, so two servers never compute
 one at once) and computes each in its own workspace transaction with a 30-second statement timeout.
 Due means: the baseline is dirty, never computed, or an hour old; an hour-old workspace whose inputs
@@ -98,4 +99,5 @@ session returns.
 | Creating a link is `approvalRequired` for every token, and its answer is withheld from the token (`withheldResults`) | Data leaves sign-in: a person approves, and only that person sees the link |
 | The weekly email is claimed per workspace week (`results_state.weekly_sent_week`, the Monday 00:00 of the workspace's timezone as an instant) before sending; a failure is logged, not retried | Two servers never send it twice; comparing instants (not local dates) survives a timezone change mid-week |
 | A workspace seen for the first time starts with the next Monday | Otherwise every new workspace would get an email the moment the worker first saw it |
+| The worker looks for a due weekly email every 5 minutes, not on every 15-second look | 8:00 is met within minutes; listing every workspace's timezone four times a minute would buy nothing |
 | It is plain text with `List-Unsubscribe` pointing at the page's switch, sent from the platform address like import notices, only when SMTP and `MAIL_FROM_DOMAIN` are set | Same system mail as the rest of the server; self-hosted servers work the same |

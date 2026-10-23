@@ -19,11 +19,14 @@ type Worker struct {
 	Every time.Duration
 	Batch int
 	mail  *Mail
+	// weeklyAt is when the weekly email was last looked at; it is looked at every few minutes.
+	weeklyAt time.Time
 }
 
-// NewWorker returns a worker that looks every five minutes.
+// NewWorker returns a worker that looks every 15 seconds: a look that finds nothing due is one small
+// query, and a finished import's baseline then shows within seconds, not minutes.
 func NewWorker(db *database.DB) *Worker {
-	return &Worker{db: db, now: time.Now, Every: 5 * time.Minute, Batch: 20}
+	return &Worker{db: db, now: time.Now, Every: 15 * time.Second, Batch: 20}
 }
 
 // Run computes due workspaces until ctx ends.
@@ -45,6 +48,9 @@ func (w *Worker) Run(ctx context.Context) {
 // lease is how long a claimed workspace stays with one server; a failed one waits as long.
 const lease = 10 * time.Minute
 
+// weeklyLook is how often the worker looks for a weekly email that is due.
+const weeklyLook = 5 * time.Minute
+
 // RunOnce computes every due workspace, a batch at a time; it returns how many it computed.
 func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 	computed := 0
@@ -55,8 +61,13 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 			return computed, err
 		}
 		if claimed < w.Batch {
-			// The weekly email reads the numbers just computed.
-			return computed, w.sendWeekly(ctx, w.now().UTC())
+			// The weekly email reads the numbers just computed; looking every 5 minutes is enough for 8:00.
+			now := w.now().UTC()
+			if now.Sub(w.weeklyAt) < weeklyLook && !w.weeklyAt.After(now) {
+				return computed, nil
+			}
+			w.weeklyAt = now
+			return computed, w.sendWeekly(ctx, now)
 		}
 	}
 }
