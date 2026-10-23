@@ -8,15 +8,16 @@ import (
 
 type storedStats struct {
 	present                          bool
+	status                           string
 	resolved, firstResponded, closed *time.Time
 }
 
 func (e *importEnv) ticketStats(t *testing.T, freshdeskID string) storedStats {
 	t.Helper()
 	var stats storedStats
-	if err := e.pool.QueryRow(context.Background(), `SELECT origin ? 'stats',(origin->'stats'->>'resolved_at')::timestamptz,
+	if err := e.pool.QueryRow(context.Background(), `SELECT origin ? 'stats',COALESCE(origin->'stats'->>'status',''),(origin->'stats'->>'resolved_at')::timestamptz,
 		(origin->'stats'->>'first_responded_at')::timestamptz,(origin->'stats'->>'closed_at')::timestamptz
-		FROM conversations WHERE id=$1`, e.target(t, "ticket", freshdeskID)).Scan(&stats.present, &stats.resolved, &stats.firstResponded, &stats.closed); err != nil {
+		FROM conversations WHERE id=$1`, e.target(t, "ticket", freshdeskID)).Scan(&stats.present, &stats.status, &stats.resolved, &stats.firstResponded, &stats.closed); err != nil {
 		t.Fatal(err)
 	}
 	return stats
@@ -41,10 +42,10 @@ func TestTicketStatsAreReadOnceAndOnlyFilledLater(t *testing.T) {
 	}
 	env.mustRun(t)
 	two := env.ticketStats(t, "2")
-	if !two.present || two.resolved == nil || !two.resolved.Equal(at("2025-02-02T09:00:00Z")) || !two.firstResponded.Equal(at("2025-02-01T11:00:00Z")) || two.closed != nil {
+	if !two.present || two.status != "resolved" || two.resolved == nil || !two.resolved.Equal(at("2025-02-02T09:00:00Z")) || !two.firstResponded.Equal(at("2025-02-01T11:00:00Z")) || two.closed != nil {
 		t.Fatalf("ticket 2 stats = %+v", two)
 	}
-	if one := env.ticketStats(t, "1"); !one.present || one.resolved != nil || one.firstResponded != nil || one.closed != nil {
+	if one := env.ticketStats(t, "1"); !one.present || one.status != "open" || one.resolved != nil || one.firstResponded != nil || one.closed != nil {
 		t.Fatalf("ticket 1 stats = %+v, want read with every value null", one)
 	}
 	if archived := env.ticketStats(t, "3"); archived.present {

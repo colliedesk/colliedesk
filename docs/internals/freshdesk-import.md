@@ -186,7 +186,9 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
 - **Downloads are never rendered inline.** `GET /api/v1/attachments/{id}` answers
   `application/octet-stream`, `Content-Disposition: attachment` (RFC 5987 `filename*`) and
   `nosniff`, and refuses a row whose storage key belongs to another workspace.
-- **Ticket stats are read once.** The first `stats` read for a ticket stay in `origin.stats`: the
+- **Ticket stats are read once**, with the ticket's status at that moment (`origin.stats.status`):
+  Freshdesk does not document whether `resolved_at` is cleared on a reopen, so the baseline counts a
+  resolve time only while the ticket was still resolved or closed. The first `stats` read for a ticket stay in `origin.stats`: the
   re-run `UPDATE` keeps them (`origin = $new || {stats: old}`), and a ticket the run skips as
   unchanged gets them only when it has none (an import that predates them), in batches of 500,
   without touching `updated_at`. A later value is newer Freshdesk work (a reopen and resolve after

@@ -155,6 +155,9 @@ type ConversationOrigin struct {
 // OriginStats are a source ticket's own timestamps (Freshdesk include=stats). The results page reads
 // ResolvedAt for the imported baseline.
 type OriginStats struct {
+	// Status is the ticket's status (mapped to Colliedesk's) when these were read: a resolve time
+	// counts for the baseline only while the ticket was still resolved or closed.
+	Status           string     `json:"status"`
 	ResolvedAt       *time.Time `json:"resolved_at"`
 	FirstRespondedAt *time.Time `json:"first_responded_at"`
 	ClosedAt         *time.Time `json:"closed_at"`

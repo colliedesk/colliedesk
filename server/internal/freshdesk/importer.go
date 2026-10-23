@@ -23,8 +23,10 @@ type ticketRef struct {
 	id        int64
 	updatedAt time.Time
 	archived  bool
-	// stats are the ticket stats the list returned; nil for an archived ticket.
-	stats *fdStats
+	// stats are the ticket stats the list returned, and status the listed status; stats is nil for
+	// an archived ticket.
+	stats  *fdStats
+	status int
 }
 
 type run struct {

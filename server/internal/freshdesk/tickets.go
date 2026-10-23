@@ -29,7 +29,7 @@ func (r *run) importTicket(ctx context.Context, ref ticketRef) error {
 	}
 	if found && entry.Status == ledgerDone && entry.SourceUpdatedAt != nil && !ref.updatedAt.After(*entry.SourceUpdatedAt) {
 		if ref.stats != nil && entry.TargetID != nil {
-			return r.fillStats(ctx, *entry.TargetID, ref.stats)
+			return r.fillStats(ctx, *entry.TargetID, ref.stats, ref.status)
 		}
 		return nil
 	}

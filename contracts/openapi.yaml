@@ -5669,8 +5669,12 @@ components:
             later import keeps the first values it read and only fills a ticket that has none. Missing on
             imports that predate it, on archived Freshdesk tickets and on other sources. The results page
             reads `resolved_at` for the imported baseline (docs/user/results.md).
-          required: [resolved_at, first_responded_at, closed_at]
+          required: [status, resolved_at, first_responded_at, closed_at]
           properties:
+            status:
+              type: string
+              enum: [open, pending, resolved, closed]
+              description: The ticket's status, as Colliedesk maps it, when these were read
             resolved_at: {type: [string, 'null'], format: date-time}
             first_responded_at: {type: [string, 'null'], format: date-time}
             closed_at: {type: [string, 'null'], format: date-time}

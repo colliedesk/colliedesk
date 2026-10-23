@@ -38,7 +38,7 @@ func (r *run) listTickets(ctx context.Context) error {
 			for _, ticket := range page {
 				if !seen[ticket.ID] {
 					seen[ticket.ID] = true
-					r.refs = append(r.refs, ticketRef{id: ticket.ID, updatedAt: ticket.UpdatedAt.UTC(), stats: ticket.Stats})
+					r.refs = append(r.refs, ticketRef{id: ticket.ID, updatedAt: ticket.UpdatedAt.UTC(), stats: ticket.Stats, status: ticket.Status})
 				}
 				if ticket.UpdatedAt.After(last) {
 					last = ticket.UpdatedAt.UTC()

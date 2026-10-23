@@ -12,8 +12,8 @@ const statsBatch = 500
 // fillStats queues stats for a ticket the run skips because it did not change. The stats are read
 // once: the statement fills only a conversation that has none, so a later run never moves what the
 // results baseline measured, and it never touches updated_at (the team's activity).
-func (r *run) fillStats(ctx context.Context, conversationID string, stats *fdStats) error {
-	encoded, err := json.Marshal(originStats(stats))
+func (r *run) fillStats(ctx context.Context, conversationID string, stats *fdStats, status int) error {
+	encoded, err := json.Marshal(originStats(stats, status))
 	if err != nil {
 		return fmt.Errorf("encode ticket stats: %w", err)
 	}
