@@ -69,11 +69,24 @@ type KBImage = KBMedia
 
 // KBMediaUsage counts the articles that name the media: Articles in their current text (live
 // articles, which make it "in use"), TrashedArticles in the current text of an article in the
-// trash, OlderVersions only in an older version of an article.
+// trash, OlderVersions only in an older version of an article. HelpCenter lists what the help center
+// shows it as (logo, favicon), which also makes it "in use"; it is empty, never null, otherwise.
 type KBMediaUsage struct {
-	Articles        int `json:"articles"`
-	TrashedArticles int `json:"trashed_articles"`
-	OlderVersions   int `json:"older_versions"`
+	Articles        int      `json:"articles"`
+	TrashedArticles int      `json:"trashed_articles"`
+	OlderVersions   int      `json:"older_versions"`
+	HelpCenter      []string `json:"help_center"`
+}
+
+// Uses of a library item by the help center, in KBMediaUsage.HelpCenter.
+const (
+	KBMediaHelpCenterLogo    = "logo"
+	KBMediaHelpCenterFavicon = "favicon"
+)
+
+// Unused is true when nothing names the item: no article, no version and not the help center.
+func (u KBMediaUsage) Unused() bool {
+	return u.Articles == 0 && u.TrashedArticles == 0 && u.OlderVersions == 0 && len(u.HelpCenter) == 0
 }
 
 // KBMediaArticle is an article that names the media, for its details.

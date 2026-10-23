@@ -112,7 +112,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_media_trash` | Moves library items to the trash by id, or all unused ones; a lower tier's request names the ids | `send` |
 | `colliedesk_kb_media_trash_list` | Lists the library's trash, with when each item is deleted for good | `read` |
 | `colliedesk_kb_media_undelete` | Takes items out of the trash, by id or a whole "move to trash" batch | `send` |
-| `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage | `admin` |
+| `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage; the help center's logo or favicon answers `in_use` and stays | `admin` |
 | `colliedesk_kb_media_replace` | Puts another image or video in place of one in every article that shows it | `send` |
 | `colliedesk_kb_media_replace_undo` | Undoes a replacement | `send` |
 | `colliedesk_kb_video_upload_start` | Starts uploading a video (MP4 or WebM, up to 200 MiB) in parts | `send` |
@@ -123,6 +123,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `send` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `send` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
+| `colliedesk_help_center_theme_get` | Shows the help center's brand (logo, links, colors, fonts) with the contrast of every color pair | `read` |
+| `colliedesk_help_center_theme_check` | Checks a brand for readable contrast without saving it, with a passing color for each that fails | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
 | `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |
@@ -151,6 +153,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_web_form_get` | Shows the web form settings | `read` |
 | `colliedesk_web_form_update` | Turns the web form on or off and sets the allowed origins | `admin` |
 | `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
+| `colliedesk_help_center_theme_update` | Sets the help center's brand; colors that are hard to read are refused | `admin` |
 | `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address or the sender name | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |

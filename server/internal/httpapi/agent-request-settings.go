@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -30,25 +29,7 @@ var settingsFields = map[string][]string{
 	"POST /api/v1/channels/email/domain-verification": {},
 	"DELETE /api/v1/auth/sessions/{id}":               {},
 	"GET /api/v1/billing":                             {},
-}
-
-// settingsBodyProblem says why body cannot be filed for a settings route: it is not a JSON object, or
-// it has a field the route does not take. It returns "" when the body may be filed.
-func settingsBodyProblem(route Route, body json.RawMessage) string {
-	allowed, ok := settingsFields[route.Method+" "+route.Pattern]
-	if !ok || len(body) == 0 {
-		return ""
-	}
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(body, &fields) != nil || fields == nil {
-		return "The body of this call must be a JSON object. Nothing was filed."
-	}
-	for _, name := range slices.Sorted(maps.Keys(fields)) {
-		if !slices.Contains(allowed, name) {
-			return "This call does not take the field " + name + ". Nothing was filed; send only the fields the route takes."
-		}
-	}
-	return ""
+	"PUT /api/v1/help-center/theme":                   themeFields,
 }
 
 // summarizeSettingsRequest is what a person reads before approving a settings change: what changes,

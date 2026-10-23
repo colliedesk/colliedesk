@@ -70,9 +70,9 @@ func (s *Store) ListKBMedia(ctx context.Context, workspaceID string, filter doma
 	}
 	switch filter.Usage {
 	case "in_use":
-		where += ` AND ` + kbMediaInUse
+		where += ` AND (` + kbMediaInUse + ` OR ` + kbMediaNamedByHelpCenter + `)`
 	case "unused":
-		where += ` AND NOT ` + kbMediaInUse
+		where += ` AND NOT ` + kbMediaInUse + ` AND NOT ` + kbMediaNamedByHelpCenter
 	case "missing_alt":
 		where += ` AND m.alt=''`
 	}
@@ -138,8 +138,9 @@ func (s *Store) ListKBMedia(ctx context.Context, workspaceID string, filter doma
 	return out, next, result.summary, nil
 }
 
-// addKBMediaUsage counts the articles that name each item and sets when the purge deletes it: an item
-// nobody kept and no article (no version either) links goes 30 days after its last upload.
+// addKBMediaUsage counts the articles that name each item, says what the help center shows it as, and
+// sets when the purge deletes it: an item nobody kept, no article (no version either) links and the
+// help center does not show goes 30 days after its last upload.
 func addKBMediaUsage(ctx context.Context, tx pgx.Tx, workspaceID string, items []StoredKBMedia) error {
 	if len(items) == 0 {
 		return nil
@@ -166,10 +167,24 @@ func addKBMediaUsage(ctx context.Context, tx pgx.Tx, workspaceID string, items [
 	}); err != nil {
 		return err
 	}
+	var logo, favicon *string
+	if err := tx.QueryRow(ctx, `SELECT logo_media_id::text, favicon_media_id::text FROM help_centers WHERE workspace_id=$1`, workspaceID).
+		Scan(&logo, &favicon); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
 	for i := range items {
 		counts := usage[items[i].ID]
+		counts.HelpCenter = []string{}
+		for _, use := range []struct {
+			id   *string
+			name string
+		}{{logo, domain.KBMediaHelpCenterLogo}, {favicon, domain.KBMediaHelpCenterFavicon}} {
+			if use.id != nil && *use.id == items[i].ID {
+				counts.HelpCenter = append(counts.HelpCenter, use.name)
+			}
+		}
 		items[i].Usage = &counts
-		if !items[i].Kept && items[i].DeletedAt == nil && counts == (domain.KBMediaUsage{}) {
+		if !items[i].Kept && items[i].DeletedAt == nil && counts.Unused() {
 			purgeAt := items[i].LastUploadedAt.Add(domain.KBTrashRetention)
 			items[i].PurgeAt = &purgeAt
 		}
