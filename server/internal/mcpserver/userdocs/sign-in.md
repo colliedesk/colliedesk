@@ -30,9 +30,12 @@ not receive or manage that Colliedesk session.
 
 ## Create a workspace (hosted cloud)
 
-New to Colliedesk Cloud? On the same sign-in page continue with email, Google or Microsoft. When the
+New to Colliedesk Cloud? Use the same sign-in form. When the
 verified email is not an agent of any workspace, the page asks you to name a workspace and starts a
 14-day free trial with you as its admin. No card is needed. See [Plan and billing](billing.md).
+The website's **Start free trial** link opens this page as `/sign-in?intent=trial`, titled
+**Start your free trial**; it is the same form, so someone who already has a workspace is
+simply signed in.
 
 The same page asks three short questions, each with a fixed list of answers: what you want
 Colliedesk to do for you first, your role, and where you heard of Colliedesk. Your first goal decides
