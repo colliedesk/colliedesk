@@ -7,8 +7,8 @@ name: Image cache
 # queue a CI job against the 120-second clock (docs/internals/performance.md, CI phase budget).
 # Every finished run writes, a red or cancelled one too: a cold image job passes its 2-minute timeout,
 # GitHub ends that run as cancelled, and skipping it kept main cold for good (runs 39893295025 and
-# 39893508473). A waiting run that a newer main push replaces ends cancelled and writes too; the
-# concurrency group below holds that to one running write and one waiting.
+# 39893508473). A waiting CI run that a newer main push replaces also ends cancelled and starts a
+# write; the concurrency group below keeps one write running and only the newest one waiting.
 on:
   workflow_run:
     workflows: [CI]
