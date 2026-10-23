@@ -47,8 +47,12 @@ test('Hide folds the draft to one line that still has its buttons; Show draft op
   show({ onUse });
   fireEvent.click(await screen.findByRole('button', { name: 'Hide' }));
   expect(screen.queryByText('Hi Jordan, I refunded INV-20932.')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Show draft' })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByRole('button', { name: 'Show draft' })).toHaveFocus();
   fireEvent.click(screen.getByRole('button', { name: 'Show draft' }));
   expect(screen.getByText('Hi Jordan, I refunded INV-20932.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Hide' })).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('button', { name: 'Hide' })).toHaveFocus();
   fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
   fireEvent.click(screen.getByRole('button', { name: 'Use draft' }));
   expect(onUse).toHaveBeenCalledWith('Hi Jordan, I refunded INV-20932.', 'replace', draft().id, []);

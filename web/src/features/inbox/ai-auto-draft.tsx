@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDate, formatShortDate } from '../../lib/format-date';
@@ -160,6 +160,15 @@ function ReadyAutoDraft({ draft, title, hasText, busy, note, onDiscard, onUse }:
   // Show draft opens it, Hide folds it again.
   const [shown, setShown] = useState(() => draft.reply_needed !== false && !shortScreen());
   const [used, setUsed] = useState(false);
+  // Show draft and Hide replace each other: focus moves to the one that took the other's place.
+  const toggled = useRef(false);
+  const showButton = useRef<HTMLButtonElement>(null);
+  const hideButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!toggled.current) return;
+    (shown ? hideButton : showButton).current?.focus();
+  }, [shown]);
+  const toggle = (open: boolean) => { toggled.current = true; setShown(open); };
   if (used) return <UsedNote />;
   const use = (how: DraftUse) => { setUsed(true); onUse(how); };
   const useButtons = hasText ? <><button type="button" onClick={() => use('below')}>{text.insertBelow}</button>
@@ -173,7 +182,7 @@ function ReadyAutoDraft({ draft, title, hasText, busy, note, onDiscard, onUse }:
         <span className="ai-chip" aria-hidden="true">AI</span>
         {noReply ? <span><b>{text.noReply}</b>{text.noReplyRest}</span> : <span><b>{title}</b></span>}
         <span className="ai-auto-draft-acts"><button type="button" className="ghost" disabled={busy} onClick={onDiscard}>{text.discard}</button>
-          <button type="button" onClick={() => setShown(true)}>{text.showDraft}</button>{!noReply && useButtons}</span>
+          <button type="button" ref={showButton} aria-expanded={false} onClick={() => toggle(true)}>{text.showDraft}</button>{!noReply && useButtons}</span>
       </section>
     );
   }
@@ -182,7 +191,7 @@ function ReadyAutoDraft({ draft, title, hasText, busy, note, onDiscard, onUse }:
       {note}
       <div className="ai-auto-draft-head"><span className="ai-chip" aria-hidden="true">AI</span><b>{title}</b>
         <span className="muted-copy">{hasText ? text.overText : text.team}</span>
-        <button type="button" className="ghost ai-auto-draft-hide" onClick={() => setShown(false)}>{text.hide}</button></div>
+        <button type="button" ref={hideButton} className="ghost ai-auto-draft-hide" aria-expanded={true} onClick={() => toggle(false)}>{text.hide}</button></div>
       {draft.warnings.length > 0 && <p className="ai-draft-check" role="alert">{draft.warnings.map((warning) => warning.value).join(', ')}</p>}
       <p className="ai-auto-draft-text" tabIndex={0}>{draft.text}</p>
       {draft.missing_info && <p className="ai-draft-missing"><strong>{text.missing}</strong> {draft.missing_info}</p>}
