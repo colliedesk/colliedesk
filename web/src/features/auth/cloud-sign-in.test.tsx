@@ -146,3 +146,15 @@ test('an identity sign-out that fails is said aloud, nothing is exchanged, and i
   expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
   expect(onSessionToken).not.toHaveBeenCalled();
 });
+
+// Clerk titles its first step with its own h1 ("Continue to Colliedesk"); the page already has one,
+// so that header is hidden. Later steps keep theirs: it carries "Check your email" and the address.
+// The card fills the panel instead of Clerk's fixed width, so a 390 px screen does not scroll sideways.
+test('the Clerk form drops its own first-step header and fits the panel width', () => {
+  clerk.signedIn = false;
+  render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} />);
+  const { appearance } = clerk.signInProps.mock.lastCall![0] as { appearance: { elements: Record<string, Record<string, unknown>> } };
+  expect(appearance.elements.card).toMatchObject({ '&.cl-signIn-start .cl-header': { display: 'none' } });
+  expect(appearance.elements.rootBox).toMatchObject({ width: '100%' });
+  expect(appearance.elements.cardBox).toMatchObject({ width: '100%', maxWidth: '100%' });
+});

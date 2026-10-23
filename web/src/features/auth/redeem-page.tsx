@@ -20,25 +20,30 @@ interface RedeemPageProps {
   buying?: string;
   // signedOut is true when the browser arrived here because its session ended.
   signedOut?: boolean;
+  // trial is true for the website's "Start free trial" link; the page then greets a new team.
+  trial?: boolean;
 }
 
 export function RedeemPage({
-  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying, signedOut = false,
+  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying, signedOut = false, trial = false,
 }: RedeemPageProps) {
   const buyer = !token && cloudEnabled && buying !== undefined;
+  // A new team can only start a trial where sign-up is on; a buy link wins, since the buyer pays at once.
+  const newTeam = !token && cloudEnabled && signupEnabled && trial && !buyer;
   return (
     <main className="redeem-page signin-split">
       <div className="signin-brand">
         <div className="signin-brand-lockup"><LogoMark size={40} /><LogoWordmark /></div>
         <p className="signin-tagline">{messages.signInTagline}</p>
+        <p className="signin-status">{messages.signInAlpha}</p>
         <p className="signin-footnote">{messages.signInFootnote}</p>
       </div>
       <section className="redeem-panel">
         <div className="brand-lockup"><LogoMark size={36} /><span>{messages.brand}</span></div>
         {signedOut && <p role="alert" className="muted-copy">{messages.signedOutCloud}</p>}
         {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
-        <h1>{buyer ? messages.buyingTitle(buying) : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
-        <p>{buyer ? messages.buyingExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
+        <h1>{buyer ? messages.buyingTitle(buying) : newTeam ? messages.cloudTrialTitle : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
+        <p>{buyer ? messages.buyingExplanation : newTeam ? messages.cloudTrialExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
         {!token && cloudEnabled && <div className="cloud-sign-in">
           {workspaces.length > 0 ? <>
@@ -48,8 +53,9 @@ export function RedeemPage({
                 onClick={() => onSelectWorkspace?.(workspace.slug)} disabled={pending}>{workspace.name}</button>)}
             </div>
           </> : cloudSignIn}
-          {!buyer && signupEnabled && workspaces.length === 0 && <p className="muted-copy">{messages.cloudNewHere}</p>}
-          {!buyer && <p className="muted-copy">{messages.oneTimeLinkInstead}</p>}
+          {newTeam && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialSignInInstead}</p>}
+          {!buyer && !newTeam && signupEnabled && workspaces.length === 0 && <p className="muted-copy">{messages.cloudNewHere}</p>}
+          {!buyer && !newTeam && <p className="muted-copy">{messages.oneTimeLinkInstead}</p>}
         </div>}
         {failed && workspaces.length === 0 && <p role="alert" className="error-copy">
           {token ? (planLimited ? messages.linkPlanLimited : messages.invalidLink) : messages.cloudSignInFailed}

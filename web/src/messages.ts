@@ -15,7 +15,9 @@ export const messages = {
   helpCenter: 'Help center',
   helpCenterDescription: 'The public pages of your published knowledge base articles.',
   workspaceTimezone: 'Workspace timezone',
-  signInTagline: 'The open-source helpdesk. One shared inbox for every customer email, reply and private note.',
+  signInTagline: 'The open-source helpdesk for small support teams leaving Freshdesk.',
+  // Colliedesk as a whole is alpha (owner decision); the sign-in page says so plainly.
+  signInAlpha: 'Colliedesk is alpha: any release may still change the interface.',
   signInFootnote: 'AGPL-3.0 · Self-host or Colliedesk Cloud',
   openSecureLink: 'Open your secure link',
   redeemExplanation: 'Colliedesk uses one-time links instead of passwords.',
@@ -23,6 +25,10 @@ export const messages = {
   oneTimeLinkInstead: 'Got a one-time link from your admin? Open it in this browser instead.',
   cloudSignInTitle: 'Sign in to Colliedesk',
   cloudSignInExplanation: 'Enter your work email and we will send you a one-time code.',
+  // The website's "Start free trial" link (`intent=trial`): the same form, titled for a new team.
+  cloudTrialTitle: 'Start your free trial',
+  cloudTrialExplanation: '14 days, no card needed. Enter your work email and we will send you a one-time code. Then you name your workspace and the trial starts.',
+  cloudTrialSignInInstead: 'Already have a workspace? The same form signs you in.',
   chooseWorkspace: 'Choose a workspace',
   loadingCloudSignIn: 'Loading sign in…',
   cloudSigningIn: 'Signing in…',
@@ -380,7 +386,8 @@ export const messages = {
   exportForbidden: 'Only workspace admins can export all data.',
   exportLinkInvalid: 'This download link was already used or has expired. Start the export again.',
   exportFailed: 'The export could not be started. Try again.',
-  cloudNewHere: 'New to Colliedesk Cloud? Continue with email, Google or Microsoft to start a 14-day free trial. No card needed.',
+  // The identity methods are switched on in the identity provider, not here, so no provider is named.
+  cloudNewHere: 'New to Colliedesk Cloud? Use the same form to start a 14-day free trial. No card needed.',
   signupHeading: 'Create your workspace',
   signupExplanation: 'No workspace uses this email yet. Name your team\'s workspace to start a 14-day free trial. No card needed.',
   workspaceName: 'Workspace name',
