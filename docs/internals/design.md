@@ -1,8 +1,9 @@
 # Web app design
 
-Decisions behind the look of `web/`. The brand is **ink and paper** (owner decision 19/10/2026, replacing
-Blue Merle): neutral grey surfaces, ink for text and the primary action, and colour only where it carries
-meaning (status, focus, private notes; on colliedesk.com also the price), plus the logo's orange tile. Light is the default theme and
+Decisions behind the look of `web/`. The brand is **ink, paper and one orange** (ink and paper: owner
+decision 19/10/2026, replacing Blue Merle; the orange: 24/10/2026): neutral grey surfaces, ink for text and
+the primary action, one orange (`#c2410c`, the coat of a sable collie) for Colliedesk itself, and colour
+elsewhere only where it carries meaning (status, focus, private notes). Light is the default theme and
 dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
 
 ## Brand guideline
@@ -13,12 +14,17 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 1. **Paper and ink.** Surfaces, lines and text are neutral grey with no hue; the primary action is ink
    (`#171717` light, `#fafafa` dark). `web/scripts/check-contrast.test.mjs` fails when a grey, a text
    token or the primary action carries a hue.
-2. **Colour means something.** Status (open blue, pending amber, resolved green, urgent red, high orange),
-   focus (amber) and private notes (amber) keep their colours; nothing else is coloured. Amber means focus,
+2. **One orange, and colour means something.** The orange is Colliedesk's own: the logo tile, and on
+   colliedesk.com the price (the promise). It is never a button, link, chip, badge or warning, so it stays
+   rare enough to remember; the primary action stays ink, which reads calm and trustworthy.
+   `web/scripts/brand-rules.test.mjs` fails when any app file other than the tokens and the mark names it.
+   Status (open blue, pending amber, resolved green, urgent red) and the high priority chip (dark neutral
+   with an up arrow; the warning orange sat 8° of hue from the brand and made a High ticket look like the
+   logo), focus (amber) and private notes (amber) keep their colours; nothing else is coloured. Amber means focus,
    private notes and the pending status, and nothing else: a warning uses `--warn` / `--warn-soft` (or a
-   neutral card with a `--warn` icon), never the note colours. `web/scripts/brand-rules.test.mjs` checks it. On the site the
-   price has its own colour (`--price`, orange) and nothing else does, except the logo tile (`--logo-tile`,
-   the same orange, see Logo).
+   neutral card with a `--warn` icon), never the note colours. `web/scripts/brand-rules.test.mjs` checks it. In dark mode the
+   logo tile keeps `#c2410c` (the mark never changes), while the price text on the site lightens to
+   `#fb8a4a` so it reads on near-black (8.3:1).
 3. **Serif for titles only.** IBM Plex Serif 500 (`--font-display`) sets page titles (Inbox, Settings,
    Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Every control, label and
    body line stays IBM Plex Sans. One Plex skeleton for serif, sans and mono (owner 22/10/2026): it
@@ -101,7 +107,7 @@ the Clerk form.) Do not create a second palette.
 | Text | `--text-1` primary, `--text-2` secondary, `--text-3` meta and labels, `--text-inverse` on the tooltip | `--text-3` is the lowest text tone. |
 | Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile` (orange `#c2410c`, the one brand hue), `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on ink `#171717`. Dark: near-black on `#fafafa`. `--accent-text` is ink; inline links are underlined. |
 | Focus and note | `--focus`, `--focus-ring`, `--note-bg`, `--note-line`, `--note-text` | Amber means focus, private notes and the pending status (`--pending`), and nothing else. Warnings use `--warn`. |
-| Status | `--danger`, `--warn`, `--ok`, `--open`, `--pending` and `*-soft` backgrounds | A dot or icon plus a word. Never colour alone. `--warn` also marks a warning (unverified sender, help center off). |
+| Status | `--danger`, `--warn`, `--ok`, `--open`, `--pending` and `*-soft` backgrounds | A dot or icon plus a word. Never colour alone. `--warn` marks a warning (unverified sender, help center off, SLA under 2 h), never a priority: High is a dark neutral chip (`--text-2` with `--surface-1` text) and its arrow. |
 | Avatars | `--avatar-lightness`, `--avatar-chroma`, `--avatar-text-lightness`, `--avatar-text-chroma` with a per-person `--avatar-hue` | See Rules: the hue tells people apart, low chroma, never on status. |
 | Shape | `--radius` 6 px controls, `--radius-lg` 10 px panels, cards, composer, `--radius-sm` 4 px chips and keycaps, `--radius-full` avatars and tag chips | |
 | Space | `--space-1` to `--space-24` on a 4 px grid, `--touch` 44 px | Touch targets are at least `--touch`. |

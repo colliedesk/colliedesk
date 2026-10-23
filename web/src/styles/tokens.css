@@ -155,7 +155,7 @@
   /* Status: a dot plus a word, never colour alone */
   --danger: #f2837a;                 /* urgent, errors, SLA breaching */
   --danger-soft: #3a1c1b;
-  --warn: #f19a55;                   /* high priority, SLA under 2 h */
+  --warn: #f19a55;                   /* warnings, SLA under 2 h */
   --warn-soft: #3a2615;
   --ok: #6fcf97;                     /* resolved, reconcile match */
   --ok-soft: #13291e;
