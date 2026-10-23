@@ -92,6 +92,51 @@ Claude's prompt cache is isolated per Anthropic organization and workspace, not 
 workspace, and a hit needs a byte-identical prefix: it cannot return one workspace's text to another,
 it only makes a repeated prefix cheaper. Colliedesk keeps no AI answers in memory.
 
+## Settings: providers, slots, consent
+
+`server/internal/ai` holds a workspace's settings (migration `20261022150000-ai-providers`):
+
+1. `ai_providers`: the providers a workspace adds, at most 5. The key is sealed with `tokenseal`
+   (`MAILBOX_TOKEN_KEYS`) under the context `ai-provider:<workspace>:<id>`, so a ciphertext copied to
+   another row does not open; only the last four characters are ever shown. Without a key ring the
+   server refuses a key (409) instead of keeping it in memory like an import: a provider key lives for
+   months, and losing it at a restart would stop features silently.
+2. A provider is saved only after a check passed. The id is made before the check so the usage row and
+   the seal context name the same provider. No transaction is held across the check, so the 5-provider
+   cap and the unique name are checked again under an advisory lock in the insert.
+3. `ai_slots`: one row per feature, created the first time an admin sets it; no row is off. Every
+   feature starts off on every server, Colliedesk Cloud included: turning one on is the admin's consent
+   to send its data to that provider, recorded in `consented_by/at` and again whenever the recipient
+   changes. Deleting a provider turns its slots off in the same transaction and never moves them to the
+   server's provider, which would change who receives the data. A slot on the server's provider whose
+   operator removed it (or the model) reads as on but not active, with `off_reason`.
+4. `ai_settings_events`: the history, with labels copied so it outlives the provider; `seq` orders the
+   events of one transaction, which share `created_at`.
+5. Routes: reading is the `read` tier; provider changes are `admin`, and the two routes that carry a key
+   are `credentialRoutes` (a lower tier is refused, never filed, because an agent request keeps its
+   body). `PUT /api/v1/ai/slots/{slot}` is Approval for every token: it decides whether ticket data
+   leaves for a third party, the reason Approval exists.
+6. Checks are synchronous (the admin waits, bounded at 20 s, well under proxy and MCP client limits) and
+   capped at 10 a minute per workspace, since each is a billed call.
+
+## The server's provider
+
+`AI_SERVER_*` configure one provider for every workspace, read at start like `POLAR_*`: a partial
+setting stops the server and names what is missing. It is never a database row, so no key of HC Labs
+sits in a workspace's data or export. Its network is the operator's and is not guarded;
+`AI_ALLOW_PRIVATE_BASE_URLS=1` is the operator's choice to let workspace providers reach private
+addresses too.
+
+## Metering
+
+`ai_usage` has one row per call to a provider, each attempt included. `Service.Metered` commits a
+`started` row before the call, makes the call with no transaction open, and finishes the row on a
+context the caller cannot cancel (a person closing the tab must not leave it `started`). Provider fields
+are copied and there is no foreign key to `ai_providers`: the row exists before the provider does (the
+add check) and outlives it. Tokens the provider did not report stay `NULL`. `hops` keeps the per-model
+usage of a refusal fallback. `TestProvidersAreCalledOnlyThroughMetered` fails when code outside the
+adapters and `meter.go` calls `Complete` or `Check`. No prompt or answer is stored.
+
 ## Testing
 
 `aiprovider.Fake` records every `Request` and answers from a script, without a network. Feature tests

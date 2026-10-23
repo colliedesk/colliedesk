@@ -1248,6 +1248,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's AI settings: the server's provider (set by the operator; null when the server has none), the providers the workspace added (never a key, only its last four characters), each feature ("slot": `triage`, `draft`) with its provider, model and whether it is on and can run, and the newest 50 changes. Every feature starts off; turning one on is an admin's consent to send that feature's ticket data to its provider. Agents can read this; only admins change it. */
+        get: operations["getAISettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        post: operations["addAIProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/providers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes a provider and erases its key now. The features that used it turn off and stay off (`turned_off`): switching them to another provider would change who receives the data. To undo, add the provider again. Its usage history stays. */
+        delete: operations["removeAIProvider"];
+        options?: never;
+        head?: never;
+        /** @description Renames a provider or changes its models. A new first model is checked before it is saved (422 `ai_check_failed`, nothing changes). A model a feature uses cannot be removed (409 `ai_model_in_use`). The base URL never changes: the stored key and the features' data would go to a new address without anyone entering the key or turning the features on again. Add the new address as another provider instead. */
+        patch: operations["updateAIProvider"];
+        trace?: never;
+    };
+    "/api/v1/ai/providers/{id}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Replaces a provider's key. The new key is checked first; when the check fails nothing changes and the old key keeps working (422 `ai_check_failed`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`. */
+        put: operations["setAIProviderKey"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/providers/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Sends one small request to the provider's first model and records the result on the provider (`check_status` ok or failing with `check_error_code`). The call is billed by the provider and counted in usage as a check. At most 10 checks a minute per workspace. */
+        post: operations["checkAIProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/slots/{slot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slot: components["schemas"]["AISlotName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Sets one feature: where it runs (`server`, `provider` with `provider_id`, or `none`), the model (the provider's first when left out), effort, and on or off. Turning a feature on, or moving it to another provider while it is on, records the person's consent: that feature's ticket data goes to that provider from now on. Every agent token's call becomes an agent request a person approves. */
+        put: operations["setAISlot"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -2230,6 +2341,10 @@ export interface components {
             expires_at: string;
         };
         PublicConfig: {
+            ai: {
+                /** @description True when the operator configured an AI provider for every workspace (AI_SERVER_*). */
+                server_provider: boolean;
+            };
             /** @description Where the web app reports which screens and buttons agents use. On by default on the cloud and self-hosted; `DISABLE_TELEMETRY` or `DO_NOT_TRACK` (and a development build) answer `enabled: false`, and then the web app never loads the analytics library. */
             product_analytics: {
                 enabled: boolean;
@@ -2263,6 +2378,138 @@ export interface components {
                 /** @description True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured). */
                 enabled: boolean;
             };
+        };
+        /** @enum {string} */
+        AISlotName: "triage" | "draft";
+        /** @enum {string} */
+        AIProviderKind: "anthropic" | "openai_compatible";
+        AIProvider: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["AIProviderKind"];
+            label: string;
+            /** @description Only an OpenAI-compatible provider has one. */
+            base_url: string | null;
+            /** @enum {string} */
+            auth_kind: "api_key" | "none";
+            /** @description The key's last four characters; the key itself is never returned. */
+            key_hint: string | null;
+            /** @description The first is the one a check uses. */
+            models: string[];
+            /** @enum {string} */
+            check_status: "ok" | "failing";
+            /** @description Why the last check failed: auth, permission, model_not_found, bad_request, too_large, rate_limited, overloaded, quota_exhausted, timeout, unavailable, blocked_address, invalid_response. */
+            check_error_code: string | null;
+            /** Format: date-time */
+            checked_at: string;
+            /** Format: uuid */
+            created_by: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description The features set to this provider, on or off. */
+            used_by: components["schemas"]["AISlotName"][];
+        };
+        AISlot: {
+            slot: components["schemas"]["AISlotName"];
+            /** @enum {string} */
+            source: "server" | "provider" | "none";
+            /** Format: uuid */
+            provider_id: string | null;
+            model: string | null;
+            /** @enum {string} */
+            effort: "low" | "medium" | "high";
+            enabled: boolean;
+            /** @description On, and its provider and model are still there: the feature runs. */
+            active: boolean;
+            /**
+             * @description Why a feature that is on cannot run.
+             * @enum {string|null}
+             */
+            off_reason: "server_provider_missing" | "model_not_offered" | null;
+            /**
+             * Format: uuid
+             * @description Who agreed that this feature's data goes to its current provider.
+             */
+            consented_by: string | null;
+            /** Format: date-time */
+            consented_at: string | null;
+            /** Format: uuid */
+            updated_by: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
+        AIEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "provider_added" | "provider_changed" | "provider_key_changed" | "provider_removed" | "slot_changed";
+            /** Format: uuid */
+            actor_agent_id: string | null;
+            actor_name: string | null;
+            /** @description True when an agent token made the change. */
+            via_token: boolean;
+            /** Format: uuid */
+            provider_id: string | null;
+            /** @description The provider's name at the time; kept after it is deleted. */
+            provider_label: string | null;
+            slot: components["schemas"]["AISlotName"] | null;
+            /** @description What changed: from and to for a feature, from_hint and to_hint for a key, turned_off for a deleted provider. Never a key. */
+            detail: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        AISettings: {
+            /** @description The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none. */
+            server: null | {
+                kind: components["schemas"]["AIProviderKind"];
+                label: string;
+                /** @description Per feature, the models a workspace may pick; the first is the default. */
+                models: {
+                    [key: string]: string[];
+                };
+            };
+            providers: components["schemas"]["AIProvider"][];
+            slots: components["schemas"]["AISlot"][];
+            /** @description The newest 50 changes, newest first. */
+            events: components["schemas"]["AIEvent"][];
+            provider_limit: number;
+            /** @description False while the server has no MAILBOX_TOKEN_KEYS; no key can be added. */
+            can_store_keys: boolean;
+            /** @description True when the operator lets workspace providers use private addresses and plain http. */
+            allow_private_base_urls: boolean;
+        };
+        AIProviderInput: {
+            kind: components["schemas"]["AIProviderKind"];
+            label: string;
+            /** @description OpenAI-compatible only, with the version path: https://openrouter.ai/api/v1. */
+            base_url?: string;
+            /** @description Required except for an OpenAI-compatible server on a private address the operator allowed. */
+            api_key?: string;
+            models: string[];
+        };
+        AIProviderChange: {
+            label?: string;
+            models?: string[];
+        };
+        AISlotInput: {
+            /** @enum {string} */
+            source: "server" | "provider" | "none";
+            /**
+             * Format: uuid
+             * @description With source provider.
+             */
+            provider_id?: string;
+            model?: string;
+            /**
+             * @description Low when left out.
+             * @enum {string}
+             */
+            effort?: "low" | "medium" | "high";
+            enabled: boolean;
         };
         ExportLink: {
             /** @description Path on this server, for example /api/v1/export/download/<token>. */
@@ -3555,6 +3802,8 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on ai_check_failed: why the provider check failed (auth, permission, model_not_found, blocked_address, quota_exhausted, timeout, unavailable…). */
+                check_error_code?: string;
                 /** @description Only on upload_offset_mismatch: where the upload stands; send the part that starts there. */
                 offset?: number;
                 /** @description Only on media_in_use: the live articles whose current text names the item. */
@@ -3704,6 +3953,25 @@ export interface components {
         };
         /** @description Per-contact inbound rate limit reached; the forwarder should retry later */
         TooManyRequests: {
+            headers: {
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The provider check failed; nothing was saved or changed. `check_error_code` says why. */
+        AICheckFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The workspace ran 10 provider checks in the last minute; try again shortly. */
+        AIChecksRateLimited: {
             headers: {
                 "Retry-After"?: number;
                 [name: string]: unknown;
@@ -6412,6 +6680,215 @@ export interface operations {
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAISettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AISettings"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    addAIProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIProviderInput"];
+            };
+        };
+        responses: {
+            /** @description The provider, checked */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["AICheckFailed"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    removeAIProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The features that turned off */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        turned_off: components["schemas"]["AISlotName"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAIProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIProviderChange"];
+            };
+        };
+        responses: {
+            /** @description The provider */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["AICheckFailed"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    setAIProviderKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    api_key: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The provider with its new key's last four characters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["AICheckFailed"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    checkAIProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The provider with the check's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    setAISlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slot: components["schemas"]["AISlotName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AISlotInput"];
+            };
+        };
+        responses: {
+            /** @description The feature */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AISlot"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

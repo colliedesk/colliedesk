@@ -88,7 +88,8 @@ async function invalidRequest(response: Response): Promise<Error> {
         const { latest_reply_number: latest, newer_replies: newer } = body.error as { latest_reply_number?: number; newer_replies?: Message[] };
         return new ReplyConflictError(body.error.message, latest ?? 0, newer ?? []);
       }
-      return response.status === 409 ? new ConflictError(body.error.message, body.error)
+      // A failed AI provider check carries why (check_error_code), which places the message under its field.
+      return response.status === 409 || body.error.code === 'ai_check_failed' ? new ConflictError(body.error.message, body.error)
         : new InvalidRequestError(body.error.message);
     }
   } catch {
@@ -134,7 +135,7 @@ async function outboundRefusal(response: Response): Promise<Error> {
     const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
-    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval'].includes(String(code)) && typeof message === 'string' && message)
+    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval', 'ai_checks_rate_limited'].includes(String(code)) && typeof message === 'string' && message)
       return new ConflictError(message, { code });
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];

@@ -41,8 +41,9 @@ export default defineConfig({
   use: { trace: 'retain-on-failure', launchOptions: { executablePath: localChrome } },
   webServer: [
     // The main server also imports in the app from the fake Freshdesk (-tags e2e lets it reach a loopback
-    // address), with a key ring as a fresh install has one.
-    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=' }, 'e2e'),
+    // address), with a key ring as a fresh install has one. Its operator lets workspaces use an AI
+    // provider on the local network, where the AI settings journey runs its fake model server.
+    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', AI_ALLOW_PRIVATE_BASE_URLS: '1' }, 'e2e'),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any' }),
     // The cloud server also imports in the app and sends replies by SMTP, for the golden path. Every server
     // with a relay runs an outbox worker that sends any workspace's queued reply, and the worker picks the

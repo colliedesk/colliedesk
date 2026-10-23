@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
@@ -106,6 +107,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
+	aiServer, err := ai.ServerProviderFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
 	googleConfig.Base = googleBaseURL
 	if emailConfig.SMTP.Configured() || googleConfig.Enabled() {
 		// A server with Gmail and no relay still runs the worker; replies that need SMTP fail with the reason.
@@ -159,7 +164,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	apiConfig := httpapi.Config{ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
+	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1"}
+	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.

@@ -1,0 +1,128 @@
+package ai
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
+	"github.com/jackc/pgx/v5"
+)
+
+// Features a usage row is counted under.
+const (
+	FeatureCheck  = "check"
+	FeatureTriage = "triage"
+	FeatureDraft  = "draft"
+)
+
+// Who pays for a call.
+const (
+	BilledToServer       = "server"
+	BilledToWorkspaceKey = "workspace_key"
+)
+
+// finishTimeout bounds the write that closes a usage row. It runs on a context that the caller
+// cannot cancel: a person who closes the tab during a call must not leave the row started.
+const finishTimeout = 10 * time.Second
+
+// Call says what a provider call is for and who pays; it becomes the usage row.
+type Call struct {
+	WorkspaceID string
+	Feature     string
+	BilledTo    string
+	// ProviderID is the workspace provider's id; empty for the server's provider.
+	ProviderID string
+	Kind       aiprovider.Kind
+	Label      string
+	Actor      Actor
+}
+
+type usageHop struct {
+	Model      string `json:"model"`
+	Input      int64  `json:"input"`
+	Output     int64  `json:"output"`
+	CacheRead  int64  `json:"cache_read"`
+	CacheWrite int64  `json:"cache_write"`
+}
+
+// Metered sends one request to a provider and records it: a started row committed before the call,
+// finished after it with the provider's usage, or the error code. It is the only way a provider is
+// called (TestProvidersAreCalledOnlyThroughMetered), so every attempt leaves exactly one row.
+func (s *Service) Metered(ctx context.Context, call Call, provider aiprovider.Provider, request aiprovider.Request) (aiprovider.Response, error) {
+	return s.metered(ctx, call, request.Model, func(ctx context.Context) (aiprovider.Response, error) {
+		return provider.Complete(ctx, request)
+	})
+}
+
+// meteredCheck is Metered for a provider check.
+func (s *Service) meteredCheck(ctx context.Context, call Call, provider aiprovider.Provider, model string) (aiprovider.Response, error) {
+	call.Feature = FeatureCheck
+	return s.metered(ctx, call, model, func(ctx context.Context) (aiprovider.Response, error) {
+		return provider.Check(ctx, model)
+	})
+}
+
+func (s *Service) metered(ctx context.Context, call Call, model string, send func(context.Context) (aiprovider.Response, error)) (aiprovider.Response, error) {
+	started := s.now().UTC()
+	var usageID string
+	err := s.db.InWorkspace(ctx, call.WorkspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_id,provider_kind,provider_label,model,status,actor_agent_id,actor_token_id,started_at)
+			VALUES($1,$2,$3,$4,$5,$6,$7,'started',$8,$9,$10) RETURNING id::text`,
+			call.WorkspaceID, call.Feature, call.BilledTo, nullable(call.ProviderID), string(call.Kind), call.Label, model,
+			nullable(call.Actor.AgentID), nullable(call.Actor.TokenID), started).Scan(&usageID)
+	})
+	if err != nil {
+		return aiprovider.Response{}, fmt.Errorf("record the AI call before sending it: %w", err)
+	}
+
+	response, callErr := send(ctx)
+
+	finished := s.now().UTC()
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishTimeout)
+	defer cancel()
+	latency := finished.Sub(started).Milliseconds()
+	err = s.db.InWorkspace(finishCtx, call.WorkspaceID, func(tx pgx.Tx) error {
+		if callErr != nil {
+			code := aiprovider.CodeOf(callErr)
+			var providerErr *aiprovider.Error
+			requestID := ""
+			if errors.As(callErr, &providerErr) {
+				requestID = providerErr.RequestID
+			}
+			_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='error',error_code=$3,provider_request_id=$4,finished_at=$5,latency_ms=$6
+				WHERE workspace_id=$1 AND id=$2`, call.WorkspaceID, usageID, string(code), nullable(requestID), finished, latency)
+			return err
+		}
+		var input, output, cacheRead, cacheWrite *int64
+		if response.Usage.Reported {
+			input, output, cacheRead, cacheWrite = &response.Usage.InputTokens, &response.Usage.OutputTokens, &response.Usage.CacheReadTokens, &response.Usage.CacheWriteTokens
+		}
+		var hops []byte
+		if response.Usage.Reported {
+			list := make([]usageHop, 0, len(response.Hops))
+			for _, hop := range response.Hops {
+				list = append(list, usageHop{Model: hop.Model, Input: hop.Usage.InputTokens, Output: hop.Usage.OutputTokens, CacheRead: hop.Usage.CacheReadTokens, CacheWrite: hop.Usage.CacheWriteTokens})
+			}
+			hops, _ = json.Marshal(list)
+		}
+		_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='ok',stop_reason=$3,served_model=$4,input_tokens=$5,output_tokens=$6,cache_read_tokens=$7,
+				cache_write_tokens=$8,hops=$9,provider_request_id=$10,finished_at=$11,latency_ms=$12
+			WHERE workspace_id=$1 AND id=$2`, call.WorkspaceID, usageID, string(response.Stop), nullable(response.Model),
+			input, output, cacheRead, cacheWrite, hops, nullable(response.RequestID), finished, latency)
+		return err
+	})
+	if err != nil && callErr == nil {
+		return response, fmt.Errorf("record the AI call after it: %w", err)
+	}
+	return response, callErr
+}
+
+func nullable(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
