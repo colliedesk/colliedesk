@@ -2427,6 +2427,7 @@ paths:
               properties:
                 per_day: {type: integer, minimum: 0, maximum: 10000}
                 per_minute: {type: integer, minimum: 0, maximum: 1000}
+                draft_per_day: {type: integer, minimum: 0, maximum: 10000, description: Kept when left out.}
       responses:
         '200':
           description: The limits and today's use
@@ -4563,7 +4564,7 @@ components:
         model: {type: [string, 'null']}
         effort: {type: string, enum: [low, medium, high]}
         enabled: {type: boolean}
-        automatic: {type: boolean, description: 'Triage only: suggestions of new tickets apply their auto_parts by themselves, filling only what nobody set. Off unless an admin turns it on; off with the feature and when it moves to another provider.'}
+        automatic: {type: boolean, description: 'The feature runs by itself: triage suggestions of new tickets apply their auto_parts, filling only what nobody set; drafts are written for every customer message (never sent). Off unless an admin turns it on; off with the feature and when it moves to another provider.'}
         auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only: what applies by itself.'}
         active: {type: boolean, description: 'On, and its provider and model are still there: the feature runs.'}
         off_reason: {type: [string, 'null'], enum: [server_provider_missing, model_not_offered, null], description: Why a feature that is on cannot run.}
@@ -4587,12 +4588,16 @@ components:
         created_at: {type: string, format: date-time}
     AIAutomaticLimits:
       type: object
-      required: [per_day, per_minute, used_today, paused_until]
+      required: [per_day, per_minute, used_today, paused_until, draft_per_day, drafts_today, drafts_paused_until, drafts_reserved_until]
       properties:
         per_day: {type: integer}
         per_minute: {type: integer}
         used_today: {type: integer, description: 'Automatic tasks that started today (UTC). Tasks count, not calls, so a retry uses no more.'}
         paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s limit is used up: the next UTC midnight.'}
+        draft_per_day: {type: integer, description: 'Drafts written by themselves in a UTC day, counted inside per_day. Each conversation gets at most 5 in 24 hours.'}
+        drafts_today: {type: integer}
+        drafts_paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s automatic drafts (or all automatic runs) are used up: the next UTC midnight.'}
+        drafts_reserved_until: {type: [string, 'null'], format: date-time, description: 'When automatic drafts spent half of this month''s allowance of the server''s provider: the next month. The other half stays for drafts people ask for and for triage.'}
     AIAllowance:
       type: object
       required: [limit_micro_usd, used_micro_usd, resets_at, drafts_left]
@@ -4624,7 +4629,7 @@ components:
               cost_micro_usd: {type: [integer, 'null'], description: 'Only for the server''s provider.'}
     AIDraft:
       type: object
-      required: [id, conversation_id, status, error_code, prompt, text, missing_info, sources, warnings, model, outcome, similarity, sent_message_id, requested_by_agent_id, created_at, ready_at, decided_at]
+      required: [id, conversation_id, status, error_code, prompt, text, missing_info, sources, warnings, model, outcome, similarity, sent_message_id, requested_by_agent_id, automatic, answers_message_id, reply_needed, created_at, ready_at, decided_at]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
@@ -4651,6 +4656,9 @@ components:
         similarity: {type: [number, 'null'], description: 'How close the sent reply stayed to the draft, 0 to 1 by words; 0.9 and above is sent_unchanged.'}
         sent_message_id: {type: [string, 'null'], format: uuid}
         requested_by_agent_id: {type: [string, 'null'], format: uuid}
+        automatic: {type: boolean, description: 'Written by itself when a customer wrote (the draft feature''s automatic mode), not asked for by a person; the whole team sees it. Never sent by itself.'}
+        answers_message_id: {type: [string, 'null'], format: uuid, description: The customer message an automatic draft answers.}
+        reply_needed: {type: [boolean, 'null'], description: 'For an automatic draft: false when the model thinks the message needs no reply (a thank-you). Null for a person''s draft.'}
         created_at: {type: string, format: date-time}
         ready_at: {type: [string, 'null'], format: date-time}
         decided_at: {type: [string, 'null'], format: date-time}
@@ -4725,7 +4733,7 @@ components:
         assignee_agent_id: {type: [string, 'null'], format: uuid}
     AISettings:
       type: object
-      required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage]
+      required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate]
       properties:
         server:
           description: The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none.
@@ -4748,6 +4756,13 @@ components:
         allow_private_base_urls: {type: boolean, description: True when the operator lets workspace providers use private addresses and plain http.}
         automatic: {$ref: '#/components/schemas/AIAutomaticLimits'}
         allowance: {anyOf: [{$ref: '#/components/schemas/AIAllowance'}, {type: 'null'}], description: 'This month''s allowance of the server''s provider; null when the server sets none.'}
+        auto_draft_estimate:
+          type: object
+          required: [customer_messages, draft_cost_micro_usd]
+          description: 'What a draft for every customer message would have meant in the last 30 days: the customer messages (imports left out), and a draft''s cost on the server''s provider (the workspace''s average, or a typical one at the server''s prices); null without a price.'
+          properties:
+            customer_messages: {type: integer}
+            draft_cost_micro_usd: {type: [integer, 'null']}
         auto_triage:
           type: object
           required: [applied, undone]
@@ -4781,7 +4796,7 @@ components:
         model: {type: string, maxLength: 200}
         effort: {type: string, enum: [low, medium, high], description: Low when left out.}
         enabled: {type: boolean}
-        automatic: {type: boolean, description: 'Triage only. Left out: kept as it is (off when the feature turns off or moves to another provider).'}
+        automatic: {type: boolean, description: 'Left out: kept as it is (off when the feature turns off or moves to another provider).'}
         auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only. Left out: kept; tags and priority when automatic turns on with none.'}
     ExportLink:
       type: object

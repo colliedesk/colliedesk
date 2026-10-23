@@ -411,6 +411,9 @@ type AIDraft struct {
 	Outcome            *string         `json:"outcome"`
 	Similarity         *float64        `json:"similarity"`
 	SentMessageID      *string         `json:"sent_message_id"`
+	Automatic          bool            `json:"automatic"`
+	AnswersMessageID   *string         `json:"answers_message_id"`
+	ReplyNeeded        *bool           `json:"reply_needed"`
 	CreatedAt          time.Time       `json:"created_at"`
 	ReadyAt            *time.Time      `json:"ready_at"`
 	DecidedAt          *time.Time      `json:"decided_at"`

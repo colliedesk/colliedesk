@@ -77,9 +77,14 @@ type Draft struct {
 	Similarity         *float64       `json:"similarity"`
 	SentMessageID      *string        `json:"sent_message_id"`
 	RequestedByAgentID *string        `json:"requested_by_agent_id"`
-	CreatedAt          time.Time      `json:"created_at"`
-	ReadyAt            *time.Time     `json:"ready_at"`
-	DecidedAt          *time.Time     `json:"decided_at"`
+	// Automatic: written by itself for a customer's message (AnswersMessageID), for the whole team.
+	// ReplyNeeded is the model's view that the message wants a reply; null for a person's draft.
+	Automatic        bool       `json:"automatic"`
+	AnswersMessageID *string    `json:"answers_message_id"`
+	ReplyNeeded      *bool      `json:"reply_needed"`
+	CreatedAt        time.Time  `json:"created_at"`
+	ReadyAt          *time.Time `json:"ready_at"`
+	DecidedAt        *time.Time `json:"decided_at"`
 }
 
 // draftColumns read a draft with the state its task gives it: a pending draft is queued, running,
@@ -91,14 +96,14 @@ const draftColumns = `d.id::text,d.conversation_id::text,
 		WHEN d.status='pending' AND t.state='done' THEN 'internal'
 		WHEN d.status='pending' AND t.state IN ('failed','cancelled') THEN t.error_code END,
 	d.prompt,d.text,d.missing_info,d.sources,d.warnings,d.model,d.outcome,d.similarity::float8,d.sent_message_id::text,
-	d.requested_by_agent_id::text,d.created_at,d.ready_at,d.decided_at
+	d.requested_by_agent_id::text,d.automatic,d.answers_message_id::text,d.reply_needed,d.created_at,d.ready_at,d.decided_at
 	FROM ai_drafts d LEFT JOIN ai_tasks t ON t.workspace_id=d.workspace_id AND t.id=d.task_id`
 
 func scanDraft(row pgx.Row) (Draft, error) {
 	var d Draft
 	var sources, warnings []byte
 	err := row.Scan(&d.ID, &d.ConversationID, &d.Status, &d.ErrorCode, &d.Prompt, &d.Text, &d.MissingInfo, &sources, &warnings, &d.Model,
-		&d.Outcome, &d.Similarity, &d.SentMessageID, &d.RequestedByAgentID, &d.CreatedAt, &d.ReadyAt, &d.DecidedAt)
+		&d.Outcome, &d.Similarity, &d.SentMessageID, &d.RequestedByAgentID, &d.Automatic, &d.AnswersMessageID, &d.ReplyNeeded, &d.CreatedAt, &d.ReadyAt, &d.DecidedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Draft{}, ErrDraftNotFound
 	}
@@ -167,6 +172,28 @@ func (s *Service) CreateDraft(ctx context.Context, workspaceID string, actor Act
 				workspaceID, conversationID, actor.AgentID, now, nullable(actor.TokenID)); err != nil {
 				return err
 			}
+		}
+		// A person's draft wins over the automatic one: the one still waiting to be written is stopped
+		// (no call is spent on it) and a ready one nobody used is replaced.
+		rows, err := tx.Query(ctx, `UPDATE ai_drafts SET status='cancelled' WHERE workspace_id=$1 AND conversation_id=$2 AND automatic AND status='pending'
+			RETURNING task_id::text`, workspaceID, conversationID)
+		if err != nil {
+			return err
+		}
+		automatic, err := pgx.CollectRows(rows, pgx.RowTo[*string])
+		if err != nil {
+			return err
+		}
+		for _, task := range automatic {
+			if task != nil {
+				if _, err := s.CancelTask(ctx, tx, workspaceID, *task); err != nil {
+					return err
+				}
+			}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET outcome='superseded',decided_at=$3,decided_by_agent_id=$4
+			WHERE workspace_id=$1 AND conversation_id=$2 AND automatic AND status='ready' AND outcome IS NULL`, workspaceID, conversationID, now, nullable(actor.AgentID)); err != nil {
+			return err
 		}
 		taskID, err := s.Enqueue(ctx, tx, workspaceID, NewTask{Kind: SlotDraft, ConversationID: conversationID, Actor: actor})
 		if err != nil {

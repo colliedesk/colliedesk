@@ -230,14 +230,15 @@ func (a *API) getAIUsage(response http.ResponseWriter, request *http.Request) {
 
 func (a *API) setAIAutomaticLimits(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		PerDay    *int `json:"per_day"`
-		PerMinute *int `json:"per_minute"`
+		PerDay      *int `json:"per_day"`
+		PerMinute   *int `json:"per_minute"`
+		DraftPerDay *int `json:"draft_per_day"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.PerDay == nil || input.PerMinute == nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000).")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000), and draft_per_day (0 to 10000) to change it.")
 		return
 	}
-	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute)
+	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute, input.DraftPerDay)
 	if err != nil {
 		writeAIError(response, err)
 		return

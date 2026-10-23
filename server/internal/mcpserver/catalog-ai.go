@@ -132,13 +132,13 @@ func aiProviderRemoveSpec() Spec {
 func aiSlotSetRequestSpec() Spec {
 	return approvalSpec("colliedesk_ai_slot_set_request", "Ask to set an AI feature",
 		`Ask to set one AI feature (triage suggestions or reply drafts): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. `+
-			`For triage, automatic lets suggestions apply the auto_parts (tags, priority, assignee) by themselves, filling only what nobody set; left out, both stay as they are. `+
+			`automatic lets the feature run by itself: triage suggestions apply the auto_parts (tags, priority, assignee), filling only what nobody set; drafts are written for every customer message, never sent. Left out, it stays as it is. `+
 			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets, so a person always decides.`,
 		[]string{"PUT /api/v1/ai/slots/{slot}"},
 		`{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":{"type":"string","enum":["triage","draft"]},`+
 			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",`+uuid+`},"model":{"type":"string","maxLength":200},`+
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},`+
-			`"automatic":{"type":"boolean","description":"Triage only: suggestions apply by themselves. Off with the feature and when it moves to another provider."},`+
+			`"automatic":{"type":"boolean","description":"The feature runs by itself. Off with the feature and when it moves to another provider."},`+
 			`"auto_parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]},"description":"Triage only: what applies by itself; tags and priority when left out as automatic turns on."}}}`, aiSlotSetRequest)
 }
 
@@ -168,9 +168,11 @@ func aiAutomaticLimitsSetSpec() Spec {
 		Tier: "admin", Idempotent: true,
 		REST: []string{"PUT /api/v1/ai/automatic-limits"},
 		Input: `{"type":"object","additionalProperties":false,"required":["per_day","per_minute"],"properties":{` +
-			`"per_day":{"type":"integer","minimum":0,"maximum":10000},"per_minute":{"type":"integer","minimum":0,"maximum":1000}}}`,
+			`"per_day":{"type":"integer","minimum":0,"maximum":10000},"per_minute":{"type":"integer","minimum":0,"maximum":1000},` +
+			`"draft_per_day":{"type":"integer","minimum":0,"maximum":10000,"description":"Automatic drafts a day, inside per_day; kept when left out."}}}`,
 		Output: `{"type":"object","required":["automatic"],"properties":{"automatic":{"type":"object","required":["per_day","per_minute","used_today"],"properties":{` +
-			`"per_day":{"type":"integer"},"per_minute":{"type":"integer"},"used_today":{"type":"integer"},"paused_until":{"type":["string","null"]}}}}}`,
+			`"per_day":{"type":"integer"},"per_minute":{"type":"integer"},"used_today":{"type":"integer"},"paused_until":{"type":["string","null"]},` +
+			`"draft_per_day":{"type":"integer"},"drafts_today":{"type":"integer"},"drafts_paused_until":{"type":["string","null"]},"drafts_reserved_until":{"type":["string","null"]}}}}}`,
 		run: aiAutomaticLimitsSet,
 	}
 }

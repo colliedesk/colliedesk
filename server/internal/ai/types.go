@@ -103,6 +103,17 @@ type Settings struct {
 	// AutoTriage counts the suggestions AI applied by itself in the last 30 days, and how many of those
 	// a person undid.
 	AutoTriage AutoTriageStats `json:"auto_triage"`
+	// AutoDraftEstimate is what writing a draft for every customer message would have meant in the last
+	// 30 days, shown before an admin turns it on.
+	AutoDraftEstimate AutoDraftEstimate `json:"auto_draft_estimate"`
+}
+
+// AutoDraftEstimate: CustomerMessages came in the last 30 days (imports left out); DraftCostMicroUSD
+// is the workspace's average draft on the server's provider in that time, or a typical one at the
+// server's prices, null when there is no price to go by (a workspace's own key).
+type AutoDraftEstimate struct {
+	CustomerMessages  int    `json:"customer_messages"`
+	DraftCostMicroUSD *int64 `json:"draft_cost_micro_usd"`
 }
 
 // AutoTriageStats is how automatic triage went in the last 30 days.
