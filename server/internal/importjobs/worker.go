@@ -233,7 +233,9 @@ type jobRun struct {
 	latest     *Progress
 	dirty      bool
 	progressed bool
-	samples    []sample
+	// advanced is set once this run got further; a retry then starts its window again.
+	advanced bool
+	samples  []sample
 }
 
 type sample struct {
@@ -264,7 +266,7 @@ func (r *jobRun) onProgress(event freshdesk.ProgressEvent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.latest != nil && event.Phase == r.latest.Step && event.Done > r.latest.Done {
-		r.progressed = true
+		r.progressed, r.advanced = true, true
 	}
 	progress := Progress{Step: event.Phase, Done: event.Done, Total: event.Total, APICalls: event.APICalls, UpdatedAt: now}
 	if event.RateLimitUntil != nil {
@@ -482,7 +484,9 @@ func (r *jobRun) fail(ctx context.Context, err error) error {
 	case errors.Is(cause, errLeaseLost):
 		return errLeaseLost
 	case ctx.Err() != nil:
-		// Shutdown: release the lease so a worker runs the job again soon; the state stays.
+		// Shutdown: release the lease so a worker runs the job again soon; the state stays. The progress
+		// since the last flush goes first, so it still clears the crash count.
+		r.flush(ctx)
 		return r.update(ctx, `claim_token=NULL, lease_until=NULL, attempts_without_progress=GREATEST(attempts_without_progress-1,0)`)
 	}
 	var capErr *freshdesk.StorageCapError
@@ -510,9 +514,13 @@ func (r *jobRun) fail(ctx context.Context, err error) error {
 
 // retry waits and runs the job again, until it was unavailable for retryWindow without progress.
 func (r *jobRun) retry(ctx context.Context, code string, cause error) error {
+	r.flush(ctx)
+	r.mu.Lock()
+	advanced := r.advanced
+	r.mu.Unlock()
 	now := r.now()
 	since := now
-	if r.job.retryingSince != nil {
+	if r.job.retryingSince != nil && !advanced {
 		since = *r.job.retryingSince
 	}
 	if now.Sub(since) >= retryWindow {
@@ -523,8 +531,8 @@ func (r *jobRun) retry(ctx context.Context, code string, cause error) error {
 		delay = time.Minute
 	}
 	r.ended = true
-	return r.update(ctx, `state='retry_wait', error_code=$4, error_message=$5, next_run_at=$6, retrying_since=COALESCE(retrying_since,$7),
-		claim_token=NULL, lease_until=NULL, updated_at=$7`, code, cause.Error(), now.Add(delay), now)
+	return r.update(ctx, `state='retry_wait', error_code=$4, error_message=$5, next_run_at=$6, retrying_since=$8,
+		claim_token=NULL, lease_until=NULL, updated_at=$7`, code, cause.Error(), now.Add(delay), now, since)
 }
 
 // retryDelay backs off 1, 2, 5, 10, then 30 minutes over a streak of retries.

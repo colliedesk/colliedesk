@@ -438,6 +438,61 @@ func TestProgressClearsTheCrashCount(t *testing.T) {
 	w.Wait()
 }
 
+// unflushed is a worker whose flusher never runs while a test lasts: only the run's own ends write progress.
+func (e *env) unflushed() *importjobs.Worker {
+	return importjobs.NewWorker(importjobs.WorkerOptions{DB: e.db, Keys: e.keys, Interval: time.Hour,
+		Heartbeat: time.Hour, Flush: time.Hour, Lease: time.Minute})
+}
+
+func TestProgressBeforeAShutdownClearsTheCrashCount(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	e.exec(t, `UPDATE import_jobs SET state='running', attempts_without_progress=3, claim_token=gen_random_uuid(), lease_until=now()-interval '1 second' WHERE id=$1`, job.ID)
+	w := e.unflushed()
+	progressed := make(chan struct{})
+	importjobs.StubImporter(w, func(ctx context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
+		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 1, Total: 3})
+		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 2, Total: 3})
+		close(progressed)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}, nil, nil)
+	ctx, stop := context.WithCancel(context.Background())
+	if err := w.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	<-progressed
+	stop()
+	w.Wait()
+	if n := e.column(t, job.ID, "attempts_without_progress").(int32); n != 0 {
+		t.Errorf("attempts_without_progress = %d after progress and a shutdown", n)
+	}
+	if p := e.get(t, job.ID).Progress; p == nil || p.Done != 2 {
+		t.Errorf("progress = %+v", p)
+	}
+}
+
+func TestProgressBeforeAnUnavailableFreshdeskStartsTheRetryWindowAgain(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	e.exec(t, `UPDATE import_jobs SET retrying_since=now()-interval '25 hours' WHERE id=$1`, job.ID)
+	w := e.unflushed()
+	importjobs.StubImporter(w, func(_ context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
+		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 1, Total: 3})
+		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 2, Total: 3})
+		return nil, freshdesk.ErrUnavailable
+	}, nil, nil)
+	before := time.Now()
+	tick(t, w)
+	got := e.get(t, job.ID)
+	if got.State != importjobs.StateRetryWait || code(got) != importjobs.CodeUnavailable || got.Progress == nil || got.Progress.Done != 2 {
+		t.Fatalf("job = %+v", got)
+	}
+	if since := e.column(t, job.ID, "retrying_since").(time.Time); since.Before(before.Add(-time.Second)) {
+		t.Fatalf("retrying_since = %v, want the time of this failure", since)
+	}
+}
+
 func TestAnUndoJobRemovesTheImportOfItsAccount(t *testing.T) {
 	e := newEnv(t, true)
 	job := e.previewed(t, e.a)
