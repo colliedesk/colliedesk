@@ -100,6 +100,15 @@ type Settings struct {
 	// provider may still spend this month, null when the server sets no allowance.
 	Automatic AutomaticLimits `json:"automatic"`
 	Allowance *AllowanceView  `json:"allowance"`
+	// AutoTriage counts the suggestions AI applied by itself in the last 30 days, and how many of those
+	// a person undid.
+	AutoTriage AutoTriageStats `json:"auto_triage"`
+}
+
+// AutoTriageStats is how automatic triage went in the last 30 days.
+type AutoTriageStats struct {
+	Applied int `json:"applied"`
+	Undone  int `json:"undone"`
 }
 
 // AllowanceView is this month's allowance of the server's provider, in micro-dollars.

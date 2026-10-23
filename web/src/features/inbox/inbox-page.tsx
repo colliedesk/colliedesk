@@ -5,6 +5,7 @@ import type { BulkConversationChanges, UpdateConversationRequest } from '../../a
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
 import type { SettingsTarget } from './conversation-list';
+import { AITriageSlot } from './ai-triage-slot';
 import { DetailsPanel } from './details-panel';
 import { InboxFilters } from './inbox-filters';
 
@@ -196,7 +197,9 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onboardingGoal={onboardingGoal} />
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel conversation={selected} items={timeline} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
+        <TimelinePanel conversation={selected} items={timeline}
+          afterFirstCustomerMessage={aiTriage && selected ? <AITriageSlot placement="timeline" conversationId={selected.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
+            currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           viewers={openViewers} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={() => onOpenSettings()}>{messages.openSettings}</button></>}</p>}

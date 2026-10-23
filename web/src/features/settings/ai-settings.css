@@ -207,3 +207,25 @@
   .ai-add { width: var(--touch); justify-content: center; padding: 0; }
 }
 .ai-meter-left { color: var(--text-3); font-size: var(--fs-label); }
+/* The automatic mode under a feature: its own switch, what it does, the parts it applies and how it went. */
+.ai-auto { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "lead side" "desc side" "parts parts"; gap: 2px var(--space-4);
+  align-items: center; margin-top: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-2) var(--space-3); min-width: 0; }
+.ai-auto-lead { grid-area: lead; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; min-width: 0; }
+.ai-auto-lead strong { font-size: var(--fs-small); font-weight: 600; }
+.ai-auto-desc { grid-area: desc; margin: 0; color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.ai-auto-desc b { color: var(--text-1); font-weight: 600; }
+.ai-auto-switch { grid-area: side; }
+.ai-auto-parts { grid-area: parts; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: var(--space-1) 0 0; border: 0; padding: 0; min-width: 0; }
+.ai-pick { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; border: 1px solid var(--line-control, var(--line-strong)); border-radius: 999px;
+  background: var(--surface-1); padding: 0 var(--space-3) 0 var(--space-2); font-size: var(--fs-small); cursor: pointer; }
+.ai-pick:has(input:checked:not(:disabled)) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text, var(--text-1)); }
+.ai-pick:has(input:disabled) { cursor: not-allowed; color: var(--text-3); }
+.ai-pick input { margin: 0; }
+.ai-auto-stat { margin-left: auto; color: var(--text-2); font-size: var(--fs-small); }
+.ai-facts { display: grid; gap: var(--space-2); margin: 0; padding-left: var(--space-5); }
+@media (pointer: coarse) { .ai-pick { min-height: var(--touch); } }
+@media (max-width: 44rem) {
+  .ai-auto { grid-template-areas: "lead side" "desc desc" "parts parts"; padding: var(--space-2); gap: 2px var(--space-2); }
+  .ai-auto-desc { font-size: var(--fs-label); }
+  .ai-auto-stat { margin-left: 0; font-size: var(--fs-label); }
+}

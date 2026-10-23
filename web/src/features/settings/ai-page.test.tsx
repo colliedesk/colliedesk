@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { ConflictError } from '../../api/client';
 import type { AIProvider, AISettings, AISlot } from '../../api/ai';
@@ -9,7 +9,7 @@ import { refusal } from './ai-route';
 const providerID = '11111111-1111-4111-8111-111111111111';
 
 function slot(change: Partial<AISlot> = {}): AISlot {
-  return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, active: false, off_reason: null,
+  return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, automatic: false, auto_parts: [], active: false, off_reason: null,
     consented_by: null, consented_at: null, updated_by: null, updated_at: null, ...change };
 }
 
@@ -21,7 +21,8 @@ function provider(change: Partial<AIProvider> = {}): AIProvider {
 
 function settings(change: Partial<AISettings> = {}): AISettings {
   return { server: null, providers: [], slots: [slot(), slot({ slot: 'draft' })], events: [], provider_limit: 5, can_store_keys: true,
-    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null }, allowance: null, ...change };
+    allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null }, allowance: null,
+    auto_triage: { applied: 0, undone: 0 }, ...change };
 }
 
 function page(props: Partial<AIPageProps> = {}) {
@@ -228,4 +229,44 @@ test('a server allowance of nothing reads as none included', () => {
 test('the allowance says about how many reply drafts are left', () => {
   page({ settings: settings({ server, allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 2_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 1240 } }) });
   expect(screen.getByText('About 1,240 reply drafts left')).toBeInTheDocument();
+});
+
+test('an admin turns on automatic triage only through a dialog that says what it does', async () => {
+  const onSetSlot = vi.fn();
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true });
+  page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })] }), onSetSlot });
+  const toggle = screen.getByRole('switch', { name: 'Apply suggestions automatically' });
+  expect(toggle).not.toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Tags' })).toBeDisabled();
+  fireEvent.click(toggle);
+  const dialog = await screen.findByRole('dialog', { name: 'Apply triage suggestions automatically?' });
+  expect(within(dialog).getByText(/tags and priority as soon as they arrive/)).toBeInTheDocument();
+  expect(onSetSlot).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+  expect(onSetSlot).toHaveBeenCalledWith('triage', { source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', effort: 'low', enabled: true, automatic: true });
+});
+
+test('with automatic triage on, an admin picks what it applies, sees how it went, and turns it off at once', () => {
+  const onSetSlot = vi.fn();
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, automatic: true, auto_parts: ['tags', 'priority'] });
+  page({ settings: settings({ providers: [provider({ used_by: ['triage'] })], slots: [on, slot({ slot: 'draft' })], auto_triage: { applied: 212, undone: 9 } }), onSetSlot });
+  expect(screen.getByText('AI applied 212, undone 9')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Assignee' }));
+  expect(onSetSlot).toHaveBeenCalledWith('triage', expect.objectContaining({ auto_parts: ['tags', 'priority', 'assignee'] }));
+  fireEvent.click(screen.getByRole('switch', { name: 'Apply suggestions automatically' }));
+  expect(onSetSlot).toHaveBeenLastCalledWith('triage', expect.objectContaining({ automatic: false }));
+});
+
+test('automatic triage waits for the feature to be on, and says when a provider change turned it off', () => {
+  const off = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5' });
+  page({ settings: settings({ providers: [provider()], slots: [off, slot({ slot: 'draft' })] }) });
+  expect(screen.getByText('Turn on Triage suggestions first.')).toBeInTheDocument();
+  expect(screen.getByRole('switch', { name: 'Apply suggestions automatically' })).toBeDisabled();
+  cleanup();
+  const moved = { id: '33333333-3333-4333-8333-333333333333', kind: 'slot_changed' as const, actor_agent_id: null, actor_name: 'Mai Tran', via_token: false,
+    provider_id: providerID, provider_label: 'Team key', slot: 'triage' as const, created_at: '2026-10-22T10:00:00Z',
+    detail: { from: { enabled: true, automatic: true, provider_label: 'Colliedesk AI' }, to: { enabled: true, automatic: false, provider_label: 'Team key' } } };
+  page({ settings: settings({ providers: [provider()], slots: [{ ...off, enabled: true, active: true }, slot({ slot: 'draft' })], events: [moved] }) });
+  expect(screen.getByText(/Apply suggestions automatically turned off: Triage suggestions moved to Team key/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Turn on again' })).toBeInTheDocument();
 });

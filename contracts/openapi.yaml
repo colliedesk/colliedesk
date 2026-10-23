@@ -4725,7 +4725,7 @@ components:
         assignee_agent_id: {type: [string, 'null'], format: uuid}
     AISettings:
       type: object
-      required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance]
+      required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage]
       properties:
         server:
           description: The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none.
@@ -4748,6 +4748,13 @@ components:
         allow_private_base_urls: {type: boolean, description: True when the operator lets workspace providers use private addresses and plain http.}
         automatic: {$ref: '#/components/schemas/AIAutomaticLimits'}
         allowance: {anyOf: [{$ref: '#/components/schemas/AIAllowance'}, {type: 'null'}], description: 'This month''s allowance of the server''s provider; null when the server sets none.'}
+        auto_triage:
+          type: object
+          required: [applied, undone]
+          description: Triage suggestions AI applied by itself in the last 30 days, and how many of those a person undid.
+          properties:
+            applied: {type: integer}
+            undone: {type: integer}
     AIProviderInput:
       type: object
       additionalProperties: false
@@ -5766,12 +5773,13 @@ components:
           maxItems: 50
           items:
             type: object
-            required: [id, subject, contact_name, assigned_at]
+            required: [id, subject, contact_name, assigned_at, by_ai]
             properties:
               id: {type: string, format: uuid}
               subject: {type: string}
               contact_name: {type: string}
               assigned_at: {type: string, format: date-time}
+              by_ai: {type: boolean, description: AI assigned it by itself (a triage suggestion applied automatically).}
         updated:
           type: array
           maxItems: 50

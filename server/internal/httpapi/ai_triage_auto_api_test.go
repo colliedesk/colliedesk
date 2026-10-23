@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"slices"
 	"testing"
 
@@ -249,4 +250,36 @@ func TestUndoTakesBackWhatAIAppliedAndKeepsWhatAPersonChanged(t *testing.T) {
 	d.run(t)
 	manual := d.triage(t, d.adminA, second)
 	wantResponse(t, request(t, d.api, http.MethodPost, "/api/v1/conversations/"+second+"/ai-triage/"+manual.ID+"/undo", nil, d.adminA, nil), http.StatusConflict, "ai_triage_not_auto_applied")
+}
+
+// A teammate AI assigns finds it in the inbox activity marked as AI's, so the notification says so.
+func TestATeammateAIAssignsSeesItWasAI(t *testing.T) {
+	d := newDraftDesk(t)
+	d.triageOn(t)
+	d.autoTriageOn(t, []string{"assignee"})
+	sam := joinAsAgent(t, d.api, d.adminA, "sam@draft-a.example.com")
+	var me struct {
+		Agent struct {
+			ID string `json:"id"`
+		} `json:"agent"`
+	}
+	decode(t, request(t, d.api, http.MethodGet, "/api/v1/auth/me", nil, sam, nil), &me)
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/agents/"+me.Agent.ID, map[string]any{"display_name": "Sam Rivera"}, d.adminA, http.StatusOK, nil)
+	var activity struct {
+		Now          string `json:"now"`
+		AssignedToMe []struct {
+			ID   string `json:"id"`
+			ByAI bool   `json:"by_ai"`
+		} `json:"assigned_to_me"`
+	}
+	decode(t, request(t, d.api, http.MethodGet, "/api/v1/inbox/activity", nil, sam, nil), &activity)
+	since := activity.Now
+	conversation := d.customerTicket(t, "printer", "normal")
+	d.fake.Script(triageAnswer(nil, "normal", "Sam Rivera"))
+	d.customerWrites(t, d.workspaceA, conversation, "The office printer is down.", nil)
+	d.run(t)
+	decode(t, request(t, d.api, http.MethodGet, "/api/v1/inbox/activity?since="+url.QueryEscape(since), nil, sam, nil), &activity)
+	if len(activity.AssignedToMe) != 1 || activity.AssignedToMe[0].ID != conversation || !activity.AssignedToMe[0].ByAI {
+		t.Fatalf("assigned to Sam = %+v", activity.AssignedToMe)
+	}
 }

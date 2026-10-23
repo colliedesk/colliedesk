@@ -123,6 +123,27 @@ used up.
 Imported tickets get no suggestion. A suggestion nobody used for 7 days expires; its reason is erased
 90 days after it ended. Colliedesk keeps whether each one was accepted, in part, or dismissed.
 
+### Apply suggestions automatically
+
+Admins can let suggestions apply by themselves: **Settings > AI**, under **Triage suggestions**, turn on
+**Apply suggestions automatically** (a dialog says what it does first). It is off until an admin turns
+it on, and it turns off when triage turns off or moves to another provider; it stays off until an admin
+turns it on again. Pick what applies by itself: **Tags** and **Priority** (the default) and
+**Assignee**. A part not picked waits for someone to accept it, as above.
+
+It only fills what nobody set: tags are added, never removed; the priority is set only while it is
+still Normal on a ticket a customer started (by email, the web form or a problem report); a teammate is
+assigned only when nobody is. What it leaves says why on the card ("Not set: Sam Ortiz was already
+assigned"). Only the suggestion a new ticket gets applies by itself; one asked for with **Suggest
+again** waits for a person.
+
+Each change shows **Applied by AI** on the conversation's timeline and in its details, with **Undo**
+for each part and **Undo all**. Undo takes back only what is still AI's: a part someone changed since
+is kept, and the card says so. **Apply again** applies it once more, filling only what is still
+empty. A teammate AI assigns gets the "Assigned to you by AI" notification. It costs nothing more: it
+uses the suggestion already made. Settings shows how many suggestions AI applied and how many were
+undone in the last 30 days. Restoring a workspace from a backup turns the automatic mode off.
+
 ## Limits
 
 1. **Automatic runs.** Work Colliedesk starts on its own (a triage suggestion for each new ticket)

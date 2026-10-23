@@ -80,7 +80,7 @@ test('a new ticket by email gets an AI triage suggestion that changes nothing un
     expect(psql(`SELECT outcome FROM ai_triage_suggestions s JOIN workspaces w ON w.id=s.workspace_id WHERE w.slug='${workspace.slug}'`)).toBe('partly_accepted');
 
     // Asked again by hand, on a phone: the details hide behind a toggle that says a suggestion waits, and
-    // the suggestion's buttons are on screen once it opens.
+    // the suggestion is on the timeline, its buttons on screen.
     await card.getByRole('button', { name: 'Suggest again' }).click();
     await expect(card.getByRole('button', { name: 'Accept assignee Sam Rivera' })).toBeVisible({ timeout: 30_000 });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -90,7 +90,8 @@ test('a new ticket by email gets an AI triage suggestion that changes nothing un
     const box = await toggle.boundingBox();
     expect(box && box.x + box.width).toBeLessThanOrEqual(390);
     expect(await page.getByRole('region', { name: 'Timeline' }).evaluate((element) => element.getBoundingClientRect().right)).toBeLessThanOrEqual(390);
-    await toggle.click();
+    // The timeline opens at its newest message; the suggestion sits under the customer's first one.
+    await card.scrollIntoViewIfNeeded();
     await expect(card.getByRole('button', { name: 'Accept all' })).toBeInViewport();
     await card.getByRole('button', { name: 'Accept all' }).click();
     await expect(card.getByText(/Accepted by you, .* Change a field below to undo\./)).toBeVisible();

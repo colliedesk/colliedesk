@@ -33,7 +33,7 @@ interface Alert { id: string; title: string; body: string }
 // in the same poll are not announced a second time for the message that created them.
 function alerts(activity: Omit<Activity, 'updated' | 'viewing'>, replies: Activity['updated'], agentId: string | undefined, viewing: (id: string) => boolean): Alert[] {
   const body = (item: { subject: string; contact_name: string }) => `${item.subject} · ${item.contact_name}`;
-  const assigned = activity.assigned_to_me.map((item) => ({ id: item.id, title: messages.notificationAssigned, body: body(item) }));
+  const assigned = activity.assigned_to_me.map((item) => ({ id: item.id, title: item.by_ai ? messages.notificationAssignedByAI : messages.notificationAssigned, body: body(item) }));
   const taken = new Set(assigned.map((item) => item.id));
   const created = activity.new_conversations.filter((item) => !taken.has(item.id))
     .map((item) => ({ id: item.id, title: messages.notificationNew, body: body(item) }));

@@ -1,4 +1,5 @@
-import type { RefObject } from 'react';
+import { Fragment } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
@@ -10,6 +11,8 @@ import { TimeEntriesSection } from './time-entries-section';
 interface TimelinePanelProps {
   conversation?: Conversation;
   items: Message[];
+  // Shown after the first customer message: what AI suggested or applied for it.
+  afterFirstCustomerMessage?: ReactNode;
   timeEntries?: TimeEntry[];
   loading?: boolean;
   // The ticket an address names could not be loaded: say so, and offer to try again.
@@ -30,7 +33,8 @@ interface TimelinePanelProps {
   viewers?: ConversationViewer[];
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [] }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [] }: TimelinePanelProps) {
+  const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -53,8 +57,9 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
           {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
             <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
-          {items.map((item) => <MessageItem key={item.id} item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
-            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} />)}
+          {items.map((item, index) => <Fragment key={item.id}><MessageItem item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
+            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} />
+            {index === firstCustomer && afterFirstCustomerMessage}</Fragment>)}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
         </div>
       </div>

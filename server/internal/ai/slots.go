@@ -129,6 +129,10 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 		if settings.Automatic, _, err = s.automaticLimits(ctx, tx, workspaceID); err != nil {
 			return err
 		}
+		if err := tx.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE undone_at IS NOT NULL) FROM ai_triage_suggestions
+			WHERE workspace_id=$1 AND auto_applied_at>$2`, workspaceID, s.now().Add(-30*24*time.Hour)).Scan(&settings.AutoTriage.Applied, &settings.AutoTriage.Undone); err != nil {
+			return err
+		}
 		if left, limit, limited, err := s.allowanceLeft(ctx, tx, workspaceID); err != nil {
 			return err
 		} else if limited {

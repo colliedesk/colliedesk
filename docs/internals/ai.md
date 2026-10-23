@@ -255,6 +255,31 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
    trigger does not fire for restored messages, and it deletes `ai_tasks` first (a pending suggestion
    reads `restored`).
 
+## Triage applied by itself
+
+1. **Two levels of consent.** Turning triage on lets ticket data go to its provider; `ai_slots.automatic`
+   lets suggestions change tickets. `SetSlot` keeps `automatic` when a request does not name it (an
+   older client does not turn it off), turns it off with the feature and when the feature moves to
+   another provider (unless the same request turns it on), and refuses it for drafts until they have an
+   automatic mode. CHECK `NOT automatic OR enabled`; deleting a provider turns both off. Restore
+   (`restore-workspace.sh`) sets it false: a restore never changes tickets by itself.
+2. **Applied in the transaction that records the answer.** `runTriage` locks the suggestion, then the
+   conversation (the order accept and undo take them), drops what the conversation has and what a person
+   changed since (`stale`), and `autoApply` fills only what nobody set: tags added, the priority only
+   while it is `normal`, equal to `base`, on a conversation a customer started (`channel`), the assignee
+   only when nobody is. What it leaves goes to `skipped` with its reason and is not suggested either.
+   Only a suggestion the trigger queued applies itself; one asked for by hand waits for a person.
+3. **One path for every change.** `AcceptTriage` (a person, "Apply again"), `autoApply` (AI) and
+   `UndoTriage` change the conversation with `store.SetConversationTagIn` and `UpdateConversationIn` in
+   their own transaction under the suggestion's lock: no window between the check and the change. AI
+   assigns as no one (`assigned_by_agent_id` NULL); the inbox activity marks such an assignment `by_ai`
+   from the suggestion that made it.
+4. **Undo is per part and compare-and-set.** A tag goes if it is still there, the priority goes back
+   to `base` if it is still AI's, the assignee is cleared if it is still AI's; anything else is `kept`.
+   With nothing of AI's left the outcome is `undone` (final: the 7-day sweep leaves it); accepting
+   again from `undone` fills only what is still empty. `GET …/ai-triage` returns `auto_applied`, the
+   newest suggestion AI applied, so a later one asked for by hand does not hide the line and its Undo.
+
 ## Testing
 
 `aiprovider.Fake` records every `Request` and answers from a script, without a network. Feature tests

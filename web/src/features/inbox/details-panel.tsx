@@ -3,10 +3,7 @@ import type { UpdateConversationRequest } from '../../api/client';
 import type { TeamMember, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
-
-// The AI triage suggestion loads only where triage is on.
-const aiTriagePart = lazyPart(() => import('./ai-triage-part'));
+import { AITriageSlot } from './ai-triage-slot';
 
 interface DetailsPanelProps {
   conversation?: Conversation;
@@ -41,9 +38,8 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
     <aside id="conversation-details" className="details-panel panel" aria-label={messages.conversationDetails}
       onKeyDown={(event) => { if (event.key === 'Escape' && onClose && !(event.target instanceof HTMLSelectElement)) onClose(); }}>
       {onClose && <button type="button" className="drawer-close" onClick={onClose} autoFocus>{messages.hideDetails}</button>}
-      {aiTriage && conversation && <Part part={aiTriagePart} failed={<section className="details-section"><PartUnavailable /></section>}
-        render={(module) => <module.AITriageCard key={conversation.id} conversationId={conversation.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
-          currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />} />}
+      {aiTriage && conversation && <AITriageSlot conversationId={conversation.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
+        currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />}
       <section className="details-section">
         <h2>{messages.properties}</h2>
         <label className="property-row"><span>{messages.status}</span><select value={conversation?.status ?? 'open'} disabled={!conversation}

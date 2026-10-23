@@ -2856,6 +2856,11 @@ export interface components {
             automatic: components["schemas"]["AIAutomaticLimits"];
             /** @description This month's allowance of the server's provider; null when the server sets none. */
             allowance: components["schemas"]["AIAllowance"] | null;
+            /** @description Triage suggestions AI applied by itself in the last 30 days, and how many of those a person undid. */
+            auto_triage: {
+                applied: number;
+                undone: number;
+            };
         };
         AIProviderInput: {
             kind: components["schemas"]["AIProviderKind"];
@@ -3881,6 +3886,8 @@ export interface components {
                 contact_name: string;
                 /** Format: date-time */
                 assigned_at: string;
+                /** @description AI assigned it by itself (a triage suggestion applied automatically). */
+                by_ai: boolean;
             }[];
             updated: {
                 /** Format: uuid */

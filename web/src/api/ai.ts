@@ -16,7 +16,8 @@ export const aiProviderSchema = z.object({
 }) satisfies z.ZodType<Generated<'AIProvider'>>;
 export const aiSlotSchema = z.object({
   slot: aiSlotNameSchema, source: z.enum(['server', 'provider', 'none']), provider_id: z.string().uuid().nullable(), model: z.string().nullable(),
-  effort: z.enum(['low', 'medium', 'high']), enabled: z.boolean(), active: z.boolean(),
+  effort: z.enum(['low', 'medium', 'high']), enabled: z.boolean(), automatic: z.boolean(), auto_parts: z.array(z.enum(['tags', 'priority', 'assignee'])),
+  active: z.boolean(),
   off_reason: z.enum(['server_provider_missing', 'model_not_offered']).nullable(),
   consented_by: z.string().uuid().nullable(), consented_at: nullableDate, updated_by: z.string().uuid().nullable(), updated_at: nullableDate,
 }) satisfies z.ZodType<Generated<'AISlot'>>;
@@ -45,7 +46,7 @@ export const aiSettingsSchema = z.object({
   server: z.object({ kind: kindSchema, label: z.string(), models: z.record(z.string(), z.array(z.string())) }).nullable(),
   providers: z.array(aiProviderSchema), slots: z.array(aiSlotSchema), events: z.array(aiEventSchema),
   provider_limit: z.number().int(), can_store_keys: z.boolean(), allow_private_base_urls: z.boolean(),
-  automatic: aiAutomaticSchema, allowance: aiAllowanceSchema.nullable(),
+  automatic: aiAutomaticSchema, allowance: aiAllowanceSchema.nullable(), auto_triage: z.object({ applied: z.number().int(), undone: z.number().int() }),
 }) satisfies z.ZodType<JsonResponse<'getAISettings', 200>>;
 const removedSchema = z.object({ turned_off: z.array(aiSlotNameSchema) }) satisfies z.ZodType<JsonResponse<'removeAIProvider', 200>>;
 
