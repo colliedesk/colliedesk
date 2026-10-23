@@ -11,6 +11,9 @@ parser.add_argument('--parts', type=int, default=1,
                     help='print a regular shard as this many disjoint patterns, one per line')
 parser.add_argument('--latency-shards', type=int, default=1,
                     help='how many of the last shards run the latency fixtures')
+parser.add_argument('--latency-share', default='0',
+                    help='regular tests a latency shard runs after its gates, as a fraction of a regular '
+                         'shard; one value for all latency shards, or one per latency shard, comma-separated')
 args = parser.parse_args()
 if not 1 <= args.shard <= args.total:
     parser.error('shard must be between 1 and total')
@@ -18,6 +21,15 @@ if args.parts < 1:
     parser.error('parts must be at least 1')
 if args.total > 1 and not 1 <= args.latency_shards < args.total:
     parser.error('latency shards must be at least 1 and leave a regular shard')
+try:
+    shares = [float(share) for share in args.latency_share.split(',')]
+except ValueError:
+    parser.error('latency share must be numbers')
+latency_total = args.latency_shards
+if len(shares) == 1:
+    shares *= latency_total
+if len(shares) != latency_total or any(share < 0 for share in shares):
+    parser.error('latency share needs one non-negative value, or one per latency shard')
 names = sorted({line.strip() for line in sys.stdin
                 if re.fullmatch(r'(Test|Example|Fuzz)\w*', line.strip())})
 if not names:
@@ -37,21 +49,42 @@ KB_SEED = ('HelpCenterPages', 'KnowledgeBase', 'KBMedia')
 kb = [name for name in latency if any(marker in name for marker in KB_SEED)]
 rest = [name for name in latency if name not in kb]
 regular_total = args.total - args.latency_shards
+# A latency shard ends 30 to 60 seconds before the regular ones, so it can take a share of the regular
+# tests once its gates are done. Smooth weighted round robin over the sorted names: each regular shard
+# weighs 1 and each latency shard the share, so every name has exactly one shard.
+weights = [1.0] * regular_total + shares
+credit = [0.0] * args.total
+owner = {}
+for name in regular:
+    credit = [c + w for c, w in zip(credit, weights)]
+    best = max(range(args.total), key=lambda i: (credit[i], -i))
+    credit[best] -= sum(weights)
+    owner[name] = best + 1
+mine = [name for name in regular if owner[name] == args.shard]
 if args.total == 1:
-    selected = names
+    gates = []
+    mine = names
 elif args.shard <= regular_total:
-    selected = regular[args.shard - 1::regular_total]
+    gates = []
 elif args.latency_shards == 1:
-    selected = latency
+    gates = latency
 else:
     index = args.shard - regular_total - 1
-    selected = kb if index == 0 else rest[index - 1::args.latency_shards - 1]
+    gates = kb if index == 0 else rest[index - 1::args.latency_shards - 1]
 # A regular shard's tests mostly wait on PostgreSQL, one test at a time in each package binary, and
-# httpapi takes most of the shard: the job runs one go test per part at once. A latency shard is
-# never split, so its gates still measure with no other test binary of the shard beside them.
-parts = args.parts if args.shard <= regular_total else 1
-for part in range(parts):
-    chosen = selected[part::parts]
-    # Anchors prevent a selected TestFoo from also running TestFooBar on another shard.
-    print('^(' + '|'.join(chosen) + ')$' if chosen else '^$')
-print(f'shard {args.shard}/{args.total}: {len(selected)}/{len(names)} names in {parts} part(s)', file=sys.stderr)
+# httpapi takes most of the shard: the job runs one go test per part at once. A latency shard runs
+# its gates as one process with no other test binary of the shard beside them; only after they
+# finished ('--' tells the job to wait) does its share of regular tests run in parts.
+lines = []
+if gates:
+    lines.append('^(' + '|'.join(gates) + ')$')
+if mine or not gates:
+    if gates:
+        lines.append('--')
+    for part in range(args.parts):
+        chosen = mine[part::args.parts]
+        # Anchors prevent a selected TestFoo from also running TestFooBar on another shard.
+        lines.append('^(' + '|'.join(chosen) + ')$' if chosen else '^$')
+print('\n'.join(lines))
+print(f'shard {args.shard}/{args.total}: {len(gates) + len(mine)}/{len(names)} names, {len(gates)} gates, '
+      f'{len(mine)} regular in {args.parts} part(s)', file=sys.stderr)
