@@ -136,6 +136,28 @@ class Shards(unittest.TestCase):
             self.assertNotEqual(run('go-test-shard.py', '1', '8', '--latency-shards', '2',
                                     '--latency-share', share, stdin=listing).returncode, 0, share)
 
+    def test_the_go_job_starts_a_latency_shards_regular_tests_only_after_its_gates_exit(self):
+        go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
+        script = re.search(r'- name: Test\n(?:        .*\n)*?        run: \|\n((?:          .*\n?)+)', go).group(1)
+        script = '\n'.join(line[10:] for line in script.splitlines())
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            # A stand-in go: the gate sleeps, a regular pattern fails, each logs start and end.
+            (tmp / 'go').write_text('#!/bin/bash\necho "start $4" >> "$LOG"\n'
+                                    '[ "$4" = GATE ] && sleep 0.5\necho "end $4" >> "$LOG"\n'
+                                    '[ "$4" = B ] && exit 3\nexit 0\n')
+            (tmp / 'go').chmod(0o755)
+            runner = tmp / 'temp'
+            runner.mkdir()
+            (runner / 'go-test-patterns.txt').write_text('GATE\n--\nA\nB\n')
+            env = dict(os.environ, PATH=f'{tmp}:{os.environ["PATH"]}', RUNNER_TEMP=str(runner), LOG=str(tmp / 'log'))
+            result = subprocess.run(['bash', '-e', '-c', script], env=env, capture_output=True, text=True)
+            log = (tmp / 'log').read_text().split('\n')
+        self.assertNotEqual(result.returncode, 0, 'a failing pattern after the gates fails the step')
+        self.assertLess(log.index('end GATE'), log.index('start A'), log)
+        self.assertLess(log.index('end GATE'), log.index('start B'), log)
+        self.assertNotIn('start --', log)
+
     def test_latency_share_defaults_to_none_and_rejects_negative(self):
         listing = self.listing + 'TestInboxListLatencyBudget\n'
         plain = run('go-test-shard.py', '3', '3', stdin=listing)
