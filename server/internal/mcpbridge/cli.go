@@ -21,15 +21,21 @@ Connects an MCP host that starts stdio servers (Claude Desktop) to Colliedesk.
 The agent token comes from COLLIEDESK_TOKEN or --token-file, never from the command line.
 The URL comes from --url or COLLIEDESK_URL: the site, or its /mcp endpoint.`
 
-// TokenPrefix starts every agent token (contracts/openapi.yaml, createAgentToken).
-const TokenPrefix = "cdk_agent_"
+const (
+	// TokenPrefix starts every agent token (contracts/openapi.yaml, createAgentToken).
+	TokenPrefix = "cdk_agent_"
+	// TokenEnv and URLEnv are the variables collie mcp reads; the host guides and the web app's
+	// Connect panel use the same names (mcpserver/docgen).
+	TokenEnv = "COLLIEDESK_TOKEN"
+	URLEnv   = "COLLIEDESK_URL"
+)
 
 // Parse reads the flags and the environment. An error says what to fix; nothing has been read
 // from stdin yet.
 func Parse(args []string, getenv func(string) string) (Config, error) {
 	flags := flag.NewFlagSet("collie mcp", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
-	rawURL := flags.String("url", getenv("COLLIEDESK_URL"), "")
+	rawURL := flags.String("url", getenv(URLEnv), "")
 	tokenFile := flags.String("token-file", "", "")
 	timeout := flags.Duration("timeout", 60*time.Second, "")
 	if err := flags.Parse(args); err != nil {
@@ -51,7 +57,7 @@ func Parse(args []string, getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	token := strings.TrimSpace(getenv("COLLIEDESK_TOKEN"))
+	token := strings.TrimSpace(getenv(TokenEnv))
 	if *tokenFile != "" {
 		if token, err = readTokenFile(*tokenFile); err != nil {
 			return Config{}, err

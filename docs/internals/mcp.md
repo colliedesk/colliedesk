@@ -176,6 +176,15 @@
   `make docs-mcp` after changing a tool; `TestGeneratedDocsMatchTheCatalog` fails on a stale table,
   `TestEveryToolHasADocSentence` on a tool without a sentence, and `TestUserGuidesNameOnlyRealTools`
   on a guide naming a tool that does not exist. `docs_search` skips the marker lines.
+- **Generated host guides.** `docs/user/connect-<host>.md` (Claude Code, Codex, Cursor, VS Code,
+  Claude Desktop), the protocol versions and the host list of `mcp.md`, and
+  `web/src/features/settings/connect-snippets.generated.ts` come from `docgen/connect.go` and
+  `docgen/templates`. The commands and JSON a person copies are one map (`snippets`), so a guide and
+  the Connect panel of Settings never differ; the web app swaps `https://desk.example.com` for its
+  own origin. The token is never in a snippet, only its variable or the host's prompt. Release file
+  names come from `.github/scripts/client-assets.txt`; `TestHostGuidesHoldValidJSONAndRealFileNames`
+  parses every JSON block and checks every `releases/latest/download/` link against that list. The
+  plugin and skills live in `plugins/colliedesk` (`TestSkillsNameRealToolsAtTheirTier`).
 - **SDK dependency.** `github.com/modelcontextprotocol/go-sdk` v1.8.0 (Apache-2.0, compatible with
   AGPL-3.0-only). It pulls `golang.org/x/sys` v0.41.0, which carries an OSV advisory (Windows
   only); `go.mod` pins v0.44.0 so the PR gate stays clean. The SDK's stateless-session behaviour

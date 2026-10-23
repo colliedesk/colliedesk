@@ -1,0 +1,39 @@
+# Connect Cursor
+
+Connect [Cursor](https://cursor.com) to Colliedesk. Cursor has no place to keep a secret apart
+from its configuration, so the token ends up in your own `~/.cursor/mcp.json` or in an
+environment variable.
+
+{{template "before" .}}
+## Connect
+
+**From Colliedesk (one click).** After you create the token, Settings shows **Add to Cursor**. It
+opens Cursor, which asks you to install the Colliedesk server, with the token in its
+configuration (`~/.cursor/mcp.json` in your home folder, readable by programs you run). Use a
+`read` or `draft` token for it, and revoke the token when you stop using it.
+
+**By hand, with an environment variable.** Put the token in your shell profile:
+
+```sh
+{{index .Snippets "tokenEnv"}}
+```
+
+then add this to `~/.cursor/mcp.json` (create the file if it does not exist; keep any other
+servers in `mcpServers`):
+
+```json
+{{index .Snippets "cursor"}}
+```
+
+Cursor reads `${env:{{.TokenEnv}}}` only when it is started from a terminal that has the variable
+(`cursor .`); started from the Dock or the Start menu, it sends no token and Colliedesk answers 401.
+
+In **Cursor Settings → MCP**, `{{.ServerName}}` shows its tools when it is connected.
+
+{{template "try" .}}
+{{template "tiers" .}}
+## Remove it
+
+Delete the `{{.ServerName}}` entry from `~/.cursor/mcp.json`, or turn it off in **Cursor Settings →
+MCP**. {{template "revoke" .}}
+{{template "others" .}}

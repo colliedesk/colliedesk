@@ -1,0 +1,40 @@
+{{define "before"}}## Before you start
+
+1. Sign in to Colliedesk and open **Settings → Sessions**.
+2. Choose **Create agent token**, pick {{.Host.Name}} and a tier (`draft` is a good start: the agent
+   can sort and annotate, and nothing reaches a customer). See [Agent tokens](sessions.md#agent-tokens).
+3. Copy the token. It starts with `{{.TokenPrefix}}` and is shown once.
+
+The steps below use `{{.Origin}}`: put the address you open Colliedesk at in its place.
+Settings shows these steps with your address already in.
+{{end}}
+
+{{define "try"}}## Try it
+
+Ask {{.Host.Name}}: "What can you do in Colliedesk?" It calls `colliedesk_whoami`, which answers
+with your workspace, the token's tier and the tools it may use. Then, for example: "Triage the
+open conversations nobody owns: tag billing questions with `billing` and leave a note with a
+summary."
+{{end}}
+
+{{define "tiers"}}## What each tier can do
+
+Colliedesk has {{.Tools}} tools. A token calls the tools of its tier directly; any other call
+becomes an [agent request](agent-requests.md) a person approves in **Requests**.
+
+| Tier | Tools it calls directly |
+|---|---|
+{{range .Tiers}}| `{{.Name}}` | {{.Callable}} of {{$.Tools}} |
+{{end}}
+Every tool and its tier: [Connect an AI agent (MCP)](mcp.md#tools).
+{{end}}
+
+{{define "revoke"}}Then revoke the token in **Settings → Sessions**: it stops working at once, wherever it was
+copied.
+{{end}}
+
+{{define "others"}}## Other hosts
+
+{{range .Hosts}}{{if ne .ID $.Host.ID}}- [{{.Name}}](connect-{{.ID}}.md)
+{{end}}{{end}}- [Agent skills](agent-skills.md): triage, draft replies and chase pending conversations
+{{end}}

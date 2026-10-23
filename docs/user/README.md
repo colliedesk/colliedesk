@@ -28,3 +28,12 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Export all your data](export.md)
 - [Report a problem](problem-reports.md)
 - [Usage report (telemetry)](telemetry.md)
+
+## Connect an AI agent
+
+- [Claude Code](connect-claude-code.md)
+- [Codex](connect-codex.md)
+- [Cursor](connect-cursor.md)
+- [VS Code](connect-vscode.md)
+- [Claude Desktop](connect-claude-desktop.md)
+- [Agent skills](agent-skills.md)

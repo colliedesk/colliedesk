@@ -32,8 +32,9 @@ sync-user-docs:
 	rm -f server/internal/mcpserver/userdocs/*.md
 	cp docs/user/*.md server/internal/mcpserver/userdocs/
 
-# The tool table of docs/user/mcp.md is generated from the MCP tool catalog. Run this after changing
-# a tool; a Go test fails when the guide is stale.
+# The tool table of docs/user/mcp.md, the host guides docs/user/connect-*.md and the web app's
+# connect-snippets.generated.ts come from the MCP tool catalog (server/internal/mcpserver/docgen).
+# Run this after changing a tool or a guide template; a Go test fails when they are stale.
 docs-mcp:
 	cd server && $(GO_ENV) go test ./internal/mcpserver/docgen -run TestGeneratedDocs -count=1 -update
 	$(MAKE) sync-user-docs

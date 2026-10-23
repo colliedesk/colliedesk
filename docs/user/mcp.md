@@ -7,8 +7,10 @@ private notes for your team. With a `send` token it can also reply to customers.
 
 ## Endpoint and sign-in
 
+<!-- generated:versions -->
 - URL: `https://<your-colliedesk>/mcp`. It uses MCP Streamable HTTP without sessions, protocol
-  versions `2025-11-25` and `2026-07-28`.
+  versions `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`.
+<!-- /generated -->
 - Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
   person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
 - Create the token as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
@@ -29,20 +31,18 @@ actions wait for a person with every tier, `admin` included: new tokens, invites
 admin or changing an admin, signing out another person, export, billing checkout and portal, disconnecting the email channel, a new
 inbound secret and the workspace address. No tool approves or rejects; only a person does.
 
-## Connect Claude Code
+## Connect your AI host
 
-```sh
-export COLLIEDESK_TOKEN=<your token>
-claude mcp add --transport http colliedesk https://desk.example.com/mcp \
-  --header "Authorization: Bearer $COLLIEDESK_TOKEN"
-```
+Each guide gives the shortest way for one host, keeps the token out of plain configuration where
+the host allows it, and says how to remove it again:
 
-## Connect Codex
-
-```sh
-export COLLIEDESK_TOKEN=<your token>
-codex mcp add colliedesk --url https://desk.example.com/mcp --bearer-token-env-var COLLIEDESK_TOKEN
-```
+<!-- generated:hosts -->
+- [Claude Code](connect-claude-code.md)
+- [Codex](connect-codex.md)
+- [Cursor](connect-cursor.md)
+- [VS Code](connect-vscode.md)
+- [Claude Desktop](connect-claude-desktop.md)
+<!-- /generated -->
 
 Then ask the agent, for example: "Triage the open conversations nobody owns: tag billing questions
 with `billing` and leave a note with a summary."
