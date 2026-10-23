@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
+import { AgentTokensSection } from './agent-tokens-section';
 import { ExportAllData } from './export-all-data';
 import { EmailChannelSection, gmailPart } from './email-channel-section';
 import { gmailReturn } from './gmail-return';
@@ -78,6 +79,9 @@ export function SettingsRoute() {
     onSetDisplayName={(name) => agentDisplayName.mutate(name)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError || emailFailed ? messages.settingsActionFailed : undefined}
+    // The new token is in no cache: only the card holds it. The session list reloads to show it with its tier.
+    agentsSection={<AgentTokensSection canCreateAdmin={isAdmin}
+      onCreate={async (label, scope) => { const created = await api.createAgentToken(label, scope); void refresh('sessions'); return created; }} />}
     teamSection={<TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={isAdmin} timezone={me.data?.timezone ?? 'UTC'}
       error={updateAgent.error instanceof PlanLimitError || updateAgent.error instanceof InvalidRequestError ? updateAgent.error.message : updateAgent.isError ? messages.settingsActionFailed : undefined}
       onChangeRole={(id, role) => updateAgent.mutate({ id, role })}

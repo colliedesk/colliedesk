@@ -56,6 +56,7 @@ export const messages = {
   connectEmail: 'Connect your support email',
   importFreshdesk: 'Import from Freshdesk',
   aiSettings: 'AI',
+  aiAgents: 'AI agents',
   importFreshdeskURL: 'https://colliedesk.com/docs/import-freshdesk',
   inviteTeam: 'Invite your team',
   connectAIAgent: 'Connect an AI agent',

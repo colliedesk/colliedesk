@@ -16,7 +16,7 @@ export function hrefFor(item: NavItem, page: SettingsPath): string {
 
 const sectionByHash: Record<string, SettingsSection> = {
   'profile-heading': 'profile', 'preferences-heading': 'preferences', 'general-heading': 'general', 'team-heading': 'team',
-  'invites-heading': 'invites', 'sessions-heading': 'sessions', 'email-channel-heading': 'email_channel', 'web-form-heading': 'web_form',
+  'invites-heading': 'invites', 'agents-heading': 'agents', 'sessions-heading': 'sessions', 'email-channel-heading': 'email_channel', 'web-form-heading': 'web_form',
   'saved-replies-heading': 'saved_replies', 'help-center-heading': 'help_center', 'export-heading': 'export',
 };
 const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : item.to === '/settings/ai' ? 'ai' : undefined);
@@ -28,7 +28,7 @@ const plainLink: RenderLink = (item, page) =>
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
 
-export interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean }
+export interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean; agents?: boolean }
 
 // settingsNavGroups lists what this person can see: their own account, then the shared workspace.
 export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] {
@@ -40,6 +40,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...section(messages.general, 'general-heading', shown.general),
       ...section(messages.team, 'team-heading', shown.team),
       ...section(messages.invites, 'invites-heading'),
+      ...section(messages.aiAgents, 'agents-heading', shown.agents),
       ...section(messages.sessions, 'sessions-heading'),
       ...section(messages.emailChannel, 'email-channel-heading', shown.email),
       ...section(messages.webForm, 'web-form-heading', shown.webForm),

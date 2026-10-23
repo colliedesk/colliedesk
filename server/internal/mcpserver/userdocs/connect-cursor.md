@@ -6,13 +6,13 @@ environment variable.
 
 ## Before you start
 
-1. Sign in to Colliedesk and open **Settings → Sessions**.
-2. Choose **Create agent token**, pick Cursor and a tier (`draft` is a good start: the agent
-   can sort and annotate, and nothing reaches a customer). See [Agent tokens](sessions.md#agent-tokens).
+1. Sign in to Colliedesk and open **Settings → AI agents**.
+2. Name the token (for example "Cursor on my laptop"), pick a tier (`draft` is a good start: the agent
+   can sort and annotate, and nothing reaches a customer) and choose **Create token**. See [Agent tokens](sessions.md#agent-tokens).
 3. Copy the token. It starts with `cdk_agent_` and is shown once.
 
 The steps below use `https://desk.example.com`: put the address you open Colliedesk at in its place.
-Settings shows these steps with your address already in.
+Under **Connect your agent**, Settings shows these steps for Cursor with your address already in.
 
 ## Connect
 

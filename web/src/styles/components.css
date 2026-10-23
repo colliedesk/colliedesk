@@ -731,9 +731,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Help under the import's fields and counts stays readable: at least the label size. */
 .import-page small { font-size: var(--fs-label); }
 /* A link that leads on (Open the inbox) looks like the button next to it. */
-.import-page a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+.import-page a.button, .agent-tokens a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
-.import-page a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
+.import-page a.button.primary-action, .agent-tokens a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
 /* On a phone the actions of the import stay at the bottom of the screen, whatever the table above
    them holds: nothing to scroll to before starting, stopping or confirming. */
 @media (max-width: 40rem) {

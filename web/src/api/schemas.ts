@@ -149,9 +149,11 @@ export const webFormSettingsSchema = z.object({
   enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(),
 }) satisfies z.ZodType<Generated<'WebFormSettings'>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
+export const tokenScopeSchema = z.enum(['read', 'draft', 'send', 'admin']) satisfies z.ZodType<Generated<'TokenScope'>>;
+export type TokenScope = Generated<'TokenScope'>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
-  scope: z.enum(['read', 'draft', 'send', 'admin']).nullable(), current: z.boolean(),
+  scope: tokenScopeSchema.nullable(), current: z.boolean(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Session'>>;
 export const inviteSchema = z.object({
@@ -170,6 +172,8 @@ export const meSchema = z.object({
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
+// The raw token is in this answer only; the client keeps it in no cache.
+export const agentTokenSchema = z.object({ token: z.string().startsWith('cdk_agent_'), session: sessionSchema }) satisfies z.ZodType<JsonResponse<'createAgentToken', 201>>;
 export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satisfies z.ZodType<JsonResponse<'listInvites', 200>>;
 export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createInvite', 201>>;
 export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
@@ -217,6 +221,7 @@ export type EmailDnsRecord = Generated<'EmailDNSRecord'>;
 export type GmailSettings = Generated<'GmailSettings'>;
 export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
+export type AgentToken = Generated<'AgentToken'>;
 export type Tag = Generated<'Tag'>;
 export type SavedReply = Generated<'SavedReply'>;
 export type SavedView = Generated<'SavedView'>;
