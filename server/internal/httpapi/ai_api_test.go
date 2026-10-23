@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -196,6 +197,15 @@ func TestAIUsageAndAutomaticLimitsStayInTheirWorkspace(t *testing.T) {
 	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage", nil, desk.adminA, nil), &usage)
 	if len(usage.Rows) != 1 || usage.Rows[0].ProviderLabel != "Team key" || usage.Rows[0].Feature != "check" || usage.Rows[0].Calls != 1 || usage.Rows[0].CostMicroUSD != nil {
 		t.Fatalf("A's usage = %+v", usage)
+	}
+	// A call still running is neither done nor failed.
+	if _, err := desk.pool.Exec(context.Background(), `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_id,provider_kind,provider_label,model,status,started_at)
+		SELECT workspace_id,feature,billed_to,provider_id,provider_kind,provider_label,model,'started',now() FROM ai_usage WHERE workspace_id=$1 LIMIT 1`, desk.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage", nil, desk.adminA, nil), &usage)
+	if usage.Rows[0].Calls != 2 || usage.Rows[0].Failed != 0 {
+		t.Fatalf("A's usage with a call running = %+v", usage.Rows[0])
 	}
 	wantResponse(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/usage?month=October", nil, desk.adminA, nil), http.StatusBadRequest, "invalid_request")
 	agent := joinAsAgent(t, desk.api, desk.adminA, "agent@ai-a.example.com")

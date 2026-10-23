@@ -45,7 +45,7 @@ func (s *Service) ParseMonth(value string) (time.Time, error) {
 func (s *Service) Usage(ctx context.Context, workspaceID string, month time.Time) (Usage, error) {
 	usage := Usage{Month: month.Format("2006-01"), Rows: []UsageRow{}}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT feature,billed_to,provider_label,count(*),count(*) FILTER (WHERE status<>'ok'),count(*) FILTER (WHERE automatic),
+		rows, err := tx.Query(ctx, `SELECT feature,billed_to,provider_label,count(*),count(*) FILTER (WHERE status='error'),count(*) FILTER (WHERE automatic),
 				COALESCE(sum(input_tokens),0)::bigint,COALESCE(sum(output_tokens),0)::bigint,
 				CASE WHEN billed_to='server' THEN COALESCE(sum(cost_micro_usd),0)::bigint END
 			FROM ai_usage WHERE workspace_id=$1 AND started_at>=$2 AND started_at<$3
