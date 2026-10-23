@@ -451,15 +451,15 @@ class BundleBudget(unittest.TestCase):
 
 
 class ImageLayerCache(unittest.TestCase):
-    def test_the_image_job_builds_from_the_layer_cache_and_writes_it_off_the_build_path(self):
+    def test_the_image_job_reads_the_layer_cache_and_never_writes_it(self):
         # Without it every run compiled the Go dependencies again: 52 s of a 117-second image job.
+        # Writing it took 52 s more after a dependency change, so image-cache.yml writes it instead.
         image = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['image'])
-        build = image.find('name: Build image')
-        checks = image.find('ci-background.sh start image-checks')
-        self.assertIn('cache-from: type=gha,scope=image', image[build:checks])
-        self.assertNotIn('cache-to:', image[build:checks], 'the cache upload would delay the checks')
-        self.assertEqual(image.count('cache-to: type=gha,scope=image,mode=max,ignore-error=true'), 2)
-        self.assertGreater(image.find('cache-to:'), checks)
+        self.assertIn('cache-from: type=gha,scope=image', image)
+        self.assertNotIn('cache-to:', image)
+        writer = (ROOT / '.github/workflows/image-cache.yml').read_text()
+        self.assertIn('branches: [main]', writer)
+        self.assertIn('cache-to: type=gha,scope=image,mode=max', writer)
 
     def test_the_dependency_compile_depends_only_on_the_imported_packages(self):
         dockerfile = (ROOT / 'server/Dockerfile').read_text()

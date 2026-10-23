@@ -1,0 +1,39 @@
+name: Image cache
+
+# Writes the image's layer cache (type=gha, scope image) for every main commit; CI's image job only
+# reads it. Writing it in CI cost 52 seconds whenever the Go dependencies changed (compressing and
+# uploading them), which a two-minute job cannot hold. A workflow of its own so it adds nothing to the
+# CI run's 120-second clock or to edge (docs/internals/performance.md, CI phase budget).
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer main commit waits for the running write instead of cancelling it: a cancelled write of
+# changed dependencies would leave every run cold until one finishes.
+concurrency:
+  group: image-cache
+  cancel-in-progress: false
+
+jobs:
+  image-cache:
+    runs-on: ubuntu-latest
+    # A cold write builds the Go dependencies and uploads them: about two and a half minutes.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          cleanup: false
+      - name: Build the image into the layer cache
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64
+          build-args: VERSION=edge-${{ github.sha }}
+          outputs: type=cacheonly
+          cache-from: type=gha,scope=image
+          cache-to: type=gha,scope=image,mode=max
