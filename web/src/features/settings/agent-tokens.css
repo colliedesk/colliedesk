@@ -41,3 +41,4 @@
 .agent-tokens a.button.primary-action { background: var(--accent); color: var(--on-accent); }
 .agent-tokens a.button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 @media (pointer: coarse) { .snippet-head button { --control: var(--touch); } }
+.agent-tokens .button-row > .link-button { align-self: center; font-size: var(--fs-small); }

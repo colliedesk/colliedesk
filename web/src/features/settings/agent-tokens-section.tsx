@@ -174,7 +174,7 @@ function HostSteps({ host, origin, token }: { host: ConnectHostID; origin: strin
     steps = <ol className="host-steps">
       <li><p>{text.desktopDownloadStep}</p>
         <span className="button-row"><a className="button" href={connectSnippets.desktopBundle}>{text.desktopDownload}</a>
-          <span className="muted-copy">{text.desktopChecksums}</span></span></li>
+          <a className="link-button" href={text.releasePage} target="_blank" rel="noopener noreferrer">{text.desktopChecksums}</a></span></li>
       <li><p>{text.desktopOpen}</p>
         <div className="copy-field"><label className="invite-link"><span className="field-label">{text.desktopAddress}</span><input readOnly value={origin} /></label>
           <span className="button-row"><CopyButton value={origin}>{text.copyAddress}</CopyButton></span></div>
@@ -185,7 +185,7 @@ function HostSteps({ host, origin, token }: { host: ConnectHostID; origin: strin
     <div className="host-panel" role="group" aria-label={item.name}>
       {steps}
       <p className="muted-copy host-foot"><a href={item.guide} target="_blank" rel="noopener noreferrer">{text.fullGuide}</a>
-        {' · '}{text.disconnect}{before}<code>{command}</code>{text.revokeAfter}</p>
+        {' · '}{text.disconnect}{before}{command && <code>{command}</code>}{text.revokeAfter}</p>
     </div>
   );
 }

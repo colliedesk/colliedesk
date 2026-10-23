@@ -58,6 +58,7 @@ export const agentTokenMessages = {
   desktopDownloadStep: 'Download the Colliedesk extension for macOS or Windows.',
   desktopDownload: 'Download colliedesk.mcpb',
   desktopChecksums: 'Checksums on the release page',
+  releasePage: 'https://github.com/colliedesk/colliedesk/releases/latest',
   desktopOpen: 'Open the file and choose Install. Claude Desktop asks for two things:',
   desktopAddress: 'Colliedesk address',
   copyAddress: 'Copy address',
@@ -65,13 +66,13 @@ export const agentTokenMessages = {
   fullGuide: 'Full guide',
   disconnect: 'To disconnect: ',
   revokeAfter: ', then revoke the token in Sessions below.',
-  // Each is the words before a command or path, then the command or path, as in the host guide's "Remove it".
+  // Each is the words before a command or path, then the command or path if there is one, as in the host guide's "Remove it".
   disconnects: {
     'claude-code': ['run ', 'claude plugin uninstall colliedesk@colliedesk'],
     codex: ['run ', 'codex mcp remove colliedesk'],
     cursor: ['delete the colliedesk entry in ', '~/.cursor/mcp.json'],
     vscode: ['delete the colliedesk server and its colliedesk-token input in ', 'mcp.json'],
-    'claude-desktop': ['remove Colliedesk in ', 'Claude Desktop → Settings → Extensions'],
-  } satisfies Record<ConnectHostID, [string, string]>,
+    'claude-desktop': ['remove Colliedesk in Claude Desktop → Settings → Extensions'],
+  } satisfies Record<ConnectHostID, [string, string?]>,
   checkIt: 'To check it works, ask the agent “Who am I in Colliedesk?” It answers with your name and the token’s tier.',
 };
