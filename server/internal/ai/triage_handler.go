@@ -272,8 +272,10 @@ var sourceID = regexp.MustCompile(`(?i)\b(kb|past)(\d+)\b`)
 // inside, so "2*3*4" or an order code with stars stays as written.
 var markdownMarks = func() []*regexp.Regexp {
 	var marks []*regexp.Regexp
-	for _, mark := range []string{`\*\*`, `__`, `\*`, "`"} {
-		marks = append(marks, regexp.MustCompile(`(^|[^\pL\pN*_`+"`"+`])`+mark+`([^\s*_`+"`"+`](?:[^\n]*?[^\s*_`+"`"+`])?)`+mark+`($|[^\pL\pN*_`+"`"+`])`))
+	for _, mark := range []struct{ open, char string }{{`\*\*`, `*`}, {`__`, `_`}, {`\*`, `*`}, {"`", "`"}} {
+		edge := `[^\pL\pN*_` + "`" + `]`
+		inner := `[^\s` + mark.char + `]`
+		marks = append(marks, regexp.MustCompile(`(^|`+edge+`)`+mark.open+`(`+inner+`(?:[^\n`+mark.char+`]*`+inner+`)?)`+mark.open+`($|`+edge+`)`))
 	}
 	return marks
 }()
@@ -282,8 +284,13 @@ var markdownMarks = func() []*regexp.Regexp {
 // similar solved ticket" for a past conversation, so a person never reads the prompt's ids.
 func readableReason(reason string, ids map[string]store.AIRetrievedDoc) string {
 	// The card shows plain text: Markdown emphasis or code marks around words would show as they are.
-	for _, mark := range markdownMarks {
-		reason = mark.ReplaceAllString(reason, "$1$2$3")
+	// Again until nothing changes: two marked words one space apart share that space as their edge.
+	for changed := true; changed; {
+		before := reason
+		for _, mark := range markdownMarks {
+			reason = mark.ReplaceAllString(reason, "$1$2$3")
+		}
+		changed = reason != before
 	}
 	return sourceID.ReplaceAllStringFunc(reason, func(match string) string {
 		parts := sourceID.FindStringSubmatch(match)
