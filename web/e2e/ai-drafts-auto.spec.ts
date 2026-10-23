@@ -47,6 +47,8 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     await dialog.getByRole('button', { name: 'Turn on' }).click();
     await expect(page.getByRole('switch', { name: 'Write a draft when a customer writes' })).toBeChecked();
 
+    // Adding the provider checked it with one call; from here, one call is one draft.
+    const before = model.calls();
     const inbound = await page.request.post(`${baseURL}/api/v1/channels/email/inbound`, {
       headers: { 'Content-Type': 'message/rfc822', 'X-Colliedesk-Inbound-Secret': secret },
       data: Buffer.from([`From: Erin Customer <erin-${suffix}@customer.example>`, `To: ${support}`, `Subject: Printer down ${suffix}`,
@@ -67,7 +69,7 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     await page.getByRole('button', { name: 'Send reply' }).click();
     await expect(page.getByRole('article').filter({ hasText: 'Hi Erin, the office printer is back' })).toBeVisible();
     expect(psql(`SELECT outcome FROM ai_drafts WHERE conversation_id='${conversation}' AND automatic`)).toMatch(/^sent_/);
-    expect(model.calls()).toBe(1);
+    expect(model.calls() - before).toBe(1);
 
     // A phone: the card's buttons are in reach and nothing scrolls sideways.
     await page.setViewportSize({ width: 390, height: 844 });
