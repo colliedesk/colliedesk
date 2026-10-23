@@ -53,7 +53,13 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 - Thread: incoming messages on `--surface-2`, our replies on white with a 1px ring (`--surface-1`,
   `--shadow-1`), private notes amber.
   Composer: a raised card with Reply / Private note tabs (keys **R** and **N**) and
-  **Ctrl/Cmd + Enter** to send.
+  **Ctrl/Cmd + Enter** to send. A reply also offers **Send and resolve** (secondary button beside the
+  primary **Send reply**; **Ctrl/Cmd + Shift + Enter**), as Freshdesk's "Send and set as" and Help Scout's
+  status-on-send do: the status changes only after the reply was accepted. A note has none. The keycap hint sits
+  in the composer head, so the button row stays one line on desktop; below 75 rem the hint hides and the
+  row wraps instead of clipping.
+- Thread header: **Resolve** (or **Reopen** once resolved or closed), a secondary button with an icon, so
+  resolving never needs the details drawer.
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise) beside the form; on narrow
   screens the brand side becomes a header.
 - The mascot is the headset collie on an ink tile (see Logo).

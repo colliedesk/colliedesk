@@ -227,6 +227,7 @@ export function InboxRoute() {
     viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    onSetStatus={(conversationId, status) => update.mutateAsync({ conversationId, changes: { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc, seen) => message.mutateAsync({ kind, body, files, cc, seen })}

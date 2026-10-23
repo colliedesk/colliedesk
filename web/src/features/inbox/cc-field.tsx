@@ -15,8 +15,8 @@ interface CcFieldProps {
   value: string[];
   onChange: (value: string[]) => void;
   disabled?: boolean;
-  // Ctrl/Cmd+Enter in an empty box sends the reply, as it does in the message box.
-  onSend?: () => void;
+  // Ctrl/Cmd+Enter in an empty box sends the reply, as it does in the message box; with Shift it also resolves.
+  onSend?: (resolve: boolean) => void;
   // Told whether the box holds typed text that cannot be added, which the reply must not leave without.
   onBlockingChange?: (blocking: boolean) => void;
 }
@@ -58,7 +58,7 @@ export function CcField({ value, onChange, disabled, onSend, onBlockingChange }:
     const sends = event.key === 'Enter' && (event.ctrlKey || event.metaKey);
     if (sends && draft.trim() === '') {
       event.preventDefault();
-      onSend?.();
+      onSend?.(event.shiftKey);
     } else if ((event.key === 'Enter' || commitKeys.includes(event.key)) && draft.trim() !== '') {
       // With text typed, Ctrl+Enter only finishes the address; the next one sends.
       event.preventDefault();

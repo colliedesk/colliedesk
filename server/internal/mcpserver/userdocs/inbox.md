@@ -161,6 +161,13 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   connected, it is also emailed to the contact and shows **Queued**, **Sent** or
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
+- **Send reply** (or Ctrl/Cmd + Enter) sends what you wrote.
+- **Send and resolve**, next to **Send reply** (or Ctrl/Cmd + Shift + Enter), sends the reply and then sets
+  the conversation to **Resolved**, in one step. The status changes only after the reply was accepted: if the
+  reply is refused, nothing changes and your text stays in the box with the reason. If the reply was sent but
+  the status could not be changed, a message says so; press **Resolve** above the thread to try again.
+- A private note has no **Send and resolve**, because a note is often written while the work goes on. Add
+  the note, then press **Resolve** above the thread.
 - Messages support Markdown.
 - **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
   tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
@@ -202,6 +209,9 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 
 **Change the conversation** (details pane)
+- **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
+  screen width, without opening the details. A resolved or closed conversation shows **Reopen** there
+  instead, which sets it back to Open. If the change fails, a message under the button says so.
 - **Status**: every status can be changed back, for example Resolved → Open to reopen.
 - **Priority**: Low, Normal, High, Urgent.
 - **Assignee**: assign to a teammate or set back to unassigned.
