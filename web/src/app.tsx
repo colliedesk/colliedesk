@@ -239,8 +239,12 @@ const aiRoute = createRoute({
 const resultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/results',
+  validateSearch: (search: Record<string, unknown>): { window?: '7d' } => (search.window === '7d' ? { window: '7d' } : {}),
   component: function Results() {
-    return <Part part={resultsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ResultsRoute }) => <ResultsRoute />} />;
+    const { window } = resultsRoute.useSearch();
+    const navigate = useNavigate();
+    return <Part part={resultsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ResultsRoute }) => <ResultsRoute window={window ?? '30d'}
+      onWindow={(value) => void navigate({ to: '/results', search: value === '7d' ? { window: '7d' } : {}, replace: true })} />} />;
   },
 });
 const resultsShareRoute = createRoute({

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ResultsAdmin } from './results-admin';
 import type { ResultsAdminProps } from './results-admin';
@@ -17,8 +17,9 @@ describe('ResultsAdmin', () => {
   it('shows the link state and turns it off or replaces it', () => {
     const handlers = renderAdmin();
     expect(screen.getByText(/On · created Oct 20, 2026 by Mai Tran · last viewed Oct 22/)).toBeVisible();
-    expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull();
+    expect(screen.queryByText(/r#/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    expect(screen.getByRole('button', { name: 'Create a new link' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: 'Create a new link' }));
     expect(handlers.onTurnOff).toHaveBeenCalled();
     expect(handlers.onCreate).toHaveBeenCalled();
@@ -26,7 +27,7 @@ describe('ResultsAdmin', () => {
 
   it('shows a new link once, to copy, and says the old one stopped', () => {
     renderAdmin({ created: 'https://desk.example/r#token', replacedOld: true });
-    expect(screen.getByRole('textbox', { name: 'Share link' })).toHaveValue('https://desk.example/r#token');
+    expect(screen.getByText('https://desk.example/r#token')).toBeVisible();
     expect(screen.getByText(/You will not see this link again/)).toBeVisible();
     expect(screen.getByText(/Your old link was turned off/)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Copy link' })).toBeVisible();
@@ -46,8 +47,12 @@ describe('ResultsAdmin', () => {
     expect(handlers.onWeekly).toHaveBeenCalledWith(false);
   });
 
-  it('explains why the weekly email cannot be turned on without mail settings', () => {
-    renderAdmin({ weekly: { ...weekly, can_send: false } });
+  it('explains why the weekly email cannot be turned on without mail settings, and still lets it be turned off', () => {
+    const handlers = renderAdmin({ weekly: { ...weekly, can_send: false } });
+    fireEvent.click(screen.getByRole('switch', { name: 'Email me on Mondays' }));
+    expect(handlers.onWeekly).toHaveBeenCalledWith(false);
+    cleanup();
+    renderAdmin({ weekly: { ...weekly, subscribed: false, can_send: false } });
     expect(screen.getByRole('switch', { name: 'Email me on Mondays' })).toBeDisabled();
     expect(screen.getByText(/Ask whoever runs it to set SMTP_HOST and MAIL_FROM_DOMAIN/)).toBeVisible();
     expect(screen.getByRole('link', { name: 'How to set up outgoing email' })).toBeVisible();

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { sharedResults } from '../../api/results';
 import type { Results, SharedResults, WindowKey } from '../../api/results';
@@ -23,6 +23,8 @@ function asResults(shared: SharedResults): Results {
   };
 }
 
+const readToken = () => window.location.hash.replace(/^#/, '');
+
 const timezone = (() => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -34,7 +36,13 @@ const timezone = (() => {
 // The public page of a results share link: /r#<token>. The token is in the fragment, so it never
 // reaches a server log; it is sent in the body of the request.
 export function ResultsShareRoute() {
-  const token = window.location.hash.replace(/^#/, '');
+  const [token, setToken] = useState(readToken);
+  // Another link pasted into the same tab changes only the fragment: read it again.
+  useEffect(() => {
+    const changed = () => setToken(readToken());
+    window.addEventListener('hashchange', changed);
+    return () => window.removeEventListener('hashchange', changed);
+  }, []);
   const shared = useQuery({ queryKey: ['results-shared', token], queryFn: () => sharedResults(token), enabled: token !== '', retry: false });
   const [period, setPeriod] = useState<WindowKey>('30d');
   if (token === '' || shared.data === null) {

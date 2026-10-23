@@ -224,6 +224,7 @@ export function ResultsPage(props: ResultsPageProps) {
   const aiWindow = a?.ai;
   const saved = results.hours_saved[key];
   const savedCell = (() => {
+    if (!current) return <p className="results-muted">{m.ai.needsCurrent}</p>;
     if (saved && saved.conversations === 0) return <p className="results-muted">{m.ai.noneUnchanged}</p>;
     if (saved) return <><p className="results-value results-hours">{m.ai.upTo} <strong>{m.ai.hours(saved.hours.toLocaleString('en'))}</strong></p>
       <p className="results-muted">{m.ai.formula(saved.conversations, formatMinutes(saved.median_handle_minutes))}</p></>;
@@ -252,8 +253,9 @@ export function ResultsPage(props: ResultsPageProps) {
       {rows.map((row) => <section key={row.name} className="results-row" aria-label={row.name}>
         <div className="results-metric"><h2>{row.name}</h2><p><strong>{m.howWeCount}</strong> {how(row.how)}</p></div>
         {showBaseline && <div className="results-cell">{cellLabel(before)}{withBaseline ? row.before : <p className="results-muted">{m.ai.needsBaseline}</p>}</div>}
-        <div className="results-cell">{cellLabel(after)}{current ? row.after : <p className="results-muted">{m.firstCompute}</p>}</div>
-        {showBaseline && <div className="results-cell results-change-cell"><p className="results-cell-label">{m.change}</p><ChangeCell change={row.change} /></div>}
+        <div className="results-cell">{cellLabel(after)}{current ? row.after : <p className="results-muted">{m.calculating}</p>}</div>
+        {showBaseline && <div className="results-cell results-change-cell"><p className="results-cell-label">{m.change}</p>
+          {current ? <ChangeCell change={row.change} /> : <p className="results-change-none">{m.waitingForNumbers}</p>}</div>}
       </section>)}
     </section>
     <section className="results-card results-ai" aria-labelledby="results-ai">
@@ -261,7 +263,7 @@ export function ResultsPage(props: ResultsPageProps) {
       <p className="results-ai-how"><strong>{m.howWeCount}</strong> {m.ai.how}</p>
       <div className="results-ai-grid">
         <div><p className="results-cell-title">{m.ai.unchanged}</p>{aiWindow ? <>{number(after, 'ai_sent_unchanged', String(aiWindow.sent_unchanged))}
-          <p className="results-muted">{m.ai.unchangedDetail(aiWindow.conversations_sent_unchanged)}</p></> : <p className="results-muted">{m.firstCompute}</p>}</div>
+          <p className="results-muted">{m.ai.unchangedDetail(aiWindow.conversations_sent_unchanged)}</p></> : <p className="results-muted">{m.calculating}</p>}</div>
         <div><p className="results-cell-title">{m.ai.edited}</p>{aiWindow && number(after, 'ai_sent_edited', String(aiWindow.sent_edited))}</div>
         <div><p className="results-cell-title">{m.ai.discarded}</p>{aiWindow && number(after, 'ai_discarded', String(aiWindow.discarded))}</div>
         <div className="results-saved"><p className="results-cell-title">{m.ai.hoursSaved}</p>{savedCell}</div>

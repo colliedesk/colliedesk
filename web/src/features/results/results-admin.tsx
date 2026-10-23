@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ShareLink } from '../../api/results';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { resultsMessages as m } from './results-messages';
@@ -24,6 +24,8 @@ export interface ResultsAdminProps {
 export function ResultsAdmin(props: ResultsAdminProps) {
   const { timezone, link, linkFailed, created, replacedOld, busy, shareFailed, onCreate, onTurnOff, weekly, weeklyBusy, weeklyFailed, onWeekly } = props;
   const [copied, setCopied] = useState(false);
+  // Turning the link off removes its button: the focus moves to the button that stays.
+  const createButton = useRef<HTMLButtonElement>(null);
   const copy = async () => {
     if (!created) return;
     try {
@@ -45,14 +47,15 @@ export function ResultsAdmin(props: ResultsAdminProps) {
           {created && <div className="results-share-new">
             <p>{m.admin.copyNow}</p>
             <div className="results-share-copy">
-              <input type="text" readOnly value={created} aria-label={m.admin.linkLabel} onFocus={(event) => event.currentTarget.select()} />
-              <button type="button" onClick={() => void copy()}>{copied ? m.admin.copied : m.admin.copy}</button>
+              {/* The whole address wraps: nothing of the token is hidden behind a scroll. */}
+              <p className="results-share-url" aria-label={m.admin.linkLabel}><code>{created}</code></p>
+              <button type="button" onClick={() => void copy()}><span role="status">{copied ? m.admin.copied : m.admin.copy}</span></button>
             </div>
             {replacedOld && <p className="results-muted">{m.admin.oldTurnedOff}</p>}
           </div>}
           <div className="button-row">
-            <button type="button" disabled={busy} onClick={() => { setCopied(false); onCreate(); }}>{link ? m.admin.createNew : m.admin.create}</button>
-            {link && <button type="button" className="danger-action" disabled={busy} onClick={onTurnOff}>{m.admin.turnOff}</button>}
+            <button type="button" ref={createButton} disabled={busy} onClick={() => { setCopied(false); onCreate(); }}>{link ? m.admin.createNew : m.admin.create}</button>
+            {link && <button type="button" className="danger-action" disabled={busy} onClick={() => { createButton.current?.focus(); onTurnOff(); }}>{m.admin.turnOff}</button>}
           </div>
           {shareFailed && <p role="alert" className="error-copy">{m.admin.shareFailed}</p>}
           <p className="results-muted">{link ? m.admin.onceNote : m.admin.offNote}</p>
@@ -63,7 +66,7 @@ export function ResultsAdmin(props: ResultsAdminProps) {
         {weekly && <>
           <p>{m.admin.weeklyAbout(weekly.timezone)}</p>
           <label className="results-switch">
-            <input type="checkbox" role="switch" checked={weekly.subscribed} disabled={!weekly.can_send || weeklyBusy} onChange={(event) => onWeekly(event.target.checked)} />
+            <input type="checkbox" role="switch" checked={weekly.subscribed} disabled={(!weekly.can_send && !weekly.subscribed) || weeklyBusy} onChange={(event) => onWeekly(event.target.checked)} />
             <span>{m.admin.weeklyToggle}</span>
           </label>
           {weekly.can_send ? <p className="results-muted">{weekly.subscribed ? m.admin.weeklyOn(formatDay(weekly.next_at, weekly.timezone)) : m.admin.weeklyOff}</p>

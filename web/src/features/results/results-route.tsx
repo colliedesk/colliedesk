@@ -13,7 +13,8 @@ import './results.css';
 // A number opens the inbox on the conversations it counts, in any status.
 const numberLink: NumberLink = ({ result, className, children }) => <Link to="/" search={{ status: 'all', result }} className={className}>{children}</Link>;
 
-export function ResultsRoute({ window: initial = '30d', onWindow }: { window?: WindowKey; onWindow?: (window: WindowKey) => void }) {
+// The period is in the address (?window=7d), so a number opened from it comes back to the same period.
+export function ResultsRoute({ window = '30d', onWindow }: { window?: WindowKey; onWindow: (window: WindowKey) => void }) {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   // The numbers are computed in the background; while the first ones or the baseline are being worked
   // out, the page asks again every 30 seconds so it updates by itself.
@@ -21,7 +22,6 @@ export function ResultsRoute({ window: initial = '30d', onWindow }: { window?: W
     queryKey: ['results'], queryFn: resultsApi.get, enabled: Boolean(me.data),
     refetchInterval: (query) => (query.state.data && (query.state.data.current === null || query.state.data.baseline_state === 'computing') ? 30_000 : false),
   });
-  const [window, setWindow] = useState<WindowKey>(initial);
   // "Updated 40 min ago" moves with the clock.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -50,7 +50,7 @@ export function ResultsRoute({ window: initial = '30d', onWindow }: { window?: W
     ? { ...results.data.weekly_email, subscribed: weekly.variables } : results.data?.weekly_email;
   const timezone = me.data?.timezone ?? 'UTC';
   return <ResultsPage results={results.data} loading={results.isPending || me.isPending} failed={results.isError || me.isError}
-    onRetry={() => void results.refetch()} window={window} onWindow={(value) => { setWindow(value); onWindow?.(value); }}
+    onRetry={() => void results.refetch()} window={window} onWindow={onWindow}
     timezone={timezone} isAdmin={isAdmin} now={now} link={numberLink}
     importLink={<Link to="/settings/import-freshdesk" className="button">{m.openImport}</Link>}
     admin={isAdmin ? <ResultsAdmin timezone={timezone} link={shareLink.data?.link} linkFailed={shareLink.isError} created={created} replacedOld={replacedOld}

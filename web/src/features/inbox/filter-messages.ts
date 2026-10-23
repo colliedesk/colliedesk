@@ -33,6 +33,8 @@ export const filterMessages = {
   remove: (label: string) => `Remove filter ${label}`,
   clearAll: 'Clear all',
   countedIn: (metric: string, window: string) => `Counted in: ${metric}, ${window}`,
+  countedInSide: (metric: string, side: string, range: string) => `Counted in: ${metric}, ${side}, ${range}`,
+  anyStatus: 'The conversations behind this number, in any status.',
   resultWindows: { '30d': 'last 30 days', '7d': 'last 7 days' } as Record<string, string>,
   resultMetrics: {
     first_response: 'First response', first_response_waiting: 'Waiting for a first reply', resolution: 'Time to resolve', unresolved: 'Not resolved or still settling',
