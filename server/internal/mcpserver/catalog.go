@@ -5,6 +5,8 @@ type Spec struct {
 	Name        string
 	Title       string
 	Description string
+	// Doc is one Markdown sentence for people: the "What it does" of the tool table in the user guide.
+	Doc string
 	// Tier is the lowest agent token tier that may call the tool: read, draft, send or admin. "any" means
 	// every valid token, because the tool needs nothing a read token lacks.
 	Tier       string
@@ -26,7 +28,7 @@ type Spec struct {
 // Catalog lists every tool in documentation order. It is the one place a tool is defined: the
 // server registers from it and the user guide and the generated references read it.
 func Catalog() []Spec {
-	return []Spec{
+	specs := []Spec{
 		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), conversationPresenceSpec(), timeEntriesListSpec(), attachmentGetSpec(),
 		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
 		conversationStartSpec(),
@@ -52,6 +54,10 @@ func Catalog() []Spec {
 		aiDraftCreateSpec(), aiDraftGetSpec(), aiDraftsListSpec(), aiDraftDiscardSpec(),
 		aiTriageGetSpec(), aiTriageCreateSpec(), aiTriageAcceptSpec(), aiTriageDismissSpec(), aiTriageUndoSpec(),
 	}
+	for i := range specs {
+		specs[i].Doc = toolDocs[specs[i].Name]
+	}
+	return specs
 }
 
 const (

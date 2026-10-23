@@ -1,4 +1,4 @@
-.PHONY: test build e2e dev clean sync-user-docs
+.PHONY: test build e2e dev clean sync-user-docs docs-mcp
 
 GO_ENV := GOPATH=/tmp/colliedesk-gopath GOMODCACHE=/tmp/colliedesk-gopath/pkg/mod GOCACHE=/tmp/colliedesk-go-cache
 TEST_DATABASE_URL ?= postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable
@@ -31,6 +31,12 @@ e2e:
 sync-user-docs:
 	rm -f server/internal/mcpserver/userdocs/*.md
 	cp docs/user/*.md server/internal/mcpserver/userdocs/
+
+# The tool table of docs/user/mcp.md is generated from the MCP tool catalog. Run this after changing
+# a tool; a Go test fails when the guide is stale.
+docs-mcp:
+	cd server && $(GO_ENV) go test ./internal/mcpserver/docgen -run TestGeneratedDocs -count=1 -update
+	$(MAKE) sync-user-docs
 
 dev:
 	docker compose up --build

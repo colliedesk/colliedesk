@@ -143,6 +143,13 @@
   `docs/user` in `server/internal/mcpserver/userdocs`. Run `make sync-user-docs` after editing a
   guide; `TestEmbeddedUserGuidesMatchTheDocsDirectory` fails on a stale copy. `README.md` is not
   indexed.
+- **Generated tool table.** The table under "Tools" in `docs/user/mcp.md` sits between
+  `<!-- generated:tools -->` and `<!-- /generated -->` and comes from the catalog (package
+  `mcpserver/docgen`): the sentence from `toolDocs` (`Spec.Doc`, written for people; `Description`
+  is written for the model), the tier from `Tier`, and "Cannot be undone" from `Destructive`. Run
+  `make docs-mcp` after changing a tool; `TestGeneratedDocsMatchTheCatalog` fails on a stale table,
+  `TestEveryToolHasADocSentence` on a tool without a sentence, and `TestUserGuidesNameOnlyRealTools`
+  on a guide naming a tool that does not exist. `docs_search` skips the marker lines.
 - **SDK dependency.** `github.com/modelcontextprotocol/go-sdk` v1.8.0 (Apache-2.0, compatible with
   AGPL-3.0-only). It pulls `golang.org/x/sys` v0.41.0, which carries an OSV advisory (Windows
   only); `go.mod` pins v0.44.0 so the PR gate stays clean. The SDK's stateless-session behaviour
