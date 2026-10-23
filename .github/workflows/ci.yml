@@ -9,10 +9,12 @@ permissions:
   contents: read
   actions: read
 
-# A newer push to a PR cancels its older run. On main a run never cancels the running one, but
-# GitHub keeps only one pending run per group, so a burst of merges skips the middle commits.
+# A newer push to a PR cancels its older run. Each push to main has a group of its own: a shared
+# group made a main run wait for the one before it, on the 120-second clock (run 39900633315 started
+# its first job 102 seconds after it was created), and replaced the middle commits of a burst.
+# publish-edge.yml moves edge only to main's head, so runs that end out of order are safe.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -525,17 +527,9 @@ jobs:
           fi
           python3 -I .github/scripts/roadmap-check.py ROADMAP.md
 
-  codeql:
-    needs: pr-verified
-    if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
-    permissions:
-      contents: read
-      security-events: write
-    uses: ./.github/workflows/codeql.yml
-
   ci-ok:
     if: ${{ !cancelled() }}
-    needs: [pr-verified, go, web, e2e, onboarding, image, osv-scan, roadmap, codeql]
+    needs: [pr-verified, go, web, e2e, onboarding, image, osv-scan, roadmap]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

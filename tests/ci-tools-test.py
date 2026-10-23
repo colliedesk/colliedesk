@@ -520,9 +520,61 @@ class RunnerConcurrency(unittest.TestCase):
         self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
 
     def test_jobs_behind_pr_verified_count_and_push_only_jobs_do_not(self):
-        # 8 Go shards, web, 2 e2e shards, 2 onboarding, image, roadmap, 3 CodeQL; not pr-verified,
-        # and not osv-scan, which starts when roadmap ends.
-        self.assertEqual(runners(ROOT / '.github/workflows/ci.yml'), 18)
+        # 8 Go shards, web, 2 e2e shards, 2 onboarding, image, roadmap; not pr-verified, and not
+        # osv-scan, which starts when roadmap ends. CodeQL's 3 count in codeql.yml.
+        self.assertEqual(runners(ROOT / '.github/workflows/ci.yml'), 15)
+
+
+def concurrency(path):
+    """The workflow-level concurrency group and cancel-in-progress expressions."""
+    block = re.search(r'^concurrency:\n  group: (.+)\n  cancel-in-progress: (.+)$', path.read_text(), re.M)
+    return block.groups() if block else (None, None)
+
+
+class Concurrency(unittest.TestCase):
+    """A newer push to a pull request cancels its older run, which only queues for runners. A push
+    to main never waits for, cancels or replaces another main run: GitHub keeps one run per group
+    running and one pending, so a shared group made a main run wait for the one before it (run
+    39900633315: created 04:29:57, first job 04:31:39, when 39900609093 ended; 234 seconds) and
+    dropped the middle commits of a burst."""
+    per_run = "${{ github.event_name == 'pull_request' && github.ref || github.run_id }}"
+    cancel = "${{ github.event_name == 'pull_request' }}"
+
+    def test_a_pull_request_cancels_its_older_run_and_main_runs_every_push(self):
+        for name in ('ci.yml', 'codeql.yml'):
+            group, cancel = concurrency(ROOT / '.github/workflows' / name)
+            self.assertIsNotNone(group, f'{name} has no concurrency group')
+            self.assertTrue(group.endswith('-' + self.per_run), f'{name}: {group}')
+            self.assertEqual(cancel, self.cancel, name)
+
+
+class CodeQLOutsideTheClock(unittest.TestCase):
+    """CodeQL runs on every pull request and every push to main, all three languages, in a workflow of
+    its own: its Go analysis ended the CI run in some runs (100 to 124 seconds), and on a merge that
+    pr-verified passes it was skipped. Merging waits for it through the ruleset, not through ci-ok."""
+    workflow = ROOT / '.github/workflows/codeql.yml'
+
+    def test_codeql_runs_on_every_pull_request_and_push_to_main(self):
+        text = self.workflow.read_text()
+        on = re.search(r'^on:\n((?:  .*\n)+)', text, re.M).group(1)
+        self.assertRegex(on, re.compile(r'^  pull_request:\n(?!    )', re.M), 'no filter on pull requests')
+        self.assertRegex(on, re.compile(r'^  push:\n    branches: \[main\]\n(?!    )', re.M))
+        self.assertRegex(on, re.compile(r'^  schedule:', re.M))
+        self.assertNotIn('workflow_call', on)
+        self.assertNotIn('paths', on)
+        for _, body in workflow_jobs(self.workflow):
+            self.assertIsNone(re.search(r'^    if:', '\n'.join(body), re.M),
+                              'a skipped job passes a required check')
+        for language in ('go', 'javascript-typescript', 'actions'):
+            self.assertIn(f'- language: {language}', text)
+
+    def test_ci_ok_does_not_wait_for_codeql(self):
+        for name, body in workflow_jobs(ROOT / '.github/workflows/ci.yml'):
+            text = '\n'.join(body)
+            self.assertNotIn('codeql.yml', text, name)
+            self.assertNotIn('github/codeql-action/', text, name)
+            needs = re.search(r'^    needs: (.*)$', text, re.M)
+            self.assertNotIn('codeql', needs.group(1) if needs else '', name)
 
 
 class PublishEdge(unittest.TestCase):

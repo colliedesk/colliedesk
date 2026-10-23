@@ -3,7 +3,7 @@ name: Image cache
 # Writes the image's layer cache (type=gha, scope image) for main; CI's image job only reads it.
 # Writing it in CI cost 52 seconds whenever the Go dependencies changed (compressing and uploading
 # them), which a two-minute job cannot hold. It runs after CI, never beside it: a main push that
-# runs every CI job already takes 18 runners, go-cache and Scorecard two more, and a 21st would
+# runs every CI job and CodeQL already takes 18 runners, go-cache and Scorecard two more, and a 21st would
 # queue a CI job against the 120-second clock (docs/internals/performance.md, CI phase budget).
 # Every finished run writes, a red or cancelled one too: a cold image job passes its 2-minute timeout,
 # GitHub ends that run as cancelled, and skipping it kept main cold for good (runs 39893295025 and

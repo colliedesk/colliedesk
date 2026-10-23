@@ -1,12 +1,23 @@
 name: CodeQL
 
+# Every pull request and every push to main, all three languages, in a workflow of its own: inside
+# CI its Go analysis ended the run in some runs (100 to 124 seconds of the 120-second clock), and a
+# merge pr-verified passed skipped it. Merging waits for it through the main ruleset, not ci-ok.
+# No job here may have an if: a skipped job passes a required check.
 on:
-  workflow_call:
+  pull_request:
+  push:
+    branches: [main]
   schedule:
     - cron: '17 3 * * 1'
 
 permissions:
   contents: read
+
+# As in ci.yml: a newer push to a pull request cancels its older analysis; main analyses every push.
+concurrency:
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
