@@ -284,7 +284,7 @@ func TestATriageSuggestionTellsCaseTagsApartAndHidesSourceIDs(t *testing.T) {
 	lower := create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "bug"})
 	only := create(t, d.api, d.adminA, "/api/v1/tags", map[string]any{"name": "Printer"})
 	answer := triageAnswer([]string{"bug", "BUG", "printer"}, "high", "")
-	answer.Response.JSON = strings.Replace(answer.Response.JSON, "The printer is down for the whole office.", "Same as kb1 and past1, see KB12; down for the past 2 hours, like KB 7.", 1)
+	answer.Response.JSON = strings.Replace(answer.Response.JSON, "The printer is down for the whole office.", "Same as kb1 and **past1**, see `KB12`; down for the *past 2 hours*, like KB 7.", 1)
 	d.fake.Script(answer)
 	contact := create(t, d.api, d.adminA, "/api/v1/contacts", map[string]any{"name": "Lin", "email": "lin@customer-a.example"})
 	conversation := create(t, d.api, d.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer jam"})
