@@ -35,11 +35,15 @@ type ConversationFilter struct {
 	UpdatedAfter  *time.Time
 	UpdatedBefore *time.Time
 	// Sort is one of the ConversationSort* values; empty is ConversationSortUpdatedDesc.
-	Sort     string
-	Search   string
-	AgentID  string
-	Page     int
-	PageSize int
+	Sort   string
+	Search string
+	// ResultSnapshotID and ResultMetric keep the conversations one number of the results page counts
+	// (results_members); a snapshot no longer kept is ErrResultsRefreshed.
+	ResultSnapshotID string
+	ResultMetric     string
+	AgentID          string
+	Page             int
+	PageSize         int
 }
 
 // Orders of the inbox list. Every order ends with the id, so a page never repeats or skips a row.
@@ -276,6 +280,10 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 			` OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.body ` + like + `)` +
 			` OR EXISTS(SELECT 1 FROM contacts k WHERE k.workspace_id=c.workspace_id AND k.id=c.contact_id AND (k.name ` + like + ` OR k.email ` + like + `)))`)
 	}
+	if filter.ResultSnapshotID != "" {
+		q.and(`EXISTS(SELECT 1 FROM results_members rm WHERE rm.workspace_id=c.workspace_id AND rm.snapshot_id=` + q.arg(filter.ResultSnapshotID) +
+			`::uuid AND rm.metric=` + q.arg(filter.ResultMetric) + ` AND rm.conversation_id=c.id)`)
+	}
 	return q
 }
 
@@ -290,6 +298,15 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	order, ok := conversationOrders[filter.Sort]
 	if !ok {
 		order = conversationOrders[ConversationSortUpdatedDesc]
+	}
+	if filter.ResultSnapshotID != "" {
+		var kept bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM results_snapshots WHERE workspace_id=$1 AND id=$2::uuid)`, workspaceID, filter.ResultSnapshotID).Scan(&kept); err != nil {
+			return ConversationPage{}, fmt.Errorf("read results snapshot: %w", err)
+		}
+		if !kept {
+			return ConversationPage{}, domain.ErrResultsRefreshed
+		}
 	}
 	q := conversationConditions(workspaceID, filter, now)
 	limit, offset := q.arg(filter.PageSize), q.arg((filter.Page-1)*filter.PageSize)

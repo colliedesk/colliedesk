@@ -109,6 +109,7 @@ var routeTiers = map[string]string{
 	"PATCH /api/v1/agents/me/timezone":                                 "draft",
 	"PATCH /api/v1/agents/me/display-name":                             "draft",
 	"GET /api/v1/tags":                                                 "read",
+	"GET /api/v1/results":                                              "read",
 	"POST /api/v1/tags":                                                "draft",
 	"PATCH /api/v1/tags/{id}":                                          "send",
 	"DELETE /api/v1/tags/{id}":                                         "send",

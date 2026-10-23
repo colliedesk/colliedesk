@@ -160,6 +160,10 @@ const (
 	MetricAIDiscarded          = "ai_discarded"
 )
 
+// Metrics are every metric name a snapshot's members may hold.
+var Metrics = []string{MetricFirstResponse, MetricFirstResponseWaiting, MetricResolution, MetricUnresolved, MetricWithoutResolveTime,
+	MetricReopened, MetricVolume, MetricHandle, MetricAISentUnchanged, MetricAISentEdited, MetricAIDiscarded}
+
 // Compute applies the counting rules of docs/user/results.md to one side, for every window.
 func Compute(in Input) map[string]*Numbers {
 	out := make(map[string]*Numbers, len(Windows))

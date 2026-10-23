@@ -57,6 +57,7 @@ type inboxArgs struct {
 	UpdatedBefore   string     `json:"updated_before"`
 	Sort            string     `json:"sort"`
 	Q               string     `json:"q"`
+	Result          string     `json:"result"`
 	Limit           int        `json:"limit"`
 	Cursor          string     `json:"cursor"`
 	Detail          string     `json:"detail"`
@@ -157,7 +158,7 @@ func (c *call) inboxQuery(args inboxArgs) (url.Values, error) {
 	}
 	for key, value := range map[string]string{"tag_match": args.TagMatch, "contact": args.ContactID, "organization": args.Organization,
 		"awaiting": args.Awaiting, "source": args.Source, "created_after": args.CreatedAfter, "created_before": args.CreatedBefore,
-		"updated_after": args.UpdatedAfter, "updated_before": args.UpdatedBefore, "sort": args.Sort, "search": args.Q} {
+		"updated_after": args.UpdatedAfter, "updated_before": args.UpdatedBefore, "sort": args.Sort, "search": args.Q, "result": args.Result} {
 		set(key, value)
 	}
 	for key, value := range map[string]*bool{"has_pending_draft": args.HasPendingDraft, "delivery_failed": args.DeliveryFailed} {

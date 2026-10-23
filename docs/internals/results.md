@@ -73,3 +73,15 @@ shows.
 A workspace that imported before results existed gets, on its first compute only, the import whose
 first run finished first as its baseline (by its in-app job, or when its CLI ledger last changed),
 with an unknown reconcile status. Later an undone baseline does not come back.
+
+## Reading and opening a number
+
+`GET /api/v1/results` (every role; token tier `read`; MCP `colliedesk_results_get`) returns the newest
+current snapshot and the baseline as stored, plus `baseline_state` (`none`, `computing`, `ready`) and
+hours saved, which is worked out on the read from the two snapshots (it needs both). The compute error
+is shown to admins only. `GET /conversations?result=<snapshot id>:<window>.<metric>` keeps the
+conversations a number counts (`EXISTS` on the members' primary key); it is not a saved view filter,
+since a snapshot is replaced. A snapshot not kept in the caller's workspace answers 410
+`results_refreshed` whether it was pruned or belongs to another workspace, so the answer says nothing
+about other workspaces. Every time the API returns is UTC: the loader converts what the database
+session returns.

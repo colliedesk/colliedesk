@@ -118,17 +118,20 @@ images, and emphasis runs (goldmark's quadratic paths: up to 24 s before `tame`,
 then 20 visits (not 50, to spare the shared latency runner) read the kept page (4–12 ms).
 `TestHelpCenterRenderedPagesAreNeverSharedAcrossWorkspaces` keeps that memory per workspace.
 
-## Results compute budget
+## Results budget
 
-`TestResultsComputeStaysInBudget` (in `internal/httpapi`, so the latency shard builds no new test
+`TestResultsComputeAndReadStayInBudget` (in `internal/httpapi`, so the latency shard builds no new test
 binary) holds the background compute of one workspace's results page to 2 s, best of three: no screen
 waits for it (the page reads a stored snapshot), but it holds a connection. The fixture is a busy team:
 5,000 Colliedesk conversations over 30 days (a customer message and a reply each, half resolved) and
 20,000 imported Freshdesk tickets in the baseline's window, with stats and time logged on a quarter.
-Measured on the dev host: current numbers 130 ms, baseline 550 ms; seeding takes about 5 s. The
+Measured on the dev host: current numbers 130 ms, baseline 550 to 590 ms; seeding takes about 5 s. The
 baseline cost is mostly writing the ~65,000 rows of the conversations behind its numbers; a foreign
-key from those rows to conversations tripled it and was dropped (`docs/internals/results.md`). Do not
-widen the 2 s.
+key from those rows to conversations tripled it and was dropped (`docs/internals/results.md`). On the
+same data the page's read (`store.ReadResults`: the state row and one snapshot of each kind) is held to
+20 ms p95 over 200 calls (1.5 ms locally) and the list a number opens (`result=` on the 5,000
+conversations of the 30-day volume, a page of 50) to the inbox's 100 ms p95 (5 ms locally); one seed
+serves all three. Do not widen any of them.
 
 ## Pending agent requests budget
 

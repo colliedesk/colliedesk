@@ -36,6 +36,7 @@ func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (
 		WHERE workspace_id=$1 AND channel NOT IN ('imported','problem_report')`, workspaceID).Scan(&in.First); err != nil {
 		return in, fmt.Errorf("read the first conversation: %w", err)
 	}
+	in.HistorySince, in.First = in.HistorySince.UTC(), utc(in.First)
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.created_at,f.created_at,r.created_at FROM conversations c `+customerStarted+`
 		WHERE c.workspace_id=$1 AND c.channel NOT IN ('imported','problem_report') AND c.created_at>$3 AND c.created_at<=$2`,
 		workspaceID, m, m.Add(-lookback))
@@ -64,6 +65,7 @@ func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (
 			changes.Close()
 			return in, fmt.Errorf("read status history: %w", err)
 		}
+		change.At = change.At.UTC()
 		conversations[index[id]].Changes = append(conversations[index[id]].Changes, change)
 	}
 	changes.Close()
@@ -83,6 +85,7 @@ func LoadLive(ctx context.Context, tx pgx.Tx, workspaceID string, m time.Time) (
 		if err := drafts.Scan(&d.ConversationID, &d.Outcome, &d.DecidedAt); err != nil {
 			return in, fmt.Errorf("read AI drafts: %w", err)
 		}
+		d.DecidedAt = d.DecidedAt.UTC()
 		in.Drafts = append(in.Drafts, d)
 	}
 	return in, drafts.Err()
@@ -102,9 +105,10 @@ func LoadBaseline(ctx context.Context, tx pgx.Tx, workspaceID, source string, an
 		workspaceID, anchor, source).Scan(&in.First, &newest); err != nil {
 		return in, fmt.Errorf("read the imported history: %w", err)
 	}
+	in.First = utc(in.First)
 	in.End = anchor
 	if newest != nil && newest.Before(anchor) {
-		in.End = *newest
+		in.End = newest.UTC()
 	}
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.created_at,f.created_at,r.created_at,c.origin->'stats',
 		(SELECT COALESCE(sum(t.minutes),0) FROM time_entries t WHERE t.workspace_id=c.workspace_id AND t.conversation_id=c.id) `+imported+customerStarted+`
@@ -125,7 +129,7 @@ func LoadBaseline(ctx context.Context, tx pgx.Tx, workspaceID, source string, an
 		if err := json.Unmarshal(stats, &read); err != nil {
 			return fmt.Errorf("read ticket stats of %s: %w", c.ID, err)
 		}
-		c.Stats = &Stats{Status: read.Status, ResolvedAt: read.ResolvedAt}
+		c.Stats = &Stats{Status: read.Status, ResolvedAt: utc(read.ResolvedAt)}
 		return nil
 	})
 	return in, err
@@ -145,6 +149,7 @@ func scanConversations(rows pgx.Rows, baseline func(*Conversation, []byte, int) 
 		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("read conversations: %w", err)
 		}
+		c.CreatedAt, c.FirstIncoming, c.FirstReply = c.CreatedAt.UTC(), c.FirstIncoming.UTC(), utc(c.FirstReply)
 		if baseline != nil {
 			if err := baseline(&c, stats, minutes); err != nil {
 				return nil, err
@@ -156,4 +161,13 @@ func scanConversations(rows pgx.Rows, baseline func(*Conversation, []byte, int) 
 		return nil, fmt.Errorf("read conversations: %w", err)
 	}
 	return out, nil
+}
+
+// utc keeps every time the API returns in UTC (the database session may run in any zone).
+func utc(at *time.Time) *time.Time {
+	if at == nil {
+		return nil
+	}
+	value := at.UTC()
+	return &value
 }

@@ -2,24 +2,32 @@ package httpapi_test
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/results"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const resultsComputeBudget = 2 * time.Second
+const (
+	resultsComputeBudget = 2 * time.Second
+	resultsReadBudget    = 20 * time.Millisecond
+	resultsListBudget    = 100 * time.Millisecond
+)
 
-// TestResultsComputeStaysInBudget holds the background compute of one workspace's results page
-// (docs/internals/performance.md): no screen waits for it, but it holds a connection, and a slow one
-// on a busy workspace would back the worker up. The fixture is a busy team: 5,000 Colliedesk
+// TestResultsComputeAndReadStayInBudget holds the results page to docs/internals/performance.md. The
+// background compute of one workspace: no screen waits for it, but it holds a connection, and a slow
+// one on a busy workspace would back the worker up. The fixture is a busy team: 5,000 Colliedesk
 // conversations over 30 days (a customer message and a reply each, half resolved), and 20,000 imported
 // Freshdesk tickets in the baseline's window with stats and time logged on a quarter. Each compute
-// (current numbers, baseline) is timed three times; the best must stay within 2 s.
-func TestResultsComputeStaysInBudget(t *testing.T) {
+// (current numbers, baseline) is timed three times; the best must stay within 2 s. On the same data,
+// the page's read (one stored snapshot of each kind) is held to 20 ms p95 and the list a number opens
+// (the 5,000 conversations of the 30-day volume, a page of 50) to the inbox's 100 ms p95.
+func TestResultsComputeAndReadStayInBudget(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	token := createSession(t, api, service, "Results Budget", "admin@results-budget.example.com")
 	workspace := workspaceID(t, api, token)
@@ -50,6 +58,40 @@ func TestResultsComputeStaysInBudget(t *testing.T) {
 		return err
 	})
 	best("baseline", func(tx pgx.Tx) error { return results.ComputeBaseline(ctx, tx, workspace, now) })
+
+	data := store.New(pool)
+	p95 := func(name string, budget time.Duration, samples int, call func() error) {
+		durations := make([]time.Duration, samples)
+		for index := range durations {
+			started := time.Now()
+			if err := call(); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			durations[index] = time.Since(started)
+		}
+		sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
+		value := durations[samples*95/100-1]
+		t.Logf("results %s p95 = %s", name, value)
+		if value > budget {
+			t.Fatalf("results %s p95 exceeds %s: %s", name, budget, value)
+		}
+	}
+	var page results.Page
+	p95("read", resultsReadBudget, 200, func() (err error) {
+		page, err = data.ReadResults(ctx, workspace, true)
+		return err
+	})
+	if page.Current == nil || page.Baseline == nil {
+		t.Fatalf("read = %+v", page)
+	}
+	var listed store.ConversationPage
+	p95("list of a number", resultsListBudget, 50, func() (err error) {
+		listed, err = data.ListConversations(ctx, workspace, store.ConversationFilter{ResultSnapshotID: page.Current.ID, ResultMetric: "30d.volume", Page: 1, PageSize: 50})
+		return err
+	})
+	if len(listed.Items) != 50 {
+		t.Fatalf("list of a number has %d rows", len(listed.Items))
+	}
 
 	var answered, baselineAnswered int
 	if err := pool.QueryRow(ctx, `SELECT (SELECT (data->'windows'->'30d'->'first_response'->>'answered')::int FROM results_snapshots WHERE workspace_id=$1 AND kind='current' ORDER BY computed_at DESC LIMIT 1),

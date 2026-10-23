@@ -155,6 +155,7 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":              tier(auth.ScopeSend),
 	"GET /api/v1/agents":                                         tier(auth.ScopeRead),
 	"GET /api/v1/tags":                                           tier(auth.ScopeRead),
+	"GET /api/v1/results":                                        tier(auth.ScopeRead),
 	"POST /api/v1/tags":                                          tier(auth.ScopeDraft),
 	"PATCH /api/v1/tags/{id}":                                    tier(auth.ScopeSend),
 	"DELETE /api/v1/tags/{id}":                                   tier(auth.ScopeSend),

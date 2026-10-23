@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,11 +21,8 @@ type fixture struct {
 
 func newFixture(t *testing.T, pool *pgxpool.Pool, name string) *fixture {
 	t.Helper()
-	workspace, _, err := auth.New(pool, "https://desk.example").CreateWorkspace(context.Background(), name, "admin@"+name+".example")
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := &fixture{t: t, pool: pool, workspace: workspace.ID}
+	f := &fixture{t: t, pool: pool}
+	f.workspace = f.id(`INSERT INTO workspaces(slug,name) VALUES($1,$1) RETURNING id::text`, name)
 	f.exec(`UPDATE workspaces SET status_history_since=$2 WHERE id=$1`, f.workspace, ago(60))
 	f.contact = f.id(`INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Casey',$2) RETURNING id::text`, f.workspace, "casey@"+name+".example")
 	return f

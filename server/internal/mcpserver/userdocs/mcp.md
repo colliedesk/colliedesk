@@ -172,6 +172,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_provider_remove` | Deletes an AI provider and erases its key; its features turn off. Cannot be undone | `admin` |
 | `colliedesk_ai_slot_set_request` | Asks to set an AI feature: its provider and model, on or off | `read` |
 | `colliedesk_ai_usage_get` | Shows a month of AI usage per feature and provider, and what is left of the included AI | `admin` |
+| `colliedesk_results_get` | Shows the results page: the team's numbers next to the imported baseline; `colliedesk_inbox_search` with `result` lists the conversations behind a number | `read` |
 | `colliedesk_ai_automatic_limits_set` | Changes how many automatic AI runs a workspace allows a day and a minute | `admin` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
 | `colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list` | Shows an AI draft (waiting up to 20 seconds while it is written), or a conversation's newest drafts | `read` |

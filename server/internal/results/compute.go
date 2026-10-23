@@ -32,6 +32,7 @@ const keepCurrent = 24 * time.Hour
 // ComputeCurrent computes the Colliedesk numbers measured at now and stores them, with the
 // conversations each counts, in the workspace's transaction.
 func ComputeCurrent(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (string, error) {
+	now = now.UTC()
 	in, err := LoadLive(ctx, tx, workspaceID, now)
 	if err != nil {
 		return "", err
@@ -62,7 +63,7 @@ func ComputeBaseline(ctx context.Context, tx pgx.Tx, workspaceID string, now tim
 		return fmt.Errorf("remove the old baseline: %w", err)
 	}
 	if source != nil {
-		in, err := LoadBaseline(ctx, tx, workspaceID, *source, *anchor)
+		in, err := LoadBaseline(ctx, tx, workspaceID, *source, anchor.UTC())
 		if err != nil {
 			return err
 		}

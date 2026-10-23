@@ -1359,6 +1359,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The results page (docs/user/results.md): the team's numbers in Colliedesk next to the baseline of the history it imported, for the last 30 and 7 days. Nothing is computed on the request: the numbers are the newest a background worker stored (`computed_at`). Every count names, through its snapshot id, the conversations behind it (the `result` filter of `GET /conversations`). Every role reads it; the compute error is shown to admins only. */
+        get: operations["getResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/usage": {
         parameters: {
             query?: never;
@@ -2696,6 +2713,128 @@ export interface components {
              * @description The first instant of the next UTC month.
              */
             resets_at: string;
+        };
+        Results: {
+            /** @description Colliedesk's numbers; null until the worker has computed them once. */
+            current: components["schemas"]["ResultsSnapshot"] | null;
+            /** @description The imported history's numbers, measured when its import finished; null without one. */
+            baseline: components["schemas"]["ResultsSnapshot"] | null;
+            /**
+             * @description `none`: no import to compare with. `computing`: an import finished (or was run again or undone) and its numbers are being worked out. `ready`: `baseline` holds them.
+             * @enum {string}
+             */
+            baseline_state: "none" | "computing" | "ready";
+            /** @description Per window, the upper bound of time AI drafts saved: conversations with a draft sent nearly unchanged times the baseline's median handle time. Null without a baseline handle time from at least 5 conversations in that window. */
+            hours_saved: {
+                "30d"?: components["schemas"]["ResultsHoursSaved"];
+                "7d"?: components["schemas"]["ResultsHoursSaved"];
+            };
+            /** @description Why the last compute failed (admins only; null for agents and when it worked). */
+            error: null | {
+                message: string;
+                /** Format: date-time */
+                at: string;
+            };
+        };
+        ResultsHoursSaved: null | {
+            hours: number;
+            conversations: number;
+            median_handle_minutes: number;
+        };
+        ResultsSnapshot: {
+            /**
+             * Format: uuid
+             * @description Names the snapshot in the `result` filter.
+             */
+            id: string;
+            /** Format: date-time */
+            computed_at: string;
+            /**
+             * Format: date-time
+             * @description The moment the numbers describe: the anchor of a baseline.
+             */
+            measured_at: string;
+            /**
+             * Format: date-time
+             * @description Current only: since when status history is complete.
+             */
+            history_since?: string;
+            /** @description Baseline only: the import ledger source, for example freshdesk:account:123. */
+            source?: string;
+            /**
+             * @description Baseline only: the reconcile status of the import's latest run; empty for an import made before results existed.
+             * @enum {string}
+             */
+            import_status?: "OK" | "FAILED" | "UNVERIFIED" | "";
+            /**
+             * Format: date-time
+             * @description Baseline only: where its windows end (the newest ticket created by the anchor).
+             */
+            end?: string;
+            /** @description Baseline only: tickets whose resolve times were read; 0 means run the import again for them. */
+            stats_read?: number;
+            windows: {
+                "30d": components["schemas"]["ResultsWindow"];
+                "7d": components["schemas"]["ResultsWindow"];
+            };
+        };
+        /** @description Created after `from`, up to and including `to`. */
+        ResultsRange: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+        };
+        ResultsWindow: {
+            created: components["schemas"]["ResultsRange"];
+            resolved_created: components["schemas"]["ResultsRange"];
+            /**
+             * Format: date-time
+             * @description When resolution and reopens can be shown; set while status history does not reach back far enough.
+             */
+            available_on: string | null;
+            first_response: {
+                /** @description Null below 5 answered conversations. */
+                median_seconds: number | null;
+                p90_seconds: number | null;
+                answered: number;
+                /** @description Customer-started conversations of the window with no reply yet. */
+                waiting: number;
+            };
+            resolution: null | {
+                median_seconds: number | null;
+                resolved: number;
+                /** @description Not resolved, or resolved less than 7 days ago, or reopened. */
+                unresolved: number;
+                /** @description Imported tickets without a resolve time from the source. */
+                without_resolve_time: number;
+            };
+            reopened: null | {
+                /** @description Share (0 to 1); null below 5 resolutions. */
+                rate: number | null;
+                reopened: number;
+                resolutions: number;
+            };
+            volume: {
+                count: number;
+                /**
+                 * Format: date-time
+                 * @description Where the weeks are counted from: the window start or the first conversation, if later.
+                 */
+                from: string;
+                days: number;
+                per_week: number | null;
+            };
+            handle: null | {
+                median_minutes: number | null;
+                conversations: number;
+            };
+            ai: null | {
+                sent_unchanged: number;
+                sent_edited: number;
+                discarded: number;
+                conversations_sent_unchanged: number;
+            };
         };
         AIUsage: {
             month: string;
@@ -4925,6 +5064,8 @@ export interface operations {
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
                 search?: string;
+                /** @description Only the conversations one number of the results page counts: `<snapshot id>:<window>.<metric>`, as `GET /results` names them (for example `…:30d.first_response`). Send it without a status filter: a number counts conversations in any status. A snapshot that is no longer kept (numbers are worked out again every hour or so; a replaced one stays 24 hours) answers 410 `results_refreshed`. */
+                result?: string;
                 page?: number;
                 page_size?: number;
             };
@@ -4945,6 +5086,15 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description The results snapshot the `result` filter names is no longer kept (`results_refreshed`) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     createConversation: {
@@ -7352,6 +7502,27 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest numbers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Results"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     getAIUsage: {
