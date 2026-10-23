@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
@@ -17,6 +18,8 @@ type slotRow struct {
 	model       *string
 	effort      string
 	enabled     bool
+	automatic   bool
+	autoParts   []string
 	consentedBy *string
 	consentedAt *time.Time
 	updatedBy   *string
@@ -34,7 +37,7 @@ func (r slotRow) source() string {
 }
 
 func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (map[string]slotRow, error) {
-	query := `SELECT slot,uses_server,provider_id::text,model,effort,enabled,consented_by::text,consented_at,updated_by::text,updated_at
+	query := `SELECT slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at
 		FROM ai_slots WHERE workspace_id=$1`
 	if lock {
 		query += ` FOR UPDATE`
@@ -45,7 +48,7 @@ func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (m
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (slotRow, error) {
 		var r slotRow
-		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.effort, &r.enabled, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt)
+		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.effort, &r.enabled, &r.automatic, &r.autoParts, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt)
 		return r, err
 	})
 	if err != nil {
@@ -61,11 +64,12 @@ func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (m
 // view turns a row (or its absence: off, nothing chosen) into what the API shows, with whether it
 // can run now. A slot on the server's provider stops when the operator removes it or the model.
 func (s *Service) view(slot string, row slotRow, found bool) Slot {
-	view := Slot{Slot: slot, Source: SourceNone, Effort: string(aiprovider.EffortLow)}
+	view := Slot{Slot: slot, Source: SourceNone, Effort: string(aiprovider.EffortLow), AutoParts: []string{}}
 	if !found {
 		return view
 	}
 	view.Source, view.ProviderID, view.Model, view.Effort, view.Enabled = row.source(), row.providerID, row.model, row.effort, row.enabled
+	view.Automatic, view.AutoParts = row.automatic, orderedParts(row.autoParts)
 	view.ConsentedBy, view.ConsentedAt, view.UpdatedBy, view.UpdatedAt = row.consentedBy, utcPointer(row.consentedAt), row.updatedBy, utcPointer(row.updatedAt)
 	view.Active = row.enabled
 	if row.enabled && row.usesServer {
@@ -123,6 +127,13 @@ func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, e
 			}
 		}
 		if settings.Automatic, _, err = s.automaticLimits(ctx, tx, workspaceID); err != nil {
+			return err
+		}
+		if settings.AutoDraftEstimate, err = s.autoDraftEstimate(ctx, tx, workspaceID); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE undone_at IS NOT NULL) FROM ai_triage_suggestions
+			WHERE workspace_id=$1 AND auto_applied_at>$2`, workspaceID, s.now().Add(-30*24*time.Hour)).Scan(&settings.AutoTriage.Applied, &settings.AutoTriage.Undone); err != nil {
 			return err
 		}
 		if left, limit, limited, err := s.allowanceLeft(ctx, tx, workspaceID); err != nil {
@@ -249,16 +260,19 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 		if next.enabled && !(found && current.enabled && sameRecipient) {
 			next.consentedBy, next.consentedAt = stringPointer(actor.AgentID), &now
 		}
+		if err := nextAutomatic(slot, &next, current, found && sameRecipient, input); err != nil {
+			return err
+		}
 		updatedBy := nullable(actor.AgentID)
 		var row slotRow
-		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,consented_by,consented_at,updated_by,updated_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,automatic,auto_parts,consented_by,consented_at,updated_by,updated_at)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 			ON CONFLICT (workspace_id,slot) DO UPDATE SET uses_server=EXCLUDED.uses_server,provider_id=EXCLUDED.provider_id,model=EXCLUDED.model,
-				effort=EXCLUDED.effort,enabled=EXCLUDED.enabled,consented_by=EXCLUDED.consented_by,consented_at=EXCLUDED.consented_at,
-				updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at
-			RETURNING slot,uses_server,provider_id::text,model,effort,enabled,consented_by::text,consented_at,updated_by::text,updated_at`,
-			workspaceID, slot, next.usesServer, next.providerID, next.model, next.effort, next.enabled, next.consentedBy, next.consentedAt, updatedBy, now).
-			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.effort, &row.enabled, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt)
+				effort=EXCLUDED.effort,enabled=EXCLUDED.enabled,automatic=EXCLUDED.automatic,auto_parts=EXCLUDED.auto_parts,
+				consented_by=EXCLUDED.consented_by,consented_at=EXCLUDED.consented_at,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at
+			RETURNING slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at`,
+			workspaceID, slot, next.usesServer, next.providerID, next.model, next.effort, next.enabled, next.automatic, next.autoParts, next.consentedBy, next.consentedAt, updatedBy, now).
+			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.effort, &row.enabled, &row.automatic, &row.autoParts, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt)
 		if err != nil {
 			return err
 		}
@@ -281,7 +295,10 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 }
 
 func (s *Service) slotDetail(ctx context.Context, tx pgx.Tx, workspaceID string, row slotRow) map[string]any {
-	detail := map[string]any{"enabled": row.enabled, "source": row.source(), "effort": row.effort}
+	detail := map[string]any{"enabled": row.enabled, "source": row.source(), "effort": row.effort, "automatic": row.automatic}
+	if parts := orderedParts(row.autoParts); len(parts) > 0 {
+		detail["auto_parts"] = strings.Join(parts, ",")
+	}
 	if row.model != nil {
 		detail["model"] = *row.model
 	}
@@ -295,6 +312,63 @@ func (s *Service) slotDetail(ctx context.Context, tx pgx.Tx, workspaceID string,
 		}
 	}
 	return detail
+}
+
+// AutoParts are the parts of a triage suggestion AI may apply by itself, in display order.
+var AutoParts = []string{"tags", "priority", "assignee"}
+
+// defaultAutoParts is what turning automatic apply on picks when nothing is named: a wrong assignee
+// sends a ticket to the wrong person's feed, so it is chosen by hand.
+var defaultAutoParts = []string{"tags", "priority"}
+
+func orderedParts(parts []string) []string {
+	ordered := []string{}
+	for _, part := range AutoParts {
+		if slices.Contains(parts, part) {
+			ordered = append(ordered, part)
+		}
+	}
+	return ordered
+}
+
+// nextAutomatic decides the automatic mode of a slot being set: kept when the request does not name
+// it, off with the feature, and off when the feature moves to another provider (its consent is the
+// admin's again) unless the same request turns it on.
+func nextAutomatic(slot string, next *slotRow, current slotRow, sameRecipient bool, input SlotInput) error {
+	next.automatic, next.autoParts = current.automatic && sameRecipient, current.autoParts
+	if input.Automatic != nil {
+		next.automatic = *input.Automatic
+	}
+	if input.AutoParts != nil {
+		for _, part := range input.AutoParts {
+			if !slices.Contains(AutoParts, part) {
+				return invalid("auto_parts holds tags, priority and assignee.")
+			}
+		}
+		next.autoParts = orderedParts(input.AutoParts)
+	}
+	if next.autoParts == nil {
+		next.autoParts = []string{}
+	}
+	if slot != SlotTriage && len(next.autoParts) > 0 {
+		return invalid("auto_parts is for triage only.")
+	}
+	if next.automatic && !next.enabled {
+		if input.Automatic != nil {
+			return invalid("Turn the feature on before it runs by itself.")
+		}
+		next.automatic = false
+	}
+	if !next.enabled {
+		next.automatic = false
+	}
+	if next.automatic && slot == SlotTriage && len(next.autoParts) == 0 {
+		if input.AutoParts != nil {
+			return invalid("Pick at least one of tags, priority and assignee to apply by itself.")
+		}
+		next.autoParts = defaultAutoParts
+	}
+	return nil
 }
 
 func equalDetail(a, b map[string]any) bool {

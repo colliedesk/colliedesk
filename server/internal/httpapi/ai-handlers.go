@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
-	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 // AI settings (docs/user/ai.md). The handlers read and change the workspace's providers and features;
@@ -112,18 +111,32 @@ func (a *API) setAISlot(response http.ResponseWriter, request *http.Request) {
 		Model      string `json:"model"`
 		Effort     string `json:"effort"`
 		Enabled    *bool  `json:"enabled"`
+		// Absent: kept as they are.
+		Automatic *bool     `json:"automatic"`
+		AutoParts *[]string `json:"auto_parts"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send source (server, provider or none), enabled, and optional provider_id, model and effort.")
 		return
 	}
 	slot, err := a.ai.SetSlot(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("slot"),
-		ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, Effort: input.Effort, Enabled: *input.Enabled})
+		ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, Effort: input.Effort, Enabled: *input.Enabled,
+			Automatic: input.Automatic, AutoParts: autoParts(input.AutoParts)})
 	if err != nil {
 		writeAIError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, slot)
+}
+
+func autoParts(parts *[]string) []string {
+	if parts == nil {
+		return nil
+	}
+	if *parts == nil {
+		return []string{}
+	}
+	return *parts
 }
 
 func writeAIError(response http.ResponseWriter, err error) {
@@ -160,6 +173,8 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "No conversation with that id in this workspace.")
 	case errors.Is(err, ai.ErrTriageNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No AI triage suggestion with that id on this conversation.")
+	case errors.Is(err, ai.ErrTriageNotAutoApplied):
+		writeError(response, http.StatusConflict, "ai_triage_not_auto_applied", "AI applied nothing of this suggestion by itself, so there is nothing to undo.")
 	case errors.Is(err, ai.ErrTriageNothing):
 		writeError(response, http.StatusConflict, "ai_triage_nothing", "This suggestion names nothing to apply: the conversation already has it, or a person set it first.")
 	case errors.Is(err, ai.ErrTriageDecided):
@@ -215,14 +230,15 @@ func (a *API) getAIUsage(response http.ResponseWriter, request *http.Request) {
 
 func (a *API) setAIAutomaticLimits(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		PerDay    *int `json:"per_day"`
-		PerMinute *int `json:"per_minute"`
+		PerDay      *int `json:"per_day"`
+		PerMinute   *int `json:"per_minute"`
+		DraftPerDay *int `json:"draft_per_day"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.PerDay == nil || input.PerMinute == nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000).")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000), and draft_per_day (0 to 10000) to change it.")
 		return
 	}
-	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute)
+	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute, input.DraftPerDay)
 	if err != nil {
 		writeAIError(response, err)
 		return
@@ -285,12 +301,12 @@ func (a *API) discardAIDraft(response http.ResponseWriter, request *http.Request
 }
 
 func (a *API) getAITriage(response http.ResponseWriter, request *http.Request) {
-	triage, err := a.ai.LatestTriage(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	triage, autoApplied, err := a.ai.LatestTriage(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
 	if err != nil {
 		writeAIError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"suggestion": triage})
+	writeJSON(response, http.StatusOK, map[string]any{"suggestion": triage, "auto_applied": autoApplied})
 }
 
 func (a *API) createAITriage(response http.ResponseWriter, request *http.Request) {
@@ -303,21 +319,9 @@ func (a *API) createAITriage(response http.ResponseWriter, request *http.Request
 }
 
 // acceptAITriage applies what the person accepts of an open suggestion (the rest of it without a
-// body) to the conversation, through the same changes as a person's own, then records it.
+// body, or with one naming nothing) to the conversation, as a person's change, and records it.
 func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request) {
 	identity := principal(request)
-	workspace, conversation, id := identity.Workspace.ID, request.PathValue("id"), request.PathValue("suggestionId")
-	current, err := a.ai.GetTriage(request.Context(), workspace, conversation, id)
-	if err != nil {
-		writeAIError(response, err)
-		return
-	}
-	// Accepting all of it again changes nothing.
-	if current.Outcome != nil && *current.Outcome == "accepted" {
-		writeJSON(response, http.StatusOK, current)
-		return
-	}
-	// No body, or one naming nothing, accepts the rest of it.
 	var want ai.TriageSet
 	// A call from MCP without arguments has no body at all.
 	if request.Body == nil {
@@ -327,32 +331,28 @@ func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send tag_ids, priority and assignee_agent_id to accept, each from the suggestion; no body accepts the rest of it.")
 		return
 	}
-	if want.TagIDs == nil && want.Priority == nil && want.AssigneeAgentID == nil {
-		want = ai.TriageSet{TagIDs: current.TagIDs, Priority: current.Priority, AssigneeAgentID: current.AssigneeAgentID}
-	}
-	set, err := a.ai.TriageToApply(request.Context(), workspace, conversation, id, want)
+	triage, err := a.ai.AcceptTriage(request.Context(), identity.Workspace.ID, aiActor(request), request.PathValue("id"), request.PathValue("suggestionId"), &want)
 	if err != nil {
 		writeAIError(response, err)
 		return
 	}
-	// Tags are added one by one, as a person adds them: a tag someone added meanwhile stays.
-	for _, tag := range set.TagIDs {
-		if _, err := a.store.AddConversationTag(request.Context(), workspace, conversation, tag); err != nil {
-			writeStoreError(response, err)
-			return
-		}
+	writeJSON(response, http.StatusOK, triage)
+}
+
+// undoAITriage takes back what AI applied of a suggestion by itself: the parts named (tags, priority,
+// assignee), or all of it without a body.
+func (a *API) undoAITriage(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		Parts []string `json:"parts"`
 	}
-	update := store.ConversationUpdate{Priority: set.Priority, ActorID: identity.Agent.ID}
-	if set.AssigneeAgentID != nil {
-		update.AssigneeID = &set.AssigneeAgentID
+	if request.Body == nil {
+		request.Body = http.NoBody
 	}
-	if update.Priority != nil || update.AssigneeID != nil {
-		if _, err := a.store.UpdateConversation(request.Context(), workspace, conversation, update); err != nil {
-			writeStoreError(response, err)
-			return
-		}
+	if err := decodeJSON(request, &input); err != nil && !errors.Is(err, io.EOF) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send parts (tags, priority, assignee) to undo some of it; no body undoes all of it.")
+		return
 	}
-	triage, err := a.ai.AcceptedTriage(request.Context(), workspace, aiActor(request), conversation, id, set)
+	triage, err := a.ai.UndoTriage(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"), request.PathValue("suggestionId"), input.Parts)
 	if err != nil {
 		writeAIError(response, err)
 		return

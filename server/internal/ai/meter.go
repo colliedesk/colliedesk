@@ -249,6 +249,30 @@ func (s *Service) allowanceView(ctx context.Context, tx pgx.Tx, workspaceID stri
 	return view, nil
 }
 
+func (s *Service) autoDraftEstimate(ctx context.Context, tx pgx.Tx, workspaceID string) (AutoDraftEstimate, error) {
+	var estimate AutoDraftEstimate
+	var average *float64
+	since := s.now().Add(-30 * 24 * time.Hour)
+	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM messages WHERE workspace_id=$1 AND kind='incoming' AND origin IS NULL AND created_at>=$2),
+			(SELECT avg(cost_micro_usd)::float8 FROM ai_usage WHERE workspace_id=$1 AND feature='draft' AND billed_to='server' AND cost_micro_usd>0 AND started_at>=$2)`,
+		workspaceID, since).Scan(&estimate.CustomerMessages, &average); err != nil {
+		return estimate, err
+	}
+	if average == nil && s.config.Server != nil {
+		if models := s.config.Server.ModelsFor(SlotDraft); len(models) > 0 {
+			if price, ok := s.config.Server.Prices[models[0]]; ok {
+				typical := typicalDraftInput*price.Input + typicalDraftOutput*price.Output
+				average = &typical
+			}
+		}
+	}
+	if average != nil {
+		cost := int64(*average + 0.5)
+		estimate.DraftCostMicroUSD = &cost
+	}
+	return estimate, nil
+}
+
 // typicalCallFits refuses a call of that size that could not fit what is left of the allowance even
 // with nothing else running: what a person asks for is refused at once, not after it was queued.
 func (s *Service) typicalCallFits(ctx context.Context, tx pgx.Tx, workspaceID, model string, input, output int64) error {

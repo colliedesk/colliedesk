@@ -20,6 +20,8 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
 - Coming from the website's Founding link, a visitor who is not signed in goes straight to sign-up,
   which says the plan they came for. The button reads **Create workspace and continue to payment**,
   and the payment window opens as soon as the workspace exists.
+  The plan rides in the sign-in address, so it survives the identity provider's round trip; opening
+  the plain sign-in page later in the same tab (the website's **Log in**) is a normal sign-in again.
 
 ### Limits during the trial
 
@@ -53,7 +55,8 @@ Nothing else is limited. Conversations, contacts, tags, notes and search work as
 There is no free plan; every workspace starts with the free trial. Unlimited, for teams with more
 than 25 agents at $349 per month billed yearly, is coming soon.
 
-Founding is limited to 10 subscriptions. While a Founding slot is free, the billing page and the locked page offer Founding only
+Founding includes a free Freshdesk migration, done for you, and a 30-day money-back guarantee
+(see the [terms](https://colliedesk.com/terms#refunds)). Founding is limited to 10 subscriptions. While a Founding slot is free, the billing page and the locked page offer Founding only
 ($99 every 3 months, $396 a year), with a link to self-host for free; a workspace that does not fit Founding (its 10-agent or
 20 GiB cap) still sees every plan. When all 10 are taken Founding is closed for good and the pages offer the other plans.
 

@@ -167,6 +167,9 @@ type SlotInput struct {
 	Model      string
 	Effort     string
 	Enabled    bool
+	// Automatic and AutoParts are kept as they are when nil.
+	Automatic *bool
+	AutoParts []string
 }
 
 func newID() string {
@@ -654,7 +657,7 @@ func (s *Service) RemoveProvider(ctx context.Context, workspaceID string, actor 
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE ai_slots SET provider_id=NULL,model=NULL,enabled=false,updated_by=$3,updated_at=$4
+		if _, err := tx.Exec(ctx, `UPDATE ai_slots SET provider_id=NULL,model=NULL,enabled=false,automatic=false,updated_by=$3,updated_at=$4
 			WHERE workspace_id=$1 AND provider_id=$2`, workspaceID, id, nullable(actor.AgentID), now); err != nil {
 			return err
 		}

@@ -444,6 +444,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionConversationsWrite},
 	}
 }
 

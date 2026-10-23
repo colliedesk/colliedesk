@@ -12,8 +12,9 @@ import { RedeemPage } from './redeem-page';
 const CloudSignIn = lazy(() => import('./cloud-sign-in').then((module) => ({ default: module.CloudSignIn })));
 
 // buy is the plan named in the sign-in address when a visitor came from the website to buy it.
-// signedOut marks the arrival right after the browser's session ended.
-export function RedeemRoute({ token, buy, signedOut = false }: { token: string; buy?: string; signedOut?: boolean }) {
+// signedOut marks the arrival right after the browser's session ended. trial marks the website's
+// "Start free trial" link.
+export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean }) {
   const navigate = useNavigate();
   const client = useQueryClient();
   // A visitor who came to buy a plan lands on the billing page, which carries the purchase out.
@@ -52,7 +53,7 @@ export function RedeemRoute({ token, buy, signedOut = false }: { token: string; 
   const buying = buy ?? readCheckoutIntent();
 
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
-    buying={buying} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
+    buying={buying} trial={trial} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
     cloudSignIn={cloudEnabled && <Suspense fallback={<p>{messages.loadingCloudSignIn}</p>}>
       <CloudSignIn key={workspaceSlug ?? 'default'} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange}

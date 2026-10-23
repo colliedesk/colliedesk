@@ -8,7 +8,7 @@ import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { RequestsRoute } from './features/requests/requests-route';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
-import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
+import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
 import { AppShell } from './features/shell/app-shell';
@@ -232,18 +232,20 @@ const aiRoute = createRoute({
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
-  // `signed_out` marks the arrival right after the session ended (see AppLayout).
-  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true } => ({
+  // `signed_out` marks the arrival right after the session ended (see AppLayout). `intent=trial` is the
+  // website's "Start free trial" link: the page is titled for a new team.
+  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true; intent?: 'trial' } => ({
     ...(typeof search.token === 'string' ? { token: search.token } : {}),
     ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
     ...(search.signed_out === true ? { signed_out: true as const } : {}),
+    ...(search.intent === 'trial' ? { intent: 'trial' as const } : {}),
   }),
-  // `buy` stays in the address through the identity provider's round trip; the plan is remembered
-  // again here so a sign-in link that names it works on its own.
-  beforeLoad: ({ search }) => { if (search.buy) rememberCheckoutIntent(search.buy); },
+  // `buy` stays in the address through the identity provider's round trip, so the address decides
+  // which plan, if any, this sign-in is for (see signInCheckoutIntent).
+  beforeLoad: ({ search }) => { signInCheckoutIntent(search); },
   component: function SignIn() {
-    const { token, buy, signed_out: signedOut } = signInRoute.useSearch();
-    return <RedeemRoute token={token ?? ''} buy={buy} signedOut={signedOut === true} />;
+    const { token, buy, signed_out: signedOut, intent } = signInRoute.useSearch();
+    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} />;
   },
 });
 

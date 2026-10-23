@@ -63,7 +63,7 @@
 .settings-nav a { display: block; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--text-2); font-size: var(--fs-small); text-decoration: none; }
 .settings-nav a:hover { background: var(--surface-2); color: var(--text-1); }
 .settings-nav a[aria-current="page"] { background: var(--surface-2); color: var(--text-1); font-weight: 600; }
-.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
 .settings-nav .settings-group-label { padding: 0 var(--space-2); }
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }
 .settings-sections > .settings-group-label:first-child, .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
@@ -89,6 +89,7 @@
 .wordmark { display: block; height: 1em; width: auto; flex: none; }
 .signin-tagline { max-width: 26rem; font: 500 30px/1.12 var(--font-display); letter-spacing: -0.02em; }
 .signin-footnote { margin-top: auto; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
+.signin-status { max-width: 26rem; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
 .signin-brand .signin-footnote { margin-top: var(--space-8); }
 .signin-split .redeem-panel { align-self: center; justify-self: center; border: 0; box-shadow: none; }
 .signin-split .redeem-panel .brand-lockup { display: none; }
@@ -109,7 +110,8 @@
   .details-panel { display: none; }
 }
 @media (max-width: 56rem) {
-  .redeem-page.signin-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  /* minmax(0, 1fr): the column never grows to fit a wide child, so a phone never scrolls sideways. */
+  .redeem-page.signin-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .signin-brand { gap: var(--space-3); padding: var(--space-6); }
   .signin-brand-lockup .logo-mark { width: 40px; height: 40px; }
   .signin-tagline { font-size: 16px; }

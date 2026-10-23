@@ -124,3 +124,12 @@ test('while the help center is on, a published article opens on its public page'
   expect(link).toHaveAttribute('href', summary(1, 'Reset your password', 'published').url);
   expect(screen.queryByText('The help center is off.')).not.toBeInTheDocument();
 });
+
+// Every page shows its title (design.md: IBM Plex Serif page titles); the Knowledge page hid its h1.
+test('the Knowledge page shows its title, not only to screen readers', async () => {
+  serve(base);
+  open();
+  const title = await screen.findByRole('heading', { level: 1, name: 'Knowledge base' });
+  expect(title).not.toHaveClass('sr-only');
+  expect(title).toHaveClass('kb-page-title');
+});

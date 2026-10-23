@@ -130,6 +130,27 @@ test('the billing link with buy=founding sends a signed-out visitor straight to 
   expect(readCheckoutIntent()).toBe('founding');
 });
 
+test('after a Founding visit, the plain sign-in page in the same tab is a sign-in again, not Join Founding', async () => {
+  serve({ '/api/v1/config': () => json(200, config) });
+  const router = open('/sign-in?buy=founding');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Join Founding' })).toBeInTheDocument();
+  // The identity provider returns to the same address, plan included: the buyer stays a buyer.
+  await router.navigate({ to: '/sign-in', search: { buy: 'founding' } });
+  expect(screen.getByRole('heading', { level: 1, name: 'Join Founding' })).toBeInTheDocument();
+  expect(readCheckoutIntent()).toBe('founding');
+  // "Log in" on the website opens the plain address.
+  await router.navigate({ to: '/sign-in' });
+  expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
+  expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('the website trial link titles the sign-in page for a new team', async () => {
+  serve({ '/api/v1/config': () => json(200, config) });
+  open('/sign-in?intent=trial');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Start your free trial' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Sign in to Colliedesk' })).not.toBeInTheDocument();
+});
+
 // On the cloud the way back in is the sign-in page itself, for a known page and an unknown one alike.
 for (const path of ['/settings/billing', '/no-such-route']) {
   test(`a signed-out visit to ${path} on the cloud lands on the sign-in page`, async () => {

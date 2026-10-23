@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"errors"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,6 +13,8 @@ var (
 	ErrTriageNotFound = errors.New("no AI triage suggestion with that id on this conversation")
 	// ErrTriageDecided means the suggestion was already accepted, dismissed or replaced, or is not ready.
 	ErrTriageDecided = errors.New("this AI triage suggestion is not ready or was already accepted, dismissed or replaced")
+	// ErrTriageNotAutoApplied means AI applied nothing of the suggestion, so there is nothing to undo.
+	ErrTriageNotAutoApplied = errors.New("AI applied nothing of this suggestion by itself")
 	// ErrTriageNothing means the suggestion names nothing to apply.
 	ErrTriageNothing = errors.New("this AI triage suggestion names nothing to apply")
 )
@@ -49,6 +50,23 @@ type Triage struct {
 	ReadyAt          *time.Time    `json:"ready_at"`
 	DecidedAt        *time.Time    `json:"decided_at"`
 	DecidedByAgentID *string       `json:"decided_by_agent_id"`
+	// What AI applied by itself (automatic apply), what it left because a person had set it, and an
+	// undo: what it took back and what it kept because a person changed it after AI.
+	AutoAppliedAt   *time.Time            `json:"auto_applied_at"`
+	AutoApplied     TriageSet             `json:"auto_applied"`
+	Skipped         map[string]TriageSkip `json:"skipped"`
+	UndoneParts     TriageSet             `json:"undone_parts"`
+	Kept            TriageStale           `json:"kept"`
+	UndoneAt        *time.Time            `json:"undone_at"`
+	UndoneByAgentID *string               `json:"undone_by_agent_id"`
+}
+
+// TriageSkip is a part AI did not apply by itself, and why: set_by_person (a person had set the
+// priority), agent_conversation (a teammate started it), already_assigned. Value is what the
+// conversation had.
+type TriageSkip struct {
+	Reason string  `json:"reason"`
+	Value  *string `json:"value"`
 }
 
 // TriageStale is what a person set on the conversation before the suggestion came, in place of a
@@ -79,13 +97,15 @@ const triageColumns = `s.id::text,s.conversation_id::text,
 	s.automatic,
 	ARRAY(SELECT x.id::text FROM unnest(s.tag_ids) WITH ORDINALITY x(id,n) WHERE EXISTS (SELECT 1 FROM tags g WHERE g.workspace_id=s.workspace_id AND g.id=x.id) ORDER BY x.n),
 	s.priority,
-	(SELECT a.id::text FROM agents a WHERE a.workspace_id=s.workspace_id AND a.id=s.assignee_agent_id AND a.deactivated_at IS NULL),s.reason,s.sources,s.stale,s.model,s.outcome,s.applied,s.created_at,s.ready_at,s.decided_at,s.decided_by_agent_id::text
+	(SELECT a.id::text FROM agents a WHERE a.workspace_id=s.workspace_id AND a.id=s.assignee_agent_id AND a.deactivated_at IS NULL),s.reason,s.sources,s.stale,s.model,s.outcome,s.applied,s.created_at,s.ready_at,s.decided_at,s.decided_by_agent_id::text,
+	s.auto_applied_at,s.auto_applied,s.skipped,s.undone_parts,s.kept,s.undone_at,s.undone_by_agent_id::text
 	FROM ai_triage_suggestions s LEFT JOIN ai_tasks t ON t.workspace_id=s.workspace_id AND t.id=s.task_id`
 
 func scanTriage(row pgx.Row) (Triage, error) {
 	var t Triage
 	err := row.Scan(&t.ID, &t.ConversationID, &t.Status, &t.ErrorCode, &t.Automatic, &t.TagIDs, &t.Priority, &t.AssigneeAgentID, &t.Reason, &t.Sources, &t.Stale, &t.Model,
-		&t.Outcome, &t.Applied, &t.CreatedAt, &t.ReadyAt, &t.DecidedAt, &t.DecidedByAgentID)
+		&t.Outcome, &t.Applied, &t.CreatedAt, &t.ReadyAt, &t.DecidedAt, &t.DecidedByAgentID,
+		&t.AutoAppliedAt, &t.AutoApplied, &t.Skipped, &t.UndoneParts, &t.Kept, &t.UndoneAt, &t.UndoneByAgentID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Triage{}, ErrTriageNotFound
 	}
@@ -98,32 +118,44 @@ func scanTriage(row pgx.Row) (Triage, error) {
 	if t.Sources == nil {
 		t.Sources = []DraftSource{}
 	}
-	if t.Applied.TagIDs == nil {
-		t.Applied.TagIDs = []string{}
+	for _, set := range []*TriageSet{&t.Applied, &t.AutoApplied, &t.UndoneParts} {
+		if set.TagIDs == nil {
+			set.TagIDs = []string{}
+		}
+	}
+	if t.Skipped == nil {
+		t.Skipped = map[string]TriageSkip{}
 	}
 	t.CreatedAt, t.ReadyAt, t.DecidedAt = t.CreatedAt.UTC(), utcPointer(t.ReadyAt), utcPointer(t.DecidedAt)
+	t.AutoAppliedAt, t.UndoneAt = utcPointer(t.AutoAppliedAt), utcPointer(t.UndoneAt)
 	return t, nil
 }
 
-// LatestTriage reads the conversation's newest suggestion; nil when it has none.
-func (s *Service) LatestTriage(ctx context.Context, workspaceID, conversationID string) (*Triage, error) {
+// LatestTriage reads the conversation's newest suggestion, and the newest one AI applied by itself
+// (the same one, or an older one a suggestion asked for by hand came after); nil when there is none.
+func (s *Service) LatestTriage(ctx context.Context, workspaceID, conversationID string) (latest, autoApplied *Triage, err error) {
 	if !isUUID(conversationID) {
-		return nil, ErrConversationNotFound
+		return nil, nil, ErrConversationNotFound
 	}
-	var found *Triage
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		if err := conversationExists(ctx, tx, workspaceID, conversationID); err != nil {
 			return err
 		}
-		t, err := scanTriage(tx.QueryRow(ctx, `SELECT `+triageColumns+` WHERE s.workspace_id=$1 AND s.conversation_id=$2 ORDER BY s.created_at DESC, s.id LIMIT 1`,
-			workspaceID, conversationID))
-		if errors.Is(err, ErrTriageNotFound) {
-			return nil
+		read := func(query string) (*Triage, error) {
+			t, err := scanTriage(tx.QueryRow(ctx, `SELECT `+triageColumns+` WHERE s.workspace_id=$1 AND s.conversation_id=$2 `+query, workspaceID, conversationID))
+			if errors.Is(err, ErrTriageNotFound) {
+				return nil, nil
+			}
+			return &t, err
 		}
-		found = &t
+		var err error
+		if latest, err = read(`ORDER BY s.created_at DESC, s.id LIMIT 1`); err != nil {
+			return err
+		}
+		autoApplied, err = read(`AND s.auto_applied_at IS NOT NULL ORDER BY s.auto_applied_at DESC, s.id LIMIT 1`)
 		return err
 	})
-	return found, err
+	return latest, autoApplied, err
 }
 
 // CreateTriage asks for a suggestion by hand (not automatic: no automatic limit applies). It refuses at
@@ -197,7 +229,7 @@ func (s *Service) underMinuteCap(ctx context.Context, tx pgx.Tx, workspaceID str
 		return err
 	}
 	var recent int
-	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM ai_drafts WHERE workspace_id=$1 AND created_at>$2)
+	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM ai_drafts WHERE workspace_id=$1 AND NOT automatic AND created_at>$2)
 		+ (SELECT count(*) FROM ai_triage_suggestions WHERE workspace_id=$1 AND NOT automatic AND created_at>$2)`, workspaceID, now.Add(-time.Minute)).Scan(&recent); err != nil {
 		return err
 	}
@@ -216,110 +248,6 @@ func (s *Service) GetTriage(ctx context.Context, workspaceID, conversationID, id
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		var err error
 		triage, err = scanTriage(tx.QueryRow(ctx, `SELECT `+triageColumns+` WHERE s.workspace_id=$1 AND s.conversation_id=$2 AND s.id=$3`, workspaceID, conversationID, id))
-		return err
-	})
-	return triage, err
-}
-
-// TriageToApply checks what a person accepts against the open suggestion: only its own tags, its
-// priority and its assignee. It returns the part not applied yet; the caller applies that to the
-// conversation, then calls AcceptedTriage.
-func (s *Service) TriageToApply(ctx context.Context, workspaceID, conversationID, id string, want TriageSet) (TriageSet, error) {
-	if !isUUID(conversationID) || !isUUID(id) {
-		return TriageSet{}, ErrTriageNotFound
-	}
-	var set TriageSet
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		t, err := scanTriage(tx.QueryRow(ctx, `SELECT `+triageColumns+` WHERE s.workspace_id=$1 AND s.conversation_id=$2 AND s.id=$3`, workspaceID, conversationID, id))
-		if err != nil {
-			return err
-		}
-		if t.Status != DraftReady || t.Outcome != nil {
-			return ErrTriageDecided
-		}
-		set.TagIDs = []string{}
-		for _, tag := range want.TagIDs {
-			if !slices.Contains(t.TagIDs, tag) {
-				return invalid("Accept only the tags the suggestion names.")
-			}
-			if !slices.Contains(set.TagIDs, tag) && !slices.Contains(t.Applied.TagIDs, tag) {
-				set.TagIDs = append(set.TagIDs, tag)
-			}
-		}
-		if want.Priority != nil {
-			if t.Priority == nil || *want.Priority != *t.Priority {
-				return invalid("Accept only the priority the suggestion names.")
-			}
-			if t.Applied.Priority == nil {
-				set.Priority = t.Priority
-			}
-		}
-		if want.AssigneeAgentID != nil {
-			if t.AssigneeAgentID == nil || *want.AssigneeAgentID != *t.AssigneeAgentID {
-				return invalid("Accept only the assignee the suggestion names.")
-			}
-			if t.Applied.AssigneeAgentID == nil {
-				set.AssigneeAgentID = t.AssigneeAgentID
-			}
-		}
-		return nil
-	})
-	return set, err
-}
-
-// AcceptedTriage records a part a person applied. The suggestion stays open for the rest until all of
-// it is applied (accepted), or the rest is dismissed, replaced or expires.
-func (s *Service) AcceptedTriage(ctx context.Context, workspaceID string, actor Actor, conversationID, id string, applied TriageSet) (Triage, error) {
-	if !isUUID(conversationID) || !isUUID(id) {
-		return Triage{}, ErrTriageNotFound
-	}
-	var triage Triage
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		// Under the row's lock, so two people accepting two parts at once both count.
-		t, err := scanTriage(tx.QueryRow(ctx, `SELECT `+triageColumns+` WHERE s.workspace_id=$1 AND s.conversation_id=$2 AND s.id=$3 FOR UPDATE OF s`, workspaceID, conversationID, id))
-		if err != nil {
-			return err
-		}
-		// Dismissed, replaced or expired while the part was being applied: what was applied is still
-		// recorded, so the suggestion never says nothing was done when something was.
-		if t.Status != DraftReady {
-			return ErrTriageDecided
-		}
-		if len(t.TagIDs) == 0 && t.Priority == nil && t.AssigneeAgentID == nil {
-			return ErrTriageNothing
-		}
-		merged := t.Applied
-		for _, tag := range applied.TagIDs {
-			if !slices.Contains(merged.TagIDs, tag) {
-				merged.TagIDs = append(merged.TagIDs, tag)
-			}
-		}
-		if applied.Priority != nil {
-			merged.Priority = applied.Priority
-		}
-		if applied.AssigneeAgentID != nil {
-			merged.AssigneeAgentID = applied.AssigneeAgentID
-		}
-		all := (t.Priority == nil || merged.Priority != nil) && (t.AssigneeAgentID == nil || merged.AssigneeAgentID != nil)
-		for _, tag := range t.TagIDs {
-			all = all && slices.Contains(merged.TagIDs, tag)
-		}
-		var outcome, decidedAt, decidedBy any
-		switch {
-		case t.Outcome == nil && all:
-			outcome, decidedAt, decidedBy = "accepted", s.now().UTC(), nullable(actor.AgentID)
-		case t.Outcome != nil:
-			// Already closed: its time and who closed it stay; the outcome says what was applied.
-			outcome, decidedAt, decidedBy = "partly_accepted", t.DecidedAt, t.DecidedByAgentID
-			if all {
-				outcome = "accepted"
-			}
-		}
-		if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET applied=$3,outcome=$4,decided_at=$5,decided_by_agent_id=$6 WHERE workspace_id=$1 AND id=$2`,
-			workspaceID, id, merged, outcome, decidedAt, decidedBy); err != nil {
-			return err
-		}
-		triage, err = scanTriage(tx.QueryRow(ctx, `SELECT `+triageColumns+` WHERE s.workspace_id=$1 AND s.id=$2`, workspaceID, id))
 		return err
 	})
 	return triage, err

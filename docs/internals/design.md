@@ -14,15 +14,17 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
    (`#171717` light, `#fafafa` dark). `web/scripts/check-contrast.test.mjs` fails when a grey, a text
    token or the primary action carries a hue.
 2. **Colour means something.** Status (open blue, pending amber, resolved green, urgent red, high orange),
-   focus (amber) and private notes (amber) keep their colours; nothing else is coloured. On the site the
+   focus (amber) and private notes (amber) keep their colours; nothing else is coloured. Amber means focus,
+   private notes and the pending status, and nothing else: a warning uses `--warn` / `--warn-soft` (or a
+   neutral card with a `--warn` icon), never the note colours. `web/scripts/brand-rules.test.mjs` checks it. On the site the
    price has its own colour (`--price`, orange) and nothing else does.
 3. **Serif for titles only.** IBM Plex Serif 500 (`--font-display`) sets page titles (Inbox, Settings,
    Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Every control, label and
    body line stays IBM Plex Sans. One Plex skeleton for serif, sans and mono (owner 22/10/2026): it
    replaced Instrument Serif, whose narrow high-contrast cut spoke in a different voice from the
    Plex Sans wordmark.
-4. **Rings, not borders.** Cards and our replies sit on a 1px shadow ring (`--shadow-1`), so the eye reads
-   layers by surface and ring, not by outlines.
+4. **Rings, not borders.** Cards, the composer and our replies sit on a 1px shadow ring (`--shadow-1`,
+   `--shadow-2`), so the eye reads layers by surface and ring, not by outlines. Never a border on top of a ring.
 5. **Links are ink and underlined** inside running text (`a:not([class])`); colour alone never marks a link.
 6. **One product, one look.** Product pictures on colliedesk.com are screenshots of this app; when the app
    changes, the site's screenshots are retaken.
@@ -63,10 +65,13 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   status-on-send do: the status changes only after the reply was accepted. A note has none. The keycap hint sits
   in the composer head, so the button row stays one line on desktop; below 75 rem the hint hides and the
   row wraps instead of clipping.
+- Knowledge base pages show their title (IBM Plex Serif, like the inbox title) at the start of the
+  Articles | Media row.
 - Thread header: **Resolve** (or **Reopen** once resolved or closed), a secondary button with an icon, so
   resolving never needs the details drawer.
-- Sign-in: a dark brand side (mascot, wordmark, one line of promise) beside the form; on narrow
-  screens the brand side becomes a header.
+- Sign-in: a dark brand side (mascot, wordmark, one line of promise, one plain line that Colliedesk
+  is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
+  Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
 - The mascot is the headset collie on an ink tile (see Logo).
 
 ## Themes
@@ -94,8 +99,9 @@ the Clerk form.) Do not create a second palette.
 | Lines | `--line` hairline dividers and panel edges, `--line-control` secondary button outline, `--line-strong` input borders | Inputs keep `--line-strong` (3:1). Buttons are identified by their label, but their outline is about 2.3:1 so they do not look faded (owner feedback 16/10/2026: buttons looked washed out at 1.5:1). |
 | Text | `--text-1` primary, `--text-2` secondary, `--text-3` meta and labels, `--text-inverse` on the tooltip | `--text-3` is the lowest text tone. |
 | Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile`, `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on ink `#171717`. Dark: near-black on `#fafafa`. `--accent-text` is ink; inline links are underlined. |
-| Focus and note | `--focus`, `--focus-ring`, `--note-bg`, `--note-line`, `--note-text` | Amber means focus or private note. Never use amber for status. |
-| Status | `--danger`, `--warn`, `--ok`, `--open`, `--pending` and `*-soft` backgrounds | A dot or icon plus a word. Never colour alone. |
+| Focus and note | `--focus`, `--focus-ring`, `--note-bg`, `--note-line`, `--note-text` | Amber means focus, private notes and the pending status (`--pending`), and nothing else. Warnings use `--warn`. |
+| Status | `--danger`, `--warn`, `--ok`, `--open`, `--pending` and `*-soft` backgrounds | A dot or icon plus a word. Never colour alone. `--warn` also marks a warning (unverified sender, help center off). |
+| Avatars | `--avatar-lightness`, `--avatar-chroma`, `--avatar-text-lightness`, `--avatar-text-chroma` with a per-person `--avatar-hue` | See Rules: the hue tells people apart, low chroma, never on status. |
 | Shape | `--radius` 6 px controls, `--radius-lg` 10 px panels, cards, composer, `--radius-sm` 4 px chips and keycaps, `--radius-full` avatars and tag chips | |
 | Space | `--space-1` to `--space-24` on a 4 px grid, `--touch` 44 px | Touch targets are at least `--touch`. |
 | Type | `--font-sans`, `--font-mono`, `--fs-ui` 14 px, `--fs-small` 13 px, `--fs-label` 12 px | See Type. |
@@ -110,7 +116,8 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 ## Type
 
 - IBM Plex Sans (400, 500, 600, 700) for text, buttons, tabs, labels and time stamps, always in
-  sentence case. IBM Plex Serif 500 (`--font-display`, letter-spacing −0.02em) only for page titles and the sign-in promise. IBM Plex Mono (400, 500) only for code, IDs, URLs and keycaps. No uppercase labels.
+  sentence case. IBM Plex Serif 500 (`--font-display`, letter-spacing −0.02em) only for page titles and the sign-in promise. IBM Plex Mono (400, 500) only for code, IDs, URLs and keycaps. No uppercase labels: no stylesheet
+  sets `text-transform: uppercase` or small caps (`web/scripts/sentence-case.test.mjs`; it has no exceptions).
 - Fonts are self-hosted: `web/src/styles/fonts/` (woff2 subsets latin, latin-ext, vietnamese) and
   `fonts.css`, licence SIL OFL 1.1 (`fonts/OFL-*.txt`). Never load a font from Google Fonts or a
   CDN, and never use Be Vietnam Pro.
@@ -169,6 +176,9 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - Customer email stays plain text (see `plain-text-body.tsx`); the original HTML opens in a
   sandboxed frame that keeps a white page so the customer's own styling stays readable. Avatars are
   initials, never images, so the timeline loads nothing remote.
+- Avatar colour tells people apart on the timeline: `ui/avatar.tsx` picks one of a few hues from the name,
+  and the tile and initials take their lightness and chroma from the `--avatar-*` tokens (low chroma, initials
+  at least 4.5:1 on every hue, checked by `web/scripts/brand-rules.test.mjs`). An avatar hue never carries status.
 - Every empty list says which kind of empty it is and gives the next step: a new workspace gets
   **Get started** links, a filtered list with no match gets **Clear filters**, a failed load gets
   **Try again**.

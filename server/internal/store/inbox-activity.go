@@ -34,6 +34,8 @@ type AssignedConversationActivity struct {
 	Subject     string    `json:"subject"`
 	ContactName string    `json:"contact_name"`
 	AssignedAt  time.Time `json:"assigned_at"`
+	// ByAI: AI assigned it, applying a triage suggestion by itself.
+	ByAI bool `json:"by_ai"`
 }
 
 // UpdatedConversationActivity is a conversation that changed inside the polled window. IncomingAt is
@@ -87,7 +89,9 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID string, caller Pr
 			FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 			WHERE c.workspace_id=$1 AND c.created_at>GREATEST($2::timestamptz,now()-$5::interval)-$4::interval AND c.created_at<=now()
 			ORDER BY c.created_at DESC LIMIT $3`, workspaceID, *since, InboxActivityLimit, inboxActivityLookback, inboxActivityMaxAge)
-		batch.Queue(`SELECT c.id::text,c.subject,ct.name,c.assigned_at
+		batch.Queue(`SELECT c.id::text,c.subject,ct.name,c.assigned_at,
+				EXISTS (SELECT 1 FROM ai_triage_suggestions s WHERE s.workspace_id=c.workspace_id AND s.conversation_id=c.id
+					AND s.auto_applied_at IS NOT NULL AND s.auto_applied->>'assignee_agent_id'=c.assignee_id::text) AND c.assigned_by_agent_id IS NULL
 			FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 			WHERE c.workspace_id=$1 AND c.assignee_id=$5 AND c.assigned_at>GREATEST($2::timestamptz,now()-$6::interval)-$4::interval AND c.assigned_at<=now()
 			AND c.assigned_by_agent_id IS DISTINCT FROM $5::uuid
@@ -137,7 +141,7 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID string, caller Pr
 		}
 		for assigned.Next() {
 			var item AssignedConversationActivity
-			if err := assigned.Scan(&item.ID, &item.Subject, &item.ContactName, &item.AssignedAt); err != nil {
+			if err := assigned.Scan(&item.ID, &item.Subject, &item.ContactName, &item.AssignedAt, &item.ByAI); err != nil {
 				assigned.Close()
 				return InboxActivity{}, fmt.Errorf("scan assigned conversation: %w", err)
 			}

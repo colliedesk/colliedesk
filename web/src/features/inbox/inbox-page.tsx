@@ -5,6 +5,7 @@ import type { BulkConversationChanges, UpdateConversationRequest } from '../../a
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
 import type { SettingsTarget } from './conversation-list';
+import { AITriageSlot } from './ai-triage-slot';
 import { DetailsPanel } from './details-panel';
 import { InboxFilters } from './inbox-filters';
 
@@ -99,6 +100,7 @@ interface InboxPageProps {
 
 export function InboxPage({ hosted = false, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
+  const latestCustomerMessage = useMemo(() => [...timeline].reverse().find((item) => item.kind === 'incoming')?.id, [timeline]);
   const [detailsOpen, setDetailsOpen] = useState(false);
   // The details' AI triage card says when its suggestion has a part nobody accepted yet.
   const [triageWaiting, setTriageWaiting] = useState(false);
@@ -201,7 +203,9 @@ export function InboxPage({ hosted = false, conversations = [], selected, thread
           grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onboardingGoal={onboardingGoal} />
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel conversation={selected} items={timeline} onBack={threadOpen ? onBack : undefined} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
+        <TimelinePanel conversation={selected} items={timeline} onBack={threadOpen ? onBack : undefined}
+          afterFirstCustomerMessage={aiTriage && selected ? <AITriageSlot placement="timeline" conversationId={selected.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
+            currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           viewers={openViewers} onSetStatus={selected && onSetStatus ? (status) => onSetStatus(selected.id, status) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={() => onOpenSettings()}>{messages.openSettings}</button></>}</p>}
@@ -211,6 +215,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, thread
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
+          latestCustomerMessage={latestCustomerMessage}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
           canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
           // Send and resolve is offered while there is something to resolve; a resolved or closed one is reopened from the header.
