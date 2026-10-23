@@ -263,7 +263,9 @@ func (s *Service) runTriage(ctx context.Context, run *Run) error {
 	})
 }
 
-var sourceID = regexp.MustCompile(`(?i)\b(kb|past)\s?(\d+)\b`)
+// sourceID is an id as the prompt writes it, letters and digits together (kb1, past2): "the past 2
+// hours" or "KB 12" in a reason is ordinary text and stays.
+var sourceID = regexp.MustCompile(`(?i)\b(kb|past)(\d+)\b`)
 
 // readableReason puts an article's title where the reason names it by the prompt's id (kb1), and "a
 // similar solved ticket" for a past conversation, so a person never reads the prompt's ids.
