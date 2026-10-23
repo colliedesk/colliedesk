@@ -41,6 +41,7 @@ var withheldResults = map[string]bool{
 	"POST /api/v1/export/link":           true,
 	"POST /api/v1/billing/checkout":      true,
 	"POST /api/v1/billing/portal":        true,
+	"POST /api/v1/results/share-link":    true,
 }
 
 // approvalRunsAs replays a route as another one with the same effect. A whole export streamed into a

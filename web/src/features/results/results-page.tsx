@@ -22,6 +22,8 @@ export interface ResultsPageProps {
   importLink: ReactNode;
   // admin is the share link and weekly email block (admins only).
   admin?: ReactNode;
+  // shared is the public page of a share link: the team's name, third person, no notices for the team.
+  shared?: { workspace: string };
 }
 
 const dayFormat = (timezone: string, withYear: boolean) => {
@@ -77,12 +79,13 @@ interface Row {
 }
 
 export function ResultsPage(props: ResultsPageProps) {
-  const { results, loading, failed, onRetry, window: key, onWindow, timezone, isAdmin, now, link, importLink, admin } = props;
+  const { results, loading, failed, onRetry, window: key, onWindow, timezone, isAdmin, now, link, importLink, admin, shared } = props;
   const header = <header className="results-header">
     <div className="results-title">
-      <h1>{m.heading}</h1>
-      <p>{m.description}</p>
-      <p className="results-muted">{results?.current && <span>{m.updated(ago(results.current.computed_at, now))}</span>}<span>{m.timezone(timezone)}</span></p>
+      <h1>{shared ? m.share.title(shared.workspace) : m.heading}</h1>
+      <p>{shared ? m.share.about(shared.workspace) : m.description}</p>
+      <p className="results-muted">{results?.current && <span>{shared ? m.share.updated(day(results.current.computed_at, timezone, true)) : m.updated(ago(results.current.computed_at, now))}</span>}
+        <span>{shared ? m.share.timezone : m.timezone(timezone)}</span></p>
     </div>
     <div className="results-windows" role="group" aria-label={m.windows}>
       {(['30d', '7d'] as const).map((value) => <button key={value} type="button" aria-pressed={key === value} onClick={() => onWindow(value)}>
@@ -103,7 +106,7 @@ export function ResultsPage(props: ResultsPageProps) {
   const sourceName = helpScout ? 'Help Scout' : 'Freshdesk';
   const status = baseline?.import_status;
   const before: Side = {
-    label: helpScout ? m.beforeHelpScout : m.before, window: baseline?.windows[key], snapshot: baseline, key,
+    label: shared ? (helpScout ? m.share.beforeHelpScout : m.share.before) : helpScout ? m.beforeHelpScout : m.before, window: baseline?.windows[key], snapshot: baseline, key,
     blocked: status === 'FAILED' ? m.failedCell : undefined, badge: status === 'UNVERIFIED' ? m.unverifiedBadge : undefined,
   };
   const after: Side = { label: m.now, window: current?.windows[key], snapshot: current, key };
@@ -119,7 +122,8 @@ export function ResultsPage(props: ResultsPageProps) {
     const window = side.window;
     if (!window) return null;
     const span = resolved ? window.resolved_created : window.created;
-    return <p className="results-muted">{m.created(range(span.from, span.to, timezone, !resolved))}</p>;
+    // The window everything is created in heads its column; a card on a narrow screen repeats it.
+    return <p className={resolved ? 'results-muted' : 'results-muted results-narrow'}>{m.created(range(span.from, span.to, timezone, !resolved))}</p>;
   };
   const tooFew = (n: number, what: string) => <><p className="results-value">{m.tooFew(n)}</p><p className="results-muted">{m.tooFewWhy(what, n)}</p></>;
   const blocked = (side: Side) => side.blocked ? <p className="results-muted">{side.blocked}</p> : null;
@@ -202,6 +206,8 @@ export function ResultsPage(props: ResultsPageProps) {
     { name: m.handle.name, how: m.handle.how, before: handle(before), after: handle(after) },
   ];
 
+  // The share page speaks of the team in the third person and says nothing the team must act on.
+  const how = (text: string) => (shared ? text.replace(/your team/g, 'the team').replace(/Your team/g, 'The team') : text);
   const notices: ReactNode[] = [];
   if (isAdmin && results.error) notices.push(<p key="error" className="results-notice results-notice-danger" role="alert">{m.computeError(results.error.message)}</p>);
   if (!current) notices.push(<p key="first" className="results-notice" role="status">{m.firstCompute}</p>);
@@ -211,13 +217,14 @@ export function ResultsPage(props: ResultsPageProps) {
   if (oldImport) notices.push(<div key="old" className="results-notice"><p>{m.oldImport}</p>{importLink}</div>);
   if (available && key === '30d' && current?.history_since) {
     notices.push(<div key="available" className="results-notice"><p>{m.availableNotice(day(available, timezone), day(current.history_since, timezone, true))}</p>
-      {!current.windows['7d'].available_on && <button type="button" className="secondary" onClick={() => onWindow('7d')}>{m.showLast7}</button>}</div>);
+      {!current.windows['7d'].available_on && <button type="button" onClick={() => onWindow('7d')}>{m.showLast7}</button>}</div>);
   }
 
   const showBaseline = results.baseline_state !== 'none';
   const aiWindow = a?.ai;
   const saved = results.hours_saved[key];
   const savedCell = (() => {
+    if (saved && saved.conversations === 0) return <p className="results-muted">{m.ai.noneUnchanged}</p>;
     if (saved) return <><p className="results-value results-hours">{m.ai.upTo} <strong>{m.ai.hours(saved.hours.toLocaleString('en'))}</strong></p>
       <p className="results-muted">{m.ai.formula(saved.conversations, formatMinutes(saved.median_handle_minutes))}</p></>;
     if (!showBaseline) return <p className="results-muted">{m.ai.needsImport}</p>;
@@ -228,8 +235,8 @@ export function ResultsPage(props: ResultsPageProps) {
 
   return <main className="settings-page results-page">
     {header}
-    {notices.length > 0 && <div className="results-notices">{notices}</div>}
-    {!showBaseline && <section className="results-card results-empty" aria-labelledby="results-no-import">
+    {notices.length > 0 && !shared && <div className="results-notices">{notices}</div>}
+    {!showBaseline && !shared && <section className="results-card results-empty" aria-labelledby="results-no-import">
       <h2 id="results-no-import">{m.noImport.heading}</h2><p>{m.noImport.body}</p>{isAdmin ? importLink : <p className="results-muted">{m.noImport.agent}</p>}
     </section>}
     <section className="results-card results-table" data-baseline={showBaseline || undefined} aria-label={m.heading}>
@@ -237,12 +244,12 @@ export function ResultsPage(props: ResultsPageProps) {
         <div><p className="results-head-title">{m.metric}</p><p className="results-muted">{m.medianUnless}</p></div>
         {showBaseline && <div><p className="results-head-title">{before.label}{before.badge && <span className="results-badge">{before.badge}</span>}</p>
           {b && <p className="results-muted">{m.created(range(b.created.from, b.created.to, timezone, true))}</p>}
-          {baseline && <p className="results-muted">{m.measuredAt(day(baseline.measured_at, timezone))}</p>}</div>}
+          {baseline && <p className="results-muted">{(shared ? m.share.measuredAt : m.measuredAt)(day(baseline.measured_at, timezone))}</p>}</div>}
         <div><p className="results-head-title">{after.label}</p>{a && <p className="results-muted">{m.created(range(a.created.from, a.created.to, timezone, true))}</p>}</div>
         {showBaseline && <div><p className="results-head-title">{m.change}</p></div>}
       </div>
       {rows.map((row) => <section key={row.name} className="results-row" aria-label={row.name}>
-        <div className="results-metric"><h2>{row.name}</h2><p><strong>{m.howWeCount}</strong> {row.how}</p></div>
+        <div className="results-metric"><h2>{row.name}</h2><p><strong>{m.howWeCount}</strong> {how(row.how)}</p></div>
         {showBaseline && <div className="results-cell">{cellLabel(before)}{withBaseline ? row.before : <p className="results-muted">{m.ai.needsBaseline}</p>}</div>}
         <div className="results-cell">{cellLabel(after)}{current ? row.after : <p className="results-muted">{m.firstCompute}</p>}</div>
         {showBaseline && <div className="results-cell results-change-cell"><p className="results-cell-label">{m.change}</p><ChangeCell change={row.change} /></div>}
@@ -259,7 +266,8 @@ export function ResultsPage(props: ResultsPageProps) {
         <div className="results-saved"><p className="results-cell-title">{m.ai.hoursSaved}</p>{savedCell}</div>
       </div>
     </section>
-    {admin ?? (!isAdmin && <p className="results-muted results-agent-note">{m.agentNote}</p>)}
-    <footer className="results-footer"><a href={m.definitionsURL} target="_blank" rel="noreferrer">{m.fullDefinitions}</a><span className="results-muted">{m.footer}</span></footer>
+    {!shared && (admin ?? (!isAdmin && <p className="results-muted results-agent-note">{m.agentNote}</p>))}
+    <footer className="results-footer"><a href={m.definitionsURL} target="_blank" rel="noreferrer">{shared ? m.share.definitions : m.fullDefinitions}</a>
+      <span className="results-muted">{shared ? m.share.madeWith : m.footer}</span></footer>
   </main>;
 }

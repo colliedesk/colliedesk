@@ -85,3 +85,17 @@ since a snapshot is replaced. A snapshot not kept in the caller's workspace answ
 `results_refreshed` whether it was pruned or belongs to another workspace, so the answer says nothing
 about other workspaces. Every time the API returns is UTC: the loader converts what the database
 session returns.
+
+## Share link and weekly email
+
+| Decision | Why |
+|---|---|
+| The share page is `/r#<token>` and the token goes in the body of `POST /api/v1/results/shared` | A fragment never reaches a server, a log line or a Referer; a path would be logged on every 4xx (`request-id.go` logs the path) |
+| Only the token's SHA-256 is stored; at most one active link per workspace (a partial unique index); creating one turns the old off | Revocable, unlike a signed link; a lost link is replaced, never recovered |
+| The public answer is `results.Shared`, built field by field: windows of numbers, no snapshot id, no ledger source (it names the account), no compute error | `TestResultsShareLinkShowsTotalsOnlyAndCanBeTurnedOff` pins every key and that no workspace id, contact, subject or text appears |
+| Off, replaced, unknown and (on the cloud) locked answer the same 404 | A guess learns nothing about a workspace |
+| `last_viewed_at` is written at most once an hour; the route shares the public web form's per-address limiter; `no-store`, `no-referrer`, `noindex` | A public page must not make the database write without limit, nor be cached or indexed |
+| Creating a link is `approvalRequired` for every token, and its answer is withheld from the token (`withheldResults`) | Data leaves sign-in: a person approves, and only that person sees the link |
+| The weekly email is claimed per workspace week (`results_state.weekly_sent_week`, the Monday 00:00 of the workspace's timezone as an instant) before sending; a failure is logged, not retried | Two servers never send it twice; comparing instants (not local dates) survives a timezone change mid-week |
+| A workspace seen for the first time starts with the next Monday | Otherwise every new workspace would get an email the moment the worker first saw it |
+| It is plain text with `List-Unsubscribe` pointing at the page's switch, sent from the platform address like import notices, only when SMTP and `MAIL_FROM_DOMAIN` are set | Same system mail as the rest of the server; self-hosted servers work the same |

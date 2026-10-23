@@ -446,6 +446,11 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/results", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/results/share-link", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/results/share-link", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/results/share-link", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/results/shared", auth.PermissionPublic},
+		{http.MethodPatch, "/api/v1/agents/me/results-email", auth.PermissionAuthenticated},
 	}
 }
 

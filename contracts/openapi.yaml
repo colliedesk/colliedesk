@@ -2415,6 +2415,105 @@ paths:
           description: The newest numbers
           content: {application/json: {schema: {$ref: '#/components/schemas/Results'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/results/share-link:
+    get:
+      operationId: getResultsShareLink
+      x-permission: access:write
+      description: >-
+        The workspace's active share link of the results page: who made it, when, and when it was last
+        opened. Never the link itself: only its hash is stored, so it is shown once, when it is created.
+        Admins only.
+      responses:
+        '200':
+          description: The active link, or null
+          content: {application/json: {schema: {$ref: '#/components/schemas/ResultsShareLinkState'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createResultsShareLink
+      x-permission: access:write
+      description: >-
+        Creates a link that shows the results page's totals to anyone who has it, without signing in: no
+        conversation ids, customer or team names, subjects or message text. The old link, if any, stops
+        working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never
+        reaches a server log). An agent token's call becomes a request a person approves: the numbers leave
+        sign-in. Admins only.
+      responses:
+        '201':
+          description: The new link, shown once
+          content: {application/json: {schema: {$ref: '#/components/schemas/ResultsShareLinkCreated'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    delete:
+      operationId: revokeResultsShareLink
+      x-permission: access:write
+      description: Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Admins only.
+      responses:
+        '200':
+          description: No active link
+          content: {application/json: {schema: {$ref: '#/components/schemas/ResultsShareLinkState'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/results/shared:
+    post:
+      operationId: getSharedResults
+      x-permission: public
+      description: >-
+        The totals a share link shows, for the public page `/r#<token>`. The token is sent in the body, never
+        in the address. Only totals, medians and sample sizes: no ids, names, subjects or text. A link that
+        was turned off or replaced, an unknown one, and a locked workspace's all answer the same 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 100}
+      responses:
+        '200':
+          description: The shared totals
+          content: {application/json: {schema: {$ref: '#/components/schemas/SharedResults'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404':
+          description: The link was turned off, replaced or never existed
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/agents/me/results-email:
+    patch:
+      operationId: setResultsEmail
+      x-permission: authenticated
+      description: >-
+        Turns the weekly results email on or off for the caller. It goes to admins only, every Monday at
+        8:00 in the workspace's timezone, when the server can send email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [weekly]
+              properties:
+                weekly: {type: boolean}
+      responses:
+        '200':
+          description: The caller's choice
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [weekly]
+                properties:
+                  weekly: {type: boolean}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /api/v1/ai/usage:
     get:
       operationId: getAIUsage
@@ -4634,8 +4733,19 @@ components:
         resets_at: {type: string, format: date-time, description: The first instant of the next UTC month.}
     Results:
       type: object
-      required: [current, baseline, baseline_state, hours_saved, error]
+      required: [current, baseline, baseline_state, hours_saved, error, weekly_email]
       properties:
+        weekly_email:
+          description: The caller's weekly email (admins only; null for agents).
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [subscribed, can_send, next_at, timezone]
+              properties:
+                subscribed: {type: boolean}
+                can_send: {type: boolean, description: False when the server has no outgoing mail settings.}
+                next_at: {type: string, format: date-time, description: The next Monday 8:00 in the workspace's timezone.}
+                timezone: {type: string, description: The workspace's timezone (IANA).}
         current:
           description: Colliedesk's numbers; null until the worker has computed them once.
           oneOf: [{$ref: '#/components/schemas/ResultsSnapshot'}, {type: 'null'}]
@@ -4667,6 +4777,59 @@ components:
               properties:
                 message: {type: string}
                 at: {type: string, format: date-time}
+    ResultsShareLink:
+      type: object
+      required: [created_at, created_by_name, last_viewed_at]
+      properties:
+        created_at: {type: string, format: date-time}
+        created_by_name: {type: [string, 'null'], description: Null when that person was removed.}
+        last_viewed_at: {type: [string, 'null'], format: date-time, description: 'Updated at most once an hour.'}
+    ResultsShareLinkState:
+      type: object
+      required: [link]
+      properties:
+        link:
+          oneOf: [{$ref: '#/components/schemas/ResultsShareLink'}, {type: 'null'}]
+    ResultsShareLinkCreated:
+      type: object
+      required: [link, url]
+      properties:
+        link: {$ref: '#/components/schemas/ResultsShareLink'}
+        url: {type: string, description: 'The address to share, shown only now.'}
+    SharedResults:
+      type: object
+      additionalProperties: false
+      required: [workspace_name, computed_at, baseline_from, current, baseline, hours_saved]
+      properties:
+        workspace_name: {type: string}
+        computed_at: {type: [string, 'null'], format: date-time}
+        baseline_from:
+          type: [string, 'null']
+          enum: [freshdesk, helpscout, null]
+          description: Where the baseline was imported from; null without one (or while it is not shown).
+        current:
+          oneOf: [{$ref: '#/components/schemas/SharedResultsSide'}, {type: 'null'}]
+        baseline:
+          oneOf: [{$ref: '#/components/schemas/SharedResultsSide'}, {type: 'null'}]
+        hours_saved:
+          type: object
+          additionalProperties: false
+          properties:
+            30d: {$ref: '#/components/schemas/ResultsHoursSaved'}
+            7d: {$ref: '#/components/schemas/ResultsHoursSaved'}
+    SharedResultsSide:
+      type: object
+      additionalProperties: false
+      required: [measured_at, windows]
+      properties:
+        measured_at: {type: string, format: date-time}
+        windows:
+          type: object
+          required: [30d, 7d]
+          additionalProperties: false
+          properties:
+            30d: {$ref: '#/components/schemas/ResultsWindow'}
+            7d: {$ref: '#/components/schemas/ResultsWindow'}
     ResultsHoursSaved:
       oneOf:
         - type: 'null'

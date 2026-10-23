@@ -103,9 +103,7 @@ func TestResultsPageNumbersOpenTheConversationsTheyCount(t *testing.T) {
 	if _, err := pool.Exec(context.Background(), `UPDATE conversations SET status='resolved' WHERE id=$1`, ids[0]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := results.NewWorker(database.New(pool)).RunOnce(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	runResultsWorker(t, pool)
 
 	for _, token := range []string{admin, agent} {
 		page = resultsPage{}
@@ -172,5 +170,12 @@ func TestResultsComputeErrorIsForAdmins(t *testing.T) {
 	decode(t, request(t, api, http.MethodGet, "/api/v1/results", nil, agent, nil), &page)
 	if page.Error != nil {
 		t.Fatalf("agent sees the error %+v", page.Error)
+	}
+}
+
+func runResultsWorker(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	if _, err := results.NewWorker(database.New(pool)).RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }

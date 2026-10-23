@@ -39,10 +39,29 @@ type Page struct {
 	BaselineState string                 `json:"baseline_state"`
 	HoursSaved    map[string]*HoursSaved `json:"hours_saved"`
 	Error         *ComputeError          `json:"error"`
+	WeeklyEmail   *WeeklyEmail           `json:"weekly_email"`
 }
 
-// Read returns the newest stored numbers; nothing is computed. The compute error is for admins.
-func Read(ctx context.Context, tx pgx.Tx, workspaceID string, admin bool) (Page, error) {
+// WeeklyEmail is an admin's own weekly email.
+type WeeklyEmail struct {
+	Subscribed bool      `json:"subscribed"`
+	CanSend    bool      `json:"can_send"`
+	NextAt     time.Time `json:"next_at"`
+	Timezone   string    `json:"timezone"`
+}
+
+// Viewer is who reads the page: an admin also gets the compute error and their weekly email.
+type Viewer struct {
+	AgentID string
+	Admin   bool
+	// CanSend says the server has outgoing mail settings.
+	CanSend bool
+	Now     time.Time
+}
+
+// Read returns the newest stored numbers; nothing is computed.
+func Read(ctx context.Context, tx pgx.Tx, workspaceID string, viewer Viewer) (Page, error) {
+	admin := viewer.Admin
 	page := Page{BaselineState: "none", HoursSaved: map[string]*HoursSaved{}}
 	var source, message *string
 	var errorAt *time.Time
@@ -67,6 +86,15 @@ func Read(ctx context.Context, tx pgx.Tx, workspaceID string, admin bool) (Page,
 	}
 	for _, window := range Windows {
 		page.HoursSaved[window.Key] = hoursSaved(page.Current, page.Baseline, window.Key)
+	}
+	if admin && viewer.AgentID != "" {
+		weekly := WeeklyEmail{CanSend: viewer.CanSend}
+		if err := tx.QueryRow(ctx, `SELECT a.results_email,w.timezone FROM agents a JOIN workspaces w ON w.id=a.workspace_id
+			WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, viewer.AgentID).Scan(&weekly.Subscribed, &weekly.Timezone); err != nil {
+			return page, fmt.Errorf("read the weekly email: %w", err)
+		}
+		weekly.NextAt = NextWeekly(viewer.Now, weekly.Timezone)
+		page.WeeklyEmail = &weekly
 	}
 	return page, nil
 }

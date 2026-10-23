@@ -78,7 +78,7 @@ func TestResultsComputeAndReadStayInBudget(t *testing.T) {
 	}
 	var page results.Page
 	p95("read", resultsReadBudget, 200, func() (err error) {
-		page, err = data.ReadResults(ctx, workspace, true)
+		page, err = data.ReadResults(ctx, workspace, results.Viewer{Admin: true, Now: now})
 		return err
 	})
 	if page.Current == nil || page.Baseline == nil {

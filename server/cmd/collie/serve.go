@@ -34,6 +34,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 	"github.com/colliedesk/colliedesk/server/internal/webui"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -152,8 +153,20 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
 	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
 	go sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage))
-	// The results page only reads numbers this worker computes (docs/internals/results.md).
-	go results.NewWorker(db).Run(ctx)
+	// The results page only reads numbers this worker computes (docs/internals/results.md). It also sends
+	// the weekly email to admins, from the platform address, when the server can send mail.
+	resultsWorker := results.NewWorker(db)
+	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
+		resultsWorker.WithMail(results.Mail{Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain, Origin: origin,
+			Locked: func(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error) {
+				if !billing.Enabled() {
+					return false, nil
+				}
+				access, err := store.WorkspaceAccess(ctx, tx, workspaceID, now)
+				return access.Locked, err
+			}})
+	}
+	go resultsWorker.Run(ctx)
 	mailImageCacheBytes, err := mailImageCacheBytesFromEnv(os.Getenv)
 	if err != nil {
 		return err

@@ -89,4 +89,6 @@ const (
 	// workspaces whose results page numbers are due. Only workspace ids leave the transaction; each is
 	// computed and stored in its own scope.
 	PrivilegeResultsClaim Privilege = "results-claim"
+	// PrivilegeResultsShareToken resolves the workspace of a results share link from its token hash.
+	PrivilegeResultsShareToken Privilege = "results-share-token"
 )

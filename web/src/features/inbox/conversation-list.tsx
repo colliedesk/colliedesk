@@ -112,7 +112,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
       {failed === 'results_refreshed' && <div className="empty-copy"><p role="alert" className="error-copy">{messages.resultsRefreshed}</p>
         <p className="muted-copy">{messages.resultsRefreshedWhy}</p>
         <div className="button-row"><a href="/results" className="button">{messages.openResults}</a>
-          {onClearFilters && <button type="button" className="secondary" onClick={onClearFilters}>{messages.clearFilter}</button>}</div></div>}
+          {onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilter}</button>}</div></div>}
       {failed === true && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
       {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : messages.noConversations}</p>

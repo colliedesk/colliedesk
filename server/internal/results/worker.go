@@ -18,6 +18,7 @@ type Worker struct {
 	// Every is how often the worker looks for due workspaces; Batch how many it takes per look.
 	Every time.Duration
 	Batch int
+	mail  *Mail
 }
 
 // NewWorker returns a worker that looks every five minutes.
@@ -50,8 +51,12 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 	for {
 		done, claimed, err := w.runBatch(ctx)
 		computed += done
-		if err != nil || claimed < w.Batch {
+		if err != nil {
 			return computed, err
+		}
+		if claimed < w.Batch {
+			// The weekly email reads the numbers just computed.
+			return computed, w.sendWeekly(ctx, w.now().UTC())
 		}
 	}
 }

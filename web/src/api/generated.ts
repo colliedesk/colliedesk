@@ -1376,6 +1376,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/results/share-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's active share link of the results page: who made it, when, and when it was last opened. Never the link itself: only its hash is stored, so it is shown once, when it is created. Admins only. */
+        get: operations["getResultsShareLink"];
+        put?: never;
+        /** @description Creates a link that shows the results page's totals to anyone who has it, without signing in: no conversation ids, customer or team names, subjects or message text. The old link, if any, stops working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never reaches a server log). An agent token's call becomes a request a person approves: the numbers leave sign-in. Admins only. */
+        post: operations["createResultsShareLink"];
+        /** @description Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Admins only. */
+        delete: operations["revokeResultsShareLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/results/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description The totals a share link shows, for the public page `/r#<token>`. The token is sent in the body, never in the address. Only totals, medians and sample sizes: no ids, names, subjects or text. A link that was turned off or replaced, an unknown one, and a locked workspace's all answer the same 404. */
+        post: operations["getSharedResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/results-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Turns the weekly results email on or off for the caller. It goes to admins only, every Monday at 8:00 in the workspace's timezone, when the server can send email. */
+        patch: operations["setResultsEmail"];
+        trace?: never;
+    };
     "/api/v1/ai/usage": {
         parameters: {
             query?: never;
@@ -2715,6 +2768,19 @@ export interface components {
             resets_at: string;
         };
         Results: {
+            /** @description The caller's weekly email (admins only; null for agents). */
+            weekly_email: null | {
+                subscribed: boolean;
+                /** @description False when the server has no outgoing mail settings. */
+                can_send: boolean;
+                /**
+                 * Format: date-time
+                 * @description The next Monday 8:00 in the workspace's timezone.
+                 */
+                next_at: string;
+                /** @description The workspace's timezone (IANA). */
+                timezone: string;
+            };
             /** @description Colliedesk's numbers; null until the worker has computed them once. */
             current: components["schemas"]["ResultsSnapshot"] | null;
             /** @description The imported history's numbers, measured when its import finished; null without one. */
@@ -2734,6 +2800,49 @@ export interface components {
                 message: string;
                 /** Format: date-time */
                 at: string;
+            };
+        };
+        ResultsShareLink: {
+            /** Format: date-time */
+            created_at: string;
+            /** @description Null when that person was removed. */
+            created_by_name: string | null;
+            /**
+             * Format: date-time
+             * @description Updated at most once an hour.
+             */
+            last_viewed_at: string | null;
+        };
+        ResultsShareLinkState: {
+            link: components["schemas"]["ResultsShareLink"] | null;
+        };
+        ResultsShareLinkCreated: {
+            link: components["schemas"]["ResultsShareLink"];
+            /** @description The address to share, shown only now. */
+            url: string;
+        };
+        SharedResults: {
+            workspace_name: string;
+            /** Format: date-time */
+            computed_at: string | null;
+            /**
+             * @description Where the baseline was imported from; null without one (or while it is not shown).
+             * @enum {string|null}
+             */
+            baseline_from: "freshdesk" | "helpscout" | null;
+            current: components["schemas"]["SharedResultsSide"] | null;
+            baseline: components["schemas"]["SharedResultsSide"] | null;
+            hours_saved: {
+                "30d"?: components["schemas"]["ResultsHoursSaved"];
+                "7d"?: components["schemas"]["ResultsHoursSaved"];
+            };
+        };
+        SharedResultsSide: {
+            /** Format: date-time */
+            measured_at: string;
+            windows: {
+                "30d": components["schemas"]["ResultsWindow"];
+                "7d": components["schemas"]["ResultsWindow"];
             };
         };
         ResultsHoursSaved: null | {
@@ -7522,6 +7631,143 @@ export interface operations {
                     "application/json": components["schemas"]["Results"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The active link, or null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkState"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new link, shown once */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkCreated"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No active link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkState"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getSharedResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The shared totals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedResults"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description The link was turned off, replaced or never existed */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    setResultsEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    weekly: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's choice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        weekly: boolean;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };

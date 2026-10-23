@@ -41,6 +41,7 @@ function results(overrides: Partial<Results> = {}): Results {
     baseline_state: 'ready',
     hours_saved: { '30d': { hours: 13, conversations: 52, median_handle_minutes: 15 }, '7d': null },
     error: null,
+    weekly_email: null,
     ...overrides,
   });
 }
