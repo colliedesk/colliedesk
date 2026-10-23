@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode, Ref } from 'react';
 import type { Conversation, ConversationViewer, OnboardingGoal } from '../../api/schemas';
-import { dayGroup, formatDate, formatShortDate } from '../../lib/format-date';
+import { dayGroup, formatDate, formatListTime, formatShortDate } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { presenceViewPart } from './presence-part';
+import { useListKeys } from './use-list-keys';
 
 interface ConversationListProps {
   items: Conversation[];
@@ -81,6 +82,8 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
   useEffect(() => {
     if (selectAll.current) selectAll.current.indeterminate = checkedCount > 0 && !allChecked;
   }, [checkedCount, allChecked]);
+  const scroll = useRef<HTMLDivElement>(null);
+  const onListKey = useListKeys(scroll, items.map((item) => item.id), selectedId, onSelect);
   const settingsLink = (label: string, to: SettingsTarget = '/settings') => <a href={to} onClick={(event) => {
     if (!onOpenSettings) return;
     event.preventDefault();
@@ -96,7 +99,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
     mcp: <a href={messages.mcpURL} target="_blank" rel="noreferrer">{messages.connectAIAgent}</a>,
   };
   return (
-    <div className="conversation-scroll" aria-busy={refreshing}>
+    <div className="conversation-scroll" aria-busy={refreshing} ref={scroll} onKeyDown={onListKey}>
       {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
@@ -125,7 +128,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         return (
           <Fragment key={item.id}>
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
-          <div className="conversation-item">
+          <div className="conversation-item" data-conversation-id={item.id}>
           <label className="row-check">
             <input type="checkbox" aria-label={messages.selectRow(item.subject, full)} checked={checkedIds?.has(item.id) ?? false} onChange={() => onToggle?.(item.id)} />
           </label>
@@ -133,6 +136,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
             <span className="conversation-subject">{item.subject}</span>
             <time dateTime={item.updated_at}>
               <span aria-hidden="true" className="time-short">{formatShortDate(item.updated_at, timezone, now)}</span>
+              <span aria-hidden="true" className="time-touch">{formatListTime(item.updated_at, timezone, now)}</span>
               <span className="time-full">{full}</span>
             </time>
             <span className="conversation-meta">

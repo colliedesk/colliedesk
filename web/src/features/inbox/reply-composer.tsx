@@ -9,6 +9,7 @@ import { replyRefusalText } from './refusal-text';
 import { ConflictError, ReplyConflictError } from '../../api/client';
 import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
+import { composing, isTyping } from '../../lib/typing-target';
 import { messages } from '../../messages';
 import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon, SparklesIcon } from '../../ui/icons';
 import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
@@ -55,19 +56,6 @@ type Kind = 'outgoing' | 'note';
 type Picker = 'replies' | 'articles';
 const shortcuts: Record<string, Kind> = { r: 'outgoing', n: 'note' };
 
-const nonTextInputs = ['radio', 'checkbox', 'button', 'submit', 'reset'];
-
-// Typing in a text field, or holding a modifier, is text entry and never a shortcut. Radios and
-// checkboxes take no text, so R and N still work after a click on a status tab.
-function isTyping(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target instanceof HTMLInputElement) return !nonTextInputs.includes(target.type);
-  return target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName);
-}
-
-// An input method (Vietnamese Telex/VNI on macOS, CJK) still holds marked text while it composes;
-// acting on that key would send or switch before the text is committed.
-const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229;
 
 const noAddresses: string[] = [];
 
