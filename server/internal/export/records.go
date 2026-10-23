@@ -502,11 +502,23 @@ type ConversationHead struct {
 	UpdatedAt  time.Time                  `json:"updated_at"`
 }
 
+// StatusChange is one change of a conversation's status (conversation_status_changes). Source is
+// colliedesk or import; ActorAgentID is the person who changed it, when known.
+type StatusChange struct {
+	ID           string    `json:"id"`
+	FromStatus   string    `json:"from_status"`
+	ToStatus     string    `json:"to_status"`
+	ChangedAt    time.Time `json:"changed_at"`
+	ActorAgentID *string   `json:"actor_agent_id"`
+	Source       string    `json:"source"`
+}
+
 // Conversation is one line of conversations.ndjson with everything that hangs off it.
 type Conversation struct {
 	ConversationHead
-	Messages    []Message          `json:"messages"`
-	TimeEntries []domain.TimeEntry `json:"time_entries"`
+	Messages      []Message          `json:"messages"`
+	TimeEntries   []domain.TimeEntry `json:"time_entries"`
+	StatusChanges []StatusChange     `json:"status_changes"`
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
@@ -540,5 +552,5 @@ type Sink interface {
 	AITriage(AITriage) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
-	EndConversation(timeEntries []domain.TimeEntry) error
+	EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error
 }

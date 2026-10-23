@@ -359,7 +359,7 @@ func exportConversations(ctx context.Context, tx pgx.Tx, workspaceID string, sin
 			if err := exportMessages(ctx, tx, workspaceID, head.ID, page.files, sink); err != nil {
 				return err
 			}
-			if err := sink.EndConversation(page.timeEntries[head.ID]); err != nil {
+			if err := sink.EndConversation(page.timeEntries[head.ID], page.statusChanges[head.ID]); err != nil {
 				return err
 			}
 		}
@@ -372,10 +372,12 @@ type conversationPage struct {
 	tags        map[string][]string
 	files       map[string][]export.Attachment // by message id
 	timeEntries map[string][]domain.TimeEntry  // by conversation id
+	// statusChanges by conversation id, oldest first.
+	statusChanges map[string][]export.StatusChange
 }
 
 func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after string) (conversationPage, error) {
-	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}}
+	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}, statusChanges: map[string][]export.StatusChange{}}
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.origin,c.created_at,c.updated_at,
 		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id)
 		FROM conversations c WHERE c.workspace_id=$1 AND c.id>$2::uuid ORDER BY c.id LIMIT $3`, workspaceID, after, exportPageConversations)
@@ -416,7 +418,10 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 	if err := exportPageAttachments(ctx, tx, workspaceID, ids, page.files); err != nil {
 		return page, err
 	}
-	return page, exportPageTimeEntries(ctx, tx, workspaceID, ids, page.timeEntries)
+	if err := exportPageTimeEntries(ctx, tx, workspaceID, ids, page.timeEntries); err != nil {
+		return page, err
+	}
+	return page, exportPageStatusChanges(ctx, tx, workspaceID, ids, page.statusChanges)
 }
 
 func exportPageTags(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string, into map[string][]string) error {
@@ -819,4 +824,23 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		}
 	}
 	return rowsError("export AI triage", triage)
+}
+
+func exportPageStatusChanges(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string, into map[string][]export.StatusChange) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,from_status,to_status,changed_at,actor_agent_id::text,source
+		FROM conversation_status_changes WHERE workspace_id=$1 AND conversation_id=ANY($2::text[]::uuid[]) ORDER BY conversation_id,changed_at,id`, workspaceID, ids)
+	if err != nil {
+		return fmt.Errorf("export status changes: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item export.StatusChange
+		var conversationID string
+		if err := rows.Scan(&item.ID, &conversationID, &item.FromStatus, &item.ToStatus, &item.ChangedAt, &item.ActorAgentID, &item.Source); err != nil {
+			return fmt.Errorf("export status changes: %w", err)
+		}
+		item.ChangedAt = domain.UTC(item.ChangedAt)
+		into[conversationID] = append(into[conversationID], item)
+	}
+	return rowsError("export status changes", rows)
 }

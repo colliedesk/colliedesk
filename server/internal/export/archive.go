@@ -84,7 +84,7 @@ func NewWriter(out io.Writer, opener Opener, workspaceID string, exportedAt time
 		zip: zip.NewWriter(out), out: out, opener: opener, workspaceID: workspaceID,
 		exportedAt: exportedAt.UTC(), current: -1,
 		counts: map[string]int{"agents": 0, "contacts": 0, "tags": 0, "saved_replies": 0, "saved_reply_versions": 0, "saved_views": 0,
-			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_videos": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0},
+			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_videos": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0, "status_changes": 0},
 	}
 }
 
@@ -217,7 +217,7 @@ func (w *Writer) Conversation(record Conversation) error {
 			return err
 		}
 	}
-	return w.EndConversation(record.TimeEntries)
+	return w.EndConversation(record.TimeEntries, record.StatusChanges)
 }
 
 // BeginConversation starts the JSON line of one conversation. Message and EndConversation must follow.
@@ -275,8 +275,8 @@ func (w *Writer) Message(message Message) error {
 	return w.write(encoded)
 }
 
-// EndConversation closes the open conversation with its time entries.
-func (w *Writer) EndConversation(timeEntries []domain.TimeEntry) error {
+// EndConversation closes the open conversation with its time entries and status history.
+func (w *Writer) EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error {
 	if w.err != nil {
 		return w.err
 	}
@@ -286,14 +286,22 @@ func (w *Writer) EndConversation(timeEntries []domain.TimeEntry) error {
 	if timeEntries == nil {
 		timeEntries = []domain.TimeEntry{}
 	}
+	if statusChanges == nil {
+		statusChanges = []StatusChange{}
+	}
 	encoded, err := marshal(timeEntries)
 	if err != nil {
 		return w.fail(fmt.Errorf("encode time entries: %w", err))
 	}
+	changes, err := marshal(statusChanges)
+	if err != nil {
+		return w.fail(fmt.Errorf("encode status changes: %w", err))
+	}
 	w.inThread = false
 	w.counts["time_entries"] += len(timeEntries)
+	w.counts["status_changes"] += len(statusChanges)
 	w.counts["conversations"]++
-	line := append([]byte(`],"time_entries":`), encoded...)
+	line := append(append(append([]byte(`],"time_entries":`), encoded...), `,"status_changes":`...), changes...)
 	if err := w.write(append(line, '}', '\n')); err != nil {
 		return err
 	}

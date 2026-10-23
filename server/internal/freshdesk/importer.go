@@ -14,6 +14,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/importkit"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -249,9 +250,17 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 }
 
 // begin starts a transaction scoped to the import workspace; the importer never reads or writes
-// another workspace.
+// another workspace. Its status changes are recorded as the import's, not Colliedesk work.
 func (r *run) begin(ctx context.Context) (pgx.Tx, error) {
-	return r.db.BeginWorkspace(ctx, r.workspaceID)
+	tx, err := r.db.BeginWorkspace(ctx, r.workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.MarkImportWrites(ctx, tx); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
 }
 
 func probeAhead(hooks testHooks) int {

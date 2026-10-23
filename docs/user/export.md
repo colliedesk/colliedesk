@@ -70,7 +70,7 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 | `ai-usage.ndjson` | One call to an AI provider per line: `id`, `feature`, `billed_to` (`server` or `workspace_key`), `provider_id`, `provider_kind`, `provider_label`, `model`, `status` (`ok`, `error`, or `started` for a call that never finished), `error_code`, `stop_reason`, `served_model`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens` (`null` when the provider reported none), `hops` (per model, when a refused request was answered by another model), `provider_request_id`, `actor_agent_id`, `actor_token_id`, `started_at`, `finished_at`, `latency_ms`, `task_id` (the background task it worked for), `automatic` (no person asked for it), `cost_micro_usd` (what the server's provider spent, in millionths of a dollar, at that day's prices; `null` for your own key), `reserved_micro_usd` (the most the call could cost, set aside against the allowance while it ran; `null` for your own key). No prompt or answer is stored. Background tasks themselves are not exported |
 | `ai-triage.ndjson` | One [AI triage suggestion](ai.md#triage-suggestions) per line: `id`, `conversation_id`, `task_id`, `automatic`, `requested_by_agent_id`, `requested_by_token_id`, `status` (`pending`, `ready` or `cancelled`), `tag_ids`, `priority`, `assignee_agent_id`, `reason` (erased 90 days after it was decided), `sources` (the articles and solved conversations it read: `kind`, `id`, `title`), `base` (the conversation's `priority` and `assignee_agent_id` when it was asked for), `stale` (what a person set before it came, so not suggested), `model`, `outcome` (`accepted`, `partly_accepted`, `dismissed`, `superseded`, `expired`; empty while open), `applied` (`tag_ids`, `priority`, `assignee_agent_id` applied so far), `auto_applied_at` and `auto_applied` (what AI applied by itself), `skipped` (what it left, and why), `undone_parts`, `kept`, `undone_at`, `undone_by_agent_id` (an undo of what AI applied), `created_at`, `ready_at`, `decided_at`, `decided_by_agent_id` |
 | `ai-drafts.ndjson` | One [AI reply draft](ai.md#reply-drafts) per line: `id`, `conversation_id`, `task_id`, `requested_by_agent_id`, `requested_by_token_id`, `prompt` (what the person asked for), `status` (`pending`, `ready` or `cancelled`), `text`, `missing_info`, `sources` (`kind`, `id`, `title` of each article or solved conversation it used), `warnings` (an address, a number or a name the conversation did not hold), `model`, `outcome` (`sent_unchanged`, `sent_edited`, `discarded`, `superseded`, `expired`), `similarity` (0 to 1, how close the reply sent stayed to it), `sent_message_id`, `automatic` (written by itself for a customer message), `answers_message_id`, `reply_needed`, `created_at`, `ready_at`, `decided_at`, `decided_by_agent_id`, `text_cleared_at` (when the text and prompt were erased, 90 days after the draft ended) |
-| `conversations.ndjson` | One conversation per line, with its messages and time entries |
+| `conversations.ndjson` | One conversation per line, with its messages, time entries and status changes |
 | `attachments/<attachment id>/<file name>` | The original bytes of each attachment |
 | `kb-videos.ndjson` | One video of the knowledge base media library per line: `id`, `content_type` (`video/mp4` or `video/webm`), `size`, `sha256`, `path` (the file in the ZIP), `poster_path` (the poster's file, or `null`), `name`, `alt` (its title), `width`, `height`, `duration_ms` (`null` when the file does not say), `codecs`, `kept`, `created_by_agent_id`, `created_at`, `updated_at`, `updated_by_agent_id`, `deleted_at`, `deleted_by_agent_id` |
 | `kb-media-replacements.ndjson` | One replacement of a library item per line: `id`, `from_media_id`, `to_media_id`, `article_ids` (the articles that got a new version) and `article_versions` (that version of each), `translations` (`article_id`, `locale`, and the text `before` and `after` of each translation rewritten), `skipped_article_ids` (what an undo left because it changed since), `replaced_by_agent_id`, `created_at`, `undone_at`, `undone_by_agent_id` |
@@ -82,7 +82,7 @@ NDJSON means one JSON object per line. Read it line by line. All times are UTC (
 A conversation line has `id`, `contact_id`, `subject`, `status`, `priority`, `assignee_id`
 (an agent id or `null`), `channel` (how it started: `email`, `web_form`, `imported`, `agent` or
 `problem_report`; see [Filter and sort](inbox.md#filter-and-sort)), `origin` (where an imported ticket came from, or `null`), `tag_ids`,
-`created_at`, `updated_at`, `messages` and `time_entries`.
+`created_at`, `updated_at`, `messages`, `time_entries` and `status_changes`.
 
 Each message has `id`, `conversation_id`, `author_agent_id`, `author_name` (as stored: the author
 name of an imported message, `null` for a message written in Colliedesk, whose author is
@@ -97,6 +97,12 @@ this reply, or `null`), `ai_draft_id` (the AI draft it was written from, or `nul
 
 Each time entry has `id`, `conversation_id`, `agent_id`, `agent_name`, `minutes`, `note`,
 `billable` and `executed_at`.
+
+Each status change has `id`, `from_status`, `to_status`, `changed_at`, `actor_agent_id` (the person
+who changed it, or `null` for a customer reply that reopened the conversation) and `source`
+(`colliedesk`, or `import` when an import set the status it read from the old helpdesk). Changes are
+recorded from the upgrade that added them; a conversation created by an import has no change for
+its first status.
 
 Attachment files are stored without compression, under a directory named by the attachment id, so
 two files with the same name never collide. File names are cleaned: directories and control
