@@ -274,13 +274,16 @@ export function AITriageCard({ conversationId, tags, agents, currentAgentId, tim
       }
     }
   }
+  // The time of what the heading says: when AI applied it (again), when it was undone, or when it came.
+  const headingAt = !suggestion ? null : suggestion.status === 'ready' && undoneByAI(suggestion) ? suggestion.undone_at
+    : suggestion.status === 'ready' && appliedByAI(suggestion) ? suggestion.auto_applied_at : suggestion.ready_at ?? suggestion.created_at;
   const headingText = suggestion?.status === 'ready' && undoneByAI(suggestion) ? text.headingUndone
     : suggestion?.status === 'ready' && appliedByAI(suggestion) ? text.headingApplied : text.headingShort;
   const card = (
     <section className={placement === 'details' ? 'details-section ai-triage' : 'ai-triage ai-triage-timeline'} aria-label={text.heading}
       aria-busy={latest.isPending || writing(suggestion)}>
       <h2 ref={heading} tabIndex={-1}><span className="ai-chip" aria-hidden="true">AI</span>{headingText}
-        {suggestion && <time className="ai-triage-time" dateTime={suggestion.ready_at ?? suggestion.created_at}>{formatShortDate(suggestion.ready_at ?? suggestion.created_at, timezone)}</time>}</h2>
+        {headingAt && <time className="ai-triage-time" dateTime={headingAt}>{formatShortDate(headingAt, timezone)}</time>}</h2>
       {body}
       <p className="sr-only" role="status">{announcement}</p>
       {/* A refusal Colliedesk explains is shown as it is; anything else (no connection) changed nothing. */}

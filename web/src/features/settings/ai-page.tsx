@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { AIEvent, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
 import { formatDate, formatDay } from '../../lib/format-date';
@@ -69,8 +69,23 @@ const slotLabel = (slot: string) => m.slotName[slot as AISlotName] ?? slot;
 // from the page, so the browser would leave it on the body).
 const focusSwitch = (slot: AISlotName) => requestAnimationFrame(() => document.getElementById(`ai-auto-${slot}`)?.focus());
 
+// useFocusAfterSave puts focus back on an automatic mode's switch once the change it started is saved:
+// the row is drawn again meanwhile, and focus would otherwise land on the body.
+function useFocusAfterSave(busySlot: AISlotName | undefined) {
+  const pending = useRef<AISlotName>(undefined);
+  useEffect(() => {
+    if (busySlot === undefined && pending.current) {
+      focusSwitch(pending.current);
+      pending.current = undefined;
+    }
+  }, [busySlot]);
+  return (slot: AISlotName) => { pending.current = slot; };
+}
+
 export function AIPage(props: AIPageProps) {
   const { settings, isAdmin } = props;
+  const focusAfterSave = useFocusAfterSave(props.busySlot);
+  const setSlot = (slot: AISlotName, input: AISlotInput) => { focusAfterSave(slot); props.onSetSlot(slot, input); };
   const [tab, setTab] = useState<AITab>('features');
   const [dialog, setDialog] = useState<{ kind: 'add' } | { kind: 'automatic' } | { kind: 'auto-triage'; slot: AISlot } | { kind: 'key' | 'delete'; provider: AIProvider }>();
   const ids = { tabs: useId() };
@@ -109,7 +124,7 @@ export function AIPage(props: AIPageProps) {
             {props.error && <p role="alert" className="error-copy">{props.error}</p>}
             <div role="tabpanel" id={`${ids.tabs}-${tab}-panel`} aria-labelledby={`${ids.tabs}-${tab}`} className="ai-panel-stack">
               {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })}
-                onConfirmAuto={(slot) => setDialog({ kind: 'auto-triage', slot })} />}
+                onConfirmAuto={(slot) => setDialog({ kind: 'auto-triage', slot })} onSetAuto={setSlot} />}
               {tab === 'usage' && <Usage usage={props.usage} failed={props.usageFailed} month={month} onMonth={(next) => { setMonth(next); props.onUsageMonth(next); }} />}
               {tab === 'providers' && <Providers {...props} settings={settings}
                 onKey={(provider) => setDialog({ kind: 'key', provider })} onDelete={(provider) => setDialog({ kind: 'delete', provider })} />}
@@ -123,12 +138,12 @@ export function AIPage(props: AIPageProps) {
       {dialog?.kind === 'automatic' && settings && <AutomaticDialog settings={settings} onClose={() => setDialog(undefined)} onSave={props.onSetAutomatic} />}
       {dialog?.kind === 'delete' && settings && <DeleteDialog provider={dialog.provider} settings={settings} onClose={() => setDialog(undefined)} onRemove={props.onRemove} />}
       {dialog?.kind === 'auto-triage' && <AutoTriageDialog slot={dialog.slot} onClose={() => { setDialog(undefined); focusSwitch('triage'); }}
-        onTurnOn={() => { setDialog(undefined); props.onSetSlot('triage', { ...slotInput(dialog.slot), automatic: true }); focusSwitch('triage'); }} />}
+        onTurnOn={() => { setDialog(undefined); setSlot('triage', { ...slotInput(dialog.slot), automatic: true }); }} />}
     </main>
   );
 }
 
-type FeatureActions = { onOpenAutomatic: () => void; onConfirmAuto: (slot: AISlot) => void };
+type FeatureActions = { onOpenAutomatic: () => void; onConfirmAuto: (slot: AISlot) => void; onSetAuto: (slot: AISlotName, input: AISlotInput) => void };
 
 function Features(props: AIPageProps & FeatureActions & { settings: AISettings; onOpenAdd: () => void }) {
   const { settings, isAdmin } = props;
@@ -193,7 +208,7 @@ type Part = AISlot['auto_parts'][number];
 const parts: Part[] = ['tags', 'priority', 'assignee'];
 const partList = (list: Part[]) => list.map((part) => m.autoPartLower[part]).join(' and ').replace(/ and (?=.* and )/g, ', ');
 
-function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
+function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
   const name = slotLabel(slot.slot);
   const serverModels = settings.server?.models[slot.slot] ?? [];
   const choices = [
@@ -248,7 +263,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
       {!saving && choices.length === 0 && <p className="ai-slot-why help">{m.addFirst}</p>}
       {!saving && stopped && slot.off_reason && <p className="ai-slot-why error-copy">{m.offReason[slot.off_reason]}</p>}
       {slot.slot === 'triage' && <AutoTriage slot={slot} settings={settings} isAdmin={isAdmin} locked={locked} hasProvider={choices.length > 0}
-        onTurnOn={() => onConfirmAuto(slot)} onSet={(input) => onSetSlot('triage', { ...slotInput(slot), ...input })} />}
+        onTurnOn={() => onConfirmAuto(slot)} onSet={(input) => onSetAuto('triage', { ...slotInput(slot), ...input })} />}
     </div>
   );
 }
@@ -269,7 +284,7 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
     <div className="ai-auto">
       <div className="ai-auto-lead"><strong id={id}>{m.autoTitle}</strong>
         <span aria-live="polite">{on ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>}</span></div>
-      {why ? <p className="ai-auto-desc muted-copy">{why}</p>
+      {why ? <p className="ai-auto-desc muted-copy" id={`${id}-why`}>{why}</p>
         : <p className="ai-auto-desc"><span className="ai-long">{m.autoDesc} </span><b>{m.autoDescStrong}</b>{m.autoDescRest}</p>}
       {!why && <fieldset className="ai-auto-parts"><legend className="sr-only">{m.autoParts}</legend>
         {parts.map((part) => <label key={part} className="ai-pick"><input type="checkbox" checked={chosen.includes(part)}
@@ -280,6 +295,7 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
           : isAdmin && <span className="ai-auto-stat muted-copy ai-long">{m.autoPickLater}</span>}
       </fieldset>}
       <label className="ai-switch ai-auto-switch"><input type="checkbox" role="switch" id="ai-auto-triage" aria-label={m.autoTitle} checked={on} disabled={locked || !slot.enabled}
+        aria-describedby={why ? `${id}-why` : undefined}
         onChange={(event) => (event.target.checked ? onTurnOn() : onSet({ automatic: false }))} /></label>
     </div>
   );
