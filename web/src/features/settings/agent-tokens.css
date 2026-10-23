@@ -1,7 +1,7 @@
 /* Settings → AI agents: create a token, then the steps of each AI host. */
 .agent-step { display: grid; gap: var(--space-3); min-width: 0; }
 .agent-step + .agent-step { border-top: 1px solid var(--line); padding-top: var(--space-5); }
-.step-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-weight: 600; }
+.step-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: inherit; font-weight: 600; }
 .step-no { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--surface-3); color: var(--text-1); font-size: var(--fs-label); font-weight: 600; }
 .token-form { display: grid; gap: var(--space-3); max-width: 34rem; }
 .token-form > p { margin: 0; }
@@ -11,7 +11,8 @@
 .tier-picker label:has(input:disabled) { color: var(--text-3); cursor: not-allowed; text-decoration: line-through; }
 .tier-picker input:disabled { cursor: not-allowed; }
 .token-created { display: grid; gap: var(--space-3); max-width: 40rem; }
-.token-value { font-family: var(--font-mono); font-size: var(--fs-small); }
+/* The token wraps, so the whole of it shows on a phone too. */
+.token-value { font-family: var(--font-mono); font-size: var(--fs-small); word-break: break-all; resize: none; }
 .token-hidden-note { margin: 0; }
 /* The host tabs fade only at their right edge: the first tab starts flush with the card. */
 .host-tabs { margin: 0; border-bottom: 1px solid var(--line);
@@ -39,6 +40,7 @@
 .deeplink p { margin: 0; }
 .agent-tokens a.button { color: var(--text-1); background: var(--surface-1); }
 .agent-tokens a.button.primary-action { background: var(--accent); color: var(--on-accent); }
-.agent-tokens a.button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.agent-tokens [aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 @media (pointer: coarse) { .snippet-head button { --control: var(--touch); } }
 .agent-tokens .button-row > .link-button { align-self: center; font-size: var(--fs-small); }
+.agent-tokens .primary-action[aria-disabled="true"]:hover { border-color: var(--accent); background: var(--accent); }

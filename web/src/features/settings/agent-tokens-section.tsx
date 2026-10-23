@@ -43,7 +43,7 @@ export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.l
   const [hidden, setHidden] = useState(false);
   const [host, setHost] = useState<ConnectHostID>('claude-code');
   const nameInput = useRef<HTMLInputElement>(null);
-  const tokenInput = useRef<HTMLInputElement>(null);
+  const tokenInput = useRef<HTMLTextAreaElement>(null);
   const another = useRef<HTMLButtonElement>(null);
   // Each new state of step 1 takes the focus to what comes next there.
   const [focus, setFocus] = useState<'name' | 'token' | 'another' | null>(null);
@@ -91,7 +91,7 @@ export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.l
       <div className="section-heading"><h2 id="agents-heading">{text.heading}</h2><p>{text.description}</p></div>
       <div className="settings-body">
         <div className="agent-step">
-          <p className="step-title"><span className="step-no" aria-hidden="true">1</span>{text.createStep}</p>
+          <h3 className="step-title"><span className="step-no" aria-hidden="true">1</span>{text.createStep}</h3>
           {!created && !hidden && <form className="token-form" noValidate onSubmit={(event) => void submit(event)}>
             <label className="field"><span>{text.name}</span>
               <input ref={nameInput} value={label} maxLength={80} placeholder={text.namePlaceholder} autoComplete="off"
@@ -112,7 +112,7 @@ export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.l
           {created && <div className="token-created">
             <div className="copy-field">
               <label className="invite-link"><span className="field-label">{text.yourToken(created.label)}</span>
-                <input ref={tokenInput} readOnly className="token-value" value={created.token} /></label>
+                <textarea ref={tokenInput} readOnly rows={2} spellCheck={false} className="token-value" value={created.token} /></label>
               <span className="button-row"><CopyButton value={created.token} className="primary-action">{text.copyToken}</CopyButton></span>
             </div>
             <p className="warning-note">{text.shownOnce}</p>
@@ -123,12 +123,12 @@ export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.l
         </div>
 
         <div className="agent-step">
-          <p className="step-title"><span className="step-no" aria-hidden="true">2</span>{text.connectStep}</p>
+          <h3 className="step-title"><span className="step-no" aria-hidden="true">2</span>{text.connectStep}</h3>
           <div className="status-tabs scroll-x-fade host-tabs" role="radiogroup" aria-label={text.host}>
             {connectHosts.map((item) => <label key={item.id}><input type="radio" name="agent-host" value={item.id} checked={host === item.id}
               onChange={() => setHost(item.id)} />{item.name}</label>)}
           </div>
-          <HostSteps host={host} origin={origin} token={token} />
+          <HostSteps host={host} origin={origin} token={token} hidden={hidden} />
           <p className="muted-copy check-it">{text.checkIt}</p>
         </div>
       </div>
@@ -136,7 +136,8 @@ export function AgentTokensSection({ canCreateAdmin, onCreate, origin = window.l
   );
 }
 
-function HostSteps({ host, origin, token }: { host: ConnectHostID; origin: string; token?: string }) {
+// hidden is a token just created and hidden: the steps say so instead of asking for a first one.
+function HostSteps({ host, origin, token, hidden }: { host: ConnectHostID; origin: string; token?: string; hidden: boolean }) {
   const item = connectHosts.find((candidate) => candidate.id === host)!;
   const snippet = (name: keyof typeof connectSnippets) => connectSnippets[name].replaceAll(exampleOrigin, origin);
   const [before, command] = text.disconnects[host];
@@ -163,8 +164,8 @@ function HostSteps({ host, origin, token }: { host: ConnectHostID; origin: strin
     steps = <>
       <div className="deeplink">
         {token ? <a className="button primary-action" href={cursorInstallLink(origin, token)}>{text.addToCursor}</a>
-          : <a className="button primary-action" role="link" aria-disabled="true">{text.addToCursor}</a>}
-        <p className="muted-copy">{token ? text.cursorWithToken : text.cursorNoToken}</p>
+          : <button type="button" className="primary-action" aria-disabled="true">{text.addToCursor}</button>}
+        <p className="muted-copy">{token ? text.cursorWithToken : hidden ? text.cursorHidden : text.cursorNoToken}</p>
       </div>
       <details className="host-alt"><summary>{text.byHand}</summary>
         <ol className="host-steps">
@@ -203,7 +204,7 @@ function Snippet({ label, code }: { label: string; code: string }) {
     <div className="snippet">
       <div className="snippet-head"><span className="field-label">{label}</span>
         <span className="button-row"><CopyButton value={code} label={text.copySnippet(label)}>{text.copy}</CopyButton></span></div>
-      <pre tabIndex={0} aria-label={label}><code>{code}</code></pre>
+      <pre tabIndex={0} role="group" aria-label={label}><code>{code}</code></pre>
     </div>
   );
 }

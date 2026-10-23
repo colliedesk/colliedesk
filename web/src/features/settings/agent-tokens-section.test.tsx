@@ -35,6 +35,9 @@ test('a token is created with its name and tier, shown once, copied, then hidden
   const field = await screen.findByRole('textbox', { name: 'Your token: Claude Code' });
   expect(field).toHaveValue(token);
   expect(field).toHaveAttribute('readonly');
+  // The whole token shows, also on a phone: it wraps instead of scrolling inside a one-line field.
+  expect(field.tagName).toBe('TEXTAREA');
+  expect(screen.getByRole('heading', { level: 3, name: 'Create a token' })).toBeInTheDocument();
   expect(screen.getByText(/cannot be shown again/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Copy token' }));
   expect(writeText).toHaveBeenCalledWith(token);
@@ -125,6 +128,9 @@ test('each agent app has its steps with this address, a copy button, a guide and
   expect(within(panel).getByRole('link', { name: 'Full guide' })).toHaveAttribute('href', 'https://colliedesk.com/docs/connect-claude-code');
   expect(panel).toHaveTextContent('claude plugin uninstall colliedesk@colliedesk');
   expect(document.body.innerHTML).not.toContain('desk.example.com');
+  expect(screen.getByRole('heading', { level: 3, name: 'Connect your agent' })).toBeInTheDocument();
+  // Each command is a labelled stop for the keyboard, so a screen reader names what it is.
+  expect(within(panel).getByRole('group', { name: 'Run in your terminal' })).toHaveTextContent('claude plugin install colliedesk');
 
   fireEvent.click(screen.getByRole('radio', { name: 'Codex' }));
   expect(screen.queryByRole('group', { name: 'Claude Code' })).not.toBeInTheDocument();
@@ -140,6 +146,7 @@ test('each agent app has its steps with this address, a copy button, a guide and
   panel = screen.getByRole('group', { name: 'Claude Desktop' });
   expect(within(panel).getByRole('link', { name: 'Download colliedesk.mcpb' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/releases/latest/download/colliedesk.mcpb');
   expect(within(panel).getByRole('textbox', { name: 'Colliedesk address' })).toHaveValue(origin);
+  expect(panel).toHaveTextContent('asks for two things: your Colliedesk address (copy it below) and your token.');
   fireEvent.click(within(panel).getByRole('button', { name: 'Copy address' }));
   expect(writeText).toHaveBeenLastCalledWith(origin);
   expect(screen.getByText(/Who am I in Colliedesk\?/)).toBeInTheDocument();
@@ -148,9 +155,10 @@ test('each agent app has its steps with this address, a copy button, a guide and
 test('Add to Cursor works only while the token is shown, and carries it to Cursor alone', async () => {
   show();
   fireEvent.click(screen.getByRole('radio', { name: 'Cursor' }));
-  const disabled = screen.getByText('Add to Cursor');
-  expect(disabled).not.toHaveAttribute('href');
+  // Still in the Tab order, so the sentence after it is found; pressing it does nothing.
+  const disabled = screen.getByRole('button', { name: 'Add to Cursor' });
   expect(disabled).toHaveAttribute('aria-disabled', 'true');
+  expect(disabled).toBeEnabled();
   expect(screen.getByText(/Create a token above first/)).toBeInTheDocument();
 
   fireEvent.change(nameField(), { target: { value: 'Cursor' } });
@@ -164,5 +172,8 @@ test('Add to Cursor works only while the token is shown, and carries it to Curso
   for (const code of document.querySelectorAll('pre')) expect(code.textContent).not.toContain(token);
 
   fireEvent.click(screen.getByRole('button', { name: 'I saved it, hide the token' }));
-  await waitFor(() => expect(screen.getByText('Add to Cursor')).not.toHaveAttribute('href'));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Add to Cursor' })).toHaveAttribute('aria-disabled', 'true'));
+  expect(screen.queryByRole('link', { name: 'Add to Cursor' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Token hidden\. Create another token above to use this button/)).toBeInTheDocument();
+  expect(screen.queryByText(/Create a token above first/)).not.toBeInTheDocument();
 });
