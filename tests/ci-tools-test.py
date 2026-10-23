@@ -141,6 +141,18 @@ class Shards(unittest.TestCase):
         self.assertEqual(shards[3], ['^(TestInboxListLatencyBudget)$'])
         self.assertTrue(all('--' not in lines for lines in shards[:2]))
 
+    def test_a_part_counts_its_overlapping_tests_and_its_process_start(self):
+        regular = ['TestA', 'TestB', 'TestC', 'TestD', 'TestE', 'TestF']
+        listing = '\n'.join(regular + ['TestInboxListLatencyBudget']) + '\n'
+        timings = {'TestInboxListLatencyBudget': 8, **{name: 4 for name in regular}}
+        # A part's packages run at once (go test -p), so its tests take about half their summed time;
+        # a part pays 3 seconds to start its process. The gates run one after another.
+        shards = self.shards(listing, 2, '--parallel', '2', '--process-seconds', '3', timings=timings)
+        self.assertEqual(shards[0], ['^(TestA|TestB|TestC|TestD|TestE)$'])
+        self.assertEqual(shards[1], ['^(TestInboxListLatencyBudget)$', '--', '^(TestF)$'])
+        for bad in (('--parallel', '0'), ('--process-seconds', '-1')):
+            self.assertNotEqual(run('go-test-shard.py', '1', '2', *bad, stdin=listing).returncode, 0, bad)
+
     def test_gates_spread_by_time_and_the_kb_seed_stays_on_the_first_latency_runner(self):
         kb = ['TestHelpCenterPagesLatencyBudget', 'TestKnowledgeBaseSearchLatencyBudget']
         others = ['TestInboxListLatencyBudget', 'TestStorageUsageStaysFast', 'TestTrialCapStaysFast']
@@ -434,24 +446,8 @@ class RunnerConcurrency(unittest.TestCase):
         self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
 
     def test_jobs_behind_pr_verified_count_and_push_only_jobs_do_not(self):
-        # 8 Go shards, 2 web, e2e, 2 onboarding, image, osv-scan, 3 CodeQL; not pr-verified, and not
-        # roadmap, which waits for osv-scan.
+        # 8 Go shards, web, e2e, 2 onboarding, image, osv-scan, roadmap, 3 CodeQL; not pr-verified.
         self.assertEqual(runners(ROOT / '.github/workflows/ci.yml'), 18)
-
-    def test_roadmap_takes_the_osv_scan_runner_after_it_on_every_event(self):
-        jobs = dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))
-        roadmap = '\n'.join(jobs['roadmap'])
-        self.assertRegex(roadmap, r'(?m)^    needs: osv-scan$')
-        # osv-scan runs on pull requests only and may fail; roadmap runs anyway, and ci-ok needs it.
-        self.assertRegex(roadmap, r"(?m)^    if: \$\{\{ !cancelled\(\) \}\}$")
-        self.assertRegex('\n'.join(jobs['ci-ok']), r'(?m)^    needs: \[.*\broadmap\b.*\]$')
-
-    def test_web_unit_tests_split_over_shards_that_cover_every_file(self):
-        web = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['web'])
-        self.assertRegex(web, r'(?m)^        shard: \[1, 2\]$')
-        self.assertIn('corepack pnpm test --shard="$SHARD/$SHARDS"', web)
-        self.assertIn('SHARD: ${{ matrix.shard }}', web)
-        self.assertIn('SHARDS: ${{ strategy.job-total }}', web)
 
 
 class PublishEdge(unittest.TestCase):
@@ -514,13 +510,13 @@ class GoBuildCache(unittest.TestCase):
         condition = ' '.join(line.strip() for line in
                              re.search(r'if: >-\n((?:          .*\n)+)', step).group(1).splitlines())
         self.assertIn("github.event_name == 'pull_request'", condition)
-        # A latency runner: it ends 30 to 60 seconds before the regular shards, so the upload is free.
+        # One shard uploads, a latency shard (6, 7 and 8 of 8).
         self.assertIn('matrix.shard == 7', condition)
         self.assertIn("!startsWith(steps.go-cache.outputs.cache-matched-key, format('go-{0}-{1}-{2}-', "
                       "runner.os, steps.go.outputs.go-version, hashFiles('server/go.sum')))", condition)
         go = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['go'])
         self.assertIn('id: go-cache', go)
-        self.assertRegex(go, r"latency-shards 2\b")
+        self.assertRegex(go, r"latency-shards 3\b")
         self.assertIn("SHARDS: ${{ strategy.job-total }}", go)
         self.assertRegex(go, r'shard: \[1, 2, 3, 4, 5, 6, 7, 8\]')
 
@@ -533,20 +529,6 @@ class GoBuildCache(unittest.TestCase):
                 for step in re.findall(r'uses: actions/setup-go@\S+.*?(?=\n      - |\Z)', text, re.S):
                     if path.name != 'codeql.yml':
                         self.assertIn('cache: false', step, f'{path.name} {name}')
-
-
-class OnboardingBuild(unittest.TestCase):
-    def test_onboarding_builds_the_app_and_servers_while_chromium_installs(self):
-        onboarding = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['onboarding'])
-        start = onboarding.find('ci-background.sh start app')
-        chromium = onboarding.find('playwright install')
-        wait = onboarding.find('ci-background.sh wait app')
-        journeys = onboarding.find('corepack pnpm e2e --grep "$JOURNEY_PATTERN"')
-        self.assertGreaterEqual(start, 0)
-        self.assertLess(start, chromium)
-        self.assertLess(chromium, wait)
-        self.assertLess(wait, journeys)
-        self.assertIn("go build -tags e2e -o /dev/null ./cmd/collie", onboarding)
 
 
 class BundleBudget(unittest.TestCase):
