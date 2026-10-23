@@ -323,7 +323,7 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
   return (
     <div className="ai-auto">
       <div className="ai-auto-lead"><strong>{m.autoDraftTitle}</strong><span aria-live="polite">{status}</span></div>
-      {why ? <p className="ai-auto-desc muted-copy">{why}</p>
+      {why ? <p className="ai-auto-desc muted-copy" id="ai-auto-draft-why">{why}</p>
         : pausedDay ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedDayDesc(limits.drafts_today, limits.draft_per_day)}</b>{m.autoDraftPausedDayRest}</p>
           : pausedHalf ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedHalfDesc}</b>{m.autoDraftPausedHalfRest}</p>
             : <p className="ai-auto-desc"><span className="ai-long">{m.autoDraftDesc} </span><b>{m.autoDraftStrong}</b>{m.autoDraftCost(limits.draft_per_day)}</p>}
@@ -332,6 +332,7 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
         {pausedDay && isAdmin && <button type="button" onClick={onRaise}>{m.autoDraftRaise}</button>}
         {pausedHalf && isAdmin && <a className="button" href="/settings/ai?add=1">{m.autoDraftAddKey}</a>}
         <label className="ai-switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
+          aria-describedby={why ? 'ai-auto-draft-why' : undefined}
           onChange={(event) => (event.target.checked ? onTurnOn() : onOff())} /></label>
       </div>
     </div>
