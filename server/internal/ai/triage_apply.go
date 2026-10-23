@@ -234,7 +234,8 @@ func (s *Service) applyAgain(ctx context.Context, tx pgx.Tx, workspaceID string,
 			skipped["assignee"] = TriageSkip{Reason: "already_assigned", Value: now.assignee}
 		}
 	}
-	// What a person kept at the undo is theirs: it says so as a part AI left.
+	// What a person kept at the undo is theirs: it says so as a part AI left. When nothing could be
+	// applied again, what the undo took back stays listed, for a later Apply again.
 	if t.Kept.Priority != nil && set.Priority == nil && skipped["priority"].Reason == "" {
 		skipped["priority"] = TriageSkip{Reason: "set_by_person", Value: t.Kept.Priority}
 	}
@@ -266,8 +267,9 @@ func (s *Service) applyAgain(ctx context.Context, tx pgx.Tx, workspaceID string,
 		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET priority=$3,assignee_agent_id=$4,applied=$5,auto_applied=$6,auto_applied_at=COALESCE($7,auto_applied_at),
-			skipped=$8,kept='{"priority":null,"assignee_agent_id":null}',undone_parts='{"tag_ids":[],"priority":null,"assignee_agent_id":null}',outcome=$9,decided_at=$10,decided_by_agent_id=$11 WHERE workspace_id=$1 AND id=$2`,
-		workspaceID, t.ID, priority, assignee, applied, set, autoAt, skipped, outcome, decidedAt, nullable(actor.AgentID)); err != nil {
+			skipped=$8,kept='{"priority":null,"assignee_agent_id":null}',
+			undone_parts=CASE WHEN $12 THEN undone_parts ELSE '{"tag_ids":[],"priority":null,"assignee_agent_id":null}' END,outcome=$9,decided_at=$10,decided_by_agent_id=$11 WHERE workspace_id=$1 AND id=$2`,
+		workspaceID, t.ID, priority, assignee, applied, set, autoAt, skipped, outcome, decidedAt, nullable(actor.AgentID), set.empty()); err != nil {
 		return Triage{}, err
 	}
 	return scanTriage(tx.QueryRow(ctx, `SELECT `+triageColumns+` WHERE s.workspace_id=$1 AND s.id=$2`, workspaceID, t.ID))
