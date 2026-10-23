@@ -22,6 +22,7 @@ export const connectSnippets = {
   claudeCodeToken: "/plugin configure colliedesk@colliedesk",
   codex: "codex mcp add colliedesk --url https://desk.example.com/mcp --bearer-token-env-var COLLIEDESK_TOKEN",
   collieTokenFile: "(umask 077 \u0026\u0026 pbpaste \u003e ~/.colliedesk-token)",
+  collieTokenFileWindows: "Get-Clipboard | Set-Content -NoNewline \"$HOME\\.colliedesk-token\"",
   collieUnix: "mkdir -p ~/.local/bin\ncurl -fsSL https://github.com/colliedesk/colliedesk/releases/latest/download/collie_$(uname -s)_$(uname -m).tar.gz | tar -xz -C ~/.local/bin collie\necho \"$HOME/.local/bin/collie\"",
   collieWindows: "$dir = \"$env:LOCALAPPDATA\\Programs\\collie\"\nNew-Item -ItemType Directory -Force $dir | Out-Null\nInvoke-WebRequest \"https://github.com/colliedesk/colliedesk/releases/latest/download/collie_Windows_$env:PROCESSOR_ARCHITECTURE.zip\" -OutFile \"$env:TEMP\\collie.zip\"\nExpand-Archive -Force \"$env:TEMP\\collie.zip\" $dir\n\"$dir\\collie.exe\"",
   cursor: "{\n  \"mcpServers\": {\n    \"colliedesk\": {\n      \"url\": \"https://desk.example.com/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer ${env:COLLIEDESK_TOKEN}\"\n      }\n    }\n  }\n}",

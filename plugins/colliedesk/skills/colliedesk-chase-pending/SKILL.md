@@ -16,12 +16,15 @@ conversations and you do not send anything on your own.
    <tool> yet" and go on without it. Ask how many days count as stalled when the person did not
    say; 3 is a reasonable default.
 2. Customers who have not answered: `colliedesk_inbox_search` with `status` `pending`, `awaiting`
-   `customer` and `updated_before` set to that many days ago (RFC 3339 with an offset). For each,
-   read it with `colliedesk_conversation_get` and leave a short, friendly reminder with
-   `colliedesk_reply_draft` for a person to send.
+   `customer`, `has_pending_draft` false (a reminder from an earlier run still waits otherwise) and
+   `updated_before` set to that many days ago (RFC 3339 with an offset). For each, read it with
+   `colliedesk_conversation_get` and leave a short, friendly reminder with `colliedesk_reply_draft`
+   for a person to send. Each call adds one more draft: never call it twice for one conversation.
 3. Customers the team keeps waiting: `colliedesk_inbox_search` with `status` `open`, `awaiting`
-   `team` and `sort` `waiting_longest`. For each one past the limit, leave a note for its owner with
-   `colliedesk_note_add` ("waiting since <date>; the customer asked <one line>").
+   `team` and `sort` `waiting_longest`. For each one past the limit, read it with
+   `colliedesk_conversation_get`; when its newest note already says "waiting since", skip it.
+   Otherwise leave a note for its owner with `colliedesk_note_add` ("waiting since <date>; the
+   customer asked <one line>").
 4. End with two lists for the person: the reminders you drafted and the conversations waiting on
    the team, oldest first.
 

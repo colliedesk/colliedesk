@@ -117,7 +117,8 @@ func snippets(d Data) map[string]string {
 			"Invoke-WebRequest \"" + d.Releases + "collie_Windows_$env:PROCESSOR_ARCHITECTURE.zip\" -OutFile \"$env:TEMP\\collie.zip\"\n" +
 			"Expand-Archive -Force \"$env:TEMP\\collie.zip\" $dir\n" +
 			"\"$dir\\collie.exe\"",
-		"collieTokenFile": "(umask 077 && pbpaste > ~/.colliedesk-token)",
+		"collieTokenFile":        "(umask 077 && pbpaste > ~/.colliedesk-token)",
+		"collieTokenFileWindows": "Get-Clipboard | Set-Content -NoNewline \"$HOME\\.colliedesk-token\"",
 		"stdio": jsonOf(map[string]any{"mcpServers": map[string]stdioServer{d.ServerName: {
 			Command: "/Users/you/.local/bin/collie",
 			Args:    []string{"mcp", "--url", d.Origin, "--token-file", "/Users/you/.colliedesk-token"},

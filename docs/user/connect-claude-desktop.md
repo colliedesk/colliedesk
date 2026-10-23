@@ -49,14 +49,22 @@ Expand-Archive -Force "$env:TEMP\collie.zip" $dir
 ```
 
 The last line prints the full path of `collie`: the host needs it, because it does not read your
-shell's `PATH`. Copy the token, save it in a file only you can read (macOS; on Linux paste it into
-the file with an editor, then `chmod 600` it):
+shell's `PATH`. Copy the token and save it in a file only you can read. On macOS:
 
 ```sh
 (umask 077 && pbpaste > ~/.colliedesk-token)
 ```
 
-and give the host this server, with your paths and address:
+On Linux, paste it into `~/.colliedesk-token` with an editor, then `chmod 600 ~/.colliedesk-token`.
+On Windows, in PowerShell (Windows does not check who can read the file; your user folder is
+private to you):
+
+```powershell
+Get-Clipboard | Set-Content -NoNewline "$HOME\.colliedesk-token"
+```
+
+Then give the host this server, with your paths and address (on Windows, the `collie.exe` path the
+install printed and `C:\Users\you\.colliedesk-token`, with each `\` written twice in JSON):
 
 ```json
 {
