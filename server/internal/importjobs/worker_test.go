@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -466,6 +468,51 @@ func TestProgressBeforeAShutdownClearsTheCrashCount(t *testing.T) {
 	w.Wait()
 	if n := e.column(t, job.ID, "attempts_without_progress").(int32); n != 0 {
 		t.Errorf("attempts_without_progress = %d after progress and a shutdown", n)
+	}
+	if p := e.get(t, job.ID).Progress; p == nil || p.Done != 2 {
+		t.Errorf("progress = %+v", p)
+	}
+}
+
+func TestAShutdownWaitsForTheProgressTheFlusherIsWriting(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	e.exec(t, `UPDATE import_jobs SET state='running', attempts_without_progress=3, claim_token=gen_random_uuid(), lease_until=now()-interval '1 second' WHERE id=$1`, job.ID)
+	// The flusher reads the clock between taking the progress and writing it: holding the clock there
+	// holds it mid-flush. The importer's own clock reads are let through.
+	var armed, inImporter atomic.Bool
+	held, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	w := importjobs.NewWorker(importjobs.WorkerOptions{DB: e.db, Keys: e.keys, Interval: time.Hour,
+		Heartbeat: time.Hour, Flush: 5 * time.Millisecond, Lease: time.Minute, Now: func() time.Time {
+			if armed.Load() && !inImporter.Load() {
+				once.Do(func() { close(held); <-release })
+			}
+			return time.Now()
+		}})
+	importjobs.StubImporter(w, func(ctx context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
+		inImporter.Store(true)
+		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 1, Total: 3})
+		armed.Store(true)
+		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 2, Total: 3})
+		inImporter.Store(false)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}, nil, nil)
+	ctx, stop := context.WithCancel(context.Background())
+	if err := w.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	<-held
+	stop()
+	// Without a wait for the flusher, the shutdown releases the claim now and the held write is lost.
+	for deadline := time.Now().Add(500 * time.Millisecond); time.Now().Before(deadline) && e.column(t, job.ID, "claim_token") != nil; {
+		time.Sleep(5 * time.Millisecond)
+	}
+	close(release)
+	w.Wait()
+	if n := e.column(t, job.ID, "attempts_without_progress").(int32); n != 0 {
+		t.Errorf("attempts_without_progress = %d: the shutdown did not wait for the progress being written", n)
 	}
 	if p := e.get(t, job.ID).Progress; p == nil || p.Done != 2 {
 		t.Errorf("progress = %+v", p)

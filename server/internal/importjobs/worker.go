@@ -228,6 +228,8 @@ type jobRun struct {
 	cancel context.CancelCauseFunc
 	// ended is set once the job reached a state of its own (it is no longer this run's to write).
 	ended bool
+	// flushing is held through a flush, so a flush at the end waits for one the flusher is writing.
+	flushing sync.Mutex
 
 	mu         sync.Mutex
 	latest     *Progress
@@ -356,6 +358,8 @@ func (r *jobRun) heartbeat(ctx context.Context) {
 
 // flush writes the newest progress when it changed; progress clears the crash and retry counters.
 func (r *jobRun) flush(ctx context.Context) {
+	r.flushing.Lock()
+	defer r.flushing.Unlock()
 	r.mu.Lock()
 	latest, dirty, progressed := r.latest, r.dirty, r.progressed
 	r.dirty, r.progressed = false, false
