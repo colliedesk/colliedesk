@@ -9,7 +9,7 @@ export const aiDraftSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), status: z.enum(['queued', 'running', 'ready', 'failed', 'cancelled']),
   error_code: z.string().nullable(), prompt: z.string(), text: z.string().nullable(), missing_info: z.string().nullable(),
   sources: z.array(z.object({ kind: z.enum(['kb_article', 'conversation']), id: z.string().uuid(), locale: z.string().optional(), number: z.number().int().optional(), title: z.string() })),
-  warnings: z.array(z.object({ kind: z.enum(['email', 'number', 'name', 'script']), value: z.string() })),
+  warnings: z.array(z.object({ kind: z.enum(['email', 'number', 'name', 'script', 'placeholder']), value: z.string() })),
   model: z.string().nullable(), outcome: z.enum(['sent_unchanged', 'sent_edited', 'discarded', 'superseded', 'expired']).nullable(),
   similarity: z.number().nullable(), sent_message_id: z.string().uuid().nullable(), requested_by_agent_id: z.string().uuid().nullable(),
   created_at: z.string().datetime(), ready_at: nullableDate, decided_at: nullableDate,

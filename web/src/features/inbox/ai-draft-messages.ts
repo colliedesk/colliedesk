@@ -22,7 +22,7 @@ export const aiDraftMessages = {
   missingInfo: 'Missing information',
   checkHeading: 'Check before sending',
   checkBody: 'Not in this conversation:',
-  warningKind: { email: 'email address', number: 'number', name: 'another customer’s name', script: 'not in the customer’s language' } as Record<string, string>,
+  warningKind: { email: 'email address', number: 'number', name: 'another customer’s name', script: 'not in the customer’s language', placeholder: 'a hidden detail to fill in' } as Record<string, string>,
   sources: 'Sources',
   noSources: 'No article or solved ticket was used.',
   article: 'Article',

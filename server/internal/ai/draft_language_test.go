@@ -25,3 +25,16 @@ func TestForeignWordsAreWordsOfAnotherAlphabet(t *testing.T) {
 		}
 	}
 }
+
+func TestFillPlaceholdersNamesThisCustomerOrNobody(t *testing.T) {
+	for _, c := range []struct{ reply, name, want string }{
+		{"Chào chị [customer],", "Kiều Thị Dung", "Chào chị Kiều Thị Dung,"},
+		{"Chào chị [customer],", "", "Chào chị,"},
+		{"[customer], hello", "", ", hello"},
+		{"Hi [company] team", "Ada", "Hi [company] team"},
+	} {
+		if got := fillPlaceholders(c.reply, c.name); got != c.want {
+			t.Errorf("fillPlaceholders(%q, %q) = %q, want %q", c.reply, c.name, got, c.want)
+		}
+	}
+}
