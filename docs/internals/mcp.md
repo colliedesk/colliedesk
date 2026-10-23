@@ -30,8 +30,34 @@
   runs both. The SDK lists tools sorted by name, which is what makes the order fixed.
 - **Mounting.** `mcpserver.Mount` wraps the web handler in `serve`; only the exact path `/mcp` goes
   to MCP, every other request takes the old path untouched.
+- **Stdio bridge.** `collie mcp` (package `internal/mcpbridge`, standard library only) is for hosts
+  that only start stdio servers (Claude Desktop). It reads one JSON-RPC line, POSTs it as it is to
+  `/mcp` and writes each answer as one line; it registers no tools, so it cannot drift from the
+  server it talks to. Two builds carry it: the server's `collie`, and `cmd/collie-client`, the
+  about 6 MB `collie` a person installs (only `mcp`, `version`, `help`;
+  `TestTheClientBuildLeavesTheServerOut` keeps the web app and pgx out of it). Decisions:
+  - The token comes from `COLLIEDESK_TOKEN` or `--token-file` (0600 checked on Unix only), never
+    argv, which `ps` and host config files show. `http://` is refused except on loopback.
+  - A failure (401, 404 or HTML, 5xx, network) answers the waiting id with a JSON-RPC error that
+    says what to do, and the bridge stays up: hosts otherwise show only "server disconnected". A
+    JSON-RPC error the server answers itself (400 for a version or header mismatch) passes as it is.
+  - stderr has one line per event (start: host and version; failure: the method and the HTTP
+    status), never a header or body. Claude Desktop keeps it in its MCP log.
 
 ## Traps
+
+- **The bridge sets the HTTP headers a stdio host cannot.** `MCP-Protocol-Version` comes from the
+  request's `_meta` (2026-07-28) or from the `initialize` answer the bridge saw; from 2026-07-28 the
+  server also refuses a POST without `Mcp-Method` and, for `tools/call`, `prompts/get` and
+  `resources/read`, `Mcp-Name`. Piping two go-sdk `Connection`s into each other loses these
+  headers: the SDK's HTTP client sets them only when an `mcp.Client` owns the connection
+  (`setMCPHeaders` after `initialize`). Hence the hand-written proxy. No tool uses `x-mcp-header`
+  (`Mcp-Param-*`); a tool that adds one needs the bridge to set it too.
+- **Bridge framing.** One message per stdout line: answers are `json.Compact`ed (the server may
+  indent), stdin is read with `ReadBytes` (an image upload is one line of megabytes; a default
+  `bufio.Scanner` stops at 64 KiB), and ids stay `json.RawMessage` so a large number or a string
+  comes back as sent. `TestBridge*` in `mcpserver` runs a real SDK client through the bridge to
+  the real server for `2025-06-18`, `2025-11-25` and `2026-07-28`.
 
 - **Loopback Host check.** The SDK refuses a request that arrives on a loopback listener with a
   non-loopback `Host`. A reverse proxy on the same machine forwards the public host name, so this
