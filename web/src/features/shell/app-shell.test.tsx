@@ -22,12 +22,6 @@ test('a signed-out visitor is told how to get back in instead of seeing an empty
   expect(screen.queryByText('inbox')).not.toBeInTheDocument();
 });
 
-test('a signed-out visitor of a cloud instance gets a sign-in link instead of the self-host hint', () => {
-  render(<AppShell signedOut signIn={<a href="/sign-in">Sign in</a>}><p>inbox</p></AppShell>);
-  expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
-  expect(screen.queryByText(/collie pair/)).not.toBeInTheDocument();
-});
-
 test('a signed-out visitor of a self-hosted instance keeps the pair hint', () => {
   render(<AppShell signedOut><p>inbox</p></AppShell>);
   expect(screen.getByText(/collie pair/)).toBeInTheDocument();

@@ -421,22 +421,87 @@ func (s *Store) buildAIRetrievalBatch(ctx context.Context, workspaceID string) (
 		if len(ids) == 0 {
 			return nil
 		}
+		// The rows the sources come from are locked first, and a row someone else holds (a delete,
+		// an import being undone) is left queued for a later batch instead of waited for. Waiting
+		// would hold this batch's own locks while the delete, in its own order, comes for them.
+		// The workspace first: a workspace being deleted takes its sources with it.
+		var held bool
+		if err := tx.QueryRow(ctx, `SELECT NOT EXISTS (SELECT 1 FROM workspaces WHERE id=$1 FOR KEY SHARE SKIP LOCKED)`, workspaceID).Scan(&held); err != nil || held {
+			return err
+		}
+		if articles, err = lockAIArticles(ctx, tx, workspaceID, articles); err != nil {
+			return err
+		}
+		if conversations, err = lockAIRows(ctx, tx, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR KEY SHARE SKIP LOCKED`, workspaceID, conversations); err != nil {
+			return err
+		}
 		if err := buildAIArticles(ctx, tx, workspaceID, articles); err != nil {
 			return err
 		}
 		if err := buildAIConversations(ctx, tx, workspaceID, conversations); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM ai_retrieval_pending WHERE workspace_id=$1 AND id=ANY($2::uuid[])`, workspaceID, ids); err != nil {
+		// A queued row is done once its article or conversation was built, or is gone for good.
+		tag, err := tx.Exec(ctx, `DELETE FROM ai_retrieval_pending p WHERE p.workspace_id=$1 AND p.id=ANY($2::uuid[])
+			AND (p.kb_article_id=ANY($3::uuid[]) OR p.conversation_id=ANY($4::uuid[])
+				OR (p.kb_article_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM kb_articles a WHERE a.workspace_id=p.workspace_id AND a.id=p.kb_article_id))
+				OR (p.conversation_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.workspace_id=p.workspace_id AND c.id=p.conversation_id)))`,
+			workspaceID, ids, articles, conversations)
+		if err != nil {
 			return err
 		}
-		built, more = len(articles)+len(conversations), len(ids) == aiRetrievalBatch
+		// A batch that only met held rows stops here; the next call tries them again.
+		built, more = len(articles)+len(conversations), len(ids) == aiRetrievalBatch && tag.RowsAffected() > 0
 		return nil
 	})
 	if err != nil {
 		return 0, false, fmt.Errorf("build AI retrieval of workspace %s: %w", workspaceID, err)
 	}
 	return built, more, nil
+}
+
+// lockAIRows locks the rows the query names without waiting and returns the ids it locked.
+func lockAIRows(ctx context.Context, tx pgx.Tx, query, workspaceID string, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := tx.Query(ctx, query, workspaceID, ids)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
+// lockAIArticles locks the articles and their translations (each source names one) without waiting:
+// an article with a row someone else holds is left for later. One that no longer exists stays in the
+// list: building it removes its sources.
+func lockAIArticles(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := tx.Query(ctx, `WITH wanted AS (SELECT unnest($2::uuid[]) AS id),
+			locked AS (SELECT a.id FROM kb_articles a WHERE a.workspace_id=$1 AND a.id IN (SELECT id FROM wanted) ORDER BY a.id FOR KEY SHARE SKIP LOCKED),
+			held AS (SELECT w.id FROM wanted w WHERE EXISTS (SELECT 1 FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=w.id) AND w.id NOT IN (SELECT id FROM locked))
+		SELECT id::text FROM wanted WHERE id NOT IN (SELECT id FROM held)`, workspaceID, ids)
+	if err != nil {
+		return nil, err
+	}
+	articles, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil || len(articles) == 0 {
+		return articles, err
+	}
+	rows, err = tx.Query(ctx, `WITH locked AS (SELECT t.article_id, t.locale FROM kb_article_translations t
+				WHERE t.workspace_id=$1 AND t.article_id=ANY($2::uuid[]) ORDER BY t.article_id, t.locale FOR KEY SHARE SKIP LOCKED)
+		SELECT DISTINCT t.article_id::text FROM kb_article_translations t
+		WHERE t.workspace_id=$1 AND t.article_id=ANY($2::uuid[]) AND (t.article_id, t.locale) NOT IN (SELECT article_id, locale FROM locked)`, workspaceID, articles)
+	if err != nil {
+		return nil, err
+	}
+	held, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(articles, func(id string) bool { return slices.Contains(held, id) }), nil
 }
 
 // aiDocRows are retrieval rows to write, column by column.

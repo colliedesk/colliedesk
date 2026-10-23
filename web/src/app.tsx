@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Link, Navigate, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, createRootRoute, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
@@ -34,6 +34,8 @@ const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   const onSignIn = path === '/sign-in';
+  // An address that matches no page is no rail destination either.
+  const notFound = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === rootRouteId });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
   const signedOut = !onSignIn && me.error instanceof UnauthorizedError;
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
@@ -53,8 +55,6 @@ function AppLayout() {
   useProductAnalytics(config.data?.product_analytics, me.data);
   // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
-  // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
-  const signIn = config.data?.cloud_sign_in.enabled ? <Link to="/sign-in">{messages.signIn}</Link> : undefined;
   // Sign-in pages have nowhere to navigate to yet.
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
@@ -64,11 +64,16 @@ function AppLayout() {
   const buying = signedOut && inBilling ? readCheckoutIntent() : undefined;
   if (buying && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={{ buy: buying }} replace />;
   if (buying && config.isPending) return <div className="app-main" />;
+  // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
+  // The marker makes that page end the identity provider session too, so the next sign-in is a
+  // deliberate one (sign out, a revoked or an expired session alike).
+  if (signedOut && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={{ signed_out: true }} replace />;
+  if (signedOut && config.isPending) return <div className="app-main" />;
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
   const inKnowledge = path.startsWith('/knowledge');
-  return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut} signIn={signIn}
+  return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
       {config.data?.product_analytics.realm === 'cloud' && me.data.agent.role === 'admin' && me.data.plan?.plan === 'trial'
@@ -76,7 +81,7 @@ function AppLayout() {
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
+      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
       <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
         aria-current={inRequests ? 'page' : undefined}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
@@ -96,7 +101,15 @@ function settingsRouterLink(item: NavItem) {
     aria-current={item.current ? 'page' : undefined}>{item.label}</Link>;
 }
 
-const rootRoute = createRootRoute({ component: AppLayout });
+// An unknown address inside the app says so and offers the way back, in the frame of every other page.
+function NotFoundPage() {
+  return <main className="settings-page">
+    <header><h1>{messages.pageNotFound}</h1><p>{messages.pageNotFoundExplanation}</p></header>
+    <Link to="/">{messages.backToInbox}</Link>
+  </main>;
+}
+
+const rootRoute = createRootRoute({ component: AppLayout, notFoundComponent: NotFoundPage });
 // The inbox filters are in the address, so a link opens the same list (src/lib/inbox-query.ts).
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
@@ -219,16 +232,18 @@ const aiRoute = createRoute({
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
-  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string } => ({
+  // `signed_out` marks the arrival right after the session ended (see AppLayout).
+  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true } => ({
     ...(typeof search.token === 'string' ? { token: search.token } : {}),
     ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
+    ...(search.signed_out === true ? { signed_out: true as const } : {}),
   }),
   // `buy` stays in the address through the identity provider's round trip; the plan is remembered
   // again here so a sign-in link that names it works on its own.
   beforeLoad: ({ search }) => { if (search.buy) rememberCheckoutIntent(search.buy); },
   component: function SignIn() {
-    const { token, buy } = signInRoute.useSearch();
-    return <RedeemRoute token={token ?? ''} buy={buy} />;
+    const { token, buy, signed_out: signedOut } = signInRoute.useSearch();
+    return <RedeemRoute token={token ?? ''} buy={buy} signedOut={signedOut === true} />;
   },
 });
 

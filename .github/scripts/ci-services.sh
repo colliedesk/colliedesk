@@ -11,16 +11,14 @@ INTERVAL=${CI_SERVICES_INTERVAL:-1}
 # docker run's output and exit status per service, read by wait.
 STATE=${CI_SERVICES_DIR:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/ci-services}
 
-# Go tests run in parallel, each migrating and dropping a schema of its own; dropping one takes a lock
-# on every object in it, so the shared lock table (max_locks_per_transaction x connections) is raised
-# above the default 64, which the schema outgrew ("out of shared memory").
 run_service() {
   case "$1" in
     postgres)
       "$DOCKER" run -d --name ci-postgres -p 5432:5432 \
         --tmpfs /var/lib/postgresql/data:rw,size=2g \
         -e POSTGRES_DB=colliedesk_test -e POSTGRES_USER=colliedesk -e POSTGRES_PASSWORD=colliedesk \
-        postgres:17-bookworm -c max_locks_per_transaction=256 ;;
+        postgres:17-bookworm \
+        postgres -c max_locks_per_transaction=256 ;;
     mailpit) "$DOCKER" run -d --name ci-mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.27 ;;
   esac
 }

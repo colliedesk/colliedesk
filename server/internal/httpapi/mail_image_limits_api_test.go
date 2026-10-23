@@ -14,6 +14,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -226,7 +227,11 @@ func TestAppRoleCannotReadTheServerSecrets(t *testing.T) {
 // With no key in the database, a process that signed with a key of its own would answer 403 to images signed
 // by its replicas without a sign. It stops at start instead.
 func TestServerRefusesToStartWhenItCannotReadTheImageSigningKey(t *testing.T) {
-	pool := testPool(t) // a schema that was never migrated: no server_secrets table
+	pool, err := pgxpool.New(context.Background(), databasetest.EmptySchema(t)) // never migrated: no server_secrets table
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
 	defer func() {
 		recovered := recover()
 		if recovered == nil || !strings.Contains(fmt.Sprint(recovered), "image signing key") {
