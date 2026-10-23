@@ -8,6 +8,8 @@ export const messages = {
   notificationsBlocked: 'Blocked by this browser. Allow notifications for this site in its site settings, then reload.',
   notificationNew: 'New conversation',
   notificationAssigned: 'Assigned to you',
+  notificationAssignedByAI: 'Assigned to you by AI',
+  notificationNewAssignedByAI: 'New conversation · assigned to you by AI',
   notificationReply: 'New customer message',
   notificationSummary: (count: number) => `${count} new updates in your inbox`,
   settings: 'Settings',

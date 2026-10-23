@@ -251,6 +251,8 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 @container (max-width: 40rem) {
   .composer-actions .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .composer-actions .saved-reply-button kbd { display: none; }
+  /* Draft with AI keeps its words: the automatic draft and its notices point people to it by name. */
+  .composer-actions .ai-tool .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
 }
 .composer-warning { margin: var(--space-2) var(--space-2) 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text);
   padding: var(--space-2) var(--space-3); font-size: var(--fs-small); overflow-wrap: anywhere; }

@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { AIEvent, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
 import { formatDate, formatDay } from '../../lib/format-date';
@@ -44,7 +44,7 @@ export interface AIPageProps {
   onAdd: (input: AIProviderInput) => Promise<FieldError | undefined>;
   onSetKey: (id: string, key: string) => Promise<FieldError | undefined>;
   onRemove: (id: string) => Promise<FieldError | undefined>;
-  onSetAutomatic: (perDay: number, perMinute: number) => Promise<FieldError | undefined>;
+  onSetAutomatic: (perDay: number, perMinute: number, draftPerDay?: number) => Promise<FieldError | undefined>;
   // The usage of the month shown in the Usage tab, asked for when the tab opens or the month changes.
   usage?: AIUsage;
   usageFailed?: boolean;
@@ -65,10 +65,29 @@ export function recentMonths(now: Date = new Date()): string[] {
 
 const slotLabel = (slot: string) => m.slotName[slot as AISlotName] ?? slot;
 
+// focusSwitch puts focus back on an automatic mode's switch once its dialog closes (the dialog is gone
+// from the page, so the browser would leave it on the body).
+const focusSwitch = (slot: AISlotName) => requestAnimationFrame(() => document.getElementById(`ai-auto-${slot}`)?.focus());
+
+// useFocusAfterSave puts focus back on an automatic mode's switch once the change it started is saved:
+// the row is drawn again meanwhile, and focus would otherwise land on the body.
+function useFocusAfterSave(busySlot: AISlotName | undefined) {
+  const pending = useRef<AISlotName>(undefined);
+  useEffect(() => {
+    if (busySlot === undefined && pending.current) {
+      focusSwitch(pending.current);
+      pending.current = undefined;
+    }
+  }, [busySlot]);
+  return (slot: AISlotName) => { pending.current = slot; };
+}
+
 export function AIPage(props: AIPageProps) {
   const { settings, isAdmin } = props;
+  const focusAfterSave = useFocusAfterSave(props.busySlot);
+  const setSlot = (slot: AISlotName, input: AISlotInput) => { focusAfterSave(slot); props.onSetSlot(slot, input); };
   const [tab, setTab] = useState<AITab>('features');
-  const [dialog, setDialog] = useState<{ kind: 'add' } | { kind: 'automatic' } | { kind: 'key' | 'delete'; provider: AIProvider }>();
+  const [dialog, setDialog] = useState<{ kind: 'add' } | { kind: 'automatic' } | { kind: 'auto-triage' | 'auto-draft'; slot: AISlot } | { kind: 'key' | 'delete'; provider: AIProvider }>();
   const ids = { tabs: useId() };
   const full = settings ? settings.providers.length >= settings.provider_limit : false;
   const tabs: { id: AITab; label: string; count?: number }[] = [
@@ -104,7 +123,8 @@ export function AIPage(props: AIPageProps) {
             </div>
             {props.error && <p role="alert" className="error-copy">{props.error}</p>}
             <div role="tabpanel" id={`${ids.tabs}-${tab}-panel`} aria-labelledby={`${ids.tabs}-${tab}`} className="ai-panel-stack">
-              {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })} />}
+              {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })}
+                onConfirmAuto={(slot) => setDialog({ kind: slot.slot === 'draft' ? 'auto-draft' : 'auto-triage', slot })} onSetAuto={setSlot} />}
               {tab === 'usage' && <Usage usage={props.usage} failed={props.usageFailed} month={month} onMonth={(next) => { setMonth(next); props.onUsageMonth(next); }} />}
               {tab === 'providers' && <Providers {...props} settings={settings}
                 onKey={(provider) => setDialog({ kind: 'key', provider })} onDelete={(provider) => setDialog({ kind: 'delete', provider })} />}
@@ -116,18 +136,26 @@ export function AIPage(props: AIPageProps) {
       {dialog?.kind === 'add' && settings && <AddDialog settings={settings} onClose={() => setDialog(undefined)} onAdd={props.onAdd} />}
       {dialog?.kind === 'key' && <KeyDialog provider={dialog.provider} onClose={() => setDialog(undefined)} onSetKey={props.onSetKey} />}
       {dialog?.kind === 'automatic' && settings && <AutomaticDialog settings={settings} onClose={() => setDialog(undefined)} onSave={props.onSetAutomatic} />}
-      {dialog?.kind === 'delete' && <DeleteDialog provider={dialog.provider} onClose={() => setDialog(undefined)} onRemove={props.onRemove} />}
+      {dialog?.kind === 'delete' && settings && <DeleteDialog provider={dialog.provider} settings={settings} onClose={() => setDialog(undefined)} onRemove={props.onRemove} />}
+      {dialog?.kind === 'auto-draft' && settings && <AutoDraftDialog slot={dialog.slot} settings={settings} onClose={() => { setDialog(undefined); focusSwitch('draft'); }}
+        onTurnOn={() => { setDialog(undefined); setSlot('draft', { ...slotInput(dialog.slot), automatic: true }); }} />}
+      {dialog?.kind === 'auto-triage' && <AutoTriageDialog slot={dialog.slot} onClose={() => { setDialog(undefined); focusSwitch('triage'); }}
+        onTurnOn={() => { setDialog(undefined); setSlot('triage', { ...slotInput(dialog.slot), automatic: true }); }} />}
     </main>
   );
 }
 
-function Features(props: AIPageProps & { settings: AISettings; onOpenAdd: () => void; onOpenAutomatic: () => void }) {
+type FeatureActions = { onOpenAutomatic: () => void; onConfirmAuto: (slot: AISlot) => void; onSetAuto: (slot: AISlotName, input: AISlotInput) => void };
+
+function Features(props: AIPageProps & FeatureActions & { settings: AISettings; onOpenAdd: () => void }) {
   const { settings, isAdmin } = props;
   const server = settings.server;
   const nothing = !server && settings.providers.length === 0;
   const models = (slot: AISlotName) => server?.models[slot]?.[0] ?? '';
   return <div className={`ai-panel-stack${nothing ? ' ai-nothing' : ''}`}>
     {!isAdmin && <div className="ai-notice ai-notice-plain" role="note"><InfoIcon /><span><strong>{m.agentNotice}</strong> {m.agentNoticeMore}</span></div>}
+    {props.isAdmin && <AutoMovedNotice settings={settings} slotName="triage" onTurnOn={props.onConfirmAuto} />}
+    {props.isAdmin && <AutoMovedNotice settings={settings} slotName="draft" onTurnOn={props.onConfirmAuto} />}
     {settings.automatic.paused_until && settings.slots.some((slot) => slot.slot === 'triage' && slot.enabled) && <div className="ai-notice" role="status">
       <span><strong>{m.pausedHeading(formatDate(settings.automatic.paused_until, props.timezone))}</strong> {m.pausedBody(settings.automatic.per_day)}</span>
       {isAdmin && <div className="ai-notice-actions"><button type="button" onClick={props.onOpenAutomatic}>{m.raiseLimit}</button></div>}
@@ -170,7 +198,20 @@ function Features(props: AIPageProps & { settings: AISettings; onOpenAdd: () => 
 // A choice of provider is "server" or a provider id.
 const sourceOf = (slot: AISlot) => (slot.source === 'server' ? 'server' : slot.provider_id ?? '');
 
-function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic }: AIPageProps & { slot: AISlot; settings: AISettings; onOpenAutomatic: () => void }) {
+// slotInput is the slot as it is, to change one thing of it.
+function slotInput(slot: AISlot): AISlotInput {
+  const input: AISlotInput = slot.source === 'server' ? { source: 'server', enabled: slot.enabled }
+    : slot.provider_id ? { source: 'provider', provider_id: slot.provider_id, enabled: slot.enabled } : { source: 'none', enabled: false };
+  if (slot.model && input.source !== 'none') input.model = slot.model;
+  input.effort = slot.effort;
+  return input;
+}
+
+type Part = AISlot['auto_parts'][number];
+const parts: Part[] = ['tags', 'priority', 'assignee'];
+const partList = (list: Part[]) => list.map((part) => m.autoPartLower[part]).join(' and ').replace(/ and (?=.* and )/g, ', ');
+
+function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
   const name = slotLabel(slot.slot);
   const serverModels = settings.server?.models[slot.slot] ?? [];
   const choices = [
@@ -215,7 +256,8 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
           {models.map((model) => <option key={model} value={model}>{model}</option>)}
         </select></label>
       <div className="ai-slot-limit"><span className="ai-cell-label">{m.columnAutomatic}</span>
-        {slot.slot === 'triage' ? <><span>{m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)}</span>
+        {slot.slot === 'triage' || slot.automatic ? <><span>{slot.slot === 'triage' ? m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)
+          : m.draftLimits(settings.automatic.draft_per_day)}</span>
           {isAdmin && <button type="button" className="link-button" onClick={onOpenAutomatic} aria-label={m.changeAutomatic}>{m.change}</button>}</>
           : <span className="muted-copy">{m.noAutomatic}</span>}
       </div>
@@ -224,7 +266,125 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
       {saving && <p className="ai-slot-why" role="status">{m.saving}</p>}
       {!saving && choices.length === 0 && <p className="ai-slot-why help">{m.addFirst}</p>}
       {!saving && stopped && slot.off_reason && <p className="ai-slot-why error-copy">{m.offReason[slot.off_reason]}</p>}
+      {slot.slot === 'draft' && <AutoDraft slot={slot} settings={settings} isAdmin={isAdmin} locked={locked} hasProvider={choices.length > 0}
+        onTurnOn={() => onConfirmAuto(slot)} onOff={() => onSetAuto('draft', { ...slotInput(slot), automatic: false })} onRaise={onOpenAutomatic} />}
+      {slot.slot === 'triage' && <AutoTriage slot={slot} settings={settings} isAdmin={isAdmin} locked={locked} hasProvider={choices.length > 0}
+        onTurnOn={() => onConfirmAuto(slot)} onSet={(input) => onSetAuto('triage', { ...slotInput(slot), ...input })} />}
     </div>
+  );
+}
+
+// AutoTriage is the automatic mode of triage suggestions: off until an admin turns it on (a dialog says
+// what it does), the parts it applies, and how it went in 30 days.
+function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onSet }: { slot: AISlot; settings: AISettings; isAdmin: boolean; locked: boolean; hasProvider: boolean;
+  onTurnOn: () => void; onSet: (input: Partial<AISlotInput>) => void }) {
+  const on = slot.enabled && slot.automatic;
+  const id = useId();
+  const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.autoNeedsFeature : undefined;
+  const chosen = slot.auto_parts.length > 0 ? slot.auto_parts : (['tags', 'priority'] as Part[]);
+  const toggle = (part: Part) => {
+    const next = chosen.includes(part) ? chosen.filter((item) => item !== part) : [...chosen, part];
+    if (next.length > 0) onSet({ auto_parts: parts.filter((item) => next.includes(item)) });
+  };
+  return (
+    <div className="ai-auto">
+      <div className="ai-auto-lead"><strong id={id}>{m.autoTitle}</strong>
+        <span aria-live="polite">{on ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>}</span></div>
+      {why ? <p className="ai-auto-desc muted-copy" id={`${id}-why`}>{why}</p>
+        : <p className="ai-auto-desc"><span className="ai-long">{m.autoDesc} </span><b>{m.autoDescStrong}</b>{m.autoDescRest}</p>}
+      {!why && <fieldset className="ai-auto-parts"><legend className="sr-only">{m.autoParts}</legend>
+        {parts.map((part) => <label key={part} className="ai-pick"><input type="checkbox" checked={chosen.includes(part)}
+          disabled={!on || locked || (chosen.length === 1 && chosen.includes(part))} title={chosen.length === 1 && chosen.includes(part) ? m.autoLastPart : undefined}
+          onChange={() => toggle(part)} />{m.autoPart[part]}</label>)}
+        {on && chosen.length === 1 && <span className="muted-copy ai-auto-hint">{m.autoLastPart}</span>}
+        {on ? <span className="ai-auto-stat">{m.autoStat(settings.auto_triage.applied, settings.auto_triage.undone)} <span className="muted-copy">{m.autoStatWhen}</span></span>
+          : isAdmin && <span className="ai-auto-stat muted-copy ai-long">{m.autoPickLater}</span>}
+      </fieldset>}
+      <label className="ai-switch ai-auto-switch"><input type="checkbox" role="switch" id="ai-auto-triage" aria-label={m.autoTitle} checked={on} disabled={locked || !slot.enabled}
+        aria-describedby={why ? `${id}-why` : undefined}
+        onChange={(event) => (event.target.checked ? onTurnOn() : onSet({ automatic: false }))} /></label>
+    </div>
+  );
+}
+
+// AutoDraft is the automatic mode of reply drafts: a draft for every customer message, off until an
+// admin turns it on (a dialog estimates what it costs); paused for the day at its limit, or until next
+// month once it used half of the included AI.
+function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onOff, onRaise }: { slot: AISlot; settings: AISettings; isAdmin: boolean; locked: boolean;
+  hasProvider: boolean; onTurnOn: () => void; onOff: () => void; onRaise: () => void }) {
+  const on = slot.enabled && slot.automatic;
+  const limits = settings.automatic;
+  const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.autoDraftNeedsFeature : undefined;
+  const half = settings.allowance ? money(Math.floor(settings.allowance.limit_micro_usd / 2)) : null;
+  const pausedDay = on && limits.drafts_paused_until !== null;
+  const pausedHalf = on && !pausedDay && limits.drafts_reserved_until !== null;
+  const status = pausedDay ? <span className="status ai-st-warn">{m.autoDraftPausedDay(formatDate(limits.drafts_paused_until ?? '', 'UTC'))}</span>
+    : pausedHalf ? <span className="status ai-st-warn">{m.autoDraftPausedDay(formatDay(limits.drafts_reserved_until ?? '', 'UTC'))}</span>
+      : on ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>;
+  return (
+    <div className="ai-auto">
+      <div className="ai-auto-lead"><strong>{m.autoDraftTitle}</strong><span aria-live="polite">{status}</span></div>
+      {why ? <p className="ai-auto-desc muted-copy" id="ai-auto-draft-why">{why}</p>
+        : pausedDay ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedDayDesc(limits.drafts_today, limits.draft_per_day)}</b>{m.autoDraftPausedDayRest}</p>
+          : pausedHalf ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedHalfDesc(half)}</b>{m.autoDraftPausedHalfRest}</p>
+            : <p className="ai-auto-desc"><span className="ai-long">{m.autoDraftDesc} </span><b>{m.autoDraftStrong}</b>{m.autoDraftCost(limits.draft_per_day)}</p>}
+      <div className="ai-auto-side">
+        {on && !pausedDay && !pausedHalf && <span className="ai-auto-stat">{m.autoDraftToday(limits.drafts_today, limits.draft_per_day)}</span>}
+        {pausedDay && isAdmin && <button type="button" onClick={onRaise}>{m.autoDraftRaise}</button>}
+        {pausedHalf && isAdmin && <a className="button ai-link-button" href="/settings/ai?add=1">{m.autoDraftAddKey}</a>}
+        {locked && !why && <span className="sr-only" id="ai-auto-draft-why">{m.autoAdminsOnly}</span>}
+        <label className="ai-switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
+          aria-describedby={why || locked ? 'ai-auto-draft-why' : undefined}
+          onChange={(event) => (event.target.checked ? onTurnOn() : onOff())} /></label>
+      </div>
+    </div>
+  );
+}
+
+function AutoDraftDialog({ slot, settings, onClose, onTurnOn }: { slot: AISlot; settings: AISettings; onClose: () => void; onTurnOn: () => void }) {
+  const estimate = settings.auto_draft_estimate;
+  const perDay = settings.automatic.draft_per_day;
+  const server = slot.source === 'server';
+  const each = estimate.draft_cost_micro_usd;
+  const allowance = settings.allowance;
+  const provider = settings.providers.find((item) => item.id === slot.provider_id);
+  const half = allowance ? Math.floor(allowance.limit_micro_usd / 2) : null;
+  return (
+    <Dialog title={m.autoDraftConfirmTitle} help={m.autoDraftConfirmLead} onClose={onClose} onSubmit={onTurnOn}
+      footer={<><button type="button" className="ghost" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" autoFocus>{m.autoConfirmOn}</button></>}>
+      <dl className="ai-estimate">
+        <div><dt>{m.estLast30}</dt><dd>{m.estMessages(estimate.customer_messages)}</dd></div>
+        {each !== null && <div><dt>{m.estAbout}</dt><dd>{m.estMonth(money(each * estimate.customer_messages), money(each))}</dd></div>}
+        {server && allowance && <div><dt>{m.estPlan}</dt><dd>{m.estPlanMonth(money(allowance.limit_micro_usd))}</dd></div>}
+        {!server && <div><dt>{m.estAtMost}</dt><dd>{m.estAtMostDay(perDay)}</dd></div>}
+      </dl>
+      {server && half !== null ? <p className="ai-estimate-note"><b>{m.estHalf(money(half), each ? Math.floor(half / each) : null)}</b>{m.estHalfRest}</p>
+        : !server && <p className="ai-estimate-note"><b>{m.estByo(provider?.label ?? '')}</b>{m.estByoRest}</p>}
+      <ul className="ai-facts">{m.autoDraftFacts(perDay).map((fact) => <li key={fact}>{fact}</li>)}</ul>
+      <p><a href="https://github.com/colliedesk/colliedesk/blob/main/docs/user/ai.md#write-a-draft-when-a-customer-writes" target="_blank" rel="noopener noreferrer">{m.estHow}</a></p>
+    </Dialog>
+  );
+}
+
+// AutoMovedNotice says when triage's automatic mode turned off because the feature moved to another
+// provider: the admin's consent was for the provider it left.
+function AutoMovedNotice({ settings, slotName, onTurnOn }: { settings: AISettings; slotName: AISlotName; onTurnOn: (slot: AISlot) => void }) {
+  const slot = settings.slots.find((item) => item.slot === slotName);
+  const last = settings.events.find((event) => event.kind === 'slot_changed' && event.slot === slotName);
+  const detail = last?.detail as { from?: Record<string, unknown>; to?: Record<string, unknown> } | undefined;
+  if (!slot || !slot.enabled || slot.automatic || !detail?.from?.automatic || detail.to?.automatic || detail.from.provider_label === detail.to?.provider_label) return null;
+  const title = slotName === 'draft' ? m.autoDraftTitle : m.autoTitle;
+  return <div className="ai-notice" role="status"><span>{m.autoMovedNotice(title, slotLabel(slotName), String(detail.to?.provider_label ?? ''))}</span>
+    <button type="button" onClick={() => onTurnOn(slot)}>{m.autoTurnOnAgain}</button></div>;
+}
+
+function AutoTriageDialog({ slot, onClose, onTurnOn }: { slot: AISlot; onClose: () => void; onTurnOn: () => void }) {
+  const chosen = slot.auto_parts.length > 0 ? slot.auto_parts : (['tags', 'priority'] as Part[]);
+  return (
+    <Dialog title={m.autoConfirmTitle} help={m.autoConfirmLead(partList(chosen))} onClose={onClose} onSubmit={onTurnOn}
+      footer={<><button type="button" className="ghost" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" autoFocus>{m.autoConfirmOn}</button></>}>
+      <ul className="ai-facts">{m.autoConfirmFacts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
+    </Dialog>
   );
 }
 
@@ -274,15 +434,25 @@ const monthName = (value: string) => new Date(`${value}-01T00:00:00Z`).toLocaleD
 function AutomaticDialog({ settings, onClose, onSave }: { settings: AISettings; onClose: () => void; onSave: AIPageProps['onSetAutomatic'] }) {
   const [perDay, setPerDay] = useState(String(settings.automatic.per_day));
   const [perMinute, setPerMinute] = useState(String(settings.automatic.per_minute));
+  const [draftsPerDay, setDraftsPerDay] = useState(String(settings.automatic.draft_per_day));
   const [error, setError] = useState<string>();
+  const [bad, setBad] = useState<{ day?: string; minute?: string; drafts?: string }>({});
   const [busy, setBusy] = useState(false);
   const id = useId();
   const submit = async () => {
     const day = Number(perDay);
     const minute = Number(perMinute);
-    if (!Number.isInteger(day) || day < 0 || day > 10000 || !Number.isInteger(minute) || minute < 0 || minute > 1000) { setError(m.automaticInvalid); return; }
+    const drafts = Number(draftsPerDay);
+    const out = (value: number, max: number) => (!Number.isInteger(value) || value < 0 || value > max ? m.wholeNumber(max) : undefined);
+    const marked = { day: perDay === '' ? m.wholeNumber(10000) : out(day, 10000), minute: perMinute === '' ? m.wholeNumber(1000) : out(minute, 1000),
+      drafts: draftsPerDay === '' ? m.wholeNumber(10000) : out(drafts, 10000) };
+    setBad(marked);
+    if (marked.day || marked.minute || marked.drafts) {
+      setError(m.automaticInvalid);
+      return;
+    }
     setBusy(true);
-    const refused = await onSave(day, minute);
+    const refused = await onSave(day, minute, drafts);
     setBusy(false);
     if (refused) setError(refused.text); else onClose();
   };
@@ -291,9 +461,11 @@ function AutomaticDialog({ settings, onClose, onSave }: { settings: AISettings; 
       footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={busy}>{m.save}</button></>}>
       {error && <p role="alert" className="error-copy">{error}</p>}
       <div className="ai-two">
-        <Field label={m.perDay} id={`${id}-day`}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={perDay} onChange={(event) => setPerDay(event.target.value)} autoFocus />}</Field>
-        <Field label={m.perMinute} id={`${id}-minute`}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={1000} value={perMinute} onChange={(event) => setPerMinute(event.target.value)} />}</Field>
+        <Field label={m.perDay} id={`${id}-day`} error={bad.day}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={perDay} onChange={(event) => setPerDay(event.target.value)} autoFocus />}</Field>
+        <Field label={m.perMinute} id={`${id}-minute`} error={bad.minute}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={1000} value={perMinute} onChange={(event) => setPerMinute(event.target.value)} />}</Field>
       </div>
+      <Field label={m.draftsPerDay} id={`${id}-drafts`} help={m.draftsPerDayHelp} error={bad.drafts}>{(attrs) => <input {...attrs} type="number" inputMode="numeric" min={0} max={10000} value={draftsPerDay}
+        onChange={(event) => setDraftsPerDay(event.target.value)} />}</Field>
       <p>{m.usedToday(settings.automatic.used_today)}</p>
     </Dialog>
   );
@@ -351,17 +523,31 @@ function eventText(event: AIEvent): string {
     case 'provider_removed': return m.eventRemoved(label);
   }
   if (event.kind === 'automatic_limits_changed') {
-    const to = detail.to as { per_day?: number; per_minute?: number } | undefined;
+    const to = detail.to as { per_day?: number; per_minute?: number; draft_per_day?: number } | undefined;
+    const from = detail.from as { per_day?: number; per_minute?: number; draft_per_day?: number } | undefined;
+    if (from && to && to.draft_per_day !== undefined && from.draft_per_day !== to.draft_per_day && from.per_day === to.per_day && from.per_minute === to.per_minute) {
+      return m.eventAutomaticDrafts(from.draft_per_day ?? 0, to.draft_per_day);
+    }
     return m.eventAutomatic(to?.per_day ?? 0, to?.per_minute ?? 0);
   }
   if (detail.reason === 'provider_removed') return m.eventSlotRemoved(slot, label);
+  const fromAuto = detail.from?.automatic === true;
+  const toAuto = detail.to?.automatic === true;
+  const autoParts = String(detail.to?.auto_parts ?? '').split(',').filter(Boolean).map((part) => m.autoPartLower[part as Part] ?? part).join(', ');
   const fromOn = detail.from?.enabled === true;
   const toOn = detail.to?.enabled === true;
   const fromLabel = String(detail.from?.provider_label ?? '');
   const toLabel = String(detail.to?.provider_label ?? '');
   if (!fromOn && toOn) return m.eventSlotOn(slot, toLabel);
   if (fromOn && !toOn) return m.eventSlotOff(slot);
-  if (fromLabel && toLabel && fromLabel !== toLabel) return m.eventSlotMoved(slot, fromLabel, toLabel);
+  const drafts = event.slot === 'draft';
+  if (fromLabel && toLabel && fromLabel !== toLabel) {
+    if (fromAuto && !toAuto) return drafts ? m.eventAutoDraftMoved(slot, toLabel) : m.eventAutoMoved(slot, toLabel);
+    return m.eventSlotMoved(slot, fromLabel, toLabel);
+  }
+  if (!fromAuto && toAuto) return drafts ? m.eventAutoDraftOn(toLabel) : m.eventAutoOn(autoParts);
+  if (fromAuto && !toAuto) return drafts ? m.eventAutoDraftOff : m.eventAutoOff;
+  if (toAuto && String(detail.from?.auto_parts ?? '') !== String(detail.to?.auto_parts ?? '')) return m.eventAutoParts(autoParts);
   const fromModel = String(detail.from?.model ?? '');
   const toModel = String(detail.to?.model ?? '');
   if (fromModel && toModel && fromModel !== toModel) return m.eventSlotModel(slot, fromModel, toModel);
@@ -481,7 +667,8 @@ function KeyDialog({ provider, onClose, onSetKey }: { provider: AIProvider; onCl
   );
 }
 
-function DeleteDialog({ provider, onClose, onRemove }: { provider: AIProvider; onClose: () => void; onRemove: AIPageProps['onRemove'] }) {
+function DeleteDialog({ provider, settings, onClose, onRemove }: { provider: AIProvider; settings: AISettings; onClose: () => void; onRemove: AIPageProps['onRemove'] }) {
+  const automatic = settings.slots.some((slot) => slot.automatic && provider.used_by.includes(slot.slot));
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const submit = async () => {
@@ -497,6 +684,7 @@ function DeleteDialog({ provider, onClose, onRemove }: { provider: AIProvider; o
       {provider.used_by.length > 0 ? <><p>{m.deleteUsed}</p><ul className="ai-delete-list">{provider.used_by.map((slot) => <li key={slot}><b>{slotLabel(slot)}</b></li>)}</ul></>
         : <p>{m.deleteUnused}</p>}
       <p>{m.deleteBody}</p>
+      {automatic && <p>{m.deleteAutomatic}</p>}
     </Dialog>
   );
 }

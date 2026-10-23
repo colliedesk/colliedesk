@@ -179,6 +179,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_triage_get` | Shows a conversation's newest [AI triage suggestion](ai.md#triage-suggestions): tags, priority, assignee and a reason | `read` |
 | `colliedesk_ai_triage_create` | Asks for a triage suggestion again | `draft` |
 | `colliedesk_ai_triage_accept`, `colliedesk_ai_triage_dismiss` | Applies a suggestion (all of it, or the parts named) to its conversation, or dismisses it | `draft` |
+| `colliedesk_ai_triage_undo` | Takes back what AI applied of a suggestion by itself (all of it, or the parts named); keeps what a person changed since | `draft` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

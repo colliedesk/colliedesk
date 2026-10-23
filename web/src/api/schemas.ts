@@ -180,7 +180,7 @@ export const conversationViewerSchema = z.object({
 export const inboxActivitySchema = z.object({
   now: z.string().datetime(),
   new_conversations: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), created_at: z.string().datetime() })),
-  assigned_to_me: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assigned_at: z.string().datetime() })),
+  assigned_to_me: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assigned_at: z.string().datetime(), by_ai: z.boolean().catch(false) })),
   updated: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assignee_id: z.string().uuid().nullable(), updated_at: z.string().datetime(), incoming_at: z.string().datetime().nullable() })),
   viewing: z.array(z.object({ conversation_id: z.string().uuid(), viewers: z.array(conversationViewerSchema) })),
 }) satisfies z.ZodType<Generated<'InboxActivity'>>;

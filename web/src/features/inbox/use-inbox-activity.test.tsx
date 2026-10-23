@@ -17,7 +17,7 @@ class FakeNotification {
 
 const item = (id: string, subject: string) => ({ id, subject, contact_name: 'Ada' });
 const created = (id: string, subject: string) => ({ ...item(id, subject), created_at: '2026-10-15T10:00:10Z' });
-const assigned = (id: string, subject: string) => ({ ...item(id, subject), assigned_at: '2026-10-15T10:00:10Z' });
+const assigned = (id: string, subject: string, by_ai = false) => ({ ...item(id, subject), assigned_at: '2026-10-15T10:00:10Z', by_ai });
 const idle = (now: string) => ({ now, new_conversations: [], assigned_to_me: [], updated: [] });
 const changed = (n: number, extra: { assignee_id?: string | null; incoming_at?: string | null; updated_at?: string } = {}) =>
   ({ id: id(n), subject: `Subject ${n}`, contact_name: 'Ada', assignee_id: null, updated_at: '2026-10-15T10:00:10Z', incoming_at: null, ...extra });
@@ -73,14 +73,14 @@ test('activity refreshes the conversation list, an empty poll does not', async (
 
 test('raises one notification per item and counts them in the tab title until focus returns', async () => {
   api.inboxActivity.mockResolvedValueOnce(idle('2026-10-15T10:00:00Z')).mockResolvedValueOnce({
-    now: '2026-10-15T10:00:20Z', new_conversations: [created(id(1), 'Printer')], assigned_to_me: [assigned(id(2), 'Refund')], updated: [],
+    now: '2026-10-15T10:00:20Z', new_conversations: [created(id(1), 'Printer')], assigned_to_me: [assigned(id(2), 'Refund'), assigned(id(3), 'Printer jam', true)], updated: [],
   }).mockResolvedValue(idle('2026-10-15T10:00:40Z'));
   renderHook(() => useInboxActivity(true, me), { wrapper });
   await tick(0);
   await tick(20_000);
-  expect(notifications.map((entry) => entry.title)).toEqual(['New conversation', 'Assigned to you']);
+  expect(notifications.map((entry) => entry.title)).toEqual(['New conversation', 'Assigned to you', 'Assigned to you by AI']);
   expect(notifications[0]?.options?.body).toBe('Printer · Ada');
-  expect(document.title).toBe('(2) Colliedesk');
+  expect(document.title).toBe('(3) Colliedesk');
   act(() => { window.dispatchEvent(new Event('focus')); });
   expect(document.title).toBe('Colliedesk');
 });
@@ -320,4 +320,16 @@ test('the inbox reads who has which conversation open from the same poll, from i
   await tick(30_000);
   expect(alone.result.current.size).toBe(0);
   expect(api.inboxActivity).not.toHaveBeenCalled();
+});
+
+test('a new conversation AI assigns a poll later is one notification that says both', async () => {
+  api.inboxActivity.mockResolvedValueOnce(idle('2026-10-15T10:00:00Z'))
+    .mockResolvedValueOnce({ now: '2026-10-15T10:00:20Z', new_conversations: [created(id(1), 'Printer')], assigned_to_me: [], updated: [] })
+    .mockResolvedValueOnce({ now: '2026-10-15T10:00:40Z', new_conversations: [], assigned_to_me: [{ ...assigned(id(1), 'Printer', true), assigned_at: '2026-10-15T10:00:30Z' }], updated: [] })
+    .mockResolvedValue(idle('2026-10-15T10:01:00Z'));
+  renderHook(() => useInboxActivity(true, me), { wrapper });
+  await tick(0);
+  await tick(20_000);
+  await tick(20_000);
+  expect(notifications.map((entry) => [entry.title, entry.options?.tag])).toEqual([['New conversation', id(1)], ['New conversation · assigned to you by AI', id(1)]]);
 });

@@ -200,6 +200,7 @@ type aiTriageArguments struct {
 	TagIDs          []string `json:"tag_ids"`
 	Priority        *string  `json:"priority"`
 	AssigneeAgentID *string  `json:"assignee_agent_id"`
+	Parts           []string `json:"parts"`
 }
 
 func aiTriagePath(conversationID, rest string) string {
@@ -212,12 +213,13 @@ func aiTriageGet(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	var answer struct {
-		Suggestion json.RawMessage `json:"suggestion"`
+		Suggestion  json.RawMessage `json:"suggestion"`
+		AutoApplied json.RawMessage `json:"auto_applied"`
 	}
 	if err := c.get(aiTriagePath(args.ConversationID, ""), nil, &answer); err != nil {
 		return nil, err
 	}
-	return map[string]any{"suggestion": answer.Suggestion}, nil
+	return map[string]any{"suggestion": answer.Suggestion, "auto_applied": answer.AutoApplied}, nil
 }
 
 func aiTriageCreate(c *call, arguments map[string]any) (any, error) {
@@ -248,6 +250,23 @@ func aiTriageAccept(c *call, arguments map[string]any) (any, error) {
 	}
 	var suggestion json.RawMessage
 	if err := c.send(http.MethodPost, aiTriagePath(args.ConversationID, "/"+url.PathEscape(args.SuggestionID)+"/accept"), body, &suggestion); err != nil {
+		return nil, err
+	}
+	return map[string]any{"suggestion": suggestion}, nil
+}
+
+func aiTriageUndo(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiTriageArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = aiTriageNotFound
+	var body any
+	if len(args.Parts) > 0 {
+		body = map[string]any{"parts": args.Parts}
+	}
+	var suggestion json.RawMessage
+	if err := c.send(http.MethodPost, aiTriagePath(args.ConversationID, "/"+url.PathEscape(args.SuggestionID)+"/undo"), body, &suggestion); err != nil {
 		return nil, err
 	}
 	return map[string]any{"suggestion": suggestion}, nil

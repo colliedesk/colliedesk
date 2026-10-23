@@ -13,6 +13,7 @@ export const aiDraftSchema = z.object({
   warnings: z.array(z.object({ kind: z.enum(['email', 'number', 'name', 'script', 'placeholder']), value: z.string() })),
   model: z.string().nullable(), outcome: z.enum(['sent_unchanged', 'sent_edited', 'discarded', 'superseded', 'expired']).nullable(),
   similarity: z.number().nullable(), sent_message_id: z.string().uuid().nullable(), requested_by_agent_id: z.string().uuid().nullable(),
+  automatic: z.boolean(), answers_message_id: z.string().uuid().nullable(), reply_needed: z.boolean().nullable(),
   created_at: z.string().datetime(), ready_at: nullableDate, decided_at: nullableDate,
 }) satisfies z.ZodType<Generated<'AIDraft'>>;
 const aiDraftListSchema = z.object({ items: z.array(aiDraftSchema) }) satisfies z.ZodType<JsonResponse<'listAIDrafts', 200>>;
