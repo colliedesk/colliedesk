@@ -23,6 +23,7 @@ export const ReplyIcon = () => <Icon><path d="M9 14 4 9l5-5" /><path d="M4 9h10.
 export const FilterIcon = () => <Icon><path d="M3 6h18M7 12h10M10 18h4" /></Icon>;
 export const XIcon = () => <Icon><path d="M18 6 6 18M6 6l12 12" /></Icon>;
 export const BookmarkIcon = () => <Icon><path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" /></Icon>;
+export const ChartIcon = () => <Icon><path d="M3 3v18h18" /><path d="M8 17v-5M13 17V8M18 17v-9" /></Icon>;
 export const BookIcon = () => <Icon><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" /></Icon>;
 export const RequestsIcon = () => <Icon><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></Icon>;
 export const ChevronDownIcon = () => <Icon width="12" height="12"><path d="m6 9 6 6 6-6" /></Icon>;

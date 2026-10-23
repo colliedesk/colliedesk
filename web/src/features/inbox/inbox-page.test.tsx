@@ -260,6 +260,16 @@ test('a list that failed to load says so and offers a retry, never "Get started"
   expect(onRetry).toHaveBeenCalled();
 });
 
+test('the list of a results number that was refreshed says so and leads back to Results', () => {
+  const onQuery = vi.fn();
+  render(<InboxPage conversations={[]} failed="results_refreshed" query={{ status: 'all', result: '11111111-1111-4111-8111-111111111111:30d.first_response' }} onQuery={onQuery} filtered />);
+  expect(screen.getByRole('alert')).toHaveTextContent('These numbers were refreshed. Open Results again.');
+  expect(screen.getByRole('link', { name: 'Open Results' })).toHaveAttribute('href', '/results');
+  expect(screen.queryByText('Conversations could not be loaded.')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+  expect(onQuery).toHaveBeenCalled();
+});
+
 test('get-started links open Settings inside the app and hide admin-only steps from agents', () => {
   const onOpenSettings = vi.fn();
   const { rerender } = render(<InboxPage conversations={[]} canManage onOpenSettings={onOpenSettings} />);

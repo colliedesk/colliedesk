@@ -68,7 +68,8 @@ interface InboxPageProps {
   timelineLoading?: boolean;
   conversationFailed?: boolean;
   onRetryConversation?: () => void;
-  failed?: boolean;
+  // results_refreshed: the list of a results number whose snapshot is no longer kept (410).
+  failed?: boolean | 'results_refreshed';
   onRetry?: () => void;
   canManage?: boolean;
   onOpenSettings?: (to?: SettingsTarget) => void;

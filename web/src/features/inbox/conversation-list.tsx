@@ -24,7 +24,7 @@ interface ConversationListProps {
   loading?: boolean;
   // refreshing: a refetch is running while the previous rows stay on screen.
   refreshing?: boolean;
-  failed?: boolean;
+  failed?: boolean | 'results_refreshed';
   onRetry?: () => void;
   onClearFilters?: () => void;
   canManage?: boolean;
@@ -109,7 +109,11 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
             {step === getStarted.recommended && <><span className="recommended-step">{messages.recommendedFirstStep}</span>{' '}</>}{stepLink[step]}</li>)}
         </ul>
       </section>}
-      {failed && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
+      {failed === 'results_refreshed' && <div className="empty-copy"><p role="alert" className="error-copy">{messages.resultsRefreshed}</p>
+        <p className="muted-copy">{messages.resultsRefreshedWhy}</p>
+        <div className="button-row"><a href="/results" className="button">{messages.openResults}</a>
+          {onClearFilters && <button type="button" className="secondary" onClick={onClearFilters}>{messages.clearFilter}</button>}</div></div>}
+      {failed === true && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
       {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : messages.noConversations}</p>
         {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}

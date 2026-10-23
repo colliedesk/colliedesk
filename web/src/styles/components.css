@@ -82,13 +82,9 @@
   .filter-popover { width: 100%; }
   .check-row { min-height: var(--touch); }
   .chip-remove { width: var(--touch); min-height: var(--touch); margin-block: -8px; }
-  /* One row of chips that scrolls sideways, its bar hidden and its edges faded, so the list stays in view. */
-  /* Only the chips scroll; Clear all stays outside the scrolling row, always in view. */
-  .filter-chips { flex-wrap: nowrap; min-width: 0; }
+  /* Chips wrap here too: a chip scrolled out of a sideways row is a filter nobody sees is on. */
   .inbox-filters { grid-template-columns: minmax(0, 1fr); }
-  .filter-chips ul { display: flex; flex: 1; min-width: 0; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
-  .filter-chips ul::-webkit-scrollbar { display: none; }
-  .filter-chips li { flex: none; }
+  .filter-chips li { min-width: 0; }
   .filter-chips .link-button { flex: none; min-height: var(--touch); padding-inline: var(--space-2); }
   .filter-chips li { min-height: 36px; }
 }

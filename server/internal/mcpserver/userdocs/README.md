@@ -23,6 +23,7 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Connect an AI agent (MCP)](mcp.md)
 - [Agent requests and reply drafts](agent-requests.md)
 - [AI providers and features](ai.md)
+- [Results: before and after the move](results.md)
 - [Import from Freshdesk](import-freshdesk.md)
 - [Import from Help Scout](import-helpscout.md)
 - [Export all your data](export.md)

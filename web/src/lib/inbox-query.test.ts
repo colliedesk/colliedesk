@@ -52,3 +52,13 @@ test('the default view is Open, newest activity first, nothing else', () => {
   expect(isDefaultQuery({ status: 'all' })).toBe(false);
   expect(isDefaultQuery({ awaiting: 'team' })).toBe(false);
 });
+
+test('a results number opens its conversations in any status, and is never saved in a view', () => {
+  const result = '11111111-1111-4111-8111-111111111111:30d.first_response';
+  const query = inboxQueryFromSearch({ status: 'all', result });
+  expect(query).toEqual({ status: 'all', result });
+  expect(apiQuery(query, 1)).toBe(`result=${encodeURIComponent(result)}&page=1&page_size=50`);
+  expect(inboxQueryFromSearch({ result: 'not-a-number' })).toEqual({});
+  expect(filtersOf(query)).toEqual({});
+  expect(queryOf({ result } as never)).toEqual({ status: 'all' });
+});

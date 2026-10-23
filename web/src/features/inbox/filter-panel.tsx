@@ -148,6 +148,12 @@ function FilterPanel(props: FilterPartProps) {
   );
 }
 
+// A number of the results page: `<snapshot id>:<window>.<metric>`.
+function resultLabel(result: string): string {
+  const [window, metric] = (result.split(':')[1] ?? '').split('.');
+  return text.countedIn(text.resultMetrics[metric] ?? metric, text.resultWindows[window] ?? window);
+}
+
 interface Chip {
   key: InboxQueryKey;
   value?: string;
@@ -175,6 +181,7 @@ export function FilterChips(props: FilterPartProps) {
     ...listOf(query, 'channel').map((value) => ({ key: 'channel' as const, value, label: `${text.channel}: ${text.channels[value as keyof typeof text.channels] ?? value}` })),
     ...(query.source === 'imported' || query.source === 'native' ? [{ key: 'source' as const, label: `${text.source}: ${text.sources[query.source]}` }] : []),
     ...(query.organization ? [{ key: 'organization' as const, label: `${text.organization}: ${query.organization}` }] : []),
+    ...(query.result ? [{ key: 'result' as const, label: resultLabel(query.result) }] : []),
     ...dateFilters.flatMap(([name, after, before]) => (query[after] || query[before]
       ? [{ key: after, label: `${text[name]}: ${text.dateRange(query[after] ? zonedDay(query[after], timezone) : undefined, query[before] ? lastDay(query[before], timezone) : undefined)}` }]
       : [])),
@@ -194,6 +201,7 @@ export function FilterChips(props: FilterPartProps) {
             <button type="button" className="chip-remove" aria-label={text.remove(chip.label)} onClick={() => removeChip(chip)}><XIcon /></button></li>))}
       </ul>
       <button type="button" className="link-button" onClick={() => onChange?.({})}>{text.clearAll}</button>
+      {query.result && <a href="/results" className="link-button">{text.backToResults}</a>}
     </div>
   );
 }

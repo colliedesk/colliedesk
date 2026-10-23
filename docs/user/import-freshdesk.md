@@ -229,7 +229,7 @@ so a large account can take hours. You can stop it at any time with Ctrl+C.
 
 The ticket list also asks for each ticket's resolve, first response and close times (Freshdesk
 `stats`, two more API credits per page of 100 tickets). They are kept with the ticket and read for
-the "before" numbers of the results page. Once the first full import has finished, the times read
+the "before" numbers of the [results page](results.md). Once the first full import has finished, the times read
 stay: running the import again only adds them to tickets that have none (an import from before they
 were read), so the before numbers do not move. Archived tickets come without them.
 
