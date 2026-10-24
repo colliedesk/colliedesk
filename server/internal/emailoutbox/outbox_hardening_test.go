@@ -51,6 +51,9 @@ func TestPoisonRowDoesNotStallOthersAndAttemptsAreCapped(t *testing.T) {
 	poison := f.write(t, "outgoing", "To a broken contact.")
 	f.exec(t, `UPDATE contacts SET email='not an address' WHERE workspace_id=$1`, f.workspaceID)
 	other := f.secondConversationReply(t, "healthy@customer.example", "Healthy reply.")
+	// The worker's clock moves past the rows just written: on a slow runner they were written after
+	// the clock was first read, and a row due later than the clock is not claimed yet.
+	clock = time.Now().UTC().Add(time.Second)
 	process(t, worker)
 	process(t, worker)
 	if delivery := f.delivery(t, poison.ID); delivery.Status != "failed" || delivery.LastError == nil {
@@ -61,6 +64,7 @@ func TestPoisonRowDoesNotStallOthersAndAttemptsAreCapped(t *testing.T) {
 	}
 
 	crashLoop := f.secondConversationReply(t, "loop@customer.example", "Crash loop.")
+	clock = time.Now().UTC().Add(time.Second)
 	f.exec(t, `UPDATE email_outbox SET attempts=3,locked_until=$2 WHERE message_id=$1`, crashLoop.ID, clock.Add(-time.Second))
 	before := len(server.mail())
 	process(t, worker)
