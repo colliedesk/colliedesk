@@ -52,7 +52,7 @@ docker compose logs server | grep 'usage report sent'
 
 ## AI provider
 
-Workspaces can add their own AI provider with a key in **Settings > AI** (see
+Workspaces can add their own AI provider with a key in **Settings → Built-in AI** (see
 [AI providers and features](../user/ai.md)). You can also give every workspace on this server one
 provider that you pay for, the way Colliedesk Cloud does:
 

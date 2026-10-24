@@ -1,9 +1,9 @@
-// Strings of Settings → AI. The page is a lazy part, so they live in its chunk.
+// Strings of Settings → Built-in AI. The page is a lazy part, so they live in its chunk.
 export const aiMessages = {
-  heading: 'AI',
-  description: 'A model suggests and drafts; a person accepts, edits and sends. Nothing reaches a customer until someone presses Send.',
+  heading: 'Built-in AI',
+  description: 'Triage suggestions and reply drafts inside Colliedesk, on a model you choose. A person accepts, edits and sends; nothing reaches a customer until someone presses Send.',
   loadFailed: 'The AI settings could not be loaded. Reload the page to try again.',
-  tabs: 'AI settings',
+  tabs: 'Built-in AI settings',
   tabFeatures: 'Features',
   tabProviders: 'Providers',
   tabHistory: 'History',

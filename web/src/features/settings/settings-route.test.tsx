@@ -159,7 +159,7 @@ test('an agent creates an agent token above Sessions; the list reloads to show i
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   show('agent', [], undefined, client);
   api.createAgentToken.mockResolvedValue({ token: 'cdk_agent_routetoken', session });
-  const card = await screen.findByRole('region', { name: 'AI agents' });
+  const card = await screen.findByRole('region', { name: 'External AI agents' });
   expect(within(card).getByRole('radio', { name: 'Admin' })).toBeDisabled();
   expect(card.compareDocumentPosition(screen.getByRole('region', { name: 'Sessions' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   api.sessions.mockResolvedValue({ items: [session] });
@@ -181,7 +181,7 @@ test('a refused token request reaches the app-wide handling of signed-out and lo
   const refused = new errors.UnauthorizedError('API 401');
   show('admin', [], undefined, new QueryClient({ defaultOptions: { queries: { retry: false } }, mutationCache: new MutationCache({ onError }) }));
   api.createAgentToken.mockRejectedValue(refused);
-  const card = await screen.findByRole('region', { name: 'AI agents' });
+  const card = await screen.findByRole('region', { name: 'External AI agents' });
   fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Codex' } });
   fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
   await waitFor(() => expect(onError.mock.calls[0]?.[0]).toBe(refused));

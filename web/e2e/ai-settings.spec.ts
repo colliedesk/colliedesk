@@ -45,7 +45,7 @@ test('a self-hosted admin adds a provider on the network, turns reply drafts on,
     await expect(page).toHaveURL(`${baseURL}/`);
 
     await page.goto(`${baseURL}/settings`);
-    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'AI', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Built-in AI', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'No AI provider on this server yet' })).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Reply drafts on' })).toBeDisabled();
 

@@ -2,7 +2,7 @@ import { PlanLimitError } from '../../api/client';
 
 // The next step after an AI draft or suggestion fails for a setting. Shared by both lazy parts.
 
-const text = { openSettings: 'Open AI settings', askAdmin: 'Ask an admin to check Settings → AI.' };
+const text = { openSettings: 'Open AI settings', askAdmin: 'Ask an admin to check Settings → Built-in AI.' };
 
 // Failures a setting causes: the provider's key or credit, the included AI, the feature turned off.
 const settingsCodes = ['auth', 'permission', 'quota_exhausted', 'model_not_found', 'ai_allowance_reached', 'feature_off', 'ai_feature_off'];
@@ -20,7 +20,7 @@ export function refusalCode(error: unknown): string | null {
   return error instanceof PlanLimitError ? 'ai_allowance_reached' : null;
 }
 
-// SettingsWay is the next step for a failure a setting causes: Settings → AI for an admin, ask an admin otherwise.
+// SettingsWay is the next step for a failure a setting causes: Settings → Built-in AI for an admin, ask an admin otherwise.
 export function SettingsWay({ code, canManage }: { code: string | null; canManage: boolean }) {
   if (!isSettingsFailure(code)) return null;
   return canManage ? <a href="/settings/ai" target="_blank" rel="noopener">{text.openSettings}</a> : <span>{text.askAdmin}</span>;

@@ -13,7 +13,7 @@ private notes for your team. With a `send` token it can also reply to customers.
 <!-- /generated -->
 - Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
   person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
-- Create the token in **Settings → AI agents**, as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
+- Create the token in **Settings → External AI agents**, as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
   that does the job. The token is shown once; revoke it in **Settings → Sessions**.
 
 | Tier | The agent can |

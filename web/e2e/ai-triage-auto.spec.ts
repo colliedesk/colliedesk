@@ -38,7 +38,7 @@ test('an admin lets triage apply by itself; a new ticket gets its tag and priori
     const { id } = await provider.json() as { id: string };
     expect((await page.request.put(`${baseURL}/api/v1/ai/slots/triage`, { headers, data: { source: 'provider', provider_id: id, enabled: true } })).status()).toBe(200);
 
-    // Settings → AI: the switch asks first, and says what AI will do.
+    // Settings → Built-in AI: the switch asks first, and says what AI will do.
     await page.goto(`${baseURL}/settings/ai`);
     await page.getByRole('switch', { name: 'Apply suggestions automatically' }).click();
     const dialog = page.getByRole('dialog', { name: 'Apply triage suggestions automatically?' });

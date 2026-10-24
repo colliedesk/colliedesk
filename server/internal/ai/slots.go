@@ -95,7 +95,7 @@ func utcPointer(at *time.Time) *time.Time {
 	return &utc
 }
 
-// Settings reads everything Settings → AI shows.
+// Settings reads everything Settings → Built-in AI shows.
 func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, error) {
 	settings := Settings{Providers: []Provider{}, Slots: []Slot{}, Events: []Event{}, ProviderLimit: MaxProviders,
 		CanStoreKeys: s.config.Keys.Configured(), AllowPrivateBaseURLs: s.config.AllowPrivateBaseURLs}

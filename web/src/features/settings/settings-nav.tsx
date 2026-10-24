@@ -36,10 +36,10 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
   return [
     { label: messages.settingsYourAccount, items: [...section(messages.profile, 'profile-heading'), ...section(messages.preferences, 'preferences-heading')] },
     { label: messages.settingsWorkspace, items: [
-      ...(shown.ai ? [{ label: messages.aiSettings, to: '/settings/ai' as const, current: page === '/settings/ai' }] : []),
       ...section(messages.general, 'general-heading', shown.general),
       ...section(messages.team, 'team-heading', shown.team),
       ...section(messages.invites, 'invites-heading'),
+      ...(shown.ai ? [{ label: messages.aiSettings, to: '/settings/ai' as const, current: page === '/settings/ai' }] : []),
       ...section(messages.aiAgents, 'agents-heading', shown.agents),
       ...section(messages.sessions, 'sessions-heading'),
       ...section(messages.emailChannel, 'email-channel-heading', shown.email),
