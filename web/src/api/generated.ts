@@ -403,7 +403,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Opens messages the channel held (all, or those of `event_ids`) as conversations, as they would have been had the channel been on, or adds them to `conversation_id` (a conversation of this workspace; 404 otherwise). It works while the channel is still off. Recorded in the channel's history. */
+        /** @description Opens messages the channel held (all, or those of `event_ids`) as conversations, as they would have been had the channel been on, or adds them to `conversation_id` (a conversation of this workspace; 404 otherwise). It works while the channel is still off, and the ceiling on new conversations does not apply. Messages open one by one: one that cannot be opened stops the replay there, the ones opened before it are recorded in the channel's history, the rest stay held. */
         post: operations["replayHeldChannelMessages"];
         delete?: never;
         options?: never;
@@ -6116,6 +6116,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     discardHeldChannelMessages: {

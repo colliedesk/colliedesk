@@ -326,7 +326,9 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	}
 	result.Status = channels.ResultThreaded
 	if conversationID == "" {
-		if limits.NewConversations > 0 {
+		// The ceiling guards against a flood of new mail; opening held mail is an admin's decision
+		// about mail that already arrived, and holding it counted against nothing.
+		if limits.NewConversations > 0 && !request.Replay {
 			var created int
 			query := `SELECT count(*) FROM conversations WHERE workspace_id=$1 AND created_at>$2`
 			args := []any{workspaceID, now.Add(-limits.Window())}

@@ -1,7 +1,9 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -360,5 +362,87 @@ func TestAChannelThatHoldsMessagesIsNotRemoved(t *testing.T) {
 	}
 	if removed := request(t, api, http.MethodDelete, "/api/v1/channels/email", nil, admin, nil); removed.Code != http.StatusNoContent {
 		t.Fatalf("disconnect once nothing is held: %d %s", removed.Code, removed.Body.String())
+	}
+}
+
+type channelEventsPage struct {
+	Items []struct {
+		Kind      string `json:"kind"`
+		ChannelID string `json:"channel_id"`
+	} `json:"items"`
+}
+
+func heldReplayedEvents(t *testing.T, api http.Handler, token, channelID string) int {
+	t.Helper()
+	var page channelEventsPage
+	decode(t, request(t, api, http.MethodGet, "/api/v1/channels/events?channel_id="+channelID, nil, token, nil), &page)
+	replayed := 0
+	for _, event := range page.Items {
+		if event.Kind == "held_replayed" {
+			replayed++
+		}
+	}
+	return replayed
+}
+
+// Opening held mail is the admin's decision about mail that already arrived: the ceiling on new
+// conversations that guards against a flood of new mail does not cut it short.
+func TestOpeningHeldMailOpensAllOfItPastTheNewConversationCeiling(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Weekend Desk", "admin@weekend-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@weekend-desk.example.com")
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	request(t, api, http.MethodPatch, "/api/v1/channels/"+email.ID, map[string]any{"enabled": false}, admin, nil)
+	const held = 205
+	for i := 0; i < held; i++ {
+		if response := inbound(t, api, secret, mail([]string{fmt.Sprintf("From: c%d@customer.example", i), "Subject: Weekend", fmt.Sprintf("Message-ID: <weekend%d@customer.example>", i)}, "Hi.")); response.Code != http.StatusOK {
+			t.Fatalf("mail %d: %d %s", i, response.Code, response.Body.String())
+		}
+	}
+	opened := request(t, api, http.MethodPost, "/api/v1/channels/"+email.ID+"/held/replay", map[string]any{}, admin, nil)
+	var replay struct {
+		Results []struct {
+			Status string `json:"status"`
+		} `json:"results"`
+	}
+	decode(t, opened, &replay)
+	if opened.Code != http.StatusOK || len(replay.Results) != held {
+		t.Fatalf("replay of %d held: %d, %d results", held, opened.Code, len(replay.Results))
+	}
+	items, _ = listChannels(t, api, admin)
+	if got := channelOf(t, items, "email").HeldCount; got != 0 {
+		t.Fatalf("held_count after replay = %d, want 0", got)
+	}
+	if got := heldReplayedEvents(t, api, admin, email.ID); got != 1 {
+		t.Fatalf("held_replayed events = %d, want 1", got)
+	}
+}
+
+// A replay that fails part way keeps what it opened in the history, and leaves the rest held.
+func TestAReplayThatFailsPartWayRecordsWhatItOpened(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Partial Desk", "admin@partial-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@partial-desk.example.com")
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	request(t, api, http.MethodPatch, "/api/v1/channels/"+email.ID, map[string]any{"enabled": false}, admin, nil)
+	for i := 0; i < 4; i++ {
+		inboundOK(t, api, secret, mail([]string{fmt.Sprintf("From: p%d@customer.example", i), "Subject: Partial", fmt.Sprintf("Message-ID: <partial%d@customer.example>", i)}, "Hi."))
+	}
+	// The third message's original can no longer be read.
+	if _, err := pool.Exec(context.Background(), `UPDATE channel_inbound_events SET raw_object_key='missing/original.eml.gz'
+		WHERE id=(SELECT id FROM channel_inbound_events WHERE channel_id=$1 AND state='held' ORDER BY received_at,id OFFSET 2 LIMIT 1)`, email.ID); err != nil {
+		t.Fatal(err)
+	}
+	if failed := request(t, api, http.MethodPost, "/api/v1/channels/"+email.ID+"/held/replay", map[string]any{}, admin, nil); failed.Code == http.StatusOK {
+		t.Fatalf("replay with an unreadable original answered 200: %s", failed.Body.String())
+	}
+	items, _ = listChannels(t, api, admin)
+	if got := channelOf(t, items, "email").HeldCount; got != 2 {
+		t.Fatalf("held_count after a replay that failed at the third = %d, want 2", got)
+	}
+	if got := heldReplayedEvents(t, api, admin, email.ID); got != 1 {
+		t.Fatalf("held_replayed events = %d, want 1 for the two opened", got)
 	}
 }

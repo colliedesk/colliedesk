@@ -98,6 +98,9 @@ func writeChannelError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "This server runs no channel of that type.")
 	case errors.Is(err, store.ErrSealKeysMissing):
 		writeError(response, http.StatusConflict, "secret_keys_missing", "This server has no MAILBOX_TOKEN_KEYS, so it cannot keep a channel secret.")
+	case errors.Is(err, store.ErrRateLimited):
+		response.Header().Set("Retry-After", strconv.Itoa(int(store.InboundRateWindow.Seconds())))
+		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many at once. Try again later.")
 	case errors.Is(err, store.ErrBadCursor):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The cursor is not one this server handed out.")
 	default:

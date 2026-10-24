@@ -835,7 +835,9 @@ paths:
       description: >
         Opens messages the channel held (all, or those of `event_ids`) as conversations, as they would
         have been had the channel been on, or adds them to `conversation_id` (a conversation of this
-        workspace; 404 otherwise). It works while the channel is still off. Recorded in the channel's history.
+        workspace; 404 otherwise). It works while the channel is still off, and the ceiling on new
+        conversations does not apply. Messages open one by one: one that cannot be opened stops the
+        replay there, the ones opened before it are recorded in the channel's history, the rest stay held.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/HeldReplayInput'}}}
@@ -848,6 +850,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
   /api/v1/channels/{id}/held/discard:
     parameters: [{$ref: '#/components/parameters/ID'}]
     post:

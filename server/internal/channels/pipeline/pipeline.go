@@ -257,27 +257,33 @@ func (p *Pipeline) ReplayHeld(ctx context.Context, workspaceID, channelID string
 	if len(ids) > 0 && len(events) != len(ids) {
 		return nil, channels.ErrNotFound
 	}
-	items, err := p.parseEvents(ctx, channel, events)
-	if err != nil {
-		return nil, err
-	}
-	results := make([]channels.IngestResult, 0, len(items))
-	for i, item := range items {
+	// Each message is read and opened on its own: one that fails stops the replay there, and what was
+	// opened before it is in the history all the same; the rest stays held.
+	results := make([]channels.IngestResult, 0, len(events))
+	var failed error
+	for _, event := range events {
+		items, err := p.parseEvents(ctx, channel, []store.InboundEvent{event})
+		if err != nil {
+			failed = err
+			break
+		}
+		item := items[0]
 		item.Aggregate = nil
 		result, err := p.store.IngestInbound(ctx, store.IngestRequest{WorkspaceID: workspaceID, ChannelID: channelID,
-			Raw: channels.Raw{JSON: events[i].Raw}, Inbound: item, EventIDs: []string{events[i].ID}, Now: p.now(), Replay: true,
+			Raw: channels.Raw{JSON: event.Raw}, Inbound: item, EventIDs: []string{event.ID}, Now: p.now(), Replay: true,
 			IntoConversation: conversationID, DecidedBy: actor.AgentID})
 		if err != nil {
-			return results, err
+			failed = err
+			break
 		}
 		results = append(results, result)
 	}
 	if len(results) > 0 {
 		if err := p.store.RecordHeldReplay(ctx, workspaceID, channelID, len(results), conversationID, actor); err != nil {
-			return results, err
+			return results, errors.Join(failed, err)
 		}
 	}
-	return results, nil
+	return results, failed
 }
 
 // snapshot reads what the type's parser needs of its own tables, in a read-only transaction of its
