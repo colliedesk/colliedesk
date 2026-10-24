@@ -810,12 +810,16 @@ test('after Send and resolve the focus comes back to the box, since the button g
   await waitFor(() => expect(body).toHaveFocus());
 });
 
-test('with no channel to carry replies the box sends private notes only', () => {
+test('with no channel to carry replies the box opens on a private note, and a reply says it cannot be sent', () => {
   const onSubmit = vi.fn();
   render(<ReplyComposer onSubmit={onSubmit} noReplies />);
-  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hello' } });
+  const box = screen.getByLabelText('Message body');
+  expect(box).toHaveAttribute('placeholder', 'Write a private note. Only your team sees it.');
+  fireEvent.click(screen.getByRole('button', { name: /^Reply/ }));
+  expect(box).toHaveAttribute('placeholder', 'Replies to this conversation cannot be sent. Write a private note instead (N).');
+  fireEvent.change(box, { target: { value: 'Hello' } });
   expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled();
-  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
   expect(onSubmit).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: /Private note/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));

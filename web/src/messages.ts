@@ -175,6 +175,7 @@ export const messages = {
   savedReplyActionFailed: 'The saved reply could not be saved. Try again.',
   replyPlaceholder: 'Write a reply to the customer…',
   notePlaceholder: 'Write a private note. Only your team sees it.',
+  replyNotSendable: 'Replies to this conversation cannot be sent. Write a private note instead (N).',
   noteHint: 'Not visible to the customer',
   sendShortcut: 'to send',
   reply: 'Send reply',

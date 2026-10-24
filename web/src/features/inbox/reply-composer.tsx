@@ -73,7 +73,8 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
 export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve }: ReplyComposerProps) {
-  const [kind, setKind] = useState<Kind>('outgoing');
+  // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
+  const [kind, setKind] = useState<Kind>(noReplies ? 'note' : 'outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
@@ -251,7 +252,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
         )}
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
-          placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
+          placeholder={kind === 'note' ? messages.notePlaceholder : noReplies ? messages.replyNotSendable : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
         {picking && !disabled && (pickers.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
           // Until the chunk is there, the list's own box says it is loading, where the list will be.
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>

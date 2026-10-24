@@ -910,8 +910,10 @@ test('a conversation whose channel was removed takes private notes but no reply'
   expect(await screen.findByText('Replies to this conversation cannot be sent: Email was removed.')).toBeInTheDocument();
   const box = screen.getAllByLabelText('Message body').at(-1)!;
   fireEvent.change(box, { target: { value: 'Hello' } });
-  expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeDisabled();
-  fireEvent.click(screen.getAllByRole('button', { name: /Private note/ }).at(-1)!);
+  // The box opens on a private note; a reply is refused with why.
   expect(screen.getAllByRole('button', { name: 'Add private note' }).at(-1)).toBeEnabled();
+  fireEvent.click(screen.getAllByRole('button', { name: /^Reply/ }).at(-1)!);
+  expect(box).toHaveAttribute('placeholder', 'Replies to this conversation cannot be sent. Write a private note instead (N).');
+  expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeDisabled();
   navigate.mockRestore();
 });
