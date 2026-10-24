@@ -1,4 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
+import { resultsApi } from '../../api/results';
+import type { Results } from '../../api/results';
 import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { messages } from '../../messages';
 import { FilterIcon, XIcon } from '../../ui/icons';
@@ -148,6 +151,32 @@ function FilterPanel(props: FilterPartProps) {
   );
 }
 
+// Metrics counted on the conversations created a week earlier (docs/user/results.md).
+const resolvedMetrics = new Set(['resolution', 'unresolved', 'without_resolve_time', 'reopened', 'handle']);
+
+// A number of the results page: `<snapshot id>:<window>.<metric>`. With the page's numbers at hand (they
+// are cached from Results, or read once) the chip says which side it counts and the days it covers.
+export function resultLabel(result: string, results: Results | undefined, timeZone: string): string {
+  const [snapshot, key] = result.split(':');
+  const [window, metric] = (key ?? '').split('.');
+  const metricName = text.resultMetrics[metric] ?? metric;
+  const side = results?.current?.id === snapshot ? results.current : results?.baseline?.id === snapshot ? results.baseline : undefined;
+  const numbers = side?.windows[window as '30d' | '7d'];
+  if (!side || !numbers) return text.countedIn(metricName, text.resultWindows[window] ?? window);
+  const name = side === results?.current ? 'Colliedesk' : side.source?.startsWith('helpscout:') ? 'Help Scout' : 'Freshdesk';
+  const span = resolvedMetrics.has(metric) ? numbers.resolved_created : numbers.created;
+  const day = (value: string) => zonedDayLabel(value, timeZone);
+  return text.countedInSide(metricName, name, `${day(span.from)} – ${day(span.to)}`);
+}
+
+function zonedDayLabel(value: string, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone }).format(new Date(value));
+  } catch {
+    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(value));
+  }
+}
+
 interface Chip {
   key: InboxQueryKey;
   value?: string;
@@ -157,6 +186,17 @@ interface Chip {
 export function FilterChips(props: FilterPartProps) {
   const { query, tags, agents, timezone, conversations } = props;
   const { change: onChange } = changeOf(props);
+  // The numbers of the results page name the side and days of a result chip: cached from Results, or
+  // read once for a link opened directly.
+  const cached = useContext(QueryClientContext)?.getQueryData<Results>(['results']);
+  const [fetched, setFetched] = useState<Results>();
+  useEffect(() => {
+    if (!query.result || cached) return undefined;
+    let live = true;
+    resultsApi.get().then((value) => { if (live) setFetched(value); }, () => {});
+    return () => { live = false; };
+  }, [query.result, cached]);
+  const results = { data: cached ?? fetched };
   const agentName = (id: string) => {
     const agent = agents.find((item) => item.id === id);
     return agent ? agent.display_name || agent.email : text.unknownAgent;
@@ -175,6 +215,7 @@ export function FilterChips(props: FilterPartProps) {
     ...listOf(query, 'channel').map((value) => ({ key: 'channel' as const, value, label: `${text.channel}: ${text.channels[value as keyof typeof text.channels] ?? value}` })),
     ...(query.source === 'imported' || query.source === 'native' ? [{ key: 'source' as const, label: `${text.source}: ${text.sources[query.source]}` }] : []),
     ...(query.organization ? [{ key: 'organization' as const, label: `${text.organization}: ${query.organization}` }] : []),
+    ...(query.result ? [{ key: 'result' as const, label: resultLabel(query.result, results.data, timezone) }] : []),
     ...dateFilters.flatMap(([name, after, before]) => (query[after] || query[before]
       ? [{ key: after, label: `${text[name]}: ${text.dateRange(query[after] ? zonedDay(query[after], timezone) : undefined, query[before] ? lastDay(query[before], timezone) : undefined)}` }]
       : [])),
@@ -194,6 +235,8 @@ export function FilterChips(props: FilterPartProps) {
             <button type="button" className="chip-remove" aria-label={text.remove(chip.label)} onClick={() => removeChip(chip)}><XIcon /></button></li>))}
       </ul>
       <button type="button" className="link-button" onClick={() => onChange?.({})}>{text.clearAll}</button>
+      {query.result && <a href={query.result.includes(':7d.') ? '/results?window=7d' : '/results'} className="link-button">{text.backToResults}</a>}
+      {query.result && <p className="filter-chips-note">{text.anyStatus}</p>}
     </div>
   );
 }

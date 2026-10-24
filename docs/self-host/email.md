@@ -35,6 +35,10 @@ domain the relay is allowed to send for.
 The relay must be allowed to send for the From domain. Set up SPF and DKIM for that domain with
 your relay provider, or receiving servers will mark replies as spam.
 
+Mail the server writes by itself (import notices, the weekly [results](../user/results.md) email to
+admins) leaves from `noreply@<MAIL_FROM_DOMAIN>` through the same relay, so it needs `SMTP_HOST` and
+`MAIL_FROM_DOMAIN`. Without them the results page says the weekly email cannot be sent.
+
 If outgoing email cannot work, replies still appear on the timeline with **Delivery failed** and
 the reason, and the composer shows a notice. Fix the cause, then select **Retry delivery**.
 

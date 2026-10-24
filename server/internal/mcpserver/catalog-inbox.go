@@ -43,6 +43,7 @@ func inboxSearchSpec() Spec {
 			`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest"],"default":"updated_desc",` +
 			`"description":"priority: urgent first. waiting_longest: conversations awaiting the team, the oldest customer message first, then the rest."},` +
 			`"q":{"type":"string","maxLength":200,"description":"Words to find in the subject, in any message text, or in the customer's name or email."},` +
+			`"result":{"type":"string","maxLength":120,"pattern":"^[0-9a-f-]{36}:(30d|7d)\\.[a-z_]+$","description":"Only the conversations one number of colliedesk_results_get counts: <snapshot id>:<window>.<metric>, for example <current id>:30d.first_response. Leave status out: a number counts any status."},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20,"description":"Rows per page."},` +
 			`"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page. Keep every other argument the same."},` +
 			detailProperty + `}}`,

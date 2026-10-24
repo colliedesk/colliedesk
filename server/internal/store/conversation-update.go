@@ -50,6 +50,11 @@ func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 			return domain.Conversation{}, err
 		}
 	}
+	if update.Status != nil {
+		if err := setStatusActor(ctx, tx, update.ActorID); err != nil {
+			return domain.Conversation{}, err
+		}
+	}
 	result, err := tx.Exec(ctx, `UPDATE conversations SET
 		status=COALESCE($3,status),priority=COALESCE($4,priority),
 		assigned_at=CASE WHEN $5 AND assignee_id IS DISTINCT FROM $6::uuid THEN (CASE WHEN $6::uuid IS NULL THEN NULL ELSE now() END) ELSE assigned_at END,

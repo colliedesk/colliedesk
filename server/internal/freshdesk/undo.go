@@ -9,6 +9,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -128,6 +129,9 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 	result.Files = len(orphans)
 	if options.DryRun {
 		return result, nil
+	}
+	if err := results.MarkImportUndone(ctx, tx, workspaceID, source); err != nil {
+		return UndoResult{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return UndoResult{}, fmt.Errorf("commit undo: %w", err)

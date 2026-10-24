@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -122,6 +123,23 @@ func conversationFilterFromQuery(query url.Values) (store.ConversationFilter, er
 		*target = &parsed
 	}
 	return filter, nil
+}
+
+// resultFilterFromQuery reads the result filter of GET /conversations: `<snapshot id>:<window>.<metric>`.
+// It is not a saved view filter: a snapshot is replaced every hour or so.
+func resultFilterFromQuery(query url.Values, filter *store.ConversationFilter) error {
+	value := query.Get("result")
+	if value == "" {
+		return nil
+	}
+	snapshot, metric, ok := strings.Cut(value, ":")
+	window, name, named := strings.Cut(metric, ".")
+	if !ok || !named || !contactIDPattern.MatchString(snapshot) || !slices.ContainsFunc(results.Windows, func(w results.Window) bool { return w.Key == window }) ||
+		!slices.Contains(results.Metrics, name) {
+		return filterError("result must name a number of the results page: <snapshot id>:<window>.<metric>, as GET /results gives them.")
+	}
+	filter.ResultSnapshotID, filter.ResultMetric = snapshot, metric
+	return nil
 }
 
 // commaList splits a comma-separated value, refusing empty items, unknown values and more than 50.

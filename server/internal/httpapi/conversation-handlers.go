@@ -102,6 +102,9 @@ func (a *API) listConversations(response http.ResponseWriter, request *http.Requ
 		pageSize = 100
 	}
 	filter, err := conversationFilterFromQuery(query)
+	if err == nil {
+		err = resultFilterFromQuery(query, &filter)
+	}
 	if message, invalid := isFilterError(err); invalid {
 		writeError(response, http.StatusBadRequest, "invalid_request", message)
 		return
