@@ -274,8 +274,10 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
   const prefix = useId();
   const channel = detail.data;
   const ui = channel ? channelUI(channel.type) : undefined;
+  // The inbox reads the channel too (its type's settings, the conversations' channel_ref), so they reload.
   const removed = async () => {
-    await client.invalidateQueries({ queryKey: ['channels'] });
+    const keys = ['channels', 'channel-events', 'conversations', ...(ui?.caches ?? [])];
+    await client.invalidateQueries({ predicate: (query) => keys.includes(String(query.queryKey[0])) });
     client.removeQueries({ queryKey: ['channel', id] });
     navigate(base, true);
   };

@@ -334,6 +334,25 @@ test('disconnecting email that holds nothing removes the channel and goes back t
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings/channels', true));
 });
 
+test('removing a channel reloads what the inbox reads of it: its own settings, the conversations and the history', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  channelsApi.remove.mockResolvedValue(undefined);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['email-channel'], withChannel);
+  client.setQueryData(['conversations', {}], { items: [] });
+  client.setQueryData(['channel-events', ''], { pages: [], pageParams: [] });
+  const navigate = vi.fn();
+  render(<QueryClientProvider client={client}><ChannelsRoute path={EMAIL} search={{}} navigate={navigate} /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Disconnect email' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Yes, disconnect' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings/channels', true));
+  // Marked stale, or already read again when the page still shows it.
+  for (const key of [['email-channel'], ['conversations', {}], ['channel-events', '']]) {
+    const state = client.getQueryState(key);
+    expect(Boolean(state?.isInvalidated) || (state?.dataUpdateCount ?? 0) > 1, JSON.stringify(key)).toBe(true);
+  }
+});
+
 test('creating the inbound secret reloads the channel, so its state and notice follow', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'needs_attention', reason_code: 'no_inbound_secret', message: null } }), config: withChannel.channel });
   api.emailChannel.mockResolvedValue({ ...withChannel, channel: { ...withChannel.channel, secret_set: false, secret_rotated_at: null } });
