@@ -15,7 +15,8 @@ You do not run a forwarder or a Worker. A workspace started from the sign-up pag
 that address at once: its Support address is set to it. To keep your own address for customers,
 change where your mailbox forwards:
 
-1. Open **Settings → Email channel** and enter your **Support address**, for example
+1. Open **Settings → Channels**, select **Connect your support email** (or **Email** when it is
+   already connected) and enter your **Support address**, for example
    `support@example.com`. Select **Save support address**. A workspace created another way accepts
    mail only after this step. The button reads "Saving…" until the save ends, then "Saved" appears
    next to it.
@@ -45,7 +46,7 @@ renaming the workspace does not change it.
 
 A new channel starts with the workspace name. To change it:
 
-1. Open **Settings → Email channel**. The field appears once a support address is saved.
+1. Open **Settings → Channels → Email → Replies**. The field appears once a support address is saved.
 2. Enter the name in **Sender name** and select **Save sender name**.
 
 The next reply uses the new name, on every way a reply leaves: your own domain, the
@@ -76,7 +77,7 @@ requirements, with a link to the [privacy policy](https://colliedesk.com/privacy
 A self-hosted server shows no such link: it sends through your own Google OAuth client (see below).
 
 1. Connect the email channel first (a saved Support address).
-2. Open **Settings → Email channel → Send from Gmail** and select **Connect Gmail**.
+2. Open **Settings → Channels → Email → Replies → Send from Gmail** and select **Connect Gmail**.
 3. Google asks you to choose the account and allow **Send email on your behalf**. Leave that box
    ticked. Google then brings you back to Settings, which says whether Gmail is connected and, if not,
    why.
@@ -112,12 +113,12 @@ On a server you run, Gmail sending needs your own Google OAuth client. See
 
 Until your domain is verified, replies are sent as **"<sender name> via Colliedesk"** from a
 `reply+…@` address on the server's sending domain, with `Reply-To` set to your support address.
-Customer replies still reach you and thread. **Settings → Email channel** shows **Replies are sent
+Customer replies still reach you and thread. **Settings → Channels → Email → Replies** shows **Replies are sent
 from …** with the current address. Verify the domain to send as your support address.
 
 **Colliedesk Cloud** verifies in two steps:
 
-1. Publish the TXT record shown in **Settings → Email channel** (**TXT record name**, for example
+1. Publish the TXT record shown in **Settings → Channels → Email → Replies** (**TXT record name**, for example
    `_colliedesk.example.com`, and **TXT record value**). It proves you control the domain. Select
    **Verify domain**; until the TXT record is found, Colliedesk asks for it and does nothing else.
 2. Colliedesk then lists a table **DNS records to publish** (DKIM, SPF and an MX record for bounces),
@@ -140,7 +141,7 @@ address until you verify it again.
 
 **Your own server** verifies with one TXT record, unless its operator set it up like Cloud:
 
-1. In **Settings → Email channel**, copy the **TXT record name** (for example
+1. In **Settings → Channels → Email → Replies**, copy the **TXT record name** (for example
    `_colliedesk.example.com`) and the **TXT record value**.
 2. Add that TXT record at your DNS provider.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
@@ -156,7 +157,7 @@ Colliedesk counts spam complaints per workspace. A workspace is
 paused when it has **3 or more complaints in the last 7 days and they are more than 0.3% of the
 replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does not pause; 4 does).
 
-- **Settings → Email channel** shows **Email sending is paused** with the counts. Admins cannot lift it.
+- **Settings → Channels → Email → Replies** shows **Email sending is paused** with the counts. Admins cannot lift it.
 - Replies written during the pause stay **Queued** with the note "Email sending is paused after spam
   complaints; contact support." Nothing is failed and no attempt is used up. They are sent after
   the pause ends.

@@ -20,17 +20,24 @@ and its state:
 
 ## Add a channel
 
-Select **Add channel** and pick a type. A workspace has one email channel and one web form for now;
-a type you already have cannot be picked again. The channel exists once you save its first settings:
-for email, the support address.
+Select **Add channel** and pick a type (with no channel yet, the page lists the types at once:
+**Connect your support email**, **Add a web form**). A workspace has one email channel and one web
+form for now; a type you already have cannot be picked again ("One per workspace for now"). Live chat
+is listed as not available yet. The channel exists once you save its first settings: for email, the
+support address; for the web form, its allowed origins.
+
+Each channel has its own page with its type's tabs (email: **Connection**, how mail arrives, and
+**Replies**, how replies leave; web form: **Embed**) and **History**. Old links to the email and web
+form sections of Settings open these pages.
 
 ## Turn a channel off
 
 Turning a channel off keeps its settings and its conversations. While it is off:
 
 - **Email**: mail that arrives is kept, not opened. The channel shows **N messages arrived while
-  off**; an admin opens them as conversations (as they would have been had the channel been on),
-  adds them to an existing conversation, or discards them. Discarding cannot be undone; the history
+  off**; an admin opens them as conversations (**Open them as conversations**, as they would have
+  been had the channel been on) or discards them (**Discard N messages…**). Through the API they can
+  also be added to an existing conversation. Discarding cannot be undone; the history
   keeps how many. Kept messages count toward your storage until they are opened or discarded.
 - **Web form**: submissions are refused exactly as if the form did not exist, so the address of your
   form cannot be probed.
@@ -38,12 +45,16 @@ Turning a channel off keeps its settings and its conversations. While it is off:
   was off. After you turn the channel on, select **Retry** on the reply; nothing is sent again by
   itself. The channel shows how many replies wait.
 
-Turning it on again starts receiving and sending at once.
+Turning a channel off asks first. The composer of a conversation whose replies leave through a
+channel that is off says so ("Email is off: this reply is saved but not sent until the channel is
+on"), with a link to the channel for an admin. Turning it on again starts receiving and sending at
+once.
 
 ## Remove a channel
 
 Removing a channel deletes its settings and secrets. Its conversations and their messages stay and
-still name it ("Email (removed)"). Removing email is the same as **Disconnect** on the email page.
+still name it ("Email (removed)"). Removing email is **Disconnect email** on its **Connection** tab; other channels have
+**Remove channel**, which asks first.
 Adding the type again makes a new channel; conversations of a removed email channel are answered
 through the new one.
 

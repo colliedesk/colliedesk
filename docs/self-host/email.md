@@ -44,7 +44,7 @@ the reason, and the composer shows a notice. Fix the cause, then select **Retry 
 
 ## 2. Connect the support address (admin)
 
-1. Open **Settings → Email channel**.
+1. Open **Settings → Channels** and select **Connect your support email** (or **Email**).
 2. Enter the **Support address**, for example `support@example.com`, and select
    **Save support address**.
 3. Select **Create inbound secret**. Copy the **Inbound secret** now. It is shown only once.

@@ -56,8 +56,12 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     // Connect the support address: replies now go out by email.
     const support = `support-${suffix}@acme.example`;
     await page.getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Channels' }).click();
+    await page.getByRole('link', { name: 'Connect your support email' }).click();
     await page.getByRole('textbox', { name: 'Support address' }).fill(support);
     await page.getByRole('button', { name: 'Save support address' }).click();
+    // The channel's page opens on its Connection tab; how replies leave is on Replies.
+    await page.getByRole('tab', { name: 'Replies' }).click();
     await expect(page.getByText(`Replies are sent from ${support}.`)).toBeVisible();
 
     // Answer a first conversation: a customer who wrote in Freshdesk (ticket 296, open, an active contact)

@@ -14,16 +14,17 @@ It works the same on self-hosted installs and on Colliedesk Cloud.
 
 ## Turn it on
 
-1. Open **Settings → Web form** (admins only; agents see the state).
+1. Open **Settings → Channels**, select **Add a web form** (or **Add channel → Add a web form**)
+   (admins only; agents see the state).
 2. Under **Allowed origins** list every site that hosts the form, one per line, for example
    `https://example.com`. An origin is scheme, host and optional port, exactly as the browser shows
    it. No path, no trailing slash, no wildcard. `https://example.com` and `https://www.example.com`
    are two origins. At most 20.
-3. Select **Accept web form submissions** and **Save web form**. The button reads "Saving…" and
-   stays disabled until the save ends. Then "Saved" appears next to it, or the reason the save failed.
+3. Select **Save web form**. The button reads "Saving…" and stays disabled until the save ends. The
+   form is added and on; its page opens on the **Embed** tab, where you change the origins later.
 
-The form is **off** until you do this. Clear the checkbox and save to turn it off again; your
-origins stay saved. While it is off, the form answers `404`, the same as a workspace that does not
+The form is **off** until you add it. Turn it off and on again with its switch in **Settings →
+Channels** (see [Channels](channels.md#turn-a-channel-off)); your origins stay saved. While it is off, the form answers `404`, the same as a workspace that does not
 exist. A locked workspace (trial over, nothing paid) answers the same way.
 
 ## Send a submission
