@@ -112,9 +112,7 @@ func tokenCreateRequestSpec() Spec {
 		`Ask for a new agent token with a label and either a tier (scope) or its own list of permissions (resource:action, for example kb_articles:update). `+
 			`The token belongs to the person who approves, who sees it once and passes it on; it is never shown to you.`,
 		[]string{"POST /api/v1/auth/tokens"},
-		`{"type":"object","additionalProperties":false,"required":["label"],"properties":{"label":{"type":"string","minLength":1,"maxLength":80},`+
-			`"scope":{"type":"string","enum":["read","draft","send","admin"],"description":"A tier. admin only when the approving person is an admin. Leave out with permissions."},`+
-			`"permissions":{"type":"array","minItems":1,"items":{"type":"string","enum":`+permissionEnum()+`},"description":"A custom token's permissions instead of a tier; an admin-only one needs an admin to approve."}}}`, tokenCreateRequest)
+		tokenRequestInput(), tokenCreateRequest)
 }
 
 func workspaceExportRequestSpec() Spec {
@@ -164,12 +162,26 @@ func workspaceSlugRequestSpec() Spec {
 		`{"type":"object","additionalProperties":false,"required":["slug"],"properties":{"slug":{"type":"string","minLength":1,"maxLength":63}}}`, workspaceSlugRequest)
 }
 
-// permissionEnum is the JSON array of every permission a token can hold.
-func permissionEnum() string {
+// tokenRequestInput is the input schema of colliedesk_token_create_request, built as JSON so the
+// permission list comes from auth.TokenPermissions as data, never pasted into a string.
+func tokenRequestInput() string {
 	names := []string{}
 	for _, item := range auth.TokenPermissions() {
 		names = append(names, item.Name)
 	}
-	encoded, _ := json.Marshal(names)
+	schema := map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"label"},
+		"properties": map[string]any{
+			"label": map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+			"scope": map[string]any{"type": "string", "enum": auth.ScopeNames,
+				"description": "A tier. admin only when the approving person is an admin. Leave out with permissions."},
+			"permissions": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "enum": names},
+				"description": "A custom token's permissions instead of a tier; an admin-only one needs an admin to approve."},
+		},
+	}
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		panic(err)
+	}
 	return string(encoded)
 }
