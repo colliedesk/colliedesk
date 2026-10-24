@@ -159,6 +159,9 @@ CREATE INDEX channel_inbound_events_channel_idx ON channel_inbound_events(worksp
 CREATE INDEX channel_inbound_events_due_idx ON channel_inbound_events(flush_at) WHERE state = 'pending';
 CREATE INDEX channel_inbound_events_retry_idx ON channel_inbound_events(received_at) WHERE state IN ('received', 'failed');
 CREATE INDEX channel_inbound_events_held_idx ON channel_inbound_events(workspace_id, channel_id, hold_reason) WHERE state = 'held';
+-- An object a waiting event points at is not deleted with the attachment that shared it.
+CREATE INDEX channel_inbound_events_object_idx ON channel_inbound_events(workspace_id, raw_object_key)
+    WHERE raw_object_key IS NOT NULL AND state IN ('received', 'pending', 'held', 'failed');
 CREATE INDEX channel_inbound_events_sender_idx ON channel_inbound_events(workspace_id, channel_id, sender_key, received_at)
     WHERE sender_key IS NOT NULL;
 

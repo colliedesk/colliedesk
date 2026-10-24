@@ -1,0 +1,226 @@
+package channeltest_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
+	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
+	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type loopDesk struct {
+	pool                 *pgxpool.Pool
+	store                *store.Store
+	pipeline             *pipeline.Pipeline
+	clock                *time.Time
+	workspaceID, agentID string
+	channel              channels.Channel
+}
+
+func newLoopDesk(t *testing.T, loop *channeltest.Loopback) loopDesk {
+	t.Helper()
+	pool, st := loopbackStore(t, loop)
+	ctx := context.Background()
+	workspace, _, err := auth.New(pool, "https://desk.example.com").CreateWorkspace(ctx, "Loop Desk", "admin@loop.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var agentID string
+	if err := pool.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1`, workspace.ID).Scan(&agentID); err != nil {
+		t.Fatal(err)
+	}
+	channel, err := st.CreateChannel(ctx, workspace.ID, loop.Type, store.ChannelInput{Config: json.RawMessage(`{"account":"oa-1"}`)}, store.ChannelActor{AgentID: agentID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Now().UTC()
+	return loopDesk{pool: pool, store: st, pipeline: pipeline.New(st, func() time.Time { return clock }), clock: &clock,
+		workspaceID: workspace.ID, agentID: agentID, channel: channel}
+}
+
+func (d loopDesk) send(t *testing.T, events ...channeltest.LoopbackEvent) {
+	t.Helper()
+	raws := make([]channels.Raw, len(events))
+	for i, event := range events {
+		encoded, _ := json.Marshal(event)
+		raws[i] = channels.Raw{ExternalEventID: event.ID, JSON: encoded}
+	}
+	if _, err := d.pipeline.Receive(context.Background(), d.channel, raws); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.pipeline.ProcessDue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (d loopDesk) one(t *testing.T, query string, args ...any) string {
+	t.Helper()
+	var value string
+	if err := d.pool.QueryRow(context.Background(), query, append([]any{d.workspaceID}, args...)...).Scan(&value); err != nil {
+		t.Fatalf("%s: %v", query, err)
+	}
+	return value
+}
+
+// Messages of one sender are collected until the sender is quiet, then open one conversation; a
+// confirmation sends them at once and a cancel throws them away.
+func TestCollectedMessagesOpenOneConversation(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	d.send(t, channeltest.LoopbackEvent{ID: "c1", From: "u1", Text: "Hi", Collect: true},
+		channeltest.LoopbackEvent{ID: "c2", From: "u1", Text: "my invoice is wrong", Collect: true, Intent: "command:bug"})
+	if n := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); n != "0" {
+		t.Fatalf("conversations=%s while collecting, want 0", n)
+	}
+	*d.clock = d.clock.Add(11 * time.Second)
+	if _, err := d.pipeline.ProcessDue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if body := d.one(t, `SELECT string_agg(body,'|') FROM messages WHERE workspace_id=$1`); body != "Hi\nmy invoice is wrong" {
+		t.Fatalf("collected body=%q", body)
+	}
+	if got := d.one(t, `SELECT priority||':'||(SELECT string_agg(t.name,',') FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id WHERE ct.conversation_id=c.id)
+		FROM conversations c WHERE workspace_id=$1`); got != "high:bug" {
+		t.Fatalf("command applied %q, want high priority and the bug tag", got)
+	}
+	if n := d.one(t, `SELECT count(*)::text FROM channel_inbound_events WHERE workspace_id=$1 AND state='processed'`); n != "2" {
+		t.Fatalf("processed events=%s, want both", n)
+	}
+
+	d.send(t, channeltest.LoopbackEvent{ID: "c3", From: "u2", Text: "first", Collect: true},
+		channeltest.LoopbackEvent{ID: "c4", From: "u2", Text: "ok send", Collect: true, Intent: channels.IntentConfirm})
+	if _, err := d.pipeline.ProcessDue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); n != "2" {
+		t.Fatalf("conversations=%s after a confirmation, want 2", n)
+	}
+
+	d.send(t, channeltest.LoopbackEvent{ID: "c5", From: "u3", Text: "draft", Collect: true},
+		channeltest.LoopbackEvent{ID: "c6", From: "u3", Text: "never mind", Collect: true, Intent: channels.IntentCancel})
+	*d.clock = d.clock.Add(time.Minute)
+	if _, err := d.pipeline.ProcessDue(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := d.one(t, `SELECT count(*)::text FROM channel_inbound_events WHERE workspace_id=$1 AND drop_reason='cancelled'`); n != "2" {
+		t.Fatalf("cancelled events=%s, want both", n)
+	}
+	if n := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); n != "2" {
+		t.Fatalf("conversations=%s after a cancel, want still 2", n)
+	}
+}
+
+// A customer known only on the channel becomes a contact without email, found again by identity;
+// a sender with an email address joins the contact that has it.
+func TestChannelIdentityMakesAContactWithoutEmail(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	d.send(t, channeltest.LoopbackEvent{ID: "i1", From: "zalo-1", Name: "Minh", Text: "Xin chào"},
+		channeltest.LoopbackEvent{ID: "i2", From: "zalo-1", Name: "Minh Tran", Text: "again", Group: "g1"})
+	if got := d.one(t, `SELECT count(*)::text||':'||COALESCE(max(email),'none') FROM contacts WHERE workspace_id=$1`); got != "1:none" {
+		t.Fatalf("contacts=%s, want one without email", got)
+	}
+	if got := d.one(t, `SELECT display_name FROM contact_identities WHERE workspace_id=$1 AND value='zalo-1'`); got != "Minh Tran" {
+		t.Fatalf("identity name=%q, want the latest", got)
+	}
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Lan','lan@example.com')`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "i3", From: "zalo-2", Email: "Lan@example.com", Text: "hello"})
+	if got := d.one(t, `SELECT c.email FROM contact_identities i JOIN contacts c ON c.id=i.contact_id WHERE i.workspace_id=$1 AND i.value='zalo-2'`); got != "lan@example.com" {
+		t.Fatalf("identity joined %q, want the contact with that email", got)
+	}
+}
+
+// Echoes are dropped, archived chatter is kept without a conversation, and a report that a reply
+// did not arrive fails its delivery.
+func TestLoopbackKindsOtherThanMessages(t *testing.T) {
+	loop := channeltest.NewLoopback("loopback", channels.Async)
+	d := newLoopDesk(t, loop)
+	d.send(t, channeltest.LoopbackEvent{ID: "k1", From: "u1", Text: "real"})
+	conversationID := d.one(t, `SELECT id::text FROM conversations WHERE workspace_id=$1`)
+	reply, err := d.store.CreateMessage(context.Background(), d.workspaceID, conversationID, store.Actor{AgentID: d.agentID}, "outgoing", "answer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "k2", From: "oa", Text: "answer", Echo: true},
+		channeltest.LoopbackEvent{ID: "k3", From: "u9", Text: "group chatter", Archive: true},
+		channeltest.LoopbackEvent{ID: "k4", From: "u1", Failed: "out-" + reply.ID})
+	if got := d.one(t, `SELECT string_agg(state||':'||COALESCE(drop_reason,''),',' ORDER BY external_event_id) FROM channel_inbound_events
+		WHERE workspace_id=$1 AND external_event_id IN ('k2','k3','k4')`); got != "dropped:echo,processed:,dropped:delivery_update" {
+		t.Fatalf("journal=%s", got)
+	}
+	if got := d.one(t, `SELECT status||':'||last_error_code FROM channel_outbox WHERE workspace_id=$1 AND message_id=$2`, reply.ID); got != "failed:bounced" {
+		t.Fatalf("delivery after the report=%s", got)
+	}
+}
+
+// A secret refreshed by two senders at once is replaced by one of them only.
+func TestChannelCredentialIsReplacedByCompareAndSwap(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	ctx := context.Background()
+	hint, err := d.store.SetChannelCredential(ctx, d.workspaceID, d.channel.ID, "token", "refresh-0001", store.ChannelActor{AgentID: d.agentID})
+	if err != nil || hint != "0001" {
+		t.Fatalf("hint=%q (%v)", hint, err)
+	}
+	_, version, _, err := d.store.OpenChannelCredential(ctx, d.workspaceID, d.channel.ID, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	won, err := d.store.ReplaceChannelCredential(ctx, d.workspaceID, d.channel.ID, "token", "refresh-0002", version, nil)
+	if err != nil || !won {
+		t.Fatalf("first refresh won=%v (%v)", won, err)
+	}
+	lost, err := d.store.ReplaceChannelCredential(ctx, d.workspaceID, d.channel.ID, "token", "refresh-0003", version, nil)
+	if err != nil || lost {
+		t.Fatalf("second refresh with the old version won=%v (%v), want refused", lost, err)
+	}
+	value, _, _, err := d.store.OpenChannelCredential(ctx, d.workspaceID, d.channel.ID, "token")
+	if err != nil || value != "refresh-0002" {
+		t.Fatalf("token=%q (%v)", value, err)
+	}
+	if _, err := d.store.SetChannelCredential(ctx, d.workspaceID, d.channel.ID, "password", "x", store.ChannelActor{}); err == nil {
+		t.Fatal("a secret the type does not declare was stored")
+	}
+}
+
+// One outside account belongs to one channel on the whole server; a second is refused, and the
+// account routes to its workspace.
+func TestExternalAccountIsUniqueAcrossWorkspaces(t *testing.T) {
+	loop := channeltest.NewLoopback("loopback", channels.Async)
+	d := newLoopDesk(t, loop)
+	ctx := context.Background()
+	other, _, err := auth.New(d.pool, "https://desk.example.com").CreateWorkspace(ctx, "Other Desk", "admin@other.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.CreateChannel(ctx, other.ID, loop.Type, store.ChannelInput{Config: json.RawMessage(`{"account":"oa-1"}`)}, store.ChannelActor{}); !errors.Is(err, channels.ErrExternalAccount) {
+		t.Fatalf("second channel of the same account: %v, want ErrExternalAccount", err)
+	}
+	found, ok, err := d.store.ChannelForExternalAccount(ctx, loop.Type, "oa-1")
+	if err != nil || !ok || found.ID != d.channel.ID || found.WorkspaceID != d.workspaceID {
+		t.Fatalf("route oa-1: %+v %v %v", found, ok, err)
+	}
+	if err := d.store.RemoveChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.CreateChannel(ctx, other.ID, loop.Type, store.ChannelInput{Config: json.RawMessage(`{"account":"oa-1"}`)}, store.ChannelActor{}); err != nil {
+		t.Fatalf("the account after its channel was removed: %v", err)
+	}
+}
+
+// A channel can greet the customer: its received notice is a reply that goes out through the outbox.
+func TestReceivedNoticeIsSentThroughTheOutbox(t *testing.T) {
+	loop := channeltest.NewLoopback("loopback", channels.Async)
+	loop.Defaults.Notices.Received = "Thanks, we got your message."
+	d := newLoopDesk(t, loop)
+	d.send(t, channeltest.LoopbackEvent{ID: "n1", From: "u1", Text: "help"})
+	if got := d.one(t, `SELECT m.body||':'||o.status FROM messages m JOIN channel_outbox o ON o.message_id=m.id WHERE m.workspace_id=$1 AND m.kind='outgoing'`); got != "Thanks, we got your message.:queued" {
+		t.Fatalf("notice=%q", got)
+	}
+}

@@ -113,6 +113,9 @@ func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, 
 }
 
 func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) (domain.Message, error) {
+	if s.channels != nil {
+		return s.retryChannelDelivery(ctx, tx, workspaceID, conversationID, messageID)
+	}
 	message, err := getMessage(ctx, tx, workspaceID, messageID)
 	if err != nil || message.ConversationID != conversationID || message.Delivery == nil {
 		return domain.Message{}, fmt.Errorf("retry delivery: not found")

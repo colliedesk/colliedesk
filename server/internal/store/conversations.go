@@ -249,7 +249,7 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 		q.and(negateUnless(*filter.HasPendingDraft, draft))
 	}
 	if filter.DeliveryFailed != nil {
-		failed := `EXISTS(SELECT 1 FROM email_outbox o JOIN messages m ON m.workspace_id=o.workspace_id AND m.id=o.message_id
+		failed := `EXISTS(SELECT 1 FROM channel_outbox o JOIN messages m ON m.workspace_id=o.workspace_id AND m.id=o.message_id
 			WHERE o.workspace_id=c.workspace_id AND o.status='failed' AND m.conversation_id=c.id)`
 		q.and(negateUnless(*filter.DeliveryFailed, failed))
 	}
