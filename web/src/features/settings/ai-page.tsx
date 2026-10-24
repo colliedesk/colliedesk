@@ -716,6 +716,15 @@ function AddDialog({ settings, onClose, onAdd, onListModels }: { settings: AISet
   );
 }
 
+// modelMatches finds a model whatever the punctuation, spacing, case or word order typed:
+// "gpt5 mini", "GPT-5-mini" and "mini gpt5" all find gpt-5-mini; "sonnet 4.6" finds claude-sonnet-4-6.
+function modelMatches(model: string, query: string): boolean {
+  const compact = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  const name = compact(model);
+  const words = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return name.includes(compact(query)) || words.every((word) => name.includes(word));
+}
+
 // ModelPicker lists the models the provider offers this key, to tick instead of typing ids. The picked
 // ones stay on top in the order picked; the first is the default.
 function ModelPicker({ id, list, picked, onPick, error, canLoad, needsAddress, onLoad }: { id: string; list: ModelList; picked: string[]; onPick: (models: string[]) => void;
@@ -723,7 +732,7 @@ function ModelPicker({ id, list, picked, onPick, error, canLoad, needsAddress, o
   const [query, setQuery] = useState('');
   const note = `${id}-note`;
   const models = list.state === 'loaded' ? list.models : [];
-  const shown = models.filter((model) => model.toLowerCase().includes(query.trim().toLowerCase()));
+  const shown = models.filter((model) => modelMatches(model, query));
   const full = picked.length >= maxProviderModels;
   const toggle = (model: string) => onPick(picked.includes(model) ? picked.filter((item) => item !== model) : full ? picked : [...picked, model]);
   return (

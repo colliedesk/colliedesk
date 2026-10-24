@@ -114,6 +114,31 @@ test('adding a provider checks the fields, sends them, and shows a refusal under
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
+test('the model search finds a model whatever punctuation, spacing, case or word order is typed', async () => {
+  const { onListModels } = page();
+  const all = ['gpt-5-mini', 'gpt-5.4-nano', 'gpt-6-sol', 'o3', 'claude-sonnet-4-6', 'claude-opus-4-6', 'gpt-5.6-terra', 'gpt-5', 'gpt-6.1-sol', 'gpt-5.5', 'gpt-6-luna', 'gpt-5.4'];
+  onListModels.mockResolvedValueOnce(all);
+  fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
+  const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
+  fireEvent.click(within(dialog).getByText('OpenAI', { exact: true }));
+  fireEvent.change(within(dialog).getByLabelText('API key'), { target: { value: 'sk-1' } });
+  await act(async () => { fireEvent.blur(within(dialog).getByLabelText('API key')); });
+  const models = within(dialog).getByRole('group', { name: 'Models' });
+  const search = within(models).getByRole('searchbox', { name: 'Search models' });
+  const shown = (query: string) => {
+    fireEvent.change(search, { target: { value: query } });
+    return within(models).queryAllByRole('checkbox').map((box) => box.closest('label')?.textContent?.replace('Default', ''));
+  };
+  expect(shown('gpt5mini')).toEqual(['gpt-5-mini']);
+  expect(shown('GPT 5 Mini')).toEqual(['gpt-5-mini']);
+  expect(shown('mini gpt5')).toEqual(['gpt-5-mini']);
+  expect(shown('gpt 5.4 nano')).toEqual(['gpt-5.4-nano']);
+  expect(shown('sonnet 4.6')).toEqual(['claude-sonnet-4-6']);
+  expect(shown('6.1sol')).toEqual(['gpt-6.1-sol']);
+  expect(shown('  ')).toHaveLength(all.length);
+  expect(shown('gemini')).toEqual([]);
+});
+
 test('the models a key may use are loaded and ticked instead of typed; the first ticked is the default', async () => {
   const { onAdd, onListModels } = page();
   onListModels.mockResolvedValueOnce(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']);

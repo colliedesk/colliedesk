@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 )
@@ -61,7 +62,8 @@ func claudeAnswersColliedesk(model anthropic.ModelInfo) bool {
 
 // Models lists the models of an OpenAI-compatible server (GET {BaseURL}/models), sorted by id, that
 // answer what Colliedesk sends: on the OpenAI API a reasoning chat model (openAIAnswersColliedesk);
-// on a server that lists each model's parameters (OpenRouter), one that takes a JSON schema.
+// on a server that lists each model's parameters (OpenRouter), one that takes a JSON schema. A model
+// past its shutdown or expiration date, or served only in batches, is left out.
 func (p *openAIProvider) Models(ctx context.Context) ([]string, error) {
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(p.endpoint, "/chat/completions")+"/models", nil)
 	if err != nil {
@@ -88,6 +90,11 @@ func (p *openAIProvider) Models(ctx context.Context) ([]string, error) {
 		Data []struct {
 			ID                  string    `json:"id"`
 			SupportedParameters *[]string `json:"supported_parameters"`
+			// ShutdownDate is the day OpenAI turns a model off (YYYY-MM-DD), or null; GET /models
+			// keeps listing a model after it, and every request to it then fails with model_not_found.
+			ShutdownDate *string `json:"shutdown_date"`
+			// ExpirationDate is OpenRouter's: the day after which it may remove the model.
+			ExpirationDate *string `json:"expiration_date"`
 		} `json:"data"`
 	}
 	if len(data) > maxResponseBytes || json.Unmarshal(data, &parsed) != nil {
@@ -95,14 +102,22 @@ func (p *openAIProvider) Models(ctx context.Context) ([]string, error) {
 	}
 	ids := make([]string, 0, len(parsed.Data))
 	seen := map[string]bool{}
+	today := time.Now().UTC().Format(time.DateOnly)
 	for _, model := range parsed.Data {
 		id := strings.TrimSpace(model.ID)
 		if p.openAIHost && !openAIAnswersColliedesk(id) {
 			continue
 		}
-		if model.SupportedParameters != nil && !slices.ContainsFunc(*model.SupportedParameters, func(name string) bool {
-			return name == "structured_outputs" || name == "response_format"
-		}) {
+		if model.ShutdownDate != nil && *model.ShutdownDate != "" && *model.ShutdownDate <= today ||
+			model.ExpirationDate != nil && *model.ExpirationDate != "" && *model.ExpirationDate < today {
+			continue
+		}
+		// An OpenRouter :batch entry answers only its Batch API, never a chat completion.
+		if strings.HasSuffix(id, ":batch") {
+			continue
+		}
+		// OpenRouter names the models that answer a json_schema response_format "structured_outputs".
+		if model.SupportedParameters != nil && !slices.Contains(*model.SupportedParameters, "structured_outputs") {
 			continue
 		}
 		if id != "" && !seen[id] {

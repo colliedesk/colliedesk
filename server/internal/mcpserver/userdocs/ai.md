@@ -39,8 +39,10 @@ the key may use and lists them, so you tick the ones you want instead of typing 
 only models that answer what Colliedesk sends (a JSON answer, and a reasoning effort): for Anthropic,
 the Claude models whose capabilities say so; for OpenAI, its reasoning models (GPT-5 and later, the o
 series), not the older GPT-4 and GPT-3.5 or the image, audio and embedding models; for OpenRouter, the
-models that take structured output. If a check still refuses a model, the message names it. Loading the
-list saves nothing and costs nothing. A server that keeps no list (some self-hosted ones) says so; type
+models that take structured output, without the batch-only entries. A model the provider has retired
+or set to shut down is left out. If a check still refuses a model, the message names it. With many
+models, a search box finds one whatever the punctuation or spacing: `gpt5 mini` finds `gpt-5-mini`.
+Loading the list saves nothing and costs nothing. A server that keeps no list (some self-hosted ones) says so; type
 the model names then, separated by commas.
 
 Pick the models you want to use; the first is the default. Before anything is saved, Colliedesk sends

@@ -111,9 +111,31 @@ func TestOpenAIListsOnlyReasoningChatModels(t *testing.T) {
 	}
 }
 
+func TestOpenAILeavesOutAModelPastItsShutdownDate(t *testing.T) {
+	// GET /models still lists a model OpenAI has turned off; a request to it fails with model_not_found.
+	fake := newFakeAPI(t, http.StatusOK, `{"data":[{"id":"o4-mini","shutdown_date":"2026-10-23"},{"id":"o3","shutdown_date":null},`+
+		`{"id":"gpt-5.1","shutdown_date":"2999-04-01"},{"id":"gpt-6-sol"}]}`)
+	transport := &rewriteTransport{target: fake.server.URL, next: fake.server.Client().Transport}
+	provider, err := NewOpenAICompatible(OpenAIConfig{BaseURL: "https://api.openai.com/v1", APIKey: "sk", HTTPClient: &http.Client{Transport: transport}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models, err := provider.(ModelLister).Models(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"gpt-5.1", "gpt-6-sol", "o3"}; !reflect.DeepEqual(models, want) {
+		t.Fatalf("models = %v, want %v", models, want)
+	}
+}
+
 func TestOpenRouterListsOnlyModelsThatTakeStructuredOutput(t *testing.T) {
 	fake := newFakeAPI(t, http.StatusOK, `{"data":[{"id":"openai/gpt-5","supported_parameters":["max_tokens","response_format","structured_outputs"]},`+
-		`{"id":"meta/llama-2","supported_parameters":["max_tokens"]},{"id":"own/model"}]}`)
+		`{"id":"meta/llama-2","supported_parameters":["max_tokens"]},`+
+		`{"id":"json/object-only","supported_parameters":["max_tokens","response_format"]},{"id":"own/model"},`+
+		`{"id":"openai/gpt-5:batch","supported_parameters":["structured_outputs"]},`+
+		`{"id":"old/model","supported_parameters":["structured_outputs"],"expiration_date":"2026-01-31"},`+
+		`{"id":"soon/model","supported_parameters":["structured_outputs"],"expiration_date":"2999-01-31"}]}`)
 	provider, err := NewOpenAICompatible(OpenAIConfig{BaseURL: fake.server.URL + "/api/v1", APIKey: "sk-or", HTTPClient: fake.server.Client()})
 	if err != nil {
 		t.Fatal(err)
@@ -122,9 +144,10 @@ func TestOpenRouterListsOnlyModelsThatTakeStructuredOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A server that says nothing about its parameters keeps its models; one that says it cannot answer
-	// with a JSON schema does not.
-	if want := []string{"openai/gpt-5", "own/model"}; !reflect.DeepEqual(models, want) {
+	// A server that says nothing about its parameters keeps its models; one that does not name
+	// structured_outputs cannot answer with a JSON schema.
+	// A :batch entry answers only the Batch API; an expired model may be gone.
+	if want := []string{"openai/gpt-5", "own/model", "soon/model"}; !reflect.DeepEqual(models, want) {
 		t.Fatalf("models = %v, want %v", models, want)
 	}
 }
