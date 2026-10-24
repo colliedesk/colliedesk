@@ -114,6 +114,12 @@ type SendResult struct {
 	RetryAt time.Time
 	// HeldByPause marks a deferral because the workspace's sending is paused.
 	HeldByPause bool
+	// Meta replaces what the delivery keeps for the next attempt, on every outcome: a reply sent in
+	// parts records the parts that went, so a retry sends only the rest. Nil keeps it.
+	Meta json.RawMessage
+	// ExternalIDs are every id the channel gave what was sent (a reply sent in parts has several),
+	// also on a failure after some parts went: the copies the channel sends back are known as ours.
+	ExternalIDs []string
 }
 
 // Sent is a successful send.
@@ -144,7 +150,14 @@ type SendKit interface {
 	// ReplaceCredential stores a new value only while the stored version is still version (compare
 	// and swap), so a token that may be used once is refreshed by one sender at a time.
 	ReplaceCredential(ctx context.Context, name, value string, version int64, expiresAt *time.Time) (bool, error)
+	// RefreshCredential refreshes a secret that may be used once: it locks the secret, and when its
+	// version is still seen (no other sender refreshed it meanwhile) calls refresh with the current
+	// value and stores what it returns. It returns the value and version in force afterwards.
+	RefreshCredential(ctx context.Context, name string, seen int64, refresh Refresh) (value string, version int64, err error)
 }
+
+// Refresh exchanges a secret for its successor, with when the successor expires.
+type Refresh func(ctx context.Context, current string) (next string, expiresAt *time.Time, err error)
 
 // OutboundPart is the type's sender.
 type OutboundPart interface {

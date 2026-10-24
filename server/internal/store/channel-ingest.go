@@ -152,6 +152,17 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, fmt.Errorf("check inbound duplicate: %w", err)
 		}
 	}
+	if in.ExternalID != "" {
+		// The copy a channel sends back of what we sent is our own.
+		var ours bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM channel_sent_ids WHERE workspace_id=$1 AND channel_id=$2 AND external_id=$3)`,
+			workspaceID, channel.ID, in.ExternalID).Scan(&ours); err != nil {
+			return result, fmt.Errorf("check sent ids: %w", err)
+		}
+		if ours {
+			return drop(channels.DropEcho)
+		}
+	}
 	if in.Kind == channels.KindDeliveryUpdate && in.Delivery != nil {
 		if err := applyDeliveryUpdate(ctx, tx, channel, *in.Delivery); err != nil {
 			return result, err

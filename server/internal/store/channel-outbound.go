@@ -385,11 +385,30 @@ func (s *Store) FinishOutbox(ctx context.Context, claim OutboxClaim, result chan
 	default:
 		set, args = `status='failed',last_error=$4,last_error_code=NULLIF($5,'')`, []any{result.Reason, result.Code}
 	}
+	var meta []byte
+	if len(result.Meta) > 0 {
+		meta = result.Meta
+	}
+	args = append(args, meta)
+	set += fmt.Sprintf(",meta=COALESCE($%d,meta)", len(args)+3)
 	updated, err := scoped(ctx, s, claim.WorkspaceID, func(tx pgx.Tx) (int64, error) {
 		tag, err := tx.Exec(ctx, `UPDATE channel_outbox SET `+set+fmt.Sprintf(",held_by_pause=%t", result.HeldByPause)+`,locked_until=NULL,claim_token=NULL,updated_at=now()
 			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3::uuid AND status='queued'`,
 			append([]any{claim.WorkspaceID, claim.OutboxID, claim.ClaimToken}, args...)...)
-		return tag.RowsAffected(), err
+		if err != nil || tag.RowsAffected() != 1 {
+			return tag.RowsAffected(), err
+		}
+		ids := result.ExternalIDs
+		if result.ExternalID != "" {
+			ids = append(ids, result.ExternalID)
+		}
+		if len(ids) > 0 && claim.ChannelID != "" {
+			if _, err := tx.Exec(ctx, `INSERT INTO channel_sent_ids(workspace_id,channel_id,external_id,message_id)
+				SELECT $1,$2,id,$3 FROM unnest($4::text[]) id ON CONFLICT DO NOTHING`, claim.WorkspaceID, claim.ChannelID, claim.MessageID, ids); err != nil {
+				return 0, fmt.Errorf("record sent ids: %w", err)
+			}
+		}
+		return 1, nil
 	})
 	if err != nil {
 		return fmt.Errorf("update delivery %s: %w", claim.OutboxID, err)

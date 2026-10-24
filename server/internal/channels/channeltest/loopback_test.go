@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
+	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -222,5 +226,80 @@ func TestReceivedNoticeIsSentThroughTheOutbox(t *testing.T) {
 	d.send(t, channeltest.LoopbackEvent{ID: "n1", From: "u1", Text: "help"})
 	if got := d.one(t, `SELECT m.body||':'||o.status FROM messages m JOIN channel_outbox o ON o.message_id=m.id WHERE m.workspace_id=$1 AND m.kind='outgoing'`); got != "Thanks, we got your message.:queued" {
 		t.Fatalf("notice=%q", got)
+	}
+}
+
+// A reply sent in parts that fails halfway keeps what went: the retry sends only the rest, and every
+// part's id is known, so the copies the channel sends back are dropped as our own.
+func TestReplySentInPartsResumesAndKnowsItsEchoes(t *testing.T) {
+	loop := channeltest.NewLoopback("loopback", channels.Async)
+	loop.PartSize = 5
+	d := newLoopDesk(t, loop)
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "p0", From: "u1", Text: "long question"})
+	conversationID := d.one(t, `SELECT id::text FROM conversations WHERE workspace_id=$1`)
+	reply, err := d.store.CreateMessage(ctx, d.workspaceID, conversationID, store.Actor{AgentID: d.agentID}, "outgoing", "abcdefghijklmno")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Now().UTC().Add(time.Minute)
+	worker := outbox.New(d.store, outbox.Options{Now: func() time.Time { return clock }})
+	loop.Endpoint.FailPartOnce(2)
+	if _, err := worker.ProcessDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT status||':'||(meta->>'sent') FROM channel_outbox WHERE workspace_id=$1 AND message_id=$2`, reply.ID); got != "queued:1" {
+		t.Fatalf("after part 2 failed: %s, want queued with one part sent", got)
+	}
+	clock = clock.Add(outbox.Backoff(1) + time.Second)
+	if _, err := worker.ProcessDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var texts []string
+	for _, sent := range loop.Endpoint.Sent() {
+		texts = append(texts, sent.Text)
+	}
+	if strings.Join(texts, "|") != "abcde|fghij|klmno" {
+		t.Fatalf("parts sent=%v, want each once", texts)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM channel_sent_ids WHERE workspace_id=$1 AND message_id=$2`, reply.ID); got != "3" {
+		t.Fatalf("sent ids=%s, want 3", got)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "part-2-" + reply.ID, From: "oa", Text: "fghij"})
+	if got := d.one(t, `SELECT state||':'||drop_reason FROM channel_inbound_events WHERE workspace_id=$1 AND external_event_id=$2`, "part-2-"+reply.ID); got != "dropped:echo" {
+		t.Fatalf("the echo of a part: %s", got)
+	}
+}
+
+// Two senders that find a token expired at once refresh it once; the second gets the new token.
+func TestOneTimeTokenIsRefreshedOnce(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	ctx := context.Background()
+	if _, err := d.store.SetChannelCredential(ctx, d.workspaceID, d.channel.ID, "token", "expired", store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	_, version, _, err := d.store.OpenChannelCredential(ctx, d.workspaceID, d.channel.ID, "token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	refresh := func(ctx context.Context, current string) (string, *time.Time, error) {
+		calls.Add(1)
+		time.Sleep(50 * time.Millisecond)
+		return "fresh", nil, nil
+	}
+	var wg sync.WaitGroup
+	values := make([]string, 2)
+	errs := make([]error, 2)
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			values[i], _, errs[i] = d.store.RefreshChannelCredential(ctx, d.workspaceID, d.channel.ID, "token", version, refresh)
+		}()
+	}
+	wg.Wait()
+	if calls.Load() != 1 || values[0] != "fresh" || values[1] != "fresh" || errs[0] != nil || errs[1] != nil {
+		t.Fatalf("refresh calls=%d values=%v errs=%v, want one refresh both see", calls.Load(), values, errs)
 	}
 }

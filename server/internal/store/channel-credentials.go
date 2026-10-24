@@ -121,3 +121,46 @@ func (s *Store) ReplaceChannelCredential(ctx context.Context, workspaceID, chann
 		return tag.RowsAffected() == 1, err
 	})
 }
+
+// RefreshChannelCredential locks a secret and, when its version is still seen, replaces it with what
+// refresh returns; otherwise another sender refreshed it, and its value is returned as is. The lock
+// is held while refresh runs, so two senders never spend a token that may be used once.
+func (s *Store) RefreshChannelCredential(ctx context.Context, workspaceID, channelID, name string, seen int64, refresh channels.Refresh) (string, int64, error) {
+	if !s.sealKeys.Configured() {
+		return "", 0, ErrSealKeysMissing
+	}
+	type state struct {
+		value   string
+		version int64
+	}
+	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (state, error) {
+		var keyID string
+		var sealed []byte
+		var version int64
+		if err := tx.QueryRow(ctx, `SELECT key_id,sealed,version FROM channel_credentials WHERE workspace_id=$1 AND channel_id=$2 AND name=$3 FOR UPDATE`,
+			workspaceID, channelID, name).Scan(&keyID, &sealed, &version); err != nil {
+			return state{}, fmt.Errorf("lock channel secret: %w", err)
+		}
+		current, err := s.sealKeys.Open(keyID, sealed, credentialContext(workspaceID, channelID, name))
+		if err != nil {
+			return state{}, fmt.Errorf("open channel secret: %w", err)
+		}
+		if version != seen {
+			return state{string(current), version}, nil
+		}
+		next, expiresAt, err := refresh(ctx, string(current))
+		if err != nil {
+			return state{}, err
+		}
+		nextKey, nextSealed, err := s.sealKeys.Seal([]byte(next), credentialContext(workspaceID, channelID, name))
+		if err != nil {
+			return state{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE channel_credentials SET key_id=$4,sealed=$5,hint=NULLIF($6,''),expires_at=$7,version=version+1,updated_at=now()
+			WHERE workspace_id=$1 AND channel_id=$2 AND name=$3`, workspaceID, channelID, name, nextKey, nextSealed, credentialHint(next), expiresAt); err != nil {
+			return state{}, fmt.Errorf("store refreshed secret: %w", err)
+		}
+		return state{next, version + 1}, nil
+	})
+	return got.value, got.version, err
+}

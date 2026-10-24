@@ -66,6 +66,24 @@ type Endpoint struct {
 	sent []Sent
 	// next results, used in order; empty sends successfully.
 	next []channels.SendResult
+	// failPart makes the send of this part (counted from 1) fail once, after the parts before it went.
+	failPart int
+	// refreshes counts the token refreshes the endpoint granted.
+	refreshes int
+}
+
+// FailPartOnce makes the next send fail at part n, after the parts before it went.
+func (e *Endpoint) FailPartOnce(n int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.failPart = n
+}
+
+// Refreshes counts the token refreshes granted.
+func (e *Endpoint) Refreshes() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.refreshes
 }
 
 // Script makes the next sends give these results in order.
@@ -90,6 +108,8 @@ type Loopback struct {
 	Defaults channels.Settings
 	// Quiet and Max are the collecting windows of a message with Collect.
 	Quiet, Max time.Duration
+	// PartSize splits a longer reply into parts of this many bytes; zero sends one part.
+	PartSize int
 }
 
 // NewLoopback returns the Async loopback type with an endpoint.
@@ -266,23 +286,33 @@ func (loopbackOutbound) Prepare(_ context.Context, _ pgx.Tx, request channels.Pr
 func (o loopbackOutbound) Send(ctx context.Context, out channels.Outbound, kit channels.SendKit) channels.SendResult {
 	endpoint := o.l.Endpoint
 	endpoint.mu.Lock()
-	defer endpoint.mu.Unlock()
-	result := channels.Sent("")
 	if len(endpoint.next) > 0 {
-		result, endpoint.next = endpoint.next[0], endpoint.next[1:]
-	}
-	if result.Outcome != channels.OutcomeSent {
+		result := endpoint.next[0]
+		endpoint.next = endpoint.next[1:]
+		endpoint.mu.Unlock()
 		return result
 	}
+	endpoint.mu.Unlock()
 	to := ""
 	for _, identity := range out.Recipient.Identities {
 		if identity.Kind == LoopbackIdentity {
 			to = identity.Value
 		}
 	}
-	token, _, _, err := kit.Credential(ctx, "token")
+	token, version, _, err := kit.Credential(ctx, "token")
 	if err != nil {
 		return channels.Retry(err.Error())
+	}
+	if token == "expired" {
+		token, _, err = kit.RefreshCredential(ctx, "token", version, func(context.Context, string) (string, *time.Time, error) {
+			endpoint.mu.Lock()
+			defer endpoint.mu.Unlock()
+			endpoint.refreshes++
+			return fmt.Sprintf("fresh-%d", endpoint.refreshes), nil, nil
+		})
+		if err != nil {
+			return channels.Retry(err.Error())
+		}
 	}
 	files := make([]string, 0, len(out.Message.Files))
 	for _, file := range out.Message.Files {
@@ -294,9 +324,36 @@ func (o loopbackOutbound) Send(ctx context.Context, out channels.Outbound, kit c
 		body.Close()
 		files = append(files, file.Name+"="+string(data))
 	}
-	external := "out-" + out.Message.ID
-	endpoint.sent = append(endpoint.sent, Sent{ChannelID: out.Channel.ID, To: to, Text: out.Message.Body, ExternalID: external,
-		References: out.References, Files: files, Token: token})
-	result.ExternalID = "remote-" + out.Message.ID
+	parts := []string{out.Message.Body}
+	if size := o.l.PartSize; size > 0 {
+		parts = nil
+		for body := out.Message.Body; body != ""; {
+			n := min(size, len(body))
+			parts, body = append(parts, body[:n]), body[n:]
+		}
+	}
+	var progress struct {
+		Sent int `json:"sent"`
+	}
+	_ = json.Unmarshal(out.Prepared, &progress)
+	var ids []string
+	endpoint.mu.Lock()
+	defer endpoint.mu.Unlock()
+	for i := progress.Sent; i < len(parts); i++ {
+		if endpoint.failPart == i+1 {
+			endpoint.failPart = 0
+			meta, _ := json.Marshal(map[string]int{"sent": i})
+			result := channels.Retry(fmt.Sprintf("part %d of %d did not go", i+1, len(parts)))
+			result.Meta, result.ExternalIDs = meta, ids
+			return result
+		}
+		id := fmt.Sprintf("part-%d-%s", i+1, out.Message.ID)
+		ids = append(ids, id)
+		endpoint.sent = append(endpoint.sent, Sent{ChannelID: out.Channel.ID, To: to, Text: parts[i], ExternalID: id,
+			References: out.References, Files: files, Token: token})
+	}
+	meta, _ := json.Marshal(map[string]int{"sent": len(parts)})
+	result := channels.Sent("")
+	result.Meta, result.ExternalIDs = meta, ids
 	return result
 }

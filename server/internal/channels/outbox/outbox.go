@@ -184,3 +184,7 @@ func (k kit) Credential(ctx context.Context, name string) (string, int64, bool, 
 func (k kit) ReplaceCredential(ctx context.Context, name, value string, version int64, expiresAt *time.Time) (bool, error) {
 	return k.worker.store.ReplaceChannelCredential(ctx, k.workspaceID, k.channelID, name, value, version, expiresAt)
 }
+
+func (k kit) RefreshCredential(ctx context.Context, name string, seen int64, refresh channels.Refresh) (string, int64, error) {
+	return k.worker.store.RefreshChannelCredential(ctx, k.workspaceID, k.channelID, name, seen, refresh)
+}
