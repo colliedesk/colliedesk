@@ -496,3 +496,17 @@ func TestChannelHistoryNamesWhatChangedAndHowMany(t *testing.T) {
 		}
 	}
 }
+
+// A web form conversation in a workspace without email keeps its live channel and says no channel
+// carries its replies yet; the web app tells it apart from a removed channel by deleted.
+func TestAWebFormConversationWithoutEmailIsNotARemovedChannel(t *testing.T) {
+	f := newWebFormFixture(t, nil)
+	f.enable(t, f.adminA)
+	if response := f.submit(f.slugA, `{"email":"x@example.com","message":"hi"}`, "", "203.0.113.60:1"); response.Code != http.StatusAccepted {
+		t.Fatalf("submit: %d", response.Code)
+	}
+	list := request(t, f.api, http.MethodGet, "/api/v1/conversations", nil, f.adminA, nil)
+	if !strings.Contains(list.Body.String(), `"type":"web_form","name":"Web form","enabled":true,"deleted":false,"replies_via":null`) {
+		t.Fatalf("channel_ref of a web form conversation without email: %s", list.Body.String())
+	}
+}

@@ -863,3 +863,55 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/55555555-5555-4555-8555-555555555555' });
   navigate.mockRestore();
 });
+
+test('a web form conversation with no email connected can still be answered, and the box says to connect email', async () => {
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'web_form', name: 'Web form', enabled: true, deleted: false,
+    replies_via: null };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'web_form' as const, channel_ref: ref };
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  const notice = await screen.findByText('Replies to this conversation are not emailed until you connect your support email.');
+  expect(screen.queryByText(/was removed/)).toBeNull();
+  fireEvent.change(screen.getAllByLabelText('Message body').at(-1)!, { target: { value: 'Hello' } });
+  expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeEnabled();
+  fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
+  expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/type/email?tab=replies' });
+  navigate.mockRestore();
+});
+
+test('a conversation whose channel was removed takes private notes but no reply', async () => {
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'email', name: 'Email', enabled: false, deleted: true,
+    replies_via: null };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'email' as const, channel_ref: ref };
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByText('Replies to this conversation cannot be sent: Email was removed.')).toBeInTheDocument();
+  const box = screen.getAllByLabelText('Message body').at(-1)!;
+  fireEvent.change(box, { target: { value: 'Hello' } });
+  expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeDisabled();
+  fireEvent.click(screen.getAllByRole('button', { name: /Private note/ }).at(-1)!);
+  expect(screen.getAllByRole('button', { name: 'Add private note' }).at(-1)).toBeEnabled();
+  navigate.mockRestore();
+});

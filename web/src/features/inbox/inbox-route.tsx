@@ -169,7 +169,11 @@ export function InboxRoute() {
   const limits = config?.limits;
   // The conversation's own channel comes first: off or removed, its replies wait whatever email can do.
   const via = selected?.channel_ref;
-  const channelNotice = via && (via.replies_via === null ? messages.channelRemoved(via.name) : via.replies_via.enabled ? undefined : messages.channelOff(via.replies_via.name));
+  // No channel carries the replies: its own was removed (they cannot be sent), or the one that would
+  // carry them is not connected yet (they are saved, as they always were, and not sent).
+  const removed = via?.deleted === true && via.replies_via === null;
+  const channelNotice = via && (removed ? messages.channelRemoved(via.name) : via.replies_via === null ? messages.repliesNotConnected
+    : via.replies_via.enabled ? undefined : messages.channelOff(via.replies_via.name));
   const outbound = channelNotice ?? outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
   // A reply that just failed may mean Gmail stopped sending; the channel is read again so the notice above
   // the composer follows without a reload.
@@ -260,7 +264,7 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outbound} noReplies={via?.replies_via === null} outboundLink={via?.replies_via && channelNotice ? `/settings/channels/${via.replies_via.id}` : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} noReplies={removed} outboundLink={via?.replies_via && channelNotice ? `/settings/channels/${via.replies_via.id}` : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}

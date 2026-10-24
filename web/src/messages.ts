@@ -385,6 +385,7 @@ export const messages = {
   openSettings: 'Open Settings',
   channelOff: (name: string) => `${name} is off: this reply is saved but not sent until the channel is on.`,
   channelRemoved: (name: string) => `Replies to this conversation cannot be sent: ${name} was removed.`,
+  repliesNotConnected: 'Replies to this conversation are not emailed until you connect your support email.',
   planNotices: 'Plan notices',
   trialDaysLeft: (days: number) => `Trial: ${days} ${days === 1 ? 'day' : 'days'} left`,
   trialExtendedNote: 'Your trial was extended after your Freshdesk import.',
