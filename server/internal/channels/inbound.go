@@ -33,6 +33,36 @@ type Raw struct {
 	Parsed any
 	// ReceivedAt is when the route received it.
 	ReceivedAt time.Time
+	// Files are the event's files the frame fetched (MediaSource), in the order Files listed them.
+	Files []FetchedFile
+}
+
+// FileRef is a file of a raw event the channel serves by link (links of chat media expire).
+type FileRef struct {
+	URL, Name, ContentType string
+	// Size is what the channel says, zero when it says nothing; the limit is checked on the bytes.
+	Size int64
+}
+
+// FetchedFile is a file the frame fetched for an event: in storage, or failed with why.
+type FetchedFile struct {
+	Index             int
+	Name, ContentType string
+	Object            *attachments.Object
+	// Error is why it could not be fetched; the message then shows a placeholder.
+	Error string
+}
+
+// MediaSource is the optional part of an InboundPart whose events carry files by link: the frame
+// fetches them into storage right after the event is journaled, before it is parsed, held or
+// collected, so a message opened days later still has them. Files is pure.
+type MediaSource interface {
+	Files(raw Raw) ([]FileRef, error)
+}
+
+// FileLimits bound what the frame fetches for a type; zero uses the frame's defaults.
+type FileLimits struct {
+	PerFile, PerEvent int64
 }
 
 // InboundKind says what an Inbound is.

@@ -363,6 +363,17 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	if err != nil {
 		return result, err
 	}
+	if len(request.EventIDs) > 0 && len(files) > 0 {
+		// The fetched files are attachments now, which count them.
+		keys := make([]string, len(files))
+		for i, file := range files {
+			keys[i] = file.Object.Key
+		}
+		if _, err := tx.Exec(ctx, `UPDATE channel_inbound_files SET attached=true,updated_at=now() WHERE workspace_id=$1 AND event_id::text=ANY($2)
+			AND status='stored' AND storage_key=ANY($3)`, workspaceID, request.EventIDs, keys); err != nil {
+			return result, fmt.Errorf("mark fetched files: %w", err)
+		}
+	}
 	if err := journal.write(ctx, "processed", journalDetail{senderKey: senderKey, conversationID: conversationID, messageID: messageID,
 		objectKey: original}); err != nil {
 		return result, err

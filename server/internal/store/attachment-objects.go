@@ -65,7 +65,8 @@ func DiscardObject(ctx context.Context, db *database.DB, storage attachments.Sto
 		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND storage_key=$2)
 		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND thumb_storage_key=$2)
 		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND poster_storage_key=$2)
-		OR EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND raw_object_key=$2 AND state IN ('received','pending','held','failed'))`,
+		OR EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND raw_object_key=$2 AND state IN ('received','pending','held','failed'))
+		OR EXISTS(SELECT 1 FROM channel_inbound_files WHERE workspace_id=$1 AND storage_key=$2 AND status='stored' AND NOT attached)`,
 		workspaceID, key).Scan(&used); err != nil {
 		return fmt.Errorf("check attachment key: %w", err)
 	}

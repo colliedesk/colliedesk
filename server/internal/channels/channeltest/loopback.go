@@ -43,6 +43,16 @@ type LoopbackEvent struct {
 	Archive bool   `json:"archive,omitempty"`
 	// Failed reports that our sent message with this id did not arrive.
 	Failed string `json:"failed,omitempty"`
+	// Links are files the channel serves by link, fetched by the frame.
+	Links []LoopbackLink `json:"links,omitempty"`
+}
+
+// LoopbackLink is a file of a loopback message served by link.
+type LoopbackLink struct {
+	URL  string `json:"url"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+	Size int64  `json:"size,omitempty"`
 }
 
 // LoopbackFile is a file of a loopback message, base64.
@@ -125,6 +135,7 @@ func NewLoopback(kind channels.Type, mode channels.IngestMode) *Loopback {
 func (l *Loopback) Definition() channels.Definition {
 	return channels.Definition{Type: l.Type, Name: "Loopback", Capabilities: []string{"threads", "attachments_in", "attachments_out"},
 		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: []string{"user", "group"},
+		FileLimits: channels.FileLimits{PerFile: 1000, PerEvent: 5000},
 		Routes: []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
 		Tools: []channels.ToolSpec{{Name: "colliedesk_" + string(l.Type) + "_ping", Description: "Checks the loopback route.",
 			Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", InputSchema: json.RawMessage(`{"type":"object"}`)}}}
@@ -235,6 +246,19 @@ func (loopbackConfig) Snapshot(ctx context.Context, tx pgx.Tx, channel channels.
 
 type loopbackInbound struct{ l *Loopback }
 
+// Files lists the event's links for the frame to fetch.
+func (i loopbackInbound) Files(raw channels.Raw) ([]channels.FileRef, error) {
+	var event LoopbackEvent
+	if err := json.Unmarshal(raw.JSON, &event); err != nil {
+		return nil, err
+	}
+	refs := make([]channels.FileRef, len(event.Links))
+	for n, link := range event.Links {
+		refs[n] = channels.FileRef{URL: link.URL, Name: link.Name, ContentType: link.Type, Size: link.Size}
+	}
+	return refs, nil
+}
+
 func (i loopbackInbound) Mode() channels.IngestMode { return i.l.Mode }
 
 func (i loopbackInbound) Parse(_ context.Context, channel channels.Channel, snapshot any, raw channels.Raw) ([]channels.Inbound, error) {
@@ -272,6 +296,18 @@ func (i loopbackInbound) Parse(_ context.Context, channel channels.Channel, snap
 			return nil, fmt.Errorf("decode loopback file: %w", err)
 		}
 		in.Files = append(in.Files, channels.InboundFile{Name: file.Name, ContentType: file.Type, Data: data})
+	}
+	var failed []string
+	for _, file := range raw.Files {
+		if file.Object == nil {
+			failed = append(failed, file.Name)
+			continue
+		}
+		in.Files = append(in.Files, channels.InboundFile{Name: file.Name, ContentType: file.ContentType, Object: file.Object})
+	}
+	if len(failed) > 0 {
+		in.Meta, _ = json.Marshal(map[string]any{"via": "loopback", "files_failed": failed})
+		in.Text += "\n[file not received: " + strings.Join(failed, ", ") + "]"
 	}
 	switch {
 	case event.Intent == "":

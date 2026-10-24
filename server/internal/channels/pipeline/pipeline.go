@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ type Pipeline struct {
 	store  *store.Store
 	now    func() time.Time
 	logger *slog.Logger
+	fetch  *http.Client
 }
 
 // New returns the pipeline of st. now defaults to the wall clock in UTC.
@@ -35,7 +37,7 @@ func New(st *store.Store, now func() time.Time) *Pipeline {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	return &Pipeline{store: st, now: now, logger: slog.Default()}
+	return &Pipeline{store: st, now: now, logger: slog.Default(), fetch: FetchClient(nil, nil)}
 }
 
 func (p *Pipeline) adapter(kind channels.Type) (channels.Adapter, error) {
@@ -137,6 +139,18 @@ func (p *Pipeline) process(ctx context.Context, work store.InboundWork) error {
 	if err != nil {
 		return err
 	}
+	adapter, err := p.adapter(channel.Type)
+	if err != nil {
+		return err
+	}
+	// Files first, before the event is parsed, held or collected: their links expire.
+	for _, event := range events {
+		if event.State == "received" || event.State == "failed" {
+			if err := p.fetchFiles(ctx, adapter, channel, event); err != nil {
+				return err
+			}
+		}
+	}
 	items, err := p.parseEvents(ctx, channel, events)
 	if err != nil {
 		return err
@@ -165,9 +179,17 @@ func (p *Pipeline) parseEvents(ctx context.Context, channel channels.Channel, ev
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]string, len(events))
+	for i, event := range events {
+		ids[i] = event.ID
+	}
+	fetched, err := p.store.InboundFiles(ctx, channel.WorkspaceID, ids)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]channels.Inbound, 0, len(events))
 	for _, event := range events {
-		raw := channels.Raw{ExternalEventID: event.ExternalEventID, JSON: event.Raw, ReceivedAt: event.ReceivedAt}
+		raw := channels.Raw{ExternalEventID: event.ExternalEventID, JSON: event.Raw, ReceivedAt: event.ReceivedAt, Files: fetched[event.ID]}
 		if event.ObjectKey != "" {
 			if raw.Body, err = p.readObject(ctx, event.ObjectKey); err != nil {
 				return nil, err

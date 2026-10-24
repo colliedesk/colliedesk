@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
@@ -170,12 +171,24 @@ func (s *Store) DiscardHeld(ctx context.Context, workspaceID, channelID string, 
 		if err != nil {
 			return discarded{}, err
 		}
-		if len(keys) > 0 {
-			if err := insertChannelEvent(ctx, tx, channel, "held_discarded", actor, map[string]any{"count": len(keys)}); err != nil {
+		count := len(keys)
+		if count > 0 {
+			if err := insertChannelEvent(ctx, tx, channel, "held_discarded", actor, map[string]any{"count": count}); err != nil {
 				return discarded{}, err
 			}
 		}
-		return discarded{count: len(keys), keys: keys}, nil
+		// Their fetched files go too, and stop counting toward storage.
+		fileRows, err := tx.Query(ctx, `DELETE FROM channel_inbound_files f USING channel_inbound_events e
+			WHERE f.workspace_id=$1 AND e.workspace_id=f.workspace_id AND e.id=f.event_id AND e.channel_id=$2 AND e.state='discarded'
+			AND f.status='stored' AND NOT f.attached RETURNING f.storage_key`, workspaceID, channelID)
+		if err != nil {
+			return discarded{}, fmt.Errorf("discard held files: %w", err)
+		}
+		fileKeys, err := pgx.CollectRows(fileRows, pgx.RowTo[string])
+		if err != nil {
+			return discarded{}, err
+		}
+		return discarded{count: count, keys: append(keys, fileKeys...)}, nil
 	})
 	if err != nil {
 		return 0, err
@@ -188,4 +201,99 @@ func (s *Store) DiscardHeld(ctx context.Context, workspaceID, channelID string, 
 		}
 	}
 	return got.count, nil
+}
+
+// InboundFileState is one file of a journal event as the fetch step sees it.
+type InboundFileState struct {
+	Index    int
+	Status   string
+	Attempts int
+}
+
+// RecordInboundFiles lists the files of an event the first time it is processed; later runs keep
+// what an earlier one fetched.
+func (s *Store) RecordInboundFiles(ctx context.Context, workspaceID, eventID string, refs []channels.FileRef) ([]InboundFileState, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]InboundFileState, error) {
+		for index, ref := range refs {
+			name, contentType := ref.Name, ref.ContentType
+			if name == "" {
+				name = fmt.Sprintf("file-%d", index+1)
+			}
+			if contentType == "" {
+				contentType = "application/octet-stream"
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO channel_inbound_files(workspace_id,event_id,idx,name,content_type,status)
+				VALUES($1,$2,$3,left($4,255),left($5,255),'pending') ON CONFLICT DO NOTHING`, workspaceID, eventID, index, name, contentType); err != nil {
+				return nil, fmt.Errorf("list event files: %w", err)
+			}
+		}
+		rows, err := tx.Query(ctx, `SELECT idx,status,attempts FROM channel_inbound_files WHERE workspace_id=$1 AND event_id=$2 ORDER BY idx`, workspaceID, eventID)
+		if err != nil {
+			return nil, err
+		}
+		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (InboundFileState, error) {
+			var state InboundFileState
+			err := row.Scan(&state.Index, &state.Status, &state.Attempts)
+			return state, err
+		})
+	})
+}
+
+// FinishInboundFile records a fetched file, or why it could not be fetched.
+func (s *Store) FinishInboundFile(ctx context.Context, workspaceID, eventID string, index int, object *attachments.Object, attempts int, failure string) error {
+	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		if object != nil {
+			if err := VerifyObjects(ctx, tx, s.objects, object.Key); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `UPDATE channel_inbound_files SET status='stored',storage_key=$4,sha256=$5,size=$6,attempts=$7,error=NULL,updated_at=now()
+				WHERE workspace_id=$1 AND event_id=$2 AND idx=$3 AND status='pending'`, workspaceID, eventID, index, object.Key, object.SHA256, object.Size, attempts)
+			return err
+		}
+		if len(failure) > 500 {
+			failure = failure[:500]
+		}
+		_, err := tx.Exec(ctx, `UPDATE channel_inbound_files SET status='failed',error=$4,attempts=$5,updated_at=now()
+			WHERE workspace_id=$1 AND event_id=$2 AND idx=$3 AND status='pending'`, workspaceID, eventID, index, failure, attempts)
+		return err
+	})
+}
+
+// InboundFiles reads the fetched files of events, by event id.
+func (s *Store) InboundFiles(ctx context.Context, workspaceID string, eventIDs []string) (map[string][]channels.FetchedFile, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (map[string][]channels.FetchedFile, error) {
+		rows, err := tx.Query(ctx, `SELECT event_id::text,idx,name,content_type,status,COALESCE(storage_key,''),COALESCE(sha256,''),COALESCE(size,0),COALESCE(error,'')
+			FROM channel_inbound_files WHERE workspace_id=$1 AND event_id::text=ANY($2) ORDER BY event_id,idx`, workspaceID, eventIDs)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		files := map[string][]channels.FetchedFile{}
+		for rows.Next() {
+			var eventID, status, key, sum, failure string
+			var size int64
+			var file channels.FetchedFile
+			if err := rows.Scan(&eventID, &file.Index, &file.Name, &file.ContentType, &status, &key, &sum, &size, &failure); err != nil {
+				return nil, err
+			}
+			switch status {
+			case "stored":
+				file.Object = &attachments.Object{Key: key, SHA256: sum, Size: size}
+			case "failed":
+				file.Error = failure
+			default:
+				file.Error = "the file was not fetched"
+			}
+			files[eventID] = append(files[eventID], file)
+		}
+		return files, rows.Err()
+	})
+}
+
+// CheckChannelFileRoom refuses a fetched file the workspace's storage has no room for.
+func (s *Store) CheckChannelFileRoom(ctx context.Context, workspaceID string, size int64) error {
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		return struct{}{}, s.CheckInboundStorage(ctx, tx, workspaceID, size, s.now())
+	})
+	return err
 }

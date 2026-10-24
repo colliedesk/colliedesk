@@ -187,6 +187,8 @@ type Definition struct {
 	Name string
 	// Capabilities are fixed codes the web app turns into words: what the channel can carry.
 	Capabilities []string
+	// FileLimits bound the files the frame fetches for the type's events (MediaSource).
+	FileLimits FileLimits
 	// Scopes are the keys of Settings.Scopes the type gives its messages (Inbound.Scope).
 	Scopes []string
 	// RepliesVia names the type that carries this type's replies when it sends none itself.
