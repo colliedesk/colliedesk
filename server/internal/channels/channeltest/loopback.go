@@ -136,7 +136,7 @@ func (l *Loopback) Definition() channels.Definition {
 	return channels.Definition{Type: l.Type, Name: "Loopback", Capabilities: []string{"threads", "attachments_in", "attachments_out"},
 		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: []string{"user", "group"},
 		FileLimits: channels.FileLimits{PerFile: 1000, PerEvent: 5000},
-		Routes: []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
+		Routes:     []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
 		Tools: []channels.ToolSpec{{Name: "colliedesk_" + string(l.Type) + "_ping", Description: "Checks the loopback route.",
 			Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", InputSchema: json.RawMessage(`{"type":"object"}`)}}}
 }
