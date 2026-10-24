@@ -15,7 +15,7 @@
 /* The list: name, state, then the switch and Configure. */
 .ch-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); }
 .ch-row + .ch-row { border-top: 1px solid var(--line); }
-.ch-row-off .ch-row-name { opacity: 0.6; }
+.ch-row-off .ch-row-name > svg { opacity: 0.6; }
 .ch-row-name { display: flex; gap: var(--space-3); align-items: center; min-width: 0; }
 .ch-row-name > svg { flex: none; color: var(--text-3); }
 .ch-row-name > span { display: grid; gap: 2px; min-width: 0; }

@@ -55,10 +55,12 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
 export function SettingsNav({ shown, page }: { shown: Shown; page: SettingsPath }) {
   const renderLink = useContext(SettingsNavLinkContext);
   const nav = useRef<HTMLElement>(null);
-  // On a narrow screen the links are one row that scrolls sideways: the current page is brought into it.
+  // On a narrow screen the links are one row that scrolls sideways: the current page is brought into it,
+  // again when links appear before it.
+  const links = JSON.stringify(shown);
   useEffect(() => {
     nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-  }, [page]);
+  }, [page, links]);
   return (
     <nav ref={nav} className="settings-nav" aria-label={messages.settingsSections}>
       {settingsNavGroups(shown, page).map((group) => <div key={group.label}><p className="settings-group-label">{group.label}</p>
