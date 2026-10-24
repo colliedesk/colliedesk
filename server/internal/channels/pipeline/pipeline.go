@@ -278,8 +278,16 @@ func (p *Pipeline) ReplayHeld(ctx context.Context, workspaceID, channelID string
 		}
 		results = append(results, result)
 	}
+	// The history counts the messages that opened (a new conversation or one added to an existing one),
+	// not a copy that was already in the inbox or one the channel's rules dropped.
+	opened := 0
+	for _, result := range results {
+		if result.Status == channels.ResultCreated || result.Status == channels.ResultThreaded {
+			opened++
+		}
+	}
 	if len(results) > 0 {
-		if err := p.store.RecordHeldReplay(ctx, workspaceID, channelID, len(results), conversationID, actor); err != nil {
+		if err := p.store.RecordHeldReplay(ctx, workspaceID, channelID, opened, conversationID, actor); err != nil {
 			return results, errors.Join(failed, err)
 		}
 	}

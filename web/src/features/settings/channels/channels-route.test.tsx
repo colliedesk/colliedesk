@@ -377,11 +377,11 @@ test('rotating the inbound secret asks first: the old one stops at once', async 
 
 test('opening held messages says how many opened and links to them; discarding says how many went', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email', { held_count: 3 }), config: withChannel.channel });
-  channelsApi.replayHeld.mockResolvedValue({ results: [1, 2, 3].map(() => ({ status: 'created', conversation_id: null, message_id: null })) });
+  channelsApi.replayHeld.mockResolvedValue({ results: ['created', 'threaded', 'created', 'duplicate'].map((status) => ({ status, conversation_id: null, message_id: null })) });
   channelsApi.discardHeld.mockResolvedValue({ discarded: 3 });
   show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Open them as conversations' }));
-  const opened = await screen.findByText(/3 messages opened as conversations/);
+  const opened = await screen.findByText(/3 messages opened in the inbox\. 1 was already there or set aside by the channel's rules\./);
   expect(within(opened.closest('.notice') as HTMLElement).getByRole('link', { name: 'View them in the inbox' })).toHaveAttribute('href', '/?channel=email');
   fireEvent.click(screen.getByRole('button', { name: 'Discard 3 messages…' }));
   fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Discard' }));
@@ -426,8 +426,8 @@ test('History names what changed, never a value, and how many held messages went
   show('', { tab: 'history' });
   expect(await screen.findByText(/changed the sender name and support address of Email/)).toBeInTheDocument();
   expect(screen.getByText(/replaced the inbound secret of Email/)).toBeInTheDocument();
-  expect(screen.getByText(/opened 3 messages Email held while off/)).toBeInTheDocument();
-  expect(screen.getByText(/discarded 1 message Email held while off/)).toBeInTheDocument();
+  expect(screen.getByText(/opened 3 messages that arrived while Email was off/)).toBeInTheDocument();
+  expect(screen.getByText(/discarded 1 message that arrived while Email was off/)).toBeInTheDocument();
 });
 
 test('History lists who changed which channel, newest first, and pages on', async () => {

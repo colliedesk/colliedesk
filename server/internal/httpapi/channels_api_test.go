@@ -510,3 +510,41 @@ func TestAWebFormConversationWithoutEmailIsNotARemovedChannel(t *testing.T) {
 		t.Fatalf("channel_ref of a web form conversation without email: %s", list.Body.String())
 	}
 }
+
+// Two copies of one mail held while off open once: the history counts the messages that opened.
+func TestReplayCountsOnlyTheMessagesItOpened(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Twice Desk", "admin@twice-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@twice-desk.example.com")
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	request(t, api, http.MethodPatch, "/api/v1/channels/"+email.ID, map[string]any{"enabled": false}, admin, nil)
+	raw := mail([]string{"From: lee@customer.example", "Subject: Twice", "Message-ID: <twice@customer.example>"}, "Hi.")
+	inboundOK(t, api, secret, raw)
+	inboundOK(t, api, secret, raw)
+	var replay struct {
+		Results []struct {
+			Status string `json:"status"`
+		} `json:"results"`
+	}
+	decode(t, request(t, api, http.MethodPost, "/api/v1/channels/"+email.ID+"/held/replay", map[string]any{}, admin, nil), &replay)
+	statuses := []string{}
+	for _, result := range replay.Results {
+		statuses = append(statuses, result.Status)
+	}
+	if strings.Join(statuses, ",") != "created,duplicate" {
+		t.Fatalf("replay of two copies: %v, want created then duplicate", statuses)
+	}
+	var page struct {
+		Items []struct {
+			Kind  string `json:"kind"`
+			Count *int   `json:"count"`
+		} `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/channels/events?channel_id="+email.ID, nil, admin, nil), &page)
+	for _, event := range page.Items {
+		if event.Kind == "held_replayed" && event.Count != nil && *event.Count != 1 {
+			t.Fatalf("held_replayed count = %v, want 1", *event.Count)
+		}
+	}
+}

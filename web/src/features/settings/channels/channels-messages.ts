@@ -46,7 +46,8 @@ export const channelsMessages = {
   discardTitle: (count: number) => `Discard ${count} ${count === 1 ? 'message' : 'messages'}?`,
   discardBody: 'They are deleted for good and never open as conversations. This cannot be undone; History keeps that they were discarded.',
   discard: 'Discard',
-  heldOpened: (count: number) => `${count} ${count === 1 ? 'message' : 'messages'} opened as conversations.`,
+  heldOpened: (count: number, skipped: number) => `${count} ${count === 1 ? 'message' : 'messages'} opened in the inbox.`
+    + (skipped > 0 ? ` ${skipped} ${skipped === 1 ? 'was' : 'were'} already there or set aside by the channel's rules.` : ''),
   viewInInbox: 'View them in the inbox',
   heldDiscarded: (count: number) => `${count} ${count === 1 ? 'message' : 'messages'} discarded.`,
   unsent: (count: number, name: string) => `${count} ${count === 1 ? 'reply was' : 'replies were'} not sent while ${name} was off. Retry them from the conversation.`,
@@ -95,6 +96,6 @@ const eventWords: Record<ChannelEvent['kind'], (name: string, what?: string, cou
   config_changed: (name, what) => `changed the ${what ?? 'settings'} of ${name}`,
   credential_changed: (name, what) => (what ? `replaced the ${what} of ${name}` : `changed a secret of ${name}`),
   removed: (name) => `removed ${name}`,
-  held_replayed: (name, _what, count) => `opened ${messagesOf(count)} ${name} held while off`,
-  held_discarded: (name, _what, count) => `discarded ${messagesOf(count)} ${name} held while off`,
+  held_replayed: (name, _what, count) => `opened ${messagesOf(count)} that arrived while ${name} was off`,
+  held_discarded: (name, _what, count) => `discarded ${messagesOf(count)} that arrived while ${name} was off`,
 };

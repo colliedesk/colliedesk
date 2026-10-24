@@ -267,7 +267,7 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
   const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
   const [removing, setRemoving] = useState(false);
   // What the last open or discard of held messages did; it stays after the notice of held messages goes.
-  const [heldDone, setHeldDone] = useState<{ kind: 'opened' | 'discarded'; count: number }>();
+  const [heldDone, setHeldDone] = useState<{ kind: 'opened' | 'discarded'; count: number; skipped?: number }>();
   // The buttons that did it are gone with the notice, so focus goes to what they did.
   const heldNote = useRef<HTMLParagraphElement>(null);
   useEffect(() => { if (heldDone) heldNote.current?.focus(); }, [heldDone]);
@@ -299,7 +299,7 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
       {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
-      {heldDone && <p className="notice notice-plain" role="status" tabIndex={-1} ref={heldNote}><span>{heldDone.kind === 'opened' ? m.heldOpened(heldDone.count) : m.heldDiscarded(heldDone.count)}</span>
+      {heldDone && <p className="notice notice-plain" role="status" tabIndex={-1} ref={heldNote}><span>{heldDone.kind === 'opened' ? m.heldOpened(heldDone.count, heldDone.skipped ?? 0) : m.heldDiscarded(heldDone.count)}</span>
         {heldDone.kind === 'opened' && <span className="notice-actions"><AppLink href={`/?channel=${channel.type}`} navigate={navigate}>{m.viewInInbox}</AppLink></span>}</p>}
       {channel.enabled && channel.unsent_count > 0 && <Unsent channel={channel} navigate={navigate} />}
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
@@ -326,12 +326,18 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
 }
 
 // Held is what arrived while the channel was off: open it as conversations, or discard it after a question.
-function Held({ channel, isAdmin, onDone }: { channel: ChannelDetail; isAdmin: boolean; onDone: (done: { kind: 'opened' | 'discarded'; count: number }) => void }) {
+function Held({ channel, isAdmin, onDone }: { channel: ChannelDetail; isAdmin: boolean; onDone: (done: { kind: 'opened' | 'discarded'; count: number; skipped?: number }) => void }) {
   const client = useQueryClient();
   const [asking, setAsking] = useState(false);
   const reload = () => client.invalidateQueries({ predicate: (query) => ['channels', 'channel', 'channel-events', 'conversations'].includes(String(query.queryKey[0])) });
   const replay = useMutation({ mutationFn: () => channelsApi.replayHeld(channel.id),
-    onSuccess: ({ results }) => { onDone({ kind: 'opened', count: results.length }); return reload(); } });
+    // Opened: a new conversation or one added to an existing one; a copy already in the inbox or one the
+    // channel's rules drop is counted apart.
+    onSuccess: ({ results }) => {
+      const opened = results.filter((result) => result.status === 'created' || result.status === 'threaded').length;
+      onDone({ kind: 'opened', count: opened, skipped: results.length - opened });
+      return reload();
+    } });
   const discard = useMutation({ mutationFn: () => channelsApi.discardHeld(channel.id),
     onSuccess: ({ discarded }) => { onDone({ kind: 'discarded', count: discarded }); return reload(); } });
   const busy = replay.isPending || discard.isPending;
