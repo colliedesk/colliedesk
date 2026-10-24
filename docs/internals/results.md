@@ -75,6 +75,12 @@ A workspace that imported before results existed gets, on its first compute only
 first run finished first as its baseline (by its in-app job, or when its CLI ledger last changed),
 with an unknown reconcile status. Later an undone baseline does not come back.
 
+Trap: that first compute can run while a new workspace's first in-app import is still writing tickets
+(the worker picks up a workspace it has never computed at once). Taken as an earlier import, half the
+tickets became the baseline, and the page showed it as ready until the finished run replaced it a few
+seconds later. The backfill now skips a workspace with an in-app import queued, running or waiting;
+the finished run names the baseline itself (`TestAnImportStillRunningIsNotTakenAsTheBaseline`).
+
 ## Reading and opening a number
 
 `GET /api/v1/results` (every role; token tier `read`; MCP `colliedesk_results_get`) returns the newest
