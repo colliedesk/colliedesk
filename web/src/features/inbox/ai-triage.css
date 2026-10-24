@@ -24,7 +24,7 @@
 .ai-triage .ai-sources ul { flex-wrap: wrap; row-gap: var(--space-1); overflow: visible; mask-image: none; }
 .ai-triage .ai-sources li { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .ai-triage .ai-sources a { min-width: 0; max-width: 100%; }
-/* The way to Settings → AI is the action of a failure a setting causes: a button, not a link in a sentence. */
+/* The way to Settings → Built-in AI is the action of a failure a setting causes: a button, not a link in a sentence. */
 .ai-triage-actions a { display: inline-flex; align-items: center; min-height: var(--control, 36px); border: 1px solid var(--line-strong); border-radius: var(--radius);
   background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-1); font-weight: 500; text-decoration: none; }
 .ai-triage-actions > span { color: var(--text-2); font-size: var(--fs-small); }

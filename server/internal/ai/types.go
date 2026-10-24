@@ -85,7 +85,7 @@ type Event struct {
 	CreatedAt     time.Time       `json:"created_at"`
 }
 
-// Settings is everything Settings → AI shows.
+// Settings is everything Settings → Built-in AI shows.
 type Settings struct {
 	Server    *Server    `json:"server"`
 	Providers []Provider `json:"providers"`

@@ -1,4 +1,4 @@
-/* Settings → AI agents: create a token, then the steps of each AI host. */
+/* Settings → External AI agents: create a token, then the steps of each AI host. */
 .agent-step { display: grid; gap: var(--space-3); min-width: 0; }
 .agent-step + .agent-step { border-top: 1px solid var(--line); padding-top: var(--space-5); }
 .step-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: inherit; font-weight: 600; }

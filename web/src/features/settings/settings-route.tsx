@@ -10,6 +10,7 @@ import { TeamSection } from './team-section';
 import { WebFormSection } from './web-form-section';
 import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
+import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { helpCenterPart } from '../kb/kb-part';
 import type { AgentToken } from '../../api/schemas';
@@ -80,7 +81,10 @@ export function SettingsRoute() {
   // Plan and billing exists only on the hosted cloud and only admins manage it.
   const showBilling = isAdmin && config.data?.billing.enabled === true;
   const emailFailed = rotateSecret.isError || disconnectEmail.isError || (verifyDomain.isError && !(verifyDomain.error instanceof InvalidRequestError));
-  return <SettingsPage loading={me.isPending || sessions.isPending || invites.isPending} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
+  const loading = me.isPending || sessions.isPending || invites.isPending;
+  // A link to a section (the nav from another settings page, a pasted address) arrives before the sections do.
+  useScrollToHashWhenReady(!loading);
+  return <SettingsPage loading={loading} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
     canCreateInvites={isAdmin} canManageWorkspace={isAdmin} showBilling={showBilling} exportSection={isAdmin ? <ExportAllData /> : undefined}
     workspaceTimezoneSave={saveState(workspaceTimezone)} personalTimezoneSave={saveState(agentTimezone)}
     workspaceName={me.data?.workspace.name} workspaceNameSave={saveState(workspaceName)} onSetWorkspaceName={(name) => workspaceName.mutate(name)}

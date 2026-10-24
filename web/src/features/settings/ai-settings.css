@@ -1,4 +1,4 @@
-/* Settings → AI. Loaded with its lazy part; scrollbars follow base.css. */
+/* Settings → Built-in AI. Loaded with its lazy part; scrollbars follow base.css. */
 .ai-page { display: grid; gap: var(--space-3); align-content: start; min-width: 0; }
 .ai-panel-stack { display: grid; gap: var(--space-3); min-width: 0; }
 .ai-loading { min-height: 12rem; }

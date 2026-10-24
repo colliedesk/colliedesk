@@ -118,15 +118,15 @@ const sessionBase = { agent_id: '55555555-5555-4555-8555-555555555555', agent_em
 test('settings is split into your account and the workspace, with a link to every section', () => {
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace canCreateInvites
     teamSection={<section aria-labelledby="team-heading"><h2 id="team-heading">Team</h2></section>} exportSection={<p>export</p>}
-    agentsSection={<section aria-labelledby="agents-heading"><h2 id="agents-heading">AI agents</h2></section>} />);
+    agentsSection={<section aria-labelledby="agents-heading"><h2 id="agents-heading">External AI agents</h2></section>} />);
   const nav = screen.getByRole('navigation', { name: 'Settings sections' });
   const links = within(nav).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
   expect(links).toEqual([
-    ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'], ['AI', '/settings/ai'],
-    ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'], ['AI agents', '#agents-heading'],
-    ['Sessions', '#sessions-heading'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
+    ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'],
+    ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'],
+    ['Built-in AI', '/settings/ai'], ['External AI agents', '#agents-heading'], ['Sessions', '#sessions-heading'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
   ]);
-  // AI and the import have their own pages; every other link is a section of this one.
+  // Built-in AI and the import have their own pages; every other link is a section of this one.
   for (const [, href] of links.filter(([, href]) => href!.startsWith('#'))) expect(document.getElementById(href!.slice(1))).not.toBeNull();
 });
 

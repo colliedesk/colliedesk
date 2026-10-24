@@ -80,10 +80,10 @@ const text = {
 };
 
 const failures: Record<string, string> = {
-  ai_allowance_reached: 'No suggestion: this month’s included AI is used up. An admin can add your own provider in Settings → AI.',
-  feature_off: 'No suggestion: triage suggestions were turned off. An admin turns them on in Settings → AI.',
-  auth: 'No suggestion: the AI provider refused its key. An admin can change it in Settings → AI.',
-  quota_exhausted: 'No suggestion: the AI provider account is out of credit. An admin can check it in Settings → AI.',
+  ai_allowance_reached: 'No suggestion: this month’s included AI is used up. An admin can add your own provider in Settings → Built-in AI.',
+  feature_off: 'No suggestion: triage suggestions were turned off. An admin turns them on in Settings → Built-in AI.',
+  auth: 'No suggestion: the AI provider refused its key. An admin can change it in Settings → Built-in AI.',
+  quota_exhausted: 'No suggestion: the AI provider account is out of credit. An admin can check it in Settings → Built-in AI.',
   refused: 'No suggestion: the model declined this ticket. Sort it by hand, or try again.',
   too_long: 'No suggestion: the model’s answer ran too long. Try again; fewer tags in the workspace make it shorter.',
   empty_answer: 'No suggestion: the model returned nothing. Try again.',
@@ -100,7 +100,7 @@ interface AITriageCardProps {
   // The signed-in agent, so an accepted suggestion says "you"; and the timezone its time is shown in.
   currentAgentId?: string;
   timezone?: string;
-  // An admin is offered Settings → AI when a suggestion fails for a setting; others are told to ask one.
+  // An admin is offered Settings → Built-in AI when a suggestion fails for a setting; others are told to ask one.
   canManage?: boolean;
   // Called after a part was applied, so the conversation is read again.
   onApplied: () => void;

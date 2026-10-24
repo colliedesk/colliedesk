@@ -178,11 +178,11 @@ test('while a draft is written the button says so and keeps the panel open', asy
 test('when reply drafts are off, an agent is told whom to ask and an admin gets the way to turn them on', () => {
   const { rerender } = render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff />));
   fireEvent.click(screen.getByRole('button', { name: /Draft with AI/ }));
-  expect(screen.getByRole('status')).toHaveTextContent('Ask an admin to turn them on in Settings → AI.');
+  expect(screen.getByRole('status')).toHaveTextContent('Ask an admin to turn them on in Settings → Built-in AI.');
   rerender(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff canManage />));
   const off = screen.getByRole('link', { name: 'Draft with AI (off)' });
   expect(off).toHaveAttribute('href', '/settings/ai');
-  expect(off).toHaveAccessibleDescription('Reply drafts are off. Turn them on in Settings → AI.');
+  expect(off).toHaveAccessibleDescription('Reply drafts are off. Turn them on in Settings → Built-in AI.');
   // The app's own Settings link stays the only link named Settings.
   expect(screen.queryByRole('link', { name: /Settings/ })).toBeNull();
 });

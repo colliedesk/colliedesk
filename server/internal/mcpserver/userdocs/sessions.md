@@ -25,7 +25,7 @@ with a limit you choose. It is a session with a label and a **scope**. It appear
 stops working. **Revoke** ends it at once, as for any session. Admins see and revoke the tokens of
 every agent.
 
-Create a token in **Settings → AI agents**, which every agent sees: give it a name you will
+Create a token in **Settings → External AI agents**, which every agent sees: give it a name you will
 recognise in Sessions (1 to 80 characters, for example **Claude Code on my laptop**), pick its scope
 (**Read**, **Draft**, **Send** or **Admin**; **Draft** is selected) and choose **Create token**. Only an
 admin can pick **Admin**; for an agent it is shown but cannot be chosen. The token is shown once,

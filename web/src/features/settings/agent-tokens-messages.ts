@@ -2,10 +2,10 @@ import type { TokenScope } from '../../api/schemas';
 import { messages } from '../../messages';
 import type { ConnectHostID } from './connect-snippets.generated';
 
-// Strings of Settings → AI agents: an agent token, then the steps of each AI host that uses it.
+// Strings of Settings → External AI agents: an agent token, then the steps of each AI host that uses it.
 export const agentTokenMessages = {
   heading: messages.aiAgents,
-  description: 'Let Claude, Codex, Cursor or VS Code work your inbox as you. Each one signs in with its own token, listed under Sessions.',
+  description: 'Connect Claude, Codex, Cursor or VS Code over MCP to work your inbox as you. Each one signs in with its own token, listed in Sessions below.',
   createStep: 'Create a token',
   name: 'Name',
   namePlaceholder: 'Claude Code on my laptop',

@@ -6,7 +6,7 @@ stays in an environment variable and never in that file.
 
 ## Before you start
 
-1. Sign in to Colliedesk and open **Settings → AI agents**.
+1. Sign in to Colliedesk and open **Settings → External AI agents**.
 2. Name the token (for example "Codex on my laptop"), pick a tier (`draft` is a good start: the agent
    can sort and annotate, and nothing reaches a customer) and choose **Create token**. See [Agent tokens](sessions.md#agent-tokens).
 3. Copy the token. It starts with `cdk_agent_` and is shown once.

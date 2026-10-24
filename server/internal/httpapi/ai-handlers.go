@@ -206,7 +206,7 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrNoServerProvider):
 		writeError(response, http.StatusConflict, "no_server_provider", "This server has no AI provider for that feature. Add your own provider, or ask the server operator.")
 	case errors.Is(err, ai.ErrFeatureOff):
-		writeError(response, http.StatusConflict, "ai_feature_off", "This AI feature is off in this workspace, or its provider is gone. An admin turns it on in Settings → AI.")
+		writeError(response, http.StatusConflict, "ai_feature_off", "This AI feature is off in this workspace, or its provider is gone. An admin turns it on in Settings → Built-in AI.")
 	case errors.Is(err, ai.ErrDraftsRateLimited):
 		response.Header().Set("Retry-After", "60")
 		writeError(response, http.StatusTooManyRequests, "ai_drafts_rate_limited", "At most 30 AI drafts a minute in a workspace; try again shortly.")
@@ -225,7 +225,7 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrDraftDecided):
 		writeError(response, http.StatusConflict, "ai_draft_decided", "This AI draft was already sent, discarded or replaced.")
 	case errors.Is(err, ai.ErrAllowanceReached):
-		writeError(response, http.StatusPaymentRequired, "ai_allowance_reached", "This month's included AI is used up. Add your own provider in Settings → AI, or move to a larger plan.")
+		writeError(response, http.StatusPaymentRequired, "ai_allowance_reached", "This month's included AI is used up. Add your own provider in Settings → Built-in AI, or move to a larger plan.")
 	case errors.Is(err, ai.ErrCheckRateLimited):
 		response.Header().Set("Retry-After", "60")
 		writeError(response, http.StatusTooManyRequests, "ai_checks_rate_limited", "At most 10 provider checks a minute in a workspace; try again shortly.")
