@@ -76,8 +76,21 @@ type RateLimits struct {
 // Window is the rate limit window.
 func (r RateLimits) Window() time.Duration { return time.Duration(r.WindowSeconds) * time.Second }
 
-// Command is what a recognised command (Intent.Command) applies to the conversation it opens.
+// Command actions.
+const (
+	// ActionOpen opens a conversation with the command's tags and priority (the default).
+	ActionOpen = "open"
+	// ActionCancel throws away what is being collected.
+	ActionCancel = "cancel"
+	// ActionReopen adds the message to the conversation the customer names (Intent.Ref).
+	ActionReopen = "reopen"
+)
+
+// Command is a command customers type at the start of a message, as a workspace sets it up: its
+// phrases come only from the channel's settings, never from a list built into the server.
 type Command struct {
+	Action   string   `json:"action,omitempty"`
+	Phrases  []string `json:"phrases,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
 	Priority string   `json:"priority,omitempty"`
 }

@@ -139,6 +139,8 @@ type Intent struct {
 	Kind string
 	// Command is the name of a command of Settings.Commands.
 	Command string
+	// Ref is what the customer named for a reopen (a conversation id).
+	Ref string
 }
 
 // Aggregate collects the messages of one key until the sender is quiet for Quiet or Max passed.

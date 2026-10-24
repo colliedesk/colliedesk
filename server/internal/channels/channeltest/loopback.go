@@ -117,7 +117,9 @@ func NewLoopback(kind channels.Type, mode channels.IngestMode) *Loopback {
 	return &Loopback{Type: kind, Mode: mode, Endpoint: &Endpoint{}, Quiet: 10 * time.Second, Max: time.Minute,
 		Defaults: channels.Settings{JoinPolicy: channels.JoinPolicy{Kind: channels.JoinWithinDays, Days: 7},
 			RateLimits: channels.RateLimits{WindowSeconds: 600, PerSender: 20, NewConversations: 100, Scope: channels.ScopeChannel},
-			Commands:   map[string]channels.Command{"bug": {Tags: []string{"bug"}, Priority: "high"}}}}
+			Commands: map[string]channels.Command{"bug": {Phrases: []string{"Báo lỗi", "report bug"}, Tags: []string{"bug"}, Priority: "high"},
+				"cancel": {Action: channels.ActionCancel, Phrases: []string{"Hủy"}},
+				"reopen": {Action: channels.ActionReopen, Phrases: []string{"reopen"}}}}}
 }
 
 func (l *Loopback) Definition() channels.Definition {
@@ -219,7 +221,7 @@ type loopbackInbound struct{ l *Loopback }
 
 func (i loopbackInbound) Mode() channels.IngestMode { return i.l.Mode }
 
-func (i loopbackInbound) Parse(_ context.Context, _ channels.Channel, raw channels.Raw) ([]channels.Inbound, error) {
+func (i loopbackInbound) Parse(_ context.Context, channel channels.Channel, raw channels.Raw) ([]channels.Inbound, error) {
 	var event LoopbackEvent
 	if err := json.Unmarshal(raw.JSON, &event); err != nil {
 		return nil, fmt.Errorf("parse loopback event: %w", err)
@@ -252,6 +254,13 @@ func (i loopbackInbound) Parse(_ context.Context, _ channels.Channel, raw channe
 		in.Files = append(in.Files, channels.InboundFile{Name: file.Name, ContentType: file.Type, Data: data})
 	}
 	switch {
+	case event.Intent == "":
+		if name, command, rest, ok := channels.MatchCommand(event.Text, channel.Settings.Commands); ok {
+			in.Intent = channels.Intent{Kind: channels.IntentCommand, Command: name}
+			if command.Action == channels.ActionReopen {
+				in.Intent.Ref = strings.TrimSpace(rest)
+			}
+		}
 	case event.Intent == channels.IntentConfirm || event.Intent == channels.IntentCancel:
 		in.Intent.Kind = event.Intent
 	case strings.HasPrefix(event.Intent, "command:"):

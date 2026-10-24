@@ -77,8 +77,8 @@ func (d loopDesk) one(t *testing.T, query string, args ...any) string {
 // confirmation sends them at once and a cancel throws them away.
 func TestCollectedMessagesOpenOneConversation(t *testing.T) {
 	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
-	d.send(t, channeltest.LoopbackEvent{ID: "c1", From: "u1", Text: "Hi", Collect: true},
-		channeltest.LoopbackEvent{ID: "c2", From: "u1", Text: "my invoice is wrong", Collect: true, Intent: "command:bug"})
+	d.send(t, channeltest.LoopbackEvent{ID: "c1", From: "u1", Text: "my invoice is wrong", Collect: true, Intent: "command:bug"},
+		channeltest.LoopbackEvent{ID: "c2", From: "u1", Text: "Hi", Collect: true})
 	if n := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); n != "0" {
 		t.Fatalf("conversations=%s while collecting, want 0", n)
 	}
@@ -86,7 +86,7 @@ func TestCollectedMessagesOpenOneConversation(t *testing.T) {
 	if _, err := d.pipeline.ProcessDue(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if body := d.one(t, `SELECT string_agg(body,'|') FROM messages WHERE workspace_id=$1`); body != "Hi\nmy invoice is wrong" {
+	if body := d.one(t, `SELECT string_agg(body,'|') FROM messages WHERE workspace_id=$1`); body != "my invoice is wrong\nHi" {
 		t.Fatalf("collected body=%q", body)
 	}
 	if got := d.one(t, `SELECT priority||':'||(SELECT string_agg(t.name,',') FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id WHERE ct.conversation_id=c.id)
@@ -301,5 +301,39 @@ func TestOneTimeTokenIsRefreshedOnce(t *testing.T) {
 	wg.Wait()
 	if calls.Load() != 1 || values[0] != "fresh" || values[1] != "fresh" || errs[0] != nil || errs[1] != nil {
 		t.Fatalf("refresh calls=%d values=%v errs=%v, want one refresh both see", calls.Load(), values, errs)
+	}
+}
+
+// A command cuts what is being collected: the messages before it go on their own (here to review,
+// since they named no command) and the command starts a new request. Reopen adds a message to the
+// customer's conversation it names.
+func TestCommandCutsCollectedMessagesAndReopens(t *testing.T) {
+	loop := channeltest.NewLoopback("loopback", channels.Async)
+	loop.Defaults.Review = true
+	d := newLoopDesk(t, loop)
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "r1", From: "u1", Text: "chào shop", Collect: true},
+		channeltest.LoopbackEvent{ID: "r2", From: "u1", Text: "bao loi: không đăng nhập được", Collect: true})
+	if _, err := d.pipeline.ProcessDue(ctx); err != nil { // the next run sends what the command closed
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT string_agg(external_event_id||':'||state||':'||COALESCE(hold_reason,''),',' ORDER BY external_event_id) FROM channel_inbound_events WHERE workspace_id=$1`); got != "r1:held:review,r2:pending:" {
+		t.Fatalf("after the command: %s, want the earlier message kept for review and the command collecting", got)
+	}
+	*d.clock = d.clock.Add(11 * time.Second)
+	if _, err := d.pipeline.ProcessDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	conversationID := d.one(t, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND priority='high'`)
+	if _, err := d.pool.Exec(ctx, `UPDATE conversations SET status='resolved',updated_at=now()-interval '30 days' WHERE id=$1`, conversationID); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "r3", From: "u1", Text: "reopen " + conversationID})
+	if got := d.one(t, `SELECT c.id::text||':'||c.status FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.workspace_id=$1 AND m.external_id='loopback:r3'`); got != conversationID+":open" {
+		t.Fatalf("reopen landed in %s, want %s open again", got, conversationID)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "r4", From: "u2", Text: "hủy"})
+	if got := d.one(t, `SELECT state||':'||drop_reason FROM channel_inbound_events WHERE workspace_id=$1 AND external_event_id='r4'`); got != "dropped:cancelled" {
+		t.Fatalf("cancel command: %s", got)
 	}
 }

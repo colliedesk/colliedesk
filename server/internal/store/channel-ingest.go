@@ -184,6 +184,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		result.Status = channels.ResultArchived
 		return finish(result)
 	}
+	command, commanded := channel.Settings.Commands[in.Intent.Command]
+	commanded = commanded && in.Intent.Kind == channels.IntentCommand
+	if commanded && command.Action == channels.ActionCancel {
+		in.Intent.Kind = channels.IntentCancel
+	}
 	if in.Intent.Kind == channels.IntentCancel {
 		if in.Aggregate != nil {
 			// Cancelling throws away what was being collected with it.
@@ -220,6 +225,15 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return result, err
 	}
 	if in.Aggregate != nil && len(request.EventIDs) > 0 && !request.Replay && !request.Flushing {
+		if commanded && command.Action != channels.ActionReopen {
+			// A command starts a new request: what was collected before it is sent on its own (or kept
+			// for review), and collecting starts again with this message.
+			if _, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET aggregate_key=left($3||'#'||$5,500),flush_at=$4
+				WHERE workspace_id=$1 AND channel_id=$2 AND state='pending' AND aggregate_key=$3`,
+				workspaceID, channel.ID, in.Aggregate.Key, now, request.EventIDs[0]); err != nil {
+				return result, fmt.Errorf("close collected messages: %w", err)
+			}
+		}
 		// Due when the sender has been quiet for Quiet, or Max after the first message, or now when it confirms.
 		var first *time.Time
 		if err := tx.QueryRow(ctx, `SELECT min(received_at) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2
@@ -244,11 +258,24 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return finish(result)
 	}
 
+	if request.Flushing && channel.Settings.Review && !commanded {
+		// Collected messages that named no command wait for a person to decide what they are.
+		return s.holdInbound(ctx, tx, &journal, in, channels.HoldReview, finish)
+	}
 	contactID, err := s.contactForIdentity(ctx, tx, channel, in.Sender)
 	if err != nil {
 		return result, err
 	}
 	conversationID := request.IntoConversation
+	if conversationID == "" && commanded && command.Action == channels.ActionReopen && in.Intent.Ref != "" {
+		var found string
+		err := tx.QueryRow(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND id::text=$2 AND contact_id=$3`,
+			workspaceID, in.Intent.Ref, contactID).Scan(&found)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return result, fmt.Errorf("find conversation to reopen: %w", err)
+		}
+		conversationID = found
+	}
 	if conversationID != "" {
 		var exists bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=$1 AND id=$2::uuid)`, workspaceID, conversationID).Scan(&exists); err != nil {
@@ -257,8 +284,10 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if !exists {
 			return result, pgx.ErrNoRows
 		}
-	} else if conversationID, err = findChannelThread(ctx, tx, channel, in.Thread, now); err != nil {
-		return result, err
+	} else {
+		if conversationID, err = findChannelThread(ctx, tx, channel, in.Thread, now); err != nil {
+			return result, err
+		}
 	}
 	var files []EmailFile
 	if files, err = s.putInboundFiles(ctx, workspaceID, in.Files); err != nil {
@@ -509,7 +538,7 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 	tags := append([]string{}, settings.DefaultTags...)
 	priority := settings.DefaultPriority
 	if in.Intent.Kind == channels.IntentCommand {
-		if command, ok := settings.Commands[in.Intent.Command]; ok {
+		if command, ok := settings.Commands[in.Intent.Command]; ok && command.Action != channels.ActionCancel {
 			tags = append(tags, command.Tags...)
 			if command.Priority != "" {
 				priority = command.Priority
