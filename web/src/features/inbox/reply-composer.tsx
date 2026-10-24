@@ -16,6 +16,8 @@ import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 
 interface ReplyComposerProps {
   disabled?: boolean;
+  // noReplies: no channel carries replies of this conversation (it was removed); private notes still go.
+  noReplies?: boolean;
   // May return a promise: the text is kept, with the reason shown, when it rejects.
   // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
   // only for a reply that copies someone. aiDraft (last) names the AI draft a reply was written from.
@@ -70,7 +72,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -162,9 +164,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   const canResolve = kind === 'outgoing' && Boolean(onResolve);
   // Whether the last reply asked to resolve too, so Send anyway after a conflict keeps that choice.
   const resolveAfter = useRef(false);
-  const cannotSend = sending || !body.trim() || Boolean(fileProblem) || ccHolds;
+  const blocked = kind === 'outgoing' && noReplies;
+  const cannotSend = sending || !body.trim() || Boolean(fileProblem) || ccHolds || blocked;
   const submit = (resolve = false) => {
-    if (!body.trim() || sending || fileProblem || ccHolds) return;
+    if (!body.trim() || sending || fileProblem || ccHolds || blocked) return;
     const resolving = resolve && canResolve;
     resolveAfter.current = resolving;
     // The reply stays sent when the status change fails; the person is told and can press Resolve. The button

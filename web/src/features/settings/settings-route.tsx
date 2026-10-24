@@ -14,7 +14,15 @@ import type { AgentToken } from '../../api/schemas';
 import type { TokenChoice } from './agent-tokens-section';
 import { saveState } from './save-feedback';
 
+// The email channel and the web form were sections of this page; a link to their old anchors (a bookmark,
+// an old guide) opens their channel instead. Rare, so it is done here, in this page's own chunk.
+const movedSections: Record<string, string> = { '#email-channel-heading': '/settings/channels/type/email', '#web-form-heading': '/settings/channels/type/web_form' };
+
 export function SettingsRoute() {
+  useEffect(() => {
+    const moved = movedSections[window.location.hash];
+    if (moved) window.location.replace(moved);
+  }, []);
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });

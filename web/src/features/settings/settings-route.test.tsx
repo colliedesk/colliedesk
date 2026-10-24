@@ -227,3 +227,18 @@ test('Settings opened at a section stays where the person scrolled while it load
     expect(scrolled).not.toHaveBeenCalled();
   } finally { leaveSettings(); }
 });
+
+test('an old link to the email channel or web form section opens its channel page', async () => {
+  const original = window.location;
+  for (const [hash, target] of [['#email-channel-heading', '/settings/channels/type/email'], ['#web-form-heading', '/settings/channels/type/web_form']]) {
+    const replace = vi.fn();
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...original, hash, replace } });
+    try {
+      const { unmount } = render(<QueryClientProvider client={new QueryClient()}><SettingsRoute /></QueryClientProvider>);
+      await waitFor(() => expect(replace).toHaveBeenCalledWith(target));
+      unmount();
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: original });
+    }
+  }
+});

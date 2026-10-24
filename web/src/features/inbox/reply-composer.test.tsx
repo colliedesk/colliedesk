@@ -809,3 +809,15 @@ test('after Send and resolve the focus comes back to the box, since the button g
   await waitFor(() => expect(onResolve).toHaveBeenCalled());
   await waitFor(() => expect(body).toHaveFocus());
 });
+
+test('with no channel to carry replies the box sends private notes only', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} noReplies />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hello' } });
+  expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled();
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  expect(onSubmit).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: /Private note/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  expect(onSubmit.mock.calls[0]?.slice(0, 2)).toEqual(['note', 'Hello']);
+});

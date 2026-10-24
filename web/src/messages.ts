@@ -348,6 +348,8 @@ export const messages = {
   smtpNotConfigured: 'Outgoing email is not configured. Set SMTP_HOST and related variables on the server; until then replies are marked Delivery failed.',
   deliveryStatuses: { queued: 'Queued', sent: 'Sent', failed: 'Delivery failed' },
   retryDelivery: 'Retry delivery',
+  deliverySavedNotSent: 'Saved, not sent',
+  deliveryNotSent: 'Not sent',
   conversationNotLoaded: 'This conversation could not be loaded.',
   retryLoad: 'Retry',
   downloadOriginalEmail: 'Download original email',
