@@ -242,3 +242,18 @@ test('an old link to the email channel or web form section opens its channel pag
     }
   }
 });
+
+test('an old anchor opened while Settings is on screen opens its channel page too', async () => {
+  const original = window.location;
+  const replace = vi.fn();
+  const location = { ...original, hash: '', replace };
+  Object.defineProperty(window, 'location', { configurable: true, value: location });
+  try {
+    render(<QueryClientProvider client={new QueryClient()}><SettingsRoute /></QueryClientProvider>);
+    location.hash = '#web-form-heading';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/settings/channels/type/web_form'));
+  } finally {
+    Object.defineProperty(window, 'location', { configurable: true, value: original });
+  }
+});

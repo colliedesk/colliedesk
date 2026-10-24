@@ -20,8 +20,14 @@ const movedSections: Record<string, string> = { '#email-channel-heading': '/sett
 
 export function SettingsRoute() {
   useEffect(() => {
-    const moved = movedSections[window.location.hash];
-    if (moved) window.location.replace(moved);
+    const follow = () => {
+      const moved = movedSections[window.location.hash];
+      if (moved) window.location.replace(moved);
+    };
+    follow();
+    // An old anchor opened while Settings is already on screen changes only the hash.
+    window.addEventListener('hashchange', follow);
+    return () => window.removeEventListener('hashchange', follow);
   }, []);
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
