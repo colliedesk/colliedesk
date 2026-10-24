@@ -387,16 +387,22 @@ $$;
 CREATE TRIGGER channel_outbox_default_channel BEFORE INSERT ON channel_outbox
     FOR EACH ROW WHEN (NEW.channel_id IS NULL) EXECUTE FUNCTION channel_outbox_default_channel();
 
--- A Message-ID written the old way is also the message's external id.
+-- A Message-ID written the old way is also the message's external id; an email external id written
+-- the new way is also the Message-ID older images and the email code read.
 CREATE FUNCTION messages_email_external_id() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW.email_message_id IS NOT NULL AND (NEW.external_id IS NULL OR NEW.external_id = 'email:' || OLD.email_message_id) THEN
+    IF TG_OP = 'INSERT' AND NEW.email_message_id IS NULL AND NEW.external_id LIKE 'email:%' THEN
+        NEW.email_message_id := substr(NEW.external_id, 7);
+    ELSIF TG_OP = 'UPDATE' AND NEW.external_id IS DISTINCT FROM OLD.external_id AND NEW.email_message_id IS NOT DISTINCT FROM OLD.email_message_id
+            AND NEW.external_id LIKE 'email:%' THEN
+        NEW.email_message_id := substr(NEW.external_id, 7);
+    ELSIF NEW.email_message_id IS NOT NULL AND (NEW.external_id IS NULL OR NEW.external_id = 'email:' || OLD.email_message_id) THEN
         NEW.external_id := 'email:' || NEW.email_message_id;
     END IF;
     RETURN NEW;
 END
 $$;
-CREATE TRIGGER messages_email_external_id BEFORE INSERT OR UPDATE OF email_message_id ON messages
+CREATE TRIGGER messages_email_external_id BEFORE INSERT OR UPDATE OF email_message_id, external_id ON messages
     FOR EACH ROW EXECUTE FUNCTION messages_email_external_id();
 
 -- A reply token written the old way is also the conversation's email thread key.

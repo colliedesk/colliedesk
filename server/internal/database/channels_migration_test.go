@@ -442,3 +442,30 @@ func TestHeldInboundEventsCountTowardStorage(t *testing.T) {
 		t.Fatalf("deleted: counted=%d stored=%d, want 0", c, s)
 	}
 }
+
+// The new code writes only external_id; the email code and older images still read the Message-ID.
+func TestEmailExternalIDAlsoFillsTheMessageID(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	var id string
+	var messageID *string
+	if err := pool.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,external_id)
+		SELECT workspace_id,id,'incoming','x','email:<new@example.com>' FROM conversations WHERE workspace_id=$1 RETURNING id::text,email_message_id`, ids.a).
+		Scan(&id, &messageID); err != nil || messageID == nil || *messageID != "<new@example.com>" {
+		t.Fatalf("insert: email_message_id=%v (%v)", messageID, err)
+	}
+	if err := pool.QueryRow(ctx, `UPDATE messages SET external_id='email:<out@example.com>' WHERE id=$1 RETURNING email_message_id`, id).
+		Scan(&messageID); err != nil || messageID == nil || *messageID != "<out@example.com>" {
+		t.Fatalf("update: email_message_id=%v (%v)", messageID, err)
+	}
+	var external *string
+	if err := pool.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,external_id)
+		SELECT workspace_id,id,'incoming','x','loop:1' FROM conversations WHERE workspace_id=$1 RETURNING email_message_id,external_id`, ids.a).
+		Scan(&messageID, &external); err != nil || messageID != nil || external == nil || *external != "loop:1" {
+		t.Fatalf("another type: email_message_id=%v external_id=%v (%v)", messageID, external, err)
+	}
+}
