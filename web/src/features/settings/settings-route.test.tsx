@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SettingsRoute } from './settings-route';
@@ -9,9 +9,10 @@ const api = vi.hoisted(() => ({
   saveEmailChannel: vi.fn(), saveEmailSenderName: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
   exportWorkspace: vi.fn(), config: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
   savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
-  connectGmail: vi.fn(), disconnectGmail: vi.fn(),
+  connectGmail: vi.fn(), disconnectGmail: vi.fn(), createAgentToken: vi.fn(),
 }));
-vi.mock('../../api/client', () => ({ api, PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {} }));
+const errors = vi.hoisted(() => ({ PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {}, UnauthorizedError: class extends Error {} }));
+vi.mock('../../api/client', () => ({ api, ...errors }));
 // The help center card has tests of its own (features/kb); here it stands for itself in the page.
 vi.mock('../kb/help-center-card', () => ({ HelpCenterSettings: () => <p>Help center card</p> }));
 
@@ -27,7 +28,7 @@ const teammate = (id: string, email: string, overrides = {}) => ({
 const SAM = '11111111-1111-4111-8111-111111111111';
 const ANN = '33333333-3333-4333-8333-333333333333';
 
-function show(role: 'admin' | 'agent', sessions: unknown[] = [], emailChannel?: unknown) {
+function show(role: 'admin' | 'agent', sessions: unknown[] = [], emailChannel?: unknown, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   api.me.mockResolvedValue(me(role));
   api.config.mockResolvedValue({ billing: { enabled: false }, cloud_sign_in: { enabled: false, publishable_key: null }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
   api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { role }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
@@ -37,7 +38,7 @@ function show(role: 'admin' | 'agent', sessions: unknown[] = [], emailChannel?: 
   api.invites.mockResolvedValue({ items: [] });
   api.webForm.mockResolvedValue({ enabled: false, allowed_origins: [], submit_path: '/api/v1/public/forms/beta-desk' });
   api.emailChannel.mockResolvedValue(emailChannel ?? { channel: null, inbound_url: 'https://desk.example.com/x', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null });
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SettingsRoute /></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><SettingsRoute /></QueryClientProvider>);
 }
 
 test('an admin finds Export all data in Settings', async () => {
@@ -150,6 +151,41 @@ test('signing out this device from Sessions reloads who is signed in, so the sig
   const before = api.me.mock.calls.length;
   fireEvent.click(signOut);
   await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
+});
+
+test('an agent creates an agent token above Sessions; the list reloads to show it and the token is kept in no cache', async () => {
+  const session = { id: '77777777-7777-4777-8777-777777777777', agent_id: SAM, agent_email: 'sam@example.com', label: 'Claude Code', scope: 'draft',
+    current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  show('agent', [], undefined, client);
+  api.createAgentToken.mockResolvedValue({ token: 'cdk_agent_routetoken', session });
+  const card = await screen.findByRole('region', { name: 'AI agents' });
+  expect(within(card).getByRole('radio', { name: 'Admin' })).toBeDisabled();
+  expect(card.compareDocumentPosition(screen.getByRole('region', { name: 'Sessions' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  api.sessions.mockResolvedValue({ items: [session] });
+  const before = api.sessions.mock.calls.length;
+  fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Claude Code' } });
+  fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
+  expect(await within(card).findByDisplayValue('cdk_agent_routetoken')).toBeInTheDocument();
+  expect(api.createAgentToken).toHaveBeenCalledWith('Claude Code', 'draft');
+  await waitFor(() => expect(api.sessions.mock.calls.length).toBeGreaterThan(before));
+  expect(await within(screen.getByRole('region', { name: 'Sessions' })).findByTitle('Claude Code')).toBeInTheDocument();
+  const cached = JSON.stringify([...client.getQueryCache().getAll().map((query) => query.state.data), ...client.getMutationCache().getAll().map((mutation) => mutation.state.data)]);
+  expect(cached).not.toContain('cdk_agent_routetoken');
+});
+
+// The app's mutation cache turns a 401 into the signed-out screen and a 402 into the locked one; a
+// refused token request goes through it like every other action.
+test('a refused token request reaches the app-wide handling of signed-out and locked workspaces', async () => {
+  const onError = vi.fn();
+  const refused = new errors.UnauthorizedError('API 401');
+  show('admin', [], undefined, new QueryClient({ defaultOptions: { queries: { retry: false } }, mutationCache: new MutationCache({ onError }) }));
+  api.createAgentToken.mockRejectedValue(refused);
+  const card = await screen.findByRole('region', { name: 'AI agents' });
+  fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Codex' } });
+  fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
+  await waitFor(() => expect(onError.mock.calls[0]?.[0]).toBe(refused));
+  expect(await within(card).findByRole('alert')).toHaveTextContent('Your session ended, so no token was created.');
 });
 
 const withChannel = {

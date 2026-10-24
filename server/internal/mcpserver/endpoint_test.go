@@ -116,6 +116,11 @@ var toolNames = []string{
 	"colliedesk_request_cancel",
 	"colliedesk_request_get",
 	"colliedesk_requests_list",
+	"colliedesk_results_email_set",
+	"colliedesk_results_get",
+	"colliedesk_results_share_link_create",
+	"colliedesk_results_share_link_get",
+	"colliedesk_results_share_link_revoke",
 	"colliedesk_saved_replies_list",
 	"colliedesk_saved_replies_trash",
 	"colliedesk_saved_reply_create",
@@ -291,6 +296,11 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_ai_triage_accept":                 {idempotent: true, tier: "draft"},
 	"colliedesk_ai_triage_dismiss":                {idempotent: true, tier: "draft"},
 	"colliedesk_ai_triage_undo":                   {idempotent: true, tier: "draft"},
+	"colliedesk_results_get":                      {readOnly: true, tier: "read"},
+	"colliedesk_results_share_link_get":           {readOnly: true, tier: "admin"},
+	"colliedesk_results_share_link_create":        {tier: "read"},
+	"colliedesk_results_share_link_revoke":        {idempotent: true, tier: "admin"},
+	"colliedesk_results_email_set":                {idempotent: true, tier: "draft"},
 }
 
 func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {

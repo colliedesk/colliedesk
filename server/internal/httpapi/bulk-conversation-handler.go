@@ -48,7 +48,7 @@ func (a *API) bulkUpdateConversations(response http.ResponseWriter, request *htt
 			return
 		}
 	}
-	update := store.BulkConversationUpdate{Status: changes.Status, AddTagIDs: changes.AddTagIDs, RemoveTagIDs: changes.RemoveTagIDs}
+	update := store.BulkConversationUpdate{Status: changes.Status, AddTagIDs: changes.AddTagIDs, RemoveTagIDs: changes.RemoveTagIDs, ActorID: principal(request).Agent.ID}
 	if len(changes.AssigneeID) > 0 {
 		var value *string
 		if string(changes.AssigneeID) != "null" && json.Unmarshal(changes.AssigneeID, &value) != nil {

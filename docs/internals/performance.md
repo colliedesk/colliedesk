@@ -118,6 +118,21 @@ images, and emphasis runs (goldmark's quadratic paths: up to 24 s before `tame`,
 then 20 visits (not 50, to spare the shared latency runner) read the kept page (4–12 ms).
 `TestHelpCenterRenderedPagesAreNeverSharedAcrossWorkspaces` keeps that memory per workspace.
 
+## Results budget
+
+`TestResultsComputeAndReadStayInBudget` (in `internal/httpapi`, so the latency shard builds no new test
+binary) holds the background compute of one workspace's results page to 2 s, best of three: no screen
+waits for it (the page reads a stored snapshot), but it holds a connection. The fixture is a busy team:
+5,000 Colliedesk conversations over 30 days (a customer message and a reply each, half resolved) and
+20,000 imported Freshdesk tickets in the baseline's window, with stats and time logged on a quarter.
+Measured on the dev host: current numbers 130 ms, baseline 550 to 590 ms; seeding takes about 5 s. The
+baseline cost is mostly writing the ~65,000 rows of the conversations behind its numbers; a foreign
+key from those rows to conversations tripled it and was dropped (`docs/internals/results.md`). On the
+same data the page's read (`store.ReadResults`: the state row and one snapshot of each kind) is held to
+20 ms p95 over 200 calls (1.5 ms locally) and the list a number opens (`result=` on the 5,000
+conversations of the 30-day volume, a page of 50) to the inbox's 100 ms p95 (5 ms locally); one seed
+serves all three. Do not widen any of them.
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind
@@ -181,6 +196,8 @@ On 2026-10-22 presence (issue #101: who else has a conversation open) first kept
 On 2026-10-22 Settings → AI (#89: AI providers and features) became its own lazy part, `ai-route` (9,400 bytes gzip plus 2,380 bytes of CSS), with its strings, schemas and calls. The first bundle keeps the menu link, the route and the `ai` field of the public config: 198,143 → 198,290 bytes (+147), CSS unchanged at 15,444. The page asks for nothing before it opens, and no inbox or conversation request waits for an AI provider.
 
 The same day its Usage tab, the paused and allowance notices and the automatic-runs dialog grew `ai-route` to 12,071 bytes gzip plus 2,854 of CSS; the first bundle did not change. The usage of a month is asked for only when the tab opens. AI work runs as background tasks (`ai.Worker`): no request waits for a provider.
+
+On 2026-10-23 the results page (#100) became its own lazy part, `results-route` (its strings, schemas, page and CSS); the first bundle keeps the rail link with its chart icon, the route, the `result` inbox filter, the public share page's route and the strings of a refreshed list: 201,489 → 202,056 bytes (+567); the share page is a lazy part of its own. Its CSS went from 15,890 to 15,893: the mobile filter chips now wrap instead of scrolling sideways, so a filter is never out of view.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 

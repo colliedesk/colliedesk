@@ -17,6 +17,8 @@ type BulkConversationUpdate struct {
 	AssigneeID   **string
 	AddTagIDs    []string
 	RemoveTagIDs []string
+	// ActorID is the agent making the change; it is recorded in the status history.
+	ActorID string
 }
 
 // BulkUpdateConversations applies update to every conversation in ids in one transaction and
@@ -63,6 +65,11 @@ func bulkUpdateConversations(ctx context.Context, tx pgx.Tx, workspaceID string,
 	}
 	if tags != len(tagIDs) {
 		return 0, fmt.Errorf("validate conversation tag: unknown tag")
+	}
+	if update.Status != nil {
+		if err := setStatusActor(ctx, tx, update.ActorID); err != nil {
+			return 0, err
+		}
 	}
 	if update.Status != nil || update.AssigneeID != nil {
 		if _, err := tx.Exec(ctx, `UPDATE conversations SET

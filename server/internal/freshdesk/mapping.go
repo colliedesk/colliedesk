@@ -132,7 +132,15 @@ func ticketOrigin(ticket fdTicket) *domain.ConversationOrigin {
 	}
 	return &domain.ConversationOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(ticket.ID, 10), ResponderExternalID: responder, Type: ticket.Type,
 		Source: &source, DueAt: utcPointer(ticket.DueBy), FirstResponseDueAt: utcPointer(ticket.FrDueBy),
-		CC: list(ticket.CcEmails), ForwardedTo: list(ticket.FwdEmails)}
+		CC: list(ticket.CcEmails), ForwardedTo: list(ticket.FwdEmails), Stats: originStats(ticket.Stats, ticket.Status)}
+}
+
+func originStats(stats *fdStats, freshdeskStatus int) *domain.OriginStats {
+	if stats == nil {
+		return nil
+	}
+	status, _ := mapStatus(freshdeskStatus)
+	return &domain.OriginStats{Status: status, ResolvedAt: utcPointer(stats.ResolvedAt), FirstRespondedAt: utcPointer(stats.FirstRespondedAt), ClosedAt: utcPointer(stats.ClosedAt)}
 }
 
 func list(values []string) []string {

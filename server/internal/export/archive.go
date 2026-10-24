@@ -32,13 +32,13 @@ const (
 var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
 	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
 	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson",
-	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "conversations.ndjson"}
+	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "results-baselines.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
 	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people",
-	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions",
+	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "results-baselines.ndjson": "results_baselines",
 	"conversations.ndjson": "conversations",
 }
 
@@ -84,7 +84,7 @@ func NewWriter(out io.Writer, opener Opener, workspaceID string, exportedAt time
 		zip: zip.NewWriter(out), out: out, opener: opener, workspaceID: workspaceID,
 		exportedAt: exportedAt.UTC(), current: -1,
 		counts: map[string]int{"agents": 0, "contacts": 0, "tags": 0, "saved_replies": 0, "saved_reply_versions": 0, "saved_views": 0,
-			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_videos": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0},
+			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_videos": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0, "status_changes": 0},
 	}
 }
 
@@ -207,6 +207,10 @@ func (w *Writer) AITriage(record AITriage) error {
 	return w.record("ai-triage.ndjson", record)
 }
 
+func (w *Writer) ResultsBaseline(record ResultsBaseline) error {
+	return w.record("results-baselines.ndjson", record)
+}
+
 // Conversation writes a whole conversation at once; the store streams with the three calls below.
 func (w *Writer) Conversation(record Conversation) error {
 	if err := w.BeginConversation(record.ConversationHead); err != nil {
@@ -217,7 +221,7 @@ func (w *Writer) Conversation(record Conversation) error {
 			return err
 		}
 	}
-	return w.EndConversation(record.TimeEntries)
+	return w.EndConversation(record.TimeEntries, record.StatusChanges)
 }
 
 // BeginConversation starts the JSON line of one conversation. Message and EndConversation must follow.
@@ -275,8 +279,8 @@ func (w *Writer) Message(message Message) error {
 	return w.write(encoded)
 }
 
-// EndConversation closes the open conversation with its time entries.
-func (w *Writer) EndConversation(timeEntries []domain.TimeEntry) error {
+// EndConversation closes the open conversation with its time entries and status history.
+func (w *Writer) EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error {
 	if w.err != nil {
 		return w.err
 	}
@@ -286,14 +290,22 @@ func (w *Writer) EndConversation(timeEntries []domain.TimeEntry) error {
 	if timeEntries == nil {
 		timeEntries = []domain.TimeEntry{}
 	}
+	if statusChanges == nil {
+		statusChanges = []StatusChange{}
+	}
 	encoded, err := marshal(timeEntries)
 	if err != nil {
 		return w.fail(fmt.Errorf("encode time entries: %w", err))
 	}
+	changes, err := marshal(statusChanges)
+	if err != nil {
+		return w.fail(fmt.Errorf("encode status changes: %w", err))
+	}
 	w.inThread = false
 	w.counts["time_entries"] += len(timeEntries)
+	w.counts["status_changes"] += len(statusChanges)
 	w.counts["conversations"]++
-	line := append([]byte(`],"time_entries":`), encoded...)
+	line := append(append(append([]byte(`],"time_entries":`), encoded...), `,"status_changes":`...), changes...)
 	if err := w.write(append(line, '}', '\n')); err != nil {
 		return err
 	}

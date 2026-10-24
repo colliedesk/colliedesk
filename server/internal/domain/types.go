@@ -148,6 +148,19 @@ type ConversationOrigin struct {
 	FirstResponseDueAt  *time.Time `json:"first_response_due_at"`
 	CC                  []string   `json:"cc"`
 	ForwardedTo         []string   `json:"forwarded_to"`
+	// Stats is what the source reported about the ticket, read once; nil when it reported nothing.
+	Stats *OriginStats `json:"stats,omitempty"`
+}
+
+// OriginStats are a source ticket's own timestamps (Freshdesk include=stats). The results page reads
+// ResolvedAt for the imported baseline.
+type OriginStats struct {
+	// Status is the ticket's status (mapped to Colliedesk's) when these were read: a resolve time
+	// counts for the baseline only while the ticket was still resolved or closed.
+	Status           string     `json:"status"`
+	ResolvedAt       *time.Time `json:"resolved_at"`
+	FirstRespondedAt *time.Time `json:"first_responded_at"`
+	ClosedAt         *time.Time `json:"closed_at"`
 }
 
 // MessageOrigin records where an imported message came from and who it was addressed to.

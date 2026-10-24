@@ -214,3 +214,17 @@ test('402 seat_paused becomes a SeatPausedError with the server\'s explanation',
   expect(error).not.toBeInstanceOf(WorkspaceLockedError);
   expect((error as Error).message).toBe('Your access is paused.');
 });
+
+test('an agent token is created with its label and tier; an agent refused an admin token gets the reason', async () => {
+  const session = { id: '66666666-6666-4666-8666-666666666666', agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Claude Code',
+    scope: 'draft', current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2026-11-22T00:00:00Z', revoked_at: null };
+  fetchMock.mockResolvedValueOnce(reply(201, { token: 'cdk_agent_secret', session }));
+  expect(await api.createAgentToken('Claude Code', 'draft')).toEqual({ token: 'cdk_agent_secret', session });
+  const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect([path, init.method, JSON.parse(String(init.body))]).toEqual(['/api/v1/auth/tokens', 'POST', { label: 'Claude Code', scope: 'draft' }]);
+
+  fetchMock.mockResolvedValueOnce(reply(403, apiError('admin_token_needs_admin', 'Only a workspace admin can create an admin token. Choose read, draft or send.')));
+  const error = await api.createAgentToken('Ops', 'admin').catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(InvalidRequestError);
+  expect((error as Error).message).toMatch(/Only a workspace admin/);
+});

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
+import { AgentTokensSection } from './agent-tokens-section';
 import { ExportAllData } from './export-all-data';
 import { EmailChannelSection, gmailPart } from './email-channel-section';
 import { gmailReturn } from './gmail-return';
@@ -11,6 +12,7 @@ import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { helpCenterPart } from '../kb/kb-part';
+import type { AgentToken, TokenScope } from '../../api/schemas';
 import type { SaveState } from './save-feedback';
 
 function saveState(m: { isPending: boolean; isSuccess: boolean; isError: boolean; error: unknown }): SaveState {
@@ -31,6 +33,13 @@ export function SettingsRoute() {
     mutationFn: ({ id, ...change }: { id: string; display_name?: string; role?: 'admin' | 'agent'; active?: boolean; reassign_to?: string | null }) => api.updateAgent(id, change),
     // A rename also shows in the account menu when it is your own row.
     onSuccess: () => { for (const key of ['agents', 'sessions', 'invites', 'billing', 'conversations', 'me']) void refresh(key); },
+  });
+  // A mutation, so that a 401 or 402 signs out or locks the app as any action does. The new token is in no
+  // cache: keep hands it to the card, and the mutation's own result is empty. Sessions reloads to list it,
+  // also after a failure whose outcome is unknown, so a token the server did create shows up to be revoked.
+  const createToken = useMutation({
+    mutationFn: async ({ label, scope, keep }: { label: string; scope: TokenScope; keep: (created: AgentToken) => void }) => { keep(await api.createAgentToken(label, scope)); },
+    onSettled: () => refresh('sessions'),
   });
   const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => refresh('invites') });
   // Revoking this device's own session signs it out; reloading me shows the signed-out screen.
@@ -78,6 +87,8 @@ export function SettingsRoute() {
     onSetDisplayName={(name) => agentDisplayName.mutate(name)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError || emailFailed ? messages.settingsActionFailed : undefined}
+    agentsSection={<AgentTokensSection canCreateAdmin={isAdmin}
+      onCreate={(label, scope) => new Promise((keep, reject) => { createToken.mutateAsync({ label, scope, keep }).catch(reject); })} />}
     teamSection={<TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={isAdmin} timezone={me.data?.timezone ?? 'UTC'}
       error={updateAgent.error instanceof PlanLimitError || updateAgent.error instanceof InvalidRequestError ? updateAgent.error.message : updateAgent.isError ? messages.settingsActionFailed : undefined}
       onChangeRole={(id, role) => updateAgent.mutate({ id, role })}

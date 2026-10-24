@@ -53,6 +53,7 @@
 .chip-remove:hover:not(:disabled) { background: var(--surface-3); color: var(--text-1); }
 .chip-remove svg { width: 14px; height: 14px; }
 .filter-chips .link-button { font-size: var(--fs-label); }
+.filter-chips-note { flex-basis: 100%; margin: 0; color: var(--text-3); font-size: var(--fs-label); }
 /* Saved views. */
 .views-popover { gap: var(--space-3); }
 .views-popover h3 { color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
@@ -82,13 +83,9 @@
   .filter-popover { width: 100%; }
   .check-row { min-height: var(--touch); }
   .chip-remove { width: var(--touch); min-height: var(--touch); margin-block: -8px; }
-  /* One row of chips that scrolls sideways, its bar hidden and its edges faded, so the list stays in view. */
-  /* Only the chips scroll; Clear all stays outside the scrolling row, always in view. */
-  .filter-chips { flex-wrap: nowrap; min-width: 0; }
+  /* Chips wrap here too: a chip scrolled out of a sideways row is a filter nobody sees is on. */
   .inbox-filters { grid-template-columns: minmax(0, 1fr); }
-  .filter-chips ul { display: flex; flex: 1; min-width: 0; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
-  .filter-chips ul::-webkit-scrollbar { display: none; }
-  .filter-chips li { flex: none; }
+  .filter-chips li { min-width: 0; }
   .filter-chips .link-button { flex: none; min-height: var(--touch); padding-inline: var(--space-2); }
   .filter-chips li { min-height: 36px; }
 }
@@ -736,9 +733,11 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Help under the import's fields and counts stays readable: at least the label size. */
 .import-page small { font-size: var(--fs-label); }
 /* A link that leads on (Open the inbox) looks like the button next to it. */
-.import-page a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
-  padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
-.import-page a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
+.import-page a.button, .agent-tokens a.button, .results-page a.button, .empty-copy a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+  padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
+@media (pointer: coarse) { .agent-tokens a.button, .results-page a.button, .empty-copy a.button { min-height: var(--touch); } }
+.empty-copy .button-row { justify-content: center; margin-top: var(--space-3); }
+.import-page a.button.primary-action, .agent-tokens a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
 /* On a phone the actions of the import stay at the bottom of the screen, whatever the table above
    them holds: nothing to scroll to before starting, stopping or confirming. */
 @media (max-width: 40rem) {

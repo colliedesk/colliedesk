@@ -43,6 +43,8 @@ interface SettingsPageProps {
   emailSection?: ReactNode;
   // savedRepliesSection is for every agent, not only admins.
   savedRepliesSection?: ReactNode;
+  // agentsSection creates agent tokens for AI hosts; every signed-in person sees it, just above the sessions it adds to.
+  agentsSection?: ReactNode;
   // exportSection is the admin's whole-workspace export.
   exportSection?: ReactNode;
   webFormSection?: ReactNode;
@@ -57,13 +59,13 @@ interface SettingsPageProps {
 // plus Plan and billing (its own page) for admins of a billed workspace.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, helpCenterSection, exportSection, showBilling = false }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, agentsSection, emailSection, savedRepliesSection, webFormSection, helpCenterSection, exportSection, showBilling = false }: SettingsPageProps) {
   return (
     <main className="settings-page panel">
       <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
       {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <div className="settings-layout">
         <SettingsNav page="/settings" shown={{ general: canManageWorkspace, team: Boolean(teamSection), email: Boolean(emailSection), webForm: Boolean(webFormSection),
-          savedReplies: Boolean(savedRepliesSection), helpCenter: Boolean(helpCenterSection), exportData: Boolean(exportSection), billing: showBilling, importData: canManageWorkspace, ai: true }} />
+          savedReplies: Boolean(savedRepliesSection), helpCenter: Boolean(helpCenterSection), exportData: Boolean(exportSection), billing: showBilling, importData: canManageWorkspace, ai: true, agents: Boolean(agentsSection) }} />
         <div className="settings-sections">
           {error && <p role="alert" className="error-copy">{error}</p>}
           <p className="settings-group-label">{messages.settingsYourAccount}</p>
@@ -88,6 +90,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           {teamSection}
           <InvitesSection invites={invites} timezone={timezone} canCreateInvites={canCreateInvites} createdInviteUrl={createdInviteUrl}
             inviteError={inviteError} onCreateInvite={onCreateInvite} onRevokeInvite={onRevokeInvite} />
+          {agentsSection}
           <SessionsSection sessions={sessions} timezone={timezone} onRevokeSession={onRevokeSession} />
           {emailSection}
           {webFormSection}

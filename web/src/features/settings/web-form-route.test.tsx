@@ -6,12 +6,13 @@ import { SettingsRoute } from './settings-route';
 const mocks = vi.hoisted(() => {
   class InvalidRequestError extends Error {}
   class PlanLimitError extends Error {}
+  class UnauthorizedError extends Error {}
   const api = {
     me: vi.fn(), sessions: vi.fn(), invites: vi.fn(), emailChannel: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
   };
-  return { api, InvalidRequestError, PlanLimitError };
+  return { api, InvalidRequestError, PlanLimitError, UnauthorizedError };
 });
-vi.mock('../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, PlanLimitError: mocks.PlanLimitError }));
+vi.mock('../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, PlanLimitError: mocks.PlanLimitError, UnauthorizedError: mocks.UnauthorizedError }));
 
 beforeEach(() => {
   vi.clearAllMocks();

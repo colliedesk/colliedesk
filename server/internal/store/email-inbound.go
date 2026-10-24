@@ -195,6 +195,9 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		if err := upload(); err != nil {
 			return result, err
 		}
+		if err := setStatusActor(ctx, tx, ""); err != nil {
+			return result, err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') THEN 'open' ELSE status END,
 			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID); err != nil {
 			return result, fmt.Errorf("reopen conversation: %w", err)

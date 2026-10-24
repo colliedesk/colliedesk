@@ -373,6 +373,14 @@ paths:
           in: query
           description: Words to find in the subject, in any message text, or in the name or email of the contact.
           schema: {type: string, maxLength: 200}
+        - name: result
+          in: query
+          description: >-
+            Only the conversations one number of the results page counts: `<snapshot id>:<window>.<metric>`, as
+            `GET /results` names them (for example `…:30d.first_response`). Send it without a status filter: a
+            number counts conversations in any status. A snapshot that is no longer kept (numbers are worked out
+            again every hour or so; a replaced one stays 24 hours) answers 410 `results_refreshed`.
+          schema: {type: string, maxLength: 120, pattern: '^[0-9a-f-]{36}:(30d|7d)\.[a-z_]+$'}
         - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
         - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
       responses:
@@ -383,6 +391,9 @@ paths:
               schema: {$ref: '#/components/schemas/ConversationPage'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '410':
+          description: The results snapshot the `result` filter names is no longer kept (`results_refreshed`)
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     post:
       operationId: createConversation
       x-permission: conversations:write
@@ -2389,6 +2400,121 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/results:
+    get:
+      operationId: getResults
+      x-permission: conversations:read
+      description: >-
+        The results page (docs/user/results.md): the team's numbers in Colliedesk next to the baseline of the
+        history it imported, for the last 30 and 7 days. Nothing is computed on the request: the numbers are
+        the newest a background worker stored (`computed_at`). Every count names, through its snapshot id,
+        the conversations behind it (the `result` filter of `GET /conversations`). Every role reads it; the
+        compute error is shown to admins only.
+      responses:
+        '200':
+          description: The newest numbers
+          content: {application/json: {schema: {$ref: '#/components/schemas/Results'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/results/share-link:
+    get:
+      operationId: getResultsShareLink
+      x-permission: access:write
+      description: >-
+        The workspace's active share link of the results page: who made it, when, and when it was last
+        opened. Never the link itself: only its hash is stored, so it is shown once, when it is created.
+        Admins only.
+      responses:
+        '200':
+          description: The active link, or null
+          content: {application/json: {schema: {$ref: '#/components/schemas/ResultsShareLinkState'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createResultsShareLink
+      x-permission: access:write
+      description: >-
+        Creates a link that shows the results page's totals to anyone who has it, without signing in: no
+        conversation ids, customer or team names, subjects or message text. The old link, if any, stops
+        working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never
+        reaches a server log). An agent token's call becomes a request a person approves: the numbers leave
+        sign-in. Admins only.
+      responses:
+        '201':
+          description: The new link, shown once
+          content: {application/json: {schema: {$ref: '#/components/schemas/ResultsShareLinkCreated'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    delete:
+      operationId: revokeResultsShareLink
+      x-permission: access:write
+      description: Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Admins only.
+      responses:
+        '200':
+          description: No active link
+          content: {application/json: {schema: {$ref: '#/components/schemas/ResultsShareLinkState'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/results/shared:
+    post:
+      operationId: getSharedResults
+      x-permission: public
+      description: >-
+        The totals a share link shows, for the public page `/r#<token>`. The token is sent in the body, never
+        in the address. Only totals, medians and sample sizes: no ids, names, subjects or text. A link that
+        was turned off or replaced, an unknown one, and a locked workspace's all answer the same 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 100}
+      responses:
+        '200':
+          description: The shared totals
+          content: {application/json: {schema: {$ref: '#/components/schemas/SharedResults'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404':
+          description: The link was turned off, replaced or never existed
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/agents/me/results-email:
+    patch:
+      operationId: setResultsEmail
+      x-permission: authenticated
+      description: >-
+        Turns the weekly results email on or off for the caller. It goes to admins only, every Monday at
+        8:00 in the workspace's timezone, when the server can send email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [weekly]
+              properties:
+                weekly: {type: boolean}
+      responses:
+        '200':
+          description: The caller's choice
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [weekly]
+                properties:
+                  weekly: {type: boolean}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/ai/usage:
     get:
       operationId: getAIUsage
@@ -2667,8 +2793,8 @@ paths:
       description: >-
         Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export`
         version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for
-        agents, contacts, tags and conversations (with their messages, notes, tag ids and time
-        entries), and the attachment files. Admins only. Works on self-hosted installs and in every
+        agents, contacts, tags and conversations (with their messages, notes, tag ids, time
+        entries and status changes), and the attachment files. Admins only. Works on self-hosted installs and in every
         plan state, including a read-only workspace. Sessions, pairing links, channel secrets and
         billing data are never exported. The archive is built while it is sent; if the server
         cannot finish it (for example a stored file is lost) the connection is aborted, so a
@@ -4606,6 +4732,210 @@ components:
         limit_micro_usd: {type: integer, description: 'This month''s allowance of the server''s provider, in millionths of a US dollar.'}
         used_micro_usd: {type: integer, description: Spent so far; calls still running are not counted yet.}
         resets_at: {type: string, format: date-time, description: The first instant of the next UTC month.}
+    Results:
+      type: object
+      required: [current, baseline, baseline_state, hours_saved, error, weekly_email]
+      properties:
+        weekly_email:
+          description: The caller's weekly email (admins only; null for agents).
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [subscribed, can_send, next_at, timezone]
+              properties:
+                subscribed: {type: boolean}
+                can_send: {type: boolean, description: False when the server has no outgoing mail settings.}
+                next_at: {type: string, format: date-time, description: The next Monday 8:00 in the workspace's timezone.}
+                timezone: {type: string, description: The workspace's timezone (IANA).}
+        current:
+          description: Colliedesk's numbers; null until the worker has computed them once.
+          oneOf: [{$ref: '#/components/schemas/ResultsSnapshot'}, {type: 'null'}]
+        baseline:
+          description: The imported history's numbers, measured when its import finished; null without one.
+          oneOf: [{$ref: '#/components/schemas/ResultsSnapshot'}, {type: 'null'}]
+        baseline_state:
+          type: string
+          enum: [none, computing, ready]
+          description: >-
+            `none`: no import to compare with. `computing`: an import finished (or was run again or undone) and
+            its numbers are being worked out. `ready`: `baseline` holds them.
+        hours_saved:
+          type: object
+          description: >-
+            Per window, the upper bound of time AI drafts saved: conversations with a draft sent nearly unchanged
+            times the baseline's median handle time. Null without a baseline handle time from at least 5
+            conversations in that window.
+          additionalProperties: false
+          properties:
+            30d: {$ref: '#/components/schemas/ResultsHoursSaved'}
+            7d: {$ref: '#/components/schemas/ResultsHoursSaved'}
+        error:
+          description: Why the last compute failed (admins only; null for agents and when it worked).
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [message, at]
+              properties:
+                message: {type: string}
+                at: {type: string, format: date-time}
+    ResultsShareLink:
+      type: object
+      required: [created_at, created_by_name, last_viewed_at]
+      properties:
+        created_at: {type: string, format: date-time}
+        created_by_name: {type: [string, 'null'], description: Null when that person was removed.}
+        last_viewed_at: {type: [string, 'null'], format: date-time, description: 'Updated at most once an hour.'}
+    ResultsShareLinkState:
+      type: object
+      required: [link]
+      properties:
+        link:
+          oneOf: [{$ref: '#/components/schemas/ResultsShareLink'}, {type: 'null'}]
+    ResultsShareLinkCreated:
+      type: object
+      required: [link, url]
+      properties:
+        link: {$ref: '#/components/schemas/ResultsShareLink'}
+        url: {type: string, description: 'The address to share, shown only now.'}
+    SharedResults:
+      type: object
+      additionalProperties: false
+      required: [workspace_name, computed_at, baseline_from, baseline_import_status, current, baseline, hours_saved]
+      properties:
+        workspace_name: {type: string}
+        baseline_import_status:
+          type: [string, 'null']
+          enum: [OK, UNVERIFIED, null]
+          description: UNVERIFIED when the baseline's import could not check that every ticket arrived (the page labels it); null for an import made before results existed.
+        computed_at: {type: [string, 'null'], format: date-time}
+        baseline_from:
+          type: [string, 'null']
+          enum: [freshdesk, helpscout, null]
+          description: Where the baseline was imported from; null without one (or while it is not shown).
+        current:
+          oneOf: [{$ref: '#/components/schemas/SharedResultsSide'}, {type: 'null'}]
+        baseline:
+          oneOf: [{$ref: '#/components/schemas/SharedResultsSide'}, {type: 'null'}]
+        hours_saved:
+          type: object
+          additionalProperties: false
+          properties:
+            30d: {$ref: '#/components/schemas/ResultsHoursSaved'}
+            7d: {$ref: '#/components/schemas/ResultsHoursSaved'}
+    SharedResultsSide:
+      type: object
+      additionalProperties: false
+      required: [measured_at, windows]
+      properties:
+        measured_at: {type: string, format: date-time}
+        windows:
+          type: object
+          required: [30d, 7d]
+          additionalProperties: false
+          properties:
+            30d: {$ref: '#/components/schemas/ResultsWindow'}
+            7d: {$ref: '#/components/schemas/ResultsWindow'}
+    ResultsHoursSaved:
+      oneOf:
+        - type: 'null'
+        - type: object
+          required: [hours, conversations, median_handle_minutes]
+          properties:
+            hours: {type: number}
+            conversations: {type: integer}
+            median_handle_minutes: {type: integer}
+    ResultsSnapshot:
+      type: object
+      required: [id, computed_at, measured_at, windows]
+      properties:
+        id: {type: string, format: uuid, description: 'Names the snapshot in the `result` filter.'}
+        computed_at: {type: string, format: date-time}
+        measured_at: {type: string, format: date-time, description: 'The moment the numbers describe: the anchor of a baseline.'}
+        history_since: {type: string, format: date-time, description: 'Current only: since when status history is complete.'}
+        source: {type: string, description: 'Baseline only: the import ledger source, for example freshdesk:account:123.'}
+        import_status:
+          type: string
+          enum: [OK, FAILED, UNVERIFIED, '']
+          description: 'Baseline only: the reconcile status of the import''s latest run; empty for an import made before results existed.'
+        end: {type: string, format: date-time, description: 'Baseline only: where its windows end (the newest ticket created by the anchor).'}
+        stats_read: {type: integer, description: 'Baseline only: tickets whose resolve times were read; 0 means run the import again for them.'}
+        windows:
+          type: object
+          required: [30d, 7d]
+          additionalProperties: false
+          properties:
+            30d: {$ref: '#/components/schemas/ResultsWindow'}
+            7d: {$ref: '#/components/schemas/ResultsWindow'}
+    ResultsRange:
+      type: object
+      required: [from, to]
+      description: Created after `from`, up to and including `to`.
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+    ResultsWindow:
+      type: object
+      required: [created, resolved_created, available_on, first_response, resolution, reopened, volume, handle, ai]
+      properties:
+        created: {$ref: '#/components/schemas/ResultsRange'}
+        resolved_created: {$ref: '#/components/schemas/ResultsRange'}
+        available_on:
+          type: [string, 'null']
+          format: date-time
+          description: When resolution and reopens can be shown; set while status history does not reach back far enough.
+        first_response:
+          type: object
+          required: [median_seconds, p90_seconds, answered, waiting]
+          properties:
+            median_seconds: {type: [integer, 'null'], description: Null below 5 answered conversations.}
+            p90_seconds: {type: [integer, 'null']}
+            answered: {type: integer}
+            waiting: {type: integer, description: Customer-started conversations of the window with no reply yet.}
+        resolution:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [median_seconds, resolved, unresolved, without_resolve_time]
+              properties:
+                median_seconds: {type: [integer, 'null']}
+                resolved: {type: integer}
+                unresolved: {type: integer, description: 'Not resolved, or resolved less than 7 days ago, or reopened.'}
+                without_resolve_time: {type: integer, description: Imported tickets without a resolve time from the source.}
+        reopened:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [rate, reopened, resolutions]
+              properties:
+                rate: {type: [number, 'null'], description: 'Share (0 to 1); null below 5 resolutions.'}
+                reopened: {type: integer}
+                resolutions: {type: integer}
+        volume:
+          type: object
+          required: [count, from, days, per_week]
+          properties:
+            count: {type: integer}
+            from: {type: string, format: date-time, description: 'Where the weeks are counted from: the window start or the first conversation, if later.'}
+            days: {type: number}
+            per_week: {type: [number, 'null']}
+        handle:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [median_minutes, conversations]
+              properties:
+                median_minutes: {type: [integer, 'null']}
+                conversations: {type: integer}
+        ai:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [sent_unchanged, sent_edited, discarded, conversations_sent_unchanged]
+              properties:
+                sent_unchanged: {type: integer}
+                sent_edited: {type: integer}
+                discarded: {type: integer}
+                conversations_sent_unchanged: {type: integer}
     AIUsage:
       type: object
       required: [month, allowance, rows]
@@ -5662,6 +5992,22 @@ components:
         first_response_due_at: {type: [string, 'null'], format: date-time}
         cc: {type: array, items: {type: string}}
         forwarded_to: {type: array, items: {type: string}}
+        stats:
+          type: object
+          description: >-
+            What the source helpdesk reported about the ticket (Freshdesk `include=stats`), read once: a
+            later import keeps the first values it read and only fills a ticket that has none. Missing on
+            imports that predate it, on archived Freshdesk tickets and on other sources. The results page
+            reads `resolved_at` for the imported baseline (docs/user/results.md).
+          required: [status, resolved_at, first_responded_at, closed_at]
+          properties:
+            status:
+              type: string
+              enum: [open, pending, resolved, closed]
+              description: The ticket's status, as Colliedesk maps it, when these were read
+            resolved_at: {type: [string, 'null'], format: date-time}
+            first_responded_at: {type: [string, 'null'], format: date-time}
+            closed_at: {type: [string, 'null'], format: date-time}
     BulkConversationUpdate:
       type: object
       required: [ids, changes]

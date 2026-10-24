@@ -1359,6 +1359,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The results page (docs/user/results.md): the team's numbers in Colliedesk next to the baseline of the history it imported, for the last 30 and 7 days. Nothing is computed on the request: the numbers are the newest a background worker stored (`computed_at`). Every count names, through its snapshot id, the conversations behind it (the `result` filter of `GET /conversations`). Every role reads it; the compute error is shown to admins only. */
+        get: operations["getResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/results/share-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's active share link of the results page: who made it, when, and when it was last opened. Never the link itself: only its hash is stored, so it is shown once, when it is created. Admins only. */
+        get: operations["getResultsShareLink"];
+        put?: never;
+        /** @description Creates a link that shows the results page's totals to anyone who has it, without signing in: no conversation ids, customer or team names, subjects or message text. The old link, if any, stops working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never reaches a server log). An agent token's call becomes a request a person approves: the numbers leave sign-in. Admins only. */
+        post: operations["createResultsShareLink"];
+        /** @description Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Admins only. */
+        delete: operations["revokeResultsShareLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/results/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description The totals a share link shows, for the public page `/r#<token>`. The token is sent in the body, never in the address. Only totals, medians and sample sizes: no ids, names, subjects or text. A link that was turned off or replaced, an unknown one, and a locked workspace's all answer the same 404. */
+        post: operations["getSharedResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/results-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Turns the weekly results email on or off for the caller. It goes to admins only, every Monday at 8:00 in the workspace's timezone, when the server can send email. */
+        patch: operations["setResultsEmail"];
+        trace?: never;
+    };
     "/api/v1/ai/usage": {
         parameters: {
             query?: never;
@@ -1540,7 +1610,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export` version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for agents, contacts, tags and conversations (with their messages, notes, tag ids and time entries), and the attachment files. Admins only. Works on self-hosted installs and in every plan state, including a read-only workspace. Sessions, pairing links, channel secrets and billing data are never exported. The archive is built while it is sent; if the server cannot finish it (for example a stored file is lost) the connection is aborted, so a truncated ZIP without `manifest.json` means the export failed. A client that stops reading is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at a time (409 until it has sent its last byte), and a server runs at most two exports at once (429 with `Retry-After`). */
+        /** @description Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export` version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for agents, contacts, tags and conversations (with their messages, notes, tag ids, time entries and status changes), and the attachment files. Admins only. Works on self-hosted installs and in every plan state, including a read-only workspace. Sessions, pairing links, channel secrets and billing data are never exported. The archive is built while it is sent; if the server cannot finish it (for example a stored file is lost) the connection is aborted, so a truncated ZIP without `manifest.json` means the export failed. A client that stops reading is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at a time (409 until it has sent its last byte), and a server runs at most two exports at once (429 with `Retry-After`). */
         get: operations["exportWorkspace"];
         put?: never;
         post?: never;
@@ -2697,6 +2767,189 @@ export interface components {
              */
             resets_at: string;
         };
+        Results: {
+            /** @description The caller's weekly email (admins only; null for agents). */
+            weekly_email: null | {
+                subscribed: boolean;
+                /** @description False when the server has no outgoing mail settings. */
+                can_send: boolean;
+                /**
+                 * Format: date-time
+                 * @description The next Monday 8:00 in the workspace's timezone.
+                 */
+                next_at: string;
+                /** @description The workspace's timezone (IANA). */
+                timezone: string;
+            };
+            /** @description Colliedesk's numbers; null until the worker has computed them once. */
+            current: components["schemas"]["ResultsSnapshot"] | null;
+            /** @description The imported history's numbers, measured when its import finished; null without one. */
+            baseline: components["schemas"]["ResultsSnapshot"] | null;
+            /**
+             * @description `none`: no import to compare with. `computing`: an import finished (or was run again or undone) and its numbers are being worked out. `ready`: `baseline` holds them.
+             * @enum {string}
+             */
+            baseline_state: "none" | "computing" | "ready";
+            /** @description Per window, the upper bound of time AI drafts saved: conversations with a draft sent nearly unchanged times the baseline's median handle time. Null without a baseline handle time from at least 5 conversations in that window. */
+            hours_saved: {
+                "30d"?: components["schemas"]["ResultsHoursSaved"];
+                "7d"?: components["schemas"]["ResultsHoursSaved"];
+            };
+            /** @description Why the last compute failed (admins only; null for agents and when it worked). */
+            error: null | {
+                message: string;
+                /** Format: date-time */
+                at: string;
+            };
+        };
+        ResultsShareLink: {
+            /** Format: date-time */
+            created_at: string;
+            /** @description Null when that person was removed. */
+            created_by_name: string | null;
+            /**
+             * Format: date-time
+             * @description Updated at most once an hour.
+             */
+            last_viewed_at: string | null;
+        };
+        ResultsShareLinkState: {
+            link: components["schemas"]["ResultsShareLink"] | null;
+        };
+        ResultsShareLinkCreated: {
+            link: components["schemas"]["ResultsShareLink"];
+            /** @description The address to share, shown only now. */
+            url: string;
+        };
+        SharedResults: {
+            workspace_name: string;
+            /**
+             * @description UNVERIFIED when the baseline's import could not check that every ticket arrived (the page labels it); null for an import made before results existed.
+             * @enum {string|null}
+             */
+            baseline_import_status: "OK" | "UNVERIFIED" | null;
+            /** Format: date-time */
+            computed_at: string | null;
+            /**
+             * @description Where the baseline was imported from; null without one (or while it is not shown).
+             * @enum {string|null}
+             */
+            baseline_from: "freshdesk" | "helpscout" | null;
+            current: components["schemas"]["SharedResultsSide"] | null;
+            baseline: components["schemas"]["SharedResultsSide"] | null;
+            hours_saved: {
+                "30d"?: components["schemas"]["ResultsHoursSaved"];
+                "7d"?: components["schemas"]["ResultsHoursSaved"];
+            };
+        };
+        SharedResultsSide: {
+            /** Format: date-time */
+            measured_at: string;
+            windows: {
+                "30d": components["schemas"]["ResultsWindow"];
+                "7d": components["schemas"]["ResultsWindow"];
+            };
+        };
+        ResultsHoursSaved: null | {
+            hours: number;
+            conversations: number;
+            median_handle_minutes: number;
+        };
+        ResultsSnapshot: {
+            /**
+             * Format: uuid
+             * @description Names the snapshot in the `result` filter.
+             */
+            id: string;
+            /** Format: date-time */
+            computed_at: string;
+            /**
+             * Format: date-time
+             * @description The moment the numbers describe: the anchor of a baseline.
+             */
+            measured_at: string;
+            /**
+             * Format: date-time
+             * @description Current only: since when status history is complete.
+             */
+            history_since?: string;
+            /** @description Baseline only: the import ledger source, for example freshdesk:account:123. */
+            source?: string;
+            /**
+             * @description Baseline only: the reconcile status of the import's latest run; empty for an import made before results existed.
+             * @enum {string}
+             */
+            import_status?: "OK" | "FAILED" | "UNVERIFIED" | "";
+            /**
+             * Format: date-time
+             * @description Baseline only: where its windows end (the newest ticket created by the anchor).
+             */
+            end?: string;
+            /** @description Baseline only: tickets whose resolve times were read; 0 means run the import again for them. */
+            stats_read?: number;
+            windows: {
+                "30d": components["schemas"]["ResultsWindow"];
+                "7d": components["schemas"]["ResultsWindow"];
+            };
+        };
+        /** @description Created after `from`, up to and including `to`. */
+        ResultsRange: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+        };
+        ResultsWindow: {
+            created: components["schemas"]["ResultsRange"];
+            resolved_created: components["schemas"]["ResultsRange"];
+            /**
+             * Format: date-time
+             * @description When resolution and reopens can be shown; set while status history does not reach back far enough.
+             */
+            available_on: string | null;
+            first_response: {
+                /** @description Null below 5 answered conversations. */
+                median_seconds: number | null;
+                p90_seconds: number | null;
+                answered: number;
+                /** @description Customer-started conversations of the window with no reply yet. */
+                waiting: number;
+            };
+            resolution: null | {
+                median_seconds: number | null;
+                resolved: number;
+                /** @description Not resolved, or resolved less than 7 days ago, or reopened. */
+                unresolved: number;
+                /** @description Imported tickets without a resolve time from the source. */
+                without_resolve_time: number;
+            };
+            reopened: null | {
+                /** @description Share (0 to 1); null below 5 resolutions. */
+                rate: number | null;
+                reopened: number;
+                resolutions: number;
+            };
+            volume: {
+                count: number;
+                /**
+                 * Format: date-time
+                 * @description Where the weeks are counted from: the window start or the first conversation, if later.
+                 */
+                from: string;
+                days: number;
+                per_week: number | null;
+            };
+            handle: null | {
+                median_minutes: number | null;
+                conversations: number;
+            };
+            ai: null | {
+                sent_unchanged: number;
+                sent_edited: number;
+                discarded: number;
+                conversations_sent_unchanged: number;
+            };
+        };
         AIUsage: {
             month: string;
             allowance: components["schemas"]["AIAllowance"] | null;
@@ -3815,6 +4068,20 @@ export interface components {
             first_response_due_at: string | null;
             cc: string[];
             forwarded_to: string[];
+            /** @description What the source helpdesk reported about the ticket (Freshdesk `include=stats`), read once: a later import keeps the first values it read and only fills a ticket that has none. Missing on imports that predate it, on archived Freshdesk tickets and on other sources. The results page reads `resolved_at` for the imported baseline (docs/user/results.md). */
+            stats?: {
+                /**
+                 * @description The ticket's status, as Colliedesk maps it, when these were read
+                 * @enum {string}
+                 */
+                status: "open" | "pending" | "resolved" | "closed";
+                /** Format: date-time */
+                resolved_at: string | null;
+                /** Format: date-time */
+                first_responded_at: string | null;
+                /** Format: date-time */
+                closed_at: string | null;
+            };
         };
         BulkConversationUpdate: {
             ids: string[];
@@ -4911,6 +5178,8 @@ export interface operations {
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
                 search?: string;
+                /** @description Only the conversations one number of the results page counts: `<snapshot id>:<window>.<metric>`, as `GET /results` names them (for example `…:30d.first_response`). Send it without a status filter: a number counts conversations in any status. A snapshot that is no longer kept (numbers are worked out again every hour or so; a replaced one stays 24 hours) answers 410 `results_refreshed`. */
+                result?: string;
                 page?: number;
                 page_size?: number;
             };
@@ -4931,6 +5200,15 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description The results snapshot the `result` filter names is no longer kept (`results_refreshed`) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     createConversation: {
@@ -7338,6 +7616,165 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest numbers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Results"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The active link, or null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkState"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new link, shown once */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkCreated"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No active link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkState"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getSharedResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The shared totals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedResults"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description The link was turned off, replaced or never existed */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    setResultsEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    weekly: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's choice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        weekly: boolean;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getAIUsage: {

@@ -1,0 +1,77 @@
+# Connect Claude Desktop
+
+Connect [Claude Desktop](https://claude.ai/download) on macOS or Windows to Colliedesk with the
+Colliedesk extension. Claude Desktop starts the small `collie` program that comes with it, which
+carries Claude's requests to your Colliedesk; the token is kept by Claude Desktop, not in a file.
+
+{{template "before" .}}
+## Connect
+
+1. Download the extension: [{{index .Assets "bundle"}}]({{index .Snippets "desktopBundle"}}).
+2. Open it (double-click), or drag it onto **Settings → Extensions** in Claude Desktop, and choose
+   **Install**.
+3. Fill in **Colliedesk address** (`{{.Origin}}`) and **Agent token**, and turn the extension on.
+
+In a new chat, the tools menu lists Colliedesk.
+
+The extension always holds the newest release of `collie`. Check a download against
+[{{index .Assets "checksums"}}]({{.Releases}}{{index .Assets "checksums"}}), or prove it was built by
+this repository with `gh attestation verify {{index .Assets "bundle"}} -R colliedesk/colliedesk`.
+
+### Without the extension
+
+Any host that starts a local MCP server (Claude Desktop's `claude_desktop_config.json` among them)
+can run `collie mcp` itself. Install `collie` on macOS or Linux:
+
+```sh
+{{index .Snippets "collieUnix"}}
+```
+
+or on Windows, in PowerShell:
+
+```powershell
+{{index .Snippets "collieWindows"}}
+```
+
+The last line prints the full path of `collie`: the host needs it, because it does not read your
+shell's `PATH`. Copy the token and save it in a file only you can read. On macOS:
+
+```sh
+{{index .Snippets "collieTokenFile"}}
+```
+
+On Linux, paste it into `~/.colliedesk-token` with an editor, then `chmod 600 ~/.colliedesk-token`.
+On Windows, in PowerShell (Windows does not check who can read the file; your user folder is
+private to you):
+
+```powershell
+{{index .Snippets "collieTokenFileWindows"}}
+```
+
+Then give the host this server, with your paths and address (on Windows, the `collie.exe` path the
+install printed and `C:\Users\you\.colliedesk-token`, with each `\` written twice in JSON):
+
+```json
+{{index .Snippets "stdio"}}
+```
+
+`collie mcp` takes the token from `--token-file` or the `{{.TokenEnv}}` variable, never from its
+arguments, which other programs can read. It refuses `http://` addresses except on this computer.
+When something is wrong it answers the call with what to do (a revoked token, a wrong address, a
+server that cannot be reached) and writes one line to the host's log. On Windows the token file's
+permissions are not checked.
+
+## A custom connector instead
+
+Some Claude organizations see **Request headers** when an Owner adds a custom connector. That
+connector reaches your Colliedesk from Anthropic's servers, so it must be reachable from the
+internet, and everyone in the organization uses the one token the Owner entered: every action is
+recorded as that token's person. Prefer the extension.
+
+{{template "try" .}}
+{{template "tiers" .}}
+## Remove it
+
+In Claude Desktop, **Settings → Extensions**, remove Colliedesk. Without the extension, delete
+the `{{.ServerName}}` entry from the host's configuration and `~/.colliedesk-token`. {{template "revoke" .}}
+{{template "others" .}}

@@ -227,7 +227,7 @@ func TestConversationCanBeStreamedMessageByMessage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := writer.EndConversation([]domain.TimeEntry{{ID: "e1", ConversationID: "c1", Minutes: 5}}); err != nil {
+	if err := writer.EndConversation([]domain.TimeEntry{{ID: "e1", ConversationID: "c1", Minutes: 5}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.Finish(context.Background()); err != nil {

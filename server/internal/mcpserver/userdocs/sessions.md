@@ -25,11 +25,21 @@ with a limit you choose. It is a session with a label and a **scope**. It appear
 stops working. **Revoke** ends it at once, as for any session. Admins see and revoke the tokens of
 every agent.
 
-Create a token with `POST /api/v1/auth/tokens` and a body such as
+Create a token in **Settings → AI agents**, which every agent sees: give it a name you will
+recognise in Sessions (1 to 80 characters, for example **Claude Code on my laptop**), pick its scope
+(**Read**, **Draft**, **Send** or **Admin**; **Draft** is selected) and choose **Create token**. Only an
+admin can pick **Admin**; for an agent it is shown but cannot be chosen. The token is shown once,
+with **Copy token**. Choose **I saved it, hide the token** when you have it; leaving the page hides it too,
+and Colliedesk cannot show it again. If you lose it, create a new token and revoke the old one. The new
+token appears in Sessions at once. Below it, **Connect your agent** has the steps for Claude Code,
+Codex, Cursor, VS Code and Claude Desktop with your address filled in, and the way to remove each
+one; while the token is shown, **Add to Cursor** puts it into Cursor in one click. To check that an
+agent is connected, ask it "Who am I in Colliedesk?".
+
+A program can create a token with `POST /api/v1/auth/tokens` and a body such as
 `{"label": "Claude Code", "scope": "draft"}`. On your own server you can also use the
-[command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line). Settings has no
-button for it yet. The token is shown once and cannot be recovered. If you lose
-it, create a new token and revoke the old one. The agent sends it as `Authorization: Bearer <token>`.
+[command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line). The agent
+sends the token as `Authorization: Bearer <token>`.
 
 | Scope | The agent can |
 |---|---|

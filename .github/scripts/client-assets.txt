@@ -1,0 +1,12 @@
+# The files release.yml attaches to a GitHub release besides the image: the client collie per
+# system, named the way `uname -s`/`uname -m` (or PowerShell's PROCESSOR_ARCHITECTURE) name it so
+# an install command can pick its file, then the Claude Desktop extension and the checksums.
+# GOOS GOARCH asset. The user guides link these names; a Go test checks both sides.
+darwin arm64 collie_Darwin_arm64.tar.gz
+darwin amd64 collie_Darwin_x86_64.tar.gz
+linux amd64 collie_Linux_x86_64.tar.gz
+linux arm64 collie_Linux_aarch64.tar.gz
+windows amd64 collie_Windows_AMD64.zip
+windows arm64 collie_Windows_ARM64.zip
+bundle - colliedesk.mcpb
+checksums - SHA256SUMS
