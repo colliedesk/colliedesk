@@ -2514,6 +2514,7 @@ paths:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/ai/usage:
     get:
       operationId: getAIUsage

@@ -7774,6 +7774,7 @@ export interface operations {
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getAIUsage: {

@@ -140,4 +140,9 @@ var toolDocs = map[string]string{
 	"colliedesk_ai_triage_accept":                 "Applies a suggestion (all of it, or the parts named) to its conversation",
 	"colliedesk_ai_triage_dismiss":                "Dismisses a suggestion",
 	"colliedesk_ai_triage_undo":                   "Takes back what AI applied of a suggestion by itself (all of it, or the parts named); keeps what a person changed since",
+	"colliedesk_results_get":                      "Shows the [results page](results.md): your numbers for the last 30 and 7 days next to the history you imported",
+	"colliedesk_results_share_link_get":           "Shows whether the results page has an active share link, who made it and when it was last opened; never the link itself",
+	"colliedesk_results_share_link_create":        "Asks a person to create a share link of the results page; the old link stops working",
+	"colliedesk_results_share_link_revoke":        "Turns off the results page's share link",
+	"colliedesk_results_email_set":                "Turns your weekly results email on or off (admins only)",
 }
