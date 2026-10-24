@@ -380,7 +380,7 @@ class E2EShards(unittest.TestCase):
     def test_the_e2e_job_runs_its_shard_with_the_arguments_the_check_lists(self):
         e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
         self.assertRegex(e2e, r'(?m)^        shard: \[1, 2\]$')
-        self.assertRegex(e2e, r'(?m)^    timeout-minutes: 2$')
+        self.assertRegex(e2e, r'(?m)^    timeout-minutes: 10$')
         self.assertRegex(e2e, r"(?m)^      E2E_ARGS: --grep-invert @onboarding --fully-parallel --workers=3$")
         self.assertIn('corepack pnpm e2e $E2E_ARGS --shard="$SHARD/$SHARDS"', e2e)
         self.assertIn('python3 ../.github/scripts/e2e-shard-check.py "$SHARDS" -- corepack pnpm exec playwright test $E2E_ARGS', e2e)
@@ -390,6 +390,16 @@ class E2EShards(unittest.TestCase):
 
 
 class Budget(unittest.TestCase):
+    def test_ci_has_no_phase_budget_and_cd_keeps_its_60_seconds(self):
+        # The owner exempted Colliedesk CI from the 120-second phase budget; CD keeps its 60.
+        ci = (ROOT / '.github/workflows/ci.yml').read_text()
+        self.assertNotIn('ci-budget.py', ci)
+        for name in ['ci.yml', 'codeql.yml', 'go-cache.yml']:
+            text = (ROOT / '.github/workflows' / name).read_text()
+            self.assertNotRegex(text, r'(?m)^\s+timeout-minutes: 2$', name)
+        self.assertRegex((ROOT / '.github/workflows/publish-edge.yml').read_text(),
+                         r'(?m)^    timeout-minutes: 1$')
+
     def test_queue_time_counts_toward_the_120_second_limit(self):
         for now, expected in [('2026-10-19T13:01:59Z', 0), ('2026-10-19T13:02:00Z', 0),
                               ('2026-10-19T13:02:01Z', 1)]:
