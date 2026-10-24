@@ -337,3 +337,33 @@ func TestCommandCutsCollectedMessagesAndReopens(t *testing.T) {
 		t.Fatalf("cancel command: %s", got)
 	}
 }
+
+// Groups and one-to-one messages follow their scope's rules: in a group only a command opens a
+// conversation, chatter is kept without one, and the parser reads the group's organization from the
+// type's snapshot. A scope the type does not declare is refused.
+func TestScopesGiveGroupsTheirOwnRules(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	ctx := context.Background()
+	settings := json.RawMessage(`{"scopes":{"group":{"mode":"commands"}},"loopback_groups":{"g1":"Acme Hospital"}}`)
+	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Settings: settings}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "g-1", From: "m1", Group: "g1", Text: "good morning everyone"},
+		channeltest.LoopbackEvent{ID: "g-2", From: "m1", Group: "g1", Text: "report bug: the printer is down"},
+		channeltest.LoopbackEvent{ID: "g-3", From: "m2", Group: "g1", Text: "same here"},
+		channeltest.LoopbackEvent{ID: "u-1", From: "m3", Text: "hello"})
+	if got := d.one(t, `SELECT string_agg(external_event_id||':'||state||':'||(message_id IS NOT NULL),',' ORDER BY external_event_id) FROM channel_inbound_events WHERE workspace_id=$1`); got != "g-1:processed:false,g-2:processed:true,g-3:processed:true,u-1:processed:true" {
+		t.Fatalf("journal=%s, want chatter archived, the command and its follow-up stored, the direct message stored", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); got != "2" {
+		t.Fatalf("conversations=%s, want the group's request and the direct message", got)
+	}
+	if got := d.one(t, `SELECT organization FROM contacts WHERE workspace_id=$1 AND name='m1'`); got != "Acme Hospital" {
+		t.Fatalf("group member's organization=%q, want it from the snapshot", got)
+	}
+	bad := json.RawMessage(`{"scopes":{"page_comments":{"mode":"commands"}}}`)
+	var fieldErr *channels.FieldError
+	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Settings: bad}, store.ChannelActor{}); !errors.As(err, &fieldErr) {
+		t.Fatalf("undeclared scope: %v, want a field error", err)
+	}
+}

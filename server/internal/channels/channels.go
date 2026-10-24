@@ -112,6 +112,51 @@ type Settings struct {
 	Notices           Notices            `json:"notices,omitempty"`
 	// Review holds a collected message that named no command for a person to decide (hold_reason review).
 	Review bool `json:"review,omitempty"`
+	// Scopes change these rules for one kind of conversation of the type (a chat's one-to-one messages
+	// and its groups); the keys are the type's Definition.Scopes.
+	Scopes map[string]Scope `json:"scopes,omitempty"`
+}
+
+// Scope modes.
+const (
+	// ModeAll makes every message of the scope a customer message (the default).
+	ModeAll = "all"
+	// ModeCommands opens a conversation only for a message that names a command; others join an
+	// open conversation or what is being collected, or are archived.
+	ModeCommands = "commands"
+)
+
+// Gather is a scope's collecting window, in seconds.
+type Gather struct {
+	QuietSeconds int `json:"quiet_seconds"`
+	MaxSeconds   int `json:"max_seconds"`
+}
+
+// Scope is the rules of one scope; a field left out keeps the channel's.
+type Scope struct {
+	Mode       string      `json:"mode,omitempty"`
+	JoinPolicy *JoinPolicy `json:"join_policy,omitempty"`
+	Gather     *Gather     `json:"gather,omitempty"`
+	Review     *bool       `json:"review,omitempty"`
+}
+
+// ForScope returns the rules of a scope: the channel's with what the scope sets over them.
+func (s Settings) ForScope(scope string) (Settings, Scope) {
+	rules, ok := s.Scopes[scope]
+	if !ok || scope == "" {
+		return s, Scope{Mode: ModeAll}
+	}
+	if rules.Mode == "" {
+		rules.Mode = ModeAll
+	}
+	merged := s
+	if rules.JoinPolicy != nil {
+		merged.JoinPolicy = *rules.JoinPolicy
+	}
+	if rules.Review != nil {
+		merged.Review = *rules.Review
+	}
+	return merged, rules
 }
 
 // Merge returns s with every field override sets replacing it; override is JSON a channel stores.
@@ -142,6 +187,8 @@ type Definition struct {
 	Name string
 	// Capabilities are fixed codes the web app turns into words: what the channel can carry.
 	Capabilities []string
+	// Scopes are the keys of Settings.Scopes the type gives its messages (Inbound.Scope).
+	Scopes []string
 	// RepliesVia names the type that carries this type's replies when it sends none itself.
 	RepliesVia Type
 	// CarriesOtherReplies makes the type carry the replies of conversations that came through no
@@ -259,4 +306,7 @@ type ConfigPart interface {
 	Status(ctx context.Context, tx pgx.Tx, channel Channel) (Status, error)
 	// Remove deletes the type's own rows of a channel being removed.
 	Remove(ctx context.Context, tx pgx.Tx, channel Channel) error
+	// Snapshot reads what Parse needs of the type's own tables (a map of chat groups), read-only and
+	// never a secret; nil when it needs nothing.
+	Snapshot(ctx context.Context, tx pgx.Tx, channel Channel) (any, error)
 }

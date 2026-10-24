@@ -14,6 +14,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 )
 
 const (
@@ -72,7 +73,11 @@ func (p *Pipeline) Receive(ctx context.Context, channel channels.Channel, raws [
 			results = append(results, channels.IngestResult{Status: status, EventID: id})
 			continue
 		}
-		items, err := adapter.Inbound().Parse(ctx, channel, raw)
+		snapshot, err := p.snapshot(ctx, adapter, channel)
+		if err != nil {
+			return results, err
+		}
+		items, err := adapter.Inbound().Parse(ctx, channel, snapshot, raw)
 		if err != nil {
 			return results, err
 		}
@@ -156,6 +161,10 @@ func (p *Pipeline) parseEvents(ctx context.Context, channel channels.Channel, ev
 	if err != nil {
 		return nil, err
 	}
+	snapshot, err := p.snapshot(ctx, adapter, channel)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]channels.Inbound, 0, len(events))
 	for _, event := range events {
 		raw := channels.Raw{ExternalEventID: event.ExternalEventID, JSON: event.Raw, ReceivedAt: event.ReceivedAt}
@@ -164,7 +173,7 @@ func (p *Pipeline) parseEvents(ctx context.Context, channel channels.Channel, ev
 				return nil, err
 			}
 		}
-		parsed, err := adapter.Inbound().Parse(ctx, channel, raw)
+		parsed, err := adapter.Inbound().Parse(ctx, channel, snapshot, raw)
 		if err != nil {
 			return nil, fmt.Errorf("parse channel event %s: %w", event.ID, err)
 		}
@@ -247,4 +256,20 @@ func (p *Pipeline) ReplayHeld(ctx context.Context, workspaceID, channelID string
 		}
 	}
 	return results, nil
+}
+
+// snapshot reads what the type's parser needs of its own tables, in a read-only transaction of its
+// own just before parsing: Parse stays outside the transaction that writes, and a message whose
+// snapshot changed meanwhile is processed again from the journal the same way.
+func (p *Pipeline) snapshot(ctx context.Context, adapter channels.Adapter, channel channels.Channel) (any, error) {
+	var snapshot any
+	err := p.store.InWorkspace(ctx, channel.WorkspaceID, func(tx pgx.Tx) error {
+		var err error
+		snapshot, err = adapter.Config().Snapshot(ctx, tx, channel)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read %s snapshot: %w", channel.Type, err)
+	}
+	return snapshot, nil
 }

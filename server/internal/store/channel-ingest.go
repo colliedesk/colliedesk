@@ -72,6 +72,18 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return result, ErrChannelHasNoAdapter
 	}
 	definition := adapter.Definition()
+	// The message follows its scope's rules; everything below reads them from the channel.
+	var scope channels.Scope
+	channel.Settings, scope = channel.Settings.ForScope(in.Scope)
+	if scope.Gather != nil {
+		quiet, most := time.Duration(scope.Gather.QuietSeconds)*time.Second, time.Duration(scope.Gather.MaxSeconds)*time.Second
+		switch {
+		case in.Aggregate != nil:
+			in.Aggregate.Quiet, in.Aggregate.Max = quiet, most
+		case len(in.Thread.Keys) > 0:
+			in.Aggregate = &channels.Aggregate{Key: in.Thread.Keys[0], Quiet: quiet, Max: most}
+		}
+	}
 	if len(request.EventIDs) > 0 {
 		// Another worker may hold these events; leave them to it.
 		allowed := []string{"received", "failed", "pending"}
@@ -258,6 +270,20 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return finish(result)
 	}
 
+	if scope.Mode == channels.ModeCommands && !commanded && !request.Replay && request.IntoConversation == "" {
+		joins, err := s.joinsWithoutCommand(ctx, tx, channel, in, request, now)
+		if err != nil {
+			return result, err
+		}
+		if !joins {
+			// Chatter of a scope that opens conversations only on a command is kept, not opened.
+			if err := journal.write(ctx, "processed", journalDetail{senderKey: senderKey}); err != nil {
+				return result, err
+			}
+			result.Status = channels.ResultArchived
+			return finish(result)
+		}
+	}
 	if request.Flushing && channel.Settings.Review && !commanded {
 		// Collected messages that named no command wait for a person to decide what they are.
 		return s.holdInbound(ctx, tx, &journal, in, channels.HoldReview, finish)
@@ -682,4 +708,29 @@ func (j *journalWriter) write(ctx context.Context, state string, d journalDetail
 		return fmt.Errorf("write channel journal: %w", err)
 	}
 	return nil
+}
+
+// joinsWithoutCommand reports whether a message that names no command still belongs to a request:
+// what is being collected for its key, or an open conversation its thread finds.
+func (s *Store) joinsWithoutCommand(ctx context.Context, tx pgx.Tx, channel channels.Channel, in channels.Inbound, request IngestRequest, now time.Time) (bool, error) {
+	if request.Flushing {
+		return false, nil
+	}
+	if in.Aggregate != nil {
+		var collecting bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='pending'
+			AND aggregate_key=$3 AND NOT (id::text=ANY($4)))`, channel.WorkspaceID, channel.ID, in.Aggregate.Key, request.EventIDs).Scan(&collecting); err != nil {
+			return false, fmt.Errorf("find collected messages: %w", err)
+		}
+		if collecting {
+			return true, nil
+		}
+	}
+	conversationID, err := findChannelThread(ctx, tx, channel, in.Thread, now)
+	if err != nil || conversationID == "" {
+		return false, err
+	}
+	var open bool
+	err = tx.QueryRow(ctx, `SELECT status IN ('open','pending') FROM conversations WHERE workspace_id=$1 AND id=$2`, channel.WorkspaceID, conversationID).Scan(&open)
+	return open, err
 }

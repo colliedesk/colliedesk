@@ -124,7 +124,7 @@ func NewLoopback(kind channels.Type, mode channels.IngestMode) *Loopback {
 
 func (l *Loopback) Definition() channels.Definition {
 	return channels.Definition{Type: l.Type, Name: "Loopback", Capabilities: []string{"threads", "attachments_in", "attachments_out"},
-		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults,
+		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: []string{"user", "group"},
 		Routes: []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
 		Tools: []channels.ToolSpec{{Name: "colliedesk_" + string(l.Type) + "_ping", Description: "Checks the loopback route.",
 			Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", InputSchema: json.RawMessage(`{"type":"object"}`)}}}
@@ -217,11 +217,27 @@ func (loopbackConfig) Status(context.Context, pgx.Tx, channels.Channel) (channel
 
 func (loopbackConfig) Remove(context.Context, pgx.Tx, channels.Channel) error { return nil }
 
+// Snapshot is the map of groups to organizations loopback keeps in the channel's settings
+// (loopback_groups); a real type reads its own table.
+func (loopbackConfig) Snapshot(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
+	groups := map[string]string{}
+	var raw []byte
+	if err := tx.QueryRow(ctx, `SELECT settings->'loopback_groups' FROM channels WHERE workspace_id=$1 AND id=$2`, channel.WorkspaceID, channel.ID).Scan(&raw); err != nil {
+		return nil, err
+	}
+	if len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &groups); err != nil {
+			return nil, err
+		}
+	}
+	return groups, nil
+}
+
 type loopbackInbound struct{ l *Loopback }
 
 func (i loopbackInbound) Mode() channels.IngestMode { return i.l.Mode }
 
-func (i loopbackInbound) Parse(_ context.Context, channel channels.Channel, raw channels.Raw) ([]channels.Inbound, error) {
+func (i loopbackInbound) Parse(_ context.Context, channel channels.Channel, snapshot any, raw channels.Raw) ([]channels.Inbound, error) {
 	var event LoopbackEvent
 	if err := json.Unmarshal(raw.JSON, &event); err != nil {
 		return nil, fmt.Errorf("parse loopback event: %w", err)
@@ -229,12 +245,16 @@ func (i loopbackInbound) Parse(_ context.Context, channel channels.Channel, raw 
 	if event.From == "" {
 		return nil, errors.New("a loopback event needs a sender")
 	}
-	key := "user:" + event.From
+	key, scope := "user:"+event.From, "user"
+	organization := ""
 	if event.Group != "" {
-		key = "group:" + event.Group
+		key, scope = "group:"+event.Group, "group"
+		if groups, ok := snapshot.(map[string]string); ok {
+			organization = groups[event.Group]
+		}
 	}
 	in := channels.Inbound{ExternalID: event.ID, Sender: channels.Sender{Identity: channels.Identity{Kind: LoopbackIdentity, Value: event.From},
-		Name: event.Name, Email: event.Email}, Text: event.Text, SentAt: raw.ReceivedAt,
+		Name: event.Name, Email: event.Email, Organization: organization}, Text: event.Text, SentAt: raw.ReceivedAt, Scope: scope,
 		Thread: channels.Thread{Keys: []string{key}, Record: []string{key}}, Meta: json.RawMessage(`{"via":"loopback"}`)}
 	if event.Reference != "" {
 		in.Thread.References = []string{event.Reference}

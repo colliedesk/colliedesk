@@ -74,6 +74,8 @@ type Inbound struct {
 	Intent    Intent
 	// Aggregate collects messages before a conversation opens (Async only).
 	Aggregate *Aggregate
+	// Scope picks the rules of Settings.Scopes the message follows; empty follows the channel's.
+	Scope string
 	// Delivery is the report of a KindDeliveryUpdate; it may come with DropReason set.
 	Delivery *DeliveryUpdate
 	// DropReason drops the message (the channel's own address, an auto-reply) with this reason.
@@ -197,6 +199,8 @@ const (
 // InboundPart is the type's input: raw events in, normalized messages out.
 type InboundPart interface {
 	Mode() IngestMode
-	// Parse is pure: it reads raw and the channel, never writes. One raw event may hold several messages.
-	Parse(ctx context.Context, channel Channel, raw Raw) ([]Inbound, error)
+	// Parse is pure: the same raw event and snapshot (ConfigPart.Snapshot) always give the same
+	// messages, so an event processed again from the journal gives what it gave. It never writes.
+	// One raw event may hold several messages.
+	Parse(ctx context.Context, channel Channel, snapshot any, raw Raw) ([]Inbound, error)
 }

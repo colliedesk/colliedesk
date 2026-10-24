@@ -53,8 +53,23 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	if err := json.Unmarshal(settings, &object); err != nil {
 		return nil, &channels.FieldError{Fields: map[string]string{"settings": "Settings must be a JSON object."}, Message: "Check the channel settings."}
 	}
-	if _, err := definition.Defaults.Merge(settings); err != nil {
+	merged, err := definition.Defaults.Merge(settings)
+	if err != nil {
 		return nil, &channels.FieldError{Fields: map[string]string{"settings": err.Error()}, Message: "Check the channel settings."}
+	}
+	for key, scope := range merged.Scopes {
+		known := false
+		for _, declared := range definition.Scopes {
+			known = known || declared == key
+		}
+		if !known {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key: "This channel has no such kind of conversation."},
+				Message: "Check the channel settings."}
+		}
+		if scope.Mode != "" && scope.Mode != channels.ModeAll && scope.Mode != channels.ModeCommands {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".mode": "Use all or commands."},
+				Message: "Check the channel settings."}
+		}
 	}
 	return settings, nil
 }
