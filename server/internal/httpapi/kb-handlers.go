@@ -320,7 +320,9 @@ func (a *API) askUnlessHeld(response http.ResponseWriter, request *http.Request,
 
 // articleIsPublished is the check askUnlessHeld runs for a change to one article.
 func (a *API) articleIsPublished(request *http.Request, who auth.Principal) func() (bool, error) {
-	return func() (bool, error) { return a.store.KBArticlePublished(request.Context(), who.Workspace.ID, request.PathValue("id")) }
+	return func() (bool, error) {
+		return a.store.KBArticlePublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+	}
 }
 
 // keepBody reads the request body so a handler can both decode it and, when it must wait for a

@@ -48,7 +48,9 @@ func byHandler(permission string) TokenAccess {
 
 // alwaysAsk: risky whatever the token holds (new credentials, money, data leaving); every token's call
 // becomes an agent request a person approves.
-func alwaysAsk(permission string) TokenAccess { return TokenAccess{Approval: true, Permission: permission} }
+func alwaysAsk(permission string) TokenAccess {
+	return TokenAccess{Approval: true, Permission: permission}
+}
 
 func personOnly(why string) TokenAccess { return TokenAccess{Closed: PersonOnly, Why: why} }
 
