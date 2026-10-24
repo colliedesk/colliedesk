@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -221,5 +222,70 @@ func TestAIUsageAndAutomaticLimitsStayInTheirWorkspace(t *testing.T) {
 	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/ai", nil, desk.adminB, nil), &settingsB)
 	if settingsB.Automatic.PerDay != ai.DefaultAutomaticPerDay {
 		t.Fatalf("B's limits changed with A's: %+v", settingsB.Automatic)
+	}
+}
+
+func TestAIModelsAreListedBeforeAProviderIsSavedAndSaveNothing(t *testing.T) {
+	desk := newAIDesk(t, nil)
+	desk.fake.FakeModels = []string{"claude-sonnet-5-5", "claude-haiku-5-5"}
+	var list struct {
+		Models []string `json:"models"`
+	}
+	response := request(t, desk.api, http.MethodPost, "/api/v1/ai/models", map[string]any{"kind": "anthropic", "api_key": "sk-new-5555"}, desk.adminA, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", response.Code, response.Body.String())
+	}
+	decode(t, response, &list)
+	if strings.Join(list.Models, ",") != "claude-sonnet-5-5,claude-haiku-5-5" {
+		t.Fatalf("models = %v", list.Models)
+	}
+	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM ai_providers`); n != "2" {
+		t.Fatalf("listing models saved a provider: %s providers", n)
+	}
+	if len(desk.fake.Requests()) != 2 {
+		t.Fatalf("listing models sent %d model requests, want only the 2 checks of the fixture", len(desk.fake.Requests()))
+	}
+	// A server that keeps no list says to type the names.
+	desk.fake.ModelsErr = &aiprovider.Error{Code: aiprovider.ErrorModelNotFound, Status: 404}
+	none := request(t, desk.api, http.MethodPost, "/api/v1/ai/models", map[string]any{"kind": "openai_compatible", "base_url": "https://llm.example.com/v1", "api_key": "sk-1"}, desk.adminA, nil)
+	wantResponse(t, none, http.StatusUnprocessableEntity, "ai_check_failed")
+	if !strings.Contains(none.Body.String(), `"check_error_code":"model_not_found"`) || !strings.Contains(none.Body.String(), "Type the model names") {
+		t.Fatalf("no list body = %s", none.Body.String())
+	}
+	// The same input rules as adding a provider.
+	wantResponse(t, request(t, desk.api, http.MethodPost, "/api/v1/ai/models", map[string]any{"kind": "anthropic", "base_url": "https://proxy.example.com", "api_key": "sk-1"}, desk.adminA, nil),
+		http.StatusBadRequest, "invalid_request")
+	wantResponse(t, request(t, desk.api, http.MethodPost, "/api/v1/ai/models", map[string]any{"kind": "anthropic"}, desk.adminA, nil),
+		http.StatusBadRequest, "invalid_request")
+}
+
+func TestAIModelListingSpendsOnlyItsOwnWorkspaceChecks(t *testing.T) {
+	desk := newAIDesk(t, nil)
+	desk.fake.FakeModels = []string{"claude-sonnet-5-5"}
+	list := func(token string) *httptest.ResponseRecorder {
+		return request(t, desk.api, http.MethodPost, "/api/v1/ai/models", map[string]any{"kind": "anthropic", "api_key": "sk-new-6666"}, token, nil)
+	}
+	// The fixture spent one check per workspace adding its provider.
+	for range 9 {
+		if response := list(desk.adminA); response.Code != http.StatusOK {
+			t.Fatalf("list in A: %d %s", response.Code, response.Body.String())
+		}
+	}
+	wantResponse(t, list(desk.adminA), http.StatusTooManyRequests, "ai_checks_rate_limited")
+	if response := list(desk.adminB); response.Code != http.StatusOK {
+		t.Fatalf("workspace B is held by A's checks: %d %s", response.Code, response.Body.String())
+	}
+	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM ai_providers`); n != "2" {
+		t.Fatalf("listing models saved a provider: %s providers", n)
+	}
+}
+
+func TestACheckRefusedForItsModelNamesTheModel(t *testing.T) {
+	desk := newAIDesk(t, nil)
+	desk.fake.Script(aiprovider.FakeReply{Err: &aiprovider.Error{Code: aiprovider.ErrorModelNotFound, Status: 404}})
+	response := request(t, desk.api, http.MethodPost, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Old model", "api_key": "sk-ant-1", "models": []string{"claude-3-haiku-20240307", "claude-sonnet-5-5"}}, desk.adminA, nil)
+	wantResponse(t, response, http.StatusUnprocessableEntity, "ai_check_failed")
+	if !strings.Contains(response.Body.String(), `has no model \"claude-3-haiku-20240307\"`) || !strings.Contains(response.Body.String(), "Tick another model first") {
+		t.Fatalf("body = %s, want the refused model named and the way on", response.Body.String())
 	}
 }

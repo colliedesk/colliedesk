@@ -189,6 +189,7 @@ export const kbMessages = {
   leaveUnsaved: 'You have unsaved changes. Leave without saving?',
   importedNotice: 'Imported from another help desk. The original HTML is kept in the workspace export.',
   usedByAI: 'Used by AI',
+  notUsedByAI: 'Not used by AI',
   aiChip: 'AI',
   aiIncluded: 'When AI is on, reply drafts and suggestions can quote this article.',
   aiDraftsThisMonth: (n: number) => `Used in ${n.toLocaleString('en')} AI ${n === 1 ? 'draft' : 'drafts'} this month.`,

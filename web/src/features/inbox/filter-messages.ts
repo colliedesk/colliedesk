@@ -51,6 +51,7 @@ export const savedViewMessages = {
   shared: 'Shared with the team',
   personal: 'Only me',
   none: 'No saved views yet. Set filters, then save them here.',
+  loading: 'Loading views…',
   saveCurrent: 'Save these filters',
   name: 'View name',
   scope: 'Who sees it',

@@ -79,6 +79,19 @@ test('moves between conversation pages', () => {
   expect(onPage.mock.calls).toEqual([[1], [3]]);
 });
 
+test('the count beside Inbox is the conversations of this page, a range when there are more pages', () => {
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ ...conversation, id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}` }));
+  const heading = () => screen.getByRole('heading', { level: 1, name: 'Inbox' }).parentElement as HTMLElement;
+  const { rerender } = render(<InboxPage conversations={rows(3)} />);
+  expect(heading()).toHaveTextContent(/^Inbox3/);
+  // A full first page with more after it: never a bare 50 that reads as the total.
+  rerender(<InboxPage conversations={rows(50)} hasNextPage pageSize={50} />);
+  expect(within(heading()).getByText('Conversations 1 to 50 on this page')).toBeInTheDocument();
+  expect(heading()).not.toHaveTextContent(/^Inbox50/);
+  rerender(<InboxPage conversations={rows(25)} page={2} pageSize={50} />);
+  expect(within(heading()).getByText('Conversations 51 to 75 on this page')).toBeInTheDocument();
+});
+
 test('renders message Markdown in the timeline', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} timeline={[{
     id: '44444444-4444-4444-8444-444444444444',

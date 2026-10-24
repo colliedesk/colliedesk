@@ -258,6 +258,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"DELETE /api/v1/imports/{id}/people/{externalId}/link": {path: "/api/v1/imports/" + f.imports.finished + "/people/102/link", token: admin, status: 200},
 		"GET /api/v1/ai":                                                   {path: "/api/v1/ai", token: admin, status: 200},
 		"POST /api/v1/ai/providers":                                        {path: "/api/v1/ai/providers", body: map[string]any{"kind": "openai_compatible", "label": "Contract router", "base_url": "https://openrouter.ai/api/v1", "api_key": "sk-contract-0002", "models": []string{"openai/gpt-5"}}, token: admin, status: 201},
+		"POST /api/v1/ai/models":                                           {path: "/api/v1/ai/models", body: map[string]any{"kind": "openai_compatible", "base_url": "https://openrouter.ai/api/v1", "api_key": "sk-contract-0004"}, token: admin, status: 200},
 		"PATCH /api/v1/ai/providers/{id}":                                  {path: "/api/v1/ai/providers/" + f.aiProviderID, body: map[string]any{"label": "Contract key renamed"}, token: admin, status: 200},
 		"PUT /api/v1/ai/providers/{id}/key":                                {path: "/api/v1/ai/providers/" + f.aiProviderID + "/key", body: map[string]any{"api_key": "sk-contract-0003"}, token: admin, status: 200},
 		"POST /api/v1/ai/providers/{id}/check":                             {path: "/api/v1/ai/providers/" + f.aiProviderID + "/check", token: admin, status: 200},

@@ -39,7 +39,7 @@ export function ArticleAIBox({ article, timezone, onChanged, headingId }: Articl
   const exclusion = article.ai_exclusion;
   return (
     <section className="kb-side-box kb-ai-box" aria-labelledby={headingId}>
-      <h3 id={headingId}><span className="kb-ai-chip" aria-hidden="true">{kbMessages.aiChip}</span>{kbMessages.usedByAI}</h3>
+      <h3 id={headingId}><span className="kb-ai-chip" aria-hidden="true">{kbMessages.aiChip}</span>{exclusion ? kbMessages.notUsedByAI : kbMessages.usedByAI}</h3>
       <p className="kb-side-status">{exclusion
         ? kbMessages.aiExcludedSince(formatDay(exclusion.at, timezone), exclusion.by?.name)
         : article.status === 'published' ? kbMessages.aiIncluded : kbMessages.aiIncludedDraft}</p>

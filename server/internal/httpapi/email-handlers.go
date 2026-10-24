@@ -102,7 +102,7 @@ func (a *API) writeEmailSettings(response http.ResponseWriter, request *http.Req
 const tokenDomainChecksPerHour = 10
 
 func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Request) {
-	if who := principal(request); who.Scope != "" {
+	if who := principal(request); who.IsToken() {
 		if allowed, wait := a.domainChecks.allow(who.Workspace.ID, a.now()); !allowed {
 			response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 			writeError(response, http.StatusTooManyRequests, "rate_limited", "Agent tokens may check the email domain 10 times an hour. Try again later.")

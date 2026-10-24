@@ -203,11 +203,15 @@ func computeWindow(in Input, window Window) *Numbers {
 	if in.First != nil && in.First.After(n.Volume.From) {
 		n.Volume.From = *in.First
 	}
-	if days := n.Created.To.Sub(n.Volume.From).Hours() / 24; days >= 1 {
+	switch days := n.Created.To.Sub(n.Volume.From).Hours() / 24; {
+	case in.First == nil && n.Volume.Count == 0:
+		// No customer conversation yet (a team that has just moved): no weekly rate, since zero a
+		// week would compare as "100% fewer".
+	case days >= 1:
 		n.Volume.Days = math.Round(days*10) / 10
 		perWeek := math.Round(float64(n.Volume.Count)/days*7*10) / 10
 		n.Volume.PerWeek = &perWeek
-	} else if days > 0 {
+	case days > 0:
 		n.Volume.Days = math.Round(days*10) / 10
 	}
 

@@ -167,7 +167,7 @@ test('an agent creates an agent token above Sessions; the list reloads to show i
   fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Claude Code' } });
   fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
   expect(await within(card).findByDisplayValue('cdk_agent_routetoken')).toBeInTheDocument();
-  expect(api.createAgentToken).toHaveBeenCalledWith('Claude Code', 'draft');
+  expect(api.createAgentToken).toHaveBeenCalledWith('Claude Code', { scope: 'draft' });
   await waitFor(() => expect(api.sessions.mock.calls.length).toBeGreaterThan(before));
   expect(await within(screen.getByRole('region', { name: 'Sessions' })).findByTitle('Claude Code')).toBeInTheDocument();
   const cached = JSON.stringify([...client.getQueryCache().getAll().map((query) => query.state.data), ...client.getMutationCache().getAll().map((mutation) => mutation.state.data)]);

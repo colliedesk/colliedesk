@@ -190,14 +190,16 @@ func (w *Worker) recordError(ctx context.Context, workspaceID string, now time.T
 // backfillBaseline names the baseline of a workspace that imported before results existed, on its
 // first compute only (later, an undone baseline must not come back): the import whose first run
 // finished first, by its in-app job, or for the CLI when its ledger last changed. Its reconcile status
-// stays unknown.
+// stays unknown. A workspace with an in-app import still to finish is left alone: its tickets are
+// still arriving, and the finished run names the baseline itself (MarkImportFinished).
 func backfillBaseline(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
 	tag, err := tx.Exec(ctx, `UPDATE results_state s SET baseline_source=b.source,baseline_anchor_at=b.anchor,baseline_import_status=NULL,baseline_dirty=true
 		FROM (SELECT i.source,COALESCE((SELECT min(j.finished_at) FROM import_jobs j
 				WHERE j.workspace_id=$1 AND j.kind='import' AND j.account_source=i.source AND j.status IS NOT NULL),max(i.updated_at)) AS anchor
 			FROM import_items i WHERE i.workspace_id=$1 AND i.entity='ticket' AND i.status='done' GROUP BY i.source
 			ORDER BY 2 LIMIT 1) b
-		WHERE s.workspace_id=$1 AND s.baseline_source IS NULL`, workspaceID)
+		WHERE s.workspace_id=$1 AND s.baseline_source IS NULL
+			AND NOT EXISTS (SELECT 1 FROM import_jobs j WHERE j.workspace_id=$1 AND j.kind='import' AND j.state IN ('queued','running','retry_wait','waiting_key'))`, workspaceID)
 	if err != nil {
 		return false, fmt.Errorf("find the baseline of an earlier import: %w", err)
 	}

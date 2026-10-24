@@ -59,6 +59,8 @@ interface InboxPageProps {
   onCreateTag?: (conversationId: string, name: string) => void;
   page?: number;
   hasNextPage?: boolean;
+  // pageSize is the page length the list asked for, to number the conversations of a later page.
+  pageSize?: number;
   onPage?: (page: number) => void;
   onRetryDelivery?: (messageId: string) => void;
   outboundNotice?: string;
@@ -99,7 +101,16 @@ interface InboxPageProps {
   onboardingGoal?: OnboardingGoal | null;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
+// ShownCount is how many conversations the list shows. One page shows its count; with more pages a bare
+// "50" reads as the total, so it shows the range of this page instead ("1–50", "51–75").
+function ShownCount({ count, page, pageSize, more }: { count: number; page: number; pageSize: number; more: boolean }) {
+  if (page === 1 && !more) return <span>{count}</span>;
+  const first = count === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = (page - 1) * pageSize + count;
+  return <span><span aria-hidden="true">{`${first}–${last}`}</span><span className="sr-only">{messages.inboxShown(first, last)}</span></span>;
+}
+
+export function InboxPage({ hosted = false, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const latestCustomerMessage = useMemo(() => [...timeline].reverse().find((item) => item.kind === 'incoming')?.id, [timeline]);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -183,7 +194,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, thread
     <main className="inbox-shell" data-view={threadOpen ? 'thread' : 'list'} data-details-open={detailsOpen}>
       <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
         <header>
-          <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span>
+          <div className="list-title"><h1>{messages.inbox}</h1><ShownCount count={conversations.length} page={page} pageSize={pageSize} more={hasNextPage} />
             {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
           <div className="list-head">
             <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} timezone={timezone} conversations={conversations} focusSignal={focusSignal}

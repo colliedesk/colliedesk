@@ -6,7 +6,7 @@ const me = {
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'agent' as const, timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC',
-  scope: null,
+  scope: null, permissions: [],
   plan: null,
   ai_features: { triage: false, draft: false }, onboarding_goal: null,
 };

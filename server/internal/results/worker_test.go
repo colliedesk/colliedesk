@@ -241,3 +241,33 @@ func TestAnEarlierImportBecomesTheBaselineOnTheFirstCompute(t *testing.T) {
 		t.Fatalf("baseline = %+v", baseline.Windows["30d"])
 	}
 }
+
+// An import still running is not an earlier import: the first compute of a workspace that is importing
+// leaves the baseline alone, so it is never measured from half the tickets (the finished run names it).
+func TestAnImportStillRunningIsNotTakenAsTheBaseline(t *testing.T) {
+	pool := databasetest.Pool(t)
+	if err := database.Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	f := newFixture(t, pool, "importing")
+	conversation := f.conversation("imported", ago(40), []byte(`{"system":"freshdesk","external_id":"1"}`), in(0), out(time.Hour))
+	f.exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,target_id,status,updated_at) VALUES($1,'freshdesk:account:5','ticket','1',$2,'done',$3)`,
+		f.workspace, conversation, ago(35))
+	f.exec(`INSERT INTO import_jobs(workspace_id,kind,source,domain,state,phase) VALUES($1,'import','freshdesk','acme.freshdesk.com','running','full')`, f.workspace)
+	worker := NewWorker(database.New(pool))
+	worker.now = func() time.Time { return measured }
+	if _, err := worker.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var source *string
+	if err := pool.QueryRow(context.Background(), `SELECT baseline_source FROM results_state WHERE workspace_id=$1`, f.workspace).Scan(&source); err != nil {
+		t.Fatal(err)
+	}
+	if source != nil {
+		t.Fatalf("baseline = %s while its import is still running, want none until the run finishes", *source)
+	}
+	var baselines int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM results_snapshots WHERE workspace_id=$1 AND kind='baseline'`, f.workspace).Scan(&baselines); err != nil || baselines != 0 {
+		t.Fatalf("a baseline was measured from a running import: %d snapshots, err %v", baselines, err)
+	}
+}

@@ -175,7 +175,7 @@ export function ResultsPage(props: ResultsPageProps) {
     const value = side.window?.volume;
     if (!value) return null;
     return <>
-      {value.per_week === null ? <><p className="results-value">{value.count}</p><p className="results-muted">{m.volume.tooShort}</p></>
+      {value.per_week === null ? <><p className="results-value">{value.count}</p><p className="results-muted">{value.count === 0 ? m.volume.none : m.volume.tooShort}</p></>
         : number(side, 'volume', m.volume.value(perWeek(value.per_week)))}
       {value.per_week !== null && <p className="results-muted">{m.volume.detail(value.count, weeks(value.days), range(value.from, side.window!.created.to, timezone))}</p>}
     </>;
@@ -231,7 +231,7 @@ export function ResultsPage(props: ResultsPageProps) {
     if (!showBaseline) return <p className="results-muted">{m.ai.needsImport}</p>;
     if (!withBaseline) return <p className="results-muted">{m.ai.needsBaseline}</p>;
     if (status === 'FAILED') return <p className="results-muted">{m.ai.notShown}</p>;
-    return <p className="results-muted">{m.ai.tooFew}</p>;
+    return <p className="results-muted">{m.ai.tooFew(key)}</p>;
   })();
 
   return <main className="settings-page results-page">

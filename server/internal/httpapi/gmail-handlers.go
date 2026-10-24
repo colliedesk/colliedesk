@@ -85,7 +85,7 @@ func (a *API) gmailCallbackOutcome(request *http.Request) string {
 		return "signed_out"
 	}
 	who, err := a.auth.Authenticate(request.Context(), cookie.Value, true)
-	if err != nil || who.Scope != "" {
+	if err != nil || who.IsToken() {
 		return "signed_out"
 	}
 	if !auth.HasPermission(who.Agent.Role, auth.PermissionAccessWrite) || (a.limits && who.Access.Locked) {

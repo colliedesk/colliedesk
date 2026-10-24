@@ -110,7 +110,7 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 	}
 	created, err := a.store.CreateAgentRequest(request.Context(), who.Workspace.ID, store.NewAgentRequest{
 		TokenID: who.SessionID, AgentID: who.Agent.ID, Kind: kind, Method: route.Method, Route: route.Pattern, Path: path,
-		Body: body, Summary: clip(summary), ConversationID: conversationID, SavedReply: savedReply,
+		Body: body, Summary: clip(summary), ConversationID: conversationID, SavedReply: savedReply, TokenPermissions: who.HeldPermissions(),
 	})
 	var rate *domain.AgentRequestRateError
 	if errors.As(err, &rate) {
@@ -223,8 +223,8 @@ func (a *API) summarizeConversationStart(response http.ResponseWriter, request *
 		writeError(response, http.StatusBadRequest, "invalid_request", "A subject and either contact_id or a new contact are required.")
 		return "", false
 	}
-	if len(call.CC) > 0 && !auth.ScopeAllows(who.Scope, auth.ScopeSend) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A token below send cannot copy anyone on a new conversation; a person can add copies on a later reply.")
+	if len(call.CC) > 0 && !who.Allows(auth.PermMessagesSend) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "A token without messages:send cannot copy anyone on a new conversation; a person can add copies on a later reply.")
 		return "", false
 	}
 	return "Start a conversation by email (to " + to + "): " + strings.Join(strings.Fields(call.Subject), " ") + ": " +

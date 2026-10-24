@@ -302,7 +302,8 @@ address name** (Settings → Email) changes every help center address, and old l
 - Only published articles outside the trash. Drafts, the trash, and collections with nothing
   published in or below them never appear: not in a page, a count, a search or an address.
 - The home page lists the top-level collections, each with its first articles and the collections
-  inside it. A collection page lists those collections and its articles by title, 50 a page. An
+  inside it. A collection page lists those collections, each with its first articles, and its own
+  articles by title, 50 a page. An
   article page lists the other articles of its collection beside the text.
 - **Search** works like the search in the editor: whole words and the start of words in titles and
   text, and any part of a title. It shows the best 25 matches.

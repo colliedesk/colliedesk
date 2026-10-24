@@ -171,6 +171,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_import_person_link` | Links a Freshdesk agent to a Colliedesk agent; their imported replies and tickets follow | `admin` |
 | `colliedesk_import_person_unlink` | Takes back the link between a Freshdesk agent and a Colliedesk agent | `admin` |
 | `colliedesk_ai_settings_get` | Shows the [AI settings](ai.md): providers (never a key), each feature's provider and model, and the change history | `read` |
+| `colliedesk_ai_models_list` | Lists the models a key may use, before adding the provider; saves and bills nothing. Refused below `admin` so the key never waits in a request | `admin` |
 | `colliedesk_ai_provider_add` | Adds an AI provider after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `admin` |
 | `colliedesk_ai_provider_update` | Renames an AI provider or changes its models | `admin` |
 | `colliedesk_ai_provider_key_set` | Replaces an AI provider's key after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `admin` |

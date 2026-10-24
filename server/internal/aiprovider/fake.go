@@ -14,6 +14,9 @@ type Fake struct {
 	script   []FakeReply
 	// Answer, when set, answers every request the script does not cover.
 	Answer func(Request) (Response, error)
+	// FakeModels is what Models lists; ModelsErr, when set, is what it fails with.
+	FakeModels []string
+	ModelsErr  error
 }
 
 // FakeReply is one scripted answer: a response or an error.

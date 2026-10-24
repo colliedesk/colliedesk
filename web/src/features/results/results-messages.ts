@@ -54,6 +54,7 @@ export const resultsMessages = {
     value: (n: string) => `${n} a week`,
     detail: (count: number, weeks: string, range: string) => `${count} conversations ÷ ${weeks} ${weeks === '1' ? 'week' : 'weeks'} (${range})`,
     tooShort: 'Less than a day of conversations so far.',
+    none: 'No conversation a customer started yet.',
   },
   handle: {
     name: 'Handle time',
@@ -80,7 +81,7 @@ export const resultsMessages = {
     needsBaseline: 'Appears when the Freshdesk numbers are ready.',
     needsCurrent: 'Appears when the Colliedesk numbers are ready.',
     notShown: 'Not shown while the Freshdesk numbers are not shown.',
-    tooFew: 'Not shown for this window: it needs Freshdesk handle time from at least 5 conversations. Switch to Last 30 days, or wait for more history.',
+    tooFew: (window: '30d' | '7d') => `Not shown for this window: it needs Freshdesk handle time from at least 5 conversations. ${window === '7d' ? 'Switch to Last 30 days, or wait for more history.' : 'It appears when there is more history.'}`,
   },
   noImport: {
     heading: 'Nothing from Freshdesk to compare with yet',

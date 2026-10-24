@@ -515,6 +515,8 @@ test('an article is excluded from AI and let back without touching an edit in pr
   within(box).getByRole('button', { name: 'Exclude from AI' }).focus();
   fireEvent.click(within(box).getByRole('button', { name: 'Exclude from AI' }));
   expect(await within(box).findByText('Off for this article since Oct 22, 2026, by Mai Tran.')).toBeInTheDocument();
+  // The heading says the state too, so it never reads "Used by AI" above "Off for this article".
+  expect(box).toHaveAccessibleName('Not used by AI');
   // The keyboard stays where it was.
   expect(document.activeElement).toBe(within(box).getByRole('button', { name: 'Let AI use it again' }));
   expect(screen.getByText('AI does not read this article.')).toBeInTheDocument();
@@ -541,15 +543,15 @@ test('a refused change of AI use says so and keeps the state', async () => {
   expect(within(box).getByRole('button', { name: 'Exclude from AI' })).toBeEnabled();
 });
 
-test('on a phone the Used by AI box stands at the top of the page, not behind Details', async () => {
+test('on a phone the AI box stands at the top of the page, not behind Details', async () => {
   const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
   vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ ai_exclusion: { at: '2026-10-22T09:00:00Z', by: null } })) });
   open({ articleId: ids.article });
-  const box = await screen.findByRole('region', { name: 'Used by AI' });
+  const box = await screen.findByRole('region', { name: 'Not used by AI' });
   expect(within(box).getByRole('button', { name: 'Let AI use it again' })).toBeInTheDocument();
   // One way back on a phone: the box, not the note too.
   expect(screen.queryByText('AI does not read this article.')).not.toBeInTheDocument();
   fireEvent.click(within(screen.getByRole('region', { name: 'Article actions' })).getByRole('button', { name: /^Details/ }));
-  expect(within(screen.getByRole('dialog', { name: 'Details' })).queryByRole('region', { name: 'Used by AI' })).not.toBeInTheDocument();
+  expect(within(screen.getByRole('dialog', { name: 'Details' })).queryByRole('region', { name: /used by AI/i })).not.toBeInTheDocument();
 });

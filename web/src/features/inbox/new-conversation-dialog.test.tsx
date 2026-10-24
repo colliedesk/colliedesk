@@ -44,7 +44,7 @@ test('a customer found by search, then the subject, the message and the copies s
   // A disabled Send says what is missing.
   expect(send).toHaveAccessibleDescription('To send, add a customer, a subject, a message.');
   fireEvent.change(screen.getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
-  fireEvent.click(await screen.findByRole('button', { name: /Pat Prospect/ }));
+  fireEvent.click(await screen.findByRole('option', { name: /Pat Prospect/ }));
   expect(screen.getByText('Pat Prospect <pat@prospect.example>')).toBeInTheDocument();
   await waitFor(() => expect(screen.getByLabelText('Subject')).toHaveFocus());
   write(' Your renewal ', ' It renews next week. ');
@@ -140,4 +140,43 @@ test('a click on the backdrop keeps the focus in the window, so Escape still clo
   fireEvent.keyDown(dialog, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(opener).toHaveFocus();
+});
+
+test('the customers found open as a list under the search box that the arrows and Enter pick from, and Escape closes', async () => {
+  const sam = { ...pat, id: '22222222-2222-4222-8222-222222222222', name: 'Sam Prospect', email: 'sam@prospect.example', organization: 'Prospect Co' };
+  api.contacts.mockResolvedValue({ items: [pat, sam], has_more: false });
+  wrap(<NewConversationDialog onStart={vi.fn()} onClose={vi.fn()} />);
+  const search = screen.getByRole('combobox', { name: 'Find a customer by name or email' });
+  fireEvent.change(search, { target: { value: 'prospect' } });
+  const list = await screen.findByRole('listbox');
+  expect(search).toHaveAttribute('aria-expanded', 'true');
+  expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual(['Pat Prospectpat@prospect.example', 'Sam Prospectsam@prospect.example · Prospect Co']);
+  expect(within(list).getByRole('option', { name: /Pat/ })).toHaveAttribute('aria-selected', 'true');
+  fireEvent.keyDown(search, { key: 'Escape' });
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  fireEvent.keyDown(search, { key: 'ArrowDown' });
+  fireEvent.keyDown(search, { key: 'ArrowDown' });
+  expect(search).toHaveAttribute('aria-activedescendant', within(screen.getByRole('listbox')).getByRole('option', { name: /Sam/ }).id);
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(screen.getByText('Sam Prospect <sam@prospect.example>')).toBeInTheDocument();
+});
+
+test('Enter picks from the answer to what is typed now, not from the list of the search before', async () => {
+  const sam = { ...pat, id: '33333333-3333-4333-8333-333333333333', name: 'Sam Other', email: 'sam@other.example' };
+  let answer: (value: unknown) => void = () => {};
+  api.contacts.mockImplementation((term: string) => (term === 'pat' ? Promise.resolve({ items: [pat], has_more: false }) : new Promise((resolve) => { answer = resolve; })));
+  wrap(<NewConversationDialog onStart={vi.fn()} onClose={vi.fn()} />);
+  const search = screen.getByRole('combobox', { name: 'Find a customer by name or email' });
+  // Arrows before any result do nothing, so the first result is still the one Enter picks.
+  fireEvent.keyDown(search, { key: 'ArrowDown' });
+  fireEvent.change(search, { target: { value: 'pat' } });
+  await screen.findByRole('option', { name: /Pat Prospect/ });
+  fireEvent.change(search, { target: { value: 'sam' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(screen.queryByText('Pat Prospect <pat@prospect.example>')).not.toBeInTheDocument();
+  await waitFor(() => expect(api.contacts).toHaveBeenCalledWith('sam', expect.anything(), expect.anything()));
+  answer({ items: [sam], has_more: false });
+  await screen.findByRole('option', { name: /Sam Other/ });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(screen.getByText('Sam Other <sam@other.example>')).toBeInTheDocument();
 });

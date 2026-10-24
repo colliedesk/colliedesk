@@ -95,13 +95,15 @@ func (a *API) replayApproved(ctx context.Context, approver auth.Principal, item 
 	return answer.status, answer.body.Bytes(), !answer.overflow
 }
 
-// requestedScope is the scope a token creation call asks for.
-func requestedScope(call json.RawMessage) string {
+// requestsAdminToken reports whether a token creation call asks for a token that acts as an admin:
+// the admin tier, or a list of permissions with an admin-only one.
+func requestsAdminToken(call json.RawMessage) bool {
 	var fields struct {
-		Scope string `json:"scope"`
+		Scope       string   `json:"scope"`
+		Permissions []string `json:"permissions"`
 	}
 	_ = json.Unmarshal(call, &fields)
-	return fields.Scope
+	return auth.NeedsAdmin(fields.Scope, fields.Permissions)
 }
 
 // replyText is the text of a reply draft's call; empty for anything else.
@@ -128,8 +130,9 @@ var routePermissions = func() map[string]string {
 // runs on.
 func approvalPermission(item domain.AgentRequest) string {
 	key := item.Method + " " + item.Route
-	// Only an admin can create an admin token, so only an admin can approve asking for one.
-	if key == "POST /api/v1/auth/tokens" && requestedScope(item.Body) == auth.ScopeAdmin {
+	// Only an admin can create a token that acts as an admin, so only an admin can approve asking for
+	// one: the approver holds every permission the token asks for.
+	if key == "POST /api/v1/auth/tokens" && requestsAdminToken(item.Body) {
 		return auth.PermissionAccessWrite
 	}
 	if replacement, ok := approvalRunsAs[key]; ok {

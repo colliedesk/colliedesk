@@ -52,9 +52,10 @@ longest_first = lambda chosen: sorted(chosen, key=lambda name: (-weight[name], n
 # Large latency fixtures seed thousands of rows and time a request against a budget. Give them their
 # own runners so the contract-heavy shards do not also pay that cost, and so the packages those shards run
 # at the same time do not load the shared database while they measure. Keep every threshold intact.
-# They are named ...LatencyBudget, ...StaysInBudget or ...StaysFast...; beside other packages'
-# tests one measured 389 ms against 200 ms, another a 266 ms p95 against 100 ms.
-TIMED = ('LatencyBudget', 'StaysInBudget', 'StaysFast')
+# They are named ...LatencyBudget, ...StaysInBudget, ...StayInBudget, ...StaysFast... or ...CostsLinearTime;
+# beside other packages' tests one measured 389 ms against 200 ms, another a 266 ms p95 against 100 ms,
+# and TestKnowledgeBaseSearchVectorCostsLinearTime 203 ms against 200 ms (run 40098866967).
+TIMED = ('LatencyBudget', 'StaysInBudget', 'StayInBudget', 'StaysFast', 'CostsLinearTime')
 latency = [name for name in names if any(marker in name for marker in TIMED)]
 regular = [name for name in names if name not in latency]
 regular_total = args.total - args.latency_shards

@@ -147,7 +147,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent. A `read`, `draft` or `send` token has the agent role whatever the creator's role is. An `admin` token acts with the creator's role, checked on every call; only an admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent, with a tier (`scope`) or its own list of `permissions` (resource:action), never both. A tier is a preset: its permissions are worked out on every call. A token that holds nothing admin-only has the agent role whatever the creator's role is. An `admin` token, and a custom token with an admin-only permission (`TokenPermission`, preset admin), act with the creator's role, checked on every call; only an admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
         post: operations["createAgentToken"];
         delete?: never;
         options?: never;
@@ -1276,6 +1276,23 @@ export interface paths {
         put?: never;
         /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
         post: operations["addAIProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Lists the models a provider's key may use, before the provider is added, so a person picks them instead of typing ids. Anthropic lists the Claude models (newest first); an OpenAI-compatible server lists `GET {base_url}/models` (sorted, at most 1000). Nothing is saved or metered. A provider that cannot list answers `422 ai_check_failed` with `check_error_code` (auth, permission, model_not_found when the server keeps no list, blocked_address…); type the model names then. Same input rules as adding a provider, and it counts against the 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        post: operations["listAIModels"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2577,6 +2594,8 @@ export interface components {
                 token_id: string | null;
                 token_label: string;
                 token_scope: components["schemas"]["TokenScope"];
+                /** @description What the token held when it asked (resource:action); empty for a request older than permissions. */
+                token_permissions: string[];
                 /** @description A request of a revoked token can only be rejected. */
                 token_revoked: boolean;
                 /** Format: uuid */
@@ -3151,6 +3170,16 @@ export interface components {
             api_key?: string;
             models: string[];
         };
+        AIModelsInput: {
+            kind: components["schemas"]["AIProviderKind"];
+            /** @description OpenAI-compatible only, with the version path: https://openrouter.ai/api/v1. */
+            base_url?: string;
+            /** @description Required except for an OpenAI-compatible server on a private address the operator allowed. Never stored. */
+            api_key?: string;
+        };
+        AIModelList: {
+            models: string[];
+        };
         AIProviderChange: {
             label?: string;
             models?: string[];
@@ -3431,8 +3460,10 @@ export interface components {
             timezone: string;
             /** @description The goal given at cloud sign-up; the empty inbox starts with the matching step. Null when none was given and on self-hosted instances. */
             onboarding_goal: null | components["schemas"]["OnboardingGoal"];
-            /** @description The tier of the agent token making the call (read, draft or send); null for a person's own session. */
+            /** @description The tier of the agent token making the call, custom for one with its own permissions; null for a person's own session. */
             scope: null | components["schemas"]["TokenScope"];
+            /** @description What the agent token making the call holds (resource:action); empty for a person's own session. */
+            permissions: string[];
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
@@ -3449,10 +3480,20 @@ export interface components {
             };
         };
         /**
-         * @description Tier of an agent token. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
+         * @description A tier to create a token with; each holds every permission of its own preset and below (TokenPermission).
          * @enum {string}
          */
-        TokenScope: "read" | "draft" | "send" | "admin";
+        TokenPreset: "read" | "draft" | "send" | "admin";
+        /**
+         * @description A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it; the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
+         * @enum {string}
+         */
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials";
+        /**
+         * @description Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
+         * @enum {string}
+         */
+        TokenScope: "read" | "draft" | "send" | "admin" | "custom";
         AgentToken: {
             /** @description Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again */
             token: string;
@@ -3466,8 +3507,10 @@ export interface components {
             /** Format: email */
             agent_email: string;
             label: string;
-            /** @description The tier of an agent token; null for a person's session, which has no tier. */
+            /** @description The tier of an agent token, custom for one with its own permissions; null for a person's session, which has no tier. */
             scope: null | components["schemas"]["TokenScope"];
+            /** @description What an agent token holds (resource:action), its tier's permissions or its own list; empty for a person's session. */
+            permissions: string[];
             /** @description True for the session that made this request, so a client can mark "this device". */
             current: boolean;
             /** Format: date-time */
@@ -5029,7 +5072,9 @@ export interface operations {
                 "application/json": {
                     /** @description Name shown in the session list, for example the agent host */
                     label: string;
-                    scope: components["schemas"]["TokenScope"];
+                    scope?: components["schemas"]["TokenPreset"];
+                    /** @description A custom token's permissions, instead of a scope. */
+                    permissions?: components["schemas"]["TokenPermission"][];
                 };
             };
         };
@@ -7458,6 +7503,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["AICheckFailed"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    listAIModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIModelsInput"];
+            };
+        };
+        responses: {
+            /** @description The models the key may use */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIModelList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             422: components["responses"]["AICheckFailed"];
             429: components["responses"]["AIChecksRateLimited"];
         };

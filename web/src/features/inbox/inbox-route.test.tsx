@@ -671,7 +671,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   const ready = await screen.findByRole('dialog', { name: 'Start a conversation' });
   expect(within(ready).queryByRole('status')).not.toBeInTheDocument();
   fireEvent.change(within(ready).getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
-  fireEvent.click(await within(ready).findByRole('button', { name: /pat@prospect.example/ }));
+  fireEvent.click(await within(ready).findByRole('option', { name: /pat@prospect.example/ }));
   fireEvent.change(within(ready).getByLabelText('Subject'), { target: { value: 'Hello' } });
   fireEvent.change(within(ready).getByLabelText('Message'), { target: { value: 'First words' } });
   fireEvent.click(within(ready).getByRole('button', { name: 'Send' }));

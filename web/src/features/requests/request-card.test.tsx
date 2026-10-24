@@ -185,3 +185,10 @@ test('a self-hosted server approving a Gmail connection does not point to the pr
   expect(screen.queryByRole('link', { name: 'Privacy policy' })).not.toBeInTheDocument();
   expect(screen.queryByText(/Limited Use/)).not.toBeInTheDocument();
 });
+
+test('a custom token\'s request lists what the token held when it asked', () => {
+  const base = agentRequest();
+  render(<RequestCard item={agentRequest({ requested_by: { ...base.requested_by, token_scope: 'custom', token_permissions: ['kb_articles:read', 'kb_articles:update'] } })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('What the token may do (2 permissions)')).toBeInTheDocument();
+  expect(screen.getByText('Knowledge base articles: Edit')).toBeInTheDocument();
+});

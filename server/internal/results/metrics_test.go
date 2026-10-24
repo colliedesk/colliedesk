@@ -145,6 +145,22 @@ func TestResolutionWaitsForStatusHistory(t *testing.T) {
 	}
 }
 
+// A team that has just moved has no customer conversation in Colliedesk yet: its volume is not a
+// rate of zero a week, which would read "100% fewer" next to the baseline.
+func TestNoCustomerConversationYetHasNoWeeklyVolume(t *testing.T) {
+	numbers := Compute(Input{Side: Live, Measured: measured, End: measured, HistorySince: ago(1)})
+	for _, key := range []string{"30d", "7d"} {
+		if volume := numbers[key].Volume; volume.Count != 0 || volume.PerWeek != nil || volume.Days != 0 {
+			t.Errorf("%s volume = %+v, want no conversations and no weekly rate", key, volume)
+		}
+	}
+	// Once the first one came in long ago, a quiet window is a real zero.
+	numbers = Compute(Input{Side: Live, Measured: measured, End: measured, HistorySince: ago(60), First: ptr(ago(60))})
+	if volume := numbers["7d"].Volume; volume.PerWeek == nil || *volume.PerWeek != 0 {
+		t.Errorf("7d volume after a quiet week = %+v, want 0 a week", volume)
+	}
+}
+
 func TestBaselineNumbersFollowTheCountingRules(t *testing.T) {
 	end := measured.Add(-Day) // the newest imported ticket, a day before the import finished
 	at := func(days float64) time.Time { return end.Add(-time.Duration(days * float64(Day))) }

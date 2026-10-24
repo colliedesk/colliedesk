@@ -3,6 +3,7 @@ import { InvalidRequestError } from '../../api/client';
 import type { AgentRequest } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { track } from '../../lib/product-analytics';
+import { permissionLabel } from '../settings/token-permissions';
 import { messages } from '../../messages';
 import { PartUnavailable } from '../../ui/lazy-part';
 import { gmailPart } from '../settings/email-channel-section';
@@ -64,6 +65,10 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
         <span className={`badge badge-request-${current.status}`}>{messages.requestStatus[current.status]}</span>
       </header>
       <p className="muted-copy">{messages.requestedBy(person, current.requested_by.token_label, current.requested_by.token_scope)}</p>
+      {/* A custom token's own list, as it was when it asked: what the person approving extends. */}
+      {current.requested_by.token_scope === 'custom' && current.requested_by.token_permissions.length > 0 && <details className="token-permissions">
+        <summary>{messages.tokenHeld(current.requested_by.token_permissions.length)}</summary>
+        <ul>{current.requested_by.token_permissions.map((name) => <li key={name}>{permissionLabel(name)}</li>)}</ul></details>}
       <dl className="request-call">
         <dt>{messages.requestCall}</dt><dd><code>{`${current.method} ${current.path}`}</code></dd>
       </dl>

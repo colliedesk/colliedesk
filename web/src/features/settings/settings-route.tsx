@@ -12,7 +12,8 @@ import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { helpCenterPart } from '../kb/kb-part';
-import type { AgentToken, TokenScope } from '../../api/schemas';
+import type { AgentToken } from '../../api/schemas';
+import type { TokenChoice } from './agent-tokens-section';
 import type { SaveState } from './save-feedback';
 
 function saveState(m: { isPending: boolean; isSuccess: boolean; isError: boolean; error: unknown }): SaveState {
@@ -38,7 +39,7 @@ export function SettingsRoute() {
   // cache: keep hands it to the card, and the mutation's own result is empty. Sessions reloads to list it,
   // also after a failure whose outcome is unknown, so a token the server did create shows up to be revoked.
   const createToken = useMutation({
-    mutationFn: async ({ label, scope, keep }: { label: string; scope: TokenScope; keep: (created: AgentToken) => void }) => { keep(await api.createAgentToken(label, scope)); },
+    mutationFn: async ({ label, choice, keep }: { label: string; choice: TokenChoice; keep: (created: AgentToken) => void }) => { keep(await api.createAgentToken(label, choice)); },
     onSettled: () => refresh('sessions'),
   });
   const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => refresh('invites') });
@@ -88,7 +89,7 @@ export function SettingsRoute() {
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError || emailFailed ? messages.settingsActionFailed : undefined}
     agentsSection={<AgentTokensSection canCreateAdmin={isAdmin}
-      onCreate={(label, scope) => new Promise((keep, reject) => { createToken.mutateAsync({ label, scope, keep }).catch(reject); })} />}
+      onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} />}
     teamSection={<TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={isAdmin} timezone={me.data?.timezone ?? 'UTC'}
       error={updateAgent.error instanceof PlanLimitError || updateAgent.error instanceof InvalidRequestError ? updateAgent.error.message : updateAgent.isError ? messages.settingsActionFailed : undefined}
       onChangeRole={(id, role) => updateAgent.mutate({ id, role })}

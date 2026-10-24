@@ -22,7 +22,7 @@ func (a *API) reportBody(who auth.Principal, description string, diagnostics dia
 		name = who.Agent.Email
 	}
 	signedIn := "person"
-	if who.Scope != "" {
+	if who.IsToken() {
 		signedIn = "agent token (" + who.Scope + ")"
 	}
 	plan := who.Access.Plan

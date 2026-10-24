@@ -1,6 +1,8 @@
 export const messages = {
   brand: 'Colliedesk',
   inbox: 'Inbox',
+  // The count beside Inbox is of this page; with more pages it is the range shown, never a total.
+  inboxShown: (first: number, last: number) => `Conversations ${first} to ${last} on this page`,
   // Contacts and starting a conversation: the strings the inbox shows; the rest is in contact-messages.ts.
   openContact: (name: string) => `Open ${name}'s page`,
   newConversation: 'New conversation',
@@ -69,6 +71,8 @@ export const messages = {
   recommendedFirstStep: 'Recommended first step:',
   sessionStates: { active: 'Active', revoked: 'Revoked', expired: 'Expired' },
   tokenTierTitle: 'Agent token tier',
+  customToken: (count: number) => `custom · ${count} ${count === 1 ? 'permission' : 'permissions'}`,
+  tokenPermissions: 'What it may do',
   tokenExpires: 'Expires',
   inviteStates: { pending: 'Pending', accepted: 'Accepted', revoked: 'Revoked', expired: 'Expired' },
   conversationList: 'Conversation list',
@@ -477,6 +481,7 @@ export const messages = {
   requestsFailed: 'Requests could not be loaded.',
   requestedBy: (person: string, token: string, scope: string) => `Asked by ${person} via ${token} (${scope})`,
   someone: 'someone',
+  tokenHeld: (count: number) => `What the token may do (${count} ${count === 1 ? 'permission' : 'permissions'})`,
   requestExpires: (date: string) => `Expires ${date}`,
   requestCall: 'Runs when approved',
   approve: 'Approve',

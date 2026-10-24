@@ -105,8 +105,13 @@ export const attachmentSchema = z.object({
   id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),
   size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), inline: z.boolean(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Attachment'>>;
+// A token holds a tier (a preset) or, as custom, its own list of permissions.
+export const tokenScopeSchema = z.enum(['read', 'draft', 'send', 'admin', 'custom']) satisfies z.ZodType<Generated<'TokenScope'>>;
+export type TokenScope = Generated<'TokenScope'>;
+export type TokenPreset = Generated<'TokenPreset'>;
+export type TokenPermission = Generated<'TokenPermission'>;
 export const messageAgentTokenSchema = z.object({
-  id: z.string().uuid(), label: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']), agent_name: z.string(),
+  id: z.string().uuid(), label: z.string(), scope: tokenScopeSchema, agent_name: z.string(),
 }) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
@@ -149,11 +154,9 @@ export const webFormSettingsSchema = z.object({
   enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(),
 }) satisfies z.ZodType<Generated<'WebFormSettings'>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
-export const tokenScopeSchema = z.enum(['read', 'draft', 'send', 'admin']) satisfies z.ZodType<Generated<'TokenScope'>>;
-export type TokenScope = Generated<'TokenScope'>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
-  scope: tokenScopeSchema.nullable(), current: z.boolean(),
+  scope: tokenScopeSchema.nullable(), permissions: z.array(z.string()), current: z.boolean(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Session'>>;
 export const inviteSchema = z.object({
@@ -164,7 +167,7 @@ export const errorSchema = z.object({ error: z.object({ code: z.string(), messag
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
 export const meSchema = z.object({
-  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']).nullable(),
+  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: tokenScopeSchema.nullable(), permissions: z.array(z.string()).catch([]),
   // An older server sends no goal; a goal this client does not know yet orders nothing.
   onboarding_goal: onboardingGoalSchema.nullable().catch(null),
   // An older server offers no AI feature.
@@ -247,7 +250,7 @@ export const agentRequestSchema = z.object({
     restores: z.object({ version: z.number().int(), title: z.string(), body: z.string() }).nullable(),
   }).nullable(),
   requested_by: z.object({
-    token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: z.enum(['read', 'draft', 'send', 'admin']), token_revoked: z.boolean(),
+    token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: tokenScopeSchema, token_permissions: z.array(z.string()).catch([]), token_revoked: z.boolean(),
     agent_id: z.string().uuid().nullable(), agent_name: z.string().nullable(),
   }),
   decided_by: z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }).nullable(),

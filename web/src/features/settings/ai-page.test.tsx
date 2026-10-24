@@ -28,7 +28,7 @@ function settings(change: Partial<AISettings> = {}): AISettings {
 function page(props: Partial<AIPageProps> = {}) {
   const handlers = {
     onSetSlot: vi.fn(), onConsent: vi.fn(), onDismissConsent: vi.fn(), onCheck: vi.fn(),
-    onAdd: vi.fn().mockResolvedValue(undefined), onSetKey: vi.fn().mockResolvedValue(undefined), onRemove: vi.fn().mockResolvedValue(undefined),
+    onAdd: vi.fn().mockResolvedValue(undefined), onListModels: vi.fn().mockResolvedValue([]), onSetKey: vi.fn().mockResolvedValue(undefined), onRemove: vi.fn().mockResolvedValue(undefined),
     onSetAutomatic: vi.fn().mockResolvedValue(undefined), onUsageMonth: vi.fn(),
   };
   render(<AIPage isAdmin workspaceName="Northwind" timezone="UTC" shown={{ general: true, team: true, email: true, webForm: true, savedReplies: true, exportData: true, billing: false, ai: true }}
@@ -98,11 +98,12 @@ test('adding a provider checks the fields, sends them, and shows a refusal under
   fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' }));
   expect(within(dialog).getByText('Give the provider a name.')).toBeInTheDocument();
   expect(onAdd).not.toHaveBeenCalled();
-  fireEvent.click(within(dialog).getByRole('radio', { name: /OpenAI-compatible/ }));
+  fireEvent.click(within(dialog).getByRole('radio', { name: /Other or self-hosted/ }));
   fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Office' } });
   fireEvent.change(within(dialog).getByLabelText('Base URL'), { target: { value: 'https://10.0.0.12/v1' } });
   fireEvent.change(within(dialog).getByLabelText('API key'), { target: { value: 'sk-1' } });
-  fireEvent.change(within(dialog).getByLabelText('Models'), { target: { value: 'llama, qwen ,' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Type model names instead' }));
+  fireEvent.change(within(dialog).getByLabelText('Model names'), { target: { value: 'llama, qwen ,' } });
   expect(within(dialog).getByLabelText('API key')).toHaveAttribute('type', 'password');
   onAdd.mockResolvedValueOnce({ field: 'base_url', text: 'This address is on a private network.' });
   await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' })); });
@@ -111,6 +112,109 @@ test('adding a provider checks the fields, sends them, and shows a refusal under
   expect(within(dialog).getByText('This address is on a private network.')).toBeInTheDocument();
   await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' })); });
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+test('the model search finds a model whatever punctuation, spacing, case or word order is typed', async () => {
+  const { onListModels } = page();
+  const all = ['gpt-5-mini', 'gpt-5.4-nano', 'gpt-6-sol', 'o3', 'claude-sonnet-4-6', 'claude-opus-4-6', 'gpt-5.6-terra', 'gpt-5', 'gpt-6.1-sol', 'gpt-5.5', 'gpt-6-luna', 'gpt-5.4'];
+  onListModels.mockResolvedValueOnce(all);
+  fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
+  const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
+  fireEvent.click(within(dialog).getByText('OpenAI', { exact: true }));
+  fireEvent.change(within(dialog).getByLabelText('API key'), { target: { value: 'sk-1' } });
+  await act(async () => { fireEvent.blur(within(dialog).getByLabelText('API key')); });
+  const models = within(dialog).getByRole('group', { name: 'Models' });
+  const search = within(models).getByRole('searchbox', { name: 'Search models' });
+  const shown = (query: string) => {
+    fireEvent.change(search, { target: { value: query } });
+    return within(models).queryAllByRole('checkbox').map((box) => box.closest('label')?.textContent?.replace('Default', ''));
+  };
+  expect(shown('gpt5mini')).toEqual(['gpt-5-mini']);
+  expect(shown('GPT 5 Mini')).toEqual(['gpt-5-mini']);
+  expect(shown('mini gpt5')).toEqual(['gpt-5-mini']);
+  expect(shown('gpt 5.4 nano')).toEqual(['gpt-5.4-nano']);
+  expect(shown('sonnet 4.6')).toEqual(['claude-sonnet-4-6']);
+  expect(shown('6.1sol')).toEqual(['gpt-6.1-sol']);
+  expect(shown('  ')).toHaveLength(all.length);
+  expect(shown('gemini')).toEqual([]);
+});
+
+test('the models a key may use are loaded and ticked instead of typed; the first ticked is the default', async () => {
+  const { onAdd, onListModels } = page();
+  onListModels.mockResolvedValueOnce(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']);
+  fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
+  const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
+  expect(within(dialog).getByRole('button', { name: 'Load models' })).toBeDisabled();
+  fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Team key' } });
+  fireEvent.change(within(dialog).getByLabelText('API key'), { target: { value: 'sk-ant-1' } });
+  // Leaving the key loads the list, so the next step is to pick.
+  await act(async () => { fireEvent.blur(within(dialog).getByLabelText('API key')); });
+  expect(onListModels).toHaveBeenCalledWith({ kind: 'anthropic', api_key: 'sk-ant-1' });
+  const models = within(dialog).getByRole('group', { name: 'Models' });
+  // The newest Sonnet is ticked as the default, not the newest (often dearest) model.
+  expect(within(models).getByRole('checkbox', { name: /claude-opus-5-5/ })).not.toBeChecked();
+  expect(within(models).getByRole('checkbox', { name: /claude-sonnet-5-5/ })).toBeChecked();
+  expect(within(models).getByText('Default')).toBeInTheDocument();
+  fireEvent.click(within(models).getByRole('checkbox', { name: /claude-haiku-5-5/ }));
+  fireEvent.click(within(models).getByRole('checkbox', { name: /claude-sonnet-5-5/ }));
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' })); });
+  expect(onAdd).toHaveBeenCalledWith({ kind: 'anthropic', label: 'Team key', api_key: 'sk-ant-1', models: ['claude-haiku-5-5'] });
+});
+
+test('a provider that keeps no list of models says why and takes typed names', async () => {
+  const { onAdd, onListModels } = page();
+  onListModels.mockResolvedValueOnce({ field: 'models', text: 'This provider does not list its models. Type the model names instead.' });
+  fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
+  const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
+  fireEvent.click(within(dialog).getByRole('radio', { name: /Other or self-hosted/ }));
+  fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Office' } });
+  fireEvent.change(within(dialog).getByLabelText('Base URL'), { target: { value: 'https://llm.example.com/v1' } });
+  fireEvent.change(within(dialog).getByLabelText('API key'), { target: { value: 'sk-1' } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Load models' })); });
+  expect(onListModels).toHaveBeenCalledWith({ kind: 'openai_compatible', base_url: 'https://llm.example.com/v1', api_key: 'sk-1' });
+  expect(within(dialog).getByText('This provider does not list its models. Type the model names instead.')).toBeInTheDocument();
+  expect(within(dialog).getByLabelText('Model names')).toHaveAttribute('aria-invalid', 'true');
+  fireEvent.change(within(dialog).getByLabelText('Model names'), { target: { value: 'qwen3' } });
+  // Typing a name answers the refusal: the field is no longer marked wrong, and its help stays.
+  expect(within(dialog).getByLabelText('Model names')).not.toHaveAttribute('aria-invalid');
+  expect(within(dialog).getByText(/Separate with commas/)).toBeInTheDocument();
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' })); });
+  expect(onAdd).toHaveBeenCalledWith({ kind: 'openai_compatible', label: 'Office', base_url: 'https://llm.example.com/v1', api_key: 'sk-1', models: ['qwen3'] });
+});
+
+test('a list loaded for a key changed since is dropped, and a list that fails on leaving the key keeps the focus where the person went', async () => {
+  const { onListModels } = page();
+  let first: (value: string[]) => void = () => {};
+  onListModels.mockImplementationOnce(() => new Promise((resolve) => { first = resolve; }));
+  onListModels.mockResolvedValueOnce({ field: 'api_key', text: 'The provider refused this key.' });
+  fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
+  const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
+  const key = within(dialog).getByLabelText('API key');
+  fireEvent.change(key, { target: { value: 'sk-old' } });
+  await act(async () => { fireEvent.blur(key); });
+  // The key changes while the old list is on its way: that list is not this key's.
+  fireEvent.change(key, { target: { value: 'sk-new' } });
+  await act(async () => { first(['claude-old-model']); });
+  expect(within(dialog).queryByText('claude-old-model')).not.toBeInTheDocument();
+  const name = within(dialog).getByLabelText('Name');
+  await act(async () => { fireEvent.blur(key); name.focus(); });
+  expect(within(dialog).getByText('The provider refused this key.')).toBeInTheDocument();
+  expect(name).toHaveFocus();
+});
+
+test('models ticked for one provider are not sent after switching to another', async () => {
+  const { onAdd, onListModels } = page();
+  onListModels.mockResolvedValueOnce(['claude-sonnet-5-5']);
+  fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
+  const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
+  fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Team' } });
+  fireEvent.change(within(dialog).getByLabelText('API key'), { target: { value: 'sk-1' } });
+  await act(async () => { fireEvent.blur(within(dialog).getByLabelText('API key')); });
+  expect(within(dialog).getByRole('checkbox', { name: /claude-sonnet-5-5/ })).toBeChecked();
+  fireEvent.click(within(dialog).getByRole('radio', { name: /^OpenAI/ }));
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' })); });
+  expect(onAdd).not.toHaveBeenCalled();
+  expect(within(dialog).getByText('Pick at least one model.')).toBeInTheDocument();
 });
 
 test('a server that cannot store keys says so before anyone types one', () => {
@@ -307,4 +411,20 @@ test('automatic drafts paused for the day say so and offer to raise the limit', 
   fireEvent.click(screen.getByRole('button', { name: 'Raise the limit' }));
   expect(screen.getByRole('dialog', { name: 'Automatic runs' })).toBeInTheDocument();
   expect(screen.getByLabelText('Automatic drafts a day')).toHaveValue(100);
+});
+
+test('OpenAI and OpenRouter need only a key: their address is filled in', async () => {
+  const { onAdd, onListModels } = page();
+  onListModels.mockResolvedValueOnce(['openai/gpt-5', 'anthropic/claude-sonnet-5-5']);
+  fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
+  const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
+  fireEvent.click(within(dialog).getByRole('radio', { name: /OpenRouter/ }));
+  expect(within(dialog).queryByLabelText('Base URL')).not.toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Router' } });
+  fireEvent.change(within(dialog).getByLabelText('API key'), { target: { value: 'sk-or-1' } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Load models' })); });
+  expect(onListModels).toHaveBeenCalledWith({ kind: 'openai_compatible', base_url: 'https://openrouter.ai/api/v1', api_key: 'sk-or-1' });
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: /openai\/gpt-5/ }));
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' })); });
+  expect(onAdd).toHaveBeenCalledWith({ kind: 'openai_compatible', label: 'Router', base_url: 'https://openrouter.ai/api/v1', api_key: 'sk-or-1', models: ['openai/gpt-5'] });
 });

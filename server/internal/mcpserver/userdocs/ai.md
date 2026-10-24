@@ -29,10 +29,23 @@ Each feature (**Triage suggestions**, **Reply drafts**) picks one of:
 In **Settings > AI > Providers**, admins choose **Add provider**:
 
 1. **Anthropic**: an API key from console.anthropic.com. Requests go to the Claude API.
-2. **OpenAI-compatible**: OpenAI, OpenRouter, Groq, vLLM, Ollama, LM Studio. Enter the base URL with
-   its version path, for example `https://api.openai.com/v1` or `https://openrouter.ai/api/v1`.
+2. **OpenAI**: an API key from platform.openai.com. The address is filled in.
+3. **OpenRouter**: one OpenRouter key for hundreds of models. The address is filled in.
+4. **Other or self-hosted**: any OpenAI-compatible server (Groq, vLLM, Ollama, LM Studio). Enter the
+   base URL with its version path, for example `http://localhost:11434/v1`.
 
-List the models you want to use; the first is the default. Before anything is saved, Colliedesk sends
+After the key (and the address), choose **Load models**: Colliedesk asks the provider which models
+the key may use and lists them, so you tick the ones you want instead of typing names. The list holds
+only models that answer what Colliedesk sends (a JSON answer, and a reasoning effort): for Anthropic,
+the Claude models whose capabilities say so; for OpenAI, its reasoning models (GPT-5 and later, the o
+series), not the older GPT-4 and GPT-3.5 or the image, audio and embedding models; for OpenRouter, the
+models that take structured output, without the batch-only entries. A model the provider has retired
+or set to shut down is left out. If a check still refuses a model, the message names it. With many
+models, a search box finds one whatever the punctuation or spacing: `gpt5 mini` finds `gpt-5-mini`.
+Loading the list saves nothing and costs nothing. A server that keeps no list (some self-hosted ones) says so; type
+the model names then, separated by commas.
+
+Pick the models you want to use; the first is the default. Before anything is saved, Colliedesk sends
 one small request to the first model. If the provider refuses (a wrong key, a model it does not have,
 an account out of credit), nothing is saved and Settings says why. That request is billed by the
 provider like any other.
