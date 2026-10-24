@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { AIEvent, AIModelsInput, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
 import { formatDate, formatDay } from '../../lib/format-date';
-import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
+import { Dialog as SharedDialog, Field } from '../../ui/dialog';
+import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiMessages as m } from './ai-messages';
 import { SettingsNav } from './settings-nav';
 import type { Shown } from './settings-nav';
@@ -108,23 +109,12 @@ export function AIPage(props: AIPageProps) {
           {props.loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
           {!settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
             <div className="ai-tabs-row">
-              <div className="ai-tabs" role="tablist" aria-label={m.tabs}>
-                {tabs.map((item) => <button key={item.id} type="button" role="tab" id={`${ids.tabs}-${item.id}`} aria-selected={tab === item.id}
-                  aria-controls={`${ids.tabs}-${item.id}-panel`} tabIndex={tab === item.id ? 0 : -1} onClick={() => show(item.id)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
-                    const next = tabs[(tabs.findIndex((t) => t.id === tab) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-                    show(next.id);
-                    document.getElementById(`${ids.tabs}-${next.id}`)?.focus();
-                  }}>
-                  {item.label}{item.count !== undefined && <span className="ai-count">{item.count}</span>}
-                </button>)}
-              </div>
+              <Tabs label={m.tabs} tabs={tabs} value={tab} onChange={show} prefix={ids.tabs} />
               {isAdmin && <button type="button" className="ai-add" aria-label={m.addProvider} onClick={openAdd} disabled={full}
                 aria-describedby={full ? 'ai-limit-why' : undefined}><PlusIcon /><span className="ai-wide">{m.addProvider}</span><span className="ai-narrow">{m.addShort}</span></button>}
             </div>
             {props.error && <p role="alert" className="error-copy">{props.error}</p>}
-            <div role="tabpanel" id={`${ids.tabs}-${tab}-panel`} aria-labelledby={`${ids.tabs}-${tab}`} className="ai-panel-stack">
+            <div role="tabpanel" id={panelID(ids.tabs, tab)} aria-labelledby={tabID(ids.tabs, tab)} className="ai-panel-stack">
               {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })}
                 onConfirmAuto={(slot) => setDialog({ kind: slot.slot === 'draft' ? 'auto-draft' : 'auto-triage', slot })} onSetAuto={setSlot} />}
               {tab === 'usage' && <Usage usage={props.usage} failed={props.usageFailed} month={month} onMonth={(next) => { setMonth(next); props.onUsageMonth(next); }} />}
@@ -155,17 +145,17 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
   const nothing = !server && settings.providers.length === 0;
   const models = (slot: AISlotName) => server?.models[slot]?.[0] ?? '';
   return <div className={`ai-panel-stack${nothing ? ' ai-nothing' : ''}`}>
-    {!isAdmin && <div className="ai-notice ai-notice-plain" role="note"><InfoIcon /><span><strong>{m.agentNotice}</strong> {m.agentNoticeMore}</span></div>}
+    {!isAdmin && <div className="notice notice-plain" role="note"><InfoIcon /><span><strong>{m.agentNotice}</strong> {m.agentNoticeMore}</span></div>}
     {props.isAdmin && <AutoMovedNotice settings={settings} slotName="triage" onTurnOn={props.onConfirmAuto} />}
     {props.isAdmin && <AutoMovedNotice settings={settings} slotName="draft" onTurnOn={props.onConfirmAuto} />}
-    {settings.automatic.paused_until && settings.slots.some((slot) => slot.slot === 'triage' && slot.enabled) && <div className="ai-notice" role="status">
+    {settings.automatic.paused_until && settings.slots.some((slot) => slot.slot === 'triage' && slot.enabled) && <div className="notice" role="status">
       <span><strong>{m.pausedHeading(formatDate(settings.automatic.paused_until, props.timezone))}</strong> {m.pausedBody(settings.automatic.per_day)}</span>
-      {isAdmin && <div className="ai-notice-actions"><button type="button" onClick={props.onOpenAutomatic}>{m.raiseLimit}</button></div>}
+      {isAdmin && <div className="notice-actions"><button type="button" onClick={props.onOpenAutomatic}>{m.raiseLimit}</button></div>}
     </div>}
     {settings.allowance && settings.allowance.used_micro_usd >= settings.allowance.limit_micro_usd && settings.slots.some((slot) => slot.source === 'server' && slot.enabled)
-      && <div className="ai-notice ai-notice-danger" role="alert">
+      && <div className="notice notice-danger" role="alert">
         <span><strong>{m.allowanceUsedHeading(server?.label ?? '')}</strong> {m.allowanceUsedBody(formatDay(settings.allowance.resets_at, 'UTC'))}</span>
-        {isAdmin && <div className="ai-notice-actions"><button type="button" className="primary-action" onClick={props.onOpenAdd}>{m.addProvider}</button></div>}
+        {isAdmin && <div className="notice-actions"><button type="button" className="primary-action" onClick={props.onOpenAdd}>{m.addProvider}</button></div>}
       </div>}
     {props.showConsent && server && isAdmin && <section className="panel ai-consent" aria-labelledby="ai-consent-heading">
       <div><h2 id="ai-consent-heading">{m.consentHeading(props.workspaceName)}</h2>
@@ -263,7 +253,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
           {isAdmin && <button type="button" className="link-button" onClick={onOpenAutomatic} aria-label={m.changeAutomatic}>{m.change}</button>}</>
           : <span className="muted-copy">{m.noAutomatic}</span>}
       </div>
-      <label className="ai-switch"><input type="checkbox" role="switch" aria-label={m.switchFor(name)} checked={slot.enabled} disabled={locked || !choice}
+      <label className="switch"><input type="checkbox" role="switch" aria-label={m.switchFor(name)} checked={slot.enabled} disabled={locked || !choice}
         onChange={(event) => save({ enabled: event.target.checked })} /></label>
       {saving && <p className="ai-slot-why" role="status">{m.saving}</p>}
       {!saving && choices.length === 0 && <p className="ai-slot-why help">{m.addFirst}</p>}
@@ -302,7 +292,7 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
         {on ? <span className="ai-auto-stat">{m.autoStat(settings.auto_triage.applied, settings.auto_triage.undone)} <span className="muted-copy">{m.autoStatWhen}</span></span>
           : isAdmin && <span className="ai-auto-stat muted-copy ai-long">{m.autoPickLater}</span>}
       </fieldset>}
-      <label className="ai-switch ai-auto-switch"><input type="checkbox" role="switch" id="ai-auto-triage" aria-label={m.autoTitle} checked={on} disabled={locked || !slot.enabled}
+      <label className="switch ai-auto-switch"><input type="checkbox" role="switch" id="ai-auto-triage" aria-label={m.autoTitle} checked={on} disabled={locked || !slot.enabled}
         aria-describedby={why ? `${id}-why` : undefined}
         onChange={(event) => (event.target.checked ? onTurnOn() : onSet({ automatic: false }))} /></label>
     </div>
@@ -335,7 +325,7 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
         {pausedDay && isAdmin && <button type="button" onClick={onRaise}>{m.autoDraftRaise}</button>}
         {pausedHalf && isAdmin && <a className="button ai-link-button" href="/settings/ai?add=1">{m.autoDraftAddKey}</a>}
         {locked && !why && <span className="sr-only" id="ai-auto-draft-why">{m.autoAdminsOnly}</span>}
-        <label className="ai-switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
+        <label className="switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
           aria-describedby={why || locked ? 'ai-auto-draft-why' : undefined}
           onChange={(event) => (event.target.checked ? onTurnOn() : onOff())} /></label>
       </div>
@@ -376,7 +366,7 @@ function AutoMovedNotice({ settings, slotName, onTurnOn }: { settings: AISetting
   const detail = last?.detail as { from?: Record<string, unknown>; to?: Record<string, unknown> } | undefined;
   if (!slot || !slot.enabled || slot.automatic || !detail?.from?.automatic || detail.to?.automatic || detail.from.provider_label === detail.to?.provider_label) return null;
   const title = slotName === 'draft' ? m.autoDraftTitle : m.autoTitle;
-  return <div className="ai-notice" role="status"><span>{m.autoMovedNotice(title, slotLabel(slotName), String(detail.to?.provider_label ?? ''))}</span>
+  return <div className="notice" role="status"><span>{m.autoMovedNotice(title, slotLabel(slotName), String(detail.to?.provider_label ?? ''))}</span>
     <button type="button" onClick={() => onTurnOn(slot)}>{m.autoTurnOnAgain}</button></div>;
 }
 
@@ -568,34 +558,9 @@ function History({ events, timezone }: { events: AIEvent[]; timezone: string }) 
   </>;
 }
 
-// Dialog is the frame every dialog of this page shares: Escape closes, Tab stays inside, focus returns.
-function Dialog({ title, help, onClose, children, footer, onSubmit, alert }: { title: string; help?: string; onClose: () => void; children: ReactNode; footer: ReactNode; onSubmit?: (event: FormEvent) => void; alert?: boolean }) {
-  useReturnFocus();
-  const root = useRef<HTMLFormElement>(null);
-  const titleId = useId();
-  return (
-    <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>
-      <form className="dialog ai-dialog" role={alert ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby={titleId} ref={root}
-        onKeyDown={dialogKeys(root, onClose)} onSubmit={(event) => { event.preventDefault(); onSubmit?.(event); }} noValidate>
-        <header><div><h2 id={titleId}>{title}</h2>{help && <p>{help}</p>}</div>
-          {!alert && <button type="button" className="icon-button" aria-label={m.close} onClick={onClose}>×</button>}</header>
-        <div className="ai-dialog-body">{children}</div>
-        <footer className="button-row ai-dialog-footer">{footer}</footer>
-      </form>
-    </div>
-  );
-}
-
-function Field({ label, error, help, children, id }: { label: string; error?: string; help?: string; children: (props: { id: string; 'aria-invalid'?: true; 'aria-describedby'?: string }) => ReactNode; id: string }) {
-  const note = `${id}-note`;
-  const hint = `${id}-help`;
-  // The refusal comes first; the field's own help stays under it, since it often says how to fix it.
-  const described = [error && note, help && hint].filter(Boolean).join(' ');
-  return <div className={`field${error ? ' ai-field-bad' : ''}`}><label className="field-label" htmlFor={id}>{label}</label>
-    {children({ id, ...(error ? { 'aria-invalid': true } : {}), ...(described ? { 'aria-describedby': described } : {}) })}
-    {error && <span className="error-copy ai-field-note" id={note}>{error}</span>}
-    {help && <span className="help ai-field-note" id={hint}>{help}</span>}
-  </div>;
+// Dialog is the shared form dialog with this page's close label.
+function Dialog(props: Omit<Parameters<typeof SharedDialog>[0], 'closeLabel'>) {
+  return <SharedDialog {...props} closeLabel={m.close} className="ai-dialog" />;
 }
 
 // The most models a provider keeps (contracts/openapi.yaml, AIProviderInput).
@@ -687,7 +652,7 @@ function AddDialog({ settings, onClose, onAdd, onListModels }: { settings: AISet
     <Dialog title={m.addHeading} help={m.addHelp} onClose={onClose} onSubmit={() => void submit()}
       footer={<><span className="ai-dialog-left">{left > 0 ? m.providersFoot(left) : ''}</span><button type="button" onClick={onClose}>{m.cancel}</button>
         <button type="submit" className="primary-action" disabled={busy || noKeys}>{busy ? m.checking : m.checkAndSave}</button></>}>
-      {noKeys && <div className="ai-notice ai-notice-danger" role="alert"><span><strong>{m.noKeysNotice}</strong> {m.noKeysBody}</span></div>}
+      {noKeys && <div className="notice notice-danger" role="alert"><span><strong>{m.noKeysNotice}</strong> {m.noKeysBody}</span></div>}
       {error?.field === 'form' && <p role="alert" className="error-copy">{error.text}</p>}
       <fieldset className="ai-kind"><legend className="sr-only">{m.columnProvider}</legend>
         {services.map((value) => <label key={value}>
@@ -736,7 +701,7 @@ function ModelPicker({ id, list, picked, onPick, error, canLoad, needsAddress, o
   const full = picked.length >= maxProviderModels;
   const toggle = (model: string) => onPick(picked.includes(model) ? picked.filter((item) => item !== model) : full ? picked : [...picked, model]);
   return (
-    <fieldset className={`field ai-models${error ? ' ai-field-bad' : ''}`} aria-describedby={note}>
+    <fieldset className={`field ai-models${error ? ' field-bad' : ''}`} aria-describedby={note}>
       <legend className="field-label">{m.modelsField}</legend>
       <div className="ai-models-head">
         {list.state === 'loaded' && models.length > modelSearchFrom
@@ -756,8 +721,8 @@ function ModelPicker({ id, list, picked, onPick, error, canLoad, needsAddress, o
           </label></li>
         ))}
       </ul>}
-      {error ? <span className="error-copy ai-field-note" id={note} role="alert">{error}</span>
-        : <span className="help ai-field-note" id={note}>{full ? m.modelsLimit(maxProviderModels) : list.state === 'loaded' ? m.modelsPicked(picked.length, maxProviderModels) : ''}</span>}
+      {error ? <span className="error-copy field-note" id={note} role="alert">{error}</span>
+        : <span className="help field-note" id={note}>{full ? m.modelsLimit(maxProviderModels) : list.state === 'loaded' ? m.modelsPicked(picked.length, maxProviderModels) : ''}</span>}
     </fieldset>
   );
 }

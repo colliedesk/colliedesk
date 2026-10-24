@@ -5,35 +5,10 @@
 .ai-settings .badge { font-size: var(--fs-label); }
 .ai-mono { font-family: var(--font-mono); font-size: 0.95em; }
 
-/* Tabs and the head action share a row; on a narrow screen the tabs scroll sideways with no bar. */
-/* Tabs: a segmented track like the knowledge base editor's, the open tab raised on it. */
 .ai-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
-.ai-tabs { display: inline-flex; flex: 0 1 auto; min-width: 0; gap: 2px; overflow-x: auto; scrollbar-width: none;
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: 3px; }
-.ai-tabs::-webkit-scrollbar { display: none; }
-.ai-tabs button { --control: 30px; display: inline-flex; align-items: center; gap: 6px; min-height: 30px; border: 0; border-radius: var(--radius-sm);
-  background: transparent; box-shadow: none; padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); font-weight: 500; white-space: nowrap;
-  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease; }
-.ai-tabs button:hover:not(:disabled) { background: color-mix(in srgb, var(--text-1) 5%, transparent); box-shadow: none; color: var(--text-1); }
-.ai-tabs button[aria-selected="true"], .ai-tabs button[aria-selected="true"]:hover { background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
-.ai-tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-@media (pointer: coarse) { .ai-tabs button { --control: var(--touch); min-height: var(--touch); } }
-@media (prefers-reduced-motion: reduce) { .ai-tabs button { transition: none; } }
-@media (forced-colors: active) { .ai-tabs button[aria-selected="true"] { outline: 2px solid Highlight; } }
-.ai-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 999px; background: color-mix(in srgb, var(--text-1) 8%, transparent);
-  padding: 0 5px; color: var(--text-2); font-size: var(--fs-label); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-button[aria-selected="true"] > .ai-count { background: var(--text-1); color: var(--surface-1); }
 .ai-add { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
 .ai-narrow { display: none; }
 
-/* Notices */
-.ai-notice { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; border: 1px solid var(--note-line); border-radius: var(--radius-lg);
-  background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
-.ai-notice > svg { flex: none; }
-.ai-notice > span { flex: 1 1 20rem; min-width: 0; }
-.ai-notice strong { font-weight: 600; }
-.ai-notice-plain { border-color: var(--line); background: var(--surface-0); color: var(--text-2); }
-.ai-notice-danger { border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: var(--danger-soft); color: var(--danger); }
 
 /* Consent banner and server card */
 .ai-consent { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3) var(--space-6); align-items: center; border-color: var(--line-strong);
@@ -71,7 +46,6 @@ button[aria-selected="true"] > .ai-count { background: var(--text-1); color: var
 .ai-slot select { width: 100%; }
 .ai-cell-label { display: none; }
 .ai-slot-limit { display: grid; gap: 0; justify-items: start; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
-.ai-notice-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-left: auto; }
 .ai-server-meter { grid-template-columns: auto minmax(0, 1fr) minmax(16rem, 22rem); }
 .ai-meter { display: grid; gap: 6px; min-width: 0; }
 .ai-meter-top { display: flex; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; font-size: var(--fs-small); }
@@ -97,16 +71,6 @@ button[aria-selected="true"] > .ai-count { background: var(--text-1); color: var
 .ai-meter-none { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
 @media (pointer: coarse) { .ai-slot-limit .link-button { min-height: var(--touch); } }
 
-.ai-switch { justify-self: end; display: inline-flex; align-items: center; min-height: var(--touch); cursor: pointer; }
-.ai-switch input { appearance: none; position: relative; width: 34px; height: 20px; min-height: 0; margin: 0; border: 0; border-radius: var(--radius-full);
-  background: var(--line-control); cursor: pointer; transition: background-color var(--dur) var(--ease); }
-.ai-switch input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: var(--radius-full);
-  background: var(--surface-1); box-shadow: var(--shadow-1); transition: translate var(--dur) var(--ease); }
-.ai-switch input:checked { background: var(--accent); }
-.ai-switch input:checked::after { translate: 14px 0; }
-.ai-switch input:disabled { opacity: 0.5; cursor: not-allowed; }
-.ai-switch input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .ai-switch input, .ai-switch input::after { transition: none; } }
 
 .ai-sends { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); color: var(--text-2); font-size: var(--fs-small); }
 .ai-sends > svg { flex: none; margin-top: 2px; color: var(--text-3); }
@@ -137,20 +101,6 @@ button[aria-selected="true"] > .ai-count { background: var(--text-1); color: var
 .ai-history b { color: var(--text-1); font-weight: 600; }
 .ai-help { margin: 0; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-small); }
 
-/* Dialogs: the footer stays in view, the fields scroll. */
-.ai-dialog { display: flex; flex-direction: column; width: min(34rem, 100%); max-height: calc(100dvh - 24px); overflow: hidden; }
-.ai-dialog > header, .ai-dialog > footer { flex: none; }
-.ai-dialog-body { min-height: 0; overflow-y: auto; margin: 0 calc(-1 * var(--space-1)); padding: 0 var(--space-1); }
-.ai-dialog > header { display: flex; gap: var(--space-3); align-items: flex-start; }
-.ai-dialog > header > div { flex: 1; display: grid; gap: var(--space-1); }
-.ai-dialog > header p { color: var(--text-3); font-size: var(--fs-small); }
-.ai-dialog-body { display: grid; gap: var(--space-3); }
-.ai-dialog-body p { color: var(--text-2); font-size: var(--fs-small); }
-.ai-dialog .field input { width: 100%; }
-.ai-field-note { font-size: var(--fs-label); }
-.field .ai-field-note.error-copy { color: var(--danger); }
-.ai-field-bad input { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
-.ai-dialog-footer { align-items: center; justify-content: flex-end; }
 .ai-dialog-left { margin-right: auto; color: var(--text-3); font-size: var(--fs-label); }
 .ai-kind { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: 0; border: 0; padding: 0; }
 .ai-kind label { position: relative; display: grid; align-content: start; gap: 2px; border: 1px solid var(--line-control); border-radius: var(--radius); padding: var(--space-2) var(--space-3); cursor: pointer; }
@@ -175,7 +125,7 @@ button[aria-selected="true"] > .ai-count { background: var(--text-1); color: var
   .ai-slot-what { grid-area: what; }
   .ai-slot-provider { grid-area: prov; }
   .ai-slot-model { grid-area: model; }
-  .ai-switch { grid-area: on; }
+  .ai-slot > .switch { grid-area: on; }
   .ai-cell-label { display: block; color: var(--text-3); font-size: var(--fs-label); }
   .ai-prov { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name actions" "state actions"; gap: 2px var(--space-4); }
   .ai-prov-name { grid-area: name; }
@@ -186,8 +136,8 @@ button[aria-selected="true"] > .ai-count { background: var(--text-1); color: var
 @media (max-width: 44rem) {
   .ai-settings > header p { display: none; }
   .ai-nothing .ai-slots { display: none; }
-  .ai-tabs { flex: 1 1 auto; }
-  .ai-tabs button { flex: 1 0 auto; justify-content: center; padding: 0 var(--space-2); }
+  .ai-tabs-row .seg-tabs { flex: 1 1 auto; }
+  .ai-tabs-row .seg-tabs button { flex: 1 0 auto; justify-content: center; padding: 0 var(--space-2); }
   .ai-wide, .ai-long { display: none; }
   .ai-narrow { display: inline; }
   .ai-consent { grid-template-columns: 1fr; padding: var(--space-3); }
@@ -209,7 +159,6 @@ button[aria-selected="true"] > .ai-count { background: var(--text-1); color: var
 }
 /* On a phone the add button keeps only its icon (named by aria-label), so all four tabs fit beside it. */
 @media (max-width: 30rem) {
-  .ai-tabs button { padding: 0 var(--space-2); }
   .ai-narrow { display: none; }
   .ai-add { width: var(--touch); justify-content: center; padding: 0; }
 }
@@ -258,7 +207,7 @@ button[aria-selected="true"] > .ai-count { background: var(--text-1); color: var
   border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); }
 .ai-models-list label { display: flex; align-items: center; padding-block: var(--space-1); gap: var(--space-2); min-height: 32px; border-radius: var(--radius-sm); padding: 0 var(--space-2); cursor: pointer; }
 .ai-models-list label:hover { background: var(--surface-2); }
-.ai-dialog .ai-models-list input[type="checkbox"] { width: var(--space-4); }
+.form-dialog .ai-models-list input[type="checkbox"] { width: var(--space-4); }
 .ai-models-list label:has(input:disabled) { cursor: not-allowed; color: var(--text-3); }
 .ai-models-list .ai-mono { min-width: 0; overflow-wrap: anywhere; }
 .ai-models-default { flex: none; margin-left: auto; border-radius: var(--radius-full); background: var(--surface-2); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
