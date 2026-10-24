@@ -231,3 +231,43 @@ test('Settings has a Help center section in its nav, for every agent', async () 
   expect(screen.getByRole('heading', { name: 'Help center' })).toBeInTheDocument();
   expect(screen.getByRole('navigation', { name: 'Settings sections' })).toHaveTextContent('Help center');
 });
+
+// A link to a section (#…-heading) opens Settings before its data arrives, so the router finds no section to go to.
+function openAtExportAfterTheSessionsArrive() {
+  let arrive = () => {};
+  const scrolled = vi.fn();
+  Element.prototype.scrollIntoView = scrolled;
+  window.history.replaceState(null, '', '/settings#export-heading');
+  show('admin');
+  api.sessions.mockReturnValue(new Promise((resolve) => { arrive = () => resolve({ items: [] }); }));
+  return { scrolled, arrive: () => arrive() };
+}
+const leaveSettings = () => {
+  window.history.replaceState(null, '', '/');
+  delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+};
+
+test('Settings opened at a section goes to it once the section is drawn', async () => {
+  try {
+    api.sessions.mockReset();
+    const { scrolled, arrive } = openAtExportAfterTheSessionsArrive();
+    await screen.findByRole('status');
+    expect(scrolled).not.toHaveBeenCalled();
+    arrive();
+    await screen.findByRole('button', { name: 'Export all data' });
+    await waitFor(() => expect(scrolled).toHaveBeenCalledOnce());
+    expect(scrolled.mock.contexts[0]).toBe(document.getElementById('export-heading'));
+  } finally { leaveSettings(); }
+});
+
+test('Settings opened at a section stays where the person scrolled while it loaded', async () => {
+  try {
+    api.sessions.mockReset();
+    const { scrolled, arrive } = openAtExportAfterTheSessionsArrive();
+    await screen.findByRole('status');
+    fireEvent.wheel(window, { deltaY: 200 });
+    arrive();
+    await screen.findByRole('button', { name: 'Export all data' });
+    expect(scrolled).not.toHaveBeenCalled();
+  } finally { leaveSettings(); }
+});
