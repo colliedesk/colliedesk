@@ -93,9 +93,9 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 	identity := principal(request)
 	workspaceID, conversationID := identity.Workspace.ID, request.PathValue("id")
 	// A token that may not write any message is refused before a byte is stored; the kind, and so
-	// whether a reply needs the send tier, is known only once the fields are read. Files cannot wait
+	// whether a reply needs messages:send, is known only once the fields are read. Files cannot wait
 	// days for a person's approval, so such a call is refused with the way forward.
-	if !auth.ScopeAllows(identity.Scope, auth.ScopeDraft) {
+	if !identity.Allows(auth.PermMessagesNote) && !identity.Allows(auth.PermMessagesSend) {
 		writeFilesNeedApproval(response)
 		return
 	}

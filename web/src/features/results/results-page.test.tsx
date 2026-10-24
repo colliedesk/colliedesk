@@ -117,6 +117,25 @@ describe('ResultsPage', () => {
     expect(screen.getByText('Answered conversations are 3. A median needs at least 5.')).toBeVisible();
   });
 
+  it('right after the move, compares no weekly volume and says Colliedesk has no conversation yet', () => {
+    const moved = results({ hours_saved: { '30d': null, '7d': null } });
+    moved.current!.windows['30d'] = window({ volume: { count: 0, from: '2026-09-23T12:00:00Z', days: 0, per_week: null } });
+    moved.baseline!.windows['30d'] = window({ ...baselineWindow, handle: { median_minutes: null, conversations: 2 } });
+    renderPage({ results: moved });
+    const volume = screen.getByRole('region', { name: 'Conversations per week' });
+    expect(within(volume).getByText('No conversation a customer started yet.')).toBeVisible();
+    expect(within(volume).queryByText(/fewer|more/)).toBeNull();
+    // Already on Last 30 days: the hint does not ask to switch to it.
+    const ai = screen.getByRole('region', { name: 'AI drafts' });
+    expect(within(ai).getByText(/It appears when there is more history\./)).toBeVisible();
+    expect(within(ai).queryByText(/Switch to Last 30 days/)).toBeNull();
+  });
+
+  it('on Last 7 days, a too small Freshdesk sample points to Last 30 days', () => {
+    renderPage({ results: results({ hours_saved: { '30d': null, '7d': null } }), window: '7d' });
+    expect(within(screen.getByRole('region', { name: 'AI drafts' })).getByText(/Switch to Last 30 days, or wait for more history\./)).toBeVisible();
+  });
+
   it('asks to run an earlier import again for resolve times', () => {
     const old = results();
     old.baseline!.stats_read = 0;

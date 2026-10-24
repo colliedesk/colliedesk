@@ -28,6 +28,9 @@ type Session struct {
 	AgentEmail string  `json:"agent_email"`
 	Label      string  `json:"label"`
 	Scope      *string `json:"scope"`
+	// Permissions is what an agent token holds: its tier's permissions, or a custom token's own list.
+	// Empty for a person's session.
+	Permissions []string `json:"permissions"`
 	// Current marks the session that made the request; it is not stored.
 	Current    bool       `json:"current"`
 	CreatedAt  time.Time  `json:"created_at"`

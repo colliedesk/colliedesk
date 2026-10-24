@@ -208,7 +208,7 @@ function MergeDialog({ contact, onMerge, onClose }: { contact: ContactDetail; on
   };
   return (
     <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={dialogKeys(root, onClose)}>
+      <div className="dialog merge-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={dialogKeys(root, onClose)}>
         <h2 id={titleId}>{contactMessages.mergeTitle(contact.name)}</h2>
         {!duplicate && <>
           <p className="muted-copy">{contactMessages.mergeIntro}</p>

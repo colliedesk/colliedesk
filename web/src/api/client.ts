@@ -280,7 +280,8 @@ export const api = {
   updateAgentDisplayName: (display_name: RequestBody<'updateAgentDisplayName'>['display_name']) => request('/api/v1/agents/me/display-name', agentSchema, { method: 'PATCH', body: json<'updateAgentDisplayName'>({ display_name }) }),
   updateAgent: (id: string, value: RequestBody<'updateAgent'>) => request(`/api/v1/agents/${id}`, teamMemberSchema, { method: 'PATCH', body: json<'updateAgent'>(value) }),
   sessions: () => request('/api/v1/auth/sessions', sessionListSchema),
-  createAgentToken: (label: string, scope: RequestBody<'createAgentToken'>['scope']) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', body: json<'createAgentToken'>({ label, scope }) }),
+  // A token holds a tier (scope) or its own permissions, never both.
+  createAgentToken: (label: string, choice: Omit<RequestBody<'createAgentToken'>, 'label'>) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', body: json<'createAgentToken'>({ label, ...choice }) }),
   revokeSession: (id: string) => requestNoContent(`/api/v1/auth/sessions/${id}`, { method: 'DELETE' }),
   invites: () => request('/api/v1/auth/invites', inviteListSchema),
   createInvite: (email: string, role_ceiling: RequestBody<'createInvite'>['role_ceiling']) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', body: json<'createInvite'>({ email, role_ceiling }) }),

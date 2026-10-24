@@ -214,7 +214,8 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-tabs button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-1); }
 .composer-card[data-kind="note"] .composer-tabs button[aria-pressed="true"] { background: var(--surface-1); color: var(--note-text); box-shadow: inset 0 0 0 1px var(--note-line); }
 .composer-tabs kbd { margin-left: var(--space-1); }
-.composer-head-end { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2) var(--space-4); }
+.composer-keys-resolve { display: inline-flex; align-items: center; gap: var(--space-1); }
+.composer-head-end { min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2) var(--space-4); }
 .composer-hint { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-label); white-space: nowrap; }
 .composer-card[data-kind="note"] .composer-hint { color: var(--note-text); }
 .composer textarea { display: block; width: 100%; min-height: 3.5rem; max-height: 40vh; resize: vertical; border: 0; background: transparent; padding: var(--space-2) var(--space-4); line-height: 1.55; transition: min-height var(--dur) var(--ease); }
@@ -238,6 +239,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-files { display: contents; margin: 0; padding: 0; list-style: none; }
 .composer-files li { display: inline-flex; align-items: center; gap: var(--space-2); max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-1) 0 var(--space-3); font-size: var(--fs-label); min-height: 28px; }
 .composer-files li > svg { width: 14px; height: 14px; color: var(--text-3); flex: none; }
+.composer-files li .attachment-size { flex: none; white-space: nowrap; }
 .composer-files li > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .composer-files li button { --control: 24px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
 .composer-files li button svg { width: 12px; height: 12px; }
@@ -246,10 +248,16 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 /* A narrow reply box keeps every tool on screen: the tools show their icon only (the label stays their
    accessible name) and their keycaps go. The shortcut hint lives in the composer head. */
 @container (max-width: 40rem) {
+  /* A narrow box keeps the send keys only; Send and resolve shows its own keys on hover. */
+  .composer-keys-resolve { display: none; }
   .composer-actions .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .composer-actions .saved-reply-button kbd { display: none; }
   /* Draft with AI keeps its words: the automatic draft and its notices point people to it by name. */
   .composer-actions .ai-tool .tool-label { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+}
+/* A phone-wide box has no room beside the tabs: the keys stay in the buttons' tooltips. */
+@container (max-width: 28rem) {
+  .composer-keys { display: none; }
 }
 .composer-warning { margin: var(--space-2) var(--space-2) 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text);
   padding: var(--space-2) var(--space-3); font-size: var(--fs-small); overflow-wrap: anywhere; }
@@ -263,15 +271,27 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .saved-reply-button .ai-draft-badge { margin-left: var(--space-1); border-radius: 999px; background: var(--accent-soft); color: var(--text-1); padding: 0 var(--space-2); font-size: var(--fs-label); }
 @media (pointer: coarse) {
   .saved-reply-button, .cc-button, .attach-button, .composer-tabs button { --control: var(--touch); min-width: var(--touch); justify-content: center; }
+  .cc-chips li button, .composer-files li button { --control: var(--touch); min-width: var(--touch); }
 }
 /* Saved replies and Articles sit together on the left; the last of them pushes the rest to the right. */
 .saved-reply-button:has(+ .saved-reply-button) { margin-right: 0; }
-.saved-reply-picker { display: grid; gap: var(--space-1); margin: 0 var(--space-2) var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-2); }
-.saved-reply-picker ul { max-height: 14rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
-.saved-reply-picker li { cursor: pointer; overflow: hidden; border-radius: var(--radius); padding: var(--space-2) var(--space-3); text-overflow: ellipsis; white-space: nowrap; }
+/* Saved replies and articles open as a suggestion list in the reply box: a search line, then the matches. */
+.saved-reply-picker { display: grid; margin: 0 var(--space-2) var(--space-2); overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface-1); box-shadow: var(--shadow-2); }
+.picker-search { display: flex; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--line); padding: 0 var(--space-3); color: var(--text-3); }
+.picker-search:focus-within { box-shadow: inset 0 -2px 0 var(--focus); }
+.picker-search svg { flex: none; width: 16px; height: 16px; }
+.picker-search input { flex: 1; min-width: 0; min-height: 40px; border: 0; background: transparent; padding: 0; }
+.picker-search input:focus-visible { outline: 0; }
+.saved-reply-picker ul { display: grid; gap: 2px; max-height: 15rem; margin: 0; padding: var(--space-1); overflow-y: auto; overscroll-behavior: contain; list-style: none; }
+.saved-reply-picker ul:empty { display: none; }
+.saved-reply-picker li { display: grid; gap: 1px; min-width: 0; cursor: pointer; border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
 .saved-reply-picker li[aria-selected="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+.picker-option-title, .picker-option-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-option-detail { color: var(--text-3); font-size: var(--fs-label); }
+.saved-reply-picker > button { margin: 0 var(--space-3) var(--space-3); }
 .article-link-picker { display: contents; }
-.saved-reply-empty { margin: 0; padding: var(--space-2) var(--space-3); color: var(--text-3); }
+.saved-reply-empty { margin: 0; padding: var(--space-3); color: var(--text-3); font-size: var(--fs-small); }
 .saved-reply-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .saved-reply-list > li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
 .saved-reply-list > li:last-child { border-bottom: 0; padding-bottom: 0; }
@@ -334,8 +354,6 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 75rem) {
   .details-toggle { display: inline-flex; }
-  /* The thread is narrow here: the buttons keep their room, the shortcut stays in their tooltips. */
-  .composer-keys { display: none; }
   .drawer-close { display: flex; margin: var(--space-3) var(--space-4) 0 auto; }
   .inbox-shell[data-details-open="true"] .details-panel {
     display: block; position: fixed; inset: var(--space-2) var(--space-2) var(--space-2) auto; z-index: 3; width: min(100% - var(--space-4), 20rem); box-shadow: var(--shadow-3);
@@ -350,7 +368,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .composer { padding-inline: var(--space-3); }
   .composer-notice { width: auto; margin-inline: var(--space-3); }
   .saved-reply-button kbd { display: none; }
-  .saved-reply-picker li { display: flex; align-items: center; min-height: var(--touch); }
+  .saved-reply-picker li { align-content: center; min-height: var(--touch); }
   .status-tabs label { min-height: var(--touch); }
   .conversation-row { min-height: var(--touch); }
 }
@@ -364,6 +382,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 
 /* Settings. */
 .form-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-3); }
+/* The field and its button share the first line; a save status and a hint take the whole line under them. */
+.form-row > :nth-child(n + 3) { grid-column: 1 / -1; }
 .invite-form { display: grid; grid-template-columns: minmax(0, 1fr) 9rem auto; align-items: end; gap: var(--space-3); }
 .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .invite-link { display: grid; gap: var(--space-1); }
@@ -388,6 +408,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .data-list time { font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 .data-list .badge { color: var(--text-2); }
 .data-list .token-detail { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: var(--fs-label); }
+.token-permissions summary { cursor: pointer; color: var(--text-2); }
+@media (pointer: coarse) { .token-permissions summary { display: flex; align-items: center; min-height: var(--touch); } }
+.token-permissions ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--text-2); }
 @media (max-width: 44rem) {
   .data-list article > div, .invite-form, .form-row { grid-template-columns: 1fr; gap: var(--space-2); }
 }
@@ -589,13 +612,22 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .conversation-viewers li[data-state="typing"], .conversation-viewers li[data-state="left"] { color: var(--text-1); font-weight: 600; }
 .conversation-viewers .viewer-more { margin-top: var(--space-1); font-size: var(--fs-small); }
 @media (pointer: coarse) { .conversation-viewers .viewer-more { min-height: var(--touch); } }
-.reply-conflict { display: grid; gap: var(--space-2); margin: 0 0 var(--space-2); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3); }
-.reply-conflict-title { font-weight: 600; }
-.reply-conflict ul { display: grid; gap: var(--space-2); max-height: 14rem; overflow: auto; margin: 0; padding: 0; list-style: none; }
-.reply-conflict-by { color: var(--text-2); font-size: var(--fs-small); }
-.reply-conflict-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.reply-conflict-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.reply-conflict .send-anyway { border-color: var(--danger); color: var(--danger); }
+/* Someone answered while this reply was being written: a warning inside the reply box, the new replies
+   quoted under it, the safe choice first. */
+.reply-conflict { display: grid; gap: var(--space-3); margin: var(--space-2) var(--space-2) 0; border: 1px solid var(--note-line); border-radius: var(--radius);
+  background: var(--note-bg); padding: var(--space-3); color: var(--note-text); }
+.reply-conflict-title { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--fs-small); font-weight: 600; line-height: 1.45; }
+.reply-conflict-title svg { flex: none; width: 16px; height: 16px; margin-top: 2px; }
+.reply-conflict ul { display: grid; gap: var(--space-2); max-height: 12rem; overflow: auto; margin: 0; padding: 0; list-style: none; border-radius: var(--radius-sm); }
+.reply-conflict ul:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.reply-conflict li { display: grid; gap: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-1); padding: var(--space-2) var(--space-3); color: var(--text-1); }
+.reply-conflict-by { display: flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--text-3); font-size: var(--fs-label); }
+.reply-conflict-by strong { color: var(--text-2); font-weight: 600; }
+.reply-conflict-text { font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-height: 700px) { .reply-conflict ul { max-height: 5rem; } }
+.reply-conflict-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.reply-conflict .send-anyway { border-color: transparent; background: transparent; box-shadow: none; color: var(--danger); }
+.reply-conflict .send-anyway:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); }
 @media (pointer: coarse) { .reply-conflict-actions button { min-height: var(--touch); } }
 .badge-draft-open { background: var(--surface-3); color: var(--text-2); padding: 0 var(--space-1); font-size: var(--fs-label); line-height: 18px; }
 .reply-draft { display: grid; gap: var(--space-2); margin: 0 var(--space-6) var(--space-2); border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3); }
@@ -611,7 +643,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Report a problem. */
 .dialog-backdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 0.45); padding: var(--space-3); }
 .dialog {
-  display: grid; gap: var(--space-3); width: min(36rem, 100%); max-height: 100%; overflow-y: auto; border: 1px solid var(--line);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); width: min(36rem, 100%); max-height: 100%; overflow-y: auto; border: 1px solid var(--line);
   border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-5);
 }
 .dialog h2, .dialog p { margin: 0; }
@@ -626,7 +658,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 
 /* Contacts: the customer page, the contact picker and the customers a search finds. */
 .contact-page { display: grid; align-content: start; gap: var(--space-5); }
-.contact-page > * { max-width: 60rem; }
+.contact-page > :not(.dialog-backdrop) { max-width: 60rem; }
 .contact-header { display: grid; gap: var(--space-3); }
 .contact-name-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
 .contact-name-row h1 { min-width: 0; font: 500 28px/1.1 var(--font-display); letter-spacing: -0.02em; overflow-wrap: anywhere; }
@@ -651,14 +683,22 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .contact-history .pagination { margin-top: var(--space-3); }
 .contact-picker { display: grid; gap: var(--space-2); }
 .contact-picker input { min-height: var(--touch); }
-.contact-picker-results { display: grid; gap: 2px; max-height: 16rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
-.contact-picker-results:empty { display: none; }
-.contact-picker-results button { display: grid; width: 100%; min-height: var(--touch); border: 0; border-radius: var(--radius-sm); background: transparent;
-  padding: var(--space-2) var(--space-3); text-align: left; transition: background-color var(--dur-fast) var(--ease); }
-.contact-picker-results button:hover:not(:disabled) { background: var(--surface-2); }
-.contact-picker-results button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.contact-picker-name { font-weight: 600; overflow-wrap: anywhere; }
-.contact-picker-email { color: var(--text-3); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.contact-picker-box { position: relative; }
+/* The matches open under the box like a select's list, over what follows it. */
+.contact-picker-results {
+  position: absolute; z-index: 6; top: calc(100% + var(--space-1)); left: 0; right: 0; max-height: 18rem; margin: 0; padding: var(--space-1);
+  overflow-y: auto; overscroll-behavior: contain; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface-1); box-shadow: var(--shadow-2);
+}
+.contact-picker-results[hidden] { display: none; }
+/* The merge window holds only the search, so the matches sit in it instead of over its edge. */
+.merge-dialog .contact-picker-results { position: static; margin-top: var(--space-1); box-shadow: none; }
+.contact-picker-results li { display: grid; gap: 1px; min-height: var(--touch); align-content: center; cursor: pointer; border-radius: var(--radius);
+  padding: var(--space-1) var(--space-3); text-align: left; }
+.contact-picker-results li[aria-selected="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+.contact-picker-results li[aria-disabled="true"] { cursor: not-allowed; opacity: 0.5; }
+.contact-picker-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.contact-picker-email { overflow: hidden; color: var(--text-3); font-size: var(--fs-small); text-overflow: ellipsis; white-space: nowrap; }
 .contact-matches { margin: 0 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2); }
 .contact-matches h2 { padding: 0 var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
 .contact-matches ul { display: grid; margin: var(--space-1) 0 0; padding: 0; list-style: none; }
@@ -669,8 +709,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .timeline-contact:hover { color: var(--text-1); }
 .new-conversation-button { margin-left: auto; min-height: 32px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; }
 .new-conversation-button:hover { background: var(--surface-2); }
-.new-conversation-form { display: grid; gap: var(--space-2); }
-.new-conversation-fields { display: grid; gap: var(--space-2); min-width: 0; margin: 0; border: 0; padding: 0; }
+.new-conversation-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+.new-conversation-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; margin: 0; border: 0; padding: 0; }
 .new-conversation-fields:disabled { opacity: 0.6; }
 .new-conversation-existing { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .contact-history h2:focus { outline: none; }
@@ -678,6 +718,22 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .new-conversation-form > input, .new-conversation-contact input { min-height: var(--touch); }
 .new-conversation-form textarea { width: 100%; resize: vertical; }
 .new-conversation-contact { display: grid; gap: var(--space-2); margin: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
+/* In the window, Cc is a field like Subject (the label sits inside, as in a mail client) and the files
+   button is a named button, not the reply box's bare icons. */
+.new-conversation .composer-cc { min-height: var(--touch); gap: var(--space-1); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-1); padding: var(--space-1); transition: border-color var(--dur-fast) var(--ease); }
+.new-conversation .composer-cc:hover { border-color: var(--text-3); }
+.new-conversation .composer-cc:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.new-conversation .composer-cc input { min-height: 32px; }
+.new-conversation .composer-cc input:focus-visible { outline: 0; }
+.new-conversation .composer-cc .composer-attachments-problem { margin-inline: var(--space-1); }
+.new-conversation .cc-label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+.new-conversation .composer-attachments { padding: 0; }
+.attach-button-labelled { --control: 32px; border-color: var(--line-control); background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-1); padding: 0 var(--space-3); }
+.attach-button-labelled svg { width: 14px; height: 14px; color: var(--text-3); }
+.new-conversation-form textarea { border-color: var(--line-strong); }
+.contact-picker-box input { width: 100%; }
+.new-conversation h2 { font-size: var(--fs-body); font-weight: 600; }
 .new-conversation-to { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .new-conversation-to > span:nth-child(2) { min-width: 0; overflow-wrap: anywhere; }
 .field-label { color: var(--text-3); font-size: var(--fs-label); }

@@ -96,6 +96,14 @@ export function AIRoute() {
     onDismissConsent={() => { writeDismissed(workspaceID); setDismissed(true); }}
     onCheck={(id) => { slot.reset(); consent.reset(); check.mutate(id); }}
     onAdd={(input: AIProviderInput) => run(() => aiApi.add(input))}
+    onListModels={async (input) => {
+      try { return (await aiApi.models(input)).models; } catch (error) {
+        // A provider that keeps no list (or will not show it to this key) is answered by typing the names.
+        const why = error instanceof ConflictError && error.detail?.code === 'ai_check_failed' ? error.detail.check_error_code : undefined;
+        return why && ['model_not_found', 'bad_request', 'invalid_response', 'permission'].includes(String(why))
+          ? { field: 'models', text: (error as ConflictError).message } : refusal(error);
+      }
+    }}
     onSetKey={(id, key) => run(() => aiApi.setKey(id, key))}
     onRemove={(id) => run(() => aiApi.remove(id))}
     onSetAutomatic={(perDay, perMinute, draftPerDay) => run(() => aiApi.setAutomatic(perDay, perMinute, draftPerDay))}

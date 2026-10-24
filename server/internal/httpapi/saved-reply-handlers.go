@@ -16,7 +16,7 @@ import (
 // and, when a person approved an agent request, that person with the token that asked and the request.
 func savedReplyActor(ctx context.Context, who auth.Principal) store.Actor {
 	actor := store.Actor{AgentID: who.Agent.ID}
-	if who.Scope != "" {
+	if who.IsToken() {
 		actor.TokenID = who.SessionID
 	}
 	if replay, ok := approvalOf(ctx); ok {

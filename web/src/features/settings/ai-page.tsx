@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import type { AIEvent, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
+import type { AIEvent, AIModelsInput, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
 import { aiMessages as m } from './ai-messages';
@@ -42,6 +42,8 @@ export interface AIPageProps {
   onCheck: (id: string) => void;
   // The dialogs' actions resolve to a refusal to show, or nothing when they worked.
   onAdd: (input: AIProviderInput) => Promise<FieldError | undefined>;
+  // The models a key may use, before the provider is saved, or why they could not be listed.
+  onListModels: (input: AIModelsInput) => Promise<string[] | FieldError>;
   onSetKey: (id: string, key: string) => Promise<FieldError | undefined>;
   onRemove: (id: string) => Promise<FieldError | undefined>;
   onSetAutomatic: (perDay: number, perMinute: number, draftPerDay?: number) => Promise<FieldError | undefined>;
@@ -133,7 +135,7 @@ export function AIPage(props: AIPageProps) {
           </>}
         </div>
       </div>
-      {dialog?.kind === 'add' && settings && <AddDialog settings={settings} onClose={() => setDialog(undefined)} onAdd={props.onAdd} />}
+      {dialog?.kind === 'add' && settings && <AddDialog settings={settings} onClose={() => setDialog(undefined)} onAdd={props.onAdd} onListModels={props.onListModels} />}
       {dialog?.kind === 'key' && <KeyDialog provider={dialog.provider} onClose={() => setDialog(undefined)} onSetKey={props.onSetKey} />}
       {dialog?.kind === 'automatic' && settings && <AutomaticDialog settings={settings} onClose={() => setDialog(undefined)} onSave={props.onSetAutomatic} />}
       {dialog?.kind === 'delete' && settings && <DeleteDialog provider={dialog.provider} settings={settings} onClose={() => setDialog(undefined)} onRemove={props.onRemove} />}
@@ -586,35 +588,94 @@ function Dialog({ title, help, onClose, children, footer, onSubmit, alert }: { t
 
 function Field({ label, error, help, children, id }: { label: string; error?: string; help?: string; children: (props: { id: string; 'aria-invalid'?: true; 'aria-describedby'?: string }) => ReactNode; id: string }) {
   const note = `${id}-note`;
+  const hint = `${id}-help`;
+  // The refusal comes first; the field's own help stays under it, since it often says how to fix it.
+  const described = [error && note, help && hint].filter(Boolean).join(' ');
   return <div className={`field${error ? ' ai-field-bad' : ''}`}><label className="field-label" htmlFor={id}>{label}</label>
-    {children({ id, ...(error ? { 'aria-invalid': true } : {}), ...(error || help ? { 'aria-describedby': note } : {}) })}
-    {error ? <span className="error-copy ai-field-note" id={note}>{error}</span> : help && <span className="help ai-field-note" id={note}>{help}</span>}
+    {children({ id, ...(error ? { 'aria-invalid': true } : {}), ...(described ? { 'aria-describedby': described } : {}) })}
+    {error && <span className="error-copy ai-field-note" id={note}>{error}</span>}
+    {help && <span className="help ai-field-note" id={hint}>{help}</span>}
   </div>;
 }
 
-function AddDialog({ settings, onClose, onAdd }: { settings: AISettings; onClose: () => void; onAdd: AIPageProps['onAdd'] }) {
-  const [kind, setKind] = useState<'anthropic' | 'openai_compatible'>('anthropic');
+// The most models a provider keeps (contracts/openapi.yaml, AIProviderInput).
+const maxProviderModels = 20;
+// Above this many listed models, the list gets a search box.
+const modelSearchFrom = 8;
+
+// What Add provider offers: Anthropic, two OpenAI-compatible services whose address is filled in, and
+// any other OpenAI-compatible server, whose address the person types.
+type Service = 'anthropic' | 'openai' | 'openrouter' | 'self_hosted';
+const services: Service[] = ['anthropic', 'openai', 'openrouter', 'self_hosted'];
+const serviceURL: Partial<Record<Service, string>> = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1' };
+const serviceText: Record<Service, [string, string]> = {
+  anthropic: [m.kindAnthropic, m.kindAnthropicHelp], openai: [m.serviceOpenAI, m.serviceOpenAIHelp],
+  openrouter: [m.serviceOpenRouter, m.serviceOpenRouterHelp], self_hosted: [m.serviceSelfHosted, m.serviceSelfHostedHelp],
+};
+
+type ModelList = { state: 'idle' } | { state: 'loading' } | { state: 'loaded'; models: string[] } | { state: 'typing' };
+
+function AddDialog({ settings, onClose, onAdd, onListModels }: { settings: AISettings; onClose: () => void; onAdd: AIPageProps['onAdd']; onListModels: AIPageProps['onListModels'] }) {
+  const [service, setService] = useState<Service>('anthropic');
+  const kind = service === 'anthropic' ? 'anthropic' : 'openai_compatible';
   const [label, setLabel] = useState('');
-  const [baseURL, setBaseURL] = useState('');
+  const [typedURL, setTypedURL] = useState('');
+  const baseURL = serviceURL[service] ?? typedURL;
   const [key, setKey] = useState('');
-  const [models, setModels] = useState('');
+  // The models picked from the provider's list, in the order picked: the first is the default.
+  const [picked, setPicked] = useState<string[]>([]);
+  // The names typed when the provider keeps no list (or the person prefers to type).
+  const [typed, setTyped] = useState('');
+  const [list, setList] = useState<ModelList>({ state: 'idle' });
+  // Each load is numbered; an answer for a kind, address or key changed since is dropped.
+  const loads = useRef(0);
   const [error, setError] = useState<FieldError>();
   const [busy, setBusy] = useState(false);
   const id = useId();
-  const keyOptional = kind === 'openai_compatible' && settings.allow_private_base_urls;
+  const keyOptional = service === 'self_hosted' && settings.allow_private_base_urls;
   const noKeys = !settings.can_store_keys && !keyOptional;
   const left = settings.provider_limit - settings.providers.length;
   const focus = (field: FieldError['field']) => document.getElementById(`${id}-${field}`)?.focus();
+  const canLoad = (key.trim() !== '' || keyOptional) && (kind === 'anthropic' || baseURL.trim() !== '') && list.state !== 'loading';
+  // asked is true when the person pressed Load: only then does a refusal take the focus to its field.
+  const loadModels = async (asked: boolean) => {
+    if (!canLoad) return;
+    const load = ++loads.current;
+    setList({ state: 'loading' });
+    setError(undefined);
+    const answer = await onListModels({ kind, ...(key.trim() ? { api_key: key.trim() } : {}), ...(kind === 'openai_compatible' ? { base_url: baseURL.trim() } : {}) });
+    if (load !== loads.current) return;
+    if (Array.isArray(answer)) {
+      setList({ state: 'loaded', models: answer });
+      // Claude's newest Sonnet is a sound, middle-priced default; the newest model overall is often the
+      // dearest. Other lists are sorted by name, so nothing is ticked for the person.
+      const kept = picked.filter((model) => answer.includes(model));
+      const sonnet = kind === 'anthropic' ? answer.find((model) => model.startsWith('claude-sonnet-')) : undefined;
+      setPicked(kept.length > 0 ? kept : sonnet ? [sonnet] : []);
+      return;
+    }
+    // A provider that keeps no list: the names are typed instead, with the reason under the field.
+    setList(answer.field === 'models' ? { state: 'typing' } : { state: 'idle' });
+    setError(answer);
+    if (asked && answer.field !== 'form') focus(answer.field);
+  };
+  // A new kind, address or key makes the loaded list stale, and an answer still on its way with it.
+  const changed = (next: () => void) => {
+    next();
+    setError(undefined);
+    if (list.state === 'loaded' || list.state === 'loading') { loads.current += 1; setList({ state: 'idle' }); }
+  };
   const submit = async () => {
-    const list = models.split(',').map((model) => model.trim()).filter(Boolean);
+    // Only what is on screen is sent: models ticked in a list loaded for this kind, address and key, or the names typed.
+    const models = list.state === 'typing' ? typed.split(',').map((model) => model.trim()).filter(Boolean) : list.state === 'loaded' ? picked : [];
     const refuse = (field: FieldError['field'], text: string) => { setError({ field, text }); focus(field); };
     if (!label.trim()) return refuse('label', m.labelMissing);
     if (kind === 'openai_compatible' && !baseURL.trim()) return refuse('base_url', m.baseURLMissing);
     if (!key.trim() && !keyOptional) return refuse('api_key', m.keyMissing);
-    if (list.length === 0) return refuse('models', m.modelsMissing);
+    if (models.length === 0) return refuse('models', list.state === 'typing' ? m.modelsMissing : m.modelsPick);
     setBusy(true);
     setError(undefined);
-    const input: AIProviderInput = { kind, label: label.trim(), models: list, ...(key.trim() ? { api_key: key.trim() } : {}), ...(kind === 'openai_compatible' ? { base_url: baseURL.trim() } : {}) };
+    const input: AIProviderInput = { kind, label: label.trim(), models, ...(key.trim() ? { api_key: key.trim() } : {}), ...(kind === 'openai_compatible' ? { base_url: baseURL.trim() } : {}) };
     const refused = await onAdd(input);
     setBusy(false);
     if (!refused) { onClose(); return; }
@@ -629,18 +690,66 @@ function AddDialog({ settings, onClose, onAdd }: { settings: AISettings; onClose
       {noKeys && <div className="ai-notice ai-notice-danger" role="alert"><span><strong>{m.noKeysNotice}</strong> {m.noKeysBody}</span></div>}
       {error?.field === 'form' && <p role="alert" className="error-copy">{error.text}</p>}
       <fieldset className="ai-kind"><legend className="sr-only">{m.columnProvider}</legend>
-        {(['anthropic', 'openai_compatible'] as const).map((value) => <label key={value}>
-          <input type="radio" name={`${id}-kind`} value={value} checked={kind === value} onChange={() => { setKind(value); setError(undefined); }} />
-          <strong>{value === 'anthropic' ? m.kindAnthropic : m.kindOpenAI}</strong><span>{value === 'anthropic' ? m.kindAnthropicHelp : m.kindOpenAIHelp}</span></label>)}
+        {services.map((value) => <label key={value}>
+          <input type="radio" name={`${id}-kind`} value={value} checked={service === value} onChange={() => changed(() => setService(value))} />
+          <strong>{serviceText[value][0]}</strong><span>{serviceText[value][1]}</span></label>)}
       </fieldset>
       <Field label={m.labelField} id={`${id}-label`} error={fieldError('label')}>{(attrs) => <input {...attrs} value={label} maxLength={80} onChange={(event) => setLabel(event.target.value)} autoFocus />}</Field>
-      {kind === 'openai_compatible' && <Field label={m.baseURLField} id={`${id}-base_url`} error={fieldError('base_url')} help={m.baseURLHelp}>
-        {(attrs) => <input {...attrs} type="url" inputMode="url" value={baseURL} placeholder="https://openrouter.ai/api/v1" onChange={(event) => setBaseURL(event.target.value)} />}</Field>}
+      {service === 'self_hosted' && <Field label={m.baseURLField} id={`${id}-base_url`} error={fieldError('base_url')} help={m.baseURLHelp}>
+        {(attrs) => <input {...attrs} type="url" inputMode="url" value={typedURL} placeholder="http://localhost:11434/v1" onChange={(event) => changed(() => setTypedURL(event.target.value))} />}</Field>}
+      {service !== 'self_hosted' && fieldError('base_url') && <p role="alert" className="error-copy">{fieldError('base_url')}</p>}
       <Field label={keyOptional ? m.keyFieldOptional : m.keyField} id={`${id}-api_key`} error={fieldError('api_key')} help={m.keyHelpStored}>
-        {(attrs) => <input {...attrs} type="password" autoComplete="off" value={key} placeholder={keyOptional ? m.keyOptionalPlaceholder : undefined} onChange={(event) => setKey(event.target.value)} />}</Field>
-      <Field label={m.modelsField} id={`${id}-models`} error={fieldError('models')} help={m.modelsHelp}>
-        {(attrs) => <input {...attrs} value={models} placeholder={kind === 'anthropic' ? 'claude-sonnet-5-5, claude-haiku-5-5' : 'openai/gpt-5'} onChange={(event) => setModels(event.target.value)} />}</Field>
+        {(attrs) => <input {...attrs} type="password" autoComplete="off" value={key} placeholder={keyOptional ? m.keyOptionalPlaceholder : undefined}
+          onChange={(event) => changed(() => setKey(event.target.value))}
+          // Leaving the key with nothing loaded yet loads the list, so the next thing to do is pick.
+          onBlur={() => { if (list.state === 'idle' && key.trim() !== '') void loadModels(false); }} />}</Field>
+      {list.state === 'typing'
+        ? <Field label={m.modelsTyped} id={`${id}-models`} error={fieldError('models')} help={m.modelsHelp}>
+            {(attrs) => <input {...attrs} value={typed} placeholder={kind === 'anthropic' ? 'claude-sonnet-5-5, claude-haiku-5-5' : 'llama3.1, qwen3'}
+              onChange={(event) => { setTyped(event.target.value); if (error?.field === 'models') setError(undefined); }} />}</Field>
+        : <ModelPicker id={`${id}-models`} list={list} picked={picked} onPick={setPicked} error={fieldError('models')} canLoad={canLoad}
+            needsAddress={service === 'self_hosted'} onLoad={() => void loadModels(true)} />}
+      {list.state === 'typing'
+        ? <button type="button" className="link-button ai-models-switch" disabled={!canLoad} onClick={() => void loadModels(true)}>{m.modelsPickInstead}</button>
+        : <button type="button" className="link-button ai-models-switch" onClick={() => { setError(undefined); setTyped(picked.join(', ')); setList({ state: 'typing' }); }}>{m.modelsTypeInstead}</button>}
     </Dialog>
+  );
+}
+
+// ModelPicker lists the models the provider offers this key, to tick instead of typing ids. The picked
+// ones stay on top in the order picked; the first is the default.
+function ModelPicker({ id, list, picked, onPick, error, canLoad, needsAddress, onLoad }: { id: string; list: ModelList; picked: string[]; onPick: (models: string[]) => void;
+  error?: string; canLoad: boolean; needsAddress: boolean; onLoad: () => void }) {
+  const [query, setQuery] = useState('');
+  const note = `${id}-note`;
+  const models = list.state === 'loaded' ? list.models : [];
+  const shown = models.filter((model) => model.toLowerCase().includes(query.trim().toLowerCase()));
+  const full = picked.length >= maxProviderModels;
+  const toggle = (model: string) => onPick(picked.includes(model) ? picked.filter((item) => item !== model) : full ? picked : [...picked, model]);
+  return (
+    <fieldset className={`field ai-models${error ? ' ai-field-bad' : ''}`} aria-describedby={note}>
+      <legend className="field-label">{m.modelsField}</legend>
+      <div className="ai-models-head">
+        {list.state === 'loaded' && models.length > modelSearchFrom
+          ? <input id={id} type="search" className="ai-models-search" aria-label={m.modelsSearch} placeholder={m.modelsSearch} value={query} onChange={(event) => setQuery(event.target.value)} />
+          : <span className="help">{list.state === 'loaded' ? '' : needsAddress ? m.modelsBeforeLoadAddress : m.modelsBeforeLoad}</span>}
+        <button type="button" id={list.state === 'loaded' && models.length > modelSearchFrom ? undefined : id} disabled={!canLoad} onClick={onLoad}>
+          {list.state === 'loading' ? m.loadingModels : list.state === 'loaded' ? m.reloadModels : m.loadModels}</button>
+      </div>
+      {list.state === 'loaded' && <ul className="ai-models-list">
+        {models.length === 0 && <li className="ai-models-empty">{m.modelsNone}</li>}
+        {models.length > 0 && shown.length === 0 && <li className="ai-models-empty">{m.modelsNoMatch}</li>}
+        {/* The picked models first, in the order picked, then the rest as the provider lists them. */}
+        {[...picked.filter((model) => shown.includes(model)), ...shown.filter((model) => !picked.includes(model))].map((model) => (
+          <li key={model}><label>
+            <input type="checkbox" checked={picked.includes(model)} disabled={!picked.includes(model) && full} onChange={() => toggle(model)} />
+            <span className="ai-mono" title={model}>{model}</span>{picked[0] === model && <span className="ai-models-default">{m.modelsDefault}</span>}
+          </label></li>
+        ))}
+      </ul>}
+      {error ? <span className="error-copy ai-field-note" id={note} role="alert">{error}</span>
+        : <span className="help ai-field-note" id={note}>{full ? m.modelsLimit(maxProviderModels) : list.state === 'loaded' ? m.modelsPicked(picked.length, maxProviderModels) : ''}</span>}
+    </fieldset>
   );
 }
 

@@ -250,27 +250,29 @@ type HelpCenter struct {
 // the records exported elsewhere. Body, EditedBody and SavedReplyBefore are null once 90 days passed
 // after the decision.
 type AgentRequest struct {
-	ID                 string          `json:"id"`
-	Kind               string          `json:"kind"`
-	Status             string          `json:"status"`
-	Method             string          `json:"method"`
-	Route              string          `json:"route"`
-	Path               string          `json:"path"`
-	Body               json.RawMessage `json:"body"`
-	EditedBody         json.RawMessage `json:"edited_body"`
-	Summary            string          `json:"summary"`
-	ConversationID     *string         `json:"conversation_id"`
-	TokenID            *string         `json:"token_id"`
-	TokenLabel         string          `json:"token_label"`
-	TokenScope         string          `json:"token_scope"`
-	RequestedByAgentID *string         `json:"requested_by_agent_id"`
-	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
-	DecidedAt          *time.Time      `json:"decided_at"`
-	Reason             *string         `json:"reason"`
-	ResultStatus       *int32          `json:"result_status"`
-	ResultNote         *string         `json:"result_note"`
-	CreatedAt          time.Time       `json:"created_at"`
-	ExpiresAt          time.Time       `json:"expires_at"`
+	ID             string          `json:"id"`
+	Kind           string          `json:"kind"`
+	Status         string          `json:"status"`
+	Method         string          `json:"method"`
+	Route          string          `json:"route"`
+	Path           string          `json:"path"`
+	Body           json.RawMessage `json:"body"`
+	EditedBody     json.RawMessage `json:"edited_body"`
+	Summary        string          `json:"summary"`
+	ConversationID *string         `json:"conversation_id"`
+	TokenID        *string         `json:"token_id"`
+	TokenLabel     string          `json:"token_label"`
+	TokenScope     string          `json:"token_scope"`
+	// TokenPermissions is what the token held when it asked (resource:action); empty before permissions.
+	TokenPermissions   []string   `json:"token_permissions"`
+	RequestedByAgentID *string    `json:"requested_by_agent_id"`
+	DecidedByAgentID   *string    `json:"decided_by_agent_id"`
+	DecidedAt          *time.Time `json:"decided_at"`
+	Reason             *string    `json:"reason"`
+	ResultStatus       *int32     `json:"result_status"`
+	ResultNote         *string    `json:"result_note"`
+	CreatedAt          time.Time  `json:"created_at"`
+	ExpiresAt          time.Time  `json:"expires_at"`
 	// SavedReplyID and SavedReplyBefore name the saved reply a request acts on and keep it as the token
 	// saw it (with the version a restore applies).
 	SavedReplyID     *string         `json:"saved_reply_id"`

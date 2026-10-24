@@ -130,7 +130,7 @@ func (a *API) mergeContact(response http.ResponseWriter, request *http.Request) 
 	}
 	identity := principal(request)
 	actor := store.Actor{AgentID: identity.Agent.ID}
-	if identity.Scope != "" {
+	if identity.IsToken() {
 		actor.TokenID = identity.SessionID
 	}
 	merge, err := a.store.MergeContacts(request.Context(), identity.Workspace.ID, strings.ToLower(request.PathValue("id")), strings.ToLower(input.ContactID), actor)

@@ -429,6 +429,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
 		{http.MethodGet, "/api/v1/ai", auth.PermissionAccessRead},
 		{http.MethodPost, "/api/v1/ai/providers", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/ai/models", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
 		{http.MethodPut, "/api/v1/ai/providers/{id}/key", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/ai/providers/{id}/check", auth.PermissionAccessWrite},

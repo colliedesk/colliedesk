@@ -146,8 +146,8 @@
 .ai-field-bad input { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 .ai-dialog-footer { align-items: center; justify-content: flex-end; }
 .ai-dialog-left { margin-right: auto; color: var(--text-3); font-size: var(--fs-label); }
-.ai-kind { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin: 0; border: 0; padding: 0; }
-.ai-kind label { position: relative; display: grid; gap: 2px; border: 1px solid var(--line-control); border-radius: var(--radius); padding: var(--space-2) var(--space-3); cursor: pointer; }
+.ai-kind { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: 0; border: 0; padding: 0; }
+.ai-kind label { position: relative; display: grid; align-content: start; gap: 2px; border: 1px solid var(--line-control); border-radius: var(--radius); padding: var(--space-2) var(--space-3); cursor: pointer; }
 .ai-kind label:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .ai-kind label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ai-kind input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -242,3 +242,20 @@
 .ai-link-button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
 @media (pointer: coarse) { .ai-link-button { min-height: var(--touch); } }
+/* The models a key may use, ticked instead of typed: picked ones first, the first is the default. */
+.ai-models { margin: 0; border: 0; padding: 0; min-width: 0; }
+.ai-models legend { padding: 0; margin-bottom: var(--space-1); }
+.ai-models-head { display: flex; align-items: center; gap: var(--space-2); }
+.ai-models-head > :first-child { flex: 1; min-width: 0; }
+.ai-models-head .help { color: var(--text-3); font-size: var(--fs-label); }
+.ai-models-list { display: grid; max-height: 13rem; margin: var(--space-2) 0 0; padding: var(--space-1); overflow-y: auto; overscroll-behavior: contain; list-style: none;
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); }
+.ai-models-list label { display: flex; align-items: center; padding-block: var(--space-1); gap: var(--space-2); min-height: 32px; border-radius: var(--radius-sm); padding: 0 var(--space-2); cursor: pointer; }
+.ai-models-list label:hover { background: var(--surface-2); }
+.ai-dialog .ai-models-list input[type="checkbox"] { width: var(--space-4); }
+.ai-models-list label:has(input:disabled) { cursor: not-allowed; color: var(--text-3); }
+.ai-models-list .ai-mono { min-width: 0; overflow-wrap: anywhere; }
+.ai-models-default { flex: none; margin-left: auto; border-radius: var(--radius-full); background: var(--surface-2); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
+.ai-models-empty { padding: var(--space-2); color: var(--text-3); font-size: var(--fs-small); }
+.ai-models-switch { justify-self: start; font-size: var(--fs-label); }
+@media (pointer: coarse) { .ai-models-list label { min-height: var(--touch); } }

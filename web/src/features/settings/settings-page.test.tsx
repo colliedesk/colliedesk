@@ -47,8 +47,16 @@ test('shows the state of every invite and offers revoke only while it is pending
   expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
 });
 
+test('a custom token shows how many permissions it holds and lists them by name', () => {
+  render(<SettingsPage invites={[]} timezone="UTC" sessions={[{ id: '77777777-7777-4777-8777-777777777777', agent_id: '55555555-5555-4555-8555-555555555555',
+    agent_email: 'sam@example.com', label: 'KB writer', scope: 'custom', permissions: ['kb_articles:read', 'kb_articles:update'], current: false,
+    created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), revoked_at: null }]} />);
+  expect(screen.getByText('custom · 2 permissions')).toBeInTheDocument();
+  expect(screen.getByText('Knowledge base articles: Edit')).toBeInTheDocument();
+});
+
 test('a revoked or expired session is shown as such and cannot be revoked again', () => {
-  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Chrome', scope: null, current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
+  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Chrome', scope: null, permissions: [], current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
   const future = new Date(Date.now() + 600_000).toISOString();
   render(<SettingsPage invites={[]} timezone="UTC" sessions={[
     { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Active device', expires_at: future, revoked_at: null },
@@ -72,12 +80,12 @@ test('shows why an invite was refused next to the invite form', () => {
 test('an agent token shows its tier and when it ends; a browser session shows neither', () => {
   const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
   render(<SettingsPage invites={[]} timezone="UTC" sessions={[
-    { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Claude Code', scope: 'draft', expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
-    { ...base, id: '22222222-2222-4222-8222-222222222222', label: 'Reader bot', scope: 'read', expires_at: '2037-11-02T18:00:00Z', revoked_at: null },
-    { ...base, id: '33333333-3333-4333-8333-333333333333', label: 'Sender bot', scope: 'send', expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
-    { ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', scope: 'admin', expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
-    { ...base, id: '44444444-4444-4444-8444-444444444444', label: 'Old bot', scope: 'draft', expires_at: '2037-10-14T09:30:00Z', revoked_at: '2026-10-14T00:01:00Z' },
-    { ...base, id: '55555555-5555-4555-8555-555555555556', label: 'Chrome', scope: null, expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
+    { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Claude Code', scope: 'draft', permissions: [], expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
+    { ...base, id: '22222222-2222-4222-8222-222222222222', label: 'Reader bot', scope: 'read', permissions: [], expires_at: '2037-11-02T18:00:00Z', revoked_at: null },
+    { ...base, id: '33333333-3333-4333-8333-333333333333', label: 'Sender bot', scope: 'send', permissions: [], expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
+    { ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', scope: 'admin', permissions: [], expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
+    { ...base, id: '44444444-4444-4444-8444-444444444444', label: 'Old bot', scope: 'draft', permissions: [], expires_at: '2037-10-14T09:30:00Z', revoked_at: '2026-10-14T00:01:00Z' },
+    { ...base, id: '55555555-5555-4555-8555-555555555556', label: 'Chrome', scope: null, permissions: [], expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
   ]} />);
   const sessions = screen.getByRole('region', { name: 'Sessions' });
   const row = (label: string) => within(sessions).getByText(label).closest('article') as HTMLElement;
@@ -89,7 +97,7 @@ test('an agent token shows its tier and when it ends; a browser session shows ne
   expect(within(row('Sender bot')).getByText('send')).toBeInTheDocument();
   expect(row('Sender bot')).toHaveTextContent(/Expires Dec 24, 2037/);
   expect(within(row('Ops bot')).getByText('admin')).toHaveAttribute('title', 'Agent token tier');
-  expect(sessionSchema.parse({ ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', scope: 'admin', expires_at: '2037-12-24T06:15:00Z', revoked_at: null }).scope).toBe('admin');
+  expect(sessionSchema.parse({ ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', scope: 'admin', permissions: [], expires_at: '2037-12-24T06:15:00Z', revoked_at: null }).scope).toBe('admin');
 
   // A revoked token keeps its tier but no longer has an end date to look forward to.
   expect(within(row('Old bot')).getByText('draft')).toBeInTheDocument();
@@ -104,7 +112,7 @@ test('shows the loading status while settings data is pending, without the forms
   expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
 });
 
-const sessionBase = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', scope: null, created_at: '2026-10-14T00:00:00Z',
+const sessionBase = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', scope: null, permissions: [], created_at: '2026-10-14T00:00:00Z',
   last_seen_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), revoked_at: null, current: false };
 
 test('settings is split into your account and the workspace, with a link to every section', () => {

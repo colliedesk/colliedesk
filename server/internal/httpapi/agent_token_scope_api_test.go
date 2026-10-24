@@ -151,6 +151,7 @@ var routeTiers = map[string]string{
 	"POST /api/v1/agent-requests/{id}/reject":                          "person",
 	"GET /api/v1/ai":                                                   "read",
 	"POST /api/v1/ai/providers":                                        "admin",
+	"POST /api/v1/ai/models":                                           "admin",
 	"PATCH /api/v1/ai/providers/{id}":                                  "admin",
 	"PUT /api/v1/ai/providers/{id}/key":                                "admin",
 	"POST /api/v1/ai/providers/{id}/check":                             "admin",
@@ -175,7 +176,7 @@ var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PU
 
 // credentialRouteKeys carry another service's API key; a lower tier is refused, not filed.
 var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true,
-	"POST /api/v1/ai/providers": true, "PUT /api/v1/ai/providers/{id}/key": true}
+	"POST /api/v1/ai/providers": true, "POST /api/v1/ai/models": true, "PUT /api/v1/ai/providers/{id}/key": true}
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)

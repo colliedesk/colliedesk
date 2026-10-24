@@ -110,12 +110,14 @@ type SavedReplyText struct {
 // AgentRequester is the token that asked and the person who owns it. The label and tier are kept
 // when the token is revoked or removed.
 type AgentRequester struct {
-	TokenID      *string `json:"token_id"`
-	TokenLabel   string  `json:"token_label"`
-	TokenScope   string  `json:"token_scope"`
-	TokenRevoked bool    `json:"token_revoked"`
-	AgentID      *string `json:"agent_id"`
-	AgentName    *string `json:"agent_name"`
+	TokenID    *string `json:"token_id"`
+	TokenLabel string  `json:"token_label"`
+	TokenScope string  `json:"token_scope"`
+	// TokenPermissions is what the token held when it asked; empty for a request older than permissions.
+	TokenPermissions []string `json:"token_permissions"`
+	TokenRevoked     bool     `json:"token_revoked"`
+	AgentID          *string  `json:"agent_id"`
+	AgentName        *string  `json:"agent_name"`
 }
 
 // AgentDecider is the person who approved, rejected or cancelled a request.

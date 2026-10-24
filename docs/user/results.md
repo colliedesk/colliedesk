@@ -61,7 +61,9 @@ still resolved or closed when they were read; a ticket without one is counted se
 customer wrote again (even just "thanks!") or a teammate reopened it.
 
 **Conversations per week.** Conversations in the window divided by its weeks, or by the weeks since
-your first conversation if that came later.
+your first conversation if that came later. Until a customer has started a conversation in
+Colliedesk (right after you move), there is no weekly number and nothing to compare: the page says
+so instead of showing "100% fewer".
 
 **Handle time.** The time your team logged on a conversation in Freshdesk, added up, for the
 resolved conversations; the median. Colliedesk does not record time yet

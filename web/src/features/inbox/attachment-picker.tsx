@@ -22,9 +22,11 @@ interface AttachmentPickerProps {
   onChange: (files: File[]) => void;
   limits?: AttachmentLimits;
   disabled?: boolean;
+  // A form with room (the new conversation window) names the button; the reply box keeps the bare icon.
+  labelled?: boolean;
 }
 
-export function AttachmentPicker({ files, onChange, limits, disabled }: AttachmentPickerProps) {
+export function AttachmentPicker({ files, onChange, limits, disabled, labelled = false }: AttachmentPickerProps) {
   const input = useRef<HTMLInputElement>(null);
   const problem = attachmentProblem(files, limits);
   return (
@@ -34,8 +36,9 @@ export function AttachmentPicker({ files, onChange, limits, disabled }: Attachme
         // The same file can be chosen again after it was removed.
         event.target.value = '';
       }} />
-      <button type="button" className="attach-button" disabled={disabled} title={messages.addAttachment} aria-label={messages.addAttachment} onClick={() => input.current?.click()}>
-        <PaperclipIcon />
+      <button type="button" className={labelled ? 'attach-button attach-button-labelled' : 'attach-button'} disabled={disabled} title={messages.addAttachment}
+        aria-label={messages.addAttachment} onClick={() => input.current?.click()}>
+        <PaperclipIcon />{labelled && <span>{messages.addAttachment}</span>}
       </button>
       {files.length > 0 && (
         <ul className="composer-files" aria-label={messages.filesToSend}>

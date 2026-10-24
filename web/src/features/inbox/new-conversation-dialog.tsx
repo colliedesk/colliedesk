@@ -181,7 +181,7 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
             <textarea id={bodyId} rows={8} value={body} disabled={sending} onChange={(event) => setBody(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void send(); } }} />
             <CcField value={cc} onChange={setCc} disabled={sending} onSend={() => void send()} onBlockingChange={setCcBlocking} />
-            <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={sending} />
+            <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={sending} labelled />
           </fieldset>
           {problem && <p role="alert" className="error-copy">{problem}</p>}
           {!closed && missing.length > 0 && <p id={missingId} className="muted-copy">{contactMessages.newConversationMissing(missing)}</p>}

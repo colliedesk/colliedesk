@@ -200,10 +200,12 @@ paths:
       operationId: createAgentToken
       x-permission: authenticated
       description: >
-        Creates a bearer token for an AI agent that acts as the signed-in agent. A `read`, `draft` or
-        `send` token has the agent role whatever the creator's role is. An `admin` token acts with the
-        creator's role, checked on every call; only an admin may create one (403
-        `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and
+        Creates a bearer token for an AI agent that acts as the signed-in agent, with a tier (`scope`) or
+        its own list of `permissions` (resource:action), never both. A tier is a preset: its permissions
+        are worked out on every call. A token that holds nothing admin-only has the agent role whatever
+        the creator's role is. An `admin` token, and a custom token with an admin-only permission
+        (`TokenPermission`, preset admin), act with the creator's role, checked on every call; only an
+        admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and
         scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last
         use, and one year after its creation at the latest.
       requestBody:
@@ -212,10 +214,15 @@ paths:
           application/json:
             schema:
               type: object
-              required: [label, scope]
+              required: [label]
               properties:
                 label: {type: string, minLength: 1, maxLength: 80, description: 'Name shown in the session list, for example the agent host'}
-                scope: {$ref: '#/components/schemas/TokenScope'}
+                scope: {$ref: '#/components/schemas/TokenPreset'}
+                permissions:
+                  type: array
+                  minItems: 1
+                  items: {$ref: '#/components/schemas/TokenPermission'}
+                  description: A custom token's permissions, instead of a scope.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
@@ -2279,6 +2286,31 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/AICheckFailed'}
+        '429': {$ref: '#/components/responses/AIChecksRateLimited'}
+  /api/v1/ai/models:
+    post:
+      operationId: listAIModels
+      x-permission: access:write
+      description: >
+        Lists the models a provider's key may use, before the provider is added, so a person picks them
+        instead of typing ids. Anthropic lists the Claude models (newest first); an OpenAI-compatible
+        server lists `GET {base_url}/models` (sorted, at most 1000). Nothing is saved or metered. A provider
+        that cannot list answers `422 ai_check_failed` with `check_error_code` (auth, permission,
+        model_not_found when the server keeps no list, blocked_address…); type the model names then. Same
+        input rules as adding a provider, and it counts against the 10 checks a minute per workspace (429
+        `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403
+        `credentials_need_admin_token`: an agent request would keep the key.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AIModelsInput'}}}
+      responses:
+        '200':
+          description: The models the key may use
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIModelList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/AICheckFailed'}
         '429': {$ref: '#/components/responses/AIChecksRateLimited'}
   /api/v1/ai/providers/{id}:
@@ -4593,11 +4625,15 @@ components:
                         deleted_at: {type: [string, 'null'], format: date-time}
         requested_by:
           type: object
-          required: [token_id, token_label, token_scope, token_revoked, agent_id, agent_name]
+          required: [token_id, token_label, token_scope, token_permissions, token_revoked, agent_id, agent_name]
           properties:
             token_id: {type: [string, 'null'], format: uuid}
             token_label: {type: string}
             token_scope: {$ref: '#/components/schemas/TokenScope'}
+            token_permissions:
+              type: array
+              items: {type: string}
+              description: What the token held when it asked (resource:action); empty for a request older than permissions.
             token_revoked: {type: boolean, description: A request of a revoked token can only be rejected.}
             agent_id: {type: [string, 'null'], format: uuid}
             agent_name: {type: [string, 'null'], description: The person who owns the token}
@@ -5110,6 +5146,19 @@ components:
         base_url: {type: string, maxLength: 500, description: 'OpenAI-compatible only, with the version path: https://openrouter.ai/api/v1.'}
         api_key: {type: string, maxLength: 500, description: Required except for an OpenAI-compatible server on a private address the operator allowed.}
         models: {type: array, minItems: 1, maxItems: 20, items: {type: string, minLength: 1, maxLength: 200}}
+    AIModelsInput:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: {$ref: '#/components/schemas/AIProviderKind'}
+        base_url: {type: string, maxLength: 500, description: 'OpenAI-compatible only, with the version path: https://openrouter.ai/api/v1.'}
+        api_key: {type: string, maxLength: 500, description: Required except for an OpenAI-compatible server on a private address the operator allowed. Never stored.}
+    AIModelList:
+      type: object
+      required: [models]
+      properties:
+        models: {type: array, maxItems: 1000, items: {type: string}}
     AIProviderChange:
       type: object
       additionalProperties: false
@@ -5379,7 +5428,7 @@ components:
       description: Where the person heard of Colliedesk.
     Me:
       type: object
-      required: [agent, workspace, timezone, scope, plan, onboarding_goal, ai_features]
+      required: [agent, workspace, timezone, scope, permissions, plan, onboarding_goal, ai_features]
       properties:
         ai_features:
           type: object
@@ -5397,10 +5446,14 @@ components:
             - {type: 'null'}
             - {$ref: '#/components/schemas/OnboardingGoal'}
         scope:
-          description: The tier of the agent token making the call (read, draft or send); null for a person's own session.
+          description: The tier of the agent token making the call, custom for one with its own permissions; null for a person's own session.
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/TokenScope'}
+        permissions:
+          type: array
+          items: {type: string}
+          description: What the agent token making the call holds (resource:action); empty for a person's own session.
         plan:
           description: The trial and lock state, so every agent sees it. Null on self-hosted instances.
           oneOf:
@@ -5414,11 +5467,81 @@ components:
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}
-    TokenScope:
+    TokenPreset:
       type: string
       enum: [read, draft, send, admin]
+      description: A tier to create a token with; each holds every permission of its own preset and below (TokenPermission).
+    TokenPermission:
+      type: string
       description: >
-        Tier of an agent token. `read`: read what an agent may read, including the session and invite
+        A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it;
+        the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a
+        customer), publish (reaches the public help center), export and share (data leaves), purge (no way back),
+        manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
+      enum:
+        - conversations:read
+        - conversations:update
+        - messages:read
+        - messages:note
+        - messages:send
+        - ai_assist:read
+        - ai_assist:create
+        - contacts:read
+        - contacts:create
+        - contacts:update
+        - tags:read
+        - tags:create
+        - tags:update
+        - tags:delete
+        - saved_replies:read
+        - saved_replies:create
+        - saved_replies:update
+        - saved_replies:delete
+        - saved_views:read
+        - saved_views:create
+        - saved_views:update
+        - saved_views:delete
+        - kb_articles:read
+        - kb_articles:create
+        - kb_articles:update
+        - kb_articles:delete
+        - kb_articles:publish
+        - kb_media:read
+        - kb_media:create
+        - kb_media:update
+        - kb_media:delete
+        - kb_media:purge
+        - help_center:read
+        - help_center:update
+        - results:read
+        - results:share
+        - agent_requests:read
+        - agent_requests:cancel
+        - profile:update
+        - team:read
+        - team:invite
+        - team:revoke
+        - team:manage_roles
+        - team:create_tokens
+        - channels:read
+        - channels:update
+        - channels:manage_credentials
+        - workspace:update
+        - workspace:export
+        - billing:read
+        - billing:manage
+        - imports:read
+        - imports:run
+        - imports:manage_credentials
+        - imports:undo
+        - ai_settings:read
+        - ai_settings:update
+        - ai_settings:manage_credentials
+    TokenScope:
+      type: string
+      enum: [read, draft, send, admin, custom]
+      description: >
+        Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite
         lists and the channel settings without links or secrets. `draft`: also change status, priority,
         assignee and tags of a conversation, create tags, add private notes and set the owner's own
         timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge
@@ -5433,17 +5556,21 @@ components:
         session: {$ref: '#/components/schemas/Session'}
     Session:
       type: object
-      required: [id, agent_id, agent_email, label, scope, current, created_at, last_seen_at, expires_at, revoked_at]
+      required: [id, agent_id, agent_email, label, scope, permissions, current, created_at, last_seen_at, expires_at, revoked_at]
       properties:
         id: {type: string, format: uuid}
         agent_id: {type: string, format: uuid}
         agent_email: {type: string, format: email}
         label: {type: string}
         scope:
-          description: The tier of an agent token; null for a person's session, which has no tier.
+          description: The tier of an agent token, custom for one with its own permissions; null for a person's session, which has no tier.
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/TokenScope'
+        permissions:
+          type: array
+          items: {type: string}
+          description: What an agent token holds (resource:action), its tier's permissions or its own list; empty for a person's session.
         current:
           type: boolean
           description: True for the session that made this request, so a client can mark "this device".

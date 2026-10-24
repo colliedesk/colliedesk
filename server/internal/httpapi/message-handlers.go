@@ -26,7 +26,7 @@ func (a *API) listMessages(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	// A person's screen gets remote images through the image proxy; an agent token reads the HTML as stored.
-	if identity.Scope == "" {
+	if !identity.IsToken() {
 		for i := range items {
 			items[i].BodyHTML = a.presentMessageHTML(identity.Workspace.ID, items[i].BodyHTML)
 		}
@@ -60,7 +60,7 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	identity := principal(request)
-	if input.Draft && (identity.Scope == "" || input.Kind != "outgoing") {
+	if input.Draft && (!identity.IsToken() || input.Kind != "outgoing") {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Only an agent token drafts a reply for a person to review; a note or a person's reply is written directly.")
 		return
 	}
@@ -117,11 +117,11 @@ func (a *API) fileMessageRequest(response http.ResponseWriter, request *http.Req
 			writeStoreError(response, err)
 			return
 		}
-		if !auth.ScopeAllows(identity.Scope, auth.ScopeSend) {
+		if !identity.Allows(auth.PermMessagesSend) {
 			for _, address := range clean {
 				if !known[address] {
 					writeError(response, http.StatusBadRequest, "invalid_request", address+" is not on this conversation. "+
-						"A draft from a token below send may copy only the customer and people already copied; a person can add others when sending.")
+						"A draft from a token without messages:send may copy only the customer and people already copied; a person can add others when sending.")
 					return
 				}
 			}
@@ -151,19 +151,19 @@ func replySummary(contact string, cc []string, body string) string {
 }
 
 // messageActor returns who writes the message and whether the caller may write this kind now: a note
-// needs draft, an outgoing reply needs send. What an agent token writes is marked with the token so
+// needs messages:note, an outgoing reply messages:send. What an agent token writes is marked with the token so
 // the timeline shows it as the token's work; a reply sent by approving a token's draft is marked with
 // that token and the request, and written by the approving person.
 func messageActor(ctx context.Context, identity auth.Principal, kind string) (store.Actor, bool) {
-	need := auth.ScopeDraft
+	need := auth.PermMessagesNote
 	if kind == "outgoing" {
-		need = auth.ScopeSend
+		need = auth.PermMessagesSend
 	}
-	if !auth.ScopeAllows(identity.Scope, need) {
+	if !identity.Allows(need) {
 		return store.Actor{}, false
 	}
 	actor := store.Actor{AgentID: identity.Agent.ID}
-	if identity.Scope != "" {
+	if identity.IsToken() {
 		actor.TokenID = identity.SessionID
 	}
 	if replay, ok := approvalOf(ctx); ok {
@@ -183,7 +183,7 @@ func (a *API) writeReplyConflict(response http.ResponseWriter, identity auth.Pri
 	if !errors.As(err, &conflict) {
 		return false
 	}
-	if identity.Scope == "" {
+	if !identity.IsToken() {
 		for index := range conflict.Newer {
 			conflict.Newer[index].BodyHTML = a.presentMessageHTML(identity.Workspace.ID, conflict.Newer[index].BodyHTML)
 		}

@@ -4,6 +4,12 @@ package mcpserver
 // token's tier or need a person's approval for every tier. A person approves or rejects them in
 // Colliedesk; no tool can, so a model never approves its own request.
 
+import (
+	"encoding/json"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+)
+
 const (
 	filedRequestSchema = `{"type":"object","required":["id","kind","status","summary","expires_at"],"properties":{` +
 		`"id":{"type":"string"},"kind":{"type":"string","enum":["reply_draft","action"]},"status":{"type":"string"},` +
@@ -103,10 +109,12 @@ func approvalSpec(name, title, description string, rest []string, input string, 
 
 func tokenCreateRequestSpec() Spec {
 	return approvalSpec("colliedesk_token_create_request", "Ask for a new agent token",
-		`Ask for a new agent token with a label and a tier. The token belongs to the person who approves, who sees it once and passes it on; it is never shown to you.`,
+		`Ask for a new agent token with a label and either a tier (scope) or its own list of permissions (resource:action, for example kb_articles:update). `+
+			`The token belongs to the person who approves, who sees it once and passes it on; it is never shown to you.`,
 		[]string{"POST /api/v1/auth/tokens"},
-		`{"type":"object","additionalProperties":false,"required":["label","scope"],"properties":{"label":{"type":"string","minLength":1,"maxLength":80},`+
-			`"scope":{"type":"string","enum":["read","draft","send","admin"],"description":"admin only when the approving person is an admin."}}}`, tokenCreateRequest)
+		`{"type":"object","additionalProperties":false,"required":["label"],"properties":{"label":{"type":"string","minLength":1,"maxLength":80},`+
+			`"scope":{"type":"string","enum":["read","draft","send","admin"],"description":"A tier. admin only when the approving person is an admin. Leave out with permissions."},`+
+			`"permissions":{"type":"array","minItems":1,"items":{"type":"string","enum":`+permissionEnum()+`},"description":"A custom token's permissions instead of a tier; an admin-only one needs an admin to approve."}}}`, tokenCreateRequest)
 }
 
 func workspaceExportRequestSpec() Spec {
@@ -154,4 +162,14 @@ func workspaceSlugRequestSpec() Spec {
 		`Ask to change the workspace's address (slug), which also changes its hosted support email address and web form link.`,
 		[]string{"PATCH /api/v1/workspace/slug"},
 		`{"type":"object","additionalProperties":false,"required":["slug"],"properties":{"slug":{"type":"string","minLength":1,"maxLength":63}}}`, workspaceSlugRequest)
+}
+
+// permissionEnum is the JSON array of every permission a token can hold.
+func permissionEnum() string {
+	names := []string{}
+	for _, item := range auth.TokenPermissions() {
+		names = append(names, item.Name)
+	}
+	encoded, _ := json.Marshal(names)
+	return string(encoded)
 }

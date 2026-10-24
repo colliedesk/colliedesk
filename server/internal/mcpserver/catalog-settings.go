@@ -18,7 +18,7 @@ const (
 		`"invited_by":{"type":"string"},"created_at":{"type":"string"},"expires_at":{"type":"string"}}}`
 
 	sessionSchema = `{"type":"object","required":["id","label","owner","state"],"properties":{"id":{"type":"string"},"label":{"type":"string"},` +
-		`"owner":{"type":"string","description":"Email of the team member it acts as"},"token_tier":{"type":["string","null"],"description":"read, draft, send or admin for an agent token; null for a person's sign-in"},` +
+		`"owner":{"type":"string","description":"Email of the team member it acts as"},"token_tier":{"type":["string","null"],"description":"read, draft, send or admin for an agent token, custom for one with its own permissions; null for a person's sign-in"},"permissions":{"type":"array","items":{"type":"string"},"description":"What an agent token holds (resource:action); empty for a person's sign-in"},` +
 		`"this_token":{"type":"boolean"},"state":{"type":"string","enum":["active","revoked","expired"]},"last_seen_at":{"type":"string"},"expires_at":{"type":"string"}}}`
 
 	webFormSchema = `{"type":"object","required":["enabled","allowed_origins","submit_path"],"properties":{"enabled":{"type":"boolean"},` +

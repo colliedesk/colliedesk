@@ -241,7 +241,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
             {kind === 'note' && <span className="composer-hint">{messages.noteHint}</span>}
             {/* The keys sit up here, where there is room, so the buttons below keep one row. */}
             <span className="composer-hint composer-keys" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}
-              {canResolve && <>{messages.resolveShortcutAdd} <kbd>Shift</kbd> {messages.resolveShortcut}</>}</span>
+              {canResolve && <span className="composer-keys-resolve">{messages.resolveShortcutAdd} <kbd>Shift</kbd> {messages.resolveShortcut}</span>}</span>
           </div>
         </div>
         {aiWarnings.length > 0 && kind === 'outgoing' && (

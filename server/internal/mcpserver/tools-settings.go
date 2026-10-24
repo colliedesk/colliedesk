@@ -28,14 +28,15 @@ type restInvite struct {
 }
 
 type restSession struct {
-	ID         string     `json:"id"`
-	AgentEmail string     `json:"agent_email"`
-	Label      string     `json:"label"`
-	Scope      *string    `json:"scope"`
-	Current    bool       `json:"current"`
-	LastSeenAt time.Time  `json:"last_seen_at"`
-	ExpiresAt  time.Time  `json:"expires_at"`
-	RevokedAt  *time.Time `json:"revoked_at"`
+	ID          string     `json:"id"`
+	AgentEmail  string     `json:"agent_email"`
+	Label       string     `json:"label"`
+	Scope       *string    `json:"scope"`
+	Permissions []string   `json:"permissions"`
+	Current     bool       `json:"current"`
+	LastSeenAt  time.Time  `json:"last_seen_at"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	RevokedAt   *time.Time `json:"revoked_at"`
 }
 
 type restEmailSettings struct {
@@ -247,7 +248,7 @@ func sessionsList(c *call, _ map[string]any) (any, error) {
 		case !session.ExpiresAt.After(time.Now()):
 			state = "expired"
 		}
-		sessions[index] = map[string]any{"id": session.ID, "label": session.Label, "owner": session.AgentEmail, "token_tier": session.Scope,
+		sessions[index] = map[string]any{"id": session.ID, "label": session.Label, "owner": session.AgentEmail, "token_tier": session.Scope, "permissions": session.Permissions,
 			"this_token": session.Current, "state": state, "last_seen_at": utc(session.LastSeenAt), "expires_at": utc(session.ExpiresAt)}
 	}
 	return map[string]any{"sessions": sessions}, nil

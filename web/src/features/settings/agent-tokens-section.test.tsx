@@ -30,7 +30,7 @@ test('a token is created with its name and tier, shown once, copied, then hidden
   fireEvent.click(screen.getByRole('radio', { name: 'Send' }));
   expect(screen.getByText('Also sends replies to customers on its own.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Create token' }));
-  expect(onCreate).toHaveBeenCalledWith('Claude Code', 'send');
+  expect(onCreate).toHaveBeenCalledWith('Claude Code', { scope: 'send' });
 
   const field = await screen.findByRole('textbox', { name: 'Your token: Claude Code' });
   expect(field).toHaveValue(token);
@@ -176,4 +176,36 @@ test('Add to Cursor works only while the token is shown, and carries it to Curso
   expect(screen.queryByRole('link', { name: 'Add to Cursor' })).not.toBeInTheDocument();
   expect(screen.getByText(/Token hidden\. Create another token above to use this button/)).toBeInTheDocument();
   expect(screen.queryByText(/Create a token above first/)).not.toBeInTheDocument();
+});
+
+test('a tier ticks its permissions; changing one makes the token custom with exactly what is ticked', async () => {
+  const onCreate = show();
+  fireEvent.change(nameField(), { target: { value: 'KB writer' } });
+  fireEvent.click(screen.getByRole('button', { name: /Show its \d+ permissions/ }));
+  const articles = screen.getByRole('group', { name: 'Knowledge base articles' });
+  // Draft holds no knowledge base writing; Send does.
+  expect(within(articles).getByRole('checkbox', { name: /Edit/ })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('radio', { name: 'Send' }));
+  expect(within(articles).getByRole('checkbox', { name: /Publish/ })).toBeChecked();
+  expect(within(articles).getByRole('checkbox', { name: /Publish/ })).toHaveAccessibleDescription('Reaches outside the workspace');
+  fireEvent.click(screen.getByRole('radio', { name: 'Read' }));
+  fireEvent.click(within(articles).getByRole('checkbox', { name: /Edit/ }));
+  expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create token' })); });
+  const [, choice] = onCreate.mock.calls[0] as [string, { permissions: string[] }];
+  expect(choice.permissions).toContain('kb_articles:update');
+  expect(choice.permissions).toContain('conversations:read');
+  expect(choice.permissions).not.toContain('messages:note');
+});
+
+test('a custom token needs one permission, and an agent cannot give an admin-only one', async () => {
+  const onCreate = show(false);
+  fireEvent.change(nameField(), { target: { value: 'Nothing' } });
+  fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+  const media = screen.getByRole('group', { name: 'Knowledge base media' });
+  expect(within(media).getByRole('checkbox', { name: /Delete for good/ })).toBeDisabled();
+  for (const box of screen.getAllByRole('checkbox')) if ((box as HTMLInputElement).checked) fireEvent.click(box);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create token' })); });
+  expect(onCreate).not.toHaveBeenCalled();
+  expect(screen.getByRole('alert')).toHaveTextContent('Tick at least one permission');
 });

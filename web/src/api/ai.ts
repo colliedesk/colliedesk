@@ -51,6 +51,7 @@ export const aiSettingsSchema = z.object({
   auto_draft_estimate: z.object({ customer_messages: z.number().int(), draft_cost_micro_usd: z.number().int().nullable() }),
 }) satisfies z.ZodType<JsonResponse<'getAISettings', 200>>;
 const removedSchema = z.object({ turned_off: z.array(aiSlotNameSchema) }) satisfies z.ZodType<JsonResponse<'removeAIProvider', 200>>;
+const aiModelListSchema = z.object({ models: z.array(z.string()) }) satisfies z.ZodType<JsonResponse<'listAIModels', 200>>;
 
 export type AISettings = z.infer<typeof aiSettingsSchema>;
 export type AIProvider = z.infer<typeof aiProviderSchema>;
@@ -61,11 +62,14 @@ export type AIUsage = z.infer<typeof aiUsageSchema>;
 export type AIAutomatic = z.infer<typeof aiAutomaticSchema>;
 export type AIProviderInput = RequestBody<'addAIProvider'>;
 export type AISlotInput = RequestBody<'setAISlot'>;
+export type AIModelsInput = RequestBody<'listAIModels'>;
 
-const json = <Operation extends 'addAIProvider' | 'updateAIProvider' | 'setAIProviderKey' | 'setAISlot' | 'setAIAutomaticLimits'>(value: RequestBody<Operation>): string => JSON.stringify(value);
+const json = <Operation extends 'addAIProvider' | 'listAIModels' | 'updateAIProvider' | 'setAIProviderKey' | 'setAISlot' | 'setAIAutomaticLimits'>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
 export const aiApi = {
   settings: () => request('/api/v1/ai', aiSettingsSchema),
+  // The models a key may use, asked before the provider is saved; nothing is stored.
+  models: (input: AIModelsInput) => request('/api/v1/ai/models', aiModelListSchema, { method: 'POST', body: json<'listAIModels'>(input) }),
   add: (input: AIProviderInput) => request('/api/v1/ai/providers', aiProviderSchema, { method: 'POST', body: json<'addAIProvider'>(input) }),
   update: (id: string, change: RequestBody<'updateAIProvider'>) =>
     request(`/api/v1/ai/providers/${id}`, aiProviderSchema, { method: 'PATCH', body: json<'updateAIProvider'>(change) }),
