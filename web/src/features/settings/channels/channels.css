@@ -44,7 +44,6 @@ a.ch-type:hover, button.ch-type:hover { border-color: var(--line-strong); backgr
 .ch-carries { font-size: var(--fs-small); }
 .ch-panel { display: grid; gap: var(--space-3); min-width: 0; }
 .ch-panel .settings-body { min-width: 0; }
-.ch-panel table { display: block; max-width: 100%; overflow-x: auto; }
 .ch-remove { justify-content: flex-start; }
 
 .ch-history { margin: 0; padding: 0; list-style: none; }

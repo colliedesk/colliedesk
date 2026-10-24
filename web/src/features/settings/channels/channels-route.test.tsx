@@ -176,6 +176,25 @@ test('connecting email creates the channel with its support address and opens it
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${EMAIL}`, true));
 });
 
+test('adding a web form creates it on, with its allowed origins, and opens it', async () => {
+  channelsApi.create.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  const navigate = show('new/web_form');
+  expect(await screen.findByRole('heading', { name: 'Web form' })).toBeInTheDocument();
+  const origins = await screen.findByRole('textbox', { name: /Allowed origins/i });
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  fireEvent.change(origins, { target: { value: 'https://example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'web_form', enabled: true, config: { allowed_origins: ['https://example.com'] } }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
+});
+
+test('a refused web form connect shows the server message', async () => {
+  channelsApi.create.mockRejectedValue(new mocks.InvalidRequestError('Invalid origin "*".'));
+  show('new/web_form');
+  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Invalid origin "*".');
+});
+
 test('a refused connect shows the server message next to the form', async () => {
   api.emailChannel.mockResolvedValue({ ...withChannel, channel: null });
   channelsApi.create.mockRejectedValue(new mocks.InvalidRequestError('Enter a valid support address.'));

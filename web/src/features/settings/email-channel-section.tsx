@@ -173,12 +173,13 @@ function DnsRecordsTable({ records, expiredAt, timezone }: { records: EmailDnsRe
   if (records.length === 0) return <p className="muted-copy">{expiredAt ? messages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : messages.dnsRecordsNotReady}</p>;
   return <>
     <p className="muted-copy">{messages.dnsRecordsHelp}</p>
-    <table aria-label={messages.dnsRecordsHeading}>
+    {/* A narrow screen scrolls the table sideways inside its own frame, faded at the edges. */}
+    <div className="scroll-x-fade"><table aria-label={messages.dnsRecordsHeading}>
       <thead><tr><th>{messages.dnsColumnPurpose}</th><th>{messages.dnsColumnType}</th><th>{messages.dnsColumnName}</th><th>{messages.dnsColumnValue}</th><th>{messages.dnsColumnPriority}</th><th>{messages.dnsColumnStatus}</th></tr></thead>
       <tbody>{records.map((record) => <tr key={`${record.type}-${record.name}-${record.value}`}>
         <td>{record.record}</td><td>{record.type}</td><td>{record.name}</td><td><code>{record.value}</code></td>
         <td>{record.priority ?? ''}</td><td>{messages.dnsRecordStatus(record.status)}</td>
       </tr>)}</tbody>
-    </table>
+    </table></div>
   </>;
 }
