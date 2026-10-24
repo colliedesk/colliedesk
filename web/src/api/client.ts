@@ -253,7 +253,6 @@ export const api = {
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
   // Only the name: the server keeps the address, so a stale page cannot move the channel.
   saveEmailSenderName: (sender_name: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ sender_name }) }),
-  disconnectEmailChannel: () => requestNoContent('/api/v1/channels/email', { method: 'DELETE' }),
   webForm: () => request('/api/v1/channels/web-form', webFormSettingsSchema),
   saveWebForm: (enabled: boolean, allowed_origins: string[]) => request('/api/v1/channels/web-form', webFormSettingsSchema, { method: 'PUT', body: json<'putWebForm'>({ enabled, allowed_origins }) }),
   verifyEmailDomain: () => request('/api/v1/channels/email/domain-verification', emailChannelSettingsSchema, { method: 'POST' }),

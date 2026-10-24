@@ -781,14 +781,16 @@ paths:
       description: >
         Removes a channel: its configuration and secrets are deleted, its conversations and their
         messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel.
-        Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. An agent token's call
-        is an agent request a person approves.
+        Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds
+        messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`):
+        open or discard them first. An agent token's call is an agent request a person approves.
       responses:
         '204': {description: Removed}
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/channels/{id}/credentials:
     parameters: [{$ref: '#/components/parameters/ID'}]
     put:
@@ -913,13 +915,14 @@ paths:
     delete:
       operationId: deleteEmailChannel
       x-permission: access:write
-      description: Disconnect the email channel. Conversations and messages stay; the inbound secret stops working.
+      description: Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. Mail held while the channel was off must be opened or discarded first (409 `channel_has_held`).
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '204': {description: Email channel disconnected}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/channels/email/domain-verification:
     post:
       operationId: verifyEmailDomain
@@ -7089,6 +7092,7 @@ components:
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
             check_error_code: {type: string, description: 'Only on ai_check_failed: why the provider check failed (auth, permission, model_not_found, blocked_address, quota_exhausted, timeout, unavailable…).'}
             offset: {type: integer, description: 'Only on upload_offset_mismatch: where the upload stands; send the part that starts there.'}
+            held_count: {type: integer, description: 'Only on channel_has_held: how many messages the channel holds; open or discard them before removing it.'}
             articles:
               type: array
               description: 'Only on media_in_use: the live articles whose current text names the item.'

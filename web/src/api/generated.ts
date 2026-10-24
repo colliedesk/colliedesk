@@ -346,7 +346,7 @@ export interface paths {
         get: operations["getChannel"];
         put?: never;
         post?: never;
-        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. An agent token's call is an agent request a person approves. */
+        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`): open or discard them first. An agent token's call is an agent request a person approves. */
         delete: operations["removeChannel"];
         options?: never;
         head?: never;
@@ -441,7 +441,7 @@ export interface paths {
         /** @description Connect the email channel, change its support address, change its sender name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its domain verification and its sending domain stay as they are. */
         put: operations["putEmailChannel"];
         post?: never;
-        /** @description Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. */
+        /** @description Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. Mail held while the channel was off must be opened or discarded first (409 `channel_has_held`). */
         delete: operations["deleteEmailChannel"];
         options?: never;
         head?: never;
@@ -4863,6 +4863,8 @@ export interface components {
                 check_error_code?: string;
                 /** @description Only on upload_offset_mismatch: where the upload stands; send the part that starts there. */
                 offset?: number;
+                /** @description Only on channel_has_held: how many messages the channel holds; open or discard them before removing it. */
+                held_count?: number;
                 /** @description Only on media_in_use: the live articles whose current text names the item. */
                 articles?: {
                     /** Format: uuid */
@@ -5992,6 +5994,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     updateChannel: {
@@ -6209,6 +6212,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     verifyEmailDomain: {

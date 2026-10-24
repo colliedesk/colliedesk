@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError } from '../../api/client';
+import { channelsApi } from '../../api/channels';
 import { messages } from '../../messages';
 import { EmailChannelSection, gmailPart } from '../../features/settings/email-channel-section';
 import { gmailReturn } from '../../features/settings/gmail-return';
@@ -17,15 +18,17 @@ function useEmailSettings() {
   return { me, settings, refresh };
 }
 
-function Connection({ canManage, timezone, onRemoved }: ChannelPanelProps) {
+function Connection({ channel, canManage, timezone, onRemoved }: ChannelPanelProps) {
   const client = useQueryClient();
   const { me, settings, refresh } = useEmailSettings();
   const saveEmail = useMutation({ mutationFn: (address: string) => api.saveEmailChannel(address), onSuccess: refresh });
   const workspaceSlug = useMutation({ mutationFn: api.updateWorkspaceSlug, onSuccess: () => { void client.invalidateQueries({ queryKey: ['me'] }); void refresh(); } });
   const rotateSecret = useMutation({ mutationFn: api.rotateEmailSecret, onSuccess: refresh });
-  const disconnect = useMutation({ mutationFn: api.disconnectEmailChannel, onSuccess: async () => { rotateSecret.reset(); await refresh(); onRemoved(); } });
+  // Disconnecting removes the channel (its Gmail connection with it); one that holds mail is refused, with why.
+  const disconnect = useMutation({ mutationFn: () => channelsApi.remove(channel.id), onSuccess: async () => { rotateSecret.reset(); await refresh(); onRemoved(); } });
+  const failure = disconnect.error ?? rotateSecret.error;
   return <>
-    {(rotateSecret.isError || disconnect.isError) && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
+    {failure && <p role="alert" className="error-copy">{failure instanceof InvalidRequestError ? failure.message : messages.settingsActionFailed}</p>}
     <EmailChannelSection part="connection" settings={settings.data} timezone={timezone} canManage={canManage} workspaceSlug={me.data?.workspace.slug}
       addressSave={saveState(saveEmail)} slugSave={saveState(workspaceSlug)} onSave={(address) => saveEmail.mutate(address)}
       onSaveSlug={(slug) => workspaceSlug.mutate(slug)} createdSecret={rotateSecret.data?.inbound_secret}

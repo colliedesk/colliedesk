@@ -63,6 +63,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	workspaceID := request.WorkspaceID
+	// Shared with every other message of the channel, exclusive of a removal: a channel is never removed
+	// between the moment a message is held on it and the moment it is counted (removeChannel).
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM channels WHERE workspace_id=$1 AND id=$2::uuid FOR SHARE`, workspaceID, request.ChannelID); err != nil {
+		return result, fmt.Errorf("lock channel: %w", err)
+	}
 	channel, err := s.channelByID(ctx, tx, workspaceID, request.ChannelID)
 	if err != nil {
 		return result, err

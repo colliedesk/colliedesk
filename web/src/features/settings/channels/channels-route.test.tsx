@@ -293,6 +293,27 @@ test('removing a web form asks first, then removes it and goes back to the list'
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings/channels', true));
 });
 
+test('a channel that holds messages is not removed until they are opened or discarded', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form', { enabled: false, held_count: 2 }), config: webFormConfig });
+  show(FORM);
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove channel' }));
+  const question = screen.getByRole('alertdialog', { name: 'Remove Web form?' });
+  expect(within(question).getByRole('alert')).toHaveTextContent('It holds 2 messages that arrived while it was off: open or discard them first.');
+  expect(within(question).getByRole('button', { name: 'Yes, remove' })).toBeDisabled();
+  expect(channelsApi.remove).not.toHaveBeenCalled();
+});
+
+test('disconnecting email that holds mail shows why the server refused', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { held_count: 1 }), config: withChannel.channel });
+  channelsApi.remove.mockRejectedValue(new mocks.InvalidRequestError('This channel holds 1 message that arrived while it was off. Open or discard them first.'));
+  const navigate = show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Disconnect email' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Yes, disconnect' }));
+  await waitFor(() => expect(channelsApi.remove).toHaveBeenCalledWith(EMAIL));
+  expect(await screen.findByText(/holds 1 message that arrived while it was off/)).toHaveAttribute('role', 'alert');
+  expect(navigate).not.toHaveBeenCalledWith('/settings/channels', true);
+});
+
 test('messages held while off can be opened as conversations, or discarded after a question', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email', { held_count: 3 }), config: withChannel.channel });
   channelsApi.replayHeld.mockResolvedValue({ results: [] });

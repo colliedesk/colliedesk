@@ -16,6 +16,18 @@ var (
 	ErrNoRegistry = errors.New("the channel registry is not configured")
 )
 
+// HeldError refuses to remove a channel that still holds messages that arrived while it was off:
+// removed, they would be out of reach in the app and still count toward storage.
+type HeldError struct{ Count int }
+
+func (e *HeldError) Error() string {
+	noun := "messages"
+	if e.Count == 1 {
+		noun = "message"
+	}
+	return fmt.Sprintf("the channel holds %d %s that arrived while it was off", e.Count, noun)
+}
+
 // Registry is the set of channel types this server runs, in the order the web app lists them.
 type Registry struct {
 	order    []Type

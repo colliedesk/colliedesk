@@ -52,7 +52,9 @@ once.
 
 ## Remove a channel
 
-Removing a channel deletes its settings and secrets. Its conversations and their messages stay and
+A channel that holds messages that arrived while it was off is not removed: open or discard them
+first (the Remove question and **Disconnect email** say how many). Removing a channel deletes its
+settings and secrets. Its conversations and their messages stay and
 still name it ("Email (removed)"). Removing email is **Disconnect email** on its **Connection** tab; other channels have
 **Remove channel**, which asks first.
 Adding the type again makes a new channel; conversations of a removed email channel are answered

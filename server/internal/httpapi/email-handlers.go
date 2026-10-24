@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -242,6 +243,11 @@ func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Req
 		return
 	}
 	deleted, err := a.store.DeleteEmailChannel(request.Context(), workspaceID)
+	var held *channels.HeldError
+	if errors.As(err, &held) {
+		writeHeld(response, held)
+		return
+	}
 	if err != nil {
 		writeInternalError(response, err)
 		return

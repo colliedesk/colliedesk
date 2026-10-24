@@ -299,9 +299,11 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
       </div>}
     </section>
     {removing && <Dialog alert title={m.removeTitle(channel.name)} closeLabel={m.close} onClose={() => setRemoving(false)}
-      onSubmit={() => { setRemoving(false); remove.mutate(); }}
-      footer={<><button type="button" autoFocus onClick={() => setRemoving(false)}>{m.cancel}</button><button type="submit" className="danger-action">{m.removeConfirm}</button></>}>
+      onSubmit={() => { if (channel.held_count > 0) return; setRemoving(false); remove.mutate(); }}
+      footer={<><button type="button" autoFocus onClick={() => setRemoving(false)}>{m.cancel}</button>
+        <button type="submit" className="danger-action" disabled={channel.held_count > 0}>{m.removeConfirm}</button></>}>
       <p>{m.removeBody}</p>
+      {channel.held_count > 0 && <p role="alert" className="error-copy">{m.removeHeld(channel.held_count)}</p>}
     </Dialog>}
   </>;
 }

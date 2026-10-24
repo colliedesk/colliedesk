@@ -326,3 +326,39 @@ func TestContactWithoutEmailIsListedReadAndAnswered(t *testing.T) {
 		t.Fatalf("reply to a contact without email: %d %s", reply.Code, reply.Body.String())
 	}
 }
+
+// A channel that holds messages cannot be removed: they would be hidden from the app and still count
+// toward storage. Both ways to remove email refuse until they are opened or discarded.
+func TestAChannelThatHoldsMessagesIsNotRemoved(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Held Desk", "admin@held-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@held-desk.example.com")
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	request(t, api, http.MethodPatch, "/api/v1/channels/"+email.ID, map[string]any{"enabled": false}, admin, nil)
+	inboundOK(t, api, secret, mail([]string{"From: lee@customer.example", "Subject: While off", "Message-ID: <held-remove@customer.example>"}, "Anyone?"))
+	for _, path := range []string{"/api/v1/channels/" + email.ID, "/api/v1/channels/email"} {
+		refused := request(t, api, http.MethodDelete, path, nil, admin, nil)
+		var body struct {
+			Error struct {
+				Code      string `json:"code"`
+				Message   string `json:"message"`
+				HeldCount int    `json:"held_count"`
+			} `json:"error"`
+		}
+		decode(t, refused, &body)
+		if refused.Code != http.StatusConflict || body.Error.Code != "channel_has_held" || body.Error.HeldCount != 1 || !strings.Contains(body.Error.Message, "1 message") {
+			t.Fatalf("DELETE %s with a held message: %d %s", path, refused.Code, refused.Body.String())
+		}
+		items, _ = listChannels(t, api, admin)
+		if got := channelOf(t, items, "email"); got.ID != email.ID || got.HeldCount != 1 {
+			t.Fatalf("after a refused DELETE %s: %+v, want the same channel holding 1", path, got)
+		}
+	}
+	if discarded := request(t, api, http.MethodPost, "/api/v1/channels/"+email.ID+"/held/discard", map[string]any{}, admin, nil); discarded.Code != http.StatusOK {
+		t.Fatalf("discard: %d %s", discarded.Code, discarded.Body.String())
+	}
+	if removed := request(t, api, http.MethodDelete, "/api/v1/channels/email", nil, admin, nil); removed.Code != http.StatusNoContent {
+		t.Fatalf("disconnect once nothing is held: %d %s", removed.Code, removed.Body.String())
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -74,6 +75,7 @@ func (a *API) writeChannelDetail(response http.ResponseWriter, status int, publi
 // writeChannelError answers the frame's errors the same for every type.
 func writeChannelError(response http.ResponseWriter, err error) {
 	var fieldErr *channels.FieldError
+	var heldErr *channels.HeldError
 	switch {
 	case errors.As(err, &fieldErr):
 		code := fieldErr.Code
@@ -84,6 +86,8 @@ func writeChannelError(response http.ResponseWriter, err error) {
 			status = http.StatusUnprocessableEntity
 		}
 		writeJSON(response, status, map[string]any{"error": errorBody(response, map[string]any{"code": code, "message": fieldErr.Message, "fields": fieldErr.Fields})})
+	case errors.As(err, &heldErr):
+		writeHeld(response, heldErr)
 	case errors.Is(err, channels.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
 		writeError(response, http.StatusNotFound, "channel_not_found", "No channel of this workspace has that id.")
 	case errors.Is(err, channels.ErrTypeLimit):
@@ -99,6 +103,16 @@ func writeChannelError(response http.ResponseWriter, err error) {
 	default:
 		writeStoreError(response, err)
 	}
+}
+
+// writeHeld refuses to remove a channel that still holds messages, with how many.
+func writeHeld(response http.ResponseWriter, held *channels.HeldError) {
+	noun := "messages"
+	if held.Count == 1 {
+		noun = "message"
+	}
+	writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "channel_has_held", "held_count": held.Count,
+		"message": fmt.Sprintf("This channel holds %d %s that arrived while it was off. Open or discard them first.", held.Count, noun)})})
 }
 
 // channelID reads the {id} of a channel route; anything but a UUID is no channel.
