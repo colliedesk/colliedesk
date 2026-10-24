@@ -7,6 +7,8 @@
 .kb-frame { display: flex; flex-direction: column; gap: var(--space-3); height: 100%; min-height: 0; padding: var(--space-3) var(--space-6) var(--space-4) var(--space-4); }
 .kb-frame > * { flex: none; min-width: 0; }
 .kb-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-width: 0; }
+/* The page title, set like the other pages' titles (IBM Plex Serif). */
+.kb-page-title { font: 500 24px/1.1 var(--font-display); letter-spacing: -0.02em; }
 .kb-head-actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 .kb-head-actions svg, .button-link svg { width: 16px; height: 16px; }
 .button-link { gap: var(--space-2); }
@@ -19,11 +21,13 @@
 .kb-sections a[aria-current="page"] { color: var(--text-1); box-shadow: inset 0 -2px var(--accent); }
 .kb-count-tag { color: var(--text-3); font-weight: 400; font-variant-numeric: tabular-nums; }
 .kb-panel { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+/* A warning, not a note: a neutral card on its ring, the warning colour only on the icon (amber means focus,
+   private notes and pending). */
 .kb-notice {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); border: 1px solid var(--note-line); border-radius: var(--radius-lg);
-  background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-small);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); border-radius: var(--radius-lg);
+  background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-1); padding: var(--space-2) var(--space-3); font-size: var(--fs-small);
 }
-.kb-notice > svg { width: 16px; height: 16px; flex: none; }
+.kb-notice > svg { width: 16px; height: 16px; flex: none; color: var(--warn); }
 .kb-notice > span { flex: 1 1 20rem; }
 .kb-notice strong { font-weight: 600; }
 .kb-crumbs { display: flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--text-3); font-size: var(--fs-small); }
@@ -252,7 +256,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-preview-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .kb-editor-side { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: var(--space-3); }
 .kb-side-box { display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-3) var(--space-4); }
-.kb-side-box h3 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+.kb-side-box h3 { color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
 .kb-side-box .field label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
 .kb-side-box .field small { font-size: var(--fs-label); }
 .kb-side-box .button-link { justify-self: start; }

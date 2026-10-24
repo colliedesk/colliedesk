@@ -25,6 +25,9 @@ async function draftModel() {
 }
 
 test('an admin lets drafts write themselves; a customer email gets a draft the team uses and sends, and AI sends nothing', async ({ page }) => {
+  // Three drafts wait for an AI worker tick (up to 5 s each) and two of them for the card's next check
+  // (every 10 s while a draft is being written): up to 35 s of waiting by design, past the default 30 s.
+  test.setTimeout(60_000);
   const suffix = uniqueSuffix();
   const support = `support-${suffix}@acme.example`;
   const workspace = createWorkspaceWithSlug(`E2E Auto Drafts ${suffix}`, `admin-${suffix}@acme.example`);

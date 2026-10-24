@@ -55,7 +55,7 @@
 .filter-chips .link-button { font-size: var(--fs-label); }
 /* Saved views. */
 .views-popover { gap: var(--space-3); }
-.views-popover h3 { color: var(--text-2); font-size: var(--fs-label); font-weight: 600; letter-spacing: var(--track-label); text-transform: uppercase; }
+.views-popover h3 { color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
 .view-group { display: grid; gap: var(--space-1); }
 .view-group ul, .view-trash ul { display: grid; gap: 2px; list-style: none; margin: 0; padding: 0; }
 .view-row { position: relative; display: flex; align-items: center; gap: var(--space-1); }
@@ -138,8 +138,8 @@
 .timeline-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-6); }
 .timeline-header h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.005em; }
 .timeline-meta { display: flex; gap: var(--space-3); margin-top: var(--space-1); }
-.details-toggle, .drawer-close { display: none; }
-.timeline-header > div:first-child { flex: 1 1 14rem; min-width: 0; }
+.details-toggle, .drawer-close, .thread-back { display: none; }
+.timeline-header > div:first-of-type { flex: 1 1 14rem; min-width: 0; }
 /* Resolve (or Reopen) and Show details stay together; on a narrow thread they move under the title. */
 .timeline-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-left: auto; }
 .status-button svg { width: 14px; height: 14px; }
@@ -179,7 +179,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .message-envelope:last-child { margin: var(--space-3) 0 0; }
 .badge { border-radius: var(--radius-sm); background: var(--surface-3); color: var(--text-2); font-weight: 600; padding: 2px var(--space-2); }
 .badge-fail, .badge-delivery-failed { background: var(--danger-soft); color: var(--danger); }
-.badge-none { background: var(--note-bg); color: var(--note-text); border: 1px solid var(--note-line); }
+.badge-none { background: var(--warn-soft); color: var(--warn); }
 .badge-delivery-sent { background: var(--ok-soft); color: var(--ok); }
 .message-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; font-size: var(--fs-label); }
 .message-attachments li { display: inline-flex; align-items: center; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-1) var(--space-3); }
@@ -205,8 +205,9 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 
 /* Composer: a raised card at the foot of the thread; it turns amber while it writes a private note. */
 .composer { padding: var(--space-2) var(--space-6) var(--space-4); }
-.composer-card { container-type: inline-size; max-width: 46rem; margin: 0 auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); }
-.composer-card[data-kind="note"] { border-color: var(--note-line); background: var(--note-bg); }
+/* A raised card on its ring (--shadow-2), no border: rings, not borders. A note keeps an amber ring. */
+.composer-card { container-type: inline-size; max-width: 46rem; margin: 0 auto; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); }
+.composer-card[data-kind="note"] { background: var(--note-bg); box-shadow: inset 0 0 0 1px var(--note-line), var(--shadow-2); }
 /* The textarea has no ring of its own, so the card carries the focus ring in both modes. */
 .composer-card:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .composer-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-2) 0; }
@@ -264,7 +265,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .saved-reply-button kbd { margin-left: var(--space-1); }
 .saved-reply-button .ai-draft-badge { margin-left: var(--space-1); border-radius: 999px; background: var(--accent-soft); color: var(--text-1); padding: 0 var(--space-2); font-size: var(--fs-label); }
 @media (pointer: coarse) {
-  .saved-reply-button, .cc-button { --control: var(--touch); min-width: var(--touch); justify-content: center; }
+  .saved-reply-button, .cc-button, .attach-button, .composer-tabs button { --control: var(--touch); min-width: var(--touch); justify-content: center; }
 }
 /* Saved replies and Articles sit together on the left; the last of them pushes the rest to the right. */
 .saved-reply-button:has(+ .saved-reply-button) { margin-right: 0; }
@@ -345,6 +346,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 }
 @media (max-width: 44rem) {
   .timeline-header, .timeline-scroll { padding-inline: var(--space-4); }
+  /* Back sits alone on the first line of the header; the title takes the next. */
+  .thread-back { display: inline-flex; gap: var(--space-1); margin: calc(-1 * var(--space-2)) auto 0 calc(-1 * var(--space-2)); border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); padding: 0 var(--space-2); }
+  .thread-back svg { width: 16px; height: 16px; }
+  .timeline-header > .thread-back + div { flex-basis: 100%; }
   .composer { padding-inline: var(--space-3); }
   .composer-notice { width: auto; margin-inline: var(--space-3); }
   .saved-reply-button kbd { display: none; }
@@ -390,10 +395,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .data-list article > div, .invite-form, .form-row { grid-template-columns: 1fr; gap: var(--space-2); }
 }
 
-/* Avatars: a stable hash picks one of a few muted hues, dark tile with light initials. */
+/* Avatars: a stable hash picks one of a few muted hues (tokens.css), dark tile with light initials. */
 .avatar {
   flex: none; display: inline-grid; place-items: center; border-radius: var(--radius-full); font-weight: 600; letter-spacing: 0.02em;
-  background: oklch(0.42 0.07 var(--avatar-hue)); color: oklch(0.96 0.02 var(--avatar-hue));
+  background: oklch(var(--avatar-lightness) var(--avatar-chroma) var(--avatar-hue)); color: oklch(var(--avatar-text-lightness) var(--avatar-text-chroma) var(--avatar-hue));
 }
 .avatar-md { width: 32px; height: 32px; font-size: var(--fs-label); }
 .avatar-sm { width: 24px; height: 24px; font-size: 10px; }
@@ -658,7 +663,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .contact-picker-name { font-weight: 600; overflow-wrap: anywhere; }
 .contact-picker-email { color: var(--text-3); font-size: var(--fs-small); overflow-wrap: anywhere; }
 .contact-matches { margin: 0 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2); }
-.contact-matches h2 { padding: 0 var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-weight: 600; letter-spacing: var(--track-label); text-transform: uppercase; }
+.contact-matches h2 { padding: 0 var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
 .contact-matches ul { display: grid; margin: var(--space-1) 0 0; padding: 0; list-style: none; }
 .contact-matches a { display: block; border-radius: var(--radius-sm); padding: var(--space-2); color: inherit; text-decoration: none; }
 .contact-matches a:hover { background: var(--surface-2); }
@@ -695,7 +700,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .import-connect .button-row { margin-top: var(--space-2); }
 .import-ledger { width: 100%; max-width: 34rem; border-collapse: collapse; font-size: var(--fs-small); }
 .import-ledger th, .import-ledger td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); text-align: left; }
-.import-ledger thead th { color: var(--text-3); font-weight: 500; font-size: var(--fs-label); letter-spacing: var(--track-label); text-transform: uppercase; }
+.import-ledger thead th { color: var(--text-3); font-weight: 500; font-size: var(--fs-label); }
 .import-ledger td, .import-ledger thead th:not(:first-child) { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .import-ledger tbody th { font-weight: 500; color: var(--text-1); }
 .import-ledger tr[data-short] td:last-child { color: var(--danger); font-weight: 600; }
@@ -752,6 +757,6 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* On the details toggle of a narrow screen: a dot says an AI suggestion waits behind it (the button's name says so too). */
 .details-badge { flex: none; width: 8px; height: 8px; margin-left: var(--space-1); border-radius: 999px; background: var(--accent); }
 /* The title gives way to the toggle on a narrow screen instead of pushing it past the edge. */
-.timeline-header > :first-child { min-width: 0; }
+.timeline-header > div:first-of-type { min-width: 0; }
 .timeline-header h2 { overflow-wrap: anywhere; }
 .details-toggle { flex: none; }

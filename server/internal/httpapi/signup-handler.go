@@ -108,7 +108,7 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		}
 		properties["website_visitor_id"] = visitor
 	}
-	if a.config.InternalSignups.Match(verified) {
+	if a.config.InternalSignups.Match(verified, ip) {
 		if properties == nil {
 			properties = map[string]any{}
 		}

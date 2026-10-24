@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
@@ -6,6 +6,7 @@ import { api, ReplyConflictError } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
+import { leaveList, listIsBehind, showList, showThread } from './list-return';
 import { contactPart, ContactsPart } from '../contacts/contact-part';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import { apiQuery, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
@@ -174,6 +175,22 @@ export function InboxRoute() {
     if (failedDeliveries) void client.invalidateQueries({ queryKey: ['email-channel'] });
   }, [client, failedDeliveries]);
   const [starting, setStarting] = useState(false);
+  // An address that names a conversation is the thread view; on a phone it replaces the list (layout.css).
+  const threadOpen = Boolean(params.conversationId);
+  useLayoutEffect(() => (threadOpen ? showThread() : showList()), [threadOpen]);
+  // Opening a conversation keeps the filters in the address, so Back returns to the same list.
+  const openConversation = (id: string) => {
+    reportedOpen.current = id;
+    leaveList(id);
+    setSelectedId(id);
+    void navigate({ to: '/conversations/$conversationId', params: { conversationId: id }, search: filters });
+  };
+  // Back to the list the agent came from steps back in the history, so the browser's Back does not reopen the
+  // conversation; a conversation reached by a link has no list behind it, so the list opens with its filters.
+  const backToList = () => {
+    if (params.conversationId && listIsBehind(params.conversationId)) window.history.back();
+    else void navigate({ to: '/', search: filters });
+  };
   const openContact = (contactId: string) => void navigate({ to: '/contacts/$contactId', params: { contactId } });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
@@ -224,8 +241,8 @@ export function InboxRoute() {
   return <><InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} onboardingGoal={me.data?.onboarding_goal}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
-    // Opening a conversation keeps the filters in the address, so Back returns to the same list.
-    onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id }, search: filters }); }}
+    onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
+    threadOpen={threadOpen} onBack={backToList}
     query={filters}
     viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
@@ -273,6 +290,6 @@ export function InboxRoute() {
     onOpenContact={openContact}
     onNewConversation={() => setStarting(true)} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
-      render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={setSelectedId} />} />}
+      render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}
   </>;
 }
