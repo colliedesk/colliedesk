@@ -483,9 +483,11 @@ func TestATaskWaitingOnlyForAnotherCallsHoldRunsOnceItIsFree(t *testing.T) {
 		inFlight.Done()
 		waited := make(chan struct{})
 		go func() { inFlight.Wait(); close(waited) }()
+		// The call holds the allowance long enough for the other task to ask for it, even on a slow
+		// runner (300 ms let the other task start only after this call had finished).
 		select {
 		case <-waited:
-		case <-time.After(300 * time.Millisecond):
+		case <-time.After(2 * time.Second):
 		}
 		usage := aiprovider.Usage{Reported: true, InputTokens: 10, OutputTokens: 5}
 		return aiprovider.Response{Text: "ok", Stop: aiprovider.StopDone, Model: request.Model, Usage: usage, Hops: []aiprovider.Hop{{Model: request.Model, Usage: usage}}}, nil
