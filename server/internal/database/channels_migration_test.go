@@ -391,3 +391,54 @@ func TestChannelsMigrationRollsBackOnlyWhatItCan(t *testing.T) {
 		t.Fatalf("channels after up again=%d (%v), want 4", channels, err)
 	}
 }
+
+// A held event's raw bytes count toward the workspace's storage while it is held, and stop counting
+// once it becomes a message or is discarded, so a channel left off cannot be filled without limit.
+func TestHeldInboundEventsCountTowardStorage(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	var workspaceID, channelID string
+	if err := pool.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name) VALUES('held','Held') RETURNING id),
+		c AS (INSERT INTO channels(workspace_id,type,singleton,name) SELECT id,'web_form',true,'Form' FROM w RETURNING id,workspace_id)
+		SELECT workspace_id::text,id::text FROM c`).Scan(&workspaceID, &channelID); err != nil {
+		t.Fatal(err)
+	}
+	counted := func() (int64, int64) {
+		t.Helper()
+		var c, s int64
+		if err := pool.QueryRow(ctx, `SELECT counted_storage_bytes,stored_storage_bytes FROM workspaces WHERE id=$1`, workspaceID).Scan(&c, &s); err != nil {
+			t.Fatal(err)
+		}
+		return c, s
+	}
+	var held, other string
+	if err := pool.QueryRow(ctx, `INSERT INTO channel_inbound_events(workspace_id,channel_id,state,raw_object_key,raw_bytes,hold_reason)
+		VALUES($1,$2,'held','k/1',1000,'channel_off') RETURNING id::text`, workspaceID, channelID).Scan(&held); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO channel_inbound_events(workspace_id,channel_id,state,raw_object_key,raw_bytes,drop_reason)
+		VALUES($1,$2,'dropped','k/2',500,'own_address') RETURNING id::text`, workspaceID, channelID).Scan(&other); err != nil {
+		t.Fatal(err)
+	}
+	if c, s := counted(); c != 1000 || s != 1000 {
+		t.Fatalf("held: counted=%d stored=%d, want 1000 each (the dropped event counts nothing)", c, s)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE channel_inbound_events SET state='processed',hold_reason=NULL WHERE id=$1`, held); err != nil {
+		t.Fatal(err)
+	}
+	if c, s := counted(); c != 0 || s != 0 {
+		t.Fatalf("replayed: counted=%d stored=%d, want 0 (its attachment counts it now)", c, s)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE channel_inbound_events SET state='held',hold_reason='channel_off' WHERE id=$1`, held); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM channel_inbound_events WHERE id=$1`, held); err != nil {
+		t.Fatal(err)
+	}
+	if c, s := counted(); c != 0 || s != 0 {
+		t.Fatalf("deleted: counted=%d stored=%d, want 0", c, s)
+	}
+}

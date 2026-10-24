@@ -56,15 +56,16 @@ UPDATE channel_outbox SET external_id = 'email:' || (SELECT email_message_id FRO
 UPDATE channel_outbox SET last_error_code = 'send_failed' WHERE workspace_id = md5('ws-beta')::uuid AND status = 'failed';
 
 -- One event in each state that keeps one, on beta's channels and acme's form.
-INSERT INTO channel_inbound_events (id, workspace_id, channel_id, external_event_id, state, raw, raw_object_key, hold_reason,
+INSERT INTO channel_inbound_events (id, workspace_id, channel_id, external_event_id, state, raw, raw_object_key, sender_key, hold_reason,
         aggregate_key, flush_at, drop_reason, error, attempts, conversation_id, message_id, decided_by_agent_id, received_at, processed_at)
     SELECT md5('chin-beta-1')::uuid, m.workspace_id, m.channel_id, 'form:' || m.id, 'processed',
-        '{"email": "buyer@example.com", "message": "Pricing?", "source": "pricing"}', NULL, NULL,
+        '{"email": "buyer@example.com", "message": "Pricing?", "source": "pricing"}', NULL, 'buyer@example.com', NULL,
         NULL, NULL, NULL, NULL, 1, m.conversation_id, m.id, NULL, m.created_at, m.created_at
     FROM messages m WHERE m.workspace_id = md5('ws-beta')::uuid AND m.channel_meta IS NOT NULL;
-INSERT INTO channel_inbound_events (id, workspace_id, channel_id, external_event_id, state, raw, raw_object_key, hold_reason,
+INSERT INTO channel_inbound_events (id, workspace_id, channel_id, external_event_id, state, raw, raw_object_key, raw_bytes, hold_reason,
         aggregate_key, flush_at, drop_reason, error, attempts, conversation_id, message_id, decided_by_agent_id, received_at, processed_at)
-    SELECT md5('chin-beta-' || n)::uuid, c.workspace_id, c.id, 'mail:' || n, state, raw::jsonb, object_key, NULL,
+    SELECT md5('chin-beta-' || n)::uuid, c.workspace_id, c.id, 'mail:' || n, state, raw::jsonb, object_key,
+        CASE WHEN object_key IS NOT NULL THEN 812 END, NULL,
         aggregate_key, flush_at::timestamptz, drop_reason, error, attempts, NULL, NULL, decided_by::uuid, '2026-10-24 13:00:00+00', processed_at::timestamptz
     FROM channels c, (VALUES
         ('2', 'dropped', NULL, (SELECT storage_key FROM attachments WHERE workspace_id = md5('ws-beta')::uuid ORDER BY storage_key LIMIT 1),

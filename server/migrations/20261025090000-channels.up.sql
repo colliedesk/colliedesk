@@ -127,6 +127,11 @@ CREATE TABLE channel_inbound_events (
     -- (an email's raw message, already stored once as its original).
     raw jsonb,
     raw_object_key text,
+    -- The size of the object at raw_object_key. A held event's bytes count toward the workspace's
+    -- storage until the event becomes a message (whose attachment then counts them) or is discarded.
+    raw_bytes bigint CHECK (raw_bytes >= 0),
+    -- Who sent it on the channel (an identity), for the per-sender rate limit.
+    sender_key text CHECK (char_length(sender_key) BETWEEN 1 AND 500),
     hold_reason text CHECK (hold_reason ~ '^[a-z][a-z_]{1,30}$'),
     aggregate_key text CHECK (char_length(aggregate_key) BETWEEN 1 AND 500),
     flush_at timestamptz,
@@ -143,6 +148,7 @@ CREATE TABLE channel_inbound_events (
     FOREIGN KEY (workspace_id, message_id) REFERENCES messages(workspace_id, id) ON DELETE SET NULL (message_id),
     FOREIGN KEY (workspace_id, decided_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (decided_by_agent_id),
     CHECK (raw IS NOT NULL OR raw_object_key IS NOT NULL),
+    CHECK (raw_bytes IS NULL OR raw_object_key IS NOT NULL),
     CHECK (raw IS NULL OR octet_length(raw::text) <= 262144),
     CHECK ((state = 'pending') = (flush_at IS NOT NULL)),
     CHECK ((state = 'dropped') = (drop_reason IS NOT NULL)),
@@ -153,6 +159,33 @@ CREATE INDEX channel_inbound_events_channel_idx ON channel_inbound_events(worksp
 CREATE INDEX channel_inbound_events_due_idx ON channel_inbound_events(flush_at) WHERE state = 'pending';
 CREATE INDEX channel_inbound_events_retry_idx ON channel_inbound_events(received_at) WHERE state IN ('received', 'failed');
 CREATE INDEX channel_inbound_events_held_idx ON channel_inbound_events(workspace_id, channel_id, hold_reason) WHERE state = 'held';
+CREATE INDEX channel_inbound_events_sender_idx ON channel_inbound_events(workspace_id, channel_id, sender_key, received_at)
+    WHERE sender_key IS NOT NULL;
+
+-- Held raw bytes count toward storage like attachments (20261015091216-founding-storage-counter), so a
+-- channel left off cannot be filled without limit. Row-level: held events are few.
+CREATE FUNCTION channel_inbound_events_count_held() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    delta bigint := 0;
+    workspace uuid;
+BEGIN
+    IF TG_OP IN ('UPDATE', 'DELETE') AND OLD.state = 'held' THEN
+        delta := delta - COALESCE(OLD.raw_bytes, 0);
+        workspace := OLD.workspace_id;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') AND NEW.state = 'held' THEN
+        delta := delta + COALESCE(NEW.raw_bytes, 0);
+        workspace := NEW.workspace_id;
+    END IF;
+    IF delta <> 0 THEN
+        UPDATE workspaces SET counted_storage_bytes = counted_storage_bytes + delta, stored_storage_bytes = stored_storage_bytes + delta
+            WHERE id = workspace;
+    END IF;
+    RETURN NULL;
+END
+$$;
+CREATE TRIGGER channel_inbound_events_count_held AFTER INSERT OR UPDATE OF state, raw_bytes OR DELETE ON channel_inbound_events
+    FOR EACH ROW EXECUTE FUNCTION channel_inbound_events_count_held();
 
 -- Who added, renamed, turned on or off, changed or removed a channel, and what happened to the
 -- messages it held. Never a secret: only its last four characters. The name and type are copied.

@@ -76,6 +76,7 @@ ALTER TABLE conversations
 
 DROP TABLE channel_events;
 DROP TABLE channel_inbound_events;
+DROP FUNCTION channel_inbound_events_count_held();
 DROP TABLE conversation_thread_keys;
 DROP TABLE contact_identities;
 DROP TABLE channel_credentials;
