@@ -125,7 +125,7 @@
 .priority { display: inline-flex; align-items: center; gap: 2px; color: var(--text-3); font-size: var(--fs-label); }
 .priority svg { width: 12px; height: 12px; }
 .priority-high, .priority-urgent { border-radius: var(--radius-sm); padding: 0 6px; font-weight: 600; }
-.priority-high { background: var(--warn-soft); color: var(--warn); }
+.priority-high { background: var(--text-2); color: var(--surface-1); }
 .priority-urgent { background: var(--danger-soft); color: var(--danger); }
 .tag-pill { color: var(--text-3); font-size: var(--fs-label); }
 .tag-pill::before { content: "#"; opacity: 0.7; }
