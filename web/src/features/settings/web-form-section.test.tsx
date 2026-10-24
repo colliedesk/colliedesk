@@ -79,5 +79,21 @@ test('without the clipboard, the Embed copy buttons say the copy failed', async 
   fireEvent.click(screen.getByRole('button', { name: 'Copy submit URL' }));
   expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
-  await waitFor(() => expect(screen.getAllByText('Could not copy. Select the text and copy it yourself.')).toHaveLength(2));
+  // One message at a time: the second failure replaces the first.
+  await waitFor(() => {
+    const failures = screen.getAllByText('Could not copy. Select the text and copy it yourself.');
+    expect(failures).toHaveLength(1);
+    expect(failures[0].previousElementSibling).toHaveTextContent('Copy code');
+  });
+});
+
+test('one copy message at a time: copying the code replaces what copying the URL said', async () => {
+  const writeText = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  render(<WebFormSection part="embed" settings={on} canManage onSave={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy submit URL' }));
+  expect(await screen.findByText('URL copied')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+  expect(await screen.findByText('Code copied')).toBeInTheDocument();
+  expect(screen.queryByText('URL copied')).toBeNull();
 });
