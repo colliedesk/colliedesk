@@ -61,10 +61,15 @@ func Run(t *testing.T, h Harness) {
 	c := &contract{h: h, definition: definition, pipeline: pipeline.New(h.Store, nil), async: adapter.Inbound().Mode() == channels.Async}
 
 	t.Run("a new message opens one conversation with its contact and files", c.newMessage)
-	t.Run("the same message twice is stored once", c.duplicate)
+	if definition.Identified {
+		t.Run("the same message twice is stored once", c.duplicate)
+	}
 	t.Run("an answer joins its conversation and reopens it", c.answer)
 	t.Run("what arrives while the channel is off follows its type's rule", c.off)
 	t.Run("a channel's messages never reach another workspace", c.crossWorkspace)
+	if definition.Defaults.RateLimits.PerSender > 0 {
+		t.Run("a sender over the channel's limit is refused and nothing is stored", c.perSender)
+	}
 	if c.async {
 		t.Run("an event whose processing failed is processed again, once", c.failedAgain)
 	}
@@ -150,6 +155,16 @@ func (c *contract) outcome(t *testing.T, channel channels.Channel, eventID strin
 	return channels.IngestResult{Status: status, Reason: reason, ConversationID: conversationID, MessageID: messageID, EventID: eventID}
 }
 
+// files says whether the type receives files (capability attachments_in).
+func (c *contract) files() bool {
+	for _, capability := range c.definition.Capabilities {
+		if capability == "attachments_in" {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *contract) count(t *testing.T, workspaceID, table, where string, args ...any) int {
 	t.Helper()
 	var n int
@@ -184,10 +199,10 @@ func (c *contract) newMessage(t *testing.T) {
 	if n := c.count(t, d.workspaceID, "contacts", ""); n != 1 {
 		t.Fatalf("contacts=%d, want 1", n)
 	}
-	if n := c.count(t, d.workspaceID, "messages", "kind='incoming' AND channel_id=$2 AND external_id IS NOT NULL", d.channel.ID); n != 1 {
+	if n := c.count(t, d.workspaceID, "messages", "kind='incoming' AND channel_id=$2 AND (external_id IS NOT NULL OR NOT $3)", d.channel.ID, c.definition.Identified); n != 1 {
 		t.Fatalf("incoming messages with their channel and id=%d, want 1", n)
 	}
-	if n := c.count(t, d.workspaceID, "attachments", "filename='file.txt'"); n != 1 {
+	if n := c.count(t, d.workspaceID, "attachments", "filename='file.txt'"); c.files() && n != 1 {
 		t.Fatalf("file.txt attachments=%d, want 1", n)
 	}
 	if n := c.count(t, d.workspaceID, "channel_inbound_events", "state='processed' AND message_id=$2", *results[0].MessageID); n != 1 {
@@ -265,7 +280,7 @@ func (c *contract) off(t *testing.T) {
 	if err != nil || len(replayed) != 1 || replayed[0].ConversationID == nil {
 		t.Fatalf("replay: %+v %v", replayed, err)
 	}
-	if n := c.count(t, d.workspaceID, "attachments", "filename='file.txt'"); n != 1 {
+	if n := c.count(t, d.workspaceID, "attachments", "filename='file.txt'"); c.files() && n != 1 {
 		t.Fatalf("replayed files=%d, want 1", n)
 	}
 	discarded, err := c.h.Store.DiscardHeld(ctx, d.workspaceID, d.channel.ID, nil, store.ChannelActor{AgentID: d.agentID})
@@ -304,6 +319,37 @@ func (c *contract) crossWorkspace(t *testing.T) {
 	if n := c.count(t, a.workspaceID, "messages", ""); n != 1 {
 		t.Fatalf("workspace A has %d messages, want its own 1", n)
 	}
+}
+
+func (c *contract) perSender(t *testing.T) {
+	d := c.desk(t)
+	limit := c.definition.Defaults.RateLimits.PerSender
+	for n := range limit {
+		c.receive(t, d.channel, c.h.Raw(t, d.channel, Spec{ID: fmt.Sprintf("flood-%d", n), From: "kim", Text: "Again."}))
+	}
+	over := c.h.Raw(t, d.channel, Spec{ID: "flood-over", From: "kim", Text: "Again."})
+	if c.async {
+		results, err := c.pipeline.Receive(context.Background(), d.channel, []channels.Raw{over})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.pipeline.ProcessDue(context.Background()); err == nil {
+			t.Fatal("processing the message over the limit gave no error")
+		}
+		if got := c.outcome(t, d.channel, results[0].EventID); got.Status != "failed" {
+			t.Fatalf("over the limit: %+v, want failed (tried again later)", got)
+		}
+		// Out of the way of the cases that follow, which run the same journal worker.
+		if _, err := c.h.Pool.Exec(context.Background(), `UPDATE channel_inbound_events SET state='dropped',drop_reason='test' WHERE id=$1`, results[0].EventID); err != nil {
+			t.Fatal(err)
+		}
+	} else if _, err := c.tryReceive(t, d.channel, over); !errors.Is(err, store.ErrRateLimited) {
+		t.Fatalf("over the limit: %v, want ErrRateLimited", err)
+	}
+	if n := c.count(t, d.workspaceID, "messages", "kind='incoming'"); n != limit {
+		t.Fatalf("messages=%d, want the %d under the limit", n, limit)
+	}
+	c.receive(t, d.channel, c.h.Raw(t, d.channel, Spec{ID: "calm", From: "lee", Text: "Hello."}))
 }
 
 func (c *contract) failedAgain(t *testing.T) {

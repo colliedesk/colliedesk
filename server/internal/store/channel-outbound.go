@@ -73,6 +73,23 @@ func (s *Store) replyRoute(ctx context.Context, tx pgx.Tx, workspaceID, conversa
 	return ReplyRoute{}, nil
 }
 
+// otherRepliesCarrier is the live channel that carries replies of conversations that came through no
+// channel (one a team member started); nil when the workspace has none.
+func (s *Store) otherRepliesCarrier(ctx context.Context, tx pgx.Tx, workspaceID string) (*channels.Channel, error) {
+	if s.channels == nil {
+		return nil, channels.ErrNoRegistry
+	}
+	kind, ok := s.channels.ReplyType("")
+	if !ok {
+		return nil, nil
+	}
+	channel, found, err := s.liveChannelOfType(ctx, tx, workspaceID, kind)
+	if err != nil || !found {
+		return nil, err
+	}
+	return &channel, nil
+}
+
 // GetReplyRoute is replyRoute in its own transaction.
 func (s *Store) GetReplyRoute(ctx context.Context, workspaceID, conversationID string) (ReplyRoute, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ReplyRoute, error) {
@@ -117,11 +134,11 @@ func reachable(recipient channels.Recipient, kind string) bool {
 	return false
 }
 
-// enqueueChannelReply queues a reply on the channel that carries the conversation's replies, in the
+// enqueueReply queues a reply on the channel that carries the conversation's replies, in the
 // transaction that stores it. With no channel that can carry it nothing is queued, as before channels
 // for a workspace without email. A channel that is off, removed, or cannot reach the customer queues
 // a failed delivery that says why; a person retries it once that is fixed.
-func (s *Store) enqueueChannelReply(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string, cc []string) error {
+func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string, cc []string) error {
 	route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
 	if err != nil {
 		return err
@@ -186,7 +203,15 @@ func (s *Store) enqueueChannelReply(ctx context.Context, tx pgx.Tx, workspaceID,
 	return nil
 }
 
-func (s *Store) retryChannelDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) (domain.Message, error) {
+// RetryDelivery requeues a failed delivery of a reply in this workspace and conversation, if its
+// channel can send now.
+func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, messageID string) (domain.Message, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Message, error) {
+		return s.retryDelivery(ctx, tx, workspaceID, conversationID, messageID)
+	})
+}
+
+func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) (domain.Message, error) {
 	message, err := getMessage(ctx, tx, workspaceID, messageID)
 	if err != nil || message.ConversationID != conversationID || message.Delivery == nil {
 		return domain.Message{}, fmt.Errorf("retry delivery: not found")
@@ -308,17 +333,40 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 	return scoped(ctx, s, claim.WorkspaceID, func(tx pgx.Tx) (channels.Outbound, error) {
 		out := channels.Outbound{DeliveryID: claim.OutboxID, WorkspaceID: claim.WorkspaceID, Attempt: claim.Attempts}
 		if claim.ChannelID == "" {
-			return out, fmt.Errorf("load delivery %s: %w", claim.OutboxID, channels.ErrNotFound)
+			// History of a channel removed before channels existed: the type's live channel, if any.
+			live, found, err := s.liveChannelOfType(ctx, tx, claim.WorkspaceID, claim.Type)
+			if err != nil {
+				return out, err
+			}
+			if !found {
+				live = channels.Channel{WorkspaceID: claim.WorkspaceID, Type: claim.Type, Name: string(claim.Type), Enabled: true, DeletedAt: &out.Message.CreatedAt}
+			}
+			claim.ChannelID = live.ID
+			out.Channel = live
 		}
-		channel, err := s.channelByID(ctx, tx, claim.WorkspaceID, claim.ChannelID)
-		if err != nil {
-			return out, err
+		channel := out.Channel
+		if channel.ID == "" && claim.ChannelID != "" {
+			var err error
+			if channel, err = s.channelByID(ctx, tx, claim.WorkspaceID, claim.ChannelID); err != nil {
+				return out, err
+			}
+		}
+		if adapter, ok := s.channels.Adapter(channel.Type); !channel.Live() && ok && adapter.Definition().Singleton {
+			// Disconnected and connected again: the reply leaves through the type's live channel.
+			if live, found, err := s.liveChannelOfType(ctx, tx, claim.WorkspaceID, channel.Type); err != nil {
+				return out, err
+			} else if found {
+				if _, err := tx.Exec(ctx, `UPDATE channel_outbox SET channel_id=$3 WHERE workspace_id=$1 AND id=$2`, claim.WorkspaceID, claim.OutboxID, live.ID); err != nil {
+					return out, fmt.Errorf("move delivery to the live channel: %w", err)
+				}
+				channel = live
+			}
 		}
 		out.Channel = channel
 		var meta []byte
 		var cc []string
 		var origin string
-		err = tx.QueryRow(ctx, `SELECT m.id::text,m.body,m.cc,m.created_at,c.id::text,c.subject,c.channel,o.meta
+		err := tx.QueryRow(ctx, `SELECT m.id::text,m.body,m.cc,m.created_at,c.id::text,c.subject,c.channel,o.meta
 			FROM channel_outbox o JOIN messages m ON m.workspace_id=o.workspace_id AND m.id=o.message_id
 			JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 			WHERE o.workspace_id=$1 AND o.id=$2`, claim.WorkspaceID, claim.OutboxID).

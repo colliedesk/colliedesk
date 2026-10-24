@@ -181,6 +181,9 @@ const (
 // Definition is what a type declares about itself. It is data: the frame reads it, never the type's name.
 type Definition struct {
 	Type Type
+	// Identified says the type's messages carry the channel's id of them, so the same message
+	// delivered twice is stored once. A form post has none: two posts are two messages.
+	Identified bool
 	// Singleton allows at most one live channel of the type per workspace (channel_types.singleton).
 	Singleton bool
 	// Name is the name a new channel of the type gets when none is given.
@@ -282,6 +285,8 @@ type Event struct {
 type FieldError struct {
 	Fields  map[string]string
 	Message string
+	// Code is the API error code; empty is invalid_request.
+	Code string
 }
 
 func (e *FieldError) Error() string { return e.Message }
@@ -296,7 +301,7 @@ type CredentialSpec struct {
 type ConfigPart interface {
 	// Validate reads a patch (the type's configuration schema in contracts/openapi.yaml). current is
 	// nil when the channel is being created.
-	Validate(ctx context.Context, tx pgx.Tx, current *Channel, patch json.RawMessage) (ConfigChange, error)
+	Validate(ctx context.Context, tx pgx.Tx, workspaceID string, current *Channel, patch json.RawMessage) (ConfigChange, error)
 	// Save writes the change to the type's table for the channel, created or not.
 	Save(ctx context.Context, tx pgx.Tx, channel Channel, change ConfigChange) (Event, error)
 	// Public is the configuration the API shows; never a secret.

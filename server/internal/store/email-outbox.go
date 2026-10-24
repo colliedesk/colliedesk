@@ -234,3 +234,16 @@ func (s *Store) finish(ctx context.Context, item Delivery, heldByPause bool, set
 	}
 	return nil
 }
+
+// EmailDelivery loads what the email sender needs of a claimed reply of the outbox.
+func (s *Store) EmailDelivery(ctx context.Context, workspaceID, outboxID string, attempts int) (Delivery, error) {
+	item := Delivery{OutboxID: outboxID, WorkspaceID: workspaceID, Attempts: attempts}
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, `SELECT message_id::text,COALESCE(transport,'smtp'),COALESCE(claim_token::text,'') FROM channel_outbox WHERE workspace_id=$1 AND id=$2`,
+			workspaceID, outboxID).Scan(&item.MessageID, &item.Transport, &item.ClaimToken); err != nil {
+			return fmt.Errorf("load delivery %s: %w", outboxID, err)
+		}
+		return loadDelivery(ctx, tx, &item)
+	})
+	return item, err
+}

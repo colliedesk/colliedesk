@@ -158,7 +158,7 @@ func TestTheCustomersAnswerThreadsEvenWhenGmailRewritesTheMessageID(t *testing.T
 		t.Fatal(err)
 	}
 	answer.Platform = true
-	result, err := f.store.IngestEmail(context.Background(), f.workspaceID, answer, time.Now().UTC(), nil)
+	result, err := ingestEmail(t, context.Background(), f.store, f.workspaceID, answer)
 	if err != nil || result.ConversationID == nil || *result.ConversationID != f.conversationID {
 		t.Fatalf("answer went to %+v (err %v), want conversation %s", result, err, f.conversationID)
 	}

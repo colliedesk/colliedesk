@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"io"
 	"log/slog"
 	"net/http"
@@ -118,16 +119,20 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		slog.Warn("AI_SERVER_MONTHLY_ALLOWANCE holds only while the OpenAI-compatible server reports token usage; calls without usage cost nothing against it")
 	}
 	googleConfig.Base = googleBaseURL
-	if emailConfig.SMTP.Configured() || googleConfig.Enabled() {
-		// A server with Gmail and no relay still runs the worker; replies that need SMTP fail with the reason.
-		var sender emailoutbox.Sender
-		if emailConfig.SMTP.Configured() {
-			sender = email.SMTPSender{Config: emailConfig.SMTP}
-		}
-		worker := emailoutbox.New(store.NewWithDB(db), sender,
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig})
-		go worker.Run(ctx, 5*time.Second)
+	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
+	// worker sends every channel's replies, email through SMTP or Gmail; without either, replies that
+	// need them fail with the reason. The journal worker processes what Async channels received.
+	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Billing: billing}
+	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig))).
+		WithSealKeys(googleConfig.Keys).WithPlanLimits(billing.Enabled())
+	var sender emailoutbox.Sender
+	if emailConfig.SMTP.Configured() {
+		sender = email.SMTPSender{Config: emailConfig.SMTP}
 	}
+	worker := emailoutbox.New(channelStore, sender,
+		emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig})
+	go worker.Run(ctx, 5*time.Second)
+	go pipeline.New(channelStore, nil).Run(ctx, 2*time.Second)
 	if emailConfig.ResendAPIKey != "" {
 		// Provider domains a workspace stopped using, or left behind by being deleted, free their slots here.
 		client := &resend.Client{APIKey: emailConfig.ResendAPIKey, Base: emailConfig.ResendAPIBase}

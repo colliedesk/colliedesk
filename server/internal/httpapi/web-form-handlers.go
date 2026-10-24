@@ -8,25 +8,25 @@ import (
 	"mime"
 	"net/http"
 	"net/mail"
-	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/webform"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 const (
-	webFormPathPrefix    = "/api/v1/public/forms/"
+	webFormPathPrefix    = webform.SubmitPathPrefix
 	webFormSubmitPattern = webFormPathPrefix + "{workspace_slug}"
 	maxWebFormBody       = 64 << 10
 	maxWebFormMessage    = 5000
 	maxWebFormSource     = 100
 	maxWebFormEmail      = 254
-	maxWebFormOrigins    = 20
 	webFormPreflightAge  = "600"
 )
 
@@ -69,38 +69,7 @@ func (a *API) putWebForm(response http.ResponseWriter, request *http.Request) {
 }
 
 // normalizeOrigins lowercases, validates and de-duplicates the allowed origins, keeping their order.
-func normalizeOrigins(values []string) ([]string, error) {
-	origins := make([]string, 0, len(values))
-	for _, value := range values {
-		origin, ok := normalizeOrigin(value)
-		if !ok {
-			return nil, fmt.Errorf("Invalid origin %q: use an exact origin such as https://example.com, with no path, wildcard or credentials.", value)
-		}
-		if !slices.Contains(origins, origin) {
-			origins = append(origins, origin)
-		}
-	}
-	if len(origins) > maxWebFormOrigins {
-		return nil, fmt.Errorf("At most %d origins are allowed.", maxWebFormOrigins)
-	}
-	return origins, nil
-}
-
-func normalizeOrigin(value string) (string, bool) {
-	if value == "" || strings.ContainsAny(value, "*\\ \t\r\n") {
-		return "", false
-	}
-	parsed, err := url.Parse(value)
-	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" ||
-		parsed.Fragment != "" || parsed.Opaque != "" || parsed.ForceQuery || strings.HasSuffix(value, "/") {
-		return "", false
-	}
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return "", false
-	}
-	return scheme + "://" + strings.ToLower(parsed.Host), true
-}
+func normalizeOrigins(values []string) ([]string, error) { return webform.NormalizeOrigins(values) }
 
 // allowedOrigin reports whether the request's Origin header is on the workspace's list.
 func allowedOrigin(request *http.Request, origins []string) (string, bool) {
@@ -215,9 +184,9 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 			"code": "validation_failed", "message": "Check the highlighted fields.", "fields": fields})})
 		return
 	}
-	err = a.store.SubmitWebForm(request.Context(), workspaceID, submission)
+	err = a.submitToWebForm(request, workspaceID, submission)
 	switch {
-	case errors.Is(err, domain.ErrWebFormClosed):
+	case errors.Is(err, domain.ErrWebFormClosed), errors.Is(err, channels.ErrChannelOff), errors.Is(err, domain.ErrMailboxClosed):
 		header.Del("Access-Control-Allow-Origin")
 		writeFormNotFound(response)
 	case errors.Is(err, store.ErrRateLimited):
@@ -255,4 +224,22 @@ func validateWebForm(emailAddress, message, source string) (store.WebFormSubmiss
 		return store.WebFormSubmission{}, fields
 	}
 	return store.WebFormSubmission{Email: strings.ToLower(emailAddress), Message: strings.TrimSpace(message), Source: source}, nil
+}
+
+// submitToWebForm hands a submission to the web form channel. A form turned off or a workspace locked
+// since OpenWebForm answers like a form that does not exist.
+func (a *API) submitToWebForm(request *http.Request, workspaceID string, submission store.WebFormSubmission) error {
+	channel, found, err := a.store.LiveChannelOfType(request.Context(), workspaceID, webform.Type)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return domain.ErrWebFormClosed
+	}
+	body, err := json.Marshal(webform.Submission{Email: submission.Email, Message: submission.Message, Source: submission.Source})
+	if err != nil {
+		return err
+	}
+	_, err = a.pipeline.Receive(request.Context(), channel, []channels.Raw{{JSON: body, ReceivedAt: a.now()}})
+	return err
 }

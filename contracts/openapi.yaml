@@ -6594,8 +6594,13 @@ components:
       type: object
       required: [status, reason, conversation_id, message_id, authentication]
       properties:
-        status: {type: string, enum: [created, threaded, duplicate, dropped]}
-        reason: {type: [string, 'null'], description: 'Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient).'}
+        status:
+          type: string
+          enum: [created, threaded, duplicate, dropped, held]
+          description: >-
+            `held`: the email channel is off. The message is kept in the channel (its original is stored)
+            until an admin opens it as a conversation or discards it; nothing is opened meanwhile.
+        reason: {type: [string, 'null'], description: 'Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); why it was held: channel_off.'}
         conversation_id: {type: [string, 'null'], format: uuid}
         message_id: {type: [string, 'null'], format: uuid}
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}

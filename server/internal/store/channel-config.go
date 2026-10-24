@@ -106,7 +106,7 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	if err != nil {
 		return channels.Channel{}, err
 	}
-	change, err := adapter.Config().Validate(ctx, tx, nil, input.Config)
+	change, err := adapter.Config().Validate(ctx, tx, workspaceID, nil, input.Config)
 	if err != nil {
 		return channels.Channel{}, err
 	}
@@ -206,7 +206,7 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 	}
 	var change channels.ConfigChange
 	if input.Config != nil {
-		if change, err = adapter.Config().Validate(ctx, tx, &current, input.Config); err != nil {
+		if change, err = adapter.Config().Validate(ctx, tx, workspaceID, &current, input.Config); err != nil {
 			return channels.Channel{}, err
 		}
 		if change.ExternalAccount != nil {
@@ -344,4 +344,16 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 		return public, fmt.Errorf("count channel messages: %w", err)
 	}
 	return public, nil
+}
+
+// AddChannelRow adds the live channel of a singleton type with its history entry, for a writer that
+// fills the type's own table itself in the same transaction (a new workspace's hosted email). Every
+// other channel is added with CreateChannel.
+func AddChannelRow(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type, name string, detail map[string]any) (string, error) {
+	var channel channels.Channel
+	if err := tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,singleton,name) VALUES($1,$2,true,$3) RETURNING id::text,workspace_id::text,type,name`,
+		workspaceID, string(kind), name).Scan(&channel.ID, &channel.WorkspaceID, &channel.Type, &channel.Name); err != nil {
+		return "", channelWriteError(err)
+	}
+	return channel.ID, insertChannelEvent(ctx, tx, channel, "added", ChannelActor{}, detail)
 }

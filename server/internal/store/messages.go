@@ -206,11 +206,7 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		return domain.Message{}, err
 	}
 	if kind == "outgoing" {
-		enqueue := s.enqueueReply
-		if s.channels != nil {
-			enqueue = s.enqueueChannelReply
-		}
-		if err := enqueue(ctx, tx, workspaceID, conversationID, messageID, cc); err != nil {
+		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID, cc); err != nil {
 			return domain.Message{}, err
 		}
 	}

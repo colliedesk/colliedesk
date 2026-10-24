@@ -215,7 +215,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	if limits.PerSender > 0 {
 		var recent int
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND sender_key=$3
-			AND received_at>$4 AND (state='held' OR (state='processed' AND message_id IS NOT NULL)) AND NOT (id::text=ANY($5))`,
+			AND received_at>$4 AND (state='held' OR (state='processed' AND message_id IS NOT NULL)) AND NOT (id::text=ANY(COALESCE($5::text[],'{}')))`,
 			workspaceID, channel.ID, senderKey, now.Add(-limits.Window()), request.EventIDs).Scan(&recent); err != nil {
 			return result, fmt.Errorf("check inbound rate: %w", err)
 		}
@@ -730,7 +730,7 @@ func (s *Store) joinsWithoutCommand(ctx context.Context, tx pgx.Tx, channel chan
 	if in.Aggregate != nil {
 		var collecting bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='pending'
-			AND aggregate_key=$3 AND NOT (id::text=ANY($4)))`, channel.WorkspaceID, channel.ID, in.Aggregate.Key, request.EventIDs).Scan(&collecting); err != nil {
+			AND aggregate_key=$3 AND NOT (id::text=ANY(COALESCE($4::text[],'{}'))))`, channel.WorkspaceID, channel.ID, in.Aggregate.Key, request.EventIDs).Scan(&collecting); err != nil {
 			return false, fmt.Errorf("find collected messages: %w", err)
 		}
 		if collecting {

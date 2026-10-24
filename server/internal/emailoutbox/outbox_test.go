@@ -44,7 +44,7 @@ func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fix
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := store.New(pool).WithOutbound(store.OutboundPolicy{Enabled: true, GmailEnabled: true})
+	st := channelStore(t, pool).WithOutbound(store.OutboundPolicy{Enabled: true, GmailEnabled: true})
 	if _, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@"+domainName, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fix
 		t.Fatal(err)
 	}
 	parsed.Platform = true // customer mail arrives through the platform forwarder
-	result, err := st.IngestEmail(ctx, workspace.ID, parsed, time.Now().UTC(), nil)
+	result, err := ingestEmail(t, ctx, st, workspace.ID, parsed)
 	if err != nil || result.ConversationID == nil {
 		t.Fatalf("ingest: %+v %v", result, err)
 	}

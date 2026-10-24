@@ -133,7 +133,7 @@ func NewLoopback(kind channels.Type, mode channels.IngestMode) *Loopback {
 }
 
 func (l *Loopback) Definition() channels.Definition {
-	return channels.Definition{Type: l.Type, Name: "Loopback", Capabilities: []string{"threads", "attachments_in", "attachments_out"},
+	return channels.Definition{Type: l.Type, Identified: true, Name: "Loopback", Capabilities: []string{"threads", "attachments_in", "attachments_out"},
 		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: []string{"user", "group"},
 		FileLimits: channels.FileLimits{PerFile: 1000, PerEvent: 5000},
 		Routes:     []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
@@ -187,7 +187,7 @@ func (l *Loopback) webhook(kit channels.RouteKit) http.HandlerFunc {
 // loopbackConfig keeps nothing of its own: the account is the channel's external account.
 type loopbackConfig struct{}
 
-func (loopbackConfig) Validate(_ context.Context, _ pgx.Tx, current *channels.Channel, patch json.RawMessage) (channels.ConfigChange, error) {
+func (loopbackConfig) Validate(_ context.Context, _ pgx.Tx, _ string, current *channels.Channel, patch json.RawMessage) (channels.ConfigChange, error) {
 	var config struct {
 		Account *string `json:"account"`
 	}

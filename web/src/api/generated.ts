@@ -4490,9 +4490,12 @@ export interface components {
             connected_at: string;
         };
         InboundEmailResult: {
-            /** @enum {string} */
-            status: "created" | "threaded" | "duplicate" | "dropped";
-            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient). */
+            /**
+             * @description `held`: the email channel is off. The message is kept in the channel (its original is stored) until an admin opens it as a conversation or discards it; nothing is opened meanwhile.
+             * @enum {string}
+             */
+            status: "created" | "threaded" | "duplicate" | "dropped" | "held";
+            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); why it was held: channel_off. */
             reason: string | null;
             /** Format: uuid */
             conversation_id: string | null;

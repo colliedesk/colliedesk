@@ -2,6 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	channelemail "github.com/colliedesk/colliedesk/server/internal/channels/email"
+	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
+	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"io"
 	"net"
 	"net/http"
@@ -146,6 +150,8 @@ type API struct {
 	auth    *auth.Service
 	cloud   *cloudauth.Verifier
 	store   *store.Store
+	// pipeline runs what channels receive into the store (internal/channels).
+	pipeline *pipeline.Pipeline
 	// exports admits workspace exports; see exportLimiter.
 	exports     *exportLimiter
 	exportLinks *exportLinks
@@ -205,17 +211,30 @@ func (s *Server) AI() *ai.Service { return s.api.ai }
 // does nothing when billing is off.
 func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refreshFounding(ctx) }
 
-func New(pool *pgxpool.Pool, config Config) *Server {
-	config.Origin = strings.TrimRight(config.Origin, "/")
-	if config.LookupTXT == nil {
-		config.LookupTXT = net.DefaultResolver.LookupTXT
-	}
-	outbound := store.OutboundPolicy{
+// Outbound is the outbound email policy of a configuration: whether replies can be emailed now and
+// from which identity.
+func Outbound(config Config) store.OutboundPolicy {
+	return store.OutboundPolicy{
 		GmailEnabled:          config.Google.Enabled(),
 		Enabled:               config.Email.SMTP.Configured(),
 		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
 		FallbackDomain:        config.Email.MailFromDomain,
 	}
+}
+
+// Channels is the registry of channel types a configuration runs.
+func Channels(config Config, outbound store.OutboundPolicy) *channels.Registry {
+	return registry.New(registry.Config{Email: channelemail.Config{TrustedAuthServID: config.Email.TrustedAuthServID,
+		HostedMailDomain: config.Email.HostedMailDomain, PlatformForwarding: config.Email.PlatformInboundSecret != "",
+		Cloud: config.Billing.Enabled(), Outbound: outbound}})
+}
+
+func New(pool *pgxpool.Pool, config Config) *Server {
+	config.Origin = strings.TrimRight(config.Origin, "/")
+	if config.LookupTXT == nil {
+		config.LookupTXT = net.DefaultResolver.LookupTXT
+	}
+	outbound := Outbound(config)
 	requestPool := config.RequestPool
 	if requestPool == nil {
 		requestPool = pool
@@ -231,8 +250,10 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
-		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
-		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
+		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
+		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
+			WithChannels(Channels(config, outbound)).WithSealKeys(config.Google.Keys)}
+	api.pipeline = pipeline.New(api.store, clock)
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	importKeys := config.ImportKeys
 	if importKeys == nil {

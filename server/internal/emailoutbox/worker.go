@@ -1,5 +1,6 @@
-// Package emailoutbox sends queued replies through SMTP, or through the workspace's connected Gmail
-// account, with retries and backoff.
+// Package emailoutbox is the email channel's sender: it sends queued replies through SMTP, or through
+// the workspace's connected Gmail account. The shared outbox worker (channels/outbox) claims, retries
+// and backs off; Worker runs it with this sender, for the server and the tests of email delivery.
 package emailoutbox
 
 import (
@@ -16,18 +17,19 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 )
 
 const (
 	defaultMaxAttempts = 8
 	defaultLease       = 5 * time.Minute
 	defaultBatchSize   = 20
-	firstBackoff       = 30 * time.Second
-	maxBackoff         = time.Hour
 	maxErrorLength     = 500
 	defaultHourlyLimit = 300
 	limitDeferral      = 10 * time.Minute
@@ -93,107 +95,96 @@ func New(st *store.Store, sender Sender, options Options) *Worker {
 }
 
 // Backoff is the wait after the given failed attempt: 30s, 1m, 2m, ... capped at one hour.
-func Backoff(attempt int) time.Duration {
-	delay := firstBackoff
-	for range max(attempt-1, 0) {
-		delay *= 2
-		if delay >= maxBackoff {
-			return maxBackoff
-		}
-	}
-	return delay
+func Backoff(attempt int) time.Duration { return outbox.Backoff(attempt) }
+
+// worker is the shared outbox worker that sends email through w.
+func (w *Worker) worker() *outbox.Worker {
+	return outbox.New(w.store, outbox.Options{Now: w.options.Now, MaxAttempts: w.options.MaxAttempts, Lease: w.options.Lease,
+		BatchSize: w.options.BatchSize, Logger: w.options.Logger, Senders: map[channels.Type]channels.OutboundPart{domain.ChannelEmail: w}})
 }
 
-// ProcessDue sends every due delivery once and returns how many were attempted. It claims one row at
-// a time so a lease never has to cover more than one send.
-func (w *Worker) ProcessDue(ctx context.Context) (int, error) {
-	var errs []error
-	attempted := 0
-	for attempted < w.options.BatchSize {
-		items, err := w.store.ClaimDueDeliveries(ctx, w.options.Now(), 1, w.options.Lease)
-		if err != nil {
-			errs = append(errs, err)
-		}
-		if len(items) == 0 {
-			if err == nil {
-				break
-			}
-			attempted++
-			continue
-		}
-		attempted++
-		if err := w.deliver(ctx, items[0]); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return attempted, errors.Join(errs...)
-}
+// ProcessDue sends every due delivery once and returns how many were attempted.
+func (w *Worker) ProcessDue(ctx context.Context) (int, error) { return w.worker().ProcessDue(ctx) }
 
 // Run processes the outbox every interval until the context ends.
-func (w *Worker) Run(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		if _, err := w.ProcessDue(ctx); err != nil && ctx.Err() == nil {
-			w.options.Logger.Error("email outbox", "error", err)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
+func (w *Worker) Run(ctx context.Context, interval time.Duration) { w.worker().Run(ctx, interval) }
+
+// emailHost is what the email channel needs of the store that queues a reply.
+type emailHost interface {
+	PrepareEmailReply(ctx context.Context, tx pgx.Tx, request channels.PrepareRequest) (channels.Prepared, error)
 }
 
-func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
-	if item.Attempts > w.options.MaxAttempts {
-		return w.store.MarkDeliveryFailed(ctx, item, fmt.Sprintf("Gave up after %d attempts.", w.options.MaxAttempts))
+// Prepare fixes the reply's Message-ID and reply token and applies the trial's rules, in the
+// transaction that stores it.
+func (w *Worker) Prepare(ctx context.Context, tx pgx.Tx, request channels.PrepareRequest) (channels.Prepared, error) {
+	host, ok := request.Host.(emailHost)
+	if !ok {
+		return channels.Prepared{}, errors.New("the email channel needs the store to queue a reply")
 	}
+	return host.PrepareEmailReply(ctx, tx, request)
+}
+
+// Send sends one claimed reply through SMTP or Gmail.
+func (w *Worker) Send(ctx context.Context, out channels.Outbound, kit channels.SendKit) channels.SendResult {
+	sender := *w
+	if host, ok := kit.Host().(*store.Store); ok {
+		sender.store = host
+	}
+	item, err := sender.store.EmailDelivery(ctx, out.WorkspaceID, out.DeliveryID, out.Attempt)
+	if err != nil {
+		sender.options.Logger.Warn("load email delivery", "workspace", out.WorkspaceID, "error", err)
+		return channels.Failed("The reply could not be loaded for sending.")
+	}
+	return sender.deliver(ctx, item)
+}
+
+func (w *Worker) deliver(ctx context.Context, item store.Delivery) channels.SendResult {
 	if item.SupportAddress == "" {
-		return w.store.MarkDeliveryFailed(ctx, item, "The email channel is not connected.")
+		return channels.Failed("The email channel is not connected.")
 	}
 	if item.EmailPaused {
-		return w.store.DeferDeliveryForPause(ctx, item, w.options.Now().Add(pauseDeferral), domain.EmailPausedDeliveryNote)
+		result := channels.Defer(w.options.Now().Add(pauseDeferral), domain.EmailPausedDeliveryNote)
+		result.HeldByPause = true
+		return result
 	}
 	sent, err := w.store.CountSentSince(ctx, item.WorkspaceID, w.options.Now().Add(-time.Hour))
 	if err != nil {
-		return err
+		return channels.Retry(truncate(err.Error()))
 	}
 	if sent >= w.options.HourlyLimit {
-		return w.store.DeferDelivery(ctx, item, w.options.Now().Add(limitDeferral),
+		return channels.Defer(w.options.Now().Add(limitDeferral),
 			fmt.Sprintf("Waiting: this workspace reached its hourly limit of %d emailed replies.", w.options.HourlyLimit))
 	}
 	if item.Transport == transportGmail {
 		return w.deliverGmail(ctx, item)
 	}
 	if w.sender == nil {
-		return w.store.MarkDeliveryFailed(ctx, item, "Outgoing email is not configured on this server. Ask the administrator to set SMTP_HOST.")
+		return channels.Failed("Outgoing email is not configured on this server. Ask the administrator to set SMTP_HOST.")
 	}
 	from, envelope, ok := w.identity(item)
 	if !ok {
-		return w.store.MarkDeliveryFailed(ctx, item, "Verify the support address domain in Settings before replies can be emailed.")
+		return channels.Failed("Verify the support address domain in Settings before replies can be emailed.")
 	}
 	files, err := w.loadFiles(ctx, item)
 	if errors.Is(err, errFileMissing) {
-		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
+		return channels.Failed(truncate(err.Error()))
 	}
 	if err != nil {
-		return w.store.MarkDeliveryRetry(ctx, item, w.options.Now().Add(Backoff(item.Attempts)), truncate(err.Error()))
+		return channels.Retry(truncate(err.Error()))
 	}
 	copies, unusable := usableCopies(item.CC)
 	message, err := w.compose(item, from, copies, files)
 	if err != nil {
-		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
+		return channels.Failed(truncate(err.Error()))
 	}
 	refused, sendErr := w.sender.SendCopying(ctx, envelope, item.ContactEmail, copies, message)
 	switch {
 	case sendErr == nil:
-		return w.store.MarkDeliverySent(ctx, item, w.options.Now(), truncate(missedCopies(append(unusable, refused...))))
-	case email.IsPermanent(sendErr) || item.Attempts >= w.options.MaxAttempts:
-		w.options.Logger.Warn("email delivery failed", "workspace", item.WorkspaceID, "message", item.MessageID, "attempts", item.Attempts, "error", sendErr)
-		return w.store.MarkDeliveryFailed(ctx, item, truncate(sendErr.Error()))
+		return channels.Sent(truncate(missedCopies(append(unusable, refused...))))
+	case email.IsPermanent(sendErr):
+		return channels.Failed(truncate(sendErr.Error()))
 	default:
-		return w.store.MarkDeliveryRetry(ctx, item, w.options.Now().Add(Backoff(item.Attempts)), truncate(sendErr.Error()))
+		return channels.Retry(truncate(sendErr.Error()))
 	}
 }
 

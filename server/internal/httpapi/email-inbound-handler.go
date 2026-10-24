@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -13,6 +11,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	channelemail "github.com/colliedesk/colliedesk/server/internal/channels/email"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -83,7 +83,15 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeInternalError(response, errors.New("attachment storage is not configured; inbound mail cannot be kept"))
 		return
 	}
-	result, err := a.store.IngestEmail(request.Context(), workspaceID, parsed, a.now(), a.stashEmail(workspaceID, raw, parsed.Files))
+	channel, found, err := a.store.LiveChannelOfType(request.Context(), workspaceID, channelemail.Type)
+	if err == nil && !found {
+		err = store.ErrEmailChannelMissing
+	}
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	results, err := a.pipeline.Receive(request.Context(), channel, []channels.Raw{{Parsed: parsed, Body: raw, ReceivedAt: a.now()}})
 	if errors.Is(err, store.ErrRateLimited) {
 		response.Header().Set("Retry-After", strconv.Itoa(int(store.InboundRateWindow.Seconds())))
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many messages from this sender. Retry later.")
@@ -100,7 +108,9 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeInternalError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, result)
+	outcome := results[0]
+	writeJSON(response, http.StatusOK, store.InboundResult{Status: outcome.Status, Reason: outcome.Reason, ConversationID: outcome.ConversationID,
+		MessageID: outcome.MessageID, Authentication: parsed.Authentication})
 }
 
 // isPlatformSecret reports whether the secret is the server-wide secret of the MAIL_FROM_DOMAIN forwarder.
@@ -142,40 +152,6 @@ func (a *API) replyWorkspace(ctx context.Context, recipients []string) (string, 
 	}
 	workspaceID, _, err := a.store.WorkspaceForReplyToken(ctx, token)
 	return workspaceID, err
-}
-
-// stashEmail writes the gzip-compressed raw message and every file of the message to attachment storage.
-// Objects are content-addressed and may be shared with other messages, so a failure never deletes them;
-// the forwarder's retry writes the same keys and references them.
-func (a *API) stashEmail(workspaceID string, raw []byte, files []email.File) store.StashFunc {
-	return func(ctx context.Context) ([]store.EmailFile, error) {
-		var compressed bytes.Buffer
-		writer := gzip.NewWriter(&compressed)
-		if _, err := writer.Write(raw); err != nil {
-			return nil, fmt.Errorf("compress original message: %w", err)
-		}
-		if err := writer.Close(); err != nil {
-			return nil, fmt.Errorf("compress original message: %w", err)
-		}
-		stored := make([]store.EmailFile, 0, len(files)+1)
-		put := func(filename, contentType string, data []byte, original, inline bool) error {
-			object, err := a.config.Attachments.Put(ctx, workspaceID, bytes.NewReader(data), int64(len(data)))
-			if err != nil {
-				return err
-			}
-			stored = append(stored, store.EmailFile{Filename: filename, ContentType: contentType, Original: original, Inline: inline, Object: object})
-			return nil
-		}
-		if err := put("original-message.eml.gz", "application/gzip", compressed.Bytes(), true, false); err != nil {
-			return nil, err
-		}
-		for _, file := range files {
-			if err := put(file.Filename, file.ContentType, file.Data, false, file.Embedded); err != nil {
-				return nil, err
-			}
-		}
-		return stored, nil
-	}
 }
 
 // hostedWorkspace returns the workspace that receives mail at a hosted address, or "" when no workspace

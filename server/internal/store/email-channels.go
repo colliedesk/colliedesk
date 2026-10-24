@@ -62,53 +62,37 @@ func (s *Store) GetEmailChannel(ctx context.Context, workspaceID string) (*domai
 	return &channel, nil
 }
 
-// UpsertEmailChannel connects email or changes the support address; an existing secret is kept.
-// A changed address loses its domain verification and gets a new verification token. A changed domain
-// also loses the provider domain and its records; the same domain keeps them. senderName, when given,
-// replaces the name customers see; a new channel without one starts with the workspace name.
+// UpsertEmailChannel connects email or changes the support address, through the channel frame: a
+// workspace without email gets an email channel, one with it changes its configuration. See
+// SaveEmailChannel for what changing the address keeps.
 func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddress string, senderName *string) (domain.EmailChannel, error) {
-	token, err := email.NewToken()
+	return s.UpsertEmailChannelAs(ctx, workspaceID, supportAddress, senderName, ChannelActor{})
+}
+
+// UpsertEmailChannelAs is UpsertEmailChannel recording who made the change.
+func (s *Store) UpsertEmailChannelAs(ctx context.Context, workspaceID, supportAddress string, senderName *string, actor ChannelActor) (domain.EmailChannel, error) {
+	config := map[string]any{"support_address": supportAddress}
+	if senderName != nil {
+		config["sender_name"] = *senderName
+	}
+	patch, err := json.Marshal(config)
 	if err != nil {
 		return domain.EmailChannel{}, err
 	}
 	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
-		sender := ""
-		if senderName != nil {
-			sender = *senderName
-		} else {
-			var name, slug string
-			if err := tx.QueryRow(ctx, `SELECT name,slug FROM workspaces WHERE id=$1`, workspaceID).Scan(&name, &slug); err != nil {
-				return domain.EmailChannel{}, err
-			}
-			sender = domain.DefaultSenderName(name, slug)
-		}
-		// The provider domain of the old address is no longer used when the domain changes.
-		if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
-			SELECT workspace_id,provider_domain_id FROM email_channels
-			WHERE workspace_id=$1 AND provider_domain_id IS NOT NULL AND split_part(support_address,'@',2)<>split_part(lower($2),'@',2)
-			ON CONFLICT DO NOTHING`, workspaceID, supportAddress); err != nil {
+		live, found, err := s.liveChannelOfType(ctx, tx, workspaceID, domain.ChannelEmail)
+		if err != nil {
 			return domain.EmailChannel{}, err
 		}
-		return scanChannel(tx.QueryRow(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name)
-			VALUES($1,lower($2),$3,$4)
-			ON CONFLICT(workspace_id) DO UPDATE SET
-				sender_name=CASE WHEN $5 THEN EXCLUDED.sender_name ELSE email_channels.sender_name END,
-				domain_verification_token=CASE WHEN email_channels.support_address=EXCLUDED.support_address
-					THEN email_channels.domain_verification_token ELSE EXCLUDED.domain_verification_token END,
-				domain_verified_at=CASE WHEN email_channels.support_address=EXCLUDED.support_address
-					THEN email_channels.domain_verified_at END,
-				provider_domain_id=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
-					THEN email_channels.provider_domain_id END,
-				provider_domain_records=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
-					THEN email_channels.provider_domain_records ELSE '[]'::jsonb END,
-				provider_domain_created_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
-					THEN email_channels.provider_domain_created_at END,
-				provider_domain_expired_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
-					THEN email_channels.provider_domain_expired_at END,
-				provider_domain_first_verified_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
-					THEN email_channels.provider_domain_first_verified_at END,
-				support_address=EXCLUDED.support_address,updated_at=now()
-			RETURNING `+channelColumns, workspaceID, supportAddress, token, sender, senderName != nil))
+		if found {
+			_, err = s.UpdateChannelTx(ctx, tx, workspaceID, live.ID, ChannelInput{Config: patch}, actor)
+		} else {
+			_, err = s.CreateChannelTx(ctx, tx, workspaceID, domain.ChannelEmail, ChannelInput{Config: patch}, actor)
+		}
+		if err != nil {
+			return domain.EmailChannel{}, err
+		}
+		return scanChannel(tx.QueryRow(ctx, `SELECT `+channelColumns+` FROM email_channels WHERE workspace_id=$1`, workspaceID))
 	})
 	if err != nil {
 		return domain.EmailChannel{}, fmt.Errorf("save email channel: %w", err)
@@ -116,14 +100,114 @@ func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddr
 	return channel, nil
 }
 
-// SetEmailSenderName changes only the name customers see. The address, its domain verification and the
-// provider domain stay. ErrEmailChannelMissing when email is not connected.
-func (s *Store) SetEmailSenderName(ctx context.Context, workspaceID, senderName string) (domain.EmailChannel, error) {
-	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
-		return scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET sender_name=$2,updated_at=now() WHERE workspace_id=$1 RETURNING `+channelColumns,
-			workspaceID, senderName))
-	})
+// EmailChannelTx reads the workspace's email settings inside tx; nil when email is not connected.
+func EmailChannelTx(ctx context.Context, tx pgx.Tx, workspaceID string) (*domain.EmailChannel, error) {
+	channel, err := scanChannel(tx.QueryRow(ctx, `SELECT `+channelColumns+` FROM email_channels WHERE workspace_id=$1`, workspaceID))
 	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get email channel: %w", err)
+	}
+	return &channel, nil
+}
+
+// SaveEmailChannel writes the email settings of a channel: a new support address, or a changed one.
+// An existing secret is kept. A changed address loses its domain verification and gets a new
+// verification token. A changed domain also loses the provider domain and its records; the same
+// domain keeps them. senderName, when given, replaces the name customers see; a new channel without
+// one starts with the workspace name.
+func SaveEmailChannel(ctx context.Context, tx pgx.Tx, workspaceID, channelID, supportAddress string, senderName *string) error {
+	token, err := email.NewToken()
+	if err != nil {
+		return err
+	}
+	sender := ""
+	if senderName != nil {
+		sender = *senderName
+	} else {
+		var name, slug string
+		if err := tx.QueryRow(ctx, `SELECT name,slug FROM workspaces WHERE id=$1`, workspaceID).Scan(&name, &slug); err != nil {
+			return err
+		}
+		sender = domain.DefaultSenderName(name, slug)
+	}
+	// The provider domain of the old address is no longer used when the domain changes.
+	if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
+		SELECT workspace_id,provider_domain_id FROM email_channels
+		WHERE workspace_id=$1 AND provider_domain_id IS NOT NULL AND split_part(support_address,'@',2)<>split_part(lower($2),'@',2)
+		ON CONFLICT DO NOTHING`, workspaceID, supportAddress); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name,channel_id)
+		VALUES($1,lower($2),$3,$4,$6)
+		ON CONFLICT(workspace_id) DO UPDATE SET
+			sender_name=CASE WHEN $5 THEN EXCLUDED.sender_name ELSE email_channels.sender_name END,
+			domain_verification_token=CASE WHEN email_channels.support_address=EXCLUDED.support_address
+				THEN email_channels.domain_verification_token ELSE EXCLUDED.domain_verification_token END,
+			domain_verified_at=CASE WHEN email_channels.support_address=EXCLUDED.support_address
+				THEN email_channels.domain_verified_at END,
+			provider_domain_id=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+				THEN email_channels.provider_domain_id END,
+			provider_domain_records=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+				THEN email_channels.provider_domain_records ELSE '[]'::jsonb END,
+			provider_domain_created_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+				THEN email_channels.provider_domain_created_at END,
+			provider_domain_expired_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+				THEN email_channels.provider_domain_expired_at END,
+			provider_domain_first_verified_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+				THEN email_channels.provider_domain_first_verified_at END,
+			support_address=EXCLUDED.support_address,channel_id=EXCLUDED.channel_id,updated_at=now()`,
+		workspaceID, supportAddress, token, sender, senderName != nil, channelID)
+	return err
+}
+
+// SetEmailSenderNameTx changes only the name customers see, inside tx. ErrEmailChannelMissing when
+// email is not connected.
+func SetEmailSenderNameTx(ctx context.Context, tx pgx.Tx, workspaceID, senderName string) error {
+	result, err := tx.Exec(ctx, `UPDATE email_channels SET sender_name=$2,updated_at=now() WHERE workspace_id=$1`, workspaceID, senderName)
+	if err != nil {
+		return fmt.Errorf("save sender name: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrEmailChannelMissing
+	}
+	return nil
+}
+
+// RemoveEmailChannel deletes the email settings inside tx. The provider domain is queued for deletion
+// at the provider; conversations, messages and delivery history stay.
+func RemoveEmailChannel(ctx context.Context, tx pgx.Tx, workspaceID string) error {
+	if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
+		SELECT workspace_id,provider_domain_id FROM email_channels WHERE workspace_id=$1 AND provider_domain_id IS NOT NULL
+		ON CONFLICT DO NOTHING`, workspaceID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `DELETE FROM email_channels WHERE workspace_id=$1`, workspaceID)
+	return err
+}
+
+// SetEmailSenderName changes only the name customers see, through the channel frame. The address,
+// its domain verification and the provider domain stay. ErrEmailChannelMissing when email is not connected.
+func (s *Store) SetEmailSenderName(ctx context.Context, workspaceID, senderName string) (domain.EmailChannel, error) {
+	patch, err := json.Marshal(map[string]string{"sender_name": senderName})
+	if err != nil {
+		return domain.EmailChannel{}, err
+	}
+	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
+		live, found, err := s.liveChannelOfType(ctx, tx, workspaceID, domain.ChannelEmail)
+		if err != nil {
+			return domain.EmailChannel{}, err
+		}
+		if !found {
+			return domain.EmailChannel{}, ErrEmailChannelMissing
+		}
+		if _, err := s.UpdateChannelTx(ctx, tx, workspaceID, live.ID, ChannelInput{Config: patch}, ChannelActor{}); err != nil {
+			return domain.EmailChannel{}, err
+		}
+		return scanChannel(tx.QueryRow(ctx, `SELECT `+channelColumns+` FROM email_channels WHERE workspace_id=$1`, workspaceID))
+	})
+	if errors.Is(err, ErrEmailChannelMissing) || errors.Is(err, pgx.ErrNoRows) {
 		return domain.EmailChannel{}, ErrEmailChannelMissing
 	}
 	if err != nil {
@@ -240,17 +324,20 @@ func (s *Store) SaveProviderDomain(ctx context.Context, workspaceID, supportAddr
 	return channel, nil
 }
 
-// DeleteEmailChannel disconnects email. Conversations, messages and delivery history stay. The provider
-// domain is queued for deletion at the provider.
+// DeleteEmailChannel disconnects email: its channel is removed through the frame. Conversations,
+// messages and delivery history stay. The provider domain is queued for deletion at the provider.
 func (s *Store) DeleteEmailChannel(ctx context.Context, workspaceID string) (bool, error) {
+	return s.DeleteEmailChannelAs(ctx, workspaceID, ChannelActor{})
+}
+
+// DeleteEmailChannelAs is DeleteEmailChannel recording who removed it.
+func (s *Store) DeleteEmailChannelAs(ctx context.Context, workspaceID string, actor ChannelActor) (bool, error) {
 	deleted, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
-		if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
-			SELECT workspace_id,provider_domain_id FROM email_channels WHERE workspace_id=$1 AND provider_domain_id IS NOT NULL
-			ON CONFLICT DO NOTHING`, workspaceID); err != nil {
+		live, found, err := s.liveChannelOfType(ctx, tx, workspaceID, domain.ChannelEmail)
+		if err != nil || !found {
 			return false, err
 		}
-		result, err := tx.Exec(ctx, `DELETE FROM email_channels WHERE workspace_id=$1`, workspaceID)
-		return result.RowsAffected() == 1, err
+		return true, s.RemoveChannelTx(ctx, tx, workspaceID, live.ID, actor)
 	})
 	if err != nil {
 		return false, fmt.Errorf("delete email channel: %w", err)

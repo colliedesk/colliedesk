@@ -18,6 +18,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -99,7 +100,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{pool: pool, db: database.New(pool), store: store.New(pool), disk: local, root: root, mailer: &recordingMailer{}, polar: &fakePolar{paid: map[string]bool{}}}
+	e := &env{pool: pool, db: database.New(pool), store: store.New(pool).WithChannels(registry.New(registry.Config{})), disk: local, root: root, mailer: &recordingMailer{}, polar: &fakePolar{paid: map[string]bool{}}}
 	e.service = e.serviceWith(nil)
 	return e
 }

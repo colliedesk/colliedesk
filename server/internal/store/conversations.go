@@ -123,11 +123,10 @@ func (s *Store) StartConversation(ctx context.Context, workspaceID string, in Ne
 	} else if err := checkContactNotMerged(ctx, tx, workspaceID, contactID); err != nil {
 		return domain.Conversation{}, err
 	}
-	var channel bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM email_channels WHERE workspace_id=$1)`, workspaceID).Scan(&channel); err != nil {
-		return domain.Conversation{}, fmt.Errorf("load email channel: %w", err)
-	}
-	if !channel {
+	// The reply goes out through the channel that carries a team member's conversations.
+	if carrier, err := s.otherRepliesCarrier(ctx, tx, workspaceID); err != nil {
+		return domain.Conversation{}, err
+	} else if carrier == nil {
 		return domain.Conversation{}, domain.ErrEmailChannelMissing
 	}
 	var id string
