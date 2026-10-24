@@ -409,4 +409,3 @@ func (s *Store) CountChannelSentSince(ctx context.Context, workspaceID string, k
 		return count, err
 	})
 }
-
