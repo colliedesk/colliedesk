@@ -301,15 +301,20 @@ type OutboxClaim struct {
 // ClaimDueOutbox leases due rows of every channel type, counts the attempt and stamps a claim token
 // that every finish must present. A lease that expires without a result makes the row due again:
 // delivery is at least once, deduplicated by the id Prepare fixed.
-func (s *Store) ClaimDueOutbox(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]OutboxClaim, error) {
+func (s *Store) ClaimDueOutbox(ctx context.Context, now time.Time, limit int, lease time.Duration, skip ...channels.Type) ([]OutboxClaim, error) {
+	skipped := make([]string, len(skip))
+	for i, kind := range skip {
+		skipped[i] = string(kind)
+	}
 	var claimed []OutboxClaim
 	err := s.db.Privileged(ctx, database.PrivilegeOutboxClaim, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `WITH due AS (
 				SELECT id FROM channel_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
+					AND NOT (channel_type=ANY($4))
 				ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
 			UPDATE channel_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
 			RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts,o.channel_type,COALESCE(o.channel_id::text,'')`,
-			now, limit, now.Add(lease))
+			now, limit, now.Add(lease), skipped)
 		if err != nil {
 			return fmt.Errorf("claim deliveries: %w", err)
 		}

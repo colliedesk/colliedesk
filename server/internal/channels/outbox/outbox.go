@@ -31,6 +31,9 @@ type Options struct {
 	Logger      *slog.Logger
 	// Senders replace the registry's sender of a type (a test's relay, a facade's own options).
 	Senders map[channels.Type]channels.OutboundPart
+	// Skip leaves the replies of these types to another worker (a server that cannot send email
+	// leaves email to the servers that can).
+	Skip []channels.Type
 }
 
 // Worker drains the outbox.
@@ -77,7 +80,7 @@ func (w *Worker) ProcessDue(ctx context.Context) (int, error) {
 	var errs []error
 	attempted := 0
 	for attempted < w.options.BatchSize {
-		items, err := w.store.ClaimDueOutbox(ctx, w.options.Now(), 1, w.options.Lease)
+		items, err := w.store.ClaimDueOutbox(ctx, w.options.Now(), 1, w.options.Lease, w.options.Skip...)
 		if err != nil {
 			errs = append(errs, err)
 		}

@@ -4,6 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	channelemail "github.com/colliedesk/colliedesk/server/internal/channels/email"
+	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"io"
 	"log/slog"
@@ -129,9 +132,15 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if emailConfig.SMTP.Configured() {
 		sender = email.SMTPSender{Config: emailConfig.SMTP}
 	}
-	worker := emailoutbox.New(channelStore, sender,
-		emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig})
-	go worker.Run(ctx, 5*time.Second)
+	if emailConfig.SMTP.Configured() || googleConfig.Enabled() {
+		// A server with Gmail and no relay still sends email; replies that need SMTP fail with the reason.
+		worker := emailoutbox.New(channelStore, sender,
+			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig})
+		go worker.Run(ctx, 5*time.Second)
+	} else {
+		// Without either, email waits for a server that can send it; every other channel is sent here.
+		go outbox.New(channelStore, outbox.Options{Skip: []channels.Type{channelemail.Type}}).Run(ctx, 5*time.Second)
+	}
 	go pipeline.New(channelStore, nil).Run(ctx, 2*time.Second)
 	if emailConfig.ResendAPIKey != "" {
 		// Provider domains a workspace stopped using, or left behind by being deleted, free their slots here.
