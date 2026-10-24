@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -26,7 +27,7 @@ func TestStaleFinishAfterLeaseExpiryCannotOverwriteSent(t *testing.T) {
 	clock := time.Now().UTC().Add(time.Second)
 	worker := newWorker(f, server, &clock)
 	reply := f.write(t, "outgoing", "Once.")
-	stale, err := f.store.ClaimDueDeliveries(context.Background(), clock, 1, time.Minute)
+	stale, err := f.store.ClaimDueOutbox(context.Background(), clock, 1, time.Minute)
 	if err != nil || len(stale) != 1 {
 		t.Fatalf("claim: %d %v", len(stale), err)
 	}
@@ -34,7 +35,7 @@ func TestStaleFinishAfterLeaseExpiryCannotOverwriteSent(t *testing.T) {
 	if process(t, worker) != 1 || f.delivery(t, reply.ID).Status != "sent" {
 		t.Fatal("reclaimed delivery was not sent")
 	}
-	err = f.store.MarkDeliveryFailed(context.Background(), stale[0], "stale worker timed out")
+	err = f.store.FinishOutbox(context.Background(), stale[0], channels.Failed("stale worker timed out"), clock, clock)
 	if !errors.Is(err, store.ErrLeaseLost) {
 		t.Fatalf("stale finish err=%v, want ErrLeaseLost", err)
 	}

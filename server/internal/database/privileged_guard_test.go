@@ -41,7 +41,6 @@ var privilegedCallSites = []string{
 	"internal/store/channels.go: PrivilegeChannelRoute",
 	"internal/store/email-channels.go: PrivilegeInboundSecret",
 	"internal/store/email-inbound.go: PrivilegeReplyToken",
-	"internal/store/email-outbox.go: PrivilegeOutboxClaim",
 	"internal/store/email-provider-domains.go: PrivilegeProviderDomainSweep",
 	"internal/store/email-relay-bounce.go: PrivilegeVerifiedSender",
 	"internal/store/kb-images.go: PrivilegeKBPurge",

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -51,50 +50,6 @@ type DeliveryMailbox struct {
 // DeliveryFile is a file attached to the reply, kept in attachment storage under StorageKey.
 type DeliveryFile struct {
 	Filename, ContentType, StorageKey, SHA256 string
-}
-
-// ClaimDueDeliveries leases due rows, counts the attempt and stamps a claim token that every finish
-// must present. A lease that expires without a result makes the row due again: delivery is at least
-// once, deduplicated by Message-ID. A row whose data cannot be loaded fails alone.
-func (s *Store) ClaimDueDeliveries(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]Delivery, error) {
-	// Only the lease crosses workspaces; each claimed row is then loaded and finished in its own workspace.
-	var claimed []Delivery
-	err := s.db.Privileged(ctx, database.PrivilegeOutboxClaim, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `WITH due AS (
-				SELECT id FROM email_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
-				ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
-			UPDATE email_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
-			RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts,o.transport`, now, limit, now.Add(lease))
-		if err != nil {
-			return fmt.Errorf("claim deliveries: %w", err)
-		}
-		claimed, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (Delivery, error) {
-			var item Delivery
-			err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ClaimToken, &item.Attempts, &item.Transport)
-			return item, err
-		})
-		if err != nil {
-			return fmt.Errorf("scan claimed deliveries: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	loaded := claimed[:0]
-	var errs []error
-	for _, item := range claimed {
-		if err := s.loadDelivery(ctx, &item); err != nil {
-			errs = append(errs, err, s.MarkDeliveryFailed(ctx, item, "The reply could not be loaded for sending."))
-			continue
-		}
-		loaded = append(loaded, item)
-	}
-	return loaded, errors.Join(errs...)
-}
-
-func (s *Store) loadDelivery(ctx context.Context, item *Delivery) error {
-	return s.db.InWorkspace(ctx, item.WorkspaceID, func(tx pgx.Tx) error { return loadDelivery(ctx, tx, item) })
 }
 
 func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
@@ -184,55 +139,6 @@ func (s *Store) CountSentSince(ctx context.Context, workspaceID string, since ti
 		return 0, fmt.Errorf("count sent replies: %w", err)
 	}
 	return count, nil
-}
-
-// MarkDeliverySent records a successful hand-off to the SMTP relay. note, kept as the delivery's
-// last error, names copied addresses the reply did not reach; empty when it reached everyone.
-func (s *Store) MarkDeliverySent(ctx context.Context, item Delivery, sentAt time.Time, note string) error {
-	return s.finishDelivery(ctx, item, `status='sent',sent_at=$4,last_error=NULLIF($5,'')`, sentAt, note)
-}
-
-// MarkDeliveryRetry keeps the row queued and schedules the next attempt.
-func (s *Store) MarkDeliveryRetry(ctx context.Context, item Delivery, next time.Time, reason string) error {
-	return s.finishDelivery(ctx, item, `next_attempt_at=$4,last_error=$5`, next, reason)
-}
-
-// DeferDelivery postpones a claimed row without spending the attempt it was claimed with.
-func (s *Store) DeferDelivery(ctx context.Context, item Delivery, next time.Time, reason string) error {
-	return s.finishDelivery(ctx, item, `next_attempt_at=$4,last_error=$5,attempts=GREATEST(attempts-1,0)`, next, reason)
-}
-
-// DeferDeliveryForPause postpones a claimed row because the workspace's sending is paused, without spending
-// the attempt. The row is marked so that lifting the pause releases it and nothing else.
-func (s *Store) DeferDeliveryForPause(ctx context.Context, item Delivery, next time.Time, reason string) error {
-	return s.finish(ctx, item, true, `next_attempt_at=$4,last_error=$5,attempts=GREATEST(attempts-1,0)`, next, reason)
-}
-
-// MarkDeliveryFailed stops automatic retries; an agent can requeue with RetryDelivery.
-func (s *Store) MarkDeliveryFailed(ctx context.Context, item Delivery, reason string) error {
-	return s.finishDelivery(ctx, item, `status='failed',last_error=$4`, reason)
-}
-
-// finishDelivery applies a result only while this worker still holds the claim, so a worker whose
-// lease expired cannot overwrite the result of the worker that reclaimed the row.
-func (s *Store) finishDelivery(ctx context.Context, item Delivery, set string, args ...any) error {
-	return s.finish(ctx, item, false, set, args...)
-}
-
-func (s *Store) finish(ctx context.Context, item Delivery, heldByPause bool, set string, args ...any) error {
-	updated, err := scoped(ctx, s, item.WorkspaceID, func(tx pgx.Tx) (int64, error) {
-		result, err := tx.Exec(ctx, `UPDATE email_outbox SET `+set+fmt.Sprintf(",held_by_pause=%t", heldByPause)+`,locked_until=NULL,claim_token=NULL,updated_at=now()
-			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3::uuid AND status='queued'`,
-			append([]any{item.WorkspaceID, item.OutboxID, item.ClaimToken}, args...)...)
-		return result.RowsAffected(), err
-	})
-	if err != nil {
-		return fmt.Errorf("update delivery %s: %w", item.OutboxID, err)
-	}
-	if updated != 1 {
-		return fmt.Errorf("update delivery %s: %w", item.OutboxID, ErrLeaseLost)
-	}
-	return nil
 }
 
 // EmailDelivery loads what the email sender needs of a claimed reply of the outbox.

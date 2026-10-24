@@ -237,9 +237,13 @@ func TestExpiredLeaseIsResentWithTheSameMessageID(t *testing.T) {
 	clock := time.Now().UTC().Add(time.Second)
 	worker := newWorker(f, server, &clock)
 	f.write(t, "outgoing", "At least once.")
-	claimed, err := f.store.ClaimDueDeliveries(context.Background(), clock, 10, time.Minute)
+	claimed, err := f.store.ClaimDueOutbox(context.Background(), clock, 10, time.Minute)
 	if err != nil || len(claimed) != 1 {
 		t.Fatalf("claim: %d %v", len(claimed), err)
+	}
+	leased, err := f.store.EmailDelivery(context.Background(), claimed[0].WorkspaceID, claimed[0].OutboxID, claimed[0].Attempts)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if process(t, worker) != 0 {
 		t.Fatal("a leased delivery must not be sent twice concurrently")
@@ -249,8 +253,8 @@ func TestExpiredLeaseIsResentWithTheSameMessageID(t *testing.T) {
 		t.Fatal("an expired lease must be picked up again")
 	}
 	received := server.mail()
-	if len(received) != 1 || !strings.Contains(received[0].Data, "Message-ID: <"+claimed[0].EmailMessageID+">") {
-		t.Fatalf("resend must reuse the Message-ID %s: %+v", claimed[0].EmailMessageID, received)
+	if len(received) != 1 || !strings.Contains(received[0].Data, "Message-ID: <"+leased.EmailMessageID+">") {
+		t.Fatalf("resend must reuse the Message-ID %s: %+v", leased.EmailMessageID, received)
 	}
 }
 
