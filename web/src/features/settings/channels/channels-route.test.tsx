@@ -31,8 +31,9 @@ const channel = (type: 'email' | 'web_form', change: Record<string, unknown> = {
   capabilities: type === 'email' ? ['threads', 'cc'] : ['form'], held_count: 0, unsent_count: 0, last_inbound_at: null,
   created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z', ...change,
 });
+// As the server answers: a type is available while the workspace has fewer than its most.
 const types = (emailCount = 1, formCount = 1) => [
-  { type: 'email', available: true, max_per_workspace: 1, count: emailCount }, { type: 'web_form', available: true, max_per_workspace: 1, count: formCount },
+  { type: 'email', available: emailCount < 1, max_per_workspace: 1, count: emailCount }, { type: 'web_form', available: formCount < 1, max_per_workspace: 1, count: formCount },
 ];
 const withChannel = {
   channel: {

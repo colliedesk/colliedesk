@@ -98,12 +98,14 @@ function StatePill({ channel }: { channel: Channel }) {
   return <span className={`status ${stateClass[channel.status.state]}`}>{stateLabel[channel.status.state]}</span>;
 }
 
-// The types a workspace can add now: the server's list, in the registry's order, only those the web knows.
+// The types this server runs, in the registry's order, only those the web knows. One the workspace already
+// has its most of stays listed as full, so the person sees why it cannot be added again.
 function addable(list: ChannelList | undefined): { ui: ChannelUI; info: ChannelTypeInfo; full: boolean }[] {
   return channelTypes.flatMap((ui) => {
     const info = list?.types.find((type) => type.type === ui.type);
-    if (!info?.available) return [];
-    return [{ ui, info, full: info.max_per_workspace !== null && info.count >= info.max_per_workspace }];
+    if (!info) return [];
+    const full = info.max_per_workspace !== null && info.count >= info.max_per_workspace;
+    return info.available || full ? [{ ui, info, full }] : [];
   });
 }
 
