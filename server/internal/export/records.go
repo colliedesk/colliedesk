@@ -24,14 +24,77 @@ type Agent struct {
 }
 
 type Contact struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Email        string  `json:"email"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Email is null for a customer known only on a channel (identities).
+	Email        *string `json:"email"`
 	Organization *string `json:"organization"`
 	// MergedIntoID is the contact this one was merged into; its conversations are there.
 	MergedIntoID *string   `json:"merged_into_id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Identities are who the customer is on a channel (channel_id, kind, value, display_name).
+	Identities []domain.ContactIdentity `json:"identities"`
+}
+
+// Channel is one channel of the workspace, removed ones included. Its secrets are never exported.
+type Channel struct {
+	ID              string          `json:"id"`
+	Type            string          `json:"type"`
+	Name            string          `json:"name"`
+	Enabled         bool            `json:"enabled"`
+	Settings        json.RawMessage `json:"settings"`
+	Config          any             `json:"config"`
+	ExternalAccount *string         `json:"external_account"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	DisabledAt      *time.Time      `json:"disabled_at"`
+	DeletedAt       *time.Time      `json:"deleted_at"`
+}
+
+// ChannelEvent is one change to a channel (channel_events).
+type ChannelEvent struct {
+	ID           string          `json:"id"`
+	ChannelID    string          `json:"channel_id"`
+	ChannelType  string          `json:"channel_type"`
+	ChannelName  string          `json:"channel_name"`
+	Kind         string          `json:"kind"`
+	ActorAgentID *string         `json:"actor_agent_id"`
+	ActorTokenID *string         `json:"actor_token_id"`
+	Detail       json.RawMessage `json:"detail"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
+// ChannelInboundEvent is a raw event a channel received that is not a message: held, collected,
+// failed, dropped, or kept without a conversation (a group's chatter). Its raw payload is here, or in
+// the archive at raw_path; its fetched files are in the archive too.
+type ChannelInboundEvent struct {
+	ID              string               `json:"id"`
+	ChannelID       string               `json:"channel_id"`
+	ExternalEventID *string              `json:"external_event_id"`
+	State           string               `json:"state"`
+	Raw             json.RawMessage      `json:"raw"`
+	RawPath         *string              `json:"raw_path"`
+	HoldReason      *string              `json:"hold_reason"`
+	DropReason      *string              `json:"drop_reason"`
+	Error           *string              `json:"error"`
+	ReceivedAt      time.Time            `json:"received_at"`
+	ProcessedAt     *time.Time           `json:"processed_at"`
+	Files           []ChannelInboundFile `json:"files"`
+	RawKey          string               `json:"-"`
+	RawSize         int64                `json:"-"`
+}
+
+// ChannelInboundFile is a file fetched for an event, or why it could not be.
+type ChannelInboundFile struct {
+	Name        string  `json:"name"`
+	ContentType string  `json:"content_type"`
+	Status      string  `json:"status"`
+	Size        *int64  `json:"size"`
+	SHA256      *string `json:"sha256"`
+	Error       *string `json:"error"`
+	Path        *string `json:"path"`
+	StorageKey  string  `json:"-"`
 }
 
 // ContactMerge is one duplicate merged into a contact, undone or not, with the conversations it moved.
@@ -495,9 +558,13 @@ type Message struct {
 	// AIDraftID names the AI draft the reply was written from.
 	AIDraftID *string `json:"ai_draft_id"`
 	// CC is the list a reply was copied to; null when it copied no one.
-	CC          []string     `json:"cc"`
-	CreatedAt   time.Time    `json:"created_at"`
-	Attachments []Attachment `json:"attachments"`
+	CC []string `json:"cc"`
+	// ChannelID is the channel that carried it, ExternalID its id there, ChannelMeta what the channel knows of it.
+	ChannelID   *string         `json:"channel_id"`
+	ExternalID  *string         `json:"external_id"`
+	ChannelMeta json.RawMessage `json:"channel_meta"`
+	CreatedAt   time.Time       `json:"created_at"`
+	Attachments []Attachment    `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
@@ -509,6 +576,7 @@ type ConversationHead struct {
 	Priority   string                     `json:"priority"`
 	AssigneeID *string                    `json:"assignee_id"`
 	Channel    string                     `json:"channel"`
+	ChannelID  *string                    `json:"channel_id"`
 	Origin     *domain.ConversationOrigin `json:"origin"`
 	TagIDs     []string                   `json:"tag_ids"`
 	CreatedAt  time.Time                  `json:"created_at"`
@@ -535,7 +603,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, ResultsBaseline*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelInboundEvent*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -564,6 +632,9 @@ type Sink interface {
 	AIDraft(AIDraft) error
 	AITriage(AITriage) error
 	ResultsBaseline(ResultsBaseline) error
+	Channel(Channel) error
+	ChannelEvent(ChannelEvent) error
+	ChannelInboundEvent(ChannelInboundEvent) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error

@@ -156,7 +156,7 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 
 // customerWroteFromAnotherAddress is true for a conversation holding trusted customer mail from an
 // address that is not the contact's: a contact merged into this one wrote it.
-const customerWroteFromAnotherAddress = `SELECT k.email, EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+const customerWroteFromAnotherAddress = `SELECT COALESCE(k.email,''), EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
 	AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail')
 	FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`
 

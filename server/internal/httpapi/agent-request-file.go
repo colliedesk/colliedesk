@@ -218,7 +218,7 @@ func (a *API) summarizeConversationStart(response http.ResponseWriter, request *
 			writeStoreError(response, err)
 			return "", false
 		}
-		to = contact.Email
+		to = contact.EmailOf()
 	default:
 		writeError(response, http.StatusBadRequest, "invalid_request", "A subject and either contact_id or a new contact are required.")
 		return "", false

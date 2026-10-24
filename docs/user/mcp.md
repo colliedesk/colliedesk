@@ -194,6 +194,16 @@ with `billing` and leave a note with a summary."
 | `colliedesk_results_share_link_create` | Asks a person to create a share link of the results page; the old link stops working | `read` |
 | `colliedesk_results_share_link_revoke` | Turns off the results page's share link | `admin` |
 | `colliedesk_results_email_set` | Turns your weekly results email on or off (admins only) | `draft` |
+| `colliedesk_channels_list` | Lists the channels with their state and the channel types the server runs | `read` |
+| `colliedesk_channels_get` | Shows one channel and its configuration | `read` |
+| `colliedesk_channels_events` | Shows the history of the channels | `read` |
+| `colliedesk_channels_create` | Adds a channel (admin token) | `admin` |
+| `colliedesk_channels_update` | Renames a channel, turns it on or off, or changes its configuration or rules (admin token) | `admin` |
+| `colliedesk_channels_check` | Reads a channel's state again (admin token) | `admin` |
+| `colliedesk_channels_held_replay` | Opens the messages a channel held while it was off (admin token) | `admin` |
+| `colliedesk_channels_credentials_set_request` | Asks a person to store a channel's secret | `read` |
+| `colliedesk_channels_delete_request` | Asks a person to remove a channel | `read` |
+| `colliedesk_channels_held_discard_request` | Asks a person to discard the messages a channel held | `read` |
 <!-- /generated -->
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

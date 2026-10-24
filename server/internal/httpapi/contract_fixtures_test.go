@@ -55,6 +55,8 @@ type contractFixture struct {
 	aiTriageID, aiTriageOtherID, aiTriageOtherConversation, aiTriageNewConversation, aiDraftsProviderID string
 	// aiTriageAutoID is a suggestion AI applied by itself on aiTriageAutoConversation, undone by its case.
 	aiTriageAutoID, aiTriageAutoConversation string
+	// webFormChannelID is changed and checked by the channel cases; emailChannelID is removed by one.
+	webFormChannelID, emailChannelID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -168,6 +170,14 @@ func newContractFixture(t *testing.T) contractFixture {
 	if response := request(t, api, http.MethodPut, "/api/v1/channels/web-form", map[string]any{"enabled": true, "allowed_origins": []string{}}, adminToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("enable web form status=%d body=%s", response.Code, response.Body.String())
 	}
+	channelIDs := map[string]string{}
+	var channelList struct {
+		Items []struct{ ID, Type string } `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/channels", nil, adminToken, nil), &channelList)
+	for _, item := range channelList.Items {
+		channelIDs[item.Type] = item.ID
+	}
 
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
 	requestToken := issueToken(t, api, adminToken, "Contract requester", "read").Token
@@ -232,7 +242,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
-	return contractFixture{aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }

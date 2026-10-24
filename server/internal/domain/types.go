@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -51,14 +52,33 @@ type Invite struct {
 }
 
 type Contact struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Email        string  `json:"email"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Email is nil for a customer known only on a channel (Identities).
+	Email        *string `json:"email"`
 	Organization *string `json:"organization"`
 	// MergedIntoID is the contact this one was merged into; its conversations and new mail are there.
 	MergedIntoID *string   `json:"merged_into_id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Identities are who the customer is on channels that know them by something other than email.
+	Identities []ContactIdentity `json:"identities"`
+}
+
+// ContactIdentity is who a contact is on one channel.
+type ContactIdentity struct {
+	ChannelID   string  `json:"channel_id"`
+	Kind        string  `json:"kind"`
+	Value       string  `json:"value"`
+	DisplayName *string `json:"display_name"`
+}
+
+// EmailOf is the contact's email, or "" when it has none.
+func (c Contact) EmailOf() string {
+	if c.Email == nil {
+		return ""
+	}
+	return *c.Email
 }
 
 type ContactDetail struct {
@@ -93,7 +113,7 @@ func (e *ContactMergeError) Error() string { return e.Reason }
 type ContactExistsError struct{ Use Contact }
 
 func (e *ContactExistsError) Error() string {
-	return e.Use.Name + " (" + e.Use.Email + ") is already a customer with this address. Find them by name or email instead."
+	return e.Use.Name + " (" + e.Use.EmailOf() + ") is already a customer with this address. Find them by name or email instead."
 }
 
 // ErrMergeUndone means the merge was undone already.
@@ -119,13 +139,34 @@ type Conversation struct {
 	AssigneeID  *string `json:"assignee_id"`
 	Tags        []Tag   `json:"tags"`
 	// Channel is how the conversation started: one of the Channel* values.
-	Channel   string              `json:"channel"`
-	Origin    *ConversationOrigin `json:"origin"`
-	CreatedAt time.Time           `json:"created_at"`
-	UpdatedAt time.Time           `json:"updated_at"`
+	Channel string `json:"channel"`
+	// ChannelID is the channel it came through; nil for one that came through none.
+	ChannelID *string `json:"-"`
+	// ChannelRef is its channel and the one its replies leave through, nil when there is neither.
+	ChannelRef *ChannelRef         `json:"channel_ref"`
+	Origin     *ConversationOrigin `json:"origin"`
+	CreatedAt  time.Time           `json:"created_at"`
+	UpdatedAt  time.Time           `json:"updated_at"`
 	// LatestReplyNumber is the number of the newest reply (0 before the first): a reply sent with an
 	// older seen_reply_number is refused with ReplyConflictError.
 	LatestReplyNumber int `json:"latest_reply_number"`
+}
+
+// ChannelRef names a conversation's channel and the one its replies leave through.
+type ChannelRef struct {
+	ID         string             `json:"id"`
+	Type       string             `json:"type"`
+	Name       string             `json:"name"`
+	Enabled    bool               `json:"enabled"`
+	Deleted    bool               `json:"deleted"`
+	RepliesVia *ChannelRepliesVia `json:"replies_via"`
+}
+
+// ChannelRepliesVia is the channel replies leave through.
+type ChannelRepliesVia struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
 }
 
 // How a conversation started (conversations.channel).
@@ -224,6 +265,11 @@ type Message struct {
 	// ReplyNumber numbers the replies of a conversation in the order they were stored, 1 first; nil for
 	// a note or a customer message.
 	ReplyNumber *int `json:"reply_number"`
+	// ChannelID is the channel that carried it; ExternalID its id there ("<type>:<id>"); ChannelMeta
+	// what the channel knows of it.
+	ChannelID   *string         `json:"channel_id"`
+	ExternalID  *string         `json:"external_id"`
+	ChannelMeta json.RawMessage `json:"channel_meta"`
 }
 
 // ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the
@@ -251,10 +297,12 @@ type Attachment struct {
 
 // MessageDelivery is the email delivery state of an outgoing reply.
 type MessageDelivery struct {
-	Status    string     `json:"status"`
-	Attempts  int        `json:"attempts"`
-	LastError *string    `json:"last_error"`
-	SentAt    *time.Time `json:"sent_at"`
+	Status   string `json:"status"`
+	Attempts int    `json:"attempts"`
+	// LastError says why in words; ReasonCode is the fixed code beside it (channel_off, no_recipient…).
+	LastError  *string    `json:"last_error"`
+	ReasonCode *string    `json:"reason_code"`
+	SentAt     *time.Time `json:"sent_at"`
 }
 
 // Doors an inbound message can come through.

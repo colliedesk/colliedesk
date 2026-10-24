@@ -193,8 +193,20 @@ var tokenTiers = map[string]TokenAccess{
 	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),
 	"POST /api/v1/agent-requests/{id}/reject":  personOnly("deciding an agent's request is a person's call"),
 
-	"GET /api/v1/auth/sessions":                       grant(auth.PermTeamRead),
-	"GET /api/v1/auth/invites":                        grant(auth.PermTeamRead),
+	"GET /api/v1/auth/sessions":              grant(auth.PermTeamRead),
+	"GET /api/v1/auth/invites":               grant(auth.PermTeamRead),
+	"GET /api/v1/channels":                   grant(auth.PermChannelsRead),
+	"GET /api/v1/channels/events":            grant(auth.PermChannelsRead),
+	"GET /api/v1/channels/{id}":              grant(auth.PermChannelsRead),
+	"POST /api/v1/channels":                  grant(auth.PermChannelsUpdate),
+	"PATCH /api/v1/channels/{id}":            grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/check":       grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/held/replay": grant(auth.PermChannelsUpdate),
+	// Secrets and removing a channel are what DELETE /channels/email and its secret already are:
+	// a person approves every token's call. Discarding held messages cannot be undone.
+	"PUT /api/v1/channels/{id}/credentials":           alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE /api/v1/channels/{id}":                    alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST /api/v1/channels/{id}/held/discard":         alwaysAsk(auth.PermChannelsUpdate),
 	"GET /api/v1/channels/email":                      grant(auth.PermChannelsRead),
 	"GET /api/v1/channels/web-form":                   grant(auth.PermChannelsRead),
 	"PATCH /api/v1/agents/me/timezone":                grant(auth.PermProfileUpdate),

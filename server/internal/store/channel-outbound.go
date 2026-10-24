@@ -42,10 +42,6 @@ func (s *Store) replyRoute(ctx context.Context, tx pgx.Tx, workspaceID, conversa
 		Scan(&origin, &channelID); err != nil {
 		return ReplyRoute{}, fmt.Errorf("load conversation channel: %w", err)
 	}
-	replyType, ok := s.channels.ReplyType(channels.Type(origin))
-	if !ok {
-		return ReplyRoute{}, nil
-	}
 	var own *channels.Channel
 	if channelID != nil {
 		channel, err := s.channelByID(ctx, tx, workspaceID, *channelID)
@@ -53,24 +49,96 @@ func (s *Store) replyRoute(ctx context.Context, tx pgx.Tx, workspaceID, conversa
 			return ReplyRoute{}, err
 		}
 		own = &channel
-		if channel.Type == replyType && channel.Live() {
-			return ReplyRoute{Channel: own}, nil
-		}
 	}
-	adapter, ok := s.channels.Adapter(replyType)
+	return routeReply(s.channels, channels.Type(origin), own, func(kind channels.Type) (*channels.Channel, error) {
+		live, found, err := s.liveChannelOfType(ctx, tx, workspaceID, kind)
+		if err != nil || !found {
+			return nil, err
+		}
+		return &live, nil
+	})
+}
+
+// routeReply is the one rule of where a reply leaves: own is the conversation's channel (nil when it
+// came through none), live finds the live channel of a singleton type.
+func routeReply(registry *channels.Registry, origin channels.Type, own *channels.Channel, live func(channels.Type) (*channels.Channel, error)) (ReplyRoute, error) {
+	replyType, ok := registry.ReplyType(origin)
+	if !ok {
+		return ReplyRoute{}, nil
+	}
+	if own != nil && own.Type == replyType && own.Live() {
+		return ReplyRoute{Channel: own}, nil
+	}
+	adapter, ok := registry.Adapter(replyType)
 	if !ok {
 		return ReplyRoute{}, nil
 	}
 	if adapter.Definition().Singleton {
-		live, found, err := s.liveChannelOfType(ctx, tx, workspaceID, replyType)
-		if err != nil || found {
-			return ReplyRoute{Channel: &live}, err
+		channel, err := live(replyType)
+		if err != nil || channel != nil {
+			return ReplyRoute{Channel: channel}, err
 		}
 	}
 	if own != nil && own.Type == replyType {
 		return ReplyRoute{Removed: own}, nil
 	}
 	return ReplyRoute{}, nil
+}
+
+// attachChannelRefs gives each conversation its channel and the one its replies leave through, from
+// one read of the workspace's channels.
+func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID string, items []domain.Conversation) error {
+	if s.channels == nil || len(items) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("load channels: %w", err)
+	}
+	byID := map[string]*channels.Channel{}
+	liveByType := map[channels.Type]*channels.Channel{}
+	for rows.Next() {
+		channel, err := s.scanChannelRow(rows)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		byID[channel.ID] = &channel
+		if channel.Live() {
+			liveByType[channel.Type] = &channel
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	ref := func(channel *channels.Channel) *domain.ChannelRef {
+		return &domain.ChannelRef{ID: channel.ID, Type: string(channel.Type), Name: channel.Name, Enabled: channel.Enabled, Deleted: !channel.Live()}
+	}
+	for i := range items {
+		var own *channels.Channel
+		if items[i].ChannelID != nil {
+			own = byID[*items[i].ChannelID]
+		}
+		route, err := routeReply(s.channels, channels.Type(items[i].Channel), own, func(kind channels.Type) (*channels.Channel, error) {
+			return liveByType[kind], nil
+		})
+		if err != nil {
+			return err
+		}
+		switch {
+		case own != nil:
+			items[i].ChannelRef = ref(own)
+		case route.Channel != nil:
+			items[i].ChannelRef = ref(route.Channel)
+		default:
+			continue
+		}
+		if route.Channel != nil {
+			items[i].ChannelRef.RepliesVia = &domain.ChannelRepliesVia{ID: route.Channel.ID, Name: route.Channel.Name, Enabled: route.Channel.Enabled}
+		}
+	}
+	return nil
 }
 
 // otherRepliesCarrier is the live channel that carries replies of conversations that came through no

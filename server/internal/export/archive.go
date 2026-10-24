@@ -32,13 +32,15 @@ const (
 var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
 	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
 	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson",
-	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "results-baselines.ndjson", "conversations.ndjson"}
+	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "results-baselines.ndjson",
+	"channels.ndjson", "channel-events.ndjson", "channel-inbound-events.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
 	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people",
 	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "results-baselines.ndjson": "results_baselines",
+	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-inbound-events.ndjson": "channel_inbound_events",
 	"conversations.ndjson": "conversations",
 }
 
@@ -209,6 +211,42 @@ func (w *Writer) AITriage(record AITriage) error {
 
 func (w *Writer) ResultsBaseline(record ResultsBaseline) error {
 	return w.record("results-baselines.ndjson", record)
+}
+
+func (w *Writer) Channel(record Channel) error { return w.record("channels.ndjson", record) }
+
+func (w *Writer) ChannelEvent(record ChannelEvent) error {
+	return w.record("channel-events.ndjson", record)
+}
+
+// ChannelInboundEvent writes an event and copies its stored raw payload and fetched files into the
+// archive under channel-events/<id>/.
+func (w *Writer) ChannelInboundEvent(record ChannelInboundEvent) error {
+	if err := w.open("channel-inbound-events.ndjson"); err != nil {
+		return err
+	}
+	if record.RawKey != "" && len(record.RawKey) >= 64 && record.RawSize > 0 {
+		path := "channel-events/" + record.ID + "/raw"
+		record.RawPath = &path
+		if err := w.spillFile(spillRecord{ID: record.ID + "-raw", Key: record.RawKey, Path: path, Size: record.RawSize, SHA256: record.RawKey[len(record.RawKey)-64:]}); err != nil {
+			return err
+		}
+	}
+	if record.Files == nil {
+		record.Files = []ChannelInboundFile{}
+	}
+	for index := range record.Files {
+		file := &record.Files[index]
+		if file.StorageKey == "" || file.Size == nil || file.SHA256 == nil {
+			continue
+		}
+		path := fmt.Sprintf("channel-events/%s/%d-%s", record.ID, index, SanitizeFilename(file.Name))
+		file.Path = &path
+		if err := w.spillFile(spillRecord{ID: fmt.Sprintf("%s-%d", record.ID, index), Key: file.StorageKey, Path: path, Size: *file.Size, SHA256: *file.SHA256}); err != nil {
+			return err
+		}
+	}
+	return w.record("channel-inbound-events.ndjson", record)
 }
 
 // Conversation writes a whole conversation at once; the store streams with the three calls below.

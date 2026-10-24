@@ -38,9 +38,6 @@ func credentialHint(value string) string {
 // SetChannelCredential seals and stores a secret the channel's type declares, and records the change
 // with its hint. It returns the hint.
 func (s *Store) SetChannelCredential(ctx context.Context, workspaceID, channelID, name, value string, actor ChannelActor) (string, error) {
-	if !s.sealKeys.Configured() {
-		return "", ErrSealKeysMissing
-	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (string, error) {
 		channel, err := s.channelByID(ctx, tx, workspaceID, channelID)
 		if err != nil {
@@ -48,6 +45,9 @@ func (s *Store) SetChannelCredential(ctx context.Context, workspaceID, channelID
 		}
 		if !channel.Live() {
 			return "", channels.ErrNotFound
+		}
+		if !s.sealKeys.Configured() {
+			return "", ErrSealKeysMissing
 		}
 		adapter, err := s.adapterOf(channel.Type)
 		if err != nil {

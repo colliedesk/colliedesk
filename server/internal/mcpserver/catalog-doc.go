@@ -4,6 +4,16 @@ package mcpserver
 // written for the model. The tool table in docs/user/mcp.md is generated from it (make docs-mcp),
 // with the tier from Tier and "Cannot be undone" from Destructive, so neither belongs here.
 var toolDocs = map[string]string{
+	"colliedesk_channels_list":                    "Lists the channels with their state and the channel types the server runs",
+	"colliedesk_channels_get":                     "Shows one channel and its configuration",
+	"colliedesk_channels_events":                  "Shows the history of the channels",
+	"colliedesk_channels_create":                  "Adds a channel (admin token)",
+	"colliedesk_channels_update":                  "Renames a channel, turns it on or off, or changes its configuration or rules (admin token)",
+	"colliedesk_channels_check":                   "Reads a channel's state again (admin token)",
+	"colliedesk_channels_held_replay":             "Opens the messages a channel held while it was off (admin token)",
+	"colliedesk_channels_credentials_set_request": "Asks a person to store a channel's secret",
+	"colliedesk_channels_delete_request":          "Asks a person to remove a channel",
+	"colliedesk_channels_held_discard_request":    "Asks a person to discard the messages a channel held",
 	"colliedesk_whoami":                           "Shows the workspace, the team member, the token tier and the tools you can use",
 	"colliedesk_inbox_search":                     "Lists conversations in pages by any [inbox filter](inbox.md#filter-and-sort) or a saved view, in any of the inbox orders",
 	"colliedesk_inbox_activity":                   "Lists what changed since the last call: new conversations, conversations assigned to you, conversations that changed",

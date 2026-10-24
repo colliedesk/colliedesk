@@ -188,6 +188,8 @@ type Definition struct {
 	Singleton bool
 	// Name is the name a new channel of the type gets when none is given.
 	Name string
+	// Guide is the type's page of the user guide, a file of docs/user.
+	Guide string
 	// Capabilities are fixed codes the web app turns into words: what the channel can carry.
 	Capabilities []string
 	// FileLimits bound the files the frame fetches for the type's events (MediaSource).
@@ -202,6 +204,9 @@ type Definition struct {
 	// ReplyTo is the identity kind a reply is addressed to (IdentityEmail, or a kind of the type's
 	// contact identities). A customer without one gets no delivery on the channel.
 	ReplyTo string
+	// ActivationEvent is the product event a channel of the type records when it is connected or moved
+	// to another account (its summary changed); empty records none.
+	ActivationEvent string
 	// WhenOff is OffHold or OffRefuse.
 	WhenOff  string
 	Defaults Settings
@@ -264,6 +269,13 @@ type Status struct {
 	State      string `json:"state"`
 	ReasonCode string `json:"reason_code,omitempty"`
 	Message    string `json:"message,omitempty"`
+}
+
+// RemoveFollowUp is the optional part of a ConfigPart whose type has something to undo outside once a
+// channel is removed (revoking a grant at a provider): BeforeRemove reads what it needs in the removing
+// transaction, and the frame runs after once that transaction committed.
+type RemoveFollowUp interface {
+	BeforeRemove(ctx context.Context, tx pgx.Tx, channel Channel) (after func(context.Context), err error)
 }
 
 // ConfigChange is a validated change of a channel's own configuration, to be saved by the same adapter.

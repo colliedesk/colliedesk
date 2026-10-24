@@ -2,11 +2,14 @@ package store
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/jackc/pgx/v5"
@@ -248,41 +251,56 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 // RemoveChannel removes a channel: its type's rows and its secrets go, the row stays so its
 // conversations keep its name. Adding the type again makes a new channel.
 func (s *Store) RemoveChannel(ctx context.Context, workspaceID, id string, actor ChannelActor) error {
-	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
-		return struct{}{}, s.RemoveChannelTx(ctx, tx, workspaceID, id, actor)
+	after, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (func(context.Context), error) {
+		return s.removeChannel(ctx, tx, workspaceID, id, actor)
 	})
+	if err == nil && after != nil {
+		after(ctx)
+	}
 	return err
 }
 
-// RemoveChannelTx is RemoveChannel inside tx.
+// RemoveChannelTx is RemoveChannel inside tx; what the type undoes outside (RemoveFollowUp) is the
+// caller's to do.
 func (s *Store) RemoveChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id string, actor ChannelActor) error {
+	_, err := s.removeChannel(ctx, tx, workspaceID, id, actor)
+	return err
+}
+
+func (s *Store) removeChannel(ctx context.Context, tx pgx.Tx, workspaceID, id string, actor ChannelActor) (func(context.Context), error) {
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM channels WHERE workspace_id=$1 AND id=$2::uuid FOR UPDATE`, workspaceID, id); err != nil {
-		return fmt.Errorf("lock channel: %w", err)
+		return nil, fmt.Errorf("lock channel: %w", err)
 	}
 	channel, err := s.channelByID(ctx, tx, workspaceID, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !channel.Live() {
-		return channels.ErrNotFound
+		return nil, channels.ErrNotFound
 	}
 	adapter, err := s.adapterOf(channel.Type)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// The row is marked removed first, so the type's own delete finds nothing left to do for it.
 	if _, err := tx.Exec(ctx, `UPDATE channels SET enabled=false,disabled_at=COALESCE(disabled_at,now()),settings='{}',external_account=NULL,
 		deleted_at=now(),deleted_by_agent_id=NULLIF($3,'')::uuid,updated_at=now() WHERE workspace_id=$1 AND id=$2`,
 		workspaceID, id, actor.AgentID); err != nil {
-		return fmt.Errorf("remove channel: %w", err)
+		return nil, fmt.Errorf("remove channel: %w", err)
+	}
+	var after func(context.Context)
+	if followUp, ok := adapter.Config().(channels.RemoveFollowUp); ok {
+		if after, err = followUp.BeforeRemove(ctx, tx, channel); err != nil {
+			return nil, err
+		}
 	}
 	if err := adapter.Config().Remove(ctx, tx, channel); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM channel_credentials WHERE workspace_id=$1 AND channel_id=$2`, workspaceID, id); err != nil {
-		return fmt.Errorf("delete channel secrets: %w", err)
+		return nil, fmt.Errorf("delete channel secrets: %w", err)
 	}
-	return insertChannelEvent(ctx, tx, channel, "removed", actor, nil)
+	return after, insertChannelEvent(ctx, tx, channel, "removed", actor, nil)
 }
 
 // channelWriteError names the conflicts of a channel write.
@@ -356,4 +374,145 @@ func AddChannelRow(ctx context.Context, tx pgx.Tx, workspaceID string, kind chan
 		return "", channelWriteError(err)
 	}
 	return channel.ID, insertChannelEvent(ctx, tx, channel, "added", ChannelActor{}, detail)
+}
+
+// ListChannels describes the workspace's live channels, oldest first.
+func (s *Store) ListChannels(ctx context.Context, workspaceID string) ([]ChannelPublic, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]ChannelPublic, error) {
+		rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY created_at,id`, workspaceID)
+		if err != nil {
+			return nil, fmt.Errorf("list channels: %w", err)
+		}
+		var list []channels.Channel
+		for rows.Next() {
+			channel, err := s.scanChannelRow(rows)
+			if err != nil {
+				rows.Close()
+				return nil, err
+			}
+			list = append(list, channel)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		described := make([]ChannelPublic, 0, len(list))
+		for _, channel := range list {
+			if _, ok := s.channels.Adapter(channel.Type); !ok {
+				continue // a type this server no longer runs is kept, not shown
+			}
+			public, err := s.DescribeChannel(ctx, tx, channel)
+			if err != nil {
+				return nil, err
+			}
+			described = append(described, public)
+		}
+		return described, nil
+	})
+}
+
+// GetChannelPublic describes one live channel of the workspace.
+func (s *Store) GetChannelPublic(ctx context.Context, workspaceID, id string) (ChannelPublic, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ChannelPublic, error) {
+		channel, err := s.channelByID(ctx, tx, workspaceID, id)
+		if err != nil {
+			return ChannelPublic{}, err
+		}
+		if !channel.Live() {
+			return ChannelPublic{}, channels.ErrNotFound
+		}
+		return s.DescribeChannel(ctx, tx, channel)
+	})
+}
+
+// ChannelEventPage is a page of channel history and the cursor of the next ("" on the last).
+type ChannelEventPage struct {
+	Items []ChannelEvent
+	Next  string
+}
+
+// ListChannelEvents reads the workspace's channel history, newest first: of one channel, or of all.
+func (s *Store) ListChannelEvents(ctx context.Context, workspaceID, channelID, cursor string, limit int) (ChannelEventPage, error) {
+	var before *time.Time
+	var beforeSeq int64
+	if cursor != "" {
+		at, seq, ok := decodeEventCursor(cursor)
+		if !ok {
+			return ChannelEventPage{}, ErrBadCursor
+		}
+		before, beforeSeq = &at, seq
+	}
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ChannelEventPage, error) {
+		rows, err := tx.Query(ctx, `SELECT e.id::text,e.channel_id::text,e.channel_type,e.channel_name,e.kind,e.actor_agent_id::text,
+				COALESCE(NULLIF(a.display_name,''),a.email),t.label,e.detail,e.created_at,e.seq
+			FROM channel_events e LEFT JOIN agents a ON a.workspace_id=e.workspace_id AND a.id=e.actor_agent_id
+			LEFT JOIN sessions t ON t.workspace_id=e.workspace_id AND t.id=e.actor_token_id
+			WHERE e.workspace_id=$1 AND ($2='' OR e.channel_id::text=$2) AND ($3::timestamptz IS NULL OR (e.created_at,e.seq)<($3,$4))
+			ORDER BY e.created_at DESC,e.seq DESC LIMIT $5`, workspaceID, channelID, before, beforeSeq, limit+1)
+		if err != nil {
+			return ChannelEventPage{}, fmt.Errorf("list channel history: %w", err)
+		}
+		defer rows.Close()
+		var page ChannelEventPage
+		var lastSeq int64
+		for rows.Next() {
+			var event ChannelEvent
+			var seq int64
+			if err := rows.Scan(&event.ID, &event.ChannelID, &event.ChannelType, &event.ChannelName, &event.Kind, &event.ActorAgentID,
+				&event.ActorName, &event.ActorTokenLabel, &event.Detail, &event.CreatedAt, &seq); err != nil {
+				return ChannelEventPage{}, err
+			}
+			event.CreatedAt = event.CreatedAt.UTC()
+			if len(page.Items) == limit {
+				last := page.Items[len(page.Items)-1]
+				page.Next = encodeEventCursor(last.CreatedAt, lastSeq)
+				break
+			}
+			page.Items = append(page.Items, event)
+			lastSeq = seq
+		}
+		return page, rows.Err()
+	})
+}
+
+func encodeEventCursor(at time.Time, seq int64) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(at.UTC().Format(time.RFC3339Nano) + "|" + strconv.FormatInt(seq, 10)))
+}
+
+func decodeEventCursor(cursor string) (time.Time, int64, bool) {
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, 0, false
+	}
+	at, seq, found := strings.Cut(string(raw), "|")
+	if !found {
+		return time.Time{}, 0, false
+	}
+	when, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil {
+		return time.Time{}, 0, false
+	}
+	number, err := strconv.ParseInt(seq, 10, 64)
+	return when, number, err == nil
+}
+
+// CountChannelsOfType counts the workspace's live channels of each type.
+func (s *Store) CountChannelsOfType(ctx context.Context, workspaceID string) (map[channels.Type]int, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (map[channels.Type]int, error) {
+		rows, err := tx.Query(ctx, `SELECT type,count(*) FROM channels WHERE workspace_id=$1 AND deleted_at IS NULL GROUP BY type`, workspaceID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		counts := map[channels.Type]int{}
+		for rows.Next() {
+			var kind string
+			var n int
+			if err := rows.Scan(&kind, &n); err != nil {
+				return nil, err
+			}
+			counts[channels.Type(kind)] = n
+		}
+		return counts, rows.Err()
+	})
 }

@@ -686,6 +686,186 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '429': {$ref: '#/components/responses/TrialOutboundLimit'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels:
+    get:
+      operationId: listChannels
+      x-permission: access:read
+      description: >
+        Lists the workspace's channels (removed ones are left out) with their state, and the channel
+        types this server runs: whether a type can be added (`available`), how many of it a workspace may
+        have (`max_per_workspace`, null for no limit) and how many it has. Every member of the team may
+        read it; changing a channel needs an admin.
+      responses:
+        '200':
+          description: The channels and the types
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelList'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createChannel
+      x-permission: access:write
+      description: >
+        Adds a channel of a type with its configuration (`config`, the type's schema in ChannelConfigInput).
+        The type validates it and the channel is stored only when it passes (400 with `fields`). A type that
+        allows one channel per workspace answers 409 `channel_type_limit` for a second; an outside account
+        another channel already is answers 409 `channel_account_taken`. Adding email is connecting it, as
+        `PUT /api/v1/channels/email` does.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCreate'}}}
+      responses:
+        '201':
+          description: The channel
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/channels/events:
+    get:
+      operationId: listChannelEvents
+      x-permission: access:read
+      description: >
+        The history of the workspace's channels, newest first: who added, renamed, turned on or off,
+        changed, removed a channel, changed a secret (only its last four characters are recorded), and
+        opened or discarded messages a channel held. `channel_id` keeps one channel's; `cursor` is the
+        `next_cursor` of the page before.
+      parameters:
+        - {name: channel_id, in: query, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 200}}
+      responses:
+        '200':
+          description: A page of the history
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelEventPage'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/channels/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getChannel
+      x-permission: access:read
+      description: A channel with its configuration as its type shows it (never a secret). A removed channel answers 404.
+      responses:
+        '200':
+          description: The channel
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateChannel
+      x-permission: access:write
+      description: >
+        Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its
+        type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits,
+        commands; the type's defaults apply to what is left out). A channel that is off receives nothing:
+        what arrives meanwhile is kept for an admin to open or discard (`held_count`), or, for a type that
+        refuses mail while off (the web form), answered as if the channel did not exist. A reply while it
+        is off is saved and its delivery fails with `channel_off`; retry it once the channel is on.
+        Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChannelChange'}}}
+      responses:
+        '200':
+          description: The channel
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: removeChannel
+      x-permission: access:write
+      description: >
+        Removes a channel: its configuration and secrets are deleted, its conversations and their
+        messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel.
+        Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. An agent token's call
+        is an agent request a person approves.
+      responses:
+        '204': {description: Removed}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/credentials:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: setChannelCredential
+      x-permission: access:write
+      description: >
+        Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409
+        `secret_keys_missing` without them). Only its last four characters are shown again. An agent
+        token's call is an agent request a person approves.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCredentialInput'}}}
+      responses:
+        '200':
+          description: The secret's hint
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCredential'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/channels/{id}/check:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: checkChannel
+      x-permission: access:write
+      description: Reads the channel's state again and returns it; it changes nothing.
+      responses:
+        '200':
+          description: The channel
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/held/replay:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: replayHeldChannelMessages
+      x-permission: access:write
+      description: >
+        Opens messages the channel held (all, or those of `event_ids`) as conversations, as they would
+        have been had the channel been on, or adds them to `conversation_id` (a conversation of this
+        workspace; 404 otherwise). It works while the channel is still off. Recorded in the channel's history.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/HeldReplayInput'}}}
+      responses:
+        '200':
+          description: What became of each message
+          content: {application/json: {schema: {$ref: '#/components/schemas/HeldReplayResult'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/held/discard:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: discardHeldChannelMessages
+      x-permission: access:write
+      description: >
+        Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the
+        history keeps how many. An agent token's call is an agent request a person approves.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/HeldDiscardInput'}}}
+      responses:
+        '200':
+          description: How many were discarded
+          content: {application/json: {schema: {$ref: '#/components/schemas/HeldDiscardResult'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/channels/email:
     get:
       operationId: getEmailChannel
@@ -5596,7 +5776,11 @@ components:
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
-        email: {type: string, format: email}
+        email: {type: [string, 'null'], format: email, description: 'Null for a customer known only on a channel (identities).'}
+        identities:
+          type: array
+          description: Who the customer is on channels that know them by something other than email.
+          items: {$ref: '#/components/schemas/ContactIdentity'}
         organization: {type: [string, 'null'], description: 'Company or organization name, for example imported from a Freshdesk company'}
         merged_into_id: {type: [string, 'null'], format: uuid, description: 'The contact this one was merged into; null for a contact of its own'}
         created_at: {type: string, format: date-time}
@@ -6095,6 +6279,11 @@ components:
         assignee_id: {type: [string, 'null'], format: uuid}
         tags: {type: array, items: {$ref: '#/components/schemas/Tag'}}
         channel: {$ref: '#/components/schemas/ConversationChannel'}
+        channel_ref:
+          description: The channel the conversation came through and the one its replies leave through; null for one that came through none (started by a team member, imported, a problem report) and has no channel to reply through.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ChannelRef'}
         origin:
           description: Where an imported conversation came from; null for conversations created in Colliedesk.
           oneOf:
@@ -6288,6 +6477,13 @@ components:
       type: object
       required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, ai_draft_outcome, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
+        channel_id: {type: [string, 'null'], format: uuid, description: The channel that carried the message; null for a note and for messages stored before channels were recorded.}
+        external_id: {type: [string, 'null'], description: 'The message''s id on its channel, prefixed by the type ("email:<Message-ID>").'}
+        channel_meta:
+          type: [object, 'null']
+          additionalProperties: true
+          description: What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed).
+
         ai_draft_id: {type: [string, 'null'], format: uuid, description: The AI draft the reply was written from.}
         ai_draft_outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, null], description: 'Whether the reply kept the draft''s words (sent_unchanged, 90 % or more) or was edited; null without a draft.'}
         reply_number:
@@ -6410,6 +6606,12 @@ components:
       required: [status, attempts, last_error, sent_at]
       properties:
         status: {$ref: '#/components/schemas/DeliveryStatus'}
+        reason_code:
+          type: [string, 'null']
+          description: >-
+            A fixed code beside last_error: channel_off (the channel was off; retry once it is on),
+            channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up.
+            Null for most email failures, whose words are in last_error.
         attempts: {type: integer, minimum: 0}
         last_error:
           type: [string, 'null']
@@ -6590,6 +6792,215 @@ components:
         error: {type: [string, 'null']}
         failed_at: {type: [string, 'null'], format: date-time}
         connected_at: {type: string, format: date-time}
+    ChannelType:
+      type: string
+      enum: [email, web_form]
+      description: A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
+    ChannelState:
+      type: object
+      required: [state, reason_code, message]
+      properties:
+        state:
+          type: string
+          enum: [working, off, needs_attention, not_connected]
+        reason_code:
+          type: [string, 'null']
+          description: >-
+            Why a channel needs attention, a fixed code the web app explains: email `sending_paused`,
+            `cannot_send`, `gmail_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`.
+        message: {type: [string, 'null']}
+    Channel:
+      type: object
+      required: [id, type, name, enabled, status, summary, capabilities, held_count, unsent_count, last_inbound_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/ChannelType'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        enabled: {type: boolean}
+        status: {$ref: '#/components/schemas/ChannelState'}
+        summary: {type: string, description: 'One line under the name: the support address, the allowed origins.'}
+        capabilities:
+          type: array
+          description: Fixed codes of what the channel carries (threads, attachments_in, attachments_out, cc, html, form).
+          items: {type: string}
+        held_count: {type: integer, minimum: 0, description: Messages that arrived while the channel was off and wait to be opened or discarded.}
+        unsent_count: {type: integer, minimum: 0, description: 'Replies whose delivery failed with channel_off; retry them once the channel is on.'}
+        last_inbound_at: {type: [string, 'null'], format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    EmailChannelConfig:
+      allOf: [{$ref: '#/components/schemas/EmailChannel'}]
+      description: The email channel's configuration, as `GET /api/v1/channels/email` shows it.
+    WebFormChannelConfig:
+      allOf: [{$ref: '#/components/schemas/WebFormSettings'}]
+      description: The web form's configuration, as `GET /api/v1/channels/web-form` shows it.
+    ChannelConfig:
+      description: A channel's configuration, by its type.
+      oneOf:
+        - {$ref: '#/components/schemas/EmailChannelConfig'}
+        - {$ref: '#/components/schemas/WebFormChannelConfig'}
+    ChannelDetail:
+      allOf:
+        - {$ref: '#/components/schemas/Channel'}
+        - type: object
+          required: [config]
+          properties:
+            config: {$ref: '#/components/schemas/ChannelConfig'}
+    ChannelTypeInfo:
+      type: object
+      required: [type, available, max_per_workspace, count]
+      properties:
+        type: {$ref: '#/components/schemas/ChannelType'}
+        available: {type: boolean, description: Whether a channel of the type can be added now.}
+        max_per_workspace: {type: [integer, 'null'], minimum: 1}
+        count: {type: integer, minimum: 0}
+    ChannelList:
+      type: object
+      required: [items, types]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Channel'}}
+        types: {type: array, items: {$ref: '#/components/schemas/ChannelTypeInfo'}}
+    EmailChannelConfigInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        support_address: {type: string, format: email, maxLength: 254}
+        sender_name: {type: string, minLength: 1, maxLength: 100}
+    WebFormChannelConfigInput:
+      type: object
+      additionalProperties: false
+      properties:
+        allowed_origins: {type: array, maxItems: 20, items: {type: string, maxLength: 200}}
+    ChannelConfigInput:
+      description: A channel's configuration as its type takes it.
+      oneOf:
+        - {$ref: '#/components/schemas/EmailChannelConfigInput'}
+        - {$ref: '#/components/schemas/WebFormChannelConfigInput'}
+    ChannelSettings:
+      type: object
+      description: >-
+        The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days
+        (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits`
+        {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to
+        {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type
+        declares), `notices` {received}. Never a secret.
+      additionalProperties: true
+    ChannelCreate:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: {$ref: '#/components/schemas/ChannelType'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        enabled: {type: boolean}
+        config: {$ref: '#/components/schemas/ChannelConfigInput'}
+        settings: {$ref: '#/components/schemas/ChannelSettings'}
+    ChannelChange:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        enabled: {type: boolean}
+        config: {$ref: '#/components/schemas/ChannelConfigInput'}
+        settings: {$ref: '#/components/schemas/ChannelSettings'}
+    ChannelCredentialInput:
+      type: object
+      additionalProperties: false
+      required: [name, value]
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9_]{0,40}$'}
+        value: {type: string, minLength: 1, maxLength: 4096}
+    ChannelCredential:
+      type: object
+      required: [name, hint]
+      properties:
+        name: {type: string}
+        hint: {type: [string, 'null'], description: The secret's last four characters.}
+    ChannelEvent:
+      type: object
+      required: [id, at, kind, channel_id, channel_name, channel_type, actor]
+      properties:
+        id: {type: string, format: uuid}
+        at: {type: string, format: date-time}
+        kind:
+          type: string
+          enum: [added, renamed, enabled, disabled, config_changed, credential_changed, removed, held_replayed, held_discarded]
+        channel_id: {type: string, format: uuid}
+        channel_name: {type: string}
+        channel_type: {type: string}
+        actor:
+          type: object
+          required: [agent_id, name, token_label]
+          properties:
+            agent_id: {type: [string, 'null'], format: uuid}
+            name: {type: [string, 'null']}
+            token_label: {type: [string, 'null']}
+    ChannelEventPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ChannelEvent'}}
+        next_cursor: {type: [string, 'null']}
+    HeldReplayInput:
+      type: object
+      additionalProperties: false
+      properties:
+        event_ids: {type: array, maxItems: 500, items: {type: string, format: uuid}}
+        conversation_id: {type: string, format: uuid}
+    HeldReplayResult:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [status, conversation_id, message_id]
+            properties:
+              status: {type: string}
+              conversation_id: {type: [string, 'null'], format: uuid}
+              message_id: {type: [string, 'null'], format: uuid}
+    HeldDiscardInput:
+      type: object
+      additionalProperties: false
+      properties:
+        event_ids: {type: array, maxItems: 500, items: {type: string, format: uuid}}
+    HeldDiscardResult:
+      type: object
+      required: [discarded]
+      properties:
+        discarded: {type: integer, minimum: 0}
+    ChannelRef:
+      type: object
+      required: [id, type, name, enabled, deleted, replies_via]
+      description: >-
+        The channel a conversation came through, and the one its replies leave through (`replies_via`,
+        null when none can carry them; the web form's replies leave by email).
+      properties:
+        id: {type: string, format: uuid}
+        type: {type: string}
+        name: {type: string}
+        enabled: {type: boolean}
+        deleted: {type: boolean}
+        replies_via:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, name, enabled]
+              properties:
+                id: {type: string, format: uuid}
+                name: {type: string}
+                enabled: {type: boolean}
+    ContactIdentity:
+      type: object
+      required: [channel_id, kind, value, display_name]
+      properties:
+        channel_id: {type: string, format: uuid}
+        kind: {type: string}
+        value: {type: string}
+        display_name: {type: [string, 'null']}
     InboundEmailResult:
       type: object
       required: [status, reason, conversation_id, message_id, authentication]

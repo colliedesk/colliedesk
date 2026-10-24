@@ -39,7 +39,7 @@ type Adapter struct{}
 func New() *Adapter { return &Adapter{} }
 
 func (*Adapter) Definition() channels.Definition {
-	return channels.Definition{Type: Type, Singleton: true, Name: "Web form", Capabilities: []string{"form"}, ReplyTo: channels.IdentityEmail,
+	return channels.Definition{Type: Type, Singleton: true, Name: "Web form", Guide: "web-form.md", Capabilities: []string{"form"}, ReplyTo: channels.IdentityEmail,
 		RepliesVia: domain.ChannelEmail,
 		// An unknown, off or locked form answers the same, so a slug cannot be probed.
 		WhenOff: channels.OffRefuse,

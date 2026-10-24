@@ -298,6 +298,138 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Lists the workspace's channels (removed ones are left out) with their state, and the channel types this server runs: whether a type can be added (`available`), how many of it a workspace may have (`max_per_workspace`, null for no limit) and how many it has. Every member of the team may read it; changing a channel needs an admin. */
+        get: operations["listChannels"];
+        put?: never;
+        /** @description Adds a channel of a type with its configuration (`config`, the type's schema in ChannelConfigInput). The type validates it and the channel is stored only when it passes (400 with `fields`). A type that allows one channel per workspace answers 409 `channel_type_limit` for a second; an outside account another channel already is answers 409 `channel_account_taken`. Adding email is connecting it, as `PUT /api/v1/channels/email` does. */
+        post: operations["createChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The history of the workspace's channels, newest first: who added, renamed, turned on or off, changed, removed a channel, changed a secret (only its last four characters are recorded), and opened or discarded messages a channel held. `channel_id` keeps one channel's; `cursor` is the `next_cursor` of the page before. */
+        get: operations["listChannelEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description A channel with its configuration as its type shows it (never a secret). A removed channel answers 404. */
+        get: operations["getChannel"];
+        put?: never;
+        post?: never;
+        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. An agent token's call is an agent request a person approves. */
+        delete: operations["removeChannel"];
+        options?: never;
+        head?: never;
+        /** @description Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits, commands; the type's defaults apply to what is left out). A channel that is off receives nothing: what arrives meanwhile is kept for an admin to open or discard (`held_count`), or, for a type that refuses mail while off (the web form), answered as if the channel did not exist. A reply while it is off is saved and its delivery fails with `channel_off`; retry it once the channel is on. Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here. */
+        patch: operations["updateChannel"];
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. An agent token's call is an agent request a person approves. */
+        put: operations["setChannelCredential"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Reads the channel's state again and returns it; it changes nothing. */
+        post: operations["checkChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/held/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Opens messages the channel held (all, or those of `event_ids`) as conversations, as they would have been had the channel been on, or adds them to `conversation_id` (a conversation of this workspace; 404 otherwise). It works while the channel is still off. Recorded in the channel's history. */
+        post: operations["replayHeldChannelMessages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/held/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the history keeps how many. An agent token's call is an agent request a person approves. */
+        post: operations["discardHeldChannelMessages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/email": {
         parameters: {
             query?: never;
@@ -3543,8 +3675,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            /** Format: email */
-            email: string;
+            /**
+             * Format: email
+             * @description Null for a customer known only on a channel (identities).
+             */
+            email: string | null;
+            /** @description Who the customer is on channels that know them by something other than email. */
+            identities?: components["schemas"]["ContactIdentity"][];
             /** @description Company or organization name, for example imported from a Freshdesk company */
             organization: string | null;
             /**
@@ -4087,6 +4224,8 @@ export interface components {
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
             channel: components["schemas"]["ConversationChannel"];
+            /** @description The channel the conversation came through and the one its replies leave through; null for one that came through none (started by a team member, imported, a problem report) and has no channel to reply through. */
+            channel_ref?: null | components["schemas"]["ChannelRef"];
             /** @description Where an imported conversation came from; null for conversations created in Colliedesk. */
             origin: null | components["schemas"]["ConversationOrigin"];
             /** Format: date-time */
@@ -4245,6 +4384,17 @@ export interface components {
         Message: {
             /**
              * Format: uuid
+             * @description The channel that carried the message; null for a note and for messages stored before channels were recorded.
+             */
+            channel_id?: string | null;
+            /** @description The message's id on its channel, prefixed by the type ("email:<Message-ID>"). */
+            external_id?: string | null;
+            /** @description What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed). */
+            channel_meta?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Format: uuid
              * @description The AI draft the reply was written from.
              */
             ai_draft_id: string | null;
@@ -4345,6 +4495,8 @@ export interface components {
         DeliveryStatus: "queued" | "sent" | "failed";
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
+            /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up. Null for most email failures, whose words are in last_error. */
+            reason_code?: string | null;
             attempts: number;
             /** @description Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc) addresses it did not reach: refused by the relay or bounced later. A copy that misses never fails the reply to the contact. */
             last_error: string | null;
@@ -4488,6 +4640,160 @@ export interface components {
             failed_at: string | null;
             /** Format: date-time */
             connected_at: string;
+        };
+        /**
+         * @description A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
+         * @enum {string}
+         */
+        ChannelType: "email" | "web_form";
+        ChannelState: {
+            /** @enum {string} */
+            state: "working" | "off" | "needs_attention" | "not_connected";
+            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`. */
+            reason_code: string | null;
+            message: string | null;
+        };
+        Channel: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["ChannelType"];
+            name: string;
+            enabled: boolean;
+            status: components["schemas"]["ChannelState"];
+            /** @description One line under the name: the support address, the allowed origins. */
+            summary: string;
+            /** @description Fixed codes of what the channel carries (threads, attachments_in, attachments_out, cc, html, form). */
+            capabilities: string[];
+            /** @description Messages that arrived while the channel was off and wait to be opened or discarded. */
+            held_count: number;
+            /** @description Replies whose delivery failed with channel_off; retry them once the channel is on. */
+            unsent_count: number;
+            /** Format: date-time */
+            last_inbound_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description The email channel's configuration, as `GET /api/v1/channels/email` shows it. */
+        EmailChannelConfig: components["schemas"]["EmailChannel"];
+        /** @description The web form's configuration, as `GET /api/v1/channels/web-form` shows it. */
+        WebFormChannelConfig: components["schemas"]["WebFormSettings"];
+        /** @description A channel's configuration, by its type. */
+        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"];
+        ChannelDetail: components["schemas"]["Channel"] & {
+            config: components["schemas"]["ChannelConfig"];
+        };
+        ChannelTypeInfo: {
+            type: components["schemas"]["ChannelType"];
+            /** @description Whether a channel of the type can be added now. */
+            available: boolean;
+            max_per_workspace: number | null;
+            count: number;
+        };
+        ChannelList: {
+            items: components["schemas"]["Channel"][];
+            types: components["schemas"]["ChannelTypeInfo"][];
+        };
+        EmailChannelConfigInput: {
+            /** Format: email */
+            support_address?: string;
+            sender_name?: string;
+        };
+        WebFormChannelConfigInput: {
+            allowed_origins?: string[];
+        };
+        /** @description A channel's configuration as its type takes it. */
+        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"];
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type declares), `notices` {received}. Never a secret. */
+        ChannelSettings: {
+            [key: string]: unknown;
+        };
+        ChannelCreate: {
+            type: components["schemas"]["ChannelType"];
+            name?: string;
+            enabled?: boolean;
+            config?: components["schemas"]["ChannelConfigInput"];
+            settings?: components["schemas"]["ChannelSettings"];
+        };
+        ChannelChange: {
+            name?: string;
+            enabled?: boolean;
+            config?: components["schemas"]["ChannelConfigInput"];
+            settings?: components["schemas"]["ChannelSettings"];
+        };
+        ChannelCredentialInput: {
+            name: string;
+            value: string;
+        };
+        ChannelCredential: {
+            name: string;
+            /** @description The secret's last four characters. */
+            hint: string | null;
+        };
+        ChannelEvent: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded";
+            /** Format: uuid */
+            channel_id: string;
+            channel_name: string;
+            channel_type: string;
+            actor: {
+                /** Format: uuid */
+                agent_id: string | null;
+                name: string | null;
+                token_label: string | null;
+            };
+        };
+        ChannelEventPage: {
+            items: components["schemas"]["ChannelEvent"][];
+            next_cursor: string | null;
+        };
+        HeldReplayInput: {
+            event_ids?: string[];
+            /** Format: uuid */
+            conversation_id?: string;
+        };
+        HeldReplayResult: {
+            results: {
+                status: string;
+                /** Format: uuid */
+                conversation_id: string | null;
+                /** Format: uuid */
+                message_id: string | null;
+            }[];
+        };
+        HeldDiscardInput: {
+            event_ids?: string[];
+        };
+        HeldDiscardResult: {
+            discarded: number;
+        };
+        /** @description The channel a conversation came through, and the one its replies leave through (`replies_via`, null when none can carry them; the web form's replies leave by email). */
+        ChannelRef: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            name: string;
+            enabled: boolean;
+            deleted: boolean;
+            replies_via: null | {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                enabled: boolean;
+            };
+        };
+        ContactIdentity: {
+            /** Format: uuid */
+            channel_id: string;
+            kind: string;
+            value: string;
+            display_name: string | null;
         };
         InboundEmailResult: {
             /**
@@ -5563,6 +5869,281 @@ export interface operations {
             409: components["responses"]["Conflict"];
             429: components["responses"]["TrialOutboundLimit"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channels and the types */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelCreate"];
+            };
+        };
+        responses: {
+            /** @description The channel */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listChannelEvents: {
+        parameters: {
+            query?: {
+                channel_id?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelChange"];
+            };
+        };
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setChannelCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelCredentialInput"];
+            };
+        };
+        responses: {
+            /** @description The secret's hint */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelCredential"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    checkChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replayHeldChannelMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeldReplayInput"];
+            };
+        };
+        responses: {
+            /** @description What became of each message */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeldReplayResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    discardHeldChannelMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeldDiscardInput"];
+            };
+        };
+        responses: {
+            /** @description How many were discarded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeldDiscardResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getEmailChannel: {

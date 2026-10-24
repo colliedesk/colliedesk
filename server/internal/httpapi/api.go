@@ -222,11 +222,16 @@ func Outbound(config Config) store.OutboundPolicy {
 	}
 }
 
-// Channels is the registry of channel types a configuration runs.
-func Channels(config Config, outbound store.OutboundPolicy) *channels.Registry {
-	return registry.New(registry.Config{Email: channelemail.Config{TrustedAuthServID: config.Email.TrustedAuthServID,
+// Channels is the registry of channel types a configuration runs. revoke, when given, revokes the
+// Gmail grant of a removed email channel at Google.
+func Channels(config Config, outbound store.OutboundPolicy, revoke ...func(*store.SealedGrant, string)) *channels.Registry {
+	email := channelemail.Config{TrustedAuthServID: config.Email.TrustedAuthServID,
 		HostedMailDomain: config.Email.HostedMailDomain, PlatformForwarding: config.Email.PlatformInboundSecret != "",
-		Cloud: config.Billing.Enabled(), Outbound: outbound}})
+		Cloud: config.Billing.Enabled(), Outbound: outbound}
+	if len(revoke) > 0 {
+		email.RevokeGrant = revoke[0]
+	}
+	return registry.New(registry.Config{Email: email})
 }
 
 func New(pool *pgxpool.Pool, config Config) *Server {
@@ -252,7 +257,8 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
-			WithChannels(Channels(config, outbound)).WithSealKeys(config.Google.Keys)}
+			WithSealKeys(config.Google.Keys)}
+	api.store = api.store.WithChannels(Channels(config, outbound, api.revokeSealed))
 	api.pipeline = pipeline.New(api.store, clock)
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	importKeys := config.ImportKeys
@@ -289,7 +295,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api.helpCenter = api.newHelpCenter()
 	mux := http.NewServeMux()
 	api.mux = mux
-	for _, route := range api.routeSpecs() {
+	for _, route := range append(api.routeSpecs(), api.channelTypeRoutes()...) {
 		if billingRoute(route.Route) && api.polar == nil {
 			continue
 		}
@@ -473,6 +479,16 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/results/share-link", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/results/shared", auth.PermissionPublic},
 		{http.MethodPatch, "/api/v1/agents/me/results-email", auth.PermissionAuthenticated},
+		{http.MethodGet, "/api/v1/channels", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/channels", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/channels/events", auth.PermissionAccessRead},
+		{http.MethodGet, "/api/v1/channels/{id}", auth.PermissionAccessRead},
+		{http.MethodPatch, "/api/v1/channels/{id}", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/channels/{id}", auth.PermissionAccessWrite},
+		{http.MethodPut, "/api/v1/channels/{id}/credentials", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/check", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/held/replay", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/held/discard", auth.PermissionAccessWrite},
 	}
 }
 

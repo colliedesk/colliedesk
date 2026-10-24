@@ -22,6 +22,7 @@ var frameFiles = []string{
 	"internal/channels/outbox/*.go",
 	"internal/store/channels.go",
 	"internal/store/channel-*.go",
+	"internal/httpapi/channel-handlers.go",
 }
 
 func TestTheFrameNamesNoChannelType(t *testing.T) {

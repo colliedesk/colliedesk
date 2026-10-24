@@ -4,7 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { contactApi } from './contact-api';
 import type { Contact } from '../../api/schemas';
 import { messages } from '../../messages';
-import { contactMessages } from './contact-messages';
+import { contactAddress, contactMessages } from './contact-messages';
 
 // How long the text stays unchanged before it is searched: short enough that results follow the typing
 // within the 200 ms budget, long enough that a fast typist sends one request per pause.
@@ -69,7 +69,7 @@ export function ContactPicker({ label, onPick, excludeId, autoFocus, disabled, e
             <li key={contact.id} id={optionId(index)} role="option" aria-selected={index === current} aria-disabled={disabled || undefined}
               onClick={() => { if (!disabled) onPick(contact); }} onMouseMove={() => { if (index !== current) setActive(index); }}>
               <span className="contact-picker-name">{contact.name}</span>
-              <span className="contact-picker-email">{contact.organization ? `${contact.email} · ${contact.organization}` : contact.email}</span>
+              <span className="contact-picker-email">{contact.organization ? `${contactAddress(contact)} · ${contact.organization}` : contactAddress(contact)}</span>
             </li>
           ))}
         </ul>

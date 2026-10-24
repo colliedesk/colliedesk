@@ -83,7 +83,7 @@ func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, 
 		if err != nil {
 			return domain.Conversation{}, fmt.Errorf("create conversation: %w", err)
 		}
-		return getConversation(ctx, tx, workspaceID, id)
+		return s.withChannelRef(ctx, tx, workspaceID)(getConversation(ctx, tx, workspaceID, id))
 	})
 }
 
@@ -139,7 +139,7 @@ func (s *Store) StartConversation(ctx context.Context, workspaceID string, in Ne
 	if _, err := s.createMessage(ctx, tx, workspaceID, id, actor, "outgoing", body, cc, files); err != nil {
 		return domain.Conversation{}, err
 	}
-	conversation, err := getConversation(ctx, tx, workspaceID, id)
+	conversation, err := s.withChannelRef(ctx, tx, workspaceID)(getConversation(ctx, tx, workspaceID, id))
 	if err != nil {
 		return domain.Conversation{}, err
 	}
@@ -151,15 +151,29 @@ func (s *Store) StartConversation(ctx context.Context, workspaceID string, in Ne
 
 func (s *Store) GetConversation(ctx context.Context, workspaceID, id string) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
-		return getConversation(ctx, tx, workspaceID, id)
+		return s.withChannelRef(ctx, tx, workspaceID)(getConversation(ctx, tx, workspaceID, id))
 	})
+}
+
+// withChannelRef returns a function that gives a conversation read in tx its channel_ref.
+func (s *Store) withChannelRef(ctx context.Context, tx pgx.Tx, workspaceID string) func(domain.Conversation, error) (domain.Conversation, error) {
+	return func(conversation domain.Conversation, err error) (domain.Conversation, error) {
+		if err != nil {
+			return conversation, err
+		}
+		items := []domain.Conversation{conversation}
+		if err := s.attachChannelRefs(ctx, tx, workspaceID, items); err != nil {
+			return domain.Conversation{}, err
+		}
+		return items[0], nil
+	}
 }
 
 func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
-	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL)
+	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL)
 		FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, id).
-		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber)
+		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
@@ -174,7 +188,11 @@ func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (do
 
 func (s *Store) ListConversations(ctx context.Context, workspaceID string, filter ConversationFilter) (ConversationPage, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ConversationPage, error) {
-		return listConversations(ctx, tx, workspaceID, filter, s.now())
+		page, err := listConversations(ctx, tx, workspaceID, filter, s.now())
+		if err != nil {
+			return page, err
+		}
+		return page, s.attachChannelRefs(ctx, tx, workspaceID, page.Items)
 	})
 }
 
@@ -324,7 +342,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,
-		c.assignee_id::text,c.channel,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb)
+		c.assignee_id::text,c.channel,c.channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb)
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS listed(id,position)
 		JOIN conversations c ON c.workspace_id=$1 AND c.id=listed.id
 		JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
@@ -343,7 +361,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		var item domain.Conversation
 		var tagsJSON []byte
 		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority,
-			&item.AssigneeID, &item.Channel, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON); err != nil {
+			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		if err := json.Unmarshal(tagsJSON, &item.Tags); err != nil {

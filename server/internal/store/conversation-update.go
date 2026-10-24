@@ -19,7 +19,7 @@ type ConversationUpdate struct {
 
 func (s *Store) UpdateConversation(ctx context.Context, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
-		return updateConversation(ctx, tx, workspaceID, id, update)
+		return s.withChannelRef(ctx, tx, workspaceID)(updateConversation(ctx, tx, workspaceID, id, update))
 	})
 }
 

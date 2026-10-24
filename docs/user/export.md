@@ -49,7 +49,7 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 |---|---|
 | `manifest.json` | Format, version, export time (UTC), workspace, record counts, and every attachment and knowledge base image file with its size and SHA-256 |
 | `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role`, `timezone_override`, `created_at`, `deactivated_at` (`null` for an active agent) |
-| `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `merged_into_id` (the contact it was [merged](contacts.md#merge-two-contacts-of-the-same-person) into, or null), `created_at`, `updated_at` |
+| `contacts.ndjson` | One contact per line: `id`, `name`, `email` (`null` for a customer known only on a channel), `organization`, `merged_into_id` (the contact it was [merged](contacts.md#merge-two-contacts-of-the-same-person) into, or null), `created_at`, `updated_at`, `identities` (who the customer is on a channel: `channel_id`, `kind`, `value`, `display_name`) |
 | `contact-merges.ndjson` | Every merge of two contacts, undone or not, oldest first: `id`, `contact_id` (kept), `merged_contact_id`, `conversation_ids` (the conversations it moved), `merged_by_agent_id`, `token_id`, `created_at`, `undone_at`, `undone_by_agent_id` |
 | `tags.ndjson` | One tag per line: `id`, `name`, `color`, `created_at` |
 | `saved-replies.ndjson` | One saved reply per line, including the ones in the trash: `id`, `title`, `body`, `created_by_agent_id` (an agent id or `null`), `created_at`, `updated_at`, `deleted_at` (when it went to the trash, or `null`), `deleted_by_agent_id`. The body keeps the variables `{{customer.name}}` and `{{agent.name}}` unfilled |
@@ -71,6 +71,10 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 | `ai-triage.ndjson` | One [AI triage suggestion](ai.md#triage-suggestions) per line: `id`, `conversation_id`, `task_id`, `automatic`, `requested_by_agent_id`, `requested_by_token_id`, `status` (`pending`, `ready` or `cancelled`), `tag_ids`, `priority`, `assignee_agent_id`, `reason` (erased 90 days after it was decided), `sources` (the articles and solved conversations it read: `kind`, `id`, `title`), `base` (the conversation's `priority` and `assignee_agent_id` when it was asked for), `stale` (what a person set before it came, so not suggested), `model`, `outcome` (`accepted`, `partly_accepted`, `dismissed`, `superseded`, `expired`; empty while open), `applied` (`tag_ids`, `priority`, `assignee_agent_id` applied so far), `auto_applied_at` and `auto_applied` (what AI applied by itself), `skipped` (what it left, and why), `undone_parts`, `kept`, `undone_at`, `undone_by_agent_id` (an undo of what AI applied), `created_at`, `ready_at`, `decided_at`, `decided_by_agent_id` |
 | `ai-drafts.ndjson` | One [AI reply draft](ai.md#reply-drafts) per line: `id`, `conversation_id`, `task_id`, `requested_by_agent_id`, `requested_by_token_id`, `prompt` (what the person asked for), `status` (`pending`, `ready` or `cancelled`), `text`, `missing_info`, `sources` (`kind`, `id`, `title` of each article or solved conversation it used), `warnings` (an address, a number or a name the conversation did not hold), `model`, `outcome` (`sent_unchanged`, `sent_edited`, `discarded`, `superseded`, `expired`), `similarity` (0 to 1, how close the reply sent stayed to it), `sent_message_id`, `automatic` (written by itself for a customer message), `answers_message_id`, `reply_needed`, `created_at`, `ready_at`, `decided_at`, `decided_by_agent_id`, `text_cleared_at` (when the text and prompt were erased, 90 days after the draft ended) |
 | `results-baselines.ndjson` | The [results](results.md) baseline, when there is one: `source` (the import it comes from), `anchor_at` (when that import's first full run finished), `import_status` (`OK`, `FAILED`, `UNVERIFIED`, or `null` for an import made before results existed), `computed_at` and `numbers` (the baseline's windows, as `GET /api/v1/results` returns them) |
+| `channels.ndjson` | One [channel](channels.md) per line, removed ones included: `id`, `type` (`email`, `web_form`), `name`, `enabled`, `settings` (its rules over its type's defaults), `config` (its configuration as Settings shows it; `null` once removed), `external_account`, `created_at`, `updated_at`, `disabled_at`, `deleted_at`. A channel's secrets are never exported |
+| `channel-events.ndjson` | One change to a channel per line, oldest first: `id`, `channel_id`, `channel_type`, `channel_name`, `kind` (`added`, `renamed`, `enabled`, `disabled`, `config_changed`, `credential_changed`, `removed`, `held_replayed`, `held_discarded`), `actor_agent_id`, `actor_token_id`, `detail` (what changed; a secret only by its last 4 characters), `created_at` |
+| `channel-inbound-events.ndjson` | What a channel received that is not a message, one per line: messages it holds because it was off, ones being collected or that failed to be processed, ones it dropped (and why) and chatter it kept without opening a conversation. `id`, `channel_id`, `external_event_id`, `state` (`received`, `pending`, `held`, `failed`, `dropped`, `processed`), `raw` (the payload as the channel sent it, or a summary for mail), `raw_path` (the raw message in the ZIP, for held mail), `hold_reason`, `drop_reason`, `error`, `received_at`, `processed_at`, `files` (`name`, `content_type`, `status`, `size`, `sha256`, `error`, `path`) |
+| `channel-events/<event id>/...` | The raw message and the files of each event in `channel-inbound-events.ndjson` |
 | `conversations.ndjson` | One conversation per line, with its messages, time entries and status changes |
 | `attachments/<attachment id>/<file name>` | The original bytes of each attachment |
 | `kb-videos.ndjson` | One video of the knowledge base media library per line: `id`, `content_type` (`video/mp4` or `video/webm`), `size`, `sha256`, `path` (the file in the ZIP), `poster_path` (the poster's file, or `null`), `name`, `alt` (its title), `width`, `height`, `duration_ms` (`null` when the file does not say), `codecs`, `kept`, `created_by_agent_id`, `created_at`, `updated_at`, `updated_by_agent_id`, `deleted_at`, `deleted_by_agent_id` |
@@ -82,7 +86,8 @@ NDJSON means one JSON object per line. Read it line by line. All times are UTC (
 
 A conversation line has `id`, `contact_id`, `subject`, `status`, `priority`, `assignee_id`
 (an agent id or `null`), `channel` (how it started: `email`, `web_form`, `imported`, `agent` or
-`problem_report`; see [Filter and sort](inbox.md#filter-and-sort)), `origin` (where an imported ticket came from, or `null`), `tag_ids`,
+`problem_report`; see [Filter and sort](inbox.md#filter-and-sort)), `channel_id` (the channel it came
+through, or `null`), `origin` (where an imported ticket came from, or `null`), `tag_ids`,
 `created_at`, `updated_at`, `messages`, `time_entries` and `status_changes`.
 
 Each message has `id`, `conversation_id`, `author_agent_id`, `author_name` (as stored: the author
@@ -93,7 +98,10 @@ name of an imported message, `null` for a message written in Colliedesk, whose a
 received message; `via` is `platform` or `workspace` for email and `web_form` for text typed into
 the web form, whose sender address is unverified and whose `authentication` is `none`), `cc` (the
 addresses a reply was copied to, or `null`), `agent_request_id` (the agent request whose approval sent
-this reply, or `null`), `ai_draft_id` (the AI draft it was written from, or `null`), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
+this reply, or `null`), `ai_draft_id` (the AI draft it was written from, or `null`), `channel_id` (the
+channel that carried it, or `null` for a note and for messages stored before channels were recorded),
+`external_id` (its id on that channel, such as `email:<Message-ID>`), `channel_meta` (what the channel
+knows of it beyond `email_meta`, or `null`), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
 `size`, `sha256`, `created_at` and `path`, the file's location in the ZIP.
 
 Each time entry has `id`, `conversation_id`, `agent_id`, `agent_name`, `minutes`, `note`,
@@ -112,8 +120,8 @@ and compare it with `sha256` in `manifest.json`.
 
 ## What is not exported
 
-Sessions and API tokens, pairing and invite links, the email channel's inbound secret, queued
-email delivery state, billing records, and who has a conversation open right now (it is gone
+Sessions and API tokens, pairing and invite links, the email channel's inbound secret, a channel's
+secrets (`channel_credentials`), queued email delivery state, billing records, and who has a conversation open right now (it is gone
 within minutes). They are credentials or server internals, not your data. The reply numbers the API
 shows (`reply_number`, `latest_reply_number`) are not exported either: they count a conversation's
 `outgoing` messages in the order they were stored, which the file keeps.

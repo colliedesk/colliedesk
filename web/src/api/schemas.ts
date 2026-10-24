@@ -66,9 +66,14 @@ export const trashedSavedReplySchema = z.object({
 }) satisfies z.ZodType<Generated<'TrashedSavedReply'>>;
 export const savedReplyVersionSchema = z.object({ ...savedReplyChangeFields, title: z.string(), body: z.string() }) satisfies z.ZodType<Generated<'SavedReplyVersion'>>;
 export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
+export const contactIdentitySchema = z.object({
+  channel_id: z.string().uuid(), kind: z.string(), value: z.string(), display_name: z.string().nullable(),
+}) satisfies z.ZodType<Generated<'ContactIdentity'>>;
+// A customer known only on a channel has no email: the whole response must still parse.
 export const contactSchema = z.object({
-  id: z.string().uuid(), name: z.string(), email: z.string().email(), organization: z.string().nullable(),
+  id: z.string().uuid(), name: z.string(), email: z.string().email().nullable(), organization: z.string().nullable(),
   merged_into_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  identities: z.array(contactIdentitySchema).optional(),
 }) satisfies z.ZodType<Generated<'Contact'>>;
 const stringList = z.array(z.string());
 export const conversationOriginSchema = z.object({

@@ -48,6 +48,8 @@ type Config struct {
 	Outbound store.OutboundPolicy
 	// Sender sends replies; nil sends nothing (a test of the frame).
 	Sender *emailoutbox.Worker
+	// RevokeGrant revokes a Gmail grant at Google after the channel holding it was removed; nil revokes nothing.
+	RevokeGrant func(grant *store.SealedGrant, workspaceID string)
 }
 
 // Adapter is the email channel type.
@@ -57,9 +59,10 @@ type Adapter struct{ config Config }
 func New(config Config) *Adapter { return &Adapter{config: config} }
 
 func (a *Adapter) Definition() channels.Definition {
-	return channels.Definition{Type: Type, Singleton: true, Identified: true, Name: "Email",
+	return channels.Definition{Type: Type, Singleton: true, Identified: true, Name: "Email", Guide: "email-channel.md",
 		Capabilities: []string{"threads", "attachments_in", "attachments_out", "cc", "html"},
-		ReplyTo:      channels.IdentityEmail, CarriesOtherReplies: true, WhenOff: channels.OffHold, Defaults: defaults}
+		ReplyTo:      channels.IdentityEmail, CarriesOtherReplies: true, WhenOff: channels.OffHold, Defaults: defaults,
+		ActivationEvent: "email_channel_saved"}
 }
 
 func (a *Adapter) Config() channels.ConfigPart     { return config{a} }
@@ -206,6 +209,24 @@ func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 		return attention(ReasonNoInboundSecret)
 	}
 	return channels.Status{State: channels.StateWorking}, nil
+}
+
+// BeforeRemove reads the Gmail grant the channel holds, which goes with it, so it is revoked at Google
+// once the removal committed.
+func (c config) BeforeRemove(ctx context.Context, tx pgx.Tx, channel channels.Channel) (func(context.Context), error) {
+	if c.a.config.RevokeGrant == nil {
+		return nil, nil
+	}
+	var grant store.SealedGrant
+	err := tx.QueryRow(ctx, `SELECT token_key_id,refresh_token_sealed,address FROM mailbox_connections WHERE workspace_id=$1`, channel.WorkspaceID).
+		Scan(&grant.KeyID, &grant.Sealed, &grant.Address)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read gmail grant: %w", err)
+	}
+	return func(context.Context) { c.a.config.RevokeGrant(&grant, channel.WorkspaceID) }, nil
 }
 
 func (c config) Remove(ctx context.Context, tx pgx.Tx, channel channels.Channel) error {

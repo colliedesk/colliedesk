@@ -7,7 +7,7 @@ import type { ConversationContact, FirstReply } from '../contacts/contact-api';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import type { Contact } from '../../api/schemas';
 import { messages } from '../../messages';
-import { contactMessages } from '../contacts/contact-messages';
+import { contactAddress, contactMessages } from '../contacts/contact-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
 import { RouterLink } from '../../ui/router-link';
 import { ContactPicker } from '../contacts/contact-picker';
@@ -154,7 +154,8 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
           <fieldset className="new-conversation-fields" disabled={closed}>
             {contact && <div className="new-conversation-to">
               <span className="field-label">{contactMessages.newConversationTo}</span>
-              <span>{contactMessages.newConversationPick(contact.name, contact.email)}</span>
+              <span>{contactMessages.newConversationPick(contact.name, contactAddress(contact))}</span>
+              {!contact.email && <span className="muted-copy">{contactMessages.noEmailReplies}</span>}
               <button type="button" disabled={sending} onClick={() => setContact(undefined)}>{contactMessages.newConversationChange}</button>
             </div>}
             {!contact && !adding && <>
@@ -170,7 +171,7 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
                 aria-describedby={emailInvalid || existing ? emailHintId : undefined} onChange={(event) => { setEmail(event.target.value); setExisting(undefined); }} />
               {emailInvalid && <p id={emailHintId} className="error-copy">{contactMessages.newConversationContactInvalid}</p>}
               {existing && <div id={emailHintId} className="new-conversation-existing" role="alert">
-                <p className="error-copy">{contactMessages.newConversationExists(existing.name, existing.email)}</p>
+                <p className="error-copy">{contactMessages.newConversationExists(existing.name, contactAddress(existing))}</p>
                 <button type="button" onClick={() => pick(existing)}>{contactMessages.newConversationUse(existing.name)}</button>
               </div>}
               <div className="button-row"><button type="button" onClick={() => { setAdding(false); setExisting(undefined); }}>{contactMessages.newConversationBackToSearch}</button></div>

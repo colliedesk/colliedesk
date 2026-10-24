@@ -17,7 +17,16 @@ import (
 func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 	pool := databasetest.Pool(t)
 	ctx := context.Background()
-	contract := regexp.MustCompile(`channeltest\.Run\(`)
+	runsContract := regexp.MustCompile(`channeltest\.Run\(`)
+	source, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "contracts", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract := string(source)
+	channelTypeEnum := ""
+	if start := strings.Index(contract, "\n    ChannelType:\n"); start >= 0 {
+		channelTypeEnum = contract[start : start+200]
+	}
 	for _, definition := range registry.New(registry.Config{}).Definitions() {
 		kind := string(definition.Type)
 		var connectable, singleton bool
@@ -32,11 +41,11 @@ func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 		tests, _ := filepath.Glob(filepath.Join(dir, "*_test.go"))
 		found := false
 		for _, path := range tests {
-			source, err := os.ReadFile(path)
+			test, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			found = found || contract.Match(source)
+			found = found || runsContract.Match(test)
 		}
 		if !found {
 			t.Errorf("%s: no test in %s runs channeltest.Run (the shared contract)", kind, dir)
@@ -44,5 +53,26 @@ func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 		if definition.Name == "" || len(definition.Capabilities) == 0 {
 			t.Errorf("%s: a definition needs a name and its capabilities", kind)
 		}
+		if _, err := os.Stat(filepath.Join("..", "..", "..", "..", "docs", "user", definition.Guide)); definition.Guide == "" || err != nil {
+			t.Errorf("%s: no user guide page docs/user/%s (Definition.Guide)", kind, definition.Guide)
+		}
+		schema := pascal(kind) + "ChannelConfig"
+		if !strings.Contains(contract, "- {$ref: '#/components/schemas/"+schema+"'}") || !strings.Contains(contract, "\n    "+schema+":") {
+			t.Errorf("%s: contracts/openapi.yaml has no %s schema in the oneOf of ChannelConfig", kind, schema)
+		}
+		if !strings.Contains(channelTypeEnum, kind) {
+			t.Errorf("%s: the ChannelType enum of contracts/openapi.yaml does not list it", kind)
+		}
 	}
+}
+
+// pascal writes a type as its schema names it: web_form is WebForm.
+func pascal(kind string) string {
+	var b strings.Builder
+	for _, part := range strings.Split(kind, "_") {
+		if part != "" {
+			b.WriteString(strings.ToUpper(part[:1]) + part[1:])
+		}
+	}
+	return b.String()
 }
