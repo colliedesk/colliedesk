@@ -129,7 +129,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           </span>
         </div>}
   </>;
-  const repliesPart = <>
+  const domainPart = <>
         {channel && (channel.domain_verified_at
           ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
           : gmailSending
@@ -139,13 +139,19 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
                 {dnsVerification}
               </details>
             : dnsVerification)}
+  </>;
+  const pausePart = <>
         {settings?.sending_pause && <div role="alert" aria-labelledby="email-paused-heading" className="warning-note">
           <strong id="email-paused-heading">{messages.emailSendingPausedTitle}</strong>
           <p>{messages.emailSendingPausedBody(settings.sending_pause.reason, formatDate(settings.sending_pause.paused_at, timezone))}</p>
         </div>}
+  </>;
+  const sendingPart = <>
         {channel && !gmailConnection && (settings?.sending_from
           ? <p className="muted-copy">{messages.sendingFrom(settings.sending_from)}</p>
           : <p role="status" className="error-copy">{messages.cannotSend}</p>)}
+  </>;
+  const gmailBlock = <>
         {channel && settings && (gmail.status === 'ready'
           ? <gmail.module.GmailConnection gmail={settings.gmail} supportAddress={channel.support_address} timezone={timezone} canManage={canManage}
               onConnect={onConnectGmail} onDisconnect={onDisconnectGmail} connectPending={gmailPending} error={gmailError} returned={gmailReturned} />
@@ -153,12 +159,22 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
             ? <PartUnavailable />
             // Holds the block's place while its chunk arrives, so what follows does not jump.
             : <div className="gmail-connection gmail-connection-placeholder" aria-hidden="true" />)}
+  </>;
+  const smtpPart = <>
         {smtp && (smtp.configured
           ? <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p>
           : !gmailConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{messages.smtpNotConfigured}</p>)}
   </>;
+  const repliesPart = <>{domainPart}{pausePart}{sendingPart}{gmailBlock}{smtpPart}</>;
   if (part === 'connection') return <div className="settings-body">{addressPart}{arrivalPart}</div>;
-  if (part === 'replies') return <div className="settings-body">{senderPart}{repliesPart}</div>;
+  // The Replies tab groups the same blocks under headings: how replies leave now first, then the name,
+  // the domain and Gmail.
+  if (part === 'replies') return <div className="settings-body email-replies">
+    <section aria-labelledby="replies-leave-heading"><h3 id="replies-leave-heading">{repliesHeadings.leave}</h3>{pausePart}{sendingPart}{smtpPart}</section>
+    {channel && <section aria-labelledby="replies-name-heading"><h3 id="replies-name-heading">{repliesHeadings.name}</h3>{senderPart}</section>}
+    {channel && <section aria-labelledby="replies-domain-heading"><h3 id="replies-domain-heading">{repliesHeadings.domain}</h3>{domainPart}</section>}
+    {gmailBlock}
+  </div>;
   return (
     <section className="settings-card" aria-labelledby="email-channel-heading">
       <div className="section-heading"><h2 id="email-channel-heading">{messages.emailChannel}</h2><p>{messages.emailChannelDescription}</p></div>
@@ -168,6 +184,9 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
     </section>
   );
 }
+
+// Headings of the Replies tab, which the Settings page did not have.
+const repliesHeadings = { leave: 'How replies leave', name: 'The name customers see', domain: 'Your domain' };
 
 function DnsRecordsTable({ records, expiredAt, timezone }: { records: EmailDnsRecord[]; expiredAt: string | null; timezone: string }) {
   if (records.length === 0) return <p className="muted-copy">{expiredAt ? messages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : messages.dnsRecordsNotReady}</p>;

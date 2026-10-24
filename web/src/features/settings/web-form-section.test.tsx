@@ -57,3 +57,18 @@ test('a refused save shows the message', () => {
   render(<WebFormSection settings={off} canManage save={{ error: 'Invalid origin.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Invalid origin.');
 });
+
+test('the Embed tab copies the submit URL and shows the code a page posts with, ready to copy', async () => {
+  const writeText = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  render(<WebFormSection part="embed" settings={on} canManage onSave={vi.fn()} />);
+  const url = `${window.location.origin}/api/v1/public/forms/acme`;
+  fireEvent.click(screen.getByRole('button', { name: 'Copy submit URL' }));
+  expect(writeText).toHaveBeenLastCalledWith(url);
+  expect(await screen.findByText('URL copied')).toHaveAttribute('role', 'status');
+  const code = screen.getByRole('region', { name: 'Code for your page' });
+  expect(code).toHaveTextContent(`fetch('${url}'`);
+  expect(code).toHaveTextContent("website: ''");
+  fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+  expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining(`fetch('${url}'`));
+});

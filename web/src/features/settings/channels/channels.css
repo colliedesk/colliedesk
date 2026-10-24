@@ -38,6 +38,16 @@ a.ch-type:hover, button.ch-type:hover { border-color: var(--line-strong); backgr
 .ch-type[aria-disabled="true"] { cursor: default; background: var(--surface-0); color: var(--text-3); }
 .ch-empty .ch-types { grid-column: 2; }
 
+/* Email · Replies: one block per question, each under its heading. */
+.email-replies > section { display: grid; gap: var(--space-3); }
+.email-replies > section + section, .email-replies > .gmail-connection { border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.email-replies h3, .embed-code h3 { font-size: 14px; font-weight: 600; }
+
+/* The web form's code to copy: it scrolls sideways in its own frame. */
+.embed-code { display: grid; gap: var(--space-2); }
+.embed-code pre { margin: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0);
+  padding: var(--space-3); font-size: var(--fs-small); line-height: 1.5; }
+
 /* One channel: its head, then its tabs. */
 .ch-detail { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
 .ch-detail-head { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; }

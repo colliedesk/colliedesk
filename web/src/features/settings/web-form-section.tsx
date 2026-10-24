@@ -40,6 +40,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
           : <ul className="muted-copy">{(settings?.allowed_origins ?? []).map((origin) => <li key={origin}>{origin}</li>)}</ul>}
         {settings && <label className="invite-link"><span className="field-label">{messages.webFormSubmitUrl}</span>
           <input readOnly value={`${window.location.origin}${settings.submit_path}`} /><small>{messages.webFormSubmitHelp}</small></label>}
+        {settings && embed && <EmbedCode url={`${window.location.origin}${settings.submit_path}`} />}
       </div>;
   if (embed) return body;
   return (
@@ -48,4 +49,35 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
       {body}
     </section>
   );
+}
+
+// The words of the Embed tab, which the Settings page never had; they load with the channel pages.
+const embedMessages = {
+  copyUrl: 'Copy submit URL',
+  code: 'Code for your page',
+  codeHelp: 'Send it from a page on an allowed origin, with the visitor\'s email and message. Leave website empty: a bot that fills it is answered as if stored, and nothing is.',
+  copyCode: 'Copy code',
+  codeCopied: 'Code copied',
+};
+
+// EmbedCode is the submit URL and the request a page sends to it, each with its copy button.
+function EmbedCode({ url }: { url: string }) {
+  const [copied, setCopied] = useState<'url' | 'code'>();
+  const code = `await fetch('${url}', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, message, source: 'contact-page', website: '' }),
+});`;
+  const copy = (text: string, what: 'url' | 'code') => void navigator.clipboard.writeText(text).then(() => setCopied(what));
+  return <>
+    <span className="button-row"><button type="button" onClick={() => copy(url, 'url')}>{embedMessages.copyUrl}</button>
+      {copied === 'url' && <span role="status">{messages.urlCopied}</span>}</span>
+    <section className="embed-code" aria-labelledby="embed-code-heading">
+      <h3 id="embed-code-heading" className="field-label">{embedMessages.code}</h3>
+      <pre><code>{code}</code></pre>
+      <p className="muted-copy">{embedMessages.codeHelp}</p>
+      <span className="button-row"><button type="button" onClick={() => copy(code, 'code')}>{embedMessages.copyCode}</button>
+        {copied === 'code' && <span role="status">{embedMessages.codeCopied}</span>}</span>
+    </section>
+  </>;
 }

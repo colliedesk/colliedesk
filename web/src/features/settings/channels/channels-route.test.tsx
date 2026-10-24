@@ -219,6 +219,16 @@ test('a channel page shows the type tabs then History, and opens a tab from the 
   expect(screen.getByRole('button', { name: 'Disconnect email' })).toBeInTheDocument();
 });
 
+test('the Replies tab puts each block under its heading, how replies leave first', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  show(EMAIL, { tab: 'replies' });
+  await screen.findByRole('textbox', { name: 'Sender name' });
+  const headings = (await screen.findAllByRole('heading', { level: 3 })).map((heading) => heading.textContent);
+  expect(headings.slice(0, 3)).toEqual(['How replies leave', 'The name customers see', 'Your domain']);
+  expect(within(screen.getByRole('region', { name: 'How replies leave' })).getByText('Replies are sent from support@example.com.')).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Your domain' })).getByRole('textbox', { name: 'TXT record name' })).toBeInTheDocument();
+});
+
 test('a channel that does not exist says so, with the way back', async () => {
   channelsApi.get.mockRejectedValue(new Error('API 404'));
   show(EMAIL);
