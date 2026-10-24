@@ -240,9 +240,9 @@ func aiCheckMessage(check *ai.CheckError) string {
 	case "auth":
 		return "The provider refused this key. Copy it again from the provider's console. Nothing was saved."
 	case "permission":
-		return "The key works but may not use this model. Nothing was saved."
+		return "The key works but may not use " + checkedModel(check) + ". Tick another model first. Nothing was saved."
 	case "model_not_found":
-		return "The provider has no model with that name; check the first model in the list. Nothing was saved."
+		return "The provider has no model " + checkedModel(check) + ", or this key may not use it. Tick another model first. Nothing was saved."
 	case "blocked_address":
 		return "This address is on a private network, which this server does not call for workspaces. Use a public https address, or ask the server operator to allow private addresses."
 	case "quota_exhausted":
@@ -252,7 +252,7 @@ func aiCheckMessage(check *ai.CheckError) string {
 	case "rate_limited", "overloaded":
 		return "The provider is busy right now. Try again in a minute. Nothing was saved."
 	case "bad_request", "too_large":
-		return "The provider refused the request; it may not support structured output for this model. Nothing was saved."
+		return "The provider refused the request for " + checkedModel(check) + "; it may not support structured output. Tick another model first. Nothing was saved."
 	}
 	return "The provider could not be reached or did not answer properly. Check the address and try again. Nothing was saved."
 }
@@ -423,4 +423,12 @@ func (a *API) dismissAITriage(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	writeJSON(response, http.StatusOK, triage)
+}
+
+// checkedModel names the model a check asked for, as people read it in Settings.
+func checkedModel(check *ai.CheckError) string {
+	if check.Model == "" {
+		return "the default model"
+	}
+	return `"` + check.Model + `"`
 }

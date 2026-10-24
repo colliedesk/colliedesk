@@ -59,7 +59,7 @@ test('a self-hosted admin adds a provider on the network, turns reply drafts on,
     await expect(dialog.getByText('This provider does not list its models. Type the model names instead.')).toBeVisible();
     await dialog.getByLabel('Model names', { exact: true }).fill('missing');
     await dialog.getByRole('button', { name: 'Check and save' }).click();
-    await expect(dialog.getByText(/has no model with that name/)).toBeVisible();
+    await expect(dialog.getByText(/has no model "missing", or this key may not use it/)).toBeVisible();
 
     await dialog.getByLabel('Model names', { exact: true }).fill('llama-4-scout, qwen-3');
     await dialog.getByRole('button', { name: 'Check and save' }).click();

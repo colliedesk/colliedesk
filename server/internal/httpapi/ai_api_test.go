@@ -279,3 +279,13 @@ func TestAIModelListingSpendsOnlyItsOwnWorkspaceChecks(t *testing.T) {
 		t.Fatalf("listing models saved a provider: %s providers", n)
 	}
 }
+
+func TestACheckRefusedForItsModelNamesTheModel(t *testing.T) {
+	desk := newAIDesk(t, nil)
+	desk.fake.Script(aiprovider.FakeReply{Err: &aiprovider.Error{Code: aiprovider.ErrorModelNotFound, Status: 404}})
+	response := request(t, desk.api, http.MethodPost, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Old model", "api_key": "sk-ant-1", "models": []string{"claude-3-haiku-20240307", "claude-sonnet-5-5"}}, desk.adminA, nil)
+	wantResponse(t, response, http.StatusUnprocessableEntity, "ai_check_failed")
+	if !strings.Contains(response.Body.String(), `has no model \"claude-3-haiku-20240307\"`) || !strings.Contains(response.Body.String(), "Tick another model first") {
+		t.Fatalf("body = %s, want the refused model named and the way on", response.Body.String())
+	}
+}

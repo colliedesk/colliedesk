@@ -139,7 +139,7 @@ func (s *Service) check(ctx context.Context, call Call, spec Spec, model string)
 	_, err = s.meteredCheck(ctx, call, provider, model)
 	var providerErr *aiprovider.Error
 	if errors.As(err, &providerErr) {
-		return &CheckError{Code: providerErr.Code}
+		return &CheckError{Code: providerErr.Code, Model: model}
 	}
 	return err
 }

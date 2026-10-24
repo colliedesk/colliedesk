@@ -35,7 +35,11 @@ In **Settings > AI > Providers**, admins choose **Add provider**:
    base URL with its version path, for example `http://localhost:11434/v1`.
 
 After the key (and the address), choose **Load models**: Colliedesk asks the provider which models
-the key may use and lists them, so you tick the ones you want instead of typing names. Loading the
+the key may use and lists them, so you tick the ones you want instead of typing names. The list holds
+only models that answer what Colliedesk sends (a JSON answer, and a reasoning effort): for Anthropic,
+the Claude models whose capabilities say so; for OpenAI, its reasoning models (GPT-5 and later, the o
+series), not the older GPT-4 and GPT-3.5 or the image, audio and embedding models; for OpenRouter, the
+models that take structured output. If a check still refuses a model, the message names it. Loading the
 list saves nothing and costs nothing. A server that keeps no list (some self-hosted ones) says so; type
 the model names then, separated by commas.
 
