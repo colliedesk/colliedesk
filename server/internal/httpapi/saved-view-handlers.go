@@ -66,7 +66,7 @@ func (f conversationFilters) query() url.Values {
 
 // checkedFilters decodes the filters of a saved view and holds them to what GET /conversations
 // accepts, so a saved view always opens. It returns them re-encoded without empty fields.
-func checkedFilters(raw json.RawMessage) (json.RawMessage, error) {
+func checkedFilters(raw json.RawMessage, channels []string) (json.RawMessage, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, filterError("A saved view needs filters: an object, {} for every conversation.")
 	}
@@ -76,7 +76,7 @@ func checkedFilters(raw json.RawMessage) (json.RawMessage, error) {
 	if err := decoder.Decode(&filters); err != nil {
 		return nil, filterError("The filters of a saved view are the query of GET /api/v1/conversations as an object, with lists for several values.")
 	}
-	if _, err := conversationFilterFromQuery(filters.query()); err != nil {
+	if _, err := conversationFilterFromQuery(filters.query(), channels); err != nil {
 		return nil, err
 	}
 	canonical, err := json.Marshal(filters)
@@ -166,7 +166,7 @@ func (a *API) createSavedView(response http.ResponseWriter, request *http.Reques
 	}
 	var filters json.RawMessage
 	if err == nil {
-		filters, err = checkedFilters(input.Filters)
+		filters, err = checkedFilters(input.Filters, a.conversationChannels())
 	}
 	if err != nil {
 		writeSavedViewError(response, err)
@@ -210,7 +210,7 @@ func (a *API) updateSavedView(response http.ResponseWriter, request *http.Reques
 		}
 	}
 	if err == nil && input.Filters != nil {
-		change.Filters, err = checkedFilters(input.Filters)
+		change.Filters, err = checkedFilters(input.Filters, a.conversationChannels())
 	}
 	if err != nil {
 		writeSavedViewError(response, err)

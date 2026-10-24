@@ -36,7 +36,7 @@ func inboxSearchSpec() Spec {
 			`"has_pending_draft":{"type":"boolean","description":"true: an AI agent's reply draft waits for a person's approval. false: none waits."},` +
 			`"delivery_failed":{"type":"boolean","description":"true: a reply could not be delivered by email and was not retried since."},` +
 			`"source":{"type":"string","enum":["imported","native"],"description":"imported from another helpdesk, or created in Colliedesk."},` +
-			`"channel":` + oneOrMany(`{"type":"string","enum":["email","web_form","imported","agent","problem_report"]}`, 5, `"How it started."`) + `,` +
+			`"channel":` + oneOrMany(`{"type":"string","enum":`+conversationChannelEnum+`}`, conversationChannelCount, `"How it started."`) + `,` +
 			`"created_after":{"type":"string","format":"date-time","maxLength":40,"description":"RFC 3339 with an offset; included."},` +
 			`"created_before":{"type":"string","format":"date-time","maxLength":40,"description":"Excluded."},` +
 			`"updated_after":{"type":"string","format":"date-time","maxLength":40},"updated_before":{"type":"string","format":"date-time","maxLength":40},` +

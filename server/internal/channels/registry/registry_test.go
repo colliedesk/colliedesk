@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // Every registered type is whole: its row in channel_types, a test that runs the shared contract
@@ -63,6 +65,34 @@ func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 		if !strings.Contains(channelTypeEnum, kind) {
 			t.Errorf("%s: the ChannelType enum of contracts/openapi.yaml does not list it", kind)
 		}
+	}
+}
+
+// How a conversation started is a channel type or one of the origins that come through no channel. The
+// contract lists exactly those (ConversationChannel): the web app parses every conversation against it,
+// so a type missing there breaks the inbox, and one listed there that no type runs is a filter for nothing.
+func TestTheConversationChannelOfTheContractIsTheRegistryAndTheOrigins(t *testing.T) {
+	source, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "contracts", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	enum := regexp.MustCompile(`\n    ConversationChannel:\n      type: string\n      enum: \[([^\]]*)\]`).FindStringSubmatch(string(source))
+	if enum == nil {
+		t.Fatal("contracts/openapi.yaml has no ConversationChannel enum")
+	}
+	var listed []string
+	for _, value := range strings.Split(enum[1], ",") {
+		listed = append(listed, strings.TrimSpace(value))
+	}
+	var want []string
+	for _, kind := range registry.New(registry.Config{}).Types() {
+		want = append(want, string(kind))
+	}
+	want = append(want, domain.ConversationOrigins...)
+	slices.Sort(listed)
+	slices.Sort(want)
+	if !slices.Equal(listed, want) {
+		t.Fatalf("ConversationChannel enum %v, want the registered types and the origins %v", listed, want)
 	}
 }
 

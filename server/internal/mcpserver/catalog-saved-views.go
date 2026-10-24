@@ -1,11 +1,13 @@
 package mcpserver
 
+import "strconv"
+
 // Saved views are named sets of inbox filters people keep in the sidebar of the inbox. A personal
 // view is seen only by the person the token acts as; a shared one by the whole team. A view changes
 // no conversation, so a draft token writes them, and a delete waits 30 days in the trash: no saved
 // view tool is destructive.
 
-const (
+var (
 	savedViewIDProperty = `"saved_view_id":{"type":"string",` + uuid + `,"description":"From colliedesk_saved_views_list."}`
 
 	// conversationFiltersSchema is the ConversationFilters object of the REST contract. Tags,
@@ -18,7 +20,7 @@ const (
 		`"contact":{"type":"string",` + uuid + `},"organization":{"type":"string","minLength":1,"maxLength":200},` +
 		`"awaiting":{"type":"string","enum":["team","customer"]},"has_pending_draft":{"type":"boolean"},"delivery_failed":{"type":"boolean"},` +
 		`"source":{"type":"string","enum":["imported","native"]},` +
-		`"channel":{"type":"array","maxItems":5,"items":{"type":"string","enum":["email","web_form","imported","agent","problem_report"]}},` +
+		`"channel":{"type":"array","maxItems":` + strconv.Itoa(conversationChannelCount) + `,"items":{"type":"string","enum":` + conversationChannelEnum + `}},` +
 		`"created_after":{"type":"string","format":"date-time"},"created_before":{"type":"string","format":"date-time"},` +
 		`"updated_after":{"type":"string","format":"date-time"},"updated_before":{"type":"string","format":"date-time"},` +
 		`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest"]},` +

@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { resultsApi } from '../../api/results';
 import type { Results } from '../../api/results';
+import { channelSchema } from '../../api/schemas';
 import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { messages } from '../../messages';
 import { FilterIcon, XIcon } from '../../ui/icons';
@@ -10,7 +11,7 @@ import { listOf, withoutValue } from '../../lib/inbox-query-edit';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { DraftInput } from './draft-input';
 import { trackFilterChanges } from './filter-analytics';
-import { filterMessages as text } from './filter-messages';
+import { channelLabel, filterMessages as text } from './filter-messages';
 
 // The Filter menu, the Sort menu and the chips of the active filters. They load on their own chunk, right
 // after the first screen (inbox-filters.tsx).
@@ -25,7 +26,8 @@ export interface FilterPartProps {
 }
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
-const channels = Object.keys(text.channels) as (keyof typeof text.channels)[];
+// Every value of the contract's ConversationChannel (channelSchema), named by the registry or as an origin.
+const channels = channelSchema.options;
 const dateFilters = [['created', 'created_after', 'created_before'], ['updated', 'updated_after', 'updated_before']] as const;
 
 // The day before an exclusive end is the last day the person picked.
@@ -131,7 +133,7 @@ function FilterPanel(props: FilterPartProps) {
         <label className="check-row"><input type="checkbox" checked={query.has_pending_draft === true} onChange={(event) => set('has_pending_draft', event.currentTarget.checked || undefined)} /><span>{text.hasPendingDraft}</span></label>
         <label className="check-row"><input type="checkbox" checked={query.delivery_failed === true} onChange={(event) => set('delivery_failed', event.currentTarget.checked || undefined)} /><span>{text.deliveryFailed}</span></label>
       </fieldset>
-      <fieldset><legend>{text.channel}</legend>{channels.map((value) => check('channel', value, text.channels[value]))}</fieldset>
+      <fieldset><legend>{text.channel}</legend>{channels.map((value) => check('channel', value, channelLabel(value)))}</fieldset>
       <fieldset><legend>{text.source}</legend>
         {(['', 'imported', 'native'] as const).map((value) => (
           <label key={value || 'any'} className="check-row"><input type="radio" name="source" checked={source === value} onChange={() => set('source', value || undefined)} />
@@ -212,7 +214,7 @@ export function FilterChips(props: FilterPartProps) {
     ...(query.awaiting === 'team' || query.awaiting === 'customer' ? [{ key: 'awaiting' as const, label: `${text.awaiting}: ${text.awaitingOptions[query.awaiting]}` }] : []),
     ...(query.has_pending_draft !== undefined ? [{ key: 'has_pending_draft' as const, label: query.has_pending_draft ? text.hasPendingDraft : text.noPendingDraft }] : []),
     ...(query.delivery_failed !== undefined ? [{ key: 'delivery_failed' as const, label: query.delivery_failed ? text.deliveryFailed : text.noDeliveryFailed }] : []),
-    ...listOf(query, 'channel').map((value) => ({ key: 'channel' as const, value, label: `${text.channel}: ${text.channels[value as keyof typeof text.channels] ?? value}` })),
+    ...listOf(query, 'channel').map((value) => ({ key: 'channel' as const, value, label: `${text.channel}: ${channelLabel(value)}` })),
     ...(query.source === 'imported' || query.source === 'native' ? [{ key: 'source' as const, label: `${text.source}: ${text.sources[query.source]}` }] : []),
     ...(query.organization ? [{ key: 'organization' as const, label: `${text.organization}: ${query.organization}` }] : []),
     ...(query.result ? [{ key: 'result' as const, label: resultLabel(query.result, results.data, timezone) }] : []),

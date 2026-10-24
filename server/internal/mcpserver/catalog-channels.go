@@ -62,11 +62,11 @@ func channelsEventsSpec() Spec {
 func channelsCreateSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_create", Title: "Add a channel",
-		Description: `Add a channel of a type with its configuration. A type that allows one channel per workspace (email, web_form) refuses a second (channel_type_limit). ` +
+		Description: `Add a channel of a type with its configuration. A type that allows one channel per workspace (colliedesk_channels_list shows each type's max_per_workspace) refuses a second (channel_type_limit). ` +
 			`Adding email connects the support address, like colliedesk_email_channel_update. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin",
 		REST: []string{"POST /api/v1/channels"},
-		Input: `{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":["email","web_form"]},` +
+		Input: `{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":` + channelTypeEnum + `},` +
 			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelConfig + `,` + channelSettings + `}}`,
 		Output: channelOutput,
 		run:    channelsCreate,

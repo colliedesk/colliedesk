@@ -2,6 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { renderHook, waitFor } from '@testing-library/react';
 import { expect, test } from 'vitest';
+import { channelSchema } from '../api/schemas';
+import { channelLabel } from '../features/inbox/filter-messages';
 import { channelTypes } from './registry';
 
 // The web side of "a new channel type is complete": every type the API names has a registry entry with its
@@ -45,4 +47,14 @@ test('the shared channel pages name no channel type', () => {
     const text = readFileSync(path.join(folder, name), 'utf8');
     for (const type of apiTypes) expect(text, `${name} names ${type}`).not.toMatch(new RegExp(`['"\`]${type}['"\`]`));
   }
+});
+
+// How a conversation started: the web app parses every conversation against channelSchema, so a value
+// the contract lists and the schema lacks would fail the whole inbox list. Both list the same values,
+// and each has words in the Filter menu.
+test('the conversation channel schema is the contract\'s ConversationChannel, and each value has a label', () => {
+  const contract = /\n {4}ConversationChannel:\n {6}type: string\n {6}enum: \[([^\]]*)\]/.exec(openapi)?.[1].split(',').map((value) => value.trim()) ?? [];
+  expect(contract.length).toBeGreaterThan(0);
+  expect([...channelSchema.options].sort()).toEqual([...contract].sort());
+  for (const value of contract) expect(channelLabel(value), value).not.toBe(value);
 });

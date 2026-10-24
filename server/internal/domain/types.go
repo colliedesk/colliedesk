@@ -180,6 +180,10 @@ const (
 	ChannelProblemReport = "problem_report"
 )
 
+// ConversationOrigins are the ways a conversation starts through no channel. With the registered
+// channel types they are every value of conversations.channel (ConversationChannel in the contract).
+var ConversationOrigins = []string{ChannelImported, ChannelAgent, ChannelProblemReport}
+
 // ConversationOrigin records where an imported conversation came from.
 type ConversationOrigin struct {
 	System     string `json:"system"`

@@ -29,8 +29,12 @@ fails when shared code names a type; `TestEveryRegisteredTypeIsWhole` when a reg
 
 1. A migration: one `channel_types` row, its own table if it has configuration (with `channel_id`,
    row-level security), fixture rows.
-2. `contracts/openapi.yaml`: the type in `ChannelType`, `<Type>ChannelConfig` in `ChannelConfig`, its
-   input in `ChannelConfigInput`, its own routes.
+2. `contracts/openapi.yaml`: the type in `ChannelType` and in `ConversationChannel`, `<Type>ChannelConfig`
+   in `ChannelConfig`, its input in `ChannelConfigInput`, its own routes. The web app's copy of
+   `ConversationChannel` (`channelSchema` in `web/src/api/schemas.ts`) gets the value too: it parses every
+   conversation, and a missing value fails the inbox list. `TestTheConversationChannelOfTheContractIsTheRegistryAndTheOrigins`
+   and `web/src/channels/registry.test.ts` fail until all three agree. The server's conversation filter,
+   saved views and MCP tool schemas read the registry (`mcpserver/channel-values.go`).
 3. `server/internal/channels/<type>/`: the adapter, its own routes in `Definition.Routes` (mounted by the
    API under `/api/v1`) and tools in `Definition.Tools`.
 4. One line in `server/internal/channels/registry/registry.go`.

@@ -101,7 +101,7 @@ func (a *API) listConversations(response http.ResponseWriter, request *http.Requ
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	filter, err := conversationFilterFromQuery(query)
+	filter, err := conversationFilterFromQuery(query, a.conversationChannels())
 	if err == nil {
 		err = resultFilterFromQuery(query, &filter)
 	}
