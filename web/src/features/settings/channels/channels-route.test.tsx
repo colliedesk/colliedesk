@@ -353,6 +353,37 @@ test('removing a channel reloads what the inbox reads of it: its own settings, t
   }
 });
 
+test('after a removal the list says which channel went, and focus is on that line', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  channelsApi.remove.mockResolvedValue(undefined);
+  channelsApi.list.mockResolvedValue({ items: [channel('email')], types: types(1, 0) });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const navigate = vi.fn();
+  const view = render(<QueryClientProvider client={client}><ChannelsRoute path={FORM} search={{}} navigate={navigate} /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove channel' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Yes, remove' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings/channels', true));
+  view.rerender(<QueryClientProvider client={client}><ChannelsRoute path="" search={{}} navigate={navigate} /></QueryClientProvider>);
+  const said = await screen.findByText('Web form was removed.');
+  await waitFor(() => expect(document.activeElement).toBe(said.closest('[role="status"]')));
+});
+
+test('removing the last channel says so above the empty list, with the focus there', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  channelsApi.remove.mockResolvedValue(undefined);
+  channelsApi.list.mockResolvedValue({ items: [], types: types(0, 0) });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const navigate = vi.fn();
+  const view = render(<QueryClientProvider client={client}><ChannelsRoute path={FORM} search={{}} navigate={navigate} /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove channel' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Yes, remove' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings/channels', true));
+  view.rerender(<QueryClientProvider client={client}><ChannelsRoute path="" search={{}} navigate={navigate} /></QueryClientProvider>);
+  const said = await screen.findByText('Web form was removed.');
+  await waitFor(() => expect(document.activeElement).toBe(said.closest('[role="status"]')));
+  expect(screen.getByRole('region', { name: 'No channel yet' })).toBeInTheDocument();
+});
+
 test('creating the inbound secret reloads the channel, so its state and notice follow', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'needs_attention', reason_code: 'no_inbound_secret', message: null } }), config: withChannel.channel });
   api.emailChannel.mockResolvedValue({ ...withChannel, channel: { ...withChannel.channel, secret_set: false, secret_rotated_at: null } });

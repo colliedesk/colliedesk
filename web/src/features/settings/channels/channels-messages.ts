@@ -56,6 +56,7 @@ export const channelsMessages = {
   removeTitle: (name: string) => `Remove ${name}?`,
   removeBody: 'It stops receiving and sending, and its settings and secrets are deleted. Its conversations stay and keep its name. Adding it again makes a new channel.',
   removeConfirm: 'Yes, remove',
+  removed: (name: string) => `${name} was removed.`,
   removeHeld: (count: number) => `It holds ${count} ${count === 1 ? 'message' : 'messages'} that arrived while it was off: open or discard ${count === 1 ? 'it' : 'them'} first.`,
   notFound: 'This channel was removed or does not exist.',
   unknownType: 'This kind of channel is not available on this server.',

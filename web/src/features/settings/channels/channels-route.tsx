@@ -130,8 +130,17 @@ function TypePicker({ list, navigate, choose }: { list: ChannelList | undefined;
   </ul>;
 }
 
+// The name of the channel just removed, for the list it goes back to: it says so there and takes the
+// focus the removed page's buttons had. Read once.
+let justRemoved: string | undefined;
+const takeRemoved = () => { const name = justRemoved; justRemoved = undefined; return name; };
+
 function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: 'channels' | 'history' }) {
   const channels = useChannels();
+  const [removedName] = useState(takeRemoved);
+  const removedNote = useRef<HTMLParagraphElement>(null);
+  const listed = Boolean(channels.data);
+  useEffect(() => { if (removedName && listed) removedNote.current?.focus(); }, [removedName, listed]);
   const [adding, setAdding] = useState(false);
   const prefix = useId();
   const list = channels.data;
@@ -151,11 +160,13 @@ function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: '
         : channels.isError ? <LoadFailed onRetry={() => void channels.refetch()} />
           : !list ? <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>
             : list.items.length === 0
-              ? <section className="settings-card ch-empty" aria-labelledby="ch-empty-heading">
+              ? <>{removedName && <p className="notice notice-plain" role="status" tabIndex={-1} ref={removedNote}><span>{m.removed(removedName)}</span></p>}
+                  <section className="settings-card ch-empty" aria-labelledby="ch-empty-heading">
                   <div className="section-heading"><h2 id="ch-empty-heading">{m.emptyTitle}</h2><p>{isAdmin ? m.emptyBody : m.adminsOnly}</p></div>
                   {isAdmin && <TypePicker list={list} navigate={navigate} />}
-                </section>
+                </section></>
               : <>
+                  {removedName && <p className="notice notice-plain" role="status" tabIndex={-1} ref={removedNote}><span>{m.removed(removedName)}</span></p>}
                   {attention.length > 0 && <div className="notice" role="status"><span><strong>{m.needsAttention}: </strong>
                     {attention.map((channel) => <span key={channel.id} className="ch-reason">{channel.name}: {m.reason(channel.status.reason_code, channel.status.message)}{' '}
                       <AppLink href={`${base}/${channel.id}`} navigate={navigate}>{m.fix}</AppLink></span>)}</span></div>}
@@ -279,6 +290,7 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
     const keys = ['channels', 'channel-events', 'conversations', ...(ui?.caches ?? [])];
     await client.invalidateQueries({ predicate: (query) => keys.includes(String(query.queryKey[0])) });
     client.removeQueries({ queryKey: ['channel', id] });
+    justRemoved = channel?.name;
     navigate(base, true);
   };
   const remove = useMutation({ mutationFn: () => channelsApi.remove(id), onSuccess: removed });
