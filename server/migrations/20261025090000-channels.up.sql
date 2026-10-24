@@ -143,6 +143,7 @@ CREATE TABLE channel_inbound_events (
     decided_by_agent_id uuid,
     received_at timestamptz NOT NULL DEFAULT now(),
     processed_at timestamptz,
+    UNIQUE (workspace_id, id),
     FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id),
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id) ON DELETE SET NULL (conversation_id),
     FOREIGN KEY (workspace_id, message_id) REFERENCES messages(workspace_id, id) ON DELETE SET NULL (message_id),
@@ -189,6 +190,70 @@ END
 $$;
 CREATE TRIGGER channel_inbound_events_count_held AFTER INSERT OR UPDATE OF state, raw_bytes OR DELETE ON channel_inbound_events
     FOR EACH ROW EXECUTE FUNCTION channel_inbound_events_count_held();
+
+-- The files of a journal event, fetched into attachment storage right after the event was journaled
+-- and before it is parsed, held or collected: a channel's media links expire, and a message opened
+-- days later must still have its files. A file that could not be fetched stays as failed with why.
+-- Stored bytes count toward the workspace's storage until the file becomes an attachment.
+CREATE TABLE channel_inbound_files (
+    workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    event_id uuid NOT NULL,
+    idx integer NOT NULL CHECK (idx >= 0),
+    name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 255),
+    content_type text NOT NULL CHECK (char_length(content_type) BETWEEN 1 AND 255),
+    status text NOT NULL CHECK (status IN ('pending', 'stored', 'failed')),
+    storage_key text,
+    sha256 text CHECK (sha256 ~ '^[0-9a-f]{64}$'),
+    size bigint CHECK (size >= 0),
+    error text CHECK (char_length(error) <= 500),
+    attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    -- Set once the file is an attachment of the message, which counts it from then on.
+    attached boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, event_id, idx),
+    FOREIGN KEY (workspace_id, event_id) REFERENCES channel_inbound_events(workspace_id, id) ON DELETE CASCADE,
+    CHECK ((status = 'stored') = (storage_key IS NOT NULL AND sha256 IS NOT NULL AND size IS NOT NULL)),
+    CHECK ((status = 'failed') = (error IS NOT NULL)),
+    CHECK (NOT attached OR status = 'stored')
+);
+CREATE INDEX channel_inbound_files_object_idx ON channel_inbound_files(workspace_id, storage_key) WHERE status = 'stored' AND NOT attached;
+
+CREATE FUNCTION channel_inbound_files_count() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    delta bigint := 0;
+    workspace uuid;
+BEGIN
+    IF TG_OP IN ('UPDATE', 'DELETE') AND OLD.status = 'stored' AND NOT OLD.attached THEN
+        delta := delta - OLD.size;
+        workspace := OLD.workspace_id;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') AND NEW.status = 'stored' AND NOT NEW.attached THEN
+        delta := delta + NEW.size;
+        workspace := NEW.workspace_id;
+    END IF;
+    IF delta <> 0 THEN
+        UPDATE workspaces SET counted_storage_bytes = counted_storage_bytes + delta, stored_storage_bytes = stored_storage_bytes + delta
+            WHERE id = workspace;
+    END IF;
+    RETURN NULL;
+END
+$$;
+CREATE TRIGGER channel_inbound_files_count AFTER INSERT OR UPDATE OF status, size, attached OR DELETE ON channel_inbound_files
+    FOR EACH ROW EXECUTE FUNCTION channel_inbound_files_count();
+
+-- Every id a channel gave a reply it sent (a long reply goes out as several messages), so the copy
+-- the channel sends back is known as our own.
+CREATE TABLE channel_sent_ids (
+    workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    channel_id uuid NOT NULL,
+    external_id text NOT NULL CHECK (char_length(external_id) BETWEEN 1 AND 1000),
+    message_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, channel_id, external_id),
+    FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id),
+    FOREIGN KEY (workspace_id, message_id) REFERENCES messages(workspace_id, id) ON DELETE CASCADE
+);
 
 -- Who added, renamed, turned on or off, changed or removed a channel, and what happened to the
 -- messages it held. Never a secret: only its last four characters. The name and type are copied.
@@ -432,7 +497,7 @@ BEGIN
         RAISE EXCEPTION 'row-level security is not set up in this schema';
     END IF;
     FOREACH name IN ARRAY ARRAY['channels', 'channel_credentials', 'contact_identities', 'conversation_thread_keys',
-            'channel_inbound_events', 'channel_events'] LOOP
+            'channel_inbound_events', 'channel_inbound_files', 'channel_sent_ids', 'channel_events'] LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', name);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', name);
         EXECUTE format($policy$CREATE POLICY workspace_isolation ON %1$I FOR ALL TO %2$I

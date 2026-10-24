@@ -75,6 +75,9 @@ ALTER TABLE conversations
     ADD CONSTRAINT conversations_channel_check CHECK (channel IN ('email', 'web_form', 'imported', 'agent', 'problem_report'));
 
 DROP TABLE channel_events;
+DROP TABLE channel_sent_ids;
+DROP TABLE channel_inbound_files;
+DROP FUNCTION channel_inbound_files_count();
 DROP TABLE channel_inbound_events;
 DROP FUNCTION channel_inbound_events_count_held();
 DROP TABLE conversation_thread_keys;

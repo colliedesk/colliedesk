@@ -10,13 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Spec describes a customer message for a harness to build as its type's raw event.
@@ -31,9 +30,12 @@ type Spec struct {
 
 // Harness is what Run needs of a type.
 type Harness struct {
-	Type  channels.Type
-	Pool  *pgxpool.Pool
+	Type channels.Type
+	// Pool is the owner connection the contract checks rows with (tests only; it sees every workspace).
+	Pool  Admin
 	Store *store.Store
+	// Workspace creates a workspace with its first admin and returns both ids.
+	Workspace func(t *testing.T, name, adminEmail string) (workspaceID, agentID string)
 	// Connect adds a connected channel of the type to the workspace; n tells apart two channels of a test.
 	Connect func(t *testing.T, workspaceID string, n int) channels.Channel
 	// Raw builds a customer message as the type receives it.
@@ -95,17 +97,8 @@ func (c *contract) desk(t *testing.T) desk {
 	c.n++
 	n := c.n
 	c.mu.Unlock()
-	ctx := context.Background()
-	workspace, _, err := auth.New(c.h.Pool, "https://desk.example.com").CreateWorkspace(ctx, fmt.Sprintf("%s contract %d", c.h.Type, n),
-		fmt.Sprintf("admin%d@contract.example.com", n))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var agentID string
-	if err := c.h.Pool.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1`, workspace.ID).Scan(&agentID); err != nil {
-		t.Fatal(err)
-	}
-	return desk{workspaceID: workspace.ID, agentID: agentID, channel: c.h.Connect(t, workspace.ID, n)}
+	workspaceID, agentID := c.h.Workspace(t, fmt.Sprintf("%s contract %d", c.h.Type, n), fmt.Sprintf("admin%d@contract.example.com", n))
+	return desk{workspaceID: workspaceID, agentID: agentID, channel: c.h.Connect(t, workspaceID, n)}
 }
 
 func (c *contract) receive(t *testing.T, channel channels.Channel, raws ...channels.Raw) []channels.IngestResult {
@@ -557,3 +550,9 @@ func deref(value *string) string {
 }
 
 type pgxTx = pgx.Tx
+
+// Admin is the owner connection of a test database, for assertions.
+type Admin interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}

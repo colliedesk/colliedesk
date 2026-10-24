@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
@@ -44,7 +45,7 @@ func loopbackStore(t *testing.T, loops ...*channeltest.Loopback) (*pgxpool.Pool,
 
 func loopbackHarness(t *testing.T, loop *channeltest.Loopback) channeltest.Harness {
 	pool, st := loopbackStore(t, loop)
-	return channeltest.Harness{Type: loop.Type, Pool: pool, Store: st, Secret: "loop-token-1234",
+	return channeltest.Harness{Type: loop.Type, Pool: pool, Store: st, Secret: "loop-token-1234", Workspace: workspaceMaker(pool),
 		Connect: func(t *testing.T, workspaceID string, n int) channels.Channel {
 			t.Helper()
 			var agentID string
@@ -78,4 +79,21 @@ func TestAsyncLoopbackPassesTheChannelContract(t *testing.T) {
 
 func TestSyncLoopbackPassesTheChannelContract(t *testing.T) {
 	channeltest.Run(t, loopbackHarness(t, channeltest.NewLoopback("loopback_sync", channels.Sync)))
+}
+
+// workspaceMaker creates workspaces with their first admin the way pairing does.
+func workspaceMaker(pool *pgxpool.Pool) func(t *testing.T, name, adminEmail string) (string, string) {
+	return func(t *testing.T, name, adminEmail string) (string, string) {
+		t.Helper()
+		ctx := context.Background()
+		workspace, _, err := auth.New(pool, "https://desk.example.com").CreateWorkspace(ctx, name, adminEmail)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var agentID string
+		if err := pool.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1`, workspace.ID).Scan(&agentID); err != nil {
+			t.Fatal(err)
+		}
+		return workspace.ID, agentID
+	}
 }

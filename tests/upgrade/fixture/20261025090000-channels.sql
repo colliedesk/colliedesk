@@ -78,3 +78,21 @@ INSERT INTO channel_inbound_events (id, workspace_id, channel_id, external_event
 INSERT INTO channel_inbound_events (id, workspace_id, channel_id, external_event_id, state, raw, hold_reason, received_at) VALUES
     (md5('chin-acme-1')::uuid, md5('ws-acme')::uuid, md5('channel-acme-2')::uuid, NULL, 'held',
      '{"email": "visitor@example.com", "message": "Are you open on Sunday?", "source": "contact"}', 'channel_off', '2026-10-24 12:30:00+00');
+
+-- The collected beta event had two files: one fetched into storage, one whose link was dead.
+INSERT INTO channel_inbound_files (workspace_id, event_id, idx, name, content_type, status, storage_key, sha256, size, error, attempts, attached,
+        created_at, updated_at)
+    SELECT md5('ws-beta')::uuid, md5('chin-beta-3')::uuid, 0, 'screenshot.png', 'image/png', 'stored', a.storage_key, a.sha256, a.size, NULL, 1, false,
+        '2026-10-24 13:00:02+00', '2026-10-24 13:00:02+00'
+    FROM attachments a WHERE a.workspace_id = md5('ws-beta')::uuid ORDER BY a.storage_key LIMIT 1;
+INSERT INTO channel_inbound_files (workspace_id, event_id, idx, name, content_type, status, storage_key, sha256, size, error, attempts, attached,
+        created_at, updated_at) VALUES
+    (md5('ws-beta')::uuid, md5('chin-beta-3')::uuid, 1, 'voice.amr', 'audio/amr', 'failed', NULL, NULL, NULL, 'the link answered 404', 3, false,
+     '2026-10-24 13:00:03+00', '2026-10-24 13:00:09+00');
+
+-- A sent reply that the channel delivered as two messages.
+INSERT INTO channel_sent_ids (workspace_id, channel_id, external_id, message_id, created_at)
+    SELECT o.workspace_id, o.channel_id, 'part-' || n || '-' || o.message_id, o.message_id, o.sent_at
+    FROM channel_outbox o, generate_series(1, 2) n
+    WHERE o.workspace_id = md5('ws-beta')::uuid AND o.status = 'sent' AND o.id = (
+        SELECT id FROM channel_outbox WHERE workspace_id = md5('ws-beta')::uuid AND status = 'sent' ORDER BY id LIMIT 1);
