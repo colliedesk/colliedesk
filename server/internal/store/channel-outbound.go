@@ -339,11 +339,15 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	if prepared.Status == channels.DeliveryFailed {
 		return domain.Message{}, fmt.Errorf("%w: %s", ErrOutboundNotReady, prepared.Reason)
 	}
+	// The reply is now one this channel carries, as a reply queued on it at once is (enqueueReply): it may
+	// have been saved while the channel was off, or before any channel was connected.
+	externalID := ""
 	if prepared.ExternalID != "" {
-		if _, err := tx.Exec(ctx, `UPDATE messages SET external_id=$3 WHERE workspace_id=$1 AND id=$2 AND external_id IS NULL`,
-			workspaceID, messageID, string(channel.Type)+":"+prepared.ExternalID); err != nil {
-			return domain.Message{}, fmt.Errorf("assign reply id: %w", err)
-		}
+		externalID = string(channel.Type) + ":" + prepared.ExternalID
+	}
+	if _, err := tx.Exec(ctx, `UPDATE messages SET channel_id=$4,external_id=COALESCE(external_id,NULLIF($3,'')) WHERE workspace_id=$1 AND id=$2`,
+		workspaceID, messageID, externalID, channel.ID); err != nil {
+		return domain.Message{}, fmt.Errorf("assign reply channel: %w", err)
 	}
 	now := s.now()
 	recipients := prepared.Recipients

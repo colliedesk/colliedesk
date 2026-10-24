@@ -224,6 +224,18 @@ func TestEmailOffHoldsMailAndRepliesUntilItIsOn(t *testing.T) {
 	if retry := request(t, api, http.MethodPost, "/api/v1/conversations/"+*first.ConversationID+"/messages/"+message.ID+"/retry", nil, admin, nil); retry.Code != http.StatusOK {
 		t.Fatalf("retry once on: %d %s", retry.Code, retry.Body.String())
 	}
+	var thread struct {
+		Items []struct {
+			ID        string  `json:"id"`
+			ChannelID *string `json:"channel_id"`
+		} `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/conversations/"+*first.ConversationID+"/messages", nil, admin, nil), &thread)
+	for _, item := range thread.Items {
+		if item.ID == message.ID && (item.ChannelID == nil || *item.ChannelID != email.ID) {
+			t.Fatalf("a reply retried once the channel is on names channel %v, want %s", item.ChannelID, email.ID)
+		}
+	}
 	opened := request(t, api, http.MethodPost, "/api/v1/channels/"+email.ID+"/held/replay", map[string]any{}, admin, nil)
 	var replay struct {
 		Results []struct {
@@ -584,5 +596,9 @@ func TestAReplyNoChannelCarriesIsSavedNotSentAndRetriedOnceEmailIsConnected(t *t
 	connectEmail(t, f.api, f.adminA, "support@form-desk.example.com")
 	if retry := request(t, f.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages/"+reply.ID+"/retry", nil, f.adminA, nil); retry.Code != http.StatusOK || !strings.Contains(retry.Body.String(), `"status":"queued"`) {
 		t.Fatalf("retry once email is connected: %d %s", retry.Code, retry.Body.String())
+	}
+	// The reply is now one the email channel carries, as a reply queued there at once would be.
+	if got := queryString(t, f.pool, `SELECT (COALESCE(m.channel_id::text,'') = COALESCE(o.channel_id::text,'-'))::text FROM messages m JOIN channel_outbox o ON o.message_id=m.id WHERE m.id=$1`, reply.ID); got != "true" {
+		t.Fatalf("after Retry the reply's channel is not the one that sends it (%s)", got)
 	}
 }
