@@ -111,9 +111,9 @@ function EmailEnvelope({ email, storedFiles }: { email: NonNullable<Message['ema
 function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId: string) => void }) {
   if (!item.delivery) return null;
   const { status, last_error: lastError, reason_code: code } = item.delivery;
-  // A reply saved while its channel was off waits to be retried; one with no channel or no address
+  // A reply saved while its channel was off, or before one was connected, waits to be retried; one with no channel or no address
   // to go to cannot be retried at all. Neither is a failed delivery.
-  const off = status === 'failed' && code === 'channel_off';
+  const off = status === 'failed' && (code === 'channel_off' || code === 'channel_not_connected');
   const never = status === 'failed' && (code === 'channel_removed' || code === 'no_recipient');
   return (
     <div className="message-envelope">

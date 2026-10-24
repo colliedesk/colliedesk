@@ -45,6 +45,10 @@ Turning a channel off keeps its settings and its conversations. While it is off:
   was off. After you turn the channel on, select **Retry** on the reply; nothing is sent again by
   itself. The channel shows how many replies wait.
 
+A reply written where no channel can carry it yet (a web form conversation before email is
+connected) is saved and reads **Saved, not sent**; once you connect email, select **Retry** on it.
+Nothing is sent by itself.
+
 Turning a channel off asks first. The composer of a conversation whose replies leave through a
 channel that is off says so ("Email is off: this reply is saved but not sent until the channel is
 on"), with a link to the channel for an admin. Turning it on again starts receiving and sending at

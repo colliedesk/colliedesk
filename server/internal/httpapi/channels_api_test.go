@@ -548,3 +548,41 @@ func TestReplayCountsOnlyTheMessagesItOpened(t *testing.T) {
 		}
 	}
 }
+
+// A reply in a workspace where no channel carries it yet (a web form without email) is saved with a
+// delivery that says it was not sent, and is sent by Retry once email is connected.
+func TestAReplyNoChannelCarriesIsSavedNotSentAndRetriedOnceEmailIsConnected(t *testing.T) {
+	f := newWebFormFixture(t, nil)
+	f.enable(t, f.adminA)
+	if response := f.submit(f.slugA, `{"email":"visitor@example.com","message":"hi"}`, "", "203.0.113.61:1"); response.Code != http.StatusAccepted {
+		t.Fatalf("submit: %d", response.Code)
+	}
+	var list struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	decode(t, request(t, f.api, http.MethodGet, "/api/v1/conversations", nil, f.adminA, nil), &list)
+	conversation := list.Items[0].ID
+	var reply struct {
+		ID       string `json:"id"`
+		Delivery *struct {
+			Status     string  `json:"status"`
+			ReasonCode *string `json:"reason_code"`
+			LastError  *string `json:"last_error"`
+		} `json:"delivery"`
+	}
+	decode(t, request(t, f.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Thanks."}, f.adminA, nil), &reply)
+	if reply.Delivery == nil || reply.Delivery.Status != "failed" || reply.Delivery.ReasonCode == nil || *reply.Delivery.ReasonCode != "channel_not_connected" ||
+		reply.Delivery.LastError == nil || !strings.Contains(*reply.Delivery.LastError, "connect") {
+		t.Fatalf("reply with no channel to carry it: %+v", reply.Delivery)
+	}
+	retry := request(t, f.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages/"+reply.ID+"/retry", nil, f.adminA, nil)
+	if retry.Code == http.StatusOK {
+		t.Fatal("a reply was queued with no channel to carry it")
+	}
+	connectEmail(t, f.api, f.adminA, "support@form-desk.example.com")
+	if retry := request(t, f.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages/"+reply.ID+"/retry", nil, f.adminA, nil); retry.Code != http.StatusOK || !strings.Contains(retry.Body.String(), `"status":"queued"`) {
+		t.Fatalf("retry once email is connected: %d %s", retry.Code, retry.Body.String())
+	}
+}

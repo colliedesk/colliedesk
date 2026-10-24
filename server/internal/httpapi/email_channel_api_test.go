@@ -116,8 +116,9 @@ func TestRepliesAreQueuedForEmailButNotesNever(t *testing.T) {
 	if len(items) != 3 {
 		t.Fatalf("unexpected timeline: %+v", items)
 	}
-	if items[0].Delivery != nil {
-		t.Fatalf("reply written before the channel existed must not be emailed: %+v", items[0])
+	// Written before the channel existed: not emailed by itself, and it says so (a Retry sends it).
+	if items[0].Delivery == nil || items[0].Delivery.Status != "failed" {
+		t.Fatalf("reply written before the channel existed must not be emailed, and must say it was not sent: %+v", items[0].Delivery)
 	}
 	if items[1].Delivery == nil || items[1].Delivery.Status != "queued" || items[1].Delivery.Attempts != 0 {
 		t.Fatalf("reply must be queued: %+v", items[1])
@@ -125,7 +126,7 @@ func TestRepliesAreQueuedForEmailButNotesNever(t *testing.T) {
 	if items[2].Delivery != nil {
 		t.Fatalf("note must never be queued: %+v", items[2])
 	}
-	if count := queryString(t, pool, `SELECT count(*)::text FROM email_outbox`); count != "1" {
+	if count := queryString(t, pool, `SELECT count(*)::text FROM email_outbox WHERE status='queued'`); count != "1" {
 		t.Fatalf("outbox rows=%s, want 1", count)
 	}
 	retry := request(t, api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages/"+items[1].ID+"/retry", nil, admin, nil)

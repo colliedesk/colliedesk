@@ -17,7 +17,9 @@ const (
 	DeliveryCodeChannelOff     = "channel_off"
 	DeliveryCodeChannelRemoved = "channel_removed"
 	DeliveryCodeNoRecipient    = "no_recipient"
-	DeliveryCodeGaveUp         = "gave_up"
+	// DeliveryCodeNotConnected: no channel of the type that carries the reply is connected yet.
+	DeliveryCodeNotConnected = "channel_not_connected"
+	DeliveryCodeGaveUp       = "gave_up"
 )
 
 // ReplyRoute is the channel a reply on a conversation leaves through.
@@ -26,6 +28,8 @@ type ReplyRoute struct {
 	// that was removed, if that is why.
 	Channel *channels.Channel
 	Removed *channels.Channel
+	// Type is the type that carries the replies, also when no channel of it is connected.
+	Type channels.Type
 }
 
 // replyRoute finds the channel that carries replies of a conversation: its own when its type sends,
@@ -67,7 +71,7 @@ func routeReply(registry *channels.Registry, origin channels.Type, own *channels
 		return ReplyRoute{}, nil
 	}
 	if own != nil && own.Type == replyType && own.Live() {
-		return ReplyRoute{Channel: own}, nil
+		return ReplyRoute{Channel: own, Type: replyType}, nil
 	}
 	adapter, ok := registry.Adapter(replyType)
 	if !ok {
@@ -76,13 +80,13 @@ func routeReply(registry *channels.Registry, origin channels.Type, own *channels
 	if adapter.Definition().Singleton {
 		channel, err := live(replyType)
 		if err != nil || channel != nil {
-			return ReplyRoute{Channel: channel}, err
+			return ReplyRoute{Channel: channel, Type: replyType}, err
 		}
 	}
 	if own != nil && own.Type == replyType {
-		return ReplyRoute{Removed: own}, nil
+		return ReplyRoute{Removed: own, Type: replyType}, nil
 	}
-	return ReplyRoute{}, nil
+	return ReplyRoute{Type: replyType}, nil
 }
 
 // attachChannelRefs gives each conversation its channel and the one its replies leave through, from
@@ -203,9 +207,9 @@ func reachable(recipient channels.Recipient, kind string) bool {
 }
 
 // enqueueReply queues a reply on the channel that carries the conversation's replies, in the
-// transaction that stores it. With no channel that can carry it nothing is queued, as before channels
-// for a workspace without email. A channel that is off, removed, or cannot reach the customer queues
-// a failed delivery that says why; a person retries it once that is fixed.
+// transaction that stores it. A channel that is off, removed, not connected yet (a web form without
+// email), or cannot reach the customer queues a failed delivery that says why; a person retries it once
+// that is fixed. Only a conversation whose replies no type carries queues nothing.
 func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string, cc []string) error {
 	route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
 	if err != nil {
@@ -222,6 +226,16 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if route.Channel == nil {
 		if route.Removed != nil {
 			return failed(*route.Removed, DeliveryCodeChannelRemoved, route.Removed.Name+" was removed, so this reply cannot be sent.")
+		}
+		adapter, ok := s.channels.Adapter(route.Type)
+		if !ok {
+			return nil
+		}
+		name := adapter.Definition().Name
+		if _, err := tx.Exec(ctx, `INSERT INTO channel_outbox(workspace_id,message_id,status,last_error,last_error_code,created_at,recipients,transport,channel_type)
+			VALUES($1,$2,'failed',$3,$4,$5,$6,NULL,$7)`, workspaceID, messageID, name+" is not connected: this reply is saved but not sent. Connect it, then retry.",
+			DeliveryCodeNotConnected, s.now(), 1+len(cc), string(route.Type)); err != nil {
+			return fmt.Errorf("queue reply: %w", err)
 		}
 		return nil
 	}
