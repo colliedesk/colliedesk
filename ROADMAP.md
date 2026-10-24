@@ -54,7 +54,6 @@ Beta starts when HC Labs announces it. Before that:
   ([#100](https://github.com/colliedesk/colliedesk/issues/100)).
 - Auto-answer only for topics where drafts proved accurate, with a human in the loop.
 - Usage metering; bring your own AI key.
-- Connect any agent host in one step, with setup docs and an Agent Skills pack ([#113](https://github.com/colliedesk/colliedesk/issues/113)).
 
 ## Later
 
