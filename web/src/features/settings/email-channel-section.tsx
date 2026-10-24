@@ -2,16 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type { EmailChannelSettings, EmailDnsRecord } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
+import { PartUnavailable } from '../../ui/lazy-part';
 import type { GmailReturn } from './gmail-return';
 import { NameForm } from './name-form';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
+import { gmailPart } from './gmail-part';
 
-// "Send from Gmail" loads in its own chunk: Settings is rarely opened and the main bundle has a fixed budget
-// (docs/internals/performance.md). The Settings route preloads it when it opens, so the block is there by the
-// time the channel settings arrive.
-export const gmailPart = lazyPart(() => import('./gmail-connection'));
+// The block's chunk lives in gmail-part.ts; this file keeps the name its callers and tests import.
+export { gmailPart };
 
 interface EmailChannelSectionProps {
   settings?: EmailChannelSettings;

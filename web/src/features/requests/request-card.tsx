@@ -6,7 +6,7 @@ import { track } from '../../lib/product-analytics';
 import { permissionLabel } from '../settings/token-permissions';
 import { messages } from '../../messages';
 import { PartUnavailable } from '../../ui/lazy-part';
-import { gmailPart } from '../settings/email-channel-section';
+import { gmailPart } from '../settings/gmail-part';
 import { replyCall } from './request-call';
 import { isSavedReplyRequest, SavedReplyProposal } from './saved-reply-proposal';
 
