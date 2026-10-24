@@ -36,10 +36,13 @@ interface EmailChannelSectionProps {
   gmailPending?: boolean;
   gmailError?: string;
   gmailReturned?: GmailReturn;
+  // part shows one half of the channel as a channel tab does, without the section frame: how mail arrives
+  // (connection) or how replies leave (replies). All, the default, is the whole section.
+  part?: 'all' | 'connection' | 'replies';
 }
 
 export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, senderNameSave, slugSave, onSave, onSaveSenderName, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending,
-  onConnectGmail, onDisconnectGmail, gmailPending, gmailError, gmailReturned }: EmailChannelSectionProps) {
+  onConnectGmail, onDisconnectGmail, gmailPending, gmailError, gmailReturned, part = 'all' }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   // A connected Gmail account sends by itself; a broken one says so in its own block.
   const gmailConnection = channel ? settings?.gmail.connection ?? null : null;
@@ -76,10 +79,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const copyAddress = () => {
     if (hostedAddress) void navigator.clipboard.writeText(hostedAddress).then(() => setCopied(true));
   };
-  return (
-    <section className="settings-card" aria-labelledby="email-channel-heading">
-      <div className="section-heading"><h2 id="email-channel-heading">{messages.emailChannel}</h2><p>{messages.emailChannelDescription}</p></div>
-      <div className="settings-body">
+  const addressPart = <>
         {canManage
           ? <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!addressFeedback.pending) onSave?.(address.trim()); }}>
               <label className="field"><span>{messages.supportAddress}</span><input type="email" value={address} onChange={(event) => { addressFeedback.touch(); setAddress(event.target.value); }} required /></label>
@@ -87,8 +87,12 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
               {addressFeedback.status}
             </form>
           : <p><strong>{messages.supportAddress}: </strong><span>{channel ? channel.support_address : messages.emailNotConnected}</span></p>}
+  </>;
+  const senderPart = <>
         {channel && <NameForm label={messages.senderName} saveLabel={messages.saveSenderName} hint={messages.senderNameHelp}
           value={channel.sender_name} canManage={canManage} save={senderNameSave} onSave={onSaveSenderName} />}
+  </>;
+  const arrivalPart = <>
         {hostedAddress && <div className="email-channel-forwarding">
           <div className="copy-field">
             <label className="invite-link"><span className="field-label">{messages.forwardingAddress}</span><input readOnly value={hostedAddress} /></label>
@@ -124,6 +128,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
             <button type="button" autoFocus onClick={cancelDisconnect}>{messages.cancel}</button>
           </span>
         </div>}
+  </>;
+  const repliesPart = <>
         {channel && (channel.domain_verified_at
           ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
           : gmailSending
@@ -150,6 +156,14 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         {smtp && (smtp.configured
           ? <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p>
           : !gmailConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{messages.smtpNotConfigured}</p>)}
+  </>;
+  if (part === 'connection') return <div className="settings-body">{addressPart}{arrivalPart}</div>;
+  if (part === 'replies') return <div className="settings-body">{senderPart}{repliesPart}</div>;
+  return (
+    <section className="settings-card" aria-labelledby="email-channel-heading">
+      <div className="section-heading"><h2 id="email-channel-heading">{messages.emailChannel}</h2><p>{messages.emailChannelDescription}</p></div>
+      <div className="settings-body">
+        {addressPart}{senderPart}{arrivalPart}{repliesPart}
       </div>
     </section>
   );

@@ -54,7 +54,7 @@ const firstStep: Partial<Record<OnboardingGoal, Step>> = { leave_helpdesk: 'impo
 
 // getStartedSteps lists the steps this agent can take, the goal's step first. The settings steps stay
 // admin-only; a goal whose step this agent cannot take recommends nothing.
-export type SettingsTarget = '/settings' | '/settings/import-freshdesk';
+export type SettingsTarget = '/settings' | '/settings/import-freshdesk' | `/settings/channels/${string}`;
 
 function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boolean): { steps: Step[]; recommended?: Step } {
   const lead = goal ? firstStep[goal] : undefined;
@@ -91,7 +91,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
   }}>{label}</a>;
   const getStarted = getStartedSteps(onboardingGoal, canManage);
   const stepLink: Record<Step, ReactNode> = {
-    connect: settingsLink(messages.connectEmail),
+    connect: settingsLink(messages.connectEmail, '/settings/channels/type/email'),
     // An admin imports in the app; an agent reads how, to ask an admin.
     import: canManage ? settingsLink(messages.importFreshdesk, '/settings/import-freshdesk')
       : <a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Link, Navigate, Outlet, createRootRoute, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
@@ -28,6 +28,7 @@ const settingsRoutePart = lazyPart(() => import('./features/settings/settings-ro
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
+const channelsRoutePart = lazyPart(() => import('./features/settings/channels/channels-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
 const resultsSharePart = lazyPart(() => import('./features/results/results-share-route'));
@@ -104,8 +105,9 @@ function AppLayout() {
 // Settings sections link through the router, so moving between Settings and Plan and billing needs no reload.
 // exact + includeHash: otherwise every section link would count as current on any settings page.
 function settingsRouterLink(item: NavItem) {
+  const preload = item.to === '/settings/channels' ? channelsRoutePart.preload : undefined;
   return <Link to={item.to} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
-    aria-current={item.current ? 'page' : undefined}>{item.label}</Link>;
+    aria-current={item.current ? 'page' : undefined} onPointerEnter={preload} onFocus={preload}>{item.label}</Link>;
 }
 
 // An unknown address inside the app says so and offers the way back, in the frame of every other page.
@@ -194,7 +196,10 @@ function SettingsPage() {
     {part.status === 'error' ? <PartUnavailable /> : <p role="status" className="muted-copy">{messages.loadingList}</p>}
   </main>;
 }
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
+// The email channel and the web form were sections of this page; their old anchors open their channel.
+const movedSections: Record<string, string> = { 'email-channel-heading': '/settings/channels/type/email', 'web-form-heading': '/settings/channels/type/web_form' };
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage,
+  beforeLoad: ({ location }) => { const moved = movedSections[location.hash]; if (moved) throw redirect({ href: moved, replace: true }); } });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -236,6 +241,23 @@ const aiRoute = createRoute({
     return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute />} />;
   },
 });
+// Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).
+type ChannelsSearch = { tab?: string; gmail?: string; gmail_error?: string };
+const channelsSearch = (search: Record<string, unknown>): ChannelsSearch => Object.fromEntries((['tab', 'gmail', 'gmail_error'] as const)
+  .flatMap((key) => (typeof search[key] === 'string' && search[key] !== '' ? [[key, search[key]]] : [])));
+function ChannelsSettings({ path, search }: { path: string; search: ChannelsSearch }) {
+  const navigate = useNavigate();
+  const go = useCallback((href: string, replace?: boolean) => void navigate({ href, replace }), [navigate]);
+  return <Part part={channelsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ChannelsRoute }) => <ChannelsRoute path={path} search={search} navigate={go} />} />;
+}
+const channelsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/settings/channels', validateSearch: channelsSearch,
+  component: function Channels() { return <ChannelsSettings path="" search={channelsRoute.useSearch()} />; },
+});
+const channelRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/settings/channels/$', validateSearch: channelsSearch,
+  component: function Channel() { return <ChannelsSettings path={channelRoute.useParams()._splat ?? ''} search={channelRoute.useSearch()} />; },
+});
 const resultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/results',
@@ -272,7 +294,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, resultsRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, channelsRoute, channelRoute, resultsRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

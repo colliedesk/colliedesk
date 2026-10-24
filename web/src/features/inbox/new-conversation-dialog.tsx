@@ -45,7 +45,7 @@ export function StartConversationWindow({ onClose, onStarted }: { onClose: () =>
   };
   return <NewConversationDialog blocked={blocked} checking={me.isPending || channel.isPending} onClose={onClose} onStart={start}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    onOpenSettings={() => void navigate({ to: '/settings' })} onChoosePlan={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />;
+    onOpenSettings={() => void navigate({ href: '/settings/channels/type/email?tab=replies' })} onChoosePlan={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />;
 }
 
 export interface NewConversationDialogProps {
@@ -145,7 +145,7 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
         <h2 id={titleId}>{contactMessages.newConversationTitle}</h2>
         {blocked && <p role="status" className="composer-notice">
           {blocked === 'trial' ? contactMessages.newConversationTrial : contactMessages.newConversationNeedsChannel}{' '}
-          <RouterLink href="/settings" onFollow={onOpenSettings && (() => { onClose(); onOpenSettings(); })}>
+          <RouterLink href="/settings/channels/type/email?tab=replies" onFollow={onOpenSettings && (() => { onClose(); onOpenSettings(); })}>
             {blocked === 'trial' ? contactMessages.verifySendingDomain : contactMessages.connectEmailChannel}</RouterLink>
           {blocked === 'trial' && <>{' · '}<RouterLink href="/settings/billing" onFollow={onChoosePlan && (() => { onClose(); onChoosePlan(); })}>{messages.choosePlan}</RouterLink></>}
         </p>}

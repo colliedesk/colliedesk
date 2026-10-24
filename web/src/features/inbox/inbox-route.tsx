@@ -167,7 +167,10 @@ export function InboxRoute() {
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
   const limits = config?.limits;
-  const outbound = outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  // The conversation's own channel comes first: off or removed, its replies wait whatever email can do.
+  const via = selected?.channel_ref;
+  const channelNotice = via && (via.replies_via === null ? messages.channelRemoved(via.name) : via.replies_via.enabled ? undefined : messages.channelOff(via.replies_via.name));
+  const outbound = channelNotice ?? outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
   // A reply that just failed may mean Gmail stopped sending; the channel is read again so the notice above
   // the composer follows without a reload.
   const failedDeliveries = timeline.data?.items.filter((item) => item.delivery?.status === 'failed').map((item) => item.id).join(',') ?? '';
@@ -257,12 +260,12 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outbound} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} outboundLink={via?.replies_via && channelNotice ? `/settings/channels/${via.replies_via.id}` : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={me.data?.agent?.role === 'admin'} onOpenSettings={(to = '/settings') => void navigate({ to })}
+    canManage={me.data?.agent?.role === 'admin'} onOpenSettings={(to = '/settings') => void navigate({ href: to })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}

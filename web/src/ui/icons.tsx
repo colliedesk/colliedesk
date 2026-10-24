@@ -1,7 +1,7 @@
 import type { ReactNode, SVGProps } from 'react';
 
 // Decorative 16px stroke icons; the control that holds one carries the accessible name.
-function Icon({ children, ...props }: SVGProps<SVGSVGElement> & { children: ReactNode }) {
+export function Icon({ children, ...props }: SVGProps<SVGSVGElement> & { children: ReactNode }) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...props}>{children}</svg>
@@ -35,3 +35,7 @@ export const CheckIcon = () => <Icon><path d="M20 6 9 17l-5-5" /></Icon>;
 export const RotateCcwIcon = () => <Icon><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></Icon>;
 export const MinusIcon = () => <Icon><path d="M5 12h14" /></Icon>;
 export const SparklesIcon = () => <Icon><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.1 2.1M15.6 15.6l2.1 2.1M6.3 17.7l2.1-2.1M15.6 8.4l2.1-2.1" /></Icon>;
+export const PlusIcon = () => <Icon><path d="M12 5v14M5 12h14" /></Icon>;
+export const MailIcon = () => <Icon><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></Icon>;
+export const FormIcon = () => <Icon><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M7 8h10M7 12h10M7 16h6" /></Icon>;
+export const ChatIcon = () => <Icon><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" /></Icon>;

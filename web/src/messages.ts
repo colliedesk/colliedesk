@@ -64,6 +64,7 @@ export const messages = {
   importFreshdesk: 'Import from Freshdesk',
   aiSettings: 'Built-in AI',
   aiAgents: 'External AI agents',
+  channels: 'Channels',
   importFreshdeskURL: 'https://colliedesk.com/docs/import-freshdesk',
   inviteTeam: 'Invite your team',
   connectAIAgent: 'Connect an AI agent',
@@ -380,6 +381,8 @@ export const messages = {
     ? 'Replies are not emailed: Gmail stopped sending. Reconnect it in Settings, then retry the failed replies.'
     : 'Replies are not emailed: Gmail stopped sending. Ask an admin to reconnect Gmail, then retry the failed replies.',
   openSettings: 'Open Settings',
+  channelOff: (name: string) => `${name} is off: this reply is saved but not sent until the channel is on.`,
+  channelRemoved: (name: string) => `Replies to this conversation cannot be sent: ${name} was removed.`,
   planNotices: 'Plan notices',
   trialDaysLeft: (days: number) => `Trial: ${days} ${days === 1 ? 'day' : 'days'} left`,
   trialExtendedNote: 'Your trial was extended after your Freshdesk import.',

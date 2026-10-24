@@ -70,7 +70,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
       <header><h1>{billingMessages.billingHeading}</h1><p>{billingMessages.billingDescription}</p></header>
       <div className="settings-layout">
         {/* Only admins reach this page, and an admin sees every settings section. */}
-        <SettingsNav page="/settings/billing" shown={{ general: true, team: true, email: true, webForm: true, savedReplies: true, exportData: true, billing: true, importData: true, ai: true }} />
+        <SettingsNav page="/settings/billing" shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: true, importData: true, ai: true }} />
         <div className="settings-sections">
           {failed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
           {checkoutReturned && <p role="status">{billingMessages.checkoutReturned}</p>}

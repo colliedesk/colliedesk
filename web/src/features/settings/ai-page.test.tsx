@@ -31,7 +31,7 @@ function page(props: Partial<AIPageProps> = {}) {
     onAdd: vi.fn().mockResolvedValue(undefined), onListModels: vi.fn().mockResolvedValue([]), onSetKey: vi.fn().mockResolvedValue(undefined), onRemove: vi.fn().mockResolvedValue(undefined),
     onSetAutomatic: vi.fn().mockResolvedValue(undefined), onUsageMonth: vi.fn(),
   };
-  render(<AIPage isAdmin workspaceName="Northwind" timezone="UTC" shown={{ general: true, team: true, email: true, webForm: true, savedReplies: true, exportData: true, billing: false, ai: true }}
+  render(<AIPage isAdmin workspaceName="Northwind" timezone="UTC" shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: false, ai: true }}
     showConsent={false} settings={settings()} {...handlers} {...props} />);
   return handlers;
 }

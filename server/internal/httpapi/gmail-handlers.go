@@ -62,11 +62,12 @@ func (a *API) connectGmail(response http.ResponseWriter, request *http.Request) 
 	writeJSON(response, http.StatusOK, map[string]string{"url": a.config.Google.AuthorizationURL(a.gmailRedirectURI(), started.State, started.Verifier)})
 }
 
+// gmailResultPath is the email channel's Replies tab, where the "Send from Gmail" block reads the outcome.
 func gmailResultPath(outcome string) string {
 	if outcome == "connected" {
-		return "/settings?gmail=connected"
+		return "/settings/channels/type/email?tab=replies&gmail=connected"
 	}
-	return "/settings?gmail_error=" + outcome
+	return "/settings/channels/type/email?tab=replies&gmail_error=" + outcome
 }
 
 // finishGmailConnect is where Google sends the person's browser back. The route is public so that

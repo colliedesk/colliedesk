@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
 
 // SaveState is what a section is told about its latest save request.
@@ -7,6 +8,11 @@ export interface SaveState {
   saved?: boolean;
   // error explains a refused or failed save.
   error?: string;
+}
+
+// saveState reads a mutation as the SaveState of its form: a refusal shows the server's words.
+export function saveState(m: { isPending: boolean; isSuccess: boolean; isError: boolean; error: unknown }): SaveState {
+  return { pending: m.isPending, saved: m.isSuccess, error: m.isError ? (m.error instanceof InvalidRequestError ? m.error.message : messages.settingsActionFailed) : undefined };
 }
 
 // useSaveFeedback turns a SaveState into what one form shows. The Saved line

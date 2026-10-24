@@ -840,3 +840,26 @@ test('Back to Inbox after opening a row goes back in the history, so the browser
   expect(back).toHaveBeenCalledTimes(1);
   back.mockRestore();
 });
+
+test('a conversation whose channel is off says its reply waits, and an admin is led to that channel', async () => {
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'web_form', name: 'Web form', enabled: true, deleted: false,
+    replies_via: { id: '55555555-5555-4555-8555-555555555555', name: 'Email', enabled: false } };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'web_form' as const, channel_ref: ref };
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  const notice = await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/);
+  fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
+  expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/55555555-5555-4555-8555-555555555555' });
+  navigate.mockRestore();
+});

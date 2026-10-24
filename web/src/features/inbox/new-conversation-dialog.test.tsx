@@ -107,7 +107,7 @@ test('on the trial without a verified domain the window says why, links to the w
 
 test('without an email channel the window links to Settings to connect one', () => {
   wrap(<NewConversationDialog blocked="no_channel" onStart={vi.fn()} onClose={vi.fn()} />);
-  expect(screen.getByRole('link', { name: 'Connect the email channel in Settings' })).toHaveAttribute('href', '/settings');
+  expect(screen.getByRole('link', { name: 'Connect the email channel in Settings' })).toHaveAttribute('href', '/settings/channels/type/email?tab=replies');
 });
 
 test('the picker of a new conversation offers to add the customer when nobody matches', async () => {

@@ -124,7 +124,7 @@ func TestAdminConnectsGmailAndRepliesAreQueuedForIt(t *testing.T) {
 	if !strings.Contains(consent, url.QueryEscape(gmailCallback)) || !strings.Contains(consent, "gmail.send") {
 		t.Fatalf("consent address = %s", consent)
 	}
-	if location := desk.finish(t, consent, "Help@Gmail-Desk.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail=connected" {
+	if location := desk.finish(t, consent, "Help@Gmail-Desk.example.com", sessionCookieOf(desk.admin)); location != "/settings/channels/type/email?tab=replies&gmail=connected" {
 		t.Fatalf("Location = %s", location)
 	}
 	after := desk.settings(t, desk.admin)
@@ -201,7 +201,7 @@ func TestStartingGmailRepeatedlyKeepsOnlyTheLatestConsents(t *testing.T) {
 	if count := queryString(t, desk.pool, `SELECT count(*)::text FROM mailbox_oauth_states`); count != "5" {
 		t.Fatalf("consent states kept = %s, want 5", count)
 	}
-	if location := desk.finish(t, last, "help@many-starts.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail=connected" {
+	if location := desk.finish(t, last, "help@many-starts.example.com", sessionCookieOf(desk.admin)); location != "/settings/channels/type/email?tab=replies&gmail=connected" {
 		t.Fatalf("newest consent: %s", location)
 	}
 }
@@ -222,7 +222,7 @@ func TestTheCallbackFinishesOnlyForThePersonWhoStartedIt(t *testing.T) {
 	consent := desk.startGmail(t, desk.admin)
 	// A bearer token is not a browser session.
 	target, _ := desk.fake.Consent(consent, "a@callback-desk.example.com")
-	if location := desk.callback(t, strings.TrimPrefix(target, testOrigin), nil, desk.admin); location != "/settings?gmail_error=signed_out" {
+	if location := desk.callback(t, strings.TrimPrefix(target, testOrigin), nil, desk.admin); location != "/settings/channels/type/email?tab=replies&gmail_error=signed_out" {
 		t.Fatalf("bearer callback Location = %s", location)
 	}
 	// Another admin of the same workspace cannot finish someone else's consent.
@@ -232,7 +232,7 @@ func TestTheCallbackFinishesOnlyForThePersonWhoStartedIt(t *testing.T) {
 		Token string `json:"token"`
 	}
 	decode(t, redeemed, &second)
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@callback-desk.example.com", sessionCookieOf(second.Token)); location != "/settings?gmail_error=wrong_person" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@callback-desk.example.com", sessionCookieOf(second.Token)); location != "/settings/channels/type/email?tab=replies&gmail_error=wrong_person" {
 		t.Fatalf("other admin Location = %s", location)
 	}
 	// An agent (not an admin) cannot start or finish.
@@ -240,18 +240,18 @@ func TestTheCallbackFinishesOnlyForThePersonWhoStartedIt(t *testing.T) {
 	if response := request(t, desk.api, http.MethodPost, "/api/v1/channels/email/gmail", nil, agent, nil); response.Code != http.StatusForbidden {
 		t.Fatalf("agent start: %d", response.Code)
 	}
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@callback-desk.example.com", sessionCookieOf(agent)); location != "/settings?gmail_error=forbidden" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@callback-desk.example.com", sessionCookieOf(agent)); location != "/settings/channels/type/email?tab=replies&gmail_error=forbidden" {
 		t.Fatalf("agent callback Location = %s", location)
 	}
 	// Denied at Google, then the same state again: both refused, nothing connected.
 	denied := desk.startGmail(t, desk.admin)
-	if location := desk.finish(t, denied, "", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=denied" {
+	if location := desk.finish(t, denied, "", sessionCookieOf(desk.admin)); location != "/settings/channels/type/email?tab=replies&gmail_error=denied" {
 		t.Fatalf("denied Location = %s", location)
 	}
-	if location := desk.finish(t, denied, "a@callback-desk.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=expired" {
+	if location := desk.finish(t, denied, "a@callback-desk.example.com", sessionCookieOf(desk.admin)); location != "/settings/channels/type/email?tab=replies&gmail_error=expired" {
 		t.Fatalf("reused state Location = %s", location)
 	}
-	if location := desk.callback(t, "/api/v1/channels/email/gmail/callback?code=x&state=made-up", sessionCookieOf(desk.admin), ""); location != "/settings?gmail_error=expired" {
+	if location := desk.callback(t, "/api/v1/channels/email/gmail/callback?code=x&state=made-up", sessionCookieOf(desk.admin), ""); location != "/settings/channels/type/email?tab=replies&gmail_error=expired" {
 		t.Fatalf("made-up state Location = %s", location)
 	}
 	if view := desk.settings(t, desk.admin); view.Gmail.Connection != nil {
@@ -269,14 +269,14 @@ func TestAConsentStartedInOneWorkspaceNeverConnectsAnother(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := strings.TrimPrefix(target, testOrigin)
-	if location := desk.callback(t, path, sessionCookieOf(other), ""); location != "/settings?gmail_error=expired" {
+	if location := desk.callback(t, path, sessionCookieOf(other), ""); location != "/settings/channels/type/email?tab=replies&gmail_error=expired" {
 		t.Fatalf("B finishing A's consent: Location = %s", location)
 	}
 	if view := desk.settings(t, other); view.Gmail.Connection != nil {
 		t.Fatalf("B got a connection: %+v", view.Gmail.Connection)
 	}
 	// The state was looked up in B only, so A can still finish its own consent.
-	if location := desk.callback(t, path, sessionCookieOf(desk.admin), ""); location != "/settings?gmail=connected" {
+	if location := desk.callback(t, path, sessionCookieOf(desk.admin), ""); location != "/settings/channels/type/email?tab=replies&gmail=connected" {
 		t.Fatalf("A finishing its own consent: Location = %s", location)
 	}
 	if view := desk.settings(t, other); view.Gmail.Connection != nil {
@@ -293,15 +293,15 @@ func TestAConsentStartedInOneWorkspaceNeverConnectsAnother(t *testing.T) {
 func TestGoogleRefusalsAreNamedNotEchoed(t *testing.T) {
 	desk := newGmailDesk(t, "Refusals")
 	desk.fake.Set(func(s *googletest.Server) { s.GrantScope = "openid email" })
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=send_not_granted" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings/channels/type/email?tab=replies&gmail_error=send_not_granted" {
 		t.Fatalf("unticked send: %s", location)
 	}
 	desk.fake.Set(func(s *googletest.Server) { s.GrantScope = ""; s.OmitRefreshToken = true })
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=no_refresh_token" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings/channels/type/email?tab=replies&gmail_error=no_refresh_token" {
 		t.Fatalf("no refresh token: %s", location)
 	}
 	desk.fake.Set(func(s *googletest.Server) { s.OmitRefreshToken = false; s.TokenDown = true })
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=google_unavailable" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings/channels/type/email?tab=replies&gmail_error=google_unavailable" {
 		t.Fatalf("token endpoint down: %s", location)
 	}
 	if view := desk.settings(t, desk.admin); view.Gmail.Connection != nil {

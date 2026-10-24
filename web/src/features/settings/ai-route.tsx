@@ -87,7 +87,7 @@ export function AIRoute() {
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   const error = failed ? refusal(failed).text : undefined;
   return <AIPage isAdmin={isAdmin} workspaceName={me.data.workspace.name} timezone={me.data.timezone ?? 'UTC'}
-    shown={{ general: isAdmin, team: isAdmin, email: isAdmin, webForm: isAdmin, savedReplies: true, exportData: isAdmin,
+    shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
       billing: isAdmin && config.data?.billing.enabled === true, importData: isAdmin, ai: true }}
     settings={settings.data} loadFailed={settings.isError} showConsent={!dismissed && neverSet(settings.data)}
     busySlot={busySlot} busyProvider={busyProvider} error={error}

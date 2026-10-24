@@ -108,13 +108,6 @@ test('a failed timezone save shows the failure next to its control', async () =>
   expect(alert.closest('.settings-card')).toHaveTextContent('Workspace timezone');
 });
 
-test('the web form save shows Saved after it succeeds', async () => {
-  show('admin');
-  api.saveWebForm.mockResolvedValue(undefined);
-  fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
-  await waitFor(() => expect(screen.getByText('Saved')).toHaveAttribute('role', 'status'));
-});
-
 test('Settings shows the loading status until its data arrives', async () => {
   show('admin');
   api.me.mockReturnValue(new Promise(() => {}));
@@ -186,43 +179,6 @@ test('a refused token request reaches the app-wide handling of signed-out and lo
   fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
   await waitFor(() => expect(onError.mock.calls[0]?.[0]).toBe(refused));
   expect(await within(card).findByRole('alert')).toHaveTextContent('Your session ended, so no token was created.');
-});
-
-const withChannel = {
-  channel: {
-    support_address: 'support@example.com', sender_name: 'Acme Support', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z', domain: 'example.com', domain_verified_at: null,
-    dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc', dns_records: [], dns_records_expired_at: null,
-    created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
-  },
-  inbound_url: 'https://desk.example.com/x', smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
-  from_policy: 'any', sending_from: 'support@example.com', hosted_address: null, domain_verification: 'txt', sending_pause: null,
-  gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null },
-};
-
-test('Connect Gmail sends the browser to Google, and the outcome it comes back with is shown once', async () => {
-  const assign = vi.fn();
-  const original = window.location;
-  window.history.replaceState(null, '', '/settings?gmail_error=denied');
-  Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign, search: '?gmail_error=denied', pathname: '/settings', hash: '' } });
-  try {
-    api.connectGmail.mockResolvedValue({ url: 'https://accounts.google.com/o/oauth2/v2/auth?state=x' });
-    show('admin', [], withChannel);
-    expect(await screen.findByText('Gmail was not connected: access was cancelled at Google.')).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect Gmail' }));
-    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?state=x'));
-  } finally {
-    Object.defineProperty(window, 'location', { configurable: true, value: original });
-  }
-});
-
-test('saving the sender name sends only the trimmed name, never the address this page loaded', async () => {
-  api.saveEmailSenderName.mockResolvedValue(withChannel);
-  show('admin', [], withChannel);
-  const field = await screen.findByRole('textbox', { name: 'Sender name' });
-  fireEvent.change(field, { target: { value: ' Colliedesk Support ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
-  await waitFor(() => expect(api.saveEmailSenderName).toHaveBeenCalledWith('Colliedesk Support'));
-  expect(api.saveEmailChannel).not.toHaveBeenCalled();
 });
 
 test('Settings has a Help center section in its nav, for every agent', async () => {
