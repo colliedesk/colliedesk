@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render as renderInPage, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderInPage, screen, within } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { EmailChannelSettings } from '../../api/schemas';
@@ -319,4 +319,15 @@ test('with Gmail sending, a server without SMTP is not a warning, and a broken G
   rerender(<EmailChannelSection settings={broken} timezone="UTC" canManage />);
   expect(screen.queryByText(/configure SMTP on the server/i)).not.toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('Gmail stopped sending');
+});
+
+test('a browser without the clipboard (a server on plain http) says the copy failed instead of doing nothing', async () => {
+  Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+  render(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" />);
+  fireEvent.click(screen.getByRole('button', { name: /copy forwarding address/i }));
+  expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toHaveAttribute('role', 'status');
+  cleanup();
+  render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage />);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy inbound URL' }));
+  expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toBeInTheDocument();
 });

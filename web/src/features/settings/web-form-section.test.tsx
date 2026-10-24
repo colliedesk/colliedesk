@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { WebFormSettings } from '../../api/schemas';
 import { WebFormSection } from './web-form-section';
@@ -71,4 +71,13 @@ test('the Embed tab copies the submit URL and shows the code a page posts with, 
   expect(code).toHaveTextContent("website: ''");
   fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
   expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining(`fetch('${url}'`));
+});
+
+test('without the clipboard, the Embed copy buttons say the copy failed', async () => {
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+  render(<WebFormSection part="embed" settings={on} canManage onSave={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy submit URL' }));
+  expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+  await waitFor(() => expect(screen.getAllByText('Could not copy. Select the text and copy it yourself.')).toHaveLength(2));
 });

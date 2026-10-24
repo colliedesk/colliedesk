@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
 import { messages } from '../../messages';
+import { CopyButton } from './copy-button';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 
@@ -62,22 +63,18 @@ const embedMessages = {
 
 // EmbedCode is the submit URL and the request a page sends to it, each with its copy button.
 function EmbedCode({ url }: { url: string }) {
-  const [copied, setCopied] = useState<'url' | 'code'>();
   const code = `await fetch('${url}', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ email, message, source: 'contact-page', website: '' }),
 });`;
-  const copy = (text: string, what: 'url' | 'code') => void navigator.clipboard.writeText(text).then(() => setCopied(what));
   return <>
-    <span className="button-row"><button type="button" onClick={() => copy(url, 'url')}>{embedMessages.copyUrl}</button>
-      {copied === 'url' && <span role="status">{messages.urlCopied}</span>}</span>
+    <span className="button-row"><CopyButton value={url} copiedText={messages.urlCopied}>{embedMessages.copyUrl}</CopyButton></span>
     <section className="embed-code" aria-labelledby="embed-code-heading">
       <h3 id="embed-code-heading" className="field-label">{embedMessages.code}</h3>
       <pre><code>{code}</code></pre>
       <p className="muted-copy">{embedMessages.codeHelp}</p>
-      <span className="button-row"><button type="button" onClick={() => copy(code, 'code')}>{embedMessages.copyCode}</button>
-        {copied === 'code' && <span role="status">{embedMessages.codeCopied}</span>}</span>
+      <span className="button-row"><CopyButton value={code} copiedText={embedMessages.codeCopied}>{embedMessages.copyCode}</CopyButton></span>
     </section>
   </>;
 }

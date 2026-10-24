@@ -4,6 +4,7 @@ import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { PartUnavailable } from '../../ui/lazy-part';
 import type { GmailReturn } from './gmail-return';
+import { CopyButton } from './copy-button';
 import { NameForm } from './name-form';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
@@ -52,8 +53,6 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
   const addressFeedback = useSaveFeedback(addressSave);
   const slugFeedback = useSaveFeedback(slugSave);
-  const [copied, setCopied] = useState(false);
-  const [urlCopied, setUrlCopied] = useState(false);
   // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const disconnectButton = useRef<HTMLButtonElement>(null);
@@ -75,9 +74,6 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
     {verifyError && <p role="alert" className="error-copy">{verifyError}</p>}
     {canManage && <span className="button-row"><button type="button" disabled={verifyPending} onClick={() => onVerifyDomain?.()}>{verifyPending ? messages.verifyingDomain : messages.verifyDomain}</button></span>}
   </div>;
-  const copyAddress = () => {
-    if (hostedAddress) void navigator.clipboard.writeText(hostedAddress).then(() => setCopied(true));
-  };
   const addressPart = <>
         {canManage
           ? <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!addressFeedback.pending) onSave?.(address.trim()); }}>
@@ -95,7 +91,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         {hostedAddress && <div className="email-channel-forwarding">
           <div className="copy-field">
             <label className="invite-link"><span className="field-label">{messages.forwardingAddress}</span><input readOnly value={hostedAddress} /></label>
-            <span className="button-row"><button type="button" onClick={copyAddress}>{messages.copyForwardingAddress}</button>{copied && <span role="status">{messages.addressCopied}</span>}</span>
+            <span className="button-row"><CopyButton value={hostedAddress} copiedText={messages.addressCopied}>{messages.copyForwardingAddress}</CopyButton></span>
           </div>
           <p className="muted-copy">{messages.forwardingHelp}</p>
           <ul className="muted-copy"><li>{messages.forwardingGmail}</li><li>{messages.forwardingOutlook}</li></ul>
@@ -108,8 +104,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         </div>}
         {settings && !hostedAddress && <div className="copy-field">
           <label className="invite-link"><span className="field-label">{messages.inboundURL}</span><input readOnly value={settings.inbound_url} /></label>
-          <span className="button-row"><button type="button" onClick={() => void navigator.clipboard.writeText(settings.inbound_url).then(() => setUrlCopied(true))}>{messages.copyInboundURL}</button>
-            {urlCopied && <span role="status">{messages.urlCopied}</span>}</span>
+          <span className="button-row"><CopyButton value={settings.inbound_url} copiedText={messages.urlCopied}>{messages.copyInboundURL}</CopyButton></span>
         </div>}
         {channel && !hostedAddress && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
           ? messages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : messages.inboundSecretMissing}</p>}

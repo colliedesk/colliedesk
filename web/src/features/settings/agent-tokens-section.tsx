@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { InvalidRequestError, PlanLimitError, UnauthorizedError } from '../../api/client';
 import type { AgentToken, TokenPermission, TokenPreset, TokenScope } from '../../api/schemas';
 import { agentTokenMessages as text } from './agent-tokens-messages';
+import { CopyButton } from './copy-button';
 import { connectHosts, connectSnippets, exampleOrigin, mcpServerName } from './connect-snippets.generated';
 import type { ConnectHostID } from './connect-snippets.generated';
 import { actionLabels, presetPermissions, tokenResources } from './token-permissions';
@@ -232,24 +233,6 @@ function Snippet({ label, code }: { label: string; code: string }) {
       <pre tabIndex={0} role="group" aria-label={label}><code>{code}</code></pre>
     </div>
   );
-}
-
-// CopyButton puts value on the clipboard and says so next to itself for two seconds.
-function CopyButton({ value, label, className, children }: { value: string; label?: string; className?: string; children: ReactNode }) {
-  const [state, setState] = useState<'copied' | 'failed' | null>(null);
-  useEffect(() => {
-    if (!state) return undefined;
-    const timer = window.setTimeout(() => setState(null), 2000);
-    return () => window.clearTimeout(timer);
-  }, [state]);
-  const copy = () => {
-    const write = navigator.clipboard?.writeText(value) ?? Promise.reject(new Error('no clipboard'));
-    write.then(() => setState('copied'), () => setState('failed'));
-  };
-  return <>
-    <button type="button" className={className} aria-label={label} onClick={copy}>{children}</button>
-    <span role="status" className={state === 'failed' ? 'error-copy' : 'copied'}>{state === 'copied' ? text.copied : state === 'failed' ? text.copyFailed : ''}</span>
-  </>;
 }
 
 // PermissionMatrix lists every resource with a chip for each action the token may take on it. Ticking
