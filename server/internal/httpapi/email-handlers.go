@@ -167,7 +167,7 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 	if input.SupportAddress == nil {
 		// Only the name changes: the address, its verification and the provider domain stay, whatever
 		// address a stale page or a mistaken caller would have sent along.
-		channel, err := a.store.SetEmailSenderName(request.Context(), workspaceID, *senderName)
+		channel, err := a.store.SetEmailSenderNameAs(request.Context(), workspaceID, *senderName, channelActor(request))
 		if errors.Is(err, store.ErrEmailChannelMissing) {
 			writeError(response, http.StatusBadRequest, "invalid_request", supportAddressRequired)
 			return
@@ -188,7 +188,7 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 		writeInternalError(response, err)
 		return
 	}
-	channel, err := a.store.UpsertEmailChannel(request.Context(), workspaceID, *input.SupportAddress, senderName)
+	channel, err := a.store.UpsertEmailChannelAs(request.Context(), workspaceID, *input.SupportAddress, senderName, channelActor(request))
 	if err != nil {
 		writeEmailStoreError(response, err)
 		return
@@ -261,7 +261,7 @@ func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Req
 }
 
 func (a *API) rotateEmailSecret(response http.ResponseWriter, request *http.Request) {
-	secret, err := a.store.RotateEmailSecret(request.Context(), principal(request).Workspace.ID, time.Now().UTC())
+	secret, err := a.store.RotateEmailSecretAs(request.Context(), principal(request).Workspace.ID, time.Now().UTC(), channelActor(request))
 	if err != nil {
 		writeEmailStoreError(response, err)
 		return

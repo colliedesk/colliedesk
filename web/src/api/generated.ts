@@ -4748,6 +4748,10 @@ export interface components {
                 name: string | null;
                 token_label: string | null;
             };
+            /** @description config_changed: the names of the settings that changed (email support_address, sender_name; web_form allowed_origins; settings for its rules). credential_changed: the name of the secret replaced (email inbound_secret). Never a value. Empty for other kinds. */
+            fields?: string[];
+            /** @description held_replayed and held_discarded: how many messages were opened or discarded. */
+            count?: number | null;
         };
         ChannelEventPage: {
             items: components["schemas"]["ChannelEvent"][];

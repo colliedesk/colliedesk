@@ -63,8 +63,9 @@ through the new one.
 ## History
 
 **Settings → Channels → History**, and the **History** tab of each channel, list who added, renamed,
-turned on or off, changed or removed a channel, changed one of its secrets (only its last four
-characters are shown), and opened or discarded messages it held.
+turned on or off, changed (which settings: the support address, the sender name, the allowed origins)
+or removed a channel, replaced one of its secrets (never its value), and how many held messages were
+opened or discarded.
 
 ## For AI agents and the API
 

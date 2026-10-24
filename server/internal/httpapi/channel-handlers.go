@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -405,13 +406,45 @@ func (a *API) listChannelEvents(response http.ResponseWriter, request *http.Requ
 		ChannelName string    `json:"channel_name"`
 		ChannelType string    `json:"channel_type"`
 		Actor       actorBody `json:"actor"`
+		Fields      []string  `json:"fields"`
+		Count       *int      `json:"count"`
 	}
 	items := make([]eventBody, 0, len(page.Items))
 	for _, event := range page.Items {
+		fields, count := eventFacts(event)
 		items = append(items, eventBody{ID: event.ID, At: event.CreatedAt, Kind: event.Kind, ChannelID: event.ChannelID, ChannelName: event.ChannelName,
-			ChannelType: event.ChannelType, Actor: actorBody{AgentID: event.ActorAgentID, Name: event.ActorName, TokenLabel: event.ActorTokenLabel}})
+			ChannelType: event.ChannelType, Actor: actorBody{AgentID: event.ActorAgentID, Name: event.ActorName, TokenLabel: event.ActorTokenLabel},
+			Fields: fields, Count: count})
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_cursor": optionalText(page.Next)})
+}
+
+// eventFacts is what a history entry shows of its detail, never a value: the names of the settings that
+// changed (or of the secret that was replaced), and how many held messages were opened or discarded.
+func eventFacts(event store.ChannelEvent) ([]string, *int) {
+	var detail map[string]any
+	if len(event.Detail) == 0 || json.Unmarshal(event.Detail, &detail) != nil {
+		return []string{}, nil
+	}
+	fields := []string{}
+	var count *int
+	switch event.Kind {
+	case "config_changed":
+		for name := range detail {
+			fields = append(fields, name)
+		}
+		slices.Sort(fields)
+	case "credential_changed":
+		if name, ok := detail["name"].(string); ok {
+			fields = append(fields, name)
+		}
+	case "held_replayed", "held_discarded":
+		if n, ok := detail["count"].(float64); ok {
+			value := int(n)
+			count = &value
+		}
+	}
+	return fields, count
 }
 
 // channelRouteKit is what a type's own route gets (channels.RouteKit).

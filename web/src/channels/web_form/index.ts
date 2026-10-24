@@ -14,4 +14,5 @@ export const webFormChannel: ChannelUI = {
   tabs: [{ id: 'embed', label: 'Embed' }],
   panels: lazyPart(() => import('./panels')),
   caches: ['web-form'],
+  fieldLabel: (field) => ({ allowed_origins: 'allowed origins' })[field],
 };

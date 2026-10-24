@@ -1,4 +1,5 @@
 import type { ChannelEvent } from '../../../api/channels';
+import { channelUI } from '../../../channels/registry';
 
 // The words of the Channels pages. They load with those pages, not in the first bundle.
 export const channelsMessages = {
@@ -66,7 +67,13 @@ export const channelsMessages = {
   someone: 'Someone',
   viaToken: (label: string) => ` (agent token ${label})`,
   showMore: 'Show more',
-  event: (event: ChannelEvent): string => eventWords[event.kind](event.channel_name),
+  event: (event: ChannelEvent): string => {
+    const ui = channelUI(event.channel_type);
+    const names = (event.fields ?? []).map((field) => ui?.fieldLabel?.(field) ?? (field === 'settings' ? 'rules' : field.replaceAll('_', ' ')));
+    const what = names.length > 0 ? names.join(' and ') : undefined;
+    const count = event.count ?? undefined;
+    return eventWords[event.kind](event.channel_name, what, count);
+  },
 };
 
 // reasons explains a needs-attention code (Channel.status.reason_code) when the server gave no message.
@@ -79,14 +86,15 @@ const reasons: Record<string, string> = {
   no_origins: 'No website is allowed to post to it yet.',
 };
 
-const eventWords: Record<ChannelEvent['kind'], (name: string) => string> = {
+const messagesOf = (count: number | undefined) => (count === undefined ? 'messages' : `${count} ${count === 1 ? 'message' : 'messages'}`);
+const eventWords: Record<ChannelEvent['kind'], (name: string, what?: string, count?: number) => string> = {
   added: (name) => `added ${name}`,
   renamed: (name) => `renamed a channel to ${name}`,
   enabled: (name) => `turned ${name} on`,
   disabled: (name) => `turned ${name} off`,
-  config_changed: (name) => `changed the settings of ${name}`,
-  credential_changed: (name) => `changed a secret of ${name}`,
+  config_changed: (name, what) => `changed the ${what ?? 'settings'} of ${name}`,
+  credential_changed: (name, what) => (what ? `replaced the ${what} of ${name}` : `changed a secret of ${name}`),
   removed: (name) => `removed ${name}`,
-  held_replayed: (name) => `opened messages ${name} held while off`,
-  held_discarded: (name) => `discarded messages ${name} held while off`,
+  held_replayed: (name, _what, count) => `opened ${messagesOf(count)} ${name} held while off`,
+  held_discarded: (name, _what, count) => `discarded ${messagesOf(count)} ${name} held while off`,
 };

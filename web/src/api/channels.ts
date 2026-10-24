@@ -28,6 +28,7 @@ export const channelEventSchema = z.object({
   kind: z.enum(['added', 'renamed', 'enabled', 'disabled', 'config_changed', 'credential_changed', 'removed', 'held_replayed', 'held_discarded']),
   channel_id: z.string().uuid(), channel_name: z.string(), channel_type: z.string(),
   actor: z.object({ agent_id: z.string().uuid().nullable(), name: z.string().nullable(), token_label: z.string().nullable() }),
+  fields: z.array(z.string()).optional(), count: z.number().int().nullable().optional(),
 }) satisfies z.ZodType<Generated<'ChannelEvent'>>;
 const channelEventPageSchema = z.object({ items: z.array(channelEventSchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<Generated<'ChannelEventPage'>>;
 const heldReplaySchema = z.object({

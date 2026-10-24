@@ -190,6 +190,11 @@ func RemoveEmailChannel(ctx context.Context, tx pgx.Tx, workspaceID string) erro
 // SetEmailSenderName changes only the name customers see, through the channel frame. The address,
 // its domain verification and the provider domain stay. ErrEmailChannelMissing when email is not connected.
 func (s *Store) SetEmailSenderName(ctx context.Context, workspaceID, senderName string) (domain.EmailChannel, error) {
+	return s.SetEmailSenderNameAs(ctx, workspaceID, senderName, ChannelActor{})
+}
+
+// SetEmailSenderNameAs is SetEmailSenderName recording who made the change.
+func (s *Store) SetEmailSenderNameAs(ctx context.Context, workspaceID, senderName string, actor ChannelActor) (domain.EmailChannel, error) {
 	patch, err := json.Marshal(map[string]string{"sender_name": senderName})
 	if err != nil {
 		return domain.EmailChannel{}, err
@@ -202,7 +207,7 @@ func (s *Store) SetEmailSenderName(ctx context.Context, workspaceID, senderName 
 		if !found {
 			return domain.EmailChannel{}, ErrEmailChannelMissing
 		}
-		if _, err := s.UpdateChannelTx(ctx, tx, workspaceID, live.ID, ChannelInput{Config: patch}, ChannelActor{}); err != nil {
+		if _, err := s.UpdateChannelTx(ctx, tx, workspaceID, live.ID, ChannelInput{Config: patch}, actor); err != nil {
 			return domain.EmailChannel{}, err
 		}
 		return scanChannel(tx.QueryRow(ctx, `SELECT `+channelColumns+` FROM email_channels WHERE workspace_id=$1`, workspaceID))
@@ -348,6 +353,12 @@ func (s *Store) DeleteEmailChannelAs(ctx context.Context, workspaceID string, ac
 // RotateEmailSecret replaces the inbound secret and returns the raw value once. The secret has the
 // form "<key id>.<random>": the key id finds the channel, the hash of the whole value proves it.
 func (s *Store) RotateEmailSecret(ctx context.Context, workspaceID string, now time.Time) (string, error) {
+	return s.RotateEmailSecretAs(ctx, workspaceID, now, ChannelActor{})
+}
+
+// RotateEmailSecretAs is RotateEmailSecret recording in the channel's history who replaced the secret
+// (never the secret).
+func (s *Store) RotateEmailSecretAs(ctx context.Context, workspaceID string, now time.Time, actor ChannelActor) (string, error) {
 	keyID, err := randomURLToken(9)
 	if err != nil {
 		return "", err
@@ -361,7 +372,14 @@ func (s *Store) RotateEmailSecret(ctx context.Context, workspaceID string, now t
 	rotated, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
 		result, err := tx.Exec(ctx, `UPDATE email_channels SET secret_key_id=$2,secret_hash=$3,secret_rotated_at=$4,updated_at=$4
 			WHERE workspace_id=$1`, workspaceID, keyID, hash[:], now)
-		return result.RowsAffected() == 1, err
+		if err != nil || result.RowsAffected() != 1 {
+			return false, err
+		}
+		live, found, err := s.liveChannelOfType(ctx, tx, workspaceID, domain.ChannelEmail)
+		if err != nil || !found {
+			return found, err
+		}
+		return true, insertChannelEvent(ctx, tx, live, "credential_changed", actor, map[string]any{"name": "inbound_secret"})
 	})
 	if err != nil {
 		return "", fmt.Errorf("rotate inbound secret: %w", err)

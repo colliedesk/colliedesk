@@ -386,6 +386,21 @@ test('messages held while off can be opened as conversations, or discarded after
   await waitFor(() => expect(channelsApi.discardHeld).toHaveBeenCalledWith(EMAIL));
 });
 
+test('History names what changed, never a value, and how many held messages went', async () => {
+  channelsApi.list.mockResolvedValue({ items: [channel('email')], types: types(1, 0) });
+  const event = (kind: string, change: Record<string, unknown>) => ({ id: crypto.randomUUID(), at: '2026-10-15T10:00:00Z', kind, channel_id: EMAIL, channel_name: 'Email',
+    channel_type: 'email', actor: { agent_id: null, name: 'Sam', token_label: null }, fields: [], count: null, ...change });
+  channelsApi.events.mockResolvedValue({ items: [
+    event('config_changed', { fields: ['sender_name', 'support_address'] }), event('credential_changed', { fields: ['inbound_secret'] }),
+    event('held_replayed', { count: 3 }), event('held_discarded', { count: 1 }),
+  ], next_cursor: null });
+  show('', { tab: 'history' });
+  expect(await screen.findByText(/changed the sender name and support address of Email/)).toBeInTheDocument();
+  expect(screen.getByText(/replaced the inbound secret of Email/)).toBeInTheDocument();
+  expect(screen.getByText(/opened 3 messages Email held while off/)).toBeInTheDocument();
+  expect(screen.getByText(/discarded 1 message Email held while off/)).toBeInTheDocument();
+});
+
 test('History lists who changed which channel, newest first, and pages on', async () => {
   channelsApi.list.mockResolvedValue({ items: [channel('email')], types: types(1, 0) });
   channelsApi.events.mockResolvedValueOnce({ items: [{

@@ -19,4 +19,5 @@ export const emailChannel: ChannelUI = {
   removal: { label: messages.disconnectEmail, title: messages.disconnectEmailQuestion, confirm: messages.confirmDisconnectEmail,
     body: (channel) => messages.disconnectEmailConsequence(channel.summary) },
   caches: ['email-channel'],
+  fieldLabel: (field) => ({ support_address: 'support address', sender_name: 'sender name', inbound_secret: 'inbound secret' })[field],
 };

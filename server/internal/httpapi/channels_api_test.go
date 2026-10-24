@@ -446,3 +446,53 @@ func TestAReplayThatFailsPartWayRecordsWhatItOpened(t *testing.T) {
 		t.Fatalf("held_replayed events = %d, want 1 for the two opened", got)
 	}
 }
+
+// The channel's history shows what changed: the support address, the sender name, the inbound secret
+// (never its value), and how many held messages were opened or discarded.
+func TestChannelHistoryNamesWhatChangedAndHowMany(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "History Desk", "admin@history-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@history-desk.example.com")
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"sender_name": "History Support"}, admin, nil)
+	request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "help@history-desk.example.com"}, admin, nil)
+	request(t, api, http.MethodPost, "/api/v1/channels/email/secret", nil, admin, nil)
+	request(t, api, http.MethodPatch, "/api/v1/channels/"+email.ID, map[string]any{"enabled": false}, admin, nil)
+	for i := 0; i < 2; i++ {
+		inbound(t, api, secret, mail([]string{fmt.Sprintf("From: h%d@customer.example", i), "Subject: Held", fmt.Sprintf("Message-ID: <hist%d@customer.example>", i)}, "Hi."))
+	}
+	var page struct {
+		Items []struct {
+			Kind   string   `json:"kind"`
+			Fields []string `json:"fields"`
+			Count  *int     `json:"count"`
+		} `json:"items"`
+	}
+	// The secret was rotated: the old one no longer lets mail in, so the held mail is sent with the new one.
+	newSecret := struct {
+		InboundSecret string `json:"inbound_secret"`
+	}{}
+	decode(t, request(t, api, http.MethodPost, "/api/v1/channels/email/secret", nil, admin, nil), &newSecret)
+	for i := 0; i < 2; i++ {
+		inboundOK(t, api, newSecret.InboundSecret, mail([]string{fmt.Sprintf("From: k%d@customer.example", i), "Subject: Held", fmt.Sprintf("Message-ID: <hist-new%d@customer.example>", i)}, "Hi."))
+	}
+	request(t, api, http.MethodPost, "/api/v1/channels/"+email.ID+"/held/replay", map[string]any{}, admin, nil)
+	decode(t, request(t, api, http.MethodGet, "/api/v1/channels/events?channel_id="+email.ID, nil, admin, nil), &page)
+	seen := map[string]bool{}
+	for _, event := range page.Items {
+		key := event.Kind
+		for _, field := range event.Fields {
+			seen[key+":"+field] = true
+		}
+		if event.Count != nil {
+			key += fmt.Sprintf(":%d", *event.Count)
+		}
+		seen[key] = true
+	}
+	for _, want := range []string{"config_changed:sender_name", "config_changed:support_address", "credential_changed:inbound_secret", "held_replayed:2"} {
+		if !seen[want] {
+			t.Errorf("history has no %s: %v", want, seen)
+		}
+	}
+}

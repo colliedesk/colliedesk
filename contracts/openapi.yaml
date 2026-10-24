@@ -6943,6 +6943,11 @@ components:
             agent_id: {type: [string, 'null'], format: uuid}
             name: {type: [string, 'null']}
             token_label: {type: [string, 'null']}
+        fields:
+          type: array
+          items: {type: string}
+          description: 'config_changed: the names of the settings that changed (email support_address, sender_name; web_form allowed_origins; settings for its rules). credential_changed: the name of the secret replaced (email inbound_secret). Never a value. Empty for other kinds.'
+        count: {type: [integer, 'null'], description: 'held_replayed and held_discarded: how many messages were opened or discarded.'}
     ChannelEventPage:
       type: object
       required: [items, next_cursor]

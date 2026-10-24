@@ -39,6 +39,8 @@ export interface ChannelUI {
   panels: LazyPart<ChannelPanels>;
   // removal: the type's own words for removing a channel (email is disconnected); the page asks and removes.
   removal?: { label: string; title: string; body: (channel: ChannelDetail) => string; confirm: string };
+  // fieldLabel: the words for a setting or secret the history names (ChannelEvent.fields).
+  fieldLabel?: (field: string) => string | undefined;
   // caches: the query keys of the type's own settings, reloaded when the channel is turned on or off.
   caches?: string[];
 }
