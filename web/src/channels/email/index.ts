@@ -1,3 +1,4 @@
+import { messages } from '../../messages';
 import { MailIcon } from '../../ui/icons';
 import { lazyPart } from '../../ui/lazy-part';
 import type { ChannelUI } from '../registry';
@@ -15,6 +16,7 @@ export const emailChannel: ChannelUI = {
   capabilityLabel: (code) => capabilities[code],
   tabs: [{ id: 'connection', label: 'Connection' }, { id: 'replies', label: 'Replies' }],
   panels: lazyPart(() => import('./panels')),
-  removesItself: true,
+  removal: { label: messages.disconnectEmail, title: messages.disconnectEmailQuestion, confirm: messages.confirmDisconnectEmail,
+    body: (channel) => messages.disconnectEmailConsequence(channel.summary) },
   caches: ['email-channel'],
 };

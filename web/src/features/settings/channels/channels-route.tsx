@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError } from '../../../api/client';
@@ -202,13 +202,21 @@ function EnabledSwitch({ channel }: { channel: Channel }) {
   });
   const on = toggle.isPending ? Boolean(toggle.variables) : channel.enabled;
   const id = useId();
+  // The question's Turn off leaves focus nowhere (the switch is busy meanwhile); it comes back here.
+  const input = useRef<HTMLInputElement>(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (toggle.isPending || !returnFocus.current) return;
+    returnFocus.current = false;
+    input.current?.focus();
+  }, [toggle.isPending]);
   return <span className="ch-switch">
-    <label className="switch"><input id={id} type="checkbox" role="switch" checked={on} aria-label={m.switchLabel(channel.name)} disabled={toggle.isPending}
+    <label className="switch"><input id={id} ref={input} type="checkbox" role="switch" checked={on} aria-label={channel.name} disabled={toggle.isPending}
       onChange={(event) => { if (event.target.checked) toggle.mutate(true); else setAsking(true); }} /></label>
     <span aria-live="polite" className="sr-only">{toggle.isPending ? m.saving : toggle.isSuccess ? (channel.enabled ? m.turnedOn : m.turnedOff) : ''}</span>
     {toggle.isError && <span role="alert" className="error-copy">{m.switchFailed}</span>}
     {asking && <Dialog alert title={m.turnOffTitle(channel.name)} closeLabel={m.close} onClose={() => setAsking(false)}
-      onSubmit={() => { setAsking(false); toggle.mutate(false); }}
+      onSubmit={() => { setAsking(false); returnFocus.current = true; toggle.mutate(false); }}
       footer={<><button type="button" autoFocus onClick={() => setAsking(false)}>{m.cancel}</button><button type="submit" className="danger-action">{m.turnOff}</button></>}>
       <p>{m.turnOffBody}</p>
     </Dialog>}
@@ -258,6 +266,11 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
   const client = useQueryClient();
   const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
   const [removing, setRemoving] = useState(false);
+  // What the last open or discard of held messages did; it stays after the notice of held messages goes.
+  const [heldDone, setHeldDone] = useState<{ kind: 'opened' | 'discarded'; count: number }>();
+  // The buttons that did it are gone with the notice, so focus goes to what they did.
+  const heldNote = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (heldDone) heldNote.current?.focus(); }, [heldDone]);
   const prefix = useId();
   const channel = detail.data;
   const ui = channel ? channelUI(channel.type) : undefined;
@@ -283,38 +296,42 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
       </div>
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
-      {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} />}
+      {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
+      {heldDone && <p className="notice notice-plain" role="status" tabIndex={-1} ref={heldNote}><span>{heldDone.kind === 'opened' ? m.heldOpened(heldDone.count) : m.heldDiscarded(heldDone.count)}</span>
+        {heldDone.kind === 'opened' && <span className="notice-actions"><AppLink href={`/?channel=${channel.type}`} navigate={navigate}>{m.viewInInbox}</AppLink></span>}</p>}
       {channel.enabled && channel.unsent_count > 0 && <Unsent channel={channel} navigate={navigate} />}
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
       <div role="tabpanel" id={panelID(prefix, open)} aria-labelledby={tabID(prefix, open)} className="ch-panel">
         {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
           : <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
               const Panel = panels[open];
-              return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} onRemoved={() => void removed()} /> : null;
+              return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} /> : null;
             }} />}
       </div>
-      {isAdmin && !ui.removesItself && <div className="button-row ch-remove">
-        <button type="button" className="danger-action" onClick={() => setRemoving(true)}>{m.remove}</button>
+      {isAdmin && <div className="button-row ch-remove">
+        <button type="button" className="danger-action" onClick={() => setRemoving(true)}>{ui.removal?.label ?? m.remove}</button>
         {remove.isError && <span role="alert" className="error-copy">{remove.error instanceof InvalidRequestError ? remove.error.message : m.actionFailed}</span>}
       </div>}
     </section>
-    {removing && <Dialog alert title={m.removeTitle(channel.name)} closeLabel={m.close} onClose={() => setRemoving(false)}
+    {removing && <Dialog alert title={ui.removal?.title ?? m.removeTitle(channel.name)} closeLabel={m.close} onClose={() => setRemoving(false)}
       onSubmit={() => { if (channel.held_count > 0) return; setRemoving(false); remove.mutate(); }}
       footer={<><button type="button" autoFocus onClick={() => setRemoving(false)}>{m.cancel}</button>
-        <button type="submit" className="danger-action" disabled={channel.held_count > 0}>{m.removeConfirm}</button></>}>
-      <p>{m.removeBody}</p>
+        <button type="submit" className="danger-action" disabled={channel.held_count > 0}>{ui.removal?.confirm ?? m.removeConfirm}</button></>}>
+      <p>{ui.removal?.body(channel) ?? m.removeBody}</p>
       {channel.held_count > 0 && <p role="alert" className="error-copy">{m.removeHeld(channel.held_count)}</p>}
     </Dialog>}
   </>;
 }
 
 // Held is what arrived while the channel was off: open it as conversations, or discard it after a question.
-function Held({ channel, isAdmin }: { channel: ChannelDetail; isAdmin: boolean }) {
+function Held({ channel, isAdmin, onDone }: { channel: ChannelDetail; isAdmin: boolean; onDone: (done: { kind: 'opened' | 'discarded'; count: number }) => void }) {
   const client = useQueryClient();
   const [asking, setAsking] = useState(false);
   const reload = () => client.invalidateQueries({ predicate: (query) => ['channels', 'channel', 'channel-events', 'conversations'].includes(String(query.queryKey[0])) });
-  const replay = useMutation({ mutationFn: () => channelsApi.replayHeld(channel.id), onSuccess: reload });
-  const discard = useMutation({ mutationFn: () => channelsApi.discardHeld(channel.id), onSuccess: reload });
+  const replay = useMutation({ mutationFn: () => channelsApi.replayHeld(channel.id),
+    onSuccess: ({ results }) => { onDone({ kind: 'opened', count: results.length }); return reload(); } });
+  const discard = useMutation({ mutationFn: () => channelsApi.discardHeld(channel.id),
+    onSuccess: ({ discarded }) => { onDone({ kind: 'discarded', count: discarded }); return reload(); } });
   const busy = replay.isPending || discard.isPending;
   const failed = replay.error ?? discard.error;
   return <div className="notice" role="status">

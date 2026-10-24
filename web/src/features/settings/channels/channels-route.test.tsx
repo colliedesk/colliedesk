@@ -90,7 +90,7 @@ test('a channel that needs attention says why with a link to fix it; one that is
   const notice = await screen.findByText('Needs attention:');
   expect(notice.closest('.notice')).toHaveTextContent('Email: Replies cannot be sent yet.');
   expect(within(notice.closest('.notice') as HTMLElement).getByRole('link', { name: 'Fix it' })).toHaveAttribute('href', `/settings/channels/${EMAIL}`);
-  expect(screen.getByRole('switch', { name: 'Web form on' })).not.toBeChecked();
+  expect(screen.getByRole('switch', { name: 'Web form' })).not.toBeChecked();
   expect(screen.getAllByText('Off').length).toBeGreaterThan(0);
 });
 
@@ -108,7 +108,7 @@ test('turning a channel off asks first, then sends enabled false; a failure puts
   channelsApi.list.mockResolvedValue({ items: [channel('web_form')], types: types(0, 1) });
   channelsApi.update.mockRejectedValue(new Error('API 500'));
   show('');
-  const toggle = await screen.findByRole('switch', { name: 'Web form on' });
+  const toggle = await screen.findByRole('switch', { name: 'Web form' });
   fireEvent.click(toggle);
   const question = screen.getByRole('alertdialog', { name: 'Turn Web form off?' });
   expect(question).toHaveTextContent('conversations stay');
@@ -116,14 +116,14 @@ test('turning a channel off asks first, then sends enabled false; a failure puts
   fireEvent.click(within(question).getByRole('button', { name: 'Turn off' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(FORM, { enabled: false }));
   expect(await screen.findByRole('alert')).toHaveTextContent('The channel could not be changed.');
-  expect(screen.getByRole('switch', { name: 'Web form on' })).toBeChecked();
+  expect(screen.getByRole('switch', { name: 'Web form' })).toBeChecked();
 });
 
 test('turning a channel on needs no question', async () => {
   channelsApi.list.mockResolvedValue({ items: [channel('web_form', { enabled: false, status: { state: 'off', reason_code: null, message: null } })], types: types(0, 1) });
   channelsApi.update.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   show('');
-  fireEvent.click(await screen.findByRole('switch', { name: 'Web form on' }));
+  fireEvent.click(await screen.findByRole('switch', { name: 'Web form' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(FORM, { enabled: true }));
   expect(screen.queryByRole('alertdialog')).toBeNull();
 });
@@ -214,8 +214,9 @@ test('a channel page shows the type tabs then History, and opens a tab from the 
   expect(await screen.findByRole('textbox', { name: 'Sender name' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Connection' }));
   expect(navigate).toHaveBeenCalledWith(`/settings/channels/${EMAIL}?tab=connection`, true);
-  // Email removes itself with Disconnect, on its Connection tab.
+  // Email's removal is named Disconnect email, from the same place and question as every channel.
   expect(screen.queryByRole('button', { name: 'Remove channel' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Disconnect email' })).toBeInTheDocument();
 });
 
 test('a channel that does not exist says so, with the way back', async () => {
@@ -303,15 +304,71 @@ test('a channel that holds messages is not removed until they are opened or disc
   expect(channelsApi.remove).not.toHaveBeenCalled();
 });
 
-test('disconnecting email that holds mail shows why the server refused', async () => {
+test('disconnecting email asks in a dialog that names the address, and is refused up front while mail is held', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email', { held_count: 1 }), config: withChannel.channel });
-  channelsApi.remove.mockRejectedValue(new mocks.InvalidRequestError('This channel holds 1 message that arrived while it was off. Open or discard them first.'));
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Disconnect email' }));
+  const question = screen.getByRole('alertdialog', { name: 'Disconnect email?' });
+  expect(question).toHaveTextContent('support@example.com');
+  expect(within(question).getByRole('alert')).toHaveTextContent('It holds 1 message that arrived while it was off: open or discard it first.');
+  expect(within(question).getByRole('button', { name: 'Yes, disconnect' })).toBeDisabled();
+});
+
+test('disconnecting email that holds nothing removes the channel and goes back to the list', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  channelsApi.remove.mockResolvedValue(undefined);
   const navigate = show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Disconnect email' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Yes, disconnect' }));
+  fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Disconnect email?' })).getByRole('button', { name: 'Yes, disconnect' }));
   await waitFor(() => expect(channelsApi.remove).toHaveBeenCalledWith(EMAIL));
-  expect(await screen.findByText(/holds 1 message that arrived while it was off/)).toHaveAttribute('role', 'alert');
-  expect(navigate).not.toHaveBeenCalledWith('/settings/channels', true);
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings/channels', true));
+});
+
+test('creating the inbound secret reloads the channel, so its state and notice follow', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'needs_attention', reason_code: 'no_inbound_secret', message: null } }), config: withChannel.channel });
+  api.emailChannel.mockResolvedValue({ ...withChannel, channel: { ...withChannel.channel, secret_set: false, secret_rotated_at: null } });
+  api.rotateEmailSecret.mockResolvedValue({ inbound_secret: 'k.secret', inbound_url: 'https://desk.example.com/x' });
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Create inbound secret' }));
+  await waitFor(() => expect(api.rotateEmailSecret).toHaveBeenCalled());
+  await waitFor(() => expect(channelsApi.get).toHaveBeenCalledTimes(2));
+});
+
+test('rotating the inbound secret asks first: the old one stops at once', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  api.rotateEmailSecret.mockResolvedValue({ inbound_secret: 'k.secret', inbound_url: 'https://desk.example.com/x' });
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Rotate inbound secret' }));
+  const question = screen.getByRole('alertdialog', { name: 'Rotate the inbound secret?' });
+  expect(question).toHaveTextContent('stops working at once');
+  expect(api.rotateEmailSecret).not.toHaveBeenCalled();
+  fireEvent.click(within(question).getByRole('button', { name: 'Rotate secret' }));
+  await waitFor(() => expect(api.rotateEmailSecret).toHaveBeenCalled());
+});
+
+test('opening held messages says how many opened and links to them; discarding says how many went', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { held_count: 3 }), config: withChannel.channel });
+  channelsApi.replayHeld.mockResolvedValue({ results: [1, 2, 3].map(() => ({ status: 'created', conversation_id: null, message_id: null })) });
+  channelsApi.discardHeld.mockResolvedValue({ discarded: 3 });
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Open them as conversations' }));
+  const opened = await screen.findByText(/3 messages opened as conversations/);
+  expect(within(opened.closest('.notice') as HTMLElement).getByRole('link', { name: 'View them in the inbox' })).toHaveAttribute('href', '/?channel=email');
+  fireEvent.click(screen.getByRole('button', { name: 'Discard 3 messages…' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Discard' }));
+  expect(await screen.findByText('3 messages discarded.')).toBeInTheDocument();
+  expect(screen.queryByText(/3 messages opened/)).toBeNull();
+});
+
+test('after turning a channel off, focus is back on its switch', async () => {
+  channelsApi.list.mockResolvedValue({ items: [channel('web_form')], types: types(0, 1) });
+  channelsApi.update.mockResolvedValue({ ...channel('web_form', { enabled: false }), config: webFormConfig });
+  show('');
+  const toggle = await screen.findByRole('switch', { name: 'Web form' });
+  fireEvent.click(toggle);
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Turn off' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalled());
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('switch', { name: 'Web form' })));
 });
 
 test('messages held while off can be opened as conversations, or discarded after a question', async () => {

@@ -18,7 +18,7 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
   await page.getByRole('textbox', { name: 'Allowed origins' }).fill(site);
   await page.getByRole('button', { name: 'Save web form' }).click();
   await expect(page.getByRole('heading', { name: 'Web form', exact: true })).toBeVisible();
-  const toggle = page.getByRole('switch', { name: 'Web form on' }).first();
+  const toggle = page.getByRole('switch', { name: 'Web form' }).first();
   await expect(toggle).toBeChecked();
 
   const { submit_path: submitPath } = await (await page.request.get(`${baseURL}/api/v1/channels/web-form`)).json() as { submit_path: string };
@@ -39,11 +39,11 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
   await page.getByRole('link', { name: 'All channels' }).click();
   const list = page.getByRole('region', { name: 'Channels' });
   await expect(list).toContainText('Off');
-  await expect(list.getByRole('switch', { name: 'Web form on' })).not.toBeChecked();
+  await expect(list.getByRole('switch', { name: 'Web form' })).not.toBeChecked();
 
   // On again: the next submission opens a conversation.
-  await Promise.all([changed(), list.getByRole('switch', { name: 'Web form on' }).click()]);
-  await expect(list.getByRole('switch', { name: 'Web form on' })).toBeChecked();
+  await Promise.all([changed(), list.getByRole('switch', { name: 'Web form' }).click()]);
+  await expect(list.getByRole('switch', { name: 'Web form' })).toBeChecked();
   expect((await submit('third', 'Back again')).status()).toBe(202);
 
   // Connect email, the channel web form replies leave through, then turn it off.
@@ -52,9 +52,9 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@example.com`);
   await page.getByRole('button', { name: 'Save support address' }).click();
   await expect(page.getByRole('heading', { name: 'Email', exact: true })).toBeVisible();
-  await page.getByRole('switch', { name: 'Email on' }).click();
+  await page.getByRole('switch', { name: 'Email' }).click();
   await page.getByRole('alertdialog', { name: 'Turn Email off?' }).getByRole('button', { name: 'Turn off' }).click();
-  await expect(page.getByRole('switch', { name: 'Email on' })).not.toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Email' })).not.toBeChecked();
 
   // The composer says the reply waits; nothing written is lost.
   await page.getByRole('link', { name: 'Inbox' }).click();
@@ -63,8 +63,8 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
 
   // On again: the notice goes away.
   await page.goto(`${baseURL}/settings/channels/type/email`);
-  await page.getByRole('switch', { name: 'Email on' }).click();
-  await expect(page.getByRole('switch', { name: 'Email on' })).toBeChecked();
+  await page.getByRole('switch', { name: 'Email' }).click();
+  await expect(page.getByRole('switch', { name: 'Email' })).toBeChecked();
   await page.getByRole('link', { name: 'Inbox' }).click();
   await page.getByRole('button', { name: new RegExp(`Web form: third-${suffix}`) }).click();
   await expect(page.getByText('Email is off: this reply is saved but not sent until the channel is on.')).toHaveCount(0);

@@ -9,8 +9,6 @@ export interface ChannelPanelProps {
   channel: ChannelDetail;
   canManage: boolean;
   timezone: string;
-  // onRemoved: the type's own panel removed the channel (email's Disconnect); the page leaves it.
-  onRemoved: () => void;
 }
 
 // What the type's connect form gets: create posts POST /api/v1/channels for this type.
@@ -39,8 +37,8 @@ export interface ChannelUI {
   tabs: { id: string; label: string }[];
   // The type's panels load with the channel pages, never in the first bundle.
   panels: LazyPart<ChannelPanels>;
-  // removesItself: the type's own tab removes the channel (email's Disconnect), so the page offers no Remove.
-  removesItself?: boolean;
+  // removal: the type's own words for removing a channel (email is disconnected); the page asks and removes.
+  removal?: { label: string; title: string; body: (channel: ChannelDetail) => string; confirm: string };
   // caches: the query keys of the type's own settings, reloaded when the channel is turned on or off.
   caches?: string[];
 }

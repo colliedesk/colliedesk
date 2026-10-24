@@ -118,7 +118,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           <input readOnly value={createdSecret} /><small>{messages.inboundSecretNotice}</small></label>}
         {canManage && channel && <span className="button-row">
           {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>}
-          {!confirmingDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{messages.disconnectEmail}</button>}
+          {!confirmingDisconnect && onDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{messages.disconnectEmail}</button>}
         </span>}
         {canManage && channel && confirmingDisconnect && <div className="confirm-panel" role="group" aria-labelledby="disconnect-email-question"
           onKeyDown={(event) => { if (event.key === 'Escape') cancelDisconnect(); }}>
