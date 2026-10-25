@@ -243,3 +243,43 @@ func TestOpenRouterRoutingReachesItsCallsAndLooseningItNeedsAPerson(t *testing.T
 		t.Fatalf("an unknown data policy: %v", err)
 	}
 }
+
+// A change that does not name the routing keeps the routing it finds when it saves, not the one it
+// read before its check: an admin who tightened it meanwhile is not undone, and no token's rename is
+// filed as a loosening.
+func TestAChangeWithoutRoutingKeepsTheRoutingItFindsWhenItSaves(t *testing.T) {
+	e := newEnv(t, nil)
+	provider, err := e.service.AddProvider(context.Background(), e.a.id, e.actor(e.a), ai.ProviderInput{Kind: "openai_compatible", Label: "OpenRouter",
+		BaseURL: "https://openrouter.ai/api/v1", APIKey: testKey, Models: []string{"openai/gpt-5", "openai/gpt-5-mini"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checking, release := make(chan struct{}), make(chan struct{})
+	e.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
+		if request.Model == "openai/gpt-5-mini" {
+			close(checking)
+			<-release
+		}
+		return aiprovider.Response{Text: `{"ok":true}`, JSON: `{"ok":true}`, Stop: aiprovider.StopDone, Model: request.Model}, nil
+	}
+	done := make(chan error, 1)
+	go func() {
+		// A token reorders the models; the new first model is checked before it saves.
+		_, err := e.service.UpdateProvider(context.Background(), e.a.id, ai.Actor{}, provider.ID,
+			ai.ProviderChange{Models: &[]string{"openai/gpt-5-mini", "openai/gpt-5"}})
+		done <- err
+	}()
+	<-checking
+	if _, err := e.service.UpdateProvider(context.Background(), e.a.id, e.actor(e.a), provider.ID,
+		ai.ProviderChange{Routing: &ai.ProviderRouting{DataCollection: "deny", ZDR: true}, MayLoosen: true}); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("the reorder: %v", err)
+	}
+	got, _ := e.service.Provider(context.Background(), e.a.id, provider.ID)
+	if got.Routing == nil || *got.Routing != (ai.ProviderRouting{DataCollection: "deny", ZDR: true}) || got.Models[0] != "openai/gpt-5-mini" {
+		t.Fatalf("provider = %+v routing %+v", got, got.Routing)
+	}
+}

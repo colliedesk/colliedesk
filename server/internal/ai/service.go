@@ -690,6 +690,10 @@ func (s *Service) UpdateProvider(ctx context.Context, workspaceID string, actor 
 				return &InUseError{Model: u.model, Slot: u.slot}
 			}
 		}
+		if change.Routing == nil && current.Routing != nil {
+			// What was read before the check may be older than what another change saved since.
+			routing = *current.Routing
+		}
 		if current.Routing != nil && current.Routing.loosens(routing) && !change.MayLoosen {
 			return ErrLoosenNeedsApproval
 		}
