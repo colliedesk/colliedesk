@@ -249,6 +249,8 @@ async function errorCode(response: Response): Promise<unknown> {
 
 export const api = {
   emailChannel: () => request('/api/v1/channels/email', emailChannelSettingsSchema),
+  // One mailbox of several: the one a conversation's replies leave from.
+  emailChannelOf: (id: string) => request(`/api/v1/channels/${encodeURIComponent(id)}/email`, emailChannelSettingsSchema),
   channelCounts: () => request('/api/v1/channels', channelCountsSchema),
   // Without sender_name the channel keeps its name; a new channel starts with the workspace name.
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),

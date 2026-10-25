@@ -163,7 +163,11 @@ export function InboxRoute() {
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
   // Fetched once and shared with Settings, so the picker opens from memory.
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
-  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  // How replies leave is read for the mailbox the open conversation's replies leave from; the default
+  // one for a conversation no channel carries yet.
+  const senderID = selected?.channel_ref?.replies_via?.id;
+  const emailChannel = useQuery({ queryKey: senderID ? ['email-channel', senderID] : ['email-channel'],
+    queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()) });
   const mailboxes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types.find((info) => info.type === 'email')?.count ?? 0;
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
@@ -269,7 +273,7 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outbound} sendsFrom={sendsFrom} noReplies={removed} outboundLink={via?.replies_via && channelNotice ? `/settings/channels/${via.replies_via.id}` : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} sendsFrom={sendsFrom} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}

@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   contacts: vi.fn(), createContact: vi.fn(), createConversation: vi.fn(),
   savedReplies: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), contact: vi.fn(),
   channelCounts: vi.fn(async () => ({ types: [{ type: 'email', count: 1 }] })),
+  emailChannelOf: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
@@ -955,4 +956,49 @@ test('with two mailboxes the composer names the one a reply leaves from', async 
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   expect(await screen.findByText('Careers was removed; replies send from Support.')).toBeInTheDocument();
   api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
+});
+
+// The composer speaks of the mailbox the conversation's replies leave from, not of the default one.
+test('the composer warns about the mailbox a reply leaves from, and leads to that mailbox', async () => {
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const sales = { id: '55555555-5555-4555-8555-555555555555', name: 'Sales', enabled: true };
+  const ref = { id: sales.id, type: 'email', name: 'Sales', enabled: true, deleted: false, replies_via: { ...sales, instead_of: null } };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref };
+  const settings = (address: string, gmail: 'connected' | 'failed') => ({ channel: { support_address: address, domain_verified_at: null }, inbound_url: 'https://desk.example.com/x',
+    smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: gmail === 'connected' ? address : null,
+    gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/cb', connection: { provider: 'google', address, status: gmail, error_code: gmail === 'failed' ? 'revoked' : null,
+      error: null, failed_at: null, connected_at: '2026-09-01T00:00:00Z' } } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 2 }] });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  testRouter.params = { conversationId: alpha.id };
+  try {
+    // The default mailbox's Gmail broke; Sales sends: nothing to warn about.
+    api.emailChannel.mockResolvedValue(settings('billing@desk.example', 'failed') as never);
+    api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'connected'));
+    const first = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByText('Replies send from Sales.')).toBeInTheDocument();
+    expect(screen.queryByText(/Gmail stopped sending/)).toBeNull();
+    expect(api.emailChannelOf).toHaveBeenCalledWith(sales.id);
+    first.unmount();
+
+    // Sales' Gmail broke: the warning names it and Open Settings leads to Sales.
+    api.emailChannel.mockResolvedValue(settings('billing@desk.example', 'connected') as never);
+    api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'failed'));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    const notice = await screen.findByText(/Gmail stopped sending/);
+    fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
+    expect(navigate).toHaveBeenCalledWith({ href: `/settings/channels/${sales.id}?tab=replies` });
+  } finally {
+    api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
+    navigate.mockRestore();
+  }
 });
