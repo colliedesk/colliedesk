@@ -168,11 +168,11 @@ function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: '
                     {attention.map((channel) => <span key={channel.id} className="ch-reason">{channel.name}: {m.reason(channel.status.reason_code, channel.status.message)}{' '}
                       <AppLink href={`${base}/${channel.id}`} navigate={navigate}>{m.fix}</AppLink></span>)}</span></div>}
                   {list.items.filter((channel) => channel.enabled && channel.unsent_count > 0).map((channel) => <Unsent key={channel.id} channel={channel} navigate={navigate} />)}
+                  {isAdmin && <TypeOverviews list={list} />}
                   <section className="panel ch-list" aria-label={m.tabChannels}>
                     {list.items.map((channel) => <ChannelRow key={channel.id} channel={channel} isAdmin={isAdmin} navigate={navigate}
                       markDefault={channel.is_default === true && typeCount(list, channel.type) > 1} />)}
                   </section>
-                  {isAdmin && <TypeOverviews list={list} />}
                 </>}
     </div>
     {adding && <AddChannel list={list} onClose={() => setAdding(false)} navigate={navigate} />}
@@ -188,7 +188,7 @@ function ChannelRow({ channel, isAdmin, navigate, markDefault }: { channel: Chan
   const ui = channelUI(channel.type);
   const href = `${base}/${channel.id}`;
   return <div className={`ch-row${channel.enabled ? '' : ' ch-row-off'}`}>
-    <div className="ch-row-name">{ui && <ui.Icon />}<span><strong>{channel.name}</strong>{markDefault && <span className="ch-default">{m.defaultLabel}</span>}
+    <div className="ch-row-name">{ui && <ui.Icon />}<span><span className="ch-row-title"><strong>{channel.name}</strong>{markDefault && <span className="ch-default">{m.defaultLabel}</span>}</span>
       {channel.summary && <small>{channel.summary}</small>}</span></div>
     <div className="ch-row-state"><StatePill channel={channel} />
       {channel.held_count > 0 && <small>{m.held(channel.held_count, channel.name)}</small>}</div>
