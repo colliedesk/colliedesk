@@ -316,7 +316,7 @@ export const messages = {
   copyForwardingAddress: 'Copy forwarding address',
   forwardingHelp: 'Forward your support mailbox to this address. Save your support address above first; mail is accepted once it is saved.',
   forwardingGmail: 'Gmail: Settings → See all settings → Forwarding and POP/IMAP → Add a forwarding address. Gmail sends a confirmation message to this address; it appears in your inbox here, so open it and select the link.',
-  forwardingOutlook: 'Outlook: Settings → Mail → Forwarding, enter the address and select Start forwarding.',
+  forwardingOutlook: 'Outlook: Settings → Mail → Forwarding, enter the address and select Start forwarding. In Microsoft 365, forwarding outside your organization is often blocked (a bounce with 5.7.520): your admin allows it for this mailbox in the outbound spam policy (see the email channel guide).',
   workspaceAddressName: 'Workspace address name',
   saveAddressName: 'Save address name',
   addressNameWarning: 'Changing the name changes the forwarding address and the help center address. The old address stops receiving mail at once and old help center links stop working, so update your mailbox forwarding and links too.',
@@ -376,13 +376,15 @@ export const messages = {
   domainVerified: (domain: string, when: string) => `${domain} verified ${when}.`,
   sendingFrom: (address: string) => `Replies are sent from ${address}.`,
   cannotSend: 'Replies cannot be emailed yet: configure SMTP on the server or verify the domain.',
-  domainVerificationNotNeeded: 'Domain verification (not needed while replies go through Gmail)',
+  domainVerificationNotNeeded: 'Domain verification (not needed while replies go through your mailbox)',
   outboundNotConfigured: 'Outgoing email is not configured on this server. Replies stay on the timeline and are not emailed.',
   outboundNeedsVerification: 'Replies are not emailed until an admin verifies the support address domain in Settings.',
-  outboundGmailNotSetUp: 'Replies are not emailed: Gmail sending is not set up on this server any more. Ask the administrator, or disconnect Gmail in Settings to send through SMTP.',
-  outboundGmailFailed: (canManage: boolean) => canManage
-    ? 'Replies are not emailed: Gmail stopped sending. Reconnect it in Settings, then retry the failed replies.'
-    : 'Replies are not emailed: Gmail stopped sending. Ask an admin to reconnect Gmail, then retry the failed replies.',
+  // provider is the mailbox's name: Gmail or Microsoft 365.
+  outboundMailboxNotSetUp: (provider: string) => `Replies are not emailed: ${provider} sending is not set up on this server any more. Ask the administrator, or disconnect ${provider} in Settings to send through SMTP.`,
+  outboundMailboxFailed: (canManage: boolean, provider: string) => canManage
+    ? `Replies are not emailed: ${provider} stopped sending. Reconnect it in Settings, then retry the failed replies.`
+    : `Replies are not emailed: ${provider} stopped sending. Ask an admin to reconnect ${provider}, then retry the failed replies.`,
+  microsoftLargeAttachments: 'Microsoft 365 may refuse attachments this large. If it does, the reply is marked Delivery failed and you can remove a file and retry.',
   openSettings: 'Open Settings',
   channelOff: (name: string) => `${name} is off: this reply is saved but not sent until the channel is on.`,
   removedChannel: (name: string) => `${name} (removed)`,

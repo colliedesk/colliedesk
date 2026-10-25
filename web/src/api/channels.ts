@@ -71,4 +71,6 @@ export const channelsApi = {
   emailVerifyDomain: (id: string) => request(`/api/v1/channels/${id}/email/domain-verification`, emailChannelSettingsSchema, { method: 'POST' }),
   emailConnectGmail: (id: string) => request(`/api/v1/channels/${id}/email/gmail`, consentLinkSchema, { method: 'POST' }),
   emailDisconnectGmail: (id: string) => requestNoContent(`/api/v1/channels/${id}/email/gmail`, { method: 'DELETE' }),
+  emailConnectMicrosoft: (id: string) => request(`/api/v1/channels/${id}/email/microsoft`, consentLinkSchema, { method: 'POST' }),
+  emailDisconnectMicrosoft: (id: string) => requestNoContent(`/api/v1/channels/${id}/email/microsoft`, { method: 'DELETE' }),
 };

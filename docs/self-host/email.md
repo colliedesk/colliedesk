@@ -246,7 +246,7 @@ for a workspace with too many spam complaints. The operator:
 ## Send replies through Gmail
 
 An admin connects a Gmail or Google Workspace mailbox as described in
-[send replies from Gmail](../user/email-channel.md#send-replies-from-gmail). Gmail sending uses your own Google OAuth client. Without these settings **Send from Gmail** names
+[send replies from Gmail](../user/email-channel.md#send-replies-from-gmail). Gmail sending uses your own Google OAuth client. Without these settings **Send from your mailbox** names
 what is missing and Colliedesk keeps sending through SMTP.
 
 1. In [Google Cloud console](https://console.cloud.google.com/), create a project, enable the
@@ -254,7 +254,7 @@ what is missing and Colliedesk keeps sending through SMTP.
    `.../auth/userinfo.email` and `.../auth/gmail.send`. `gmail.send` is a sensitive scope: an
    **External** app needs Google's verification before people outside your test users can connect;
    an **Internal** app (Google Workspace) does not.
-2. Create a client of type **Web application**. Add the **Redirect URI** that **Send from Gmail**
+2. Create a client of type **Web application**. Add the **Redirect URI** that **Send from your mailbox**
    shows, which is your `APP_ORIGIN` followed by `/api/v1/channels/email/gmail/callback`, for example
    `https://desk.example.com/api/v1/channels/email/gmail/callback`.
 3. Set these variables on the server and restart it:
@@ -277,7 +277,7 @@ replies are marked **Delivery failed** until a relay is set.
 ## Send replies through Microsoft 365
 
 An admin connects a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to an email channel
-in the [email channel settings](../user/email-channel.md). Colliedesk asks Microsoft only for permission to
+as described in [send replies from Microsoft 365](../user/email-channel.md#send-replies-from-microsoft-365). Colliedesk asks Microsoft only for permission to
 send email and to read the account's address (`Mail.Send`, `User.Read`, `offline_access`, `openid`); it
 cannot read the mailbox. Microsoft sending uses your own app registration in Microsoft Entra. Without
 these settings Colliedesk names what is missing and keeps sending through SMTP.

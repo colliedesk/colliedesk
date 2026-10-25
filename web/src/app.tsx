@@ -240,9 +240,9 @@ const aiRoute = createRoute({
   },
 });
 // Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).
-type ChannelsSearch = { tab?: string; gmail?: string; gmail_error?: string };
+type ChannelsSearch = { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string };
 // Passed through as it is: the pages read only string values (channels-route.tsx), and the Gmail return
-// (gmail, gmail_error) must survive the hop from type/email to the channel.
+// (gmail, gmail_error) and the Microsoft one (microsoft, microsoft_error) must survive the hop from type/email to the channel.
 const channelsSearch = (search: Record<string, unknown>) => search as ChannelsSearch;
 function ChannelsSettings({ path, search }: { path: string; search: ChannelsSearch }) {
   const navigate = useNavigate();

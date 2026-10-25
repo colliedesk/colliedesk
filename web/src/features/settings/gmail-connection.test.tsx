@@ -69,7 +69,7 @@ test('analytics that name the realm decide, like the server does', () => {
 test('an admin connects Gmail from the email channel', () => {
   const onConnect = vi.fn();
   render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage onConnect={onConnect} />);
-  expect(screen.getByRole('heading', { name: 'Send from Gmail' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Send from your mailbox' })).toBeInTheDocument();
   expect(screen.getByText(/cannot read the mailbox/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Connect Gmail' }));
   expect(onConnect).toHaveBeenCalled();

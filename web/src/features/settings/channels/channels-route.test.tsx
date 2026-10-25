@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => {
     rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(), connectGmail: vi.fn(), disconnectGmail: vi.fn(),
   };
   const channelsApi = { list: vi.fn(), listAll: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), replayHeld: vi.fn(), discardHeld: vi.fn(),
-    email: vi.fn(), emailSecret: vi.fn(), emailVerifyDomain: vi.fn(), emailConnectGmail: vi.fn(), emailDisconnectGmail: vi.fn() };
+    email: vi.fn(), emailSecret: vi.fn(), emailVerifyDomain: vi.fn(), emailConnectGmail: vi.fn(), emailDisconnectGmail: vi.fn(),
+    emailConnectMicrosoft: vi.fn(), emailDisconnectMicrosoft: vi.fn() };
   return { api, channelsApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
 });
 vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError, PlanLimitError: mocks.PlanLimitError, UnauthorizedError: mocks.UnauthorizedError }));
@@ -594,4 +595,35 @@ test('the refusal of a name goes once the name is changed, and is not left besid
   fireEvent.change(address, { target: { value: 'sales@example.com' } });
   expect(screen.getByText('Sales already uses sales@example.com.')).toBeInTheDocument();
   expect(address).toHaveAttribute('aria-invalid', 'true');
+});
+
+test('Microsoft saying an admin must approve comes back with the approval link open, and Connect Microsoft 365 goes to Microsoft', async () => {
+  const assign = vi.fn();
+  const original = window.location;
+  const approval = 'https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=c&state=' + EMAIL;
+  window.history.replaceState(null, '', `/settings/channels/${EMAIL}?tab=replies&microsoft_error=denied`);
+  Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign, search: '?tab=replies&microsoft_error=denied', pathname: `/settings/channels/${EMAIL}`, hash: '' } });
+  try {
+    channelsApi.email.mockResolvedValue({ ...withChannel, microsoft: { ...withChannel.microsoft, available: true, missing_settings: [], admin_consent_url: approval } });
+    channelsApi.emailConnectMicrosoft.mockResolvedValue({ url: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=x' });
+    channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+    show(EMAIL, { tab: 'replies', microsoft_error: 'denied' });
+    expect(await screen.findByText(/If Microsoft said you need admin approval, send your Microsoft 365 admin the approval link below/)).toBeInTheDocument();
+    const fold = screen.getByText('Work account? Your IT admin may need to approve Colliedesk first').closest('details')!;
+    expect(fold).toHaveAttribute('open');
+    expect(within(fold as HTMLElement).getByRole('textbox', { name: 'Approval link for your Microsoft 365 admin' })).toHaveValue(approval);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect Microsoft 365' }));
+    await waitFor(() => expect(channelsApi.emailConnectMicrosoft).toHaveBeenCalledWith(EMAIL));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=x'));
+  } finally {
+    Object.defineProperty(window, 'location', { configurable: true, value: original });
+  }
+});
+
+test('back from an admin\'s approval, the block says to connect again', async () => {
+  window.history.replaceState(null, '', `/settings/channels/${EMAIL}?tab=replies&microsoft=admin_consent_done`);
+  channelsApi.email.mockResolvedValue({ ...withChannel, microsoft: { ...withChannel.microsoft, available: true, missing_settings: [] } });
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  show(EMAIL, { tab: 'replies', microsoft: 'admin_consent_done' });
+  expect(await screen.findByText('Your Microsoft 365 admin approved Colliedesk. Select Connect Microsoft 365 to finish.')).toBeInTheDocument();
 });

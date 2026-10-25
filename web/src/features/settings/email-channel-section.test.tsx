@@ -286,7 +286,7 @@ test('says the records expired and to verify again', () => {
 test('while Gmail sends, domain verification is folded away and says it is not needed', () => {
   const gmailConnection = { provider: 'google' as const, address: 'support@example.com', status: 'connected' as const, error_code: null, error: null, failed_at: null, connected_at: '2026-10-19T08:00:00Z' };
   render(<EmailChannelSection settings={{ ...connected, gmail: { ...connected.gmail, connection: gmailConnection } }} timezone="UTC" canManage />);
-  const summary = screen.getByText(/not needed while replies go through Gmail/);
+  const summary = screen.getByText(/not needed while replies go through your mailbox/);
   const details = summary.closest('details');
   expect(details).not.toBeNull();
   expect(details).not.toHaveAttribute('open');
@@ -305,9 +305,9 @@ test('Escape closes the disconnect email question like Cancel', () => {
 
 test('Gmail is offered once the channel is connected, and connecting it calls back', async () => {
   const onConnectGmail = vi.fn();
-  const { rerender } = render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage onConnectGmail={onConnectGmail} />);
+  const { rerender } = render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage onConnectMailbox={onConnectGmail} />);
   expect(screen.queryByRole('button', { name: 'Connect Gmail' })).not.toBeInTheDocument();
-  rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage onConnectGmail={onConnectGmail} />);
+  rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage onConnectMailbox={onConnectGmail} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Connect Gmail' }));
   expect(onConnectGmail).toHaveBeenCalled();
 });
