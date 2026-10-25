@@ -194,7 +194,8 @@ func (a *API) hostedTarget(ctx context.Context, recipient string) (inboundTarget
 	if err != nil || !ok {
 		return inboundTarget{}, err
 	}
-	channelID, found, err := a.store.ChannelForHostedAddress(ctx, workspaceID, email.LocalPart(recipient))
+	// billing+invoice@ is billing@'s mailbox, as a +tag is for support addresses.
+	channelID, found, err := a.store.ChannelForHostedAddress(ctx, workspaceID, email.LocalPart(email.MailboxKey(recipient)))
 	if err != nil || !found {
 		return inboundTarget{}, err
 	}

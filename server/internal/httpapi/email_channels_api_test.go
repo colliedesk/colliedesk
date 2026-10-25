@@ -148,6 +148,10 @@ func TestEachMailboxHasItsOwnForwardingAddress(t *testing.T) {
 	if got := deliver("billing@many-boxes."+hostedDomain, "to-billing@customer.example"); got != billing {
 		t.Errorf("mail to billing@ arrived on %s, want %s", got, billing)
 	}
+	// A +tag names the same mailbox, as it does for support addresses.
+	if got := deliver("Billing+invoice@many-boxes."+hostedDomain, "to-billing-tag@customer.example"); got != billing {
+		t.Errorf("mail to billing+invoice@ arrived on %s, want %s", got, billing)
+	}
 	if got := deliver("anything@many-boxes."+hostedDomain, "to-anything@customer.example"); got != defaultID {
 		t.Errorf("mail to another local part arrived on %s, want the default %s", got, defaultID)
 	}
