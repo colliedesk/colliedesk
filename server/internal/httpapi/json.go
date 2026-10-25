@@ -51,7 +51,7 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	var database *pgconn.PgError
 	switch {
 	case errors.As(err, &database) && (database.Code == "40P01" || database.Code == "40001"):
-		writeError(response, http.StatusConflict, "conflict", "Another change was in progress on the same conversations. Nothing was changed; try again.")
+		writeError(response, http.StatusConflict, "conflict", "Another change was in progress at the same time. Nothing was changed; try again.")
 		return
 	case errors.Is(err, domain.ErrResultsRefreshed):
 		writeError(response, http.StatusGone, "results_refreshed", "These numbers were refreshed. Open Results again.")

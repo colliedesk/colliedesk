@@ -242,12 +242,11 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 	if err != nil {
 		return channels.Channel{}, err
 	}
-	// A rename or a new default changes what the type's other channels may do: the type lock first,
-	// then the row.
-	if input.Name != nil || input.IsDefault != nil {
-		if err := lockChannelType(ctx, tx, workspaceID, current.Type); err != nil {
-			return channels.Channel{}, err
-		}
+	// The type lock first, then the row, for every change: a rename, a new default and a type's own
+	// settings (an email address) all take the type lock, and taking it after the row would deadlock
+	// with a change that took it first.
+	if err := lockChannelType(ctx, tx, workspaceID, current.Type); err != nil {
+		return channels.Channel{}, err
 	}
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM channels WHERE workspace_id=$1 AND id=$2::uuid FOR UPDATE`, workspaceID, id); err != nil {
 		return channels.Channel{}, fmt.Errorf("lock channel: %w", err)
