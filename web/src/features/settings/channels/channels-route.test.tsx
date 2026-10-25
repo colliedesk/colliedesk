@@ -554,7 +554,38 @@ test('a web form is added with the name given, and a name another form has is re
   expect(name).toHaveFocus();
   expect(screen.getByRole('link', { name: 'Open Careers' })).toHaveAttribute('href', `/settings/channels/${FORM}`);
   fireEvent.change(name, { target: { value: ' Shop form ' } });
+  expect(screen.queryByText('Another web form is called Careers.')).toBeNull();
+  expect(name).not.toHaveAttribute('aria-invalid');
   fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenLastCalledWith({ type: 'web_form', name: 'Shop form', enabled: true, config: { allowed_origins: ['https://example.com'] } }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
+});
+
+// A refusal is about the value it refused: once the field holds another one, its words go; while it
+// still holds it, they stay.
+test('the refusal of a name goes once the name is changed, and is not left beside another refusal', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { name: 'Support' }), config: withChannel.channel });
+  channelsApi.update
+    .mockRejectedValueOnce(new mocks.ConflictError('Another email channel is called Billing.', { code: 'channel_name_taken', conflict: { channel_id: FORM, channel_name: 'Billing' } }))
+    .mockRejectedValueOnce(new mocks.ConflictError('Sales already uses sales@example.com.', { code: 'support_address_taken', conflict: { channel_id: FORM, channel_name: 'Sales' } }));
+  show(EMAIL);
+  const name = await screen.findByRole('textbox', { name: 'Name' });
+  fireEvent.change(name, { target: { value: 'Billing' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+  expect(await screen.findByText('Another email channel is called Billing.')).toBeInTheDocument();
+  fireEvent.change(name, { target: { value: 'Zed' } });
+  expect(screen.queryByText('Another email channel is called Billing.')).toBeNull();
+  expect(name).not.toHaveAttribute('aria-invalid');
+  const address = screen.getByRole('textbox', { name: 'Support address' });
+  fireEvent.change(address, { target: { value: 'sales@example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
+  expect(await screen.findByText('Sales already uses sales@example.com.')).toBeInTheDocument();
+  expect(screen.queryByText('Another email channel is called Billing.')).toBeNull();
+  expect(screen.getAllByRole('alert')).toHaveLength(1);
+  // Back to the refused address: the refusal is about it again.
+  fireEvent.change(address, { target: { value: 'other@example.com' } });
+  expect(screen.queryByText('Sales already uses sales@example.com.')).toBeNull();
+  fireEvent.change(address, { target: { value: 'sales@example.com' } });
+  expect(screen.getByText('Sales already uses sales@example.com.')).toBeInTheDocument();
+  expect(address).toHaveAttribute('aria-invalid', 'true');
 });

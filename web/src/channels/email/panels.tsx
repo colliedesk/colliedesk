@@ -98,7 +98,7 @@ function Connect({ canManage, create }: ConnectProps) {
   const about = save.error instanceof ConflictError && save.error.detail?.code === 'channel_name_taken' ? 'name' : 'address';
   const nameField = useRef<HTMLInputElement>(null);
   const addressField = useRef<HTMLInputElement>(null);
-  const feedback = useSaveFeedback(state, errorID, about === 'name' ? nameField : addressField);
+  const feedback = useSaveFeedback(state, errorID, about === 'name' ? nameField : addressField, about === 'name' ? name : address);
   // A teammate reads what is set, as on a connected channel.
   if (!canManage) return <p><strong>{messages.supportAddress}: </strong><span>{messages.emailNotConnected}</span></p>;
   const invalid = (field: 'name' | 'address') => (feedback.invalid && about === field) || undefined;

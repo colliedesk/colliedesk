@@ -22,27 +22,30 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
 // A name left empty is the type's (Web form, Web form 2, …); one another form has is refused at the field.
 function Connect({ canManage, create }: ConnectProps) {
   const [name, setName] = useState('');
-  const [edited, setEdited] = useState(false);
+  // The name a refusal is about: its words show while the field holds it.
+  const [sent, setSent] = useState('');
   const save = useMutation({
     mutationFn: (origins: string[]) => create({ ...(name.trim() ? { name: name.trim() } : {}), enabled: true, config: { allowed_origins: origins } }),
-    onMutate: () => setEdited(false),
+    onMutate: () => setSent(name),
   });
   const errorID = useId();
   const hintID = useId();
   const state = saveState(save);
-  const taken = save.error instanceof ConflictError && save.error.detail?.code === 'channel_name_taken' && !edited ? state : undefined;
+  // A refused name is said at the name, never by the origins' Save.
+  const nameRefused = save.error instanceof ConflictError && save.error.detail?.code === 'channel_name_taken';
+  const taken = nameRefused && name === sent ? state : undefined;
   const field = useRef<HTMLInputElement>(null);
   const refused = Boolean(taken);
   useEffect(() => { if (refused) field.current?.focus(); }, [refused]);
   const nameField = <>
     <label className="field"><span>{formMessages.name}</span>
       <input ref={field} value={name} maxLength={80} aria-invalid={taken ? true : undefined} aria-describedby={taken ? `${errorID} ${hintID}` : hintID}
-        onChange={(event) => { setEdited(true); setName(event.target.value); }} /></label>
+        onChange={(event) => setName(event.target.value)} /></label>
     <small id={hintID} className="muted-copy">{formMessages.nameHint}</small>
     {taken && <p role="alert" id={errorID} className="error-copy">{taken.error}{' '}
       {taken.conflict && <a href={`/settings/channels/${encodeURIComponent(taken.conflict.channel_id)}`}>{formMessages.open(taken.conflict.channel_name)}</a>}</p>}
   </>;
-  return <WebFormSection part="embed" canManage={canManage} save={taken ? { ...state, error: undefined } : state} nameField={nameField}
+  return <WebFormSection part="embed" canManage={canManage} save={nameRefused ? { ...state, error: undefined } : state} nameField={nameField}
     onSave={(_enabled, origins) => save.mutate(origins)} />;
 }
 

@@ -27,7 +27,7 @@ export function NameForm({ label, saveLabel, hint, value, canManage, save, onSav
   const hintId = useId();
   const errorId = useId();
   const input = useRef<HTMLInputElement>(null);
-  const feedback = useSaveFeedback(save, errorId, input);
+  const feedback = useSaveFeedback(save, errorId, input, name);
   if (!canManage) return <p><strong>{label}: </strong><span>{value}</span></p>;
   return (
     <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(name.trim()); }}>

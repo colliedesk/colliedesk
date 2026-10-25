@@ -56,7 +56,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
   const addressError = useId();
   const addressField = useRef<HTMLInputElement>(null);
-  const addressFeedback = useSaveFeedback(addressSave, addressError, addressField);
+  const addressFeedback = useSaveFeedback(addressSave, addressError, addressField, address);
   const slugFeedback = useSaveFeedback(slugSave);
   // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
