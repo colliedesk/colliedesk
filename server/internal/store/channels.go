@@ -39,6 +39,11 @@ func (s *Store) scanChannelRow(row rowScanner) (channels.Channel, error) {
 	}
 	channel.Type = channels.Type(kind)
 	channel.CreatedAt, channel.UpdatedAt = channel.CreatedAt.UTC(), channel.UpdatedAt.UTC()
+	for _, at := range []*time.Time{channel.DisabledAt, channel.DeletedAt} {
+		if at != nil {
+			*at = at.UTC()
+		}
+	}
 	var defaults channels.Settings
 	if adapter, ok := s.channels.Adapter(channel.Type); ok {
 		defaults = adapter.Definition().Defaults
