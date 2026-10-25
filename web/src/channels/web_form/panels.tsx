@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConflictError } from '../../api/client';
 import { channelsApi } from '../../api/channels';
@@ -31,9 +31,12 @@ function Connect({ canManage, create }: ConnectProps) {
   const hintID = useId();
   const state = saveState(save);
   const taken = save.error instanceof ConflictError && save.error.detail?.code === 'channel_name_taken' && !edited ? state : undefined;
+  const field = useRef<HTMLInputElement>(null);
+  const refused = Boolean(taken);
+  useEffect(() => { if (refused) field.current?.focus(); }, [refused]);
   const nameField = <>
     <label className="field"><span>{formMessages.name}</span>
-      <input value={name} maxLength={80} aria-invalid={taken ? true : undefined} aria-describedby={taken ? `${errorID} ${hintID}` : hintID}
+      <input ref={field} value={name} maxLength={80} aria-invalid={taken ? true : undefined} aria-describedby={taken ? `${errorID} ${hintID}` : hintID}
         onChange={(event) => { setEdited(true); setName(event.target.value); }} /></label>
     <small id={hintID} className="muted-copy">{formMessages.nameHint}</small>
     {taken && <p role="alert" id={errorID} className="error-copy">{taken.error}{' '}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { RefObject } from 'react';
 import { ConflictError, InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
 
@@ -21,13 +22,15 @@ export function saveState(m: { isPending: boolean; isSuccess: boolean; isError: 
 
 // useSaveFeedback turns a SaveState into what one form shows. The Saved line
 // goes away as soon as the person edits the form again; call touch() on change.
-export function useSaveFeedback(save: SaveState = {}, errorID?: string) {
+// field, when given, takes the focus when a save is refused: the words of the refusal describe it.
+export function useSaveFeedback(save: SaveState = {}, errorID?: string, field?: RefObject<HTMLElement | null>) {
   const [edited, setEdited] = useState(false);
   const pending = Boolean(save.pending);
   const error = pending ? undefined : save.error;
   // A new save, or a refusal that came back before its pending state was ever drawn, is about what is
   // in the form now.
   useEffect(() => { if (pending || error) setEdited(false); }, [pending, error]);
+  useEffect(() => { if (error) field?.current?.focus(); }, [error, field]);
   return {
     pending,
     // invalid marks the field the error is about, until the person edits it again.

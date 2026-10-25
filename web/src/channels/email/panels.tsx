@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ConflictError, InvalidRequestError } from '../../api/client';
 import { channelsApi } from '../../api/channels';
@@ -93,23 +93,30 @@ function Connect({ canManage, create }: ConnectProps) {
   const state = saveState(save);
   const errorID = useId();
   const nameHint = useId();
-  const feedback = useSaveFeedback(state, errorID);
-  // The refusal is about the field it names: the name or the support address.
+  // The refusal is about the field it names: the name or the support address. That field takes the
+  // focus, and the words stand right after it.
   const about = save.error instanceof ConflictError && save.error.detail?.code === 'channel_name_taken' ? 'name' : 'address';
+  const nameField = useRef<HTMLInputElement>(null);
+  const addressField = useRef<HTMLInputElement>(null);
+  const feedback = useSaveFeedback(state, errorID, about === 'name' ? nameField : addressField);
   // A teammate reads what is set, as on a connected channel.
   if (!canManage) return <p><strong>{messages.supportAddress}: </strong><span>{messages.emailNotConnected}</span></p>;
   const invalid = (field: 'name' | 'address') => (feedback.invalid && about === field) || undefined;
+  const refusal = (field: 'name' | 'address') => about === field && <>
+    {feedback.status}
+    {feedback.invalid && state.conflict && <p>{conflictLink(state.conflict)}</p>}
+  </>;
   return <form className="settings-body" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate(); }}>
     <label className="field"><span>{emailMessages.name}</span>
-      <input value={name} maxLength={80} placeholder={address} aria-invalid={invalid('name')} aria-describedby={invalid('name') ? `${errorID} ${nameHint}` : nameHint}
+      <input ref={nameField} value={name} maxLength={80} placeholder={address} aria-invalid={invalid('name')} aria-describedby={invalid('name') ? `${errorID} ${nameHint}` : nameHint}
         onChange={(event) => { feedback.touch(); setName(event.target.value); }} /></label>
     <small id={nameHint}>{emailMessages.nameHint}</small>
+    {refusal('name')}
     <label className="field"><span>{messages.supportAddress}</span>
-      <input type="email" required value={address} aria-invalid={invalid('address')} aria-describedby={invalid('address') ? errorID : undefined}
+      <input ref={addressField} type="email" required value={address} aria-invalid={invalid('address')} aria-describedby={invalid('address') ? errorID : undefined}
         onChange={(event) => { feedback.touch(); setAddress(event.target.value); }} /></label>
+    {refusal('address')}
     <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveSupportAddress)}</button></span>
-    {feedback.status}
-    {feedback.invalid && state.conflict && conflictLink(state.conflict)}
   </form>;
 }
 

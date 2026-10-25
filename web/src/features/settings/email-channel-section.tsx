@@ -55,7 +55,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const [slug, setSlug] = useState(workspaceSlug ?? '');
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
   const addressError = useId();
-  const addressFeedback = useSaveFeedback(addressSave, addressError);
+  const addressField = useRef<HTMLInputElement>(null);
+  const addressFeedback = useSaveFeedback(addressSave, addressError, addressField);
   const slugFeedback = useSaveFeedback(slugSave);
   // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
@@ -81,7 +82,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const addressPart = <>
         {canManage
           ? <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!addressFeedback.pending) onSave?.(address.trim()); }}>
-              <label className="field"><span>{messages.supportAddress}</span><input type="email" value={address} aria-invalid={addressFeedback.invalid || undefined}
+              <label className="field"><span>{messages.supportAddress}</span><input ref={addressField} type="email" value={address} aria-invalid={addressFeedback.invalid || undefined}
                 aria-describedby={addressFeedback.invalid ? addressError : undefined} onChange={(event) => { addressFeedback.touch(); setAddress(event.target.value); }} required /></label>
               <button className="primary-action" type="submit" disabled={addressFeedback.pending}>{addressFeedback.saveLabel(messages.saveSupportAddress)}</button>
               {addressFeedback.status}

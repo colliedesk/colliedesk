@@ -176,8 +176,10 @@ test('a name another channel has is refused at the name, with a link to that cha
   show(FORM);
   const name = await screen.findByRole('textbox', { name: 'Name' });
   fireEvent.change(name, { target: { value: 'Careers' } });
-  fireEvent.submit(name);
+  fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
   await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
+  // The refusal takes the focus to the field it is about, from the button that sent it.
+  expect(name).toHaveFocus();
   expect(name).toHaveAccessibleDescription(/Another channel is called Careers/);
   expect(screen.getByRole('link', { name: 'Open Careers' })).toHaveAttribute('href', `/settings/channels/${EMAIL}`);
 });
@@ -248,6 +250,11 @@ test('a second mailbox with an address another channel has is refused at that fi
   await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', name: 'Sales', config: { support_address: 'support+x@example.com' } }));
   await waitFor(() => expect(address).toHaveAttribute('aria-invalid', 'true'));
   expect(address).toHaveAccessibleDescription(/Billing already uses/);
+  expect(address).toHaveFocus();
+  // The words stand right after the field they are about, before the button.
+  const alert = screen.getByRole('alert');
+  expect(address.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(alert.compareDocumentPosition(screen.getByRole('button', { name: 'Save support address' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByRole('textbox', { name: 'Name' })).not.toHaveAttribute('aria-invalid');
   expect(screen.getByRole('link', { name: 'Open Billing' })).toHaveAttribute('href', `/settings/channels/${EMAIL}`);
 });
@@ -544,6 +551,7 @@ test('a web form is added with the name given, and a name another form has is re
   fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
   expect(name).toHaveAccessibleDescription(/Another web form is called Careers/);
+  expect(name).toHaveFocus();
   expect(screen.getByRole('link', { name: 'Open Careers' })).toHaveAttribute('href', `/settings/channels/${FORM}`);
   fireEvent.change(name, { target: { value: ' Shop form ' } });
   fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
