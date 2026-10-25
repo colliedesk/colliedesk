@@ -4831,7 +4831,7 @@ export interface components {
             admin_consent_url: string | null;
             /** @description From this total size of files the web app warns that Microsoft may refuse the reply. Microsoft documents no limit for sending; a refused reply fails with the reason and keeps its files. */
             large_attachment_bytes: number;
-            /** @description True while a reply of this channel waits because Microsoft refused this server's own app credentials (MICROSOFT_OAUTH_CLIENT_SECRET wrong or expired). The connection is fine; the operator must update the secret, and reconnecting does not help. */
+            /** @description True while a reply of this channel waits because Microsoft refused this server's own app credentials (MICROSOFT_OAUTH_CLIENT_SECRET wrong or expired). The connection is fine; the operator must update the secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is false): missing_settings names what to set. */
             server_credentials_refused: boolean;
             /** @description The channel's Microsoft 365 connection; null when it has none (or sends through Gmail). */
             connection: null | components["schemas"]["MailboxConnection"];

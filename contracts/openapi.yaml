@@ -7179,7 +7179,8 @@ components:
           description: >-
             True while a reply of this channel waits because Microsoft refused this server's own app credentials
             (MICROSOFT_OAUTH_CLIENT_SECRET wrong or expired). The connection is fine; the operator must update the
-            secret, and reconnecting does not help.
+            secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is
+            false): missing_settings names what to set.
         connection:
           description: The channel's Microsoft 365 connection; null when it has none (or sends through Gmail).
           oneOf:

@@ -66,7 +66,8 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, 
 	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy, DomainVerification: "txt", SendingPause: pause,
 		SMTP:  smtpStatus{Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != ""},
 		Gmail: a.gmailSettings(gmail), Microsoft: a.microsoftSettings(channelID, microsoftConnection)}
-	settings.Microsoft.ServerCredentials = serverRefused && microsoftConnection != nil
+	// Only while the server has its Microsoft settings: without them a waiting reply fails as not configured.
+	settings.Microsoft.ServerCredentials = serverRefused && microsoftConnection != nil && settings.Microsoft.Available
 	if a.resend != nil {
 		settings.DomainVerification = "provider"
 	}

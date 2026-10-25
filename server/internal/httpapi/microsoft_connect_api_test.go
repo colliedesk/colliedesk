@@ -1,17 +1,22 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/google/googletest"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft/microsofttest"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -393,5 +398,47 @@ func TestAnAdminConsentReturnsToAPageOrToTheChannel(t *testing.T) {
 	}
 	if count := queryString(t, desk.pool, `SELECT count(*)::text FROM mailbox_connections`); count != "0" {
 		t.Fatalf("admin consent stored %s connections", count)
+	}
+}
+
+// server_credentials_refused says replies wait for a fixed client secret only while the server has its
+// Microsoft settings: without them a waiting reply fails as not configured, and the settings name what to set.
+func TestARefusedSecretIsReportedOnlyWhileTheServerHasMicrosoftSettings(t *testing.T) {
+	waiting := func(t *testing.T, api http.Handler, pool *pgxpool.Pool, admin string) microsoftView {
+		t.Helper()
+		contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Olive", "email": "olive@customer.example"})
+		conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hi"})
+		create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hello"})
+		// The reply waits as the outbox leaves it after Microsoft refused this server's client secret.
+		if _, err := pool.Exec(context.Background(), `UPDATE channel_outbox SET status='queued',last_error='Waiting: Microsoft refused this server''s app credentials.',
+			last_error_code='mailbox_server_config'`); err != nil {
+			t.Fatal(err)
+		}
+		var view microsoftView
+		decode(t, request(t, api, http.MethodGet, "/api/v1/channels/email", nil, admin, nil), &view)
+		return view
+	}
+
+	desk := newMicrosoftDesk(t, "Secret Desk")
+	desk.finishMicrosoft(t, desk.startMicrosoft(t, desk.admin), "support@secret-desk.example.com", microsofttest.Work, sessionCookieOf(desk.admin))
+	if view := waiting(t, desk.api, desk.pool, desk.admin); !view.Microsoft.ServerCredentials {
+		t.Fatalf("with Microsoft settings: %+v, want server_credentials_refused", view.Microsoft)
+	}
+
+	api, service, pool, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Lost Settings", "admin@lost-settings.example.com")
+	connectEmail(t, api, admin, "support@lost-settings.example.com")
+	var channel struct {
+		Channel struct {
+			ChannelID string `json:"channel_id"`
+		} `json:"channel"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/channels/email", nil, admin, nil), &channel)
+	if _, _, err := store.New(pool).SaveMailboxConnection(context.Background(), workspaceID(t, api, admin), channel.Channel.ChannelID, "", "support@lost-settings.example.com",
+		microsoft.ScopeMailSend, store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed"), Provider: domain.MailboxMicrosoft}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	if view := waiting(t, api, pool, admin); view.Microsoft.Available || view.Microsoft.ServerCredentials || view.Microsoft.Connection == nil {
+		t.Fatalf("without Microsoft settings: %+v, want the connection shown without server_credentials_refused", view.Microsoft)
 	}
 }
