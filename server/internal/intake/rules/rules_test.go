@@ -41,6 +41,8 @@ func TestEachRuleDecidesWhatTheStoreDid(t *testing.T) {
 		{"an open command the join policy refused", rules.Facts{Commanded: true, CommandAction: "open", Thread: rules.Thread{Refused: true}},
 			rules.Decision{Action: rules.Create, Basis: rules.Match, Rule: rules.CommandOpen}},
 		{"the join policy refused", rules.Facts{Thread: rules.Thread{Refused: true}}, rules.Decision{Action: rules.Create, Basis: rules.Default, Rule: rules.JoinPolicy}},
+		{"an open command quoting another customer's message", rules.Facts{Commanded: true, CommandAction: "open", Thread: rules.Thread{OtherCustomer: true}},
+			rules.Decision{Action: rules.Create, Basis: rules.Match, Rule: rules.CommandOpen}},
 		{"another customer's message in a shared scope", rules.Facts{Thread: rules.Thread{OtherCustomer: true}},
 			rules.Decision{Action: rules.Create, Basis: rules.Default, Rule: rules.ReferenceOtherCustomer}},
 		{"nothing matches", rules.Facts{}, rules.Decision{Action: rules.Create, Basis: rules.Default, Rule: rules.NewThread}},

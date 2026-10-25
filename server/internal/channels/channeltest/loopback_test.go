@@ -1,9 +1,12 @@
 package channeltest_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -15,6 +18,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
 	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
+	"github.com/colliedesk/colliedesk/server/internal/export"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -464,4 +468,41 @@ func TestAReplyToAnotherCustomerInASharedScopeIsNoMatch(t *testing.T) {
 	if got := d.one(t, `SELECT count(*)::text FROM conversations WHERE workspace_id=$1`); got != "2" {
 		t.Fatalf("conversations = %s", got)
 	}
+}
+
+// The export says, for each message a channel's rules placed, on what basis and by which rule.
+func TestTheExportSaysWhyEachMessageIsInItsConversation(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	d.send(t, channeltest.LoopbackEvent{ID: "x-1", From: "u1", Text: "hello"},
+		channeltest.LoopbackEvent{ID: "x-2", From: "u1", Text: "again"})
+	var archive bytes.Buffer
+	writer := export.NewWriter(&archive, d.store.Objects(), d.workspaceID, time.Now())
+	if err := d.store.ExportWorkspace(context.Background(), d.workspaceID, writer, store.ExportLimits{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Finish(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range reader.File {
+		if file.Name != "conversations.ndjson" {
+			continue
+		}
+		body, err := file.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := io.ReadAll(body)
+		body.Close()
+		for _, want := range []string{`"decision_basis":"default","decision_rule":"new_thread"`, `"decision_basis":"match","decision_rule":"thread_key"`} {
+			if !strings.Contains(string(data), want) {
+				t.Errorf("conversations.ndjson lacks %s:\n%s", want, data)
+			}
+		}
+		return
+	}
+	t.Fatal("no conversations.ndjson")
 }

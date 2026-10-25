@@ -100,6 +100,9 @@ func Decide(f Facts) Decision {
 		return Decision{Action: Review, Basis: Default, Rule: ReviewHold}
 	case f.RefConversation != "":
 		return Decision{Action: Attach, Basis: Match, Rule: CommandReopen, ConversationID: f.RefConversation}
+	case f.Thread.OtherCustomer && f.Commanded:
+		// A command is evidence of its own; the reply it quotes is not.
+		return Decision{Action: Create, Basis: Match, Rule: CommandOpen}
 	case f.Thread.OtherCustomer:
 		return Decision{Action: Create, Basis: Default, Rule: ReferenceOtherCustomer}
 	case f.Thread.ConversationID != "" && f.Thread.ByReference:

@@ -7,3 +7,6 @@ ALTER TABLE channel_inbound_events
     ADD COLUMN decision_basis text CHECK (decision_basis IN ('match', 'default', 'person', 'model')),
     ADD COLUMN decision_rule text CHECK (decision_rule ~ '^[a-z_]{1,40}$'),
     ADD CHECK ((decision_basis IS NULL) = (decision_rule IS NULL));
+-- Who sent a message the store finds by its id (a quote in a shared scope, the export's reason for
+-- each message) is read by the message; without it each lookup reads the whole journal.
+CREATE INDEX channel_inbound_events_message ON channel_inbound_events(workspace_id, message_id) WHERE message_id IS NOT NULL;

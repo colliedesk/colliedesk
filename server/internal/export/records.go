@@ -781,8 +781,12 @@ type Message struct {
 	ChannelID   *string         `json:"channel_id"`
 	ExternalID  *string         `json:"external_id"`
 	ChannelMeta json.RawMessage `json:"channel_meta"`
-	CreatedAt   time.Time       `json:"created_at"`
-	Attachments []Attachment    `json:"attachments"`
+	// DecisionBasis and DecisionRule say why a message from a channel is in this conversation: what the
+	// channel's rules decided (match, default, person; new_thread, thread_key…). Null for the others.
+	DecisionBasis *string      `json:"decision_basis"`
+	DecisionRule  *string      `json:"decision_rule"`
+	CreatedAt     time.Time    `json:"created_at"`
+	Attachments   []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.

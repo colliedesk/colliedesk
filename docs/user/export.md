@@ -112,7 +112,9 @@ addresses a reply was copied to, or `null`), `agent_request_id` (the agent reque
 this reply, or `null`), `ai_draft_id` (the AI draft it was written from, or `null`), `channel_id` (the
 channel that carried it, or `null` for a note and for messages stored before channels were recorded),
 `external_id` (its id on that channel, such as `email:<Message-ID>`), `channel_meta` (what the channel
-knows of it beyond `email_meta`, or `null`), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
+knows of it beyond `email_meta`, or `null`), `decision_basis` and `decision_rule` (why a message from a
+channel is in this conversation: what the channel's rules decided, such as `default` and `new_thread`, or
+`match` and `thread_key`; `null` for the others), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
 `size`, `sha256`, `created_at` and `path`, the file's location in the ZIP.
 
 Each time entry has `id`, `conversation_id`, `agent_id`, `agent_name`, `minutes`, `note`,

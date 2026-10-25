@@ -499,8 +499,10 @@ func exportPageTimeEntries(ctx context.Context, tx pgx.Tx, workspaceID string, i
 // exportMessages streams one conversation's messages, one row in memory at a time.
 func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, files map[string][]export.Attachment, sink export.Sink) error {
 	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,author_agent_id::text,author_name,kind,body,body_html,origin,CASE WHEN starts_with(external_id,'email:') THEN substr(external_id,7) END,email_meta,cc,created_at,agent_request_id::text,ai_draft_id::text,
-		channel_id::text,external_id,channel_meta
-		FROM messages WHERE workspace_id=$1 AND conversation_id=$2 ORDER BY created_at,id`, workspaceID, conversationID)
+		channel_id::text,external_id,channel_meta,
+		(SELECT e.decision_basis FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.decision_basis IS NOT NULL LIMIT 1),
+		(SELECT e.decision_rule FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.decision_rule IS NOT NULL LIMIT 1)
+		FROM messages m WHERE workspace_id=$1 AND conversation_id=$2 ORDER BY created_at,id`, workspaceID, conversationID)
 	if err != nil {
 		return fmt.Errorf("export messages: %w", err)
 	}
@@ -510,7 +512,7 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		var meta, channelMeta []byte
 		if err := rows.Scan(&record.ID, &record.ConversationID, &record.AuthorAgentID, &record.AuthorName, &record.Kind, &record.Body,
 			&record.BodyHTML, &record.Origin, &record.EmailMessageID, &meta, &record.CC, &record.CreatedAt, &record.AgentRequestID, &record.AIDraftID,
-			&record.ChannelID, &record.ExternalID, &channelMeta); err != nil {
+			&record.ChannelID, &record.ExternalID, &channelMeta, &record.DecisionBasis, &record.DecisionRule); err != nil {
 			return fmt.Errorf("export messages: %w", err)
 		}
 		record.CreatedAt = domain.UTC(record.CreatedAt)
