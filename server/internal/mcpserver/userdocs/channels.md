@@ -105,5 +105,6 @@ removed channels too; each type says its `default_channel_id`), `GET/PATCH/DELET
 has is a 409 with `conflict` naming that channel), `/api/v1/channels/{id}/held/replay` and `/held/discard`, and
 `/api/v1/channels/events`, and through the MCP tools `colliedesk_channels_*` ([MCP](mcp.md)). A channel's
 rules (`settings`: how messages join conversations, default tags and priority, rate limits) can be
-changed there only, not in Settings yet. Removing a channel, storing its secret and discarding held
-messages are, for an agent token, requests a person approves.
+changed there only, not in Settings yet. Removing a channel and discarding held messages are, for an
+agent token, requests a person approves. Storing a channel's secret needs an admin token; a lower
+token is refused, so a secret never waits in a request.

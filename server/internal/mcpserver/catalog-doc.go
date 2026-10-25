@@ -11,7 +11,7 @@ var toolDocs = map[string]string{
 	"colliedesk_channels_update":                  "Renames a channel, turns it on or off, or changes its configuration or rules (admin token)",
 	"colliedesk_channels_check":                   "Reads a channel's state again (admin token)",
 	"colliedesk_channels_held_replay":             "Opens the messages a channel held while it was off (admin token)",
-	"colliedesk_channels_credentials_set_request": "Asks a person to store a channel's secret",
+	"colliedesk_channels_credentials_set":         "Stores a channel's secret (admin token only)",
 	"colliedesk_channels_delete_request":          "Asks a person to remove a channel",
 	"colliedesk_channels_held_discard_request":    "Asks a person to discard the messages a channel held",
 	"colliedesk_whoami":                           "Shows the workspace, the team member, the token tier and the tools you can use",

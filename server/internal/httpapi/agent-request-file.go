@@ -165,7 +165,6 @@ var requestTitles = map[string]string{
 	"POST " + channelGmailPath:                                   "Connect Gmail to an email channel",
 	"DELETE " + channelGmailPath:                                 "Disconnect Gmail from an email channel",
 	"DELETE /api/v1/channels/{id}":                               "Remove a channel",
-	"PUT /api/v1/channels/{id}/credentials":                      "Store a secret of a channel",
 	"POST /api/v1/channels/{id}/held/discard":                    "Discard the held messages of a channel",
 	"PATCH /api/v1/workspace/slug":                               "Change the workspace address",
 	"PATCH /api/v1/workspace/timezone":                           "Change the workspace timezone",

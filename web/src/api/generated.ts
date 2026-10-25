@@ -366,7 +366,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. An agent token's call is an agent request a person approves. */
+        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: a secret never waits in an agent request. */
         put: operations["setChannelCredential"];
         post?: never;
         delete?: never;
@@ -6216,7 +6216,6 @@ export interface operations {
                     "application/json": components["schemas"]["ChannelCredential"];
                 };
             };
-            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

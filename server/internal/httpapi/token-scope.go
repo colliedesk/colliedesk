@@ -202,9 +202,10 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/channels/{id}":            grant(auth.PermChannelsUpdate),
 	"POST /api/v1/channels/{id}/check":       grant(auth.PermChannelsUpdate),
 	"POST /api/v1/channels/{id}/held/replay": grant(auth.PermChannelsUpdate),
-	// Secrets and removing a channel are what DELETE /channels/email and its secret already are:
-	// a person approves every token's call. Discarding held messages cannot be undone.
-	"PUT /api/v1/channels/{id}/credentials":   alwaysAsk(auth.PermChannelsManageCredentials),
+	// A channel's secret is a credential route (credentialRoutes): an admin token stores it, a lower one
+	// is refused, so it never waits in a request. Removing a channel is what DELETE /channels/email
+	// already is: a person approves every token's call. Discarding held messages cannot be undone.
+	"PUT /api/v1/channels/{id}/credentials":   grant(auth.PermChannelsManageCredentials),
 	"DELETE /api/v1/channels/{id}":            alwaysAsk(auth.PermChannelsManageCredentials),
 	"POST /api/v1/channels/{id}/held/discard": alwaysAsk(auth.PermChannelsUpdate),
 	// One email channel of several: the same tiers as the routes of the default one.
@@ -343,15 +344,17 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 	return true
 }
 
-// credentialRoutes carry another service's API key (a helpdesk to import from, an AI provider): a token
+// credentialRoutes carry another service's API key (a helpdesk to import from, an AI provider, a channel's
+// account): a token
 // below their tier is refused, never filed, because an agent request stores the call's body (and the
 // export carries it).
 var credentialRoutes = map[string]bool{
-	"POST /api/v1/imports":              true,
-	"PUT /api/v1/imports/{id}/key":      true,
-	"POST /api/v1/ai/providers":         true,
-	"POST /api/v1/ai/models":            true,
-	"PUT /api/v1/ai/providers/{id}/key": true,
+	"POST /api/v1/imports":                  true,
+	"PUT /api/v1/imports/{id}/key":          true,
+	"POST /api/v1/ai/providers":             true,
+	"POST /api/v1/ai/models":                true,
+	"PUT /api/v1/ai/providers/{id}/key":     true,
+	"PUT /api/v1/channels/{id}/credentials": true,
 }
 
 // kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits

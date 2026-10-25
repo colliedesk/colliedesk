@@ -252,7 +252,6 @@ func originList(origins []string) string {
 // secret the call carries.
 var channelRequestActions = map[string]string{
 	"DELETE /api/v1/channels/{id}":                         "Remove the channel",
-	"PUT /api/v1/channels/{id}/credentials":                "Store a secret of the channel",
 	"POST /api/v1/channels/{id}/held/discard":              "Discard the held messages of the channel",
 	"POST /api/v1/channels/{id}/email/secret":              "Rotate the inbound secret of the channel",
 	"POST /api/v1/channels/{id}/email/domain-verification": "Check the DNS record of the domain of the channel",

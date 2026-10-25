@@ -826,7 +826,8 @@ paths:
       description: >
         Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409
         `secret_keys_missing` without them). Only its last four characters are shown again. An agent
-        token's call is an agent request a person approves.
+        token below the admin tier is refused with 403 `credentials_need_admin_token`: a secret never
+        waits in an agent request.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCredentialInput'}}}
@@ -834,7 +835,6 @@ paths:
         '200':
           description: The secret's hint
           content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCredential'}}}
-        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}

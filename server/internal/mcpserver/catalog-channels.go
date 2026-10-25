@@ -116,12 +116,19 @@ func channelsHeldReplaySpec() Spec {
 	}
 }
 
-func channelsCredentialsSetRequestSpec() Spec {
-	return approvalSpec("colliedesk_channels_credentials_set_request", "Ask to set a channel's secret",
-		`Ask to store a secret a channel's type needs (an access token of its account). It is sealed and only its last four characters are shown again.`,
-		[]string{"PUT /api/v1/channels/{id}/credentials"},
-		`{"type":"object","additionalProperties":false,"required":["channel_id","name","value"],"properties":{`+channelIDInput+`,`+
-			`"name":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,40}$"},"value":{"type":"string","minLength":1,"maxLength":4096}}}`, channelsCredentialsSetRequest)
+func channelsCredentialsSetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_channels_credentials_set",
+		Title: "Set a channel's secret",
+		Description: `Store a secret a channel's type needs (an access token of its account). It is sealed and only its last four characters are shown again.` +
+			"\n\nTier: admin (a lower tier is refused, so the secret never waits in a request).",
+		Tier: "admin",
+		REST: []string{"PUT /api/v1/channels/{id}/credentials"},
+		Input: `{"type":"object","additionalProperties":false,"required":["channel_id","name","value"],"properties":{` + channelIDInput + `,` +
+			`"name":{"type":"string","pattern":"^[a-z][a-z0-9_]{0,40}$"},"value":{"type":"string","minLength":1,"maxLength":4096}}}`,
+		Output: `{"type":"object","required":["name","hint"],"properties":{"name":{"type":"string"},"hint":{"type":["string","null"]}}}`,
+		run:    channelsCredentialsSet,
+	}
 }
 
 func channelsDeleteRequestSpec() Spec {
@@ -225,8 +232,15 @@ func channelsHeldReplay(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"results": result.Results}, nil
 }
 
-func channelsCredentialsSetRequest(c *call, arguments map[string]any) (any, error) {
-	return ask(c, http.MethodPut, channelPath(c, arguments, "/credentials"), channelBody(arguments))
+func channelsCredentialsSet(c *call, arguments map[string]any) (any, error) {
+	var stored struct {
+		Name string  `json:"name"`
+		Hint *string `json:"hint"`
+	}
+	if err := c.send(http.MethodPut, channelPath(c, arguments, "/credentials"), channelBody(arguments), &stored); err != nil {
+		return nil, err
+	}
+	return stored, nil
 }
 
 func channelsDeleteRequest(c *call, arguments map[string]any) (any, error) {

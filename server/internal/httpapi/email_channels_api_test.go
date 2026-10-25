@@ -240,7 +240,6 @@ func TestARequestAboutAMailboxNamesIt(t *testing.T) {
 		want         string
 	}{
 		{http.MethodDelete, "/api/v1/channels/" + billing, nil, "Remove the channel Billing (billing@named-requests.example.com)"},
-		{http.MethodPut, "/api/v1/channels/" + billing + "/credentials", map[string]any{"name": "api_key", "value": "secret-value-1234"}, "Store a secret of the channel Billing (billing@named-requests.example.com)"},
 		{http.MethodPost, "/api/v1/channels/" + billing + "/held/discard", nil, "Discard the held messages of the channel Billing (billing@named-requests.example.com)"},
 		{http.MethodPost, "/api/v1/channels/" + billing + "/email/secret", nil, "Rotate the inbound secret of the channel Billing (billing@named-requests.example.com)"},
 		{http.MethodPost, "/api/v1/channels/" + billing + "/email/gmail", nil, "Connect Gmail to the channel Billing (billing@named-requests.example.com)"},
@@ -272,5 +271,33 @@ func TestMailFromAnotherMailboxOfTheWorkspaceIsItsOwn(t *testing.T) {
 	if result := inboundOK(t, api, secret, mail([]string{"From: olive@customer.example", "To: support@own-boxes.example.com",
 		"Subject: Help", "Message-ID: <help@customer.example>"}, "Help.")); result.Status != "created" {
 		t.Fatalf("customer mail: %+v, want created", result)
+	}
+}
+
+// A channel's secret never waits in an agent request: a token below the admin tier is refused, as for
+// an AI provider's key, and an admin token stores it at once. The value is in no request, no listing
+// of requests and no export.
+func TestAChannelSecretNeverWaitsInARequest(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Sealed Secrets", "admin@sealed-secrets.example.com")
+	form := addWebForm(t, api, admin, "Contact form", []string{"https://shop.example.com"})
+	const value = "sk-channel-probe-9z8y7x"
+	body := map[string]any{"name": "access_token", "value": value}
+	send := issueToken(t, api, admin, "Sender", "send").Token
+	if response := request(t, api, http.MethodPut, "/api/v1/channels/"+form.ID+"/credentials", body, send, nil); response.Code != http.StatusForbidden ||
+		!strings.Contains(response.Body.String(), "credentials_need_admin_token") {
+		t.Fatalf("a send token: %d %s, want 403 credentials_need_admin_token", response.Code, response.Body.String())
+	}
+	adminToken := issueToken(t, api, admin, "Ops", "admin").Token
+	if response := request(t, api, http.MethodPut, "/api/v1/channels/"+form.ID+"/credentials", body, adminToken, nil); response.Code == http.StatusAccepted {
+		t.Fatalf("an admin token filed a request: %s", response.Body.String())
+	}
+	if stored := queryString(t, pool, `SELECT count(*)::text FROM agent_requests WHERE body::text LIKE '%'||$1||'%' OR summary LIKE '%'||$1||'%'`, value); stored != "0" {
+		t.Fatalf("%s agent requests keep the secret", stored)
+	}
+	for _, token := range []string{admin, adminToken} {
+		if listed := request(t, api, http.MethodGet, "/api/v1/agent-requests", nil, token, nil); strings.Contains(listed.Body.String(), value) {
+			t.Fatalf("the requests list shows the secret: %s", listed.Body.String())
+		}
 	}
 }

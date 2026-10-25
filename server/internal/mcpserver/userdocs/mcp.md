@@ -201,7 +201,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channels_update` | Renames a channel, turns it on or off, or changes its configuration or rules (admin token) | `admin` |
 | `colliedesk_channels_check` | Reads a channel's state again (admin token) | `admin` |
 | `colliedesk_channels_held_replay` | Opens the messages a channel held while it was off (admin token) | `admin` |
-| `colliedesk_channels_credentials_set_request` | Asks a person to store a channel's secret | `read` |
+| `colliedesk_channels_credentials_set` | Stores a channel's secret (admin token only) | `admin` |
 | `colliedesk_channels_delete_request` | Asks a person to remove a channel | `read` |
 | `colliedesk_channels_held_discard_request` | Asks a person to discard the messages a channel held | `read` |
 <!-- /generated -->
