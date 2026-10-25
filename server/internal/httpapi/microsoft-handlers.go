@@ -96,10 +96,12 @@ func (a *API) finishMicrosoftAdminConsent(response http.ResponseWriter, request 
 	header.Set("Cache-Control", "no-store")
 	header.Set("Referrer-Policy", "no-referrer")
 	response.WriteHeader(http.StatusOK)
+	// Light or dark as the admin's device is set (inline style only: the policy above allows no file).
 	fmt.Fprintf(response, `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>%s · Colliedesk</title>
-<body style="font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px;line-height:1.5;color:#1f2933;background:#fff">
-<h1 style="font-size:1.4rem">%s</h1><p>%s</p></body></html>`, html.EscapeString(title), html.EscapeString(title), html.EscapeString(text))
+<meta name="color-scheme" content="light dark"><title>%s · Colliedesk</title>
+<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px;line-height:1.5;color:#1f2933;background:#fff}
+h1{font-size:1.4rem}@media (prefers-color-scheme:dark){body{color:#e4e7eb;background:#15181c}}</style>
+<body><h1>%s</h1><p>%s</p></body></html>`, html.EscapeString(title), html.EscapeString(title), html.EscapeString(text))
 }
 
 // adminConsentReturn is the settings page an admin consent returns to for a signed-in person: the

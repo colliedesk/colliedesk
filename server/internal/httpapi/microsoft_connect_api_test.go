@@ -367,7 +367,8 @@ func TestAnAdminConsentReturnsToAPageOrToTheChannel(t *testing.T) {
 	path := strings.TrimPrefix(target, testOrigin)
 	page := request(t, desk.api, http.MethodGet, path, nil, "", nil)
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Colliedesk is approved for your organization") ||
-		strings.Contains(page.Body.String(), "11111111-2222") || page.Header().Get("X-Frame-Options") != "DENY" || page.Header().Get("Content-Type") != "text/html; charset=utf-8" {
+		strings.Contains(page.Body.String(), "11111111-2222") || page.Header().Get("X-Frame-Options") != "DENY" || page.Header().Get("Content-Type") != "text/html; charset=utf-8" ||
+		!strings.Contains(page.Body.String(), `<meta name="color-scheme" content="light dark">`) || !strings.Contains(page.Body.String(), "prefers-color-scheme:dark") {
 		t.Fatalf("without a session: %d %v %s", page.Code, page.Header(), page.Body.String())
 	}
 	if location := desk.callback(t, path, sessionCookieOf(desk.admin), ""); location != desk.page(t, desk.admin)+"?tab=replies&microsoft=admin_consent_done" {
