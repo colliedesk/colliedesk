@@ -173,6 +173,8 @@ const (
 	defaultAutoMaxAgeSeconds = 2 * 60 * 60
 	defaultReopenWindowDays  = 7
 	maxInstructions          = 4000
+	// maxIntakeOptionsBytes is what channel_ai_levels.options holds (CHECK in the migration).
+	maxIntakeOptionsBytes = 16384
 )
 
 // Effective returns the options with every default filled in.
@@ -248,6 +250,9 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	}
 	if options.Instructions != nil && utf8.RuneCountInString(*options.Instructions) > maxInstructions {
 		return options, invalid("instructions are at most %d characters.", maxInstructions)
+	}
+	if encoded, err := json.Marshal(options); err == nil && len(encoded) > maxIntakeOptionsBytes {
+		return options, invalid("Intake's settings of a scope are at most 16 KiB together; shorten the instructions or the redact keywords.")
 	}
 	if len(options.RedactKeywords) > 100 {
 		return options, invalid("redact_keywords holds at most 100 words.")
@@ -400,16 +405,14 @@ func (s *Service) channelAI(ctx context.Context, tx pgx.Tx, workspaceID string, 
 	return result, nil
 }
 
-// SetChannelLevel sets a feature's level on a scope of a channel, or removes it (nil Level). When
-// the change lets the AI do more by itself (a scope's level rises, or intake's options loosen) and
-// mayRaise is false, nothing changes and it returns ErrRaiseNeedsApproval: an agent token's raise
-// waits for a person. Lowering is the caller's to do. Every change is in the AI history and in the
-// channel's.
-func (s *Service) SetChannelLevel(ctx context.Context, workspaceID string, actor Actor, channel ChannelRef, slot string, input ChannelLevelInput, mayRaise bool) (ChannelAI, error) {
-	var result ChannelAI
+// CheckChannelLevel refuses a level that could never be set on the channel, before anything is
+// filed or stored: a scope the channel lacks, intake where its type declares none, a level the feature
+// never runs at, options that are not intake's. It returns intake's options as given.
+func CheckChannelLevel(channel ChannelRef, slot string, input ChannelLevelInput) (IntakeOptions, error) {
+	var options IntakeOptions
 	// The help center's chat has no level per channel: it is on or off for the workspace.
 	if !slices.Contains(Slots, slot) || slot == SlotChat {
-		return result, ErrNotFound
+		return options, ErrNotFound
 	}
 	if !slices.Contains(channel.ScopesShown(), input.Scope) {
 		names := make([]string, 0, len(channel.Scopes))
@@ -417,25 +420,39 @@ func (s *Service) SetChannelLevel(ctx context.Context, workspaceID string, actor
 			names = append(names, "'"+scope+"'")
 		}
 		if len(names) == 0 {
-			return result, invalid("This channel has no scopes: send scope ''.")
+			return options, invalid("This channel has no scopes: send scope ''.")
 		}
-		return result, invalid("scope is '' (the whole channel) or one of %s.", strings.Join(names, ", "))
+		return options, invalid("scope is '' (the whole channel) or one of %s.", strings.Join(names, ", "))
 	}
 	if !slices.Contains(channel.SlotsOf(input.Scope), slot) {
-		return result, &IntakeNotSupportedError{Available: channel.SlotsOf(input.Scope)}
+		return options, &IntakeNotSupportedError{Available: channel.SlotsOf(input.Scope)}
 	}
 	if input.Level != nil && !levelAllowed(slot, *input.Level, true) {
-		return result, ErrLevelNotAllowed
+		return options, ErrLevelNotAllowed
 	}
 	if slot != SlotIntake && len(bytes.TrimSpace(input.Options)) > 0 && string(bytes.TrimSpace(input.Options)) != "null" {
-		return result, invalid("options are intake's only.")
+		return options, invalid("options are intake's only.")
 	}
 	options, err := parseIntakeOptions(input.Options)
 	if err != nil {
-		return result, err
+		return options, err
 	}
 	if input.Level == nil && len(bytes.TrimSpace(input.Options)) > 0 && string(bytes.TrimSpace(input.Options)) != "null" {
-		return result, invalid("options go with a level; a scope that follows the channel follows its options too.")
+		return options, invalid("options go with a level; a scope that follows the channel follows its options too.")
+	}
+	return options, nil
+}
+
+// SetChannelLevel sets a feature's level on a scope of a channel, or removes it (nil Level). When
+// the change lets the AI do more by itself (a scope's level rises, or intake's options loosen) and
+// mayRaise is false, nothing changes and it returns ErrRaiseNeedsApproval: an agent token's raise
+// waits for a person. Lowering is the caller's to do. Every change is in the AI history and in the
+// channel's.
+func (s *Service) SetChannelLevel(ctx context.Context, workspaceID string, actor Actor, channel ChannelRef, slot string, input ChannelLevelInput, mayRaise bool) (ChannelAI, error) {
+	var result ChannelAI
+	options, err := CheckChannelLevel(channel, slot, input)
+	if err != nil {
+		return result, err
 	}
 	now := s.now().UTC()
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
@@ -564,9 +581,11 @@ func recordChannelLevel(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 }
 
 // lowerChannelLevels takes back what channels let a feature do by itself when the admin's consent is
-// recorded anew (the feature moved to another provider or model, or was turned on again): auto becomes
-// suggest, and a draft written by itself becomes a draft asked for by hand, as the workspace's level does.
-func lowerChannelLevels(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, slot string, now time.Time) error {
+// recorded anew (the feature moved to another provider, or was turned on again; reason
+// recipient_changed), or when intake moves to another model, whose gate it has not passed
+// (model_changed): auto becomes suggest, and a draft written by itself becomes a draft asked for by
+// hand, as the workspace's level does.
+func lowerChannelLevels(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, slot, reason string, now time.Time) error {
 	lowered := LevelSuggest
 	from := LevelAuto
 	if slot == SlotDraft {
@@ -590,7 +609,7 @@ func lowerChannelLevels(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 		return err
 	}
 	for _, c := range changes {
-		if err := recordChannelLevel(ctx, tx, workspaceID, actor, c.channel, c.scope, slot, from, lowered, false, "recipient_changed", now); err != nil {
+		if err := recordChannelLevel(ctx, tx, workspaceID, actor, c.channel, c.scope, slot, from, lowered, false, reason, now); err != nil {
 			return err
 		}
 	}

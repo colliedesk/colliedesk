@@ -88,6 +88,12 @@ func (a *API) setChannelAI(response http.ResponseWriter, request *http.Request) 
 		writeChannelError(response, err)
 		return
 	}
+	// A call that could never run is refused now, not filed for a person to approve in vain.
+	change := ai.ChannelLevelInput{Scope: *input.Scope, Level: level, Options: input.Options}
+	if _, err := ai.CheckChannelLevel(ref, request.PathValue("slot"), change); err != nil {
+		writeChannelAIError(response, err)
+		return
+	}
 	route := Route{Method: http.MethodPut, Pattern: channelAIRoute}
 	if who.IsToken() && !who.Allows(auth.PermAISettingsUpdate) {
 		a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, body, "")
@@ -98,8 +104,7 @@ func (a *API) setChannelAI(response http.ResponseWriter, request *http.Request) 
 		writeError(response, http.StatusForbidden, "forbidden", "Only admins change what AI does by itself on a channel.")
 		return
 	}
-	levels, err := a.ai.SetChannelLevel(request.Context(), who.Workspace.ID, aiActor(request), ref, request.PathValue("slot"),
-		ai.ChannelLevelInput{Scope: *input.Scope, Level: level, Options: input.Options}, !who.IsToken())
+	levels, err := a.ai.SetChannelLevel(request.Context(), who.Workspace.ID, aiActor(request), ref, request.PathValue("slot"), change, !who.IsToken())
 	if errors.Is(err, ai.ErrRaiseNeedsApproval) {
 		a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, body, "")
 		return

@@ -342,6 +342,10 @@ feature does by itself: `off`, `suggest`, `auto`.
    provider or model, or the feature turned on again), the workspace's level starts over (triage
    `suggest`, others `off`) and `lowerChannelLevels` lowers every channel row a step (auto → suggest,
    drafts suggest → off) in the same transaction, with `reason: recipient_changed` in both histories.
+   Another model of the same provider changes no consent and, for triage and drafts, nothing else (as
+   before levels); for intake it lowers the channels' `auto` (`model_changed`), since its gate was
+   passed with that model's decisions. A call that could never run (a scope the channel lacks, intake
+   on email) is refused before a token's request is filed (`CheckChannelLevel`).
    Deleting a provider sets the slot off; channel rows stay and read `workspace_off`. A restore lowers
    both the same way.
 6. **Two histories.** A change writes `ai_settings_events(channel_level_changed)` and

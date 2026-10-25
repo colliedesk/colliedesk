@@ -481,3 +481,80 @@ func TestALevelChangeIsInBothHistories(t *testing.T) {
 		t.Fatalf("channel history = %+v", page.Items)
 	}
 }
+
+// A call that could never run is refused at once, also from a token that would only file it: nobody
+// approves a request for a scope the channel lacks or intake on a web form.
+func TestALevelThatCannotRunIsRefusedBeforeItIsFiled(t *testing.T) {
+	d := newLevelDesk(t)
+	draft := issueToken(t, d.api, d.adminA, "levels draft", "draft").Token
+	if response := d.setLevel(t, draft, d.chatA, "triage", map[string]any{"scope": "nonsense", "level": "off"}); response.Code != http.StatusBadRequest {
+		t.Fatalf("unknown scope: %+v", response)
+	}
+	if response := d.setLevel(t, draft, d.formA, "intake", map[string]any{"scope": "", "level": "suggest"}); response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body, "intake_not_supported") {
+		t.Fatalf("intake on a web form: %+v", response)
+	}
+	if response := d.setLevel(t, draft, d.formA, "draft", map[string]any{"scope": "", "level": "auto"}); response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("draft auto: %+v", response)
+	}
+	if got := queryString(t, d.pool, `SELECT count(*)::text FROM agent_requests WHERE workspace_id=$1`, d.workspaceA); got != "0" {
+		t.Fatalf("filed %s requests", got)
+	}
+	// Options within every field's limit can still pass the 16 KiB a scope keeps; that is said plainly.
+	keywords := make([]string, 100)
+	for i := range keywords {
+		keywords[i] = strings.Repeat("ệ", 79) + string(rune('a'+i%26))
+	}
+	response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest",
+		"options": map[string]any{"instructions": strings.Repeat("ệ", 4000), "redact_keywords": keywords}})
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body, "16 KiB") {
+		t.Fatalf("options over 16 KiB: %+v", response)
+	}
+	cjk := make([]string, 30)
+	for i := range cjk {
+		cjk[i] = strings.Repeat("密", 79) + string(rune('a'+i))
+	}
+	response = d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest",
+		"options": map[string]any{"instructions": strings.Repeat("密", 4000), "redact_keywords": cjk}})
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body, "16 KiB") {
+		t.Fatalf("CJK options over 16 KiB: %+v", response)
+	}
+}
+
+// Intake's gate is passed with one model's decisions, so another model of the same provider takes its
+// channels back to suggest; triage and drafts keep their level on another model, as before levels, and
+// so does every feature when only the effort changes.
+func TestAnotherModelLowersIntakeOnly(t *testing.T) {
+	d := newLevelDesk(t)
+	two := create(t, d.api, d.adminA, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Two models", "api_key": "sk-level-0004",
+		"models": []string{"claude-haiku-5-5", "claude-sonnet-5-5"}})
+	for _, slot := range []string{"triage", "intake"} {
+		d.setSlot(t, d.adminA, slot, map[string]any{"source": "provider", "provider_id": two, "model": "claude-haiku-5-5", "enabled": true}, http.StatusOK)
+	}
+	d.setLevel(t, d.adminA, d.chatA, "triage", map[string]any{"scope": "group", "level": "auto"})
+	d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "auto"})
+	for _, slot := range []string{"triage", "intake"} {
+		d.setSlot(t, d.adminA, slot, map[string]any{"source": "provider", "provider_id": two, "model": "claude-haiku-5-5", "effort": "medium", "enabled": true}, http.StatusOK)
+	}
+	levels := d.levels(t, d.adminA, d.chatA)
+	for _, slot := range []string{"triage", "intake"} {
+		if item, _ := effective(levels, "group", slot); item.EffectiveLevel != "auto" {
+			t.Fatalf("%s after another effort = %+v", slot, item)
+		}
+	}
+	for _, slot := range []string{"triage", "intake"} {
+		d.setSlot(t, d.adminA, slot, map[string]any{"source": "provider", "provider_id": two, "model": "claude-sonnet-5-5", "enabled": true}, http.StatusOK)
+	}
+	levels = d.levels(t, d.adminA, d.chatA)
+	if item, _ := effective(levels, "group", "triage"); item.EffectiveLevel != "auto" {
+		t.Fatalf("triage after another model = %+v", item)
+	}
+	if item, _ := effective(levels, "group", "intake"); item.Level == nil || *item.Level != "suggest" {
+		t.Fatalf("intake after another model = %+v", item)
+	}
+	if got := queryString(t, d.pool, `SELECT count(*)::text FROM ai_settings_events WHERE workspace_id=$1 AND kind='channel_level_changed' AND detail->>'reason'='model_changed'`, d.workspaceA); got != "1" {
+		t.Fatalf("model_changed events = %s", got)
+	}
+	if got := queryString(t, d.pool, `SELECT count(*)::text FROM channel_events WHERE workspace_id=$1 AND kind='ai_changed' AND detail->>'reason'='model_changed'`, d.workspaceA); got != "1" {
+		t.Fatalf("channel model_changed events = %s", got)
+	}
+}

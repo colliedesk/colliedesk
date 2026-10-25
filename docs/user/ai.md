@@ -221,7 +221,9 @@ where many short messages arrive and some are not requests.
 
 When a feature moves to another provider, or is turned on again, its consent is new: every channel
 that ran it by itself goes a step down (Auto to Suggest; drafts written by themselves to drafts asked
-for), and the history says why. Restoring a workspace from a backup does the same.
+for), and the history says why. Intake also goes back to Suggest on a channel when it moves to
+another model, since what it was checked on was the old model's decisions. Restoring a workspace from
+a backup does the same.
 
 Admins set a channel's levels with `PUT /api/v1/channels/{id}/ai/{slot}` or the MCP tool
 `colliedesk_channel_ai_set`, and read them with `colliedesk_channel_ai_get`; **Settings → Built-in

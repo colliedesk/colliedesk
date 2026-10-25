@@ -3,8 +3,12 @@ package channels
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 )
+
+// scopeKey is what conversations.channel_scope and channel_ai_levels.scope hold.
+var scopeKey = regexp.MustCompile(`^[a-z_]{1,40}$`)
 
 // Errors of the frame, the same for every type.
 var (
@@ -59,6 +63,11 @@ func NewRegistry(adapters ...Adapter) (*Registry, error) {
 		}
 		if definition.WhenOff != OffHold && definition.WhenOff != OffRefuse {
 			return nil, fmt.Errorf("channel type %s: WhenOff must be %q or %q", definition.Type, OffHold, OffRefuse)
+		}
+		for _, scope := range definition.Scopes {
+			if !scopeKey.MatchString(scope) {
+				return nil, fmt.Errorf("channel type %s: scope %q must be 1 to 40 lower-case letters and underscores (conversations and AI levels store it)", definition.Type, scope)
+			}
 		}
 		for _, scope := range definition.IntakeScopes {
 			rules, ok := definition.Defaults.Scopes[scope]

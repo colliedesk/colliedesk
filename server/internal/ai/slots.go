@@ -298,9 +298,15 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 			}
 			return invalid("This server has no price for %s, so it cannot count what AI chat spends. Ask its operator to add one to the setting ai.server.prices.", *next.model)
 		}
-		if renewed {
+		switch {
+		case renewed:
 			// What channels let the feature do by itself was agreed for another recipient.
-			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, now); err != nil {
+			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, "recipient_changed", now); err != nil {
+				return err
+			}
+		case slot == SlotIntake && found && current.enabled && next.enabled && !equalPointer(current.model, next.model):
+			// Intake's gate was passed with this model's labels; another model starts over at suggest.
+			if err := lowerChannelLevels(ctx, tx, workspaceID, actor, slot, "model_changed", now); err != nil {
 				return err
 			}
 		}
