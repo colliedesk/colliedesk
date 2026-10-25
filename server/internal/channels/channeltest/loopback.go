@@ -40,7 +40,9 @@ type LoopbackEvent struct {
 	Intent  string `json:"intent,omitempty"`
 	Collect bool   `json:"collect,omitempty"`
 	Echo    bool   `json:"echo,omitempty"`
-	Archive bool   `json:"archive,omitempty"`
+	// Staff marks a team member writing on the channel's own app.
+	Staff   bool `json:"staff,omitempty"`
+	Archive bool `json:"archive,omitempty"`
 	// Failed reports that our sent message with this id did not arrive.
 	Failed string `json:"failed,omitempty"`
 	// Links are files the channel serves by link, fetched by the frame.
@@ -319,6 +321,13 @@ func (i loopbackInbound) Parse(_ context.Context, channel channels.Channel, snap
 		Thread: channels.Thread{Keys: []string{key}, Record: []string{key}}, Meta: json.RawMessage(`{"via":"loopback"}`)}
 	if event.Reference != "" {
 		in.Thread.References = []string{event.Reference}
+	}
+	in.Place = &channels.Place{Kind: channels.PlaceDirect, ExternalID: key, OpensConversations: true}
+	if event.Group != "" {
+		in.Place.Kind, in.Place.Name = channels.PlaceGroup, organization
+	}
+	if event.Staff {
+		in.Role = channels.RoleStaff
 	}
 	in.Subject = "Loopback: " + event.Text
 	if len(in.Subject) > 80 {

@@ -200,6 +200,14 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if err := journal.write(ctx, "processed", journalDetail{senderKey: senderKey}); err != nil {
 			return result, err
 		}
+		// Kept without a conversation: a team member on the channel's own app, or chatter.
+		kept := itemOutcome{disposition: ItemArchived, reason: "chat"}
+		if in.Role == channels.RoleStaff {
+			kept = itemOutcome{disposition: ItemStaff}
+		}
+		if err := recordThreadItems(ctx, tx, &journal, in, kept); err != nil {
+			return result, err
+		}
 		result.Status = channels.ResultArchived
 		return finish(result)
 	}
@@ -219,6 +227,9 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			}
 		}
 		if err := journal.write(ctx, "dropped", journalDetail{dropReason: channels.DropCancelled, basis: decision.Basis, rule: decision.Rule}); err != nil {
+			return result, err
+		}
+		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemNotRequest, reason: channels.DropCancelled}); err != nil {
 			return result, err
 		}
 		reason := channels.DropCancelled
@@ -279,6 +290,9 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if err := journal.write(ctx, "pending", journalDetail{senderKey: senderKey, aggregateKey: in.Aggregate.Key, flushAt: &flush}); err != nil {
 			return result, err
 		}
+		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemGathering}); err != nil {
+			return result, err
+		}
 		result.Status = channels.ResultPending
 		return finish(result)
 	}
@@ -298,6 +312,9 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	case rules.Archive:
 		// Chatter of a scope that opens conversations only on a command is kept, not opened.
 		if err := journal.write(ctx, "processed", journalDetail{senderKey: senderKey, basis: decision.Basis, rule: decision.Rule}); err != nil {
+			return result, err
+		}
+		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemArchived, reason: "chat"}); err != nil {
 			return result, err
 		}
 		result.Status = channels.ResultArchived
@@ -399,6 +416,10 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		objectKey: original, basis: decision.Basis, rule: decision.Rule}); err != nil {
 		return result, err
 	}
+	if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemConversation, contactID: contactID, conversationID: conversationID,
+		messageID: messageID, linkReason: linkReasonOf(decision)}); err != nil {
+		return result, err
+	}
 	if result.Status == channels.ResultCreated && channel.Settings.Notices.Received != "" {
 		if _, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{}, "outgoing", channel.Settings.Notices.Received, nil, nil); err != nil {
 			return result, fmt.Errorf("send received notice: %w", err)
@@ -433,6 +454,14 @@ func (s *Store) holdInbound(ctx context.Context, tx pgx.Tx, journal *journalWrit
 		detail.objectKey, detail.objectBytes = stored[0].Object.Key, stored[0].Object.Size
 	}
 	if err := journal.write(ctx, "held", detail); err != nil {
+		return result, err
+	}
+	// What waits for a person: a review of what was collected, or a channel that is off.
+	waiting := itemOutcome{disposition: ItemPendingReview, reason: "no_command"}
+	if reason == channels.HoldChannelOff {
+		waiting = itemOutcome{disposition: ItemUnresolved, reason: reason}
+	}
+	if err := recordThreadItems(ctx, tx, journal, in, waiting); err != nil {
 		return result, err
 	}
 	result.Status, result.Reason = channels.ResultHeld, &reason

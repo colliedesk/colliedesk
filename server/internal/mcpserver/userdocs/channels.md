@@ -117,6 +117,19 @@ turned on or off, changed (which settings: the support address, the sender name,
 made the default or removed a channel, replaced one of its secrets (never its value), and how many held messages were
 opened or discarded.
 
+## Chat threads
+
+On a chat channel, every message said in a place (a one-to-one chat, a group) is kept with that place,
+whatever became of it: the customers' messages that opened or joined a conversation, chatter the channel
+kept without one, what waits for review, and what the team and the channel sent. A conversation can show
+the place around its own messages, with other customers of a group marked. Nothing of a place is ever on
+a page a customer sees. Email and web forms have no places. For AI agents and the API:
+`GET /api/v1/conversations/{id}/chat` (`linked=only` keeps the conversation's own), `GET
+/api/v1/channels/{id}/threads`, `GET /api/v1/channels/{id}/threads/{threadId}/items` and `GET
+/api/v1/channel-thread-items` (messages nobody concluded on), and the MCP tools
+`colliedesk_conversation_chat_get`, `colliedesk_channel_threads_list`, `colliedesk_channel_thread_items` and
+`colliedesk_channel_unresolved_items`.
+
 ## AI on a channel
 
 Each channel's **AI** tab sets what each AI feature does by itself on it (triage and drafts; intake
