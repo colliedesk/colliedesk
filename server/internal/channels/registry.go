@@ -69,6 +69,11 @@ func NewRegistry(adapters ...Adapter) (*Registry, error) {
 				return nil, fmt.Errorf("channel type %s: scope %q must be 1 to 40 lower-case letters and underscores (conversations and AI levels store it)", definition.Type, scope)
 			}
 		}
+		for _, scope := range definition.SharedScopes {
+			if !slices.Contains(definition.Scopes, scope) {
+				return nil, fmt.Errorf("channel type %s: shared scope %q must be one of its scopes", definition.Type, scope)
+			}
+		}
 		for _, scope := range definition.IntakeScopes {
 			rules, ok := definition.Defaults.Scopes[scope]
 			if !slices.Contains(definition.Scopes, scope) || !ok || rules.Gather == nil {

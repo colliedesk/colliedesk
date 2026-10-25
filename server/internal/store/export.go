@@ -1103,7 +1103,7 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 	// What a channel received and did not make a message: everything but a processed message and a
 	// discarded event (an admin threw it away).
 	inbound, err := tx.Query(ctx, `SELECT e.id::text,e.channel_id::text,e.external_event_id,e.state,e.raw,COALESCE(e.raw_object_key,''),COALESCE(e.raw_bytes,0),
-			e.hold_reason,e.drop_reason,e.error,e.received_at,e.processed_at,
+			e.hold_reason,e.drop_reason,e.error,e.decision_basis,e.decision_rule,e.received_at,e.processed_at,
 			(SELECT COALESCE(json_agg(json_build_object('name',f.name,'content_type',f.content_type,'status',f.status,'size',f.size,'sha256',f.sha256,
 				'error',f.error,'key',f.storage_key) ORDER BY f.idx),'[]') FROM channel_inbound_files f WHERE f.workspace_id=e.workspace_id AND f.event_id=e.id)
 		FROM channel_inbound_events e WHERE e.workspace_id=$1 AND e.state<>'discarded' AND NOT (e.state='processed' AND e.message_id IS NOT NULL)
@@ -1116,7 +1116,7 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		var r export.ChannelInboundEvent
 		var files []byte
 		if err := inbound.Scan(&r.ID, &r.ChannelID, &r.ExternalEventID, &r.State, &r.Raw, &r.RawKey, &r.RawSize, &r.HoldReason, &r.DropReason, &r.Error,
-			&r.ReceivedAt, &r.ProcessedAt, &files); err != nil {
+			&r.DecisionBasis, &r.DecisionRule, &r.ReceivedAt, &r.ProcessedAt, &files); err != nil {
 			return fmt.Errorf("export channel events: %w", err)
 		}
 		var stored []struct {

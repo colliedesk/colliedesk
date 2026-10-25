@@ -203,6 +203,9 @@ type Definition struct {
 	// one, or not a request): a chat's, where messages are collected first (each has a Gather in
 	// Defaults). A type without them (email, a web form) keeps its rules and has no intake.
 	IntakeScopes []string
+	// SharedScopes are the scopes where several customers write in one place (a chat's groups): there,
+	// a reply to another customer's message is no evidence of which request it belongs to.
+	SharedScopes []string
 	// RepliesVia names the type that carries this type's replies when it sends none itself.
 	RepliesVia Type
 	// CarriesOtherReplies makes the type carry the replies of conversations that came through no
