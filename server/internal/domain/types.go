@@ -142,6 +142,8 @@ type Conversation struct {
 	Channel string `json:"channel"`
 	// ChannelID is the channel it came through; nil for one that came through none.
 	ChannelID *string `json:"-"`
+	// ReplyChannelID is the channel its replies were pinned to when its own channel cannot send them.
+	ReplyChannelID *string `json:"-"`
 	// ChannelRef is its channel and the one its replies leave through, nil when there is neither.
 	ChannelRef *ChannelRef         `json:"channel_ref"`
 	Origin     *ConversationOrigin `json:"origin"`
@@ -167,6 +169,14 @@ type ChannelRepliesVia struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Enabled bool   `json:"enabled"`
+	// InsteadOf is the channel the replies would leave from, removed, when the default stands in for it.
+	InsteadOf *ChannelName `json:"instead_of"`
+}
+
+// ChannelName names a channel.
+type ChannelName struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // How a conversation started (conversations.channel).
@@ -196,6 +206,9 @@ type ConversationOrigin struct {
 	FirstResponseDueAt  *time.Time `json:"first_response_due_at"`
 	CC                  []string   `json:"cc"`
 	ForwardedTo         []string   `json:"forwarded_to"`
+	// Mailboxes are the addresses the conversation was sent to at the source, most trusted first: its
+	// replies leave from the email channel of the first one this workspace has.
+	Mailboxes []string `json:"mailboxes,omitempty"`
 	// Stats is what the source reported about the ticket, read once; nil when it reported nothing.
 	Stats *OriginStats `json:"stats,omitempty"`
 }

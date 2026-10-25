@@ -526,7 +526,7 @@ func (c *contract) sendWhileOff(t *testing.T) {
 func (c *contract) repliesVia(t *testing.T) {
 	d := c.desk(t)
 	first := c.receive(t, d.channel, c.h.Raw(t, d.channel, Spec{ID: "via", From: "jo", Text: "Question."}))
-	route, err := c.h.Store.GetReplyRoute(context.Background(), d.workspaceID, *first[0].ConversationID)
+	route, err := c.h.Store.ReplyRoute(context.Background(), d.workspaceID, *first[0].ConversationID)
 	if err != nil {
 		t.Fatal(err)
 	}

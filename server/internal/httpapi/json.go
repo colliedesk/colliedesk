@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -75,6 +76,15 @@ func writeStoreError(response http.ResponseWriter, err error) {
 		return
 	case errors.Is(err, domain.ErrMergeUndone):
 		writeError(response, http.StatusConflict, "merge_undone", "This merge was undone already. Nothing was changed.")
+		return
+	case errors.Is(err, channels.ErrNotFound):
+		writeError(response, http.StatusNotFound, "channel_not_found", "No channel of this workspace has that id.")
+		return
+	case errors.Is(err, channels.ErrChannelCannotSend):
+		writeError(response, http.StatusBadRequest, "channel_cannot_send", "A conversation cannot start on this channel: choose an email channel.")
+		return
+	case errors.Is(err, channels.ErrChannelOff):
+		writeError(response, http.StatusConflict, "channel_off", "This channel is off: turn it on, or start from another channel. Nothing was stored.")
 		return
 	case errors.Is(err, domain.ErrEmailChannelMissing):
 		writeError(response, http.StatusConflict, "email_channel_missing", "Connect the email channel in Settings before starting a conversation by email. Nothing was stored.")

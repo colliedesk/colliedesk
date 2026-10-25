@@ -15,8 +15,9 @@ const (
 	channelOutput   = `{"type":"object","required":["channel"],"properties":{"channel":{"type":"object"}}}`
 	channelSettings = `"settings":{"type":"object","description":"The channel's rules over its type's defaults: join_policy {kind: always_reopen, within_days with days, never}, ` +
 		`default_tags, default_priority, default_assignee_id, rate_limits {window_seconds, per_sender, new_conversations, scope}, commands (name to {action, phrases, tags, priority}), review, scopes, notices {received}. Never a secret."}`
-	channelConfig = `"config":{"type":"object","description":"The type's configuration: email {support_address, sender_name}; web_form {allowed_origins}."}`
-	heldEventIDs  = `"event_ids":{"type":"array","maxItems":500,"items":{"type":"string",` + uuid + `},"description":"Leave out for every held message."}`
+	channelConfig  = `"config":{"type":"object","description":"The type's configuration: email {support_address, sender_name}; web_form {allowed_origins}."}`
+	channelDefault = `"is_default":{"type":"boolean","enum":[true],"description":"true makes the channel its type's default; the one that was loses it."}`
+	heldEventIDs   = `"event_ids":{"type":"array","maxItems":500,"items":{"type":"string",` + uuid + `},"description":"Leave out for every held message."}`
 )
 
 func channelsListSpec() Spec {
@@ -62,12 +63,13 @@ func channelsEventsSpec() Spec {
 func channelsCreateSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_create", Title: "Add a channel",
-		Description: `Add a channel of a type with its configuration. A type that allows one channel per workspace (colliedesk_channels_list shows each type's max_per_workspace) refuses a second (channel_type_limit). ` +
-			`Adding email connects the support address, like colliedesk_email_channel_update. ` + belowAdmin + "\n\nTier: admin.",
+		Description: `Add a channel of a type with its configuration. A workspace may have several of a type (two support mailboxes, two web forms): give each a name that tells them apart; ` +
+			`a name or a support address another channel has is refused, and the error names that channel. The first channel of a type is its default; is_default true makes a later one the default. ` +
+			`Adding the first email channel connects the support address, like colliedesk_email_channel_update. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin",
 		REST: []string{"POST /api/v1/channels"},
 		Input: `{"type":"object","additionalProperties":false,"required":["type"],"properties":{"type":{"type":"string","enum":` + channelTypeEnum + `},` +
-			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelConfig + `,` + channelSettings + `}}`,
+			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `}}`,
 		Output: channelOutput,
 		run:    channelsCreate,
 	}
@@ -76,13 +78,13 @@ func channelsCreateSpec() Spec {
 func channelsUpdateSpec() Spec {
 	return Spec{
 		Name: "colliedesk_channels_update", Title: "Change a channel",
-		Description: `Rename a channel, turn it on or off, or change its configuration or its rules (settings). While a channel is off it receives nothing: ` +
+		Description: `Rename a channel, make it its type's default (is_default true: what names no channel goes to it), turn it on or off, or change its configuration or its rules (settings). While a channel is off it receives nothing: ` +
 			`what arrives is held for a person to open or discard (the web form instead answers as if it did not exist), and replies are saved but not sent until it is on again. ` +
 			`It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
 		REST: []string{"PATCH /api/v1/channels/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"minProperties":2,"properties":{` + channelIDInput + `,` +
-			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelConfig + `,` + channelSettings + `}}`,
+			`"name":{"type":"string","minLength":1,"maxLength":80},"enabled":{"type":"boolean"},` + channelDefault + `,` + channelConfig + `,` + channelSettings + `}}`,
 		Output: channelOutput,
 		run:    channelsUpdate,
 	}

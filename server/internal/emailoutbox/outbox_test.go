@@ -275,7 +275,7 @@ func (f fixture) secondConversationReply(t *testing.T, contactEmail, body string
 	if err != nil {
 		t.Fatal(err)
 	}
-	conversation, err := f.store.CreateConversation(ctx, f.workspaceID, contact.ID, "Second thread")
+	conversation, err := f.store.CreateConversation(ctx, f.workspaceID, contact.ID, "Second thread", "")
 	if err != nil {
 		t.Fatal(err)
 	}

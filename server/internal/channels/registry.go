@@ -10,6 +10,8 @@ var (
 	ErrUnknownType     = errors.New("unknown channel type")
 	ErrNotFound        = errors.New("channel not found")
 	ErrChannelOff      = errors.New("the channel is off")
+	// ErrChannelCannotSend means a conversation cannot start on the channel: its type sends no replies of its own.
+	ErrChannelCannotSend = errors.New("a conversation cannot start on this channel")
 	ErrExternalAccount = errors.New("that account is connected to another channel")
 	// ErrConflict means another change of the same channels won a race; trying again works.
 	ErrConflict = errors.New("another change of these channels was made at the same moment")

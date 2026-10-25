@@ -363,8 +363,15 @@ paths:
           schema: {type: string, enum: [imported, native]}
         - name: channel
           in: query
-          description: One channel or several, comma-separated (see `ConversationChannel`).
+          description: One channel type or several, comma-separated (see `ConversationChannel`).
           schema: {type: string, example: 'email,web_form'}
+        - name: channel_id
+          in: query
+          description: >-
+            One channel or several by id, comma-separated (`GET /api/v1/channels`, `include_removed=true` for
+            removed ones): a conversation that came through one of them or whose replies leave from one of
+            them. An id of another workspace matches nothing.
+          schema: {type: string}
         - {name: created_after, in: query, schema: {type: string, format: date-time}}
         - {name: created_before, in: query, schema: {type: string, format: date-time}}
         - {name: updated_after, in: query, schema: {type: string, format: date-time}}
@@ -413,7 +420,14 @@ paths:
         conversation.
 
 
-        Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, one `cc` field
+        `channel_id` is the channel it starts from, which its replies keep leaving from; without it, the
+        default email channel. 404 `channel_not_found` for no live channel of the workspace, 400
+        `channel_cannot_send` for a channel a conversation cannot start on (a web form), 409 `channel_off`
+        when the channel (or the default, when none is given) is off. An empty conversation keeps the
+        channel too; without one its first reply takes the default.
+
+
+        Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, `channel_id`, one `cc` field
         per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`.
         `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never
         wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is
@@ -443,6 +457,7 @@ paths:
                 subject: {type: string, minLength: 1}
                 body: {type: string, minLength: 1, description: 'Markdown source of the first reply; without it the conversation starts empty'}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                channel_id: {type: string, format: uuid, description: 'The channel it starts from; the default email channel when left out.'}
           multipart/form-data:
             schema:
               type: object
@@ -455,6 +470,7 @@ paths:
                 subject: {type: string, minLength: 1}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                channel_id: {type: string, format: uuid}
                 seen_reply_number: {type: integer, minimum: 0}
                 files:
                   type: array
@@ -5697,6 +5713,12 @@ components:
         delivery_failed: {type: boolean}
         source: {type: string, enum: [imported, native]}
         channel: {type: array, maxItems: 5, uniqueItems: true, items: {$ref: '#/components/schemas/ConversationChannel'}}
+        channel_id:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+          description: 'Channels: a conversation that came through one of them or whose replies leave from one of them. A removed channel still filters.'
         created_after: {type: string, format: date-time}
         created_before: {type: string, format: date-time}
         updated_after: {type: string, format: date-time}
@@ -6499,6 +6521,12 @@ components:
         first_response_due_at: {type: [string, 'null'], format: date-time}
         cc: {type: array, items: {type: string}}
         forwarded_to: {type: array, items: {type: string}}
+        mailboxes:
+          type: array
+          items: {type: string}
+          description: >-
+            The addresses the conversation was sent to at the source, most trusted first; its replies leave
+            from the email channel of the first one the workspace has, else the default.
         stats:
           type: object
           description: >-
@@ -7194,7 +7222,9 @@ components:
       required: [id, type, name, enabled, deleted, replies_via]
       description: >-
         The channel a conversation came through, and the one its replies leave through (`replies_via`,
-        null when none can carry them; the web form's replies leave by email).
+        null when none can carry them): its own when its type sends, else the one its replies are pinned to
+        (the channel it was started from, or that sent its first reply; an import's source mailbox when the
+        workspace has it), else its type's default. A web form's replies leave by email.
       properties:
         id: {type: string, format: uuid}
         type: {type: string}
@@ -7210,6 +7240,17 @@ components:
                 id: {type: string, format: uuid}
                 name: {type: string}
                 enabled: {type: boolean}
+                instead_of:
+                  description: >-
+                    The channel the replies would leave from, removed: the default stands in for it. Null
+                    otherwise.
+                  oneOf:
+                    - {type: 'null'}
+                    - type: object
+                      required: [id, name]
+                      properties:
+                        id: {type: string, format: uuid}
+                        name: {type: string}
     ContactIdentity:
       type: object
       required: [channel_id, kind, value, display_name]

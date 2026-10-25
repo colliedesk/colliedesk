@@ -31,6 +31,7 @@ type conversationFilters struct {
 	DeliveryFailed  *bool    `json:"delivery_failed,omitempty"`
 	Source          string   `json:"source,omitempty"`
 	Channel         []string `json:"channel,omitempty"`
+	ChannelID       []string `json:"channel_id,omitempty"`
 	CreatedAfter    string   `json:"created_after,omitempty"`
 	CreatedBefore   string   `json:"created_before,omitempty"`
 	UpdatedAfter    string   `json:"updated_after,omitempty"`
@@ -42,7 +43,7 @@ type conversationFilters struct {
 // query is the same filters as GET /conversations takes them.
 func (f conversationFilters) query() url.Values {
 	query := url.Values{}
-	lists := map[string][]string{"status": f.Status, "priority": f.Priority, "assignee": f.Assignee, "tag": f.Tag, "channel": f.Channel}
+	lists := map[string][]string{"status": f.Status, "priority": f.Priority, "assignee": f.Assignee, "tag": f.Tag, "channel": f.Channel, "channel_id": f.ChannelID}
 	for key, values := range lists {
 		if len(values) > 0 {
 			query.Set(key, strings.Join(values, ","))

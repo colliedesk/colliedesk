@@ -63,7 +63,8 @@ func conversationStartSpec() Spec {
 		Title: "Start a conversation by email",
 		Description: `Open a new conversation with a customer and email them its first message (and cc) in one step. ` +
 			`It cannot be undone: an email that left cannot be called back. ` + confirmFirst +
-			`If the email is refused (no email channel, trial rules, cc rules) nothing is stored. The customer's answer joins the same conversation. ` +
+			`If the email is refused (no email channel, the channel is off, trial rules, cc rules) nothing is stored. The customer's answer joins the same conversation. ` +
+			`A workspace with several email channels starts from channel_id, or from its default one. ` +
 			`During the trial a new conversation reaches someone who never wrote in, so it is refused until the sending domain is verified or a plan is chosen. ` +
 			`Each call opens one more conversation and sends one more email, so never repeat a call that succeeded. ` +
 			`Give contact_id for a customer found with colliedesk_contacts_find, or new_contact to add the customer in the same step (an address that is already a customer is refused and the error names that customer). ` +
@@ -77,7 +78,8 @@ func conversationStartSpec() Spec {
 			`"properties":{"name":{"type":"string","minLength":1,"maxLength":200},"email":{"type":"string","minLength":3,"maxLength":254}}},` +
 			`"subject":{"type":"string","minLength":1,"maxLength":500},` +
 			`"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The first message (Markdown)."},` +
-			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy, at most 10."}}}`,
+			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy, at most 10."},` +
+			`"channel_id":{"type":"string",` + uuid + `,"description":"The email channel it starts from (colliedesk_channels_list), which its replies keep leaving from. Leave out for the default one."}}}`,
 		Output: `{"type":"object","required":["conversation"],"properties":{"conversation":` + stateSchema + `,` +
 			`"message":{"type":"object","required":["id"],"properties":{"id":{"type":"string"},"delivery":{"type":"string","description":"queued, sent or failed."}}}}}`,
 		run: conversationStart,

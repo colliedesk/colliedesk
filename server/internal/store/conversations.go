@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
@@ -28,8 +29,11 @@ type ConversationFilter struct {
 	HasPendingDraft *bool
 	DeliveryFailed  *bool
 	// Source is "imported" or "native".
-	Source        string
-	Channels      []string
+	Source   string
+	Channels []string
+	// ChannelIDs keep the conversations that came through one of the channels or whose replies leave
+	// from one of them; removed channels count.
+	ChannelIDs    []string
 	CreatedAfter  *time.Time
 	CreatedBefore *time.Time
 	UpdatedAfter  *time.Time
@@ -72,14 +76,25 @@ type ConversationPage struct {
 	Size  int                   `json:"page_size"`
 }
 
-func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, subject string) (domain.Conversation, error) {
+// CreateConversation opens an empty conversation; channelID, when given, is the channel its replies
+// leave from (else the first reply takes the default one).
+func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, subject, channelID string) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
 		if err := checkContactNotMerged(ctx, tx, workspaceID, contactID); err != nil {
 			return domain.Conversation{}, err
 		}
+		var replyChannel *string
+		if channelID != "" {
+			carrier, err := s.startingChannel(ctx, tx, workspaceID, channelID)
+			if err != nil {
+				return domain.Conversation{}, err
+			}
+			replyChannel = &carrier.ID
+		}
 		var id string
-		err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,channel)
-			SELECT $1,c.id,$3,$4 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`, workspaceID, contactID, subject, domain.ChannelAgent).Scan(&id)
+		err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,channel,reply_channel_id)
+			SELECT $1,c.id,$3,$4,$5::uuid FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
+			workspaceID, contactID, subject, domain.ChannelAgent, replyChannel).Scan(&id)
 		if err != nil {
 			return domain.Conversation{}, fmt.Errorf("create conversation: %w", err)
 		}
@@ -93,6 +108,41 @@ type NewConversation struct {
 	ContactID  string
 	NewContact *NewContact
 	Subject    string
+	// ChannelID is the channel the conversation is started from; empty for its type's default.
+	ChannelID string
+}
+
+// startingChannel is the channel a conversation the team starts leaves from: the one chosen (a live
+// channel of the type that carries such replies), else that type's default. It must be on: the first
+// reply leaves now.
+func (s *Store) startingChannel(ctx context.Context, tx pgx.Tx, workspaceID, channelID string) (channels.Channel, error) {
+	if channelID == "" {
+		carrier, err := s.otherRepliesCarrier(ctx, tx, workspaceID)
+		if err != nil {
+			return channels.Channel{}, err
+		}
+		if carrier == nil {
+			return channels.Channel{}, domain.ErrEmailChannelMissing
+		}
+		if !carrier.Enabled {
+			return channels.Channel{}, channels.ErrChannelOff
+		}
+		return *carrier, nil
+	}
+	channel, err := s.channelByID(ctx, tx, workspaceID, channelID)
+	if err != nil {
+		return channels.Channel{}, err
+	}
+	if !channel.Live() {
+		return channels.Channel{}, channels.ErrNotFound
+	}
+	if kind, ok := s.channels.ReplyType(""); !ok || channel.Type != kind {
+		return channels.Channel{}, channels.ErrChannelCannotSend
+	}
+	if !channel.Enabled {
+		return channels.Channel{}, channels.ErrChannelOff
+	}
+	return channel, nil
 }
 
 // NewContact is a customer added while starting a conversation.
@@ -123,16 +173,16 @@ func (s *Store) StartConversation(ctx context.Context, workspaceID string, in Ne
 	} else if err := checkContactNotMerged(ctx, tx, workspaceID, contactID); err != nil {
 		return domain.Conversation{}, err
 	}
-	// The reply goes out through the channel that carries a team member's conversations.
-	if carrier, err := s.otherRepliesCarrier(ctx, tx, workspaceID); err != nil {
+	// The reply goes out through the channel chosen, or the default one of the type that carries a team
+	// member's conversations; the conversation keeps it.
+	carrier, err := s.startingChannel(ctx, tx, workspaceID, in.ChannelID)
+	if err != nil {
 		return domain.Conversation{}, err
-	} else if carrier == nil {
-		return domain.Conversation{}, domain.ErrEmailChannelMissing
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,channel)
-		SELECT $1,c.id,$3,$4 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
-		workspaceID, contactID, in.Subject, domain.ChannelAgent).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,channel,reply_channel_id)
+		SELECT $1,c.id,$3,$4,$5::uuid FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
+		workspaceID, contactID, in.Subject, domain.ChannelAgent, carrier.ID).Scan(&id)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("create conversation: %w", err)
 	}
@@ -171,9 +221,9 @@ func (s *Store) withChannelRef(ctx context.Context, tx pgx.Tx, workspaceID strin
 
 func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
-	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL)
+	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL)
 		FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, id).
-		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber)
+		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
@@ -276,6 +326,10 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	case "native":
 		q.and("c.origin IS NULL")
 	}
+	if len(filter.ChannelIDs) > 0 {
+		ids := q.arg(filter.ChannelIDs)
+		q.and("(c.channel_id::text=ANY(" + ids + "::text[]) OR c.reply_channel_id::text=ANY(" + ids + "::text[]))")
+	}
 	if len(filter.Channels) > 0 {
 		q.and("c.channel=ANY(" + q.arg(filter.Channels) + "::text[])")
 	}
@@ -342,7 +396,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 
 	// The rows come back in the order of ids, so the two queries can never disagree on the order.
 	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,
-		c.assignee_id::text,c.channel,c.channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb)
+		c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,(SELECT coalesce(max(m.reply_number),0) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.reply_number IS NOT NULL),COALESCE(tag_data.tags,'[]'::jsonb)
 		FROM unnest($2::uuid[]) WITH ORDINALITY AS listed(id,position)
 		JOIN conversations c ON c.workspace_id=$1 AND c.id=listed.id
 		JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
@@ -361,7 +415,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		var item domain.Conversation
 		var tagsJSON []byte
 		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority,
-			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON); err != nil {
+			&item.AssigneeID, &item.Channel, &item.ChannelID, &item.ReplyChannelID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &item.LatestReplyNumber, &tagsJSON); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		if err := json.Unmarshal(tagsJSON, &item.Tags); err != nil {

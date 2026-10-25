@@ -203,7 +203,9 @@ export interface paths {
         /**
          * @description Open a conversation with a contact. With only `contact_id` and `subject` it is empty and nothing is sent. With `body` it starts with an outgoing reply that is emailed to the contact (and `cc`), in the same transaction: when the reply is refused (trial rules, Cc rules, attachment limits, no email channel) nothing is stored, not even the conversation. The email carries the subject as written (no "Re:") and a Message-ID and reply address that thread the customer's answer back into this conversation.
          *
-         *     Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, one `cc` field per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`. `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is verified or a plan is chosen. A workspace without an email channel answers 409 `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer added with the conversation (`contact`) is written in the same transaction; an address that is already a customer answers 409 `contact_exists` with the `contact` to use.
+         *     `channel_id` is the channel it starts from, which its replies keep leaving from; without it, the default email channel. 404 `channel_not_found` for no live channel of the workspace, 400 `channel_cannot_send` for a channel a conversation cannot start on (a web form), 409 `channel_off` when the channel (or the default, when none is given) is off. An empty conversation keeps the channel too; without one its first reply takes the default.
+         *
+         *     Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, `channel_id`, one `cc` field per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`. `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is verified or a plan is chosen. A workspace without an email channel answers 409 `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer added with the conversation (`contact`) is written in the same transaction; an address that is already a customer answers 409 `contact_exists` with the `contact` to use.
          */
         post: operations["createConversation"];
         delete?: never;
@@ -3568,6 +3570,8 @@ export interface components {
             /** @enum {string} */
             source?: "imported" | "native";
             channel?: components["schemas"]["ConversationChannel"][];
+            /** @description Channels: a conversation that came through one of them or whose replies leave from one of them. A removed channel still filters. */
+            channel_id?: string[];
             /** Format: date-time */
             created_after?: string;
             /** Format: date-time */
@@ -4348,6 +4352,8 @@ export interface components {
             first_response_due_at: string | null;
             cc: string[];
             forwarded_to: string[];
+            /** @description The addresses the conversation was sent to at the source, most trusted first; its replies leave from the email channel of the first one the workspace has, else the default. */
+            mailboxes?: string[];
             /** @description What the source helpdesk reported about the ticket (Freshdesk `include=stats`), read once: a later import keeps the first values it read and only fills a ticket that has none. Missing on imports that predate it, on archived Freshdesk tickets and on other sources. The results page reads `resolved_at` for the imported baseline (docs/user/results.md). */
             stats?: {
                 /**
@@ -4899,7 +4905,7 @@ export interface components {
         HeldDiscardResult: {
             discarded: number;
         };
-        /** @description The channel a conversation came through, and the one its replies leave through (`replies_via`, null when none can carry them; the web form's replies leave by email). */
+        /** @description The channel a conversation came through, and the one its replies leave through (`replies_via`, null when none can carry them): its own when its type sends, else the one its replies are pinned to (the channel it was started from, or that sent its first reply; an import's source mailbox when the workspace has it), else its type's default. A web form's replies leave by email. */
         ChannelRef: {
             /** Format: uuid */
             id: string;
@@ -4912,6 +4918,12 @@ export interface components {
                 id: string;
                 name: string;
                 enabled: boolean;
+                /** @description The channel the replies would leave from, removed: the default stands in for it. Null otherwise. */
+                instead_of?: null | {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                };
             };
         };
         ContactIdentity: {
@@ -5664,8 +5676,10 @@ export interface operations {
                 delivery_failed?: boolean;
                 /** @description imported (from another helpdesk) or native (created in Colliedesk). */
                 source?: "imported" | "native";
-                /** @description One channel or several, comma-separated (see `ConversationChannel`). */
+                /** @description One channel type or several, comma-separated (see `ConversationChannel`). */
                 channel?: string;
+                /** @description One channel or several by id, comma-separated (`GET /api/v1/channels`, `include_removed=true` for removed ones): a conversation that came through one of them or whose replies leave from one of them. An id of another workspace matches nothing. */
+                channel_id?: string;
                 created_after?: string;
                 created_before?: string;
                 updated_after?: string;
@@ -5729,6 +5743,11 @@ export interface operations {
                     /** @description Markdown source of the first reply; without it the conversation starts empty */
                     body?: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /**
+                     * Format: uuid
+                     * @description The channel it starts from; the default email channel when left out.
+                     */
+                    channel_id?: string;
                 };
                 "multipart/form-data": {
                     /** Format: uuid */
@@ -5740,6 +5759,8 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /** Format: uuid */
+                    channel_id?: string;
                     seen_reply_number?: number;
                     files?: string[];
                 };

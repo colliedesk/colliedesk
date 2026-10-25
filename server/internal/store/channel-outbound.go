@@ -28,38 +28,63 @@ type ReplyRoute struct {
 	// that was removed, if that is why.
 	Channel *channels.Channel
 	Removed *channels.Channel
+	// InsteadOf is the removed channel the replies would leave from, when Channel (the type's default)
+	// stands in for it.
+	InsteadOf *channels.Channel
+	// Pin is set when the conversation's replies are not pinned yet and should be to Channel: its own
+	// channel cannot send (a web form, an import, a conversation an agent started).
+	Pin bool
 	// Type is the type that carries the replies, also when no channel of it is connected.
 	Type channels.Type
 }
 
-// replyRoute finds the channel that carries replies of a conversation: its own when its type sends,
-// else the one of the type its type names, else the type that carries other replies. A removed
-// channel of a type whose customers are the same on every channel (SharedIdentity) gives way to the
-// type's default channel (email disconnected and connected again still answers its old conversations).
+// replyChoice is what decides where a conversation's replies leave: where it came from, its own
+// channel and the one its replies are pinned to (nil when none), and the source mailboxes of an import.
+type replyChoice struct {
+	origin    channels.Type
+	own, pin  *channels.Channel
+	mailboxes []string
+}
+
+// replyRoute finds the channel that carries replies of a conversation: see routeReply.
 func (s *Store) replyRoute(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) (ReplyRoute, error) {
 	if s.channels == nil {
 		return ReplyRoute{}, channels.ErrNoRegistry
 	}
 	var origin string
-	var channelID *string
-	if err := tx.QueryRow(ctx, `SELECT channel,channel_id::text FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).
-		Scan(&origin, &channelID); err != nil {
+	var channelID, pinID *string
+	var mailboxes []string
+	if err := tx.QueryRow(ctx, `SELECT channel,channel_id::text,reply_channel_id::text,
+			COALESCE(ARRAY(SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(origin->'mailboxes')='array' THEN origin->'mailboxes' END)),'{}')
+		FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID).
+		Scan(&origin, &channelID, &pinID, &mailboxes); err != nil {
 		return ReplyRoute{}, fmt.Errorf("load conversation channel: %w", err)
 	}
-	var own *channels.Channel
-	if channelID != nil {
-		channel, err := s.channelByID(ctx, tx, workspaceID, *channelID)
+	choice := replyChoice{origin: channels.Type(origin), mailboxes: mailboxes}
+	for _, item := range []struct {
+		id     *string
+		target **channels.Channel
+	}{{channelID, &choice.own}, {pinID, &choice.pin}} {
+		if item.id == nil {
+			continue
+		}
+		channel, err := s.channelByID(ctx, tx, workspaceID, *item.id)
 		if err != nil {
 			return ReplyRoute{}, err
 		}
-		own = &channel
+		*item.target = &channel
 	}
-	return routeReply(s.channels, channels.Type(origin), own, func(kind channels.Type) (*channels.Channel, error) {
-		live, found, err := s.defaultChannelOfType(ctx, tx, workspaceID, kind)
-		if err != nil || !found {
-			return nil, err
-		}
-		return &live, nil
+	return routeReply(s.channels, choice, channelFinder{
+		defaultOf: func(kind channels.Type) (*channels.Channel, error) {
+			live, found, err := s.defaultChannelOfType(ctx, tx, workspaceID, kind)
+			if err != nil || !found {
+				return nil, err
+			}
+			return &live, nil
+		},
+		mailbox: func(addresses []string) (*channels.Channel, error) {
+			return s.channelOfMailbox(ctx, tx, workspaceID, addresses)
+		},
 	})
 }
 
@@ -70,30 +95,74 @@ func (s *Store) ReplyRoute(ctx context.Context, workspaceID, conversationID stri
 	})
 }
 
-// routeReply is the one rule of where a reply leaves: own is the conversation's channel (nil when it
-// came through none), live finds the default channel of a type.
-func routeReply(registry *channels.Registry, origin channels.Type, own *channels.Channel, live func(channels.Type) (*channels.Channel, error)) (ReplyRoute, error) {
-	replyType, ok := registry.ReplyType(origin)
+// channelFinder finds channels for routeReply: a type's default, and the email channel of a source
+// mailbox (nil when it finds none).
+type channelFinder struct {
+	defaultOf func(channels.Type) (*channels.Channel, error)
+	mailbox   func([]string) (*channels.Channel, error)
+}
+
+// routeReply is the one rule of where a reply leaves.
+//  1. The conversation's own channel when its type sends the replies: while it lives, on or off; once
+//     removed, a type whose customers are the same on every channel (SharedIdentity) answers through
+//     its default channel, another type cannot.
+//  2. Else (a web form, an import, a conversation an agent started) the channel its replies are pinned
+//     to: while it lives, on or off; once removed, the type's default stands in, without pinning again.
+//  3. Not pinned yet: an import's source mailbox when the workspace has it, else the type's default;
+//     the first reply pins it.
+func routeReply(registry *channels.Registry, choice replyChoice, find channelFinder) (ReplyRoute, error) {
+	replyType, ok := registry.ReplyType(choice.origin)
 	if !ok {
 		return ReplyRoute{}, nil
-	}
-	if own != nil && own.Type == replyType && own.Live() {
-		return ReplyRoute{Channel: own, Type: replyType}, nil
 	}
 	adapter, ok := registry.Adapter(replyType)
 	if !ok {
 		return ReplyRoute{}, nil
 	}
-	if own == nil || own.Type != replyType || adapter.Definition().SharedIdentity {
-		channel, err := live(replyType)
-		if err != nil || channel != nil {
-			return ReplyRoute{Channel: channel, Type: replyType}, err
-		}
-	}
+	own := choice.own
 	if own != nil && own.Type == replyType {
+		if own.Live() {
+			return ReplyRoute{Channel: own, Type: replyType}, nil
+		}
+		if adapter.Definition().SharedIdentity {
+			if channel, err := find.defaultOf(replyType); err != nil || channel != nil {
+				return ReplyRoute{Channel: channel, InsteadOf: own, Type: replyType}, err
+			}
+		}
 		return ReplyRoute{Removed: own, Type: replyType}, nil
 	}
-	return ReplyRoute{Type: replyType}, nil
+	if pin := choice.pin; pin != nil && pin.Type == replyType {
+		if pin.Live() {
+			return ReplyRoute{Channel: pin, Type: replyType}, nil
+		}
+		channel, err := find.defaultOf(replyType)
+		if err != nil || channel == nil {
+			return ReplyRoute{Type: replyType}, err
+		}
+		return ReplyRoute{Channel: channel, InsteadOf: pin, Type: replyType}, nil
+	}
+	if len(choice.mailboxes) > 0 && find.mailbox != nil {
+		if channel, err := find.mailbox(choice.mailboxes); err != nil || channel != nil {
+			return ReplyRoute{Channel: channel, Pin: true, Type: replyType}, err
+		}
+	}
+	channel, err := find.defaultOf(replyType)
+	if err != nil || channel == nil {
+		return ReplyRoute{Type: replyType}, err
+	}
+	return ReplyRoute{Channel: channel, Pin: true, Type: replyType}, nil
+}
+
+// pinReply pins the conversation's replies to the channel route chose, once.
+func pinReply(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, route ReplyRoute) error {
+	if !route.Pin || route.Channel == nil {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `UPDATE conversations SET reply_channel_id=$3 WHERE workspace_id=$1 AND id=$2 AND reply_channel_id IS NULL`,
+		workspaceID, conversationID, route.Channel.ID); err != nil {
+		return fmt.Errorf("pin the reply channel: %w", err)
+	}
+	return nil
 }
 
 // attachChannelRefs gives each conversation its channel and the one its replies leave through, from
@@ -107,7 +176,7 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 		return fmt.Errorf("load channels: %w", err)
 	}
 	byID := map[string]*channels.Channel{}
-	liveByType := map[channels.Type]*channels.Channel{}
+	defaults := map[channels.Type]*channels.Channel{}
 	for rows.Next() {
 		channel, err := s.scanChannelRow(rows)
 		if err != nil {
@@ -116,7 +185,7 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 		}
 		byID[channel.ID] = &channel
 		if channel.IsDefault {
-			liveByType[channel.Type] = &channel
+			defaults[channel.Type] = &channel
 		}
 	}
 	rows.Close()
@@ -126,27 +195,48 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 	ref := func(channel *channels.Channel) *domain.ChannelRef {
 		return &domain.ChannelRef{ID: channel.ID, Type: string(channel.Type), Name: channel.Name, Enabled: channel.Enabled, Deleted: !channel.Live()}
 	}
+	// The mailbox of an import is read only for an unpinned import, and once per address.
+	mailboxes := map[string]*channels.Channel{}
 	for i := range items {
-		var own *channels.Channel
+		choice := replyChoice{origin: channels.Type(items[i].Channel)}
 		if items[i].ChannelID != nil {
-			own = byID[*items[i].ChannelID]
+			choice.own = byID[*items[i].ChannelID]
 		}
-		route, err := routeReply(s.channels, channels.Type(items[i].Channel), own, func(kind channels.Type) (*channels.Channel, error) {
-			return liveByType[kind], nil
+		if items[i].ReplyChannelID != nil {
+			choice.pin = byID[*items[i].ReplyChannelID]
+		}
+		if items[i].Origin != nil {
+			choice.mailboxes = items[i].Origin.Mailboxes
+		}
+		route, err := routeReply(s.channels, choice, channelFinder{
+			defaultOf: func(kind channels.Type) (*channels.Channel, error) { return defaults[kind], nil },
+			mailbox: func(addresses []string) (*channels.Channel, error) {
+				key := strings.Join(addresses, ",")
+				if channel, seen := mailboxes[key]; seen {
+					return channel, nil
+				}
+				channel, err := s.channelOfMailbox(ctx, tx, workspaceID, addresses)
+				mailboxes[key] = channel
+				return channel, err
+			},
 		})
 		if err != nil {
 			return err
 		}
 		switch {
-		case own != nil:
-			items[i].ChannelRef = ref(own)
+		case choice.own != nil:
+			items[i].ChannelRef = ref(choice.own)
 		case route.Channel != nil:
 			items[i].ChannelRef = ref(route.Channel)
 		default:
 			continue
 		}
 		if route.Channel != nil {
-			items[i].ChannelRef.RepliesVia = &domain.ChannelRepliesVia{ID: route.Channel.ID, Name: route.Channel.Name, Enabled: route.Channel.Enabled}
+			via := &domain.ChannelRepliesVia{ID: route.Channel.ID, Name: route.Channel.Name, Enabled: route.Channel.Enabled}
+			if route.InsteadOf != nil {
+				via.InsteadOf = &domain.ChannelName{ID: route.InsteadOf.ID, Name: route.InsteadOf.Name}
+			}
+			items[i].ChannelRef.RepliesVia = via
 		}
 	}
 	return nil
@@ -167,13 +257,6 @@ func (s *Store) otherRepliesCarrier(ctx context.Context, tx pgx.Tx, workspaceID 
 		return nil, err
 	}
 	return &channel, nil
-}
-
-// GetReplyRoute is replyRoute in its own transaction.
-func (s *Store) GetReplyRoute(ctx context.Context, workspaceID, conversationID string) (ReplyRoute, error) {
-	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ReplyRoute, error) {
-		return s.replyRoute(ctx, tx, workspaceID, conversationID)
-	})
 }
 
 // replyRecipient loads the conversation's customer with their identities on a channel.
@@ -247,6 +330,9 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 		return nil
 	}
 	channel := *route.Channel
+	if err := pinReply(ctx, tx, workspaceID, conversationID, route); err != nil {
+		return err
+	}
 	adapter, _ := s.channels.Adapter(channel.Type)
 	definition := adapter.Definition()
 	recipient, err := replyRecipient(ctx, tx, workspaceID, conversationID, channel.ID)
@@ -310,6 +396,9 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
 	if err != nil {
+		return domain.Message{}, err
+	}
+	if err := pinReply(ctx, tx, workspaceID, conversationID, route); err != nil {
 		return domain.Message{}, err
 	}
 	if route.Channel == nil {

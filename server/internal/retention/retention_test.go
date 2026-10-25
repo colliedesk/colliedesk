@@ -136,7 +136,7 @@ func (e *env) workspace(t *testing.T, name string, trialEnd string, admins ...st
 	if err != nil {
 		t.Fatal(err)
 	}
-	conversation, err := e.store.CreateConversation(ctx, created.ID, contact.ID, "Where is my order")
+	conversation, err := e.store.CreateConversation(ctx, created.ID, contact.ID, "Where is my order", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -75,6 +75,9 @@ func conversationFilterFromQuery(query url.Values, channels []string) (store.Con
 	if err == nil && query.Get("tag") != "" {
 		filter.TagIDs, err = commaList("tag", strings.ToLower(query.Get("tag")), contactIDPattern.MatchString)
 	}
+	if err == nil && query.Get("channel_id") != "" {
+		filter.ChannelIDs, err = commaList("channel_id", strings.ToLower(query.Get("channel_id")), contactIDPattern.MatchString)
+	}
 	if err != nil {
 		return filter, err
 	}

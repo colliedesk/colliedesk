@@ -97,9 +97,10 @@ func conversationStart(c *call, arguments map[string]any) (any, error) {
 			Name  string `json:"name"`
 			Email string `json:"email"`
 		} `json:"new_contact"`
-		Subject string   `json:"subject"`
-		Body    string   `json:"body"`
-		CC      []string `json:"cc"`
+		Subject   string   `json:"subject"`
+		Body      string   `json:"body"`
+		CC        []string `json:"cc"`
+		ChannelID string   `json:"channel_id"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -119,6 +120,9 @@ func conversationStart(c *call, arguments map[string]any) (any, error) {
 	}
 	if len(args.CC) > 0 {
 		request["cc"] = args.CC
+	}
+	if args.ChannelID != "" {
+		request["channel_id"] = args.ChannelID
 	}
 	var created restConversation
 	if err := c.send(http.MethodPost, "/api/v1/conversations", request, &created); err != nil {

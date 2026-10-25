@@ -583,6 +583,27 @@ func (s *Store) OwnEmailAddresses(ctx context.Context, workspaceID string) (supp
 	return got.support, got.gmail, nil
 }
 
+// channelOfMailbox is the live email channel of the first address it has among addresses (by
+// mailbox: support+x@ is support@); nil for none.
+func (s *Store) channelOfMailbox(ctx context.Context, tx pgx.Tx, workspaceID string, addresses []string) (*channels.Channel, error) {
+	for _, address := range addresses {
+		key := email.MailboxKey(address)
+		if key == "" {
+			continue
+		}
+		channel, err := s.scanChannelRow(tx.QueryRow(ctx, `SELECT `+channelRowColumns+` FROM channels c WHERE c.workspace_id=$1 AND c.deleted_at IS NULL
+			AND c.id=(SELECT channel_id FROM email_channels WHERE workspace_id=$1 AND mailbox_key=$2)`, workspaceID, key))
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("find the mailbox of an import: %w", err)
+		}
+		return &channel, nil
+	}
+	return nil, nil
+}
+
 func randomURLToken(size int) (string, error) {
 	raw := make([]byte, size)
 	if _, err := rand.Read(raw); err != nil {
