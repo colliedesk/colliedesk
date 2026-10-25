@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/mail"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -16,15 +17,15 @@ const transportGmail = "gmail"
 // deliverGmail sends a reply accepted for Gmail from the connected account. It never hands the reply
 // to SMTP: a removed or broken connection fails the reply with the reason, and only a retry (which
 // chooses the transport again) sends it another way.
-func (w *Worker) deliverGmail(ctx context.Context, item store.Delivery) error {
+func (w *Worker) deliverGmail(ctx context.Context, item store.Delivery) channels.SendResult {
 	mailbox := item.Mailbox
 	switch {
 	case mailbox == nil:
-		return w.store.MarkDeliveryFailed(ctx, item, domain.MailboxDisconnectedNote)
+		return channels.Failed(domain.MailboxDisconnectedNote)
 	case mailbox.Status == domain.MailboxFailed:
-		return w.store.MarkDeliveryFailed(ctx, item, domain.MailboxFailureText(mailbox.ErrorCode))
+		return channels.Failed(domain.MailboxFailureText(mailbox.ErrorCode))
 	case w.options.Google == nil || !w.options.Google.Enabled():
-		return w.store.MarkDeliveryFailed(ctx, item, domain.MailboxNotConfiguredNote)
+		return channels.Failed(domain.MailboxNotConfiguredNote)
 	}
 	config := *w.options.Google
 	refresh, err := config.Keys.Open(mailbox.Grant.KeyID, mailbox.Grant.Sealed, google.GrantContext(item.WorkspaceID))
@@ -39,7 +40,7 @@ func (w *Worker) deliverGmail(ctx context.Context, item store.Delivery) error {
 	}
 	files, err := w.loadFiles(ctx, item)
 	if errors.Is(err, errFileMissing) {
-		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
+		return channels.Failed(truncate(err.Error()))
 	}
 	if err != nil {
 		return w.retry(ctx, item, err)
@@ -47,20 +48,20 @@ func (w *Worker) deliverGmail(ctx context.Context, item store.Delivery) error {
 	copies, unusable := usableCopies(item.CC)
 	message, err := w.compose(item, mail.Address{Name: item.SenderName, Address: mailbox.Address}, copies, files)
 	if err != nil {
-		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
+		return channels.Failed(truncate(err.Error()))
 	}
 	err = w.sendGmail(ctx, config, item, string(refresh), message)
 	var apiErr *google.APIError
 	switch {
 	case err == nil:
-		return w.store.MarkDeliverySent(ctx, item, w.options.Now(), truncate(missedCopies(unusable)))
+		return channels.Sent(truncate(missedCopies(unusable)))
 	case errors.Is(err, google.ErrRevoked):
 		return w.breakConnection(ctx, item, domain.MailboxRevoked)
 	case errors.As(err, &apiErr) && apiErr.ConnectionBroken():
 		return w.breakConnection(ctx, item, domain.MailboxPermission)
 	case errors.As(err, &apiErr) && !apiErr.Temporary():
 		w.options.Logger.Warn("gmail delivery failed", "workspace", item.WorkspaceID, "message", item.MessageID, "status", apiErr.Status, "reason", apiErr.Reason)
-		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
+		return channels.Failed(truncate(err.Error()))
 	default:
 		return w.retry(ctx, item, err)
 	}
@@ -121,19 +122,15 @@ func (w *Worker) storeGrant(ctx context.Context, config google.Config, item stor
 }
 
 // breakConnection marks the workspace's Gmail connection failed and fails the reply with the same reason.
-func (w *Worker) breakConnection(ctx context.Context, item store.Delivery, code string) error {
+func (w *Worker) breakConnection(ctx context.Context, item store.Delivery, code string) channels.SendResult {
 	w.options.Logger.Warn("gmail connection failed", "workspace", item.WorkspaceID, "reason", code)
 	if err := w.store.MarkMailboxFailed(ctx, item.WorkspaceID, item.Mailbox.Grant, code, w.options.Now()); err != nil {
-		return errors.Join(err, w.store.MarkDeliveryFailed(ctx, item, domain.MailboxFailureText(code)))
+		w.options.Logger.Error("mark gmail connection failed", "workspace", item.WorkspaceID, "error", err)
 	}
-	return w.store.MarkDeliveryFailed(ctx, item, domain.MailboxFailureText(code))
+	return channels.Failed(domain.MailboxFailureText(code))
 }
 
-// retry schedules another attempt, or fails the reply once every attempt is spent.
-func (w *Worker) retry(ctx context.Context, item store.Delivery, err error) error {
-	if item.Attempts >= w.options.MaxAttempts {
-		w.options.Logger.Warn("email delivery failed", "workspace", item.WorkspaceID, "message", item.MessageID, "attempts", item.Attempts, "error", err)
-		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
-	}
-	return w.store.MarkDeliveryRetry(ctx, item, w.options.Now().Add(Backoff(item.Attempts)), truncate(err.Error()))
+// retry schedules another attempt; the outbox fails the reply once every attempt is spent.
+func (w *Worker) retry(_ context.Context, _ store.Delivery, err error) channels.SendResult {
+	return channels.Retry(truncate(err.Error()))
 }

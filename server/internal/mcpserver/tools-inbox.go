@@ -51,6 +51,7 @@ type inboxArgs struct {
 	DeliveryFailed  *bool      `json:"delivery_failed"`
 	Source          string     `json:"source"`
 	Channel         stringList `json:"channel"`
+	ChannelID       stringList `json:"channel_id"`
 	CreatedAfter    string     `json:"created_after"`
 	CreatedBefore   string     `json:"created_before"`
 	UpdatedAfter    string     `json:"updated_after"`
@@ -142,7 +143,7 @@ func (c *call) inboxQuery(args inboxArgs) (url.Values, error) {
 			query.Set(key, value)
 		}
 	}
-	for key, values := range map[string]stringList{"status": args.Status, "priority": args.Priority, "assignee": args.Assignee, "channel": args.Channel} {
+	for key, values := range map[string]stringList{"status": args.Status, "priority": args.Priority, "assignee": args.Assignee, "channel": args.Channel, "channel_id": args.ChannelID} {
 		set(key, strings.Join(values, ","))
 	}
 	if len(args.Tag) > 0 {

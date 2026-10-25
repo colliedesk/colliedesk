@@ -34,7 +34,7 @@ func TestMigrateCreatesTenantScopedTables(t *testing.T) {
 		}
 		got = append(got, name)
 	}
-	want := []string{"agent_requests", "agents", "ai_automatic_limits", "ai_draft_sources", "ai_drafts", "ai_providers", "ai_retrieval_docs", "ai_retrieval_former_names", "ai_retrieval_pending", "ai_settings_events", "ai_slots", "ai_tasks", "ai_triage_suggestions", "ai_usage", "attachments", "billing_webhook_events", "contact_merges", "contacts", "conversation_presence", "conversation_status_changes", "conversation_tags", "conversations", "email_channels", "email_outbox", "email_provider_domain_trash", "help_centers", "import_items", "import_jobs", "import_people", "kb_article_media", "kb_article_translations", "kb_article_versions", "kb_articles", "kb_collections", "kb_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "mail_image_cache", "mailbox_connections", "mailbox_oauth_states", "messages", "pairing_links", "relay_webhook_events", "results_members", "results_share_links", "results_snapshots", "results_state", "saved_replies", "saved_reply_versions", "saved_views", "sessions", "tags", "time_entries", "web_form_channels", "workspace_billing", "workspace_comp_plans", "workspace_onboarding", "workspace_retention_notices", "workspace_trial_changes"}
+	want := []string{"agent_requests", "agents", "ai_automatic_limits", "ai_draft_sources", "ai_drafts", "ai_providers", "ai_retrieval_docs", "ai_retrieval_former_names", "ai_retrieval_pending", "ai_settings_events", "ai_slots", "ai_tasks", "ai_triage_suggestions", "ai_usage", "attachments", "billing_webhook_events", "channel_credentials", "channel_events", "channel_inbound_events", "channel_inbound_files", "channel_outbox", "channel_sent_ids", "channels", "contact_identities", "contact_merges", "contacts", "conversation_presence", "conversation_status_changes", "conversation_tags", "conversation_thread_keys", "conversations", "email_channels", "email_domains", "email_provider_domain_trash", "help_centers", "import_items", "import_jobs", "import_people", "kb_article_media", "kb_article_translations", "kb_article_versions", "kb_articles", "kb_collections", "kb_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "mail_image_cache", "mailbox_connections", "mailbox_oauth_states", "messages", "pairing_links", "relay_webhook_events", "results_members", "results_share_links", "results_snapshots", "results_state", "saved_replies", "saved_reply_versions", "saved_views", "sessions", "tags", "time_entries", "web_form_channels", "workspace_billing", "workspace_comp_plans", "workspace_onboarding", "workspace_retention_notices", "workspace_trial_changes"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workspace-scoped tables = %v, want %v", got, want)
 	}
@@ -83,7 +83,7 @@ func TestMigrationAppliesUpDownAndUpAgain(t *testing.T) {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatalf("first up: %v", err)
 	}
-	if !tableExists(t, pool, "workspaces") || !tableExists(t, pool, "email_outbox") {
+	if !tableExists(t, pool, "workspaces") || !tableExists(t, pool, "channel_outbox") {
 		t.Fatal("tables missing after first up")
 	}
 	if err := rollbackThrough(ctx, pool, "20261014101628-email-channel.up.sql"); err != nil {
@@ -107,7 +107,7 @@ func TestMigrationAppliesUpDownAndUpAgain(t *testing.T) {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatalf("second up: %v", err)
 	}
-	if !tableExists(t, pool, "workspaces") || !tableExists(t, pool, "email_outbox") {
+	if !tableExists(t, pool, "workspaces") || !tableExists(t, pool, "channel_outbox") {
 		t.Fatal("tables missing after second up")
 	}
 }
@@ -151,7 +151,7 @@ func TestEmailChannelMigrationPreservesExistingHelpdeskData(t *testing.T) {
 	}
 	var body, status, createdAt string
 	var emailID, token *string
-	err = pool.QueryRow(ctx, `SELECT m.body,c.status,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS'),m.email_message_id,c.email_reply_token
+	err = pool.QueryRow(ctx, `SELECT m.body,c.status,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS'),m.external_id,(SELECT key FROM conversation_thread_keys k WHERE k.conversation_id=c.id LIMIT 1)
 		FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 		WHERE m.workspace_id=$1 AND m.id=$2`, workspace, message).Scan(&body, &status, &createdAt, &emailID, &token)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestEmailChannelMigrationPreservesExistingHelpdeskData(t *testing.T) {
 		t.Fatalf("upgrade changed data: body=%q status=%q created=%q email=%v token=%v", body, status, createdAt, emailID, token)
 	}
 	var outbox int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM email_outbox`).Scan(&outbox); err != nil || outbox != 0 {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channel_outbox`).Scan(&outbox); err != nil || outbox != 0 {
 		t.Fatalf("upgrade must not queue historic replies: %d %v", outbox, err)
 	}
 }

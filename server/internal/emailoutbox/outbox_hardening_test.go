@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -26,7 +27,7 @@ func TestStaleFinishAfterLeaseExpiryCannotOverwriteSent(t *testing.T) {
 	clock := time.Now().UTC().Add(time.Second)
 	worker := newWorker(f, server, &clock)
 	reply := f.write(t, "outgoing", "Once.")
-	stale, err := f.store.ClaimDueDeliveries(context.Background(), clock, 1, time.Minute)
+	stale, err := f.store.ClaimDueOutbox(context.Background(), clock, 1, time.Minute)
 	if err != nil || len(stale) != 1 {
 		t.Fatalf("claim: %d %v", len(stale), err)
 	}
@@ -34,7 +35,7 @@ func TestStaleFinishAfterLeaseExpiryCannotOverwriteSent(t *testing.T) {
 	if process(t, worker) != 1 || f.delivery(t, reply.ID).Status != "sent" {
 		t.Fatal("reclaimed delivery was not sent")
 	}
-	err = f.store.MarkDeliveryFailed(context.Background(), stale[0], "stale worker timed out")
+	err = f.store.FinishOutbox(context.Background(), stale[0], channels.Failed("stale worker timed out"), clock, clock)
 	if !errors.Is(err, store.ErrLeaseLost) {
 		t.Fatalf("stale finish err=%v, want ErrLeaseLost", err)
 	}
@@ -65,7 +66,7 @@ func TestPoisonRowDoesNotStallOthersAndAttemptsAreCapped(t *testing.T) {
 
 	crashLoop := f.secondConversationReply(t, "loop@customer.example", "Crash loop.")
 	clock = time.Now().UTC().Add(time.Second)
-	f.exec(t, `UPDATE email_outbox SET attempts=3,locked_until=$2 WHERE message_id=$1`, crashLoop.ID, clock.Add(-time.Second))
+	f.exec(t, `UPDATE channel_outbox SET attempts=3,locked_until=$2 WHERE message_id=$1`, crashLoop.ID, clock.Add(-time.Second))
 	before := len(server.mail())
 	process(t, worker)
 	if delivery := f.deliveryIn(t, crashLoop.ConversationID, crashLoop.ID); delivery.Status != "failed" || len(server.mail()) != before {
@@ -86,7 +87,7 @@ func TestSendingIdentityFollowsDomainVerification(t *testing.T) {
 		t.Run(item.name, func(t *testing.T) {
 			f := newFixture(t)
 			if item.verified != "" {
-				f.exec(t, `UPDATE email_channels SET domain_verified_at=now() WHERE workspace_id=$1`, f.workspaceID)
+				f.exec(t, `UPDATE email_domains SET verified_at=now() WHERE workspace_id=$1`, f.workspaceID)
 			}
 			server := startSMTPServer(t)
 			clock := time.Now().UTC().Add(time.Second)
@@ -100,11 +101,11 @@ func TestSendingIdentityFollowsDomainVerification(t *testing.T) {
 				t.Fatalf("want one mail, got %d (delivery %+v)", len(received), f.delivery(t, reply.ID))
 			}
 			var token string
-			if err := f.pool.QueryRow(context.Background(), `SELECT email_reply_token FROM conversations WHERE id=$1`, f.conversationID).Scan(&token); err != nil {
+			if err := f.pool.QueryRow(context.Background(), `SELECT substr(key,13) FROM conversation_thread_keys WHERE conversation_id=$1 AND channel_type='email'`, f.conversationID).Scan(&token); err != nil {
 				t.Fatal(err)
 			}
 			var messageID string
-			if err := f.pool.QueryRow(context.Background(), `SELECT email_message_id FROM messages WHERE id=$1`, reply.ID).Scan(&messageID); err != nil {
+			if err := f.pool.QueryRow(context.Background(), `SELECT substr(external_id,7) FROM messages WHERE id=$1`, reply.ID).Scan(&messageID); err != nil {
 				t.Fatal(err)
 			}
 			// The address names the reply by the first 12 hex digits of its random Message-ID.

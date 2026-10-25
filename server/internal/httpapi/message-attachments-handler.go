@@ -48,6 +48,8 @@ type messageFields struct {
 	// subject; it is always an outgoing reply.
 	opening            bool
 	contactID, subject string
+	// channelID is the channel a new conversation starts from; empty for the default one.
+	channelID string
 	// contactName and contactEmail add a customer with the conversation, instead of contactID.
 	contactName, contactEmail string
 	// seen is the seen_reply_number field: the latest reply the sender had seen; nil when not sent.
@@ -202,7 +204,8 @@ func (a *API) startConversationWithFiles(response http.ResponseWriter, request *
 	if added != nil {
 		newContactProblem(added, true) // trims what validate checked
 	}
-	item, err := a.store.StartConversation(request.Context(), workspaceID, store.NewConversation{ContactID: fields.contactID, NewContact: added, Subject: fields.subject},
+	item, err := a.store.StartConversation(request.Context(), workspaceID, store.NewConversation{ContactID: fields.contactID, NewContact: added, Subject: fields.subject,
+		ChannelID: fields.channelID},
 		actor, fields.body, cc, files...)
 	if errors.Is(err, store.ErrObjectMissing) {
 		writeError(response, http.StatusInternalServerError, "internal_error", "A file was lost while the conversation was saved. Nothing was sent; try again.")
@@ -271,6 +274,8 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				fields.contactID = text
 			case "subject":
 				fields.subject = text
+			case "channel_id":
+				fields.channelID = text
 			case "contact_name":
 				fields.contactName = text
 			case "contact_email":
@@ -303,7 +308,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				if refusal != nil {
 					return fields, nil, refusal
 				}
-				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.kind, cc); err != nil {
+				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.channelID, fields.kind, cc); err != nil {
 					return fields, nil, err
 				}
 				// A reply that would be refused for a newer one is refused before its files are stored.

@@ -15,7 +15,8 @@ You do not run a forwarder or a Worker. A workspace started from the sign-up pag
 that address at once: its Support address is set to it. To keep your own address for customers,
 change where your mailbox forwards:
 
-1. Open **Settings → Email channel** and enter your **Support address**, for example
+1. Open **Settings → Channels**, select **Connect your support email** (or **Email** when it is
+   already connected) and enter your **Support address**, for example
    `support@example.com`. Select **Save support address**. A workspace created another way accepts
    mail only after this step. The button reads "Saving…" until the save ends, then "Saved" appears
    next to it.
@@ -45,7 +46,7 @@ renaming the workspace does not change it.
 
 A new channel starts with the workspace name. To change it:
 
-1. Open **Settings → Email channel**. The field appears once a support address is saved.
+1. Open **Settings → Channels → Email → Replies**. The field appears once a support address is saved.
 2. Enter the name in **Sender name** and select **Save sender name**.
 
 The next reply uses the new name, on every way a reply leaves: your own domain, the
@@ -76,7 +77,7 @@ requirements, with a link to the [privacy policy](https://colliedesk.com/privacy
 A self-hosted server shows no such link: it sends through your own Google OAuth client (see below).
 
 1. Connect the email channel first (a saved Support address).
-2. Open **Settings → Email channel → Send from Gmail** and select **Connect Gmail**.
+2. Open **Settings → Channels → Email → Replies → Send from Gmail** and select **Connect Gmail**.
 3. Google asks you to choose the account and allow **Send email on your behalf**. Leave that box
    ticked. Google then brings you back to Settings, which says whether Gmail is connected and, if not,
    why.
@@ -84,9 +85,12 @@ A self-hosted server shows no such link: it sends through your own Google OAuth 
    **Retry delivery**, go out through it with the same threading headers, so customer answers join
    the same conversation.
 
-Connect the account of your support address. If you connect another one (for example
-`acme.help@gmail.com` while customers write to `support@example.com`), customers see that account as
-the sender, and their answers still go to the support address. Settings says so.
+Connect the account of your support address: a channel sends as its own address. Google bringing back
+another account (for example `acme.help@gmail.com` while customers write to `support@example.com`)
+connects nothing, and Settings says to sign in with the support address. An account another email
+channel of the workspace already sends through is refused too, with a link to that channel. A
+connection made before this rule with another account keeps sending; **Send from Gmail** warns that
+it does not match and suggests connecting the right one.
 
 **When Gmail stops working.** If the access is removed in the Google account, the password changes,
 or Google refuses to send, **Send from Gmail** turns into an alert with the reason. Replies are then
@@ -108,16 +112,50 @@ page. On Colliedesk Cloud the request card shows the same note on Google data fi
 On a server you run, Gmail sending needs your own Google OAuth client. See
 [send replies through Gmail](../self-host/email.md#send-replies-through-gmail).
 
+## Several mailboxes
+
+A workspace can have several email channels, one per support address: `support@example.com` and
+`billing@example.com`, or a second domain. Add one with **Settings → Channels → Add channel → Connect
+your support email**: give it a **Name** (left empty, it is called by its address) and its **Support
+address**. Two channels never share a mailbox: `support+billing@example.com` is the same mailbox as
+`support@example.com`, so it is refused, with a link to the channel that has it.
+
+Each mailbox has its own settings, on its own page:
+
+- **Forwarding.** On Colliedesk Cloud each mailbox has its own forwarding address: the first one is
+  `support@<workspace>.colliedesk.com`, a later one is named after its support address
+  (`billing@<workspace>.colliedesk.com`, with `-2` added when that is taken). Forward each mailbox to
+  its own forwarding address. On your own server each mailbox has its own inbound secret: give each
+  forwarder the secret of its mailbox. Mail that reaches a mailbox opens its conversation in that
+  channel.
+- **Sender name, Gmail and sending pause** belong to the mailbox.
+- **Domain verification belongs to the domain.** Two mailboxes on `example.com` share it: verify
+  once, and a later mailbox on the domain is verified at once. **Replies** says so.
+
+The **Workspace address name** sits on **Settings → Channels**, above the list: it is part of every
+mailbox's forwarding address, so changing it changes them all.
+
+Replies leave from the mailbox the conversation came through; see
+[channels](channels.md#several-mailboxes-in-the-inbox) for the default, starting a conversation from
+a chosen mailbox and filtering by one. A conversation imported from Freshdesk or Help Scout keeps the
+mailbox it was sent to (`origin.mailboxes`), and its replies leave from the channel with that support
+address when there is one.
+
+Through the API each mailbox's settings and actions are under `/api/v1/channels/{id}/email`
+(`/secret`, `/domain-verification`, `/gmail`), and `PATCH /api/v1/channels/{id}` with `config`
+changes its address or sender name. `/api/v1/channels/email` and the MCP tools without `channel_id`
+act on the default mailbox, as before.
+
 ## Send from your own domain
 
 Until your domain is verified, replies are sent as **"<sender name> via Colliedesk"** from a
 `reply+…@` address on the server's sending domain, with `Reply-To` set to your support address.
-Customer replies still reach you and thread. **Settings → Email channel** shows **Replies are sent
+Customer replies still reach you and thread. **Settings → Channels → Email → Replies** shows **Replies are sent
 from …** with the current address. Verify the domain to send as your support address.
 
 **Colliedesk Cloud** verifies in two steps:
 
-1. Publish the TXT record shown in **Settings → Email channel** (**TXT record name**, for example
+1. Publish the TXT record shown in **Settings → Channels → Email → Replies** (**TXT record name**, for example
    `_colliedesk.example.com`, and **TXT record value**). It proves you control the domain. Select
    **Verify domain**; until the TXT record is found, Colliedesk asks for it and does nothing else.
 2. Colliedesk then lists a table **DNS records to publish** (DKIM, SPF and an MX record for bounces),
@@ -140,7 +178,7 @@ address until you verify it again.
 
 **Your own server** verifies with one TXT record, unless its operator set it up like Cloud:
 
-1. In **Settings → Email channel**, copy the **TXT record name** (for example
+1. In **Settings → Channels → Email → Replies**, copy the **TXT record name** (for example
    `_colliedesk.example.com`) and the **TXT record value**.
 2. Add that TXT record at your DNS provider.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
@@ -156,7 +194,7 @@ Colliedesk counts spam complaints per workspace. A workspace is
 paused when it has **3 or more complaints in the last 7 days and they are more than 0.3% of the
 replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does not pause; 4 does).
 
-- **Settings → Email channel** shows **Email sending is paused** with the counts. Admins cannot lift it.
+- **Settings → Channels → Email → Replies** shows **Email sending is paused** with the counts. Admins cannot lift it.
 - Replies written during the pause stay **Queued** with the note "Email sending is paused after spam
   complaints; contact support." Nothing is failed and no attempt is used up. They are sent after
   the pause ends.

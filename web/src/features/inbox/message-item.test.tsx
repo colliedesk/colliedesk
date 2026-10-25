@@ -156,3 +156,26 @@ test('a reply or note written as a Markdown list keeps its numbers and bullets o
   const { container } = render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, body: '- one\n- two' }} timezone="UTC" />);
   expect(declared(container.querySelector('.markdown-body ul')!, 'list-style-type')).toBe('disc');
 });
+
+test('a reply saved while its channel was off reads as not sent yet, not as a failure, and can be retried', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 0, last_error: 'Email is off.', sent_at: null, reason_code: 'channel_off' } }} timezone="UTC" />);
+  expect(screen.getByText('Saved, not sent')).toHaveClass('badge-delivery-queued');
+  expect(screen.queryByText('Delivery failed')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
+});
+
+test('a reply whose channel was removed, or whose customer has no address on it, offers no retry', () => {
+  for (const code of ['channel_removed', 'no_recipient']) {
+    const { unmount } = render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 0, last_error: 'Cannot be sent.', sent_at: null, reason_code: code } }} timezone="UTC" />);
+    expect(screen.getByText('Not sent')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry delivery' })).toBeNull();
+    unmount();
+  }
+});
+
+test('a reply saved before any channel could carry it reads as not sent yet, with Retry for once it is connected', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 0, last_error: 'Email is not connected: this reply is saved but not sent. Connect it, then retry.', sent_at: null, reason_code: 'channel_not_connected' } }} timezone="UTC" />);
+  expect(screen.getByText('Saved, not sent')).toHaveClass('badge-delivery-queued');
+  expect(screen.getByText(/Connect it, then retry/)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
+});

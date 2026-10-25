@@ -203,7 +203,9 @@ export interface paths {
         /**
          * @description Open a conversation with a contact. With only `contact_id` and `subject` it is empty and nothing is sent. With `body` it starts with an outgoing reply that is emailed to the contact (and `cc`), in the same transaction: when the reply is refused (trial rules, Cc rules, attachment limits, no email channel) nothing is stored, not even the conversation. The email carries the subject as written (no "Re:") and a Message-ID and reply address that thread the customer's answer back into this conversation.
          *
-         *     Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, one `cc` field per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`. `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is verified or a plan is chosen. A workspace without an email channel answers 409 `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer added with the conversation (`contact`) is written in the same transaction; an address that is already a customer answers 409 `contact_exists` with the `contact` to use.
+         *     `channel_id` is the channel it starts from, which its replies keep leaving from; without it, the default email channel. 404 `channel_not_found` for no live channel of the workspace, 400 `channel_cannot_send` for a channel a conversation cannot start on (a web form), 409 `channel_off` when the channel (or the default, when none is given) is off. An empty conversation keeps the channel too; without one its first reply takes the default.
+         *
+         *     Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, `channel_id`, one `cc` field per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`. `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is verified or a plan is chosen. A workspace without an email channel answers 409 `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer added with the conversation (`contact`) is written in the same transaction; an address that is already a customer answers 409 `contact_exists` with the `contact` to use.
          */
         post: operations["createConversation"];
         delete?: never;
@@ -298,6 +300,215 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Lists the workspace's channels, oldest first, with their state, and the channel types this server runs: whether a type can be added (`available`), how many of it the workspace has and which is its default (`default_channel_id`). A workspace may have several channels of every type (two support mailboxes, two web forms); one of each is its default (`is_default`), which the routes without a channel id act on, a conversation started without choosing a channel leaves from, and the next oldest becomes when it is removed. Removed channels are left out unless `include_removed=true` (they come last, with `deleted_at` and state `removed`, for naming the channel of older conversations). Every member of the team may read it; changing a channel needs an admin. */
+        get: operations["listChannels"];
+        put?: never;
+        /** @description Adds a channel of a type with its configuration (`config`, the type's schema in ChannelConfigInput). The type validates it and the channel is stored only when it passes (400 with `fields`). A workspace may add several channels of a type; give each a `name` that tells them apart. An outside account another channel already is answers 409 `channel_account_taken`. A name another live channel of the type has (whatever its case) answers 409 `channel_name_taken`, a support address whose mailbox another email channel of the workspace has (support+vip@ is support@) 409 `support_address_taken`; both with `fields` and `conflict` naming that channel. Without a name the first channel of a type is called as its type, a later one by its address (email) or with a number. The first channel of a type is its default; `is_default: true` makes a later one the default. The first email channel is what `PUT /api/v1/channels/email` connects. */
+        post: operations["createChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The history of the workspace's channels, newest first: who added, renamed, turned on or off, changed, removed a channel, changed a secret (only its last four characters are recorded), and opened or discarded messages a channel held. `channel_id` keeps one channel's; `cursor` is the `next_cursor` of the page before. */
+        get: operations["listChannelEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description A channel with its configuration as its type shows it (never a secret). A removed channel answers 404. */
+        get: operations["getChannel"];
+        put?: never;
+        post?: never;
+        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`): open or discard them first. An agent token's call is an agent request a person approves. */
+        delete: operations["removeChannel"];
+        options?: never;
+        head?: never;
+        /** @description Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits, commands; the type's defaults apply to what is left out). A channel that is off receives nothing: what arrives meanwhile is kept for an admin to open or discard (`held_count`), or, for a type that refuses mail while off (the web form), answered as if the channel did not exist. A reply while it is off is saved and its delivery fails with `channel_off`; retry it once the channel is on. Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here. */
+        patch: operations["updateChannel"];
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: a secret never waits in an agent request. */
+        put: operations["setChannelCredential"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Reads the channel's state again and returns it; it changes nothing. */
+        post: operations["checkChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/held/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Opens messages the channel held (all, or those of `event_ids`) as conversations, as they would have been had the channel been on, or adds them to `conversation_id` (a conversation of this workspace; 404 otherwise). It works while the channel is still off, and the ceiling on new conversations does not apply. Messages open one by one: one that cannot be opened stops the replay there, the ones opened before it are recorded in the channel's history, the rest stay held. */
+        post: operations["replayHeldChannelMessages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/held/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the history keeps how many. An agent token's call is an agent request a person approves. */
+        post: operations["discardHeldChannelMessages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The settings of one email channel of the workspace, as `GET /api/v1/channels/email` shows the default one: its address, sender name, forwarding address (`hosted_address`), inbound secret state, domain verification and Gmail connection. 404 `channel_not_found` when the id names no email channel of this workspace. */
+        get: operations["getEmailChannelByID"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email/domain-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description `POST /api/v1/channels/email/domain-verification` for one email channel. The verification belongs to the domain: once one channel of the workspace verified it, every channel on it is verified. */
+        post: operations["verifyEmailDomainByID"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Create or replace the inbound secret of one email channel. Mail a forwarder sends with it arrives on that channel. The raw secret is returned once; the previous one stops working. */
+        post: operations["rotateEmailInboundSecretByID"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email/gmail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description `POST /api/v1/channels/email/gmail` for one email channel: its replies, and only its, are then sent through that Gmail account. The consent finishes at the same callback, which returns to this channel's settings. */
+        post: operations["connectGmailByID"];
+        /** @description `DELETE /api/v1/channels/email/gmail` for one email channel. The grant is revoked at Google only when no other channel holds the same account. A locked workspace may disconnect. */
+        delete: operations["disconnectGmailByID"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/email": {
         parameters: {
             query?: never;
@@ -305,11 +516,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description The settings of the workspace's default email channel (`is_default`); `channel` is null while email is not connected. Other email channels are read with `GET /api/v1/channels/{id}/email`. */
         get: operations["getEmailChannel"];
-        /** @description Connect the email channel, change its support address, change its sender name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its domain verification and its sending domain stay as they are. */
+        /** @description Connect email (the first email channel), or change the default channel's support address, its sender name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its domain verification and its sending domain stay as they are. Add another mailbox with `POST /api/v1/channels` and change it with `PATCH /api/v1/channels/{id}`. */
         put: operations["putEmailChannel"];
         post?: never;
-        /** @description Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. */
+        /** @description Disconnect the default email channel (`DELETE /api/v1/channels/{id}` removes any channel). Conversations and messages stay; the inbound secret stops working; the next oldest email channel becomes the default. Mail held while the channel was off must be opened or discarded first (409 `channel_has_held`). */
         delete: operations["deleteEmailChannel"];
         options?: never;
         head?: never;
@@ -342,7 +554,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Create or replace the inbound secret. The raw secret is returned once; the previous one stops working. */
+        /** @description Create or replace the inbound secret of the default email channel. The raw secret is returned once; the previous one stops working. */
         post: operations["rotateEmailInboundSecret"];
         delete?: never;
         options?: never;
@@ -359,7 +571,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting the workspace's Gmail account, so replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an agent request; the person who approves receives the consent address. */
+        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an agent request; the person who approves receives the consent address. */
         post: operations["connectGmail"];
         /** @description Disconnect Gmail: the grant is removed here and revoked at Google. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Gmail fails with the reason and can be retried. A locked workspace may disconnect. */
         delete: operations["disconnectGmail"];
@@ -377,7 +589,7 @@ export interface paths {
         };
         /**
          * Google's redirect after the consent screen
-         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to `/settings`: `?gmail=connected`, or `?gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `email_channel_missing` and `google_unavailable`. Google's own error text is never echoed.
+         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&gmail=connected`, or `?tab=replies&gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `address_mismatch` (the account is not the channel's support address mailbox), `account_in_use` (another email channel of the workspace sends through it, named by `&gmail_channel=<id>`), `email_channel_missing` and `google_unavailable`. A refused grant is revoked unless a channel holds the account. Google's own error text is never echoed.
          */
         get: operations["finishGmailConnect"];
         put?: never;
@@ -397,7 +609,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient. On the hosted cloud (HOSTED_MAIL_DOMAIN set) the same secret also carries mail for `<local>@<workspace slug>.<HOSTED_MAIL_DOMAIN>`: the workspace is taken from the topmost `X-Original-To` header, which the forwarder writes from the envelope recipient; To and Cc are never used. A recipient under the hosted domain that matches no workspace with a connected email channel is answered 404 so the forwarder rejects the message. Attachments, inline images and the gzip-compressed raw message are stored with the message; a storage failure returns 500 and stores nothing. */
+        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by an email channel's inbound secret, not by a session: the message arrives on that channel. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient, the channel from the one that conversation's replies leave through. On the hosted cloud (HOSTED_MAIL_DOMAIN set) the same secret also carries mail for `<local>@<workspace slug>.<HOSTED_MAIL_DOMAIN>`: the workspace is taken from the topmost `X-Original-To` header, which the forwarder writes from the envelope recipient, and the channel from the local part (each channel's `hosted_address`; another local part reaches the default channel); To and Cc are never used. A recipient under the hosted domain that matches no workspace with a connected email channel is answered 404 so the forwarder rejects the message. Attachments, inline images and the gzip-compressed raw message are stored with the message; a storage failure returns 500 and stores nothing. */
         post: operations["receiveInboundEmail"];
         delete?: never;
         options?: never;
@@ -1644,9 +1856,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description State of the public web form channel. A workspace that never set it up has it off. */
+        /** @description State of the workspace's default web form (`is_default`). A workspace that never set one up has it off. Other forms are read with `GET /api/v1/channels/{id}`. */
         get: operations["getWebForm"];
-        /** @description Turn the public web form on or off and replace its allowed origins. Turning it off keeps the origins, so turning it on again needs nothing else. Origins are exact (`scheme://host[:port]`, http or https), at most 20, with no path, wildcard or credentials; they are lowercased and de-duplicated. */
+        /** @description Turn the default web form on or off and replace its allowed origins; the first save adds a form. Other forms are changed with `PATCH /api/v1/channels/{id}`. Turning it off keeps the origins, so turning it on again needs nothing else. Origins are exact (`scheme://host[:port]`, http or https), at most 20, with no path, wildcard or credentials; they are lowercased and de-duplicated. */
         put: operations["putWebForm"];
         post?: never;
         delete?: never;
@@ -1666,11 +1878,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Public, unauthenticated. A website posts a visitor's email (and optionally a message) and the workspace gets a conversation: the visitor becomes a contact (found by email), the text is an incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown workspace, a form that is off and a locked workspace all answer the same 404. Browsers may read the answer only from an origin on the workspace's allowed list (CORS). At most 5 submissions per client address and workspace per minute, and 30 requests per client address per minute across all forms; a workspace also accepts at most 50 form conversations per 10 minutes, counted apart from email. Fields the form does not know are ignored. The message is marked `email.via = web_form` with authentication `none` (unverified address). */
+        /** @description Public, unauthenticated. The workspace's older form address: it posts to the form that has it (`legacy_slug`, the form the workspace had first; making another form the default does not move it); every form also has its own, `POST /api/v1/public/web-forms/{channel_id}`. A website posts a visitor's email (and optionally a message) and the workspace gets a conversation: the visitor becomes a contact (found by email), the text is an incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown workspace, a form that is off and a locked workspace all answer the same 404. Browsers may read the answer only from an origin on the form's allowed list (CORS). At most 5 submissions per client address and form per minute, and 30 requests per client address per minute across all forms; a workspace also accepts at most 50 form conversations per 10 minutes, counted apart from email. Fields the form does not know are ignored. The message is marked `email.via = web_form` with authentication `none` (unverified address). */
         post: operations["submitWebForm"];
         delete?: never;
         /** @description CORS preflight. 204 with the allow headers for an allowed origin; every other case is the same 404 as a missing form. */
         options: operations["preflightWebForm"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/web-forms/{channel_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description One form's own address (its `submit_path`), with every rule of `POST /api/v1/public/forms/{workspace_slug}`: the conversation opens on this form, which checks its own allowed origins and counts its own submissions. The address names the form by its random channel id, so it tells nothing of the workspace's other forms. An unknown, removed or off form answers the same 404. */
+        post: operations["submitWebFormByChannel"];
+        delete?: never;
+        /** @description CORS preflight of one form's own address. 204 with the allow headers for an origin on that form's list; every other case is the same 404 as a missing form. */
+        options: operations["preflightWebFormByChannel"];
         head?: never;
         patch?: never;
         trace?: never;
@@ -3338,6 +3570,8 @@ export interface components {
             /** @enum {string} */
             source?: "imported" | "native";
             channel?: components["schemas"]["ConversationChannel"][];
+            /** @description Channels: a conversation that came through one of them or whose replies leave from one of them. A removed channel still filters. */
+            channel_id?: string[];
             /** Format: date-time */
             created_after?: string;
             /** Format: date-time */
@@ -3543,8 +3777,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            /** Format: email */
-            email: string;
+            /**
+             * Format: email
+             * @description Null for a customer known only on a channel (identities).
+             */
+            email: string | null;
+            /** @description Who the customer is on channels that know them by something other than email. */
+            identities?: components["schemas"]["ContactIdentity"][];
             /** @description Company or organization name, for example imported from a Freshdesk company */
             organization: string | null;
             /**
@@ -4087,6 +4326,8 @@ export interface components {
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
             channel: components["schemas"]["ConversationChannel"];
+            /** @description The channel the conversation came through and the one its replies leave through; null for one that came through none (started by a team member, imported, a problem report) and has no channel to reply through. */
+            channel_ref?: null | components["schemas"]["ChannelRef"];
             /** @description Where an imported conversation came from; null for conversations created in Colliedesk. */
             origin: null | components["schemas"]["ConversationOrigin"];
             /** Format: date-time */
@@ -4111,6 +4352,8 @@ export interface components {
             first_response_due_at: string | null;
             cc: string[];
             forwarded_to: string[];
+            /** @description The addresses the conversation was sent to at the source, most trusted first; its replies leave from the email channel of the first one the workspace has, else the default. */
+            mailboxes?: string[];
             /** @description What the source helpdesk reported about the ticket (Freshdesk `include=stats`), read once: a later import keeps the first values it read and only fills a ticket that has none. Missing on imports that predate it, on archived Freshdesk tickets and on other sources. The results page reads `resolved_at` for the imported baseline (docs/user/results.md). */
             stats?: {
                 /**
@@ -4245,6 +4488,17 @@ export interface components {
         Message: {
             /**
              * Format: uuid
+             * @description The channel that carried the message; null for a note and for messages stored before channels were recorded.
+             */
+            channel_id?: string | null;
+            /** @description The message's id on its channel, prefixed by the type ("email:<Message-ID>"). */
+            external_id?: string | null;
+            /** @description What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed). */
+            channel_meta?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Format: uuid
              * @description The AI draft the reply was written from.
              */
             ai_draft_id: string | null;
@@ -4345,6 +4599,8 @@ export interface components {
         DeliveryStatus: "queued" | "sent" | "failed";
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
+            /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_not_connected (no channel of the type that carries the reply was connected, a web form without email; retry once it is), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up. Null for most email failures, whose words are in last_error. */
+            reason_code?: string | null;
             attempts: number;
             /** @description Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc) addresses it did not reach: refused by the relay or bounced later. A copy that misses never fails the reply to the contact. */
             last_error: string | null;
@@ -4377,7 +4633,13 @@ export interface components {
                 content_type: string;
             }[];
         };
+        /** @description One email channel. Its domain's verification and provider domain belong to the domain: two channels of the workspace on one domain show the same, verify it once and share one provider domain. */
         EmailChannel: {
+            /**
+             * Format: uuid
+             * @description The channel these settings belong to.
+             */
+            channel_id?: string;
             /** Format: email */
             support_address: string;
             /** @description The name customers see in the From line of every reply this channel sends (with " via Colliedesk" while the domain is not verified) and in Reply-To. Renaming the workspace does not change it. */
@@ -4439,7 +4701,7 @@ export interface components {
              * @enum {string}
              */
             domain_verification: "txt" | "provider";
-            /** @description Forwarding address of this workspace on the hosted cloud, `support@<slug>.<HOSTED_MAIL_DOMAIN>`. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail subdomain; change the slug with `PATCH /api/v1/workspace/slug`. */
+            /** @description Forwarding address of this email channel on the hosted cloud, `<local>@<slug>.<HOSTED_MAIL_DOMAIN>`: `support@` for the workspace's first channel (and while none is connected), a local part of its own for a channel added beside it. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail subdomain; change the slug with `PATCH /api/v1/workspace/slug`. */
             hosted_address: string | null;
             /**
              * @description `verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).
@@ -4464,6 +4726,8 @@ export interface components {
              */
             redirect_uri: string;
             connection: null | components["schemas"]["MailboxConnection"];
+            /** @description Only with a connection: whether its account is the channel's support address mailbox. A connection made before Gmail had to match keeps sending; connect it again with the support address to fix it. */
+            address_matches?: boolean;
         };
         MailboxConnection: {
             /** @enum {string} */
@@ -4489,10 +4753,193 @@ export interface components {
             /** Format: date-time */
             connected_at: string;
         };
-        InboundEmailResult: {
+        /**
+         * @description A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
+         * @enum {string}
+         */
+        ChannelType: "email" | "web_form";
+        ChannelState: {
             /** @enum {string} */
-            status: "created" | "threaded" | "duplicate" | "dropped";
-            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient). */
+            state: "working" | "off" | "needs_attention" | "not_connected" | "removed";
+            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`. */
+            reason_code: string | null;
+            message: string | null;
+        };
+        Channel: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["ChannelType"];
+            name: string;
+            enabled: boolean;
+            status: components["schemas"]["ChannelState"];
+            /** @description One line under the name: the support address, the allowed origins. */
+            summary: string;
+            /** @description Fixed codes of what the channel carries (threads, attachments_in, attachments_out, cc, html, form). */
+            capabilities: string[];
+            /** @description Messages that arrived while the channel was off and wait to be opened or discarded. */
+            held_count: number;
+            /** @description Replies whose delivery failed with channel_off; retry them once the channel is on. */
+            unsent_count: number;
+            /** Format: date-time */
+            last_inbound_at: string | null;
+            /** @description Whether this is its type's default channel: a call, link or address that names no channel uses it. */
+            is_default?: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * Format: date-time
+             * @description Only on a removed channel, which only `include_removed=true` lists.
+             */
+            deleted_at?: string;
+        };
+        /** @description The email channel's configuration, as `GET /api/v1/channels/email` shows it. */
+        EmailChannelConfig: components["schemas"]["EmailChannel"];
+        /** @description The web form's configuration, as `GET /api/v1/channels/web-form` shows it. */
+        WebFormChannelConfig: components["schemas"]["WebFormSettings"];
+        /** @description A channel's configuration, by its type. */
+        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"];
+        ChannelDetail: components["schemas"]["Channel"] & {
+            config: components["schemas"]["ChannelConfig"];
+        };
+        ChannelTypeInfo: {
+            type: components["schemas"]["ChannelType"];
+            /** @description Whether a channel of the type can be added now. */
+            available: boolean;
+            /** @description How many live channels of the type the workspace has. */
+            count: number;
+            /**
+             * Format: uuid
+             * @description The type's default channel; null while the workspace has none of it.
+             */
+            default_channel_id: string | null;
+        };
+        ChannelList: {
+            items: components["schemas"]["Channel"][];
+            types: components["schemas"]["ChannelTypeInfo"][];
+        };
+        EmailChannelConfigInput: {
+            /** Format: email */
+            support_address?: string;
+            sender_name?: string;
+        };
+        WebFormChannelConfigInput: {
+            allowed_origins?: string[];
+        };
+        /** @description A channel's configuration as its type takes it. */
+        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"];
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type declares), `notices` {received}. Never a secret. */
+        ChannelSettings: {
+            [key: string]: unknown;
+        };
+        ChannelCreate: {
+            type: components["schemas"]["ChannelType"];
+            name?: string;
+            enabled?: boolean;
+            /** @description true makes the new channel its type's default; false is refused (400). */
+            is_default?: boolean;
+            config?: components["schemas"]["ChannelConfigInput"];
+            settings?: components["schemas"]["ChannelSettings"];
+        };
+        ChannelChange: {
+            name?: string;
+            enabled?: boolean;
+            /** @description true makes the channel its type's default (recorded as default_changed); the one that was loses it. A type keeps a default while it has a channel, so false is refused (400): make another channel the default instead. */
+            is_default?: boolean;
+            config?: components["schemas"]["ChannelConfigInput"];
+            settings?: components["schemas"]["ChannelSettings"];
+        };
+        ChannelCredentialInput: {
+            name: string;
+            value: string;
+        };
+        ChannelCredential: {
+            name: string;
+            /** @description The secret's last four characters. */
+            hint: string | null;
+        };
+        ChannelEvent: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded" | "default_changed";
+            /** Format: uuid */
+            channel_id: string;
+            channel_name: string;
+            channel_type: string;
+            actor: {
+                /** Format: uuid */
+                agent_id: string | null;
+                name: string | null;
+                token_label: string | null;
+            };
+            /** @description config_changed: the names of the settings that changed (email support_address, sender_name; web_form allowed_origins; settings for its rules). credential_changed: the name of the secret replaced (email inbound_secret). Never a value. Empty for other kinds. */
+            fields?: string[];
+            /** @description held_replayed and held_discarded: how many messages were opened or discarded. */
+            count?: number | null;
+        };
+        ChannelEventPage: {
+            items: components["schemas"]["ChannelEvent"][];
+            next_cursor: string | null;
+        };
+        HeldReplayInput: {
+            event_ids?: string[];
+            /** Format: uuid */
+            conversation_id?: string;
+        };
+        HeldReplayResult: {
+            results: {
+                status: string;
+                /** Format: uuid */
+                conversation_id: string | null;
+                /** Format: uuid */
+                message_id: string | null;
+            }[];
+        };
+        HeldDiscardInput: {
+            event_ids?: string[];
+        };
+        HeldDiscardResult: {
+            discarded: number;
+        };
+        /** @description The channel a conversation came through, and the one its replies leave through (`replies_via`, null when none can carry them): its own when its type sends, else the one its replies are pinned to (the channel it was started from, or that sent its first reply; an import's source mailbox when the workspace has it), else its type's default. A web form's replies leave by email. */
+        ChannelRef: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            name: string;
+            enabled: boolean;
+            deleted: boolean;
+            replies_via: null | {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                enabled: boolean;
+                /** @description The channel the replies would leave from, removed: the default stands in for it. Null otherwise. */
+                instead_of?: null | {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                };
+            };
+        };
+        ContactIdentity: {
+            /** Format: uuid */
+            channel_id: string;
+            kind: string;
+            value: string;
+            display_name: string | null;
+        };
+        InboundEmailResult: {
+            /**
+             * @description `held`: the email channel is off. The message is kept in the channel (its original is stored) until an admin opens it as a conversation or discards it; nothing is opened meanwhile.
+             * @enum {string}
+             */
+            status: "created" | "threaded" | "duplicate" | "dropped" | "held";
+            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); why it was held: channel_off. */
             reason: string | null;
             /** Format: uuid */
             conversation_id: string | null;
@@ -4501,9 +4948,17 @@ export interface components {
             authentication: components["schemas"]["EmailAuthentication"];
         };
         WebFormSettings: {
+            /**
+             * Format: uuid
+             * @description The form's channel; absent while the workspace has no form.
+             */
+            channel_id?: string;
             enabled: boolean;
+            /** @description The origins this form may be posted from; each form has its own, and two forms may list the same. */
             allowed_origins: string[];
-            /** @description Path a website posts to; the host is this instance */
+            /** @description Whether the workspace's older address /api/v1/public/forms/<slug> posts to this form: the form the workspace had first keeps it. */
+            legacy_slug?: boolean;
+            /** @description Path a website posts to; the host is this instance: the older `/api/v1/public/forms/<workspace slug>` for the form that has it (`legacy_slug`), else the form's own `/api/v1/public/web-forms/<channel id>`, which every form also answers. */
             submit_path: string;
         };
         ProblemReportInput: {
@@ -4554,6 +5009,14 @@ export interface components {
                 check_error_code?: string;
                 /** @description Only on upload_offset_mismatch: where the upload stands; send the part that starts there. */
                 offset?: number;
+                /** @description Only on channel_has_held: how many messages the channel holds; open or discard them before removing it. */
+                held_count?: number;
+                /** @description Only on channel_name_taken and support_address_taken: the channel of this workspace that has the value. */
+                conflict?: {
+                    /** Format: uuid */
+                    channel_id: string;
+                    channel_name: string;
+                };
                 /** @description Only on media_in_use: the live articles whose current text names the item. */
                 articles?: {
                     /** Format: uuid */
@@ -5213,8 +5676,10 @@ export interface operations {
                 delivery_failed?: boolean;
                 /** @description imported (from another helpdesk) or native (created in Colliedesk). */
                 source?: "imported" | "native";
-                /** @description One channel or several, comma-separated (see `ConversationChannel`). */
+                /** @description One channel type or several, comma-separated (see `ConversationChannel`). */
                 channel?: string;
+                /** @description One channel or several by id, comma-separated (`GET /api/v1/channels`, `include_removed=true` for removed ones): a conversation that came through one of them or whose replies leave from one of them. An id of another workspace matches nothing. */
+                channel_id?: string;
                 created_after?: string;
                 created_before?: string;
                 updated_after?: string;
@@ -5278,6 +5743,11 @@ export interface operations {
                     /** @description Markdown source of the first reply; without it the conversation starts empty */
                     body?: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /**
+                     * Format: uuid
+                     * @description The channel it starts from; the default email channel when left out.
+                     */
+                    channel_id?: string;
                 };
                 "multipart/form-data": {
                     /** Format: uuid */
@@ -5289,6 +5759,8 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /** Format: uuid */
+                    channel_id?: string;
                     seen_reply_number?: number;
                     files?: string[];
                 };
@@ -5562,6 +6034,398 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    listChannels: {
+        parameters: {
+            query?: {
+                include_removed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channels and the types */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelCreate"];
+            };
+        };
+        responses: {
+            /** @description The channel */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listChannelEvents: {
+        parameters: {
+            query?: {
+                channel_id?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelChange"];
+            };
+        };
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setChannelCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelCredentialInput"];
+            };
+        };
+        responses: {
+            /** @description The secret's hint */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelCredential"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    checkChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replayHeldChannelMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeldReplayInput"];
+            };
+        };
+        responses: {
+            /** @description What became of each message */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeldReplayResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    discardHeldChannelMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeldDiscardInput"];
+            };
+        };
+        responses: {
+            /** @description How many were discarded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeldDiscardResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEmailChannelByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EmailChannelSettings"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    verifyEmailDomainByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EmailChannelSettings"];
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    rotateEmailInboundSecretByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description New inbound secret, shown once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        inbound_secret: string;
+                        /** Format: uri */
+                        inbound_url: string;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    connectGmailByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ConsentLink"];
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    disconnectGmailByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Gmail disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     getEmailChannel: {
         parameters: {
             query?: never;
@@ -5625,6 +6489,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     verifyEmailDomain: {
@@ -5732,7 +6597,7 @@ export interface operations {
             /** @description Back to the settings page, which explains the outcome. */
             303: {
                 headers: {
-                    /** @description The path /settings?gmail=connected or /settings?gmail_error=<reason>. */
+                    /** @description The channel settings path with ?tab=replies&gmail=connected or &gmail_error=<reason>. */
                     Location?: string;
                     [name: string]: unknown;
                 };
@@ -8339,6 +9204,100 @@ export interface operations {
             header?: never;
             path: {
                 workspace_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preflight accepted */
+            204: {
+                headers: {
+                    "Access-Control-Allow-Origin"?: string;
+                    "Access-Control-Allow-Methods"?: string;
+                    "Access-Control-Allow-Headers"?: string;
+                    "Access-Control-Max-Age"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    submitWebFormByChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    message?: string;
+                    /** @description Where the form sits, for example site:updates */
+                    source?: string;
+                    /** @description Honeypot; leave empty */
+                    website?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted (also for a honeypot hit) */
+            202: {
+                headers: {
+                    /** @description Set only for an allowed origin */
+                    "Access-Control-Allow-Origin"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            /** @description The body is not application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid input; `error.fields` names each bad field */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many submissions; retry after the `Retry-After` seconds */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    preflightWebFormByChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: string;
             };
             cookie?: never;
         };

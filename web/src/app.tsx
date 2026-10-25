@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Link, Navigate, Outlet, createRootRoute, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
@@ -28,6 +28,7 @@ const settingsRoutePart = lazyPart(() => import('./features/settings/settings-ro
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
+const channelsRoutePart = lazyPart(() => import('./features/settings/channels/channels-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
 const resultsSharePart = lazyPart(() => import('./features/results/results-share-route'));
@@ -104,8 +105,10 @@ function AppLayout() {
 // Settings sections link through the router, so moving between Settings and Plan and billing needs no reload.
 // exact + includeHash: otherwise every section link would count as current on any settings page.
 function settingsRouterLink(item: NavItem) {
-  return <Link to={item.to} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
-    aria-current={item.current ? 'page' : undefined}>{item.label}</Link>;
+  const preload = item.to === '/settings/channels' ? channelsRoutePart.preload : undefined;
+  // /settings/channels is the channels route with an empty splat, a path the route types do not list.
+  return <Link to={item.to as Exclude<NavItem['to'], '/settings/channels'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
+    aria-current={item.current ? 'page' : undefined} onPointerEnter={preload} onFocus={preload}>{item.label}</Link>;
 }
 
 // An unknown address inside the app says so and offers the way back, in the frame of every other page.
@@ -236,6 +239,21 @@ const aiRoute = createRoute({
     return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute />} />;
   },
 });
+// Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).
+type ChannelsSearch = { tab?: string; gmail?: string; gmail_error?: string };
+// Passed through as it is: the pages read only string values (channels-route.tsx), and the Gmail return
+// (gmail, gmail_error) must survive the hop from type/email to the channel.
+const channelsSearch = (search: Record<string, unknown>) => search as ChannelsSearch;
+function ChannelsSettings({ path, search }: { path: string; search: ChannelsSearch }) {
+  const navigate = useNavigate();
+  const go = useCallback((href: string, replace?: boolean) => void navigate({ href, replace }), [navigate]);
+  return <Part part={channelsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ChannelsRoute }) => <ChannelsRoute path={path} search={search} navigate={go} />} />;
+}
+// /settings/channels itself is this route with an empty splat.
+const channelRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/settings/channels/$', validateSearch: channelsSearch,
+  component: function Channel() { return <ChannelsSettings path={channelRoute.useParams()._splat ?? ''} search={channelRoute.useSearch()} />; },
+});
 const resultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/results',
@@ -272,7 +290,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, resultsRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, channelRoute, resultsRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

@@ -363,8 +363,15 @@ paths:
           schema: {type: string, enum: [imported, native]}
         - name: channel
           in: query
-          description: One channel or several, comma-separated (see `ConversationChannel`).
+          description: One channel type or several, comma-separated (see `ConversationChannel`).
           schema: {type: string, example: 'email,web_form'}
+        - name: channel_id
+          in: query
+          description: >-
+            One channel or several by id, comma-separated (`GET /api/v1/channels`, `include_removed=true` for
+            removed ones): a conversation that came through one of them or whose replies leave from one of
+            them. An id of another workspace matches nothing.
+          schema: {type: string}
         - {name: created_after, in: query, schema: {type: string, format: date-time}}
         - {name: created_before, in: query, schema: {type: string, format: date-time}}
         - {name: updated_after, in: query, schema: {type: string, format: date-time}}
@@ -413,7 +420,14 @@ paths:
         conversation.
 
 
-        Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, one `cc` field
+        `channel_id` is the channel it starts from, which its replies keep leaving from; without it, the
+        default email channel. 404 `channel_not_found` for no live channel of the workspace, 400
+        `channel_cannot_send` for a channel a conversation cannot start on (a web form), 409 `channel_off`
+        when the channel (or the default, when none is given) is off. An empty conversation keeps the
+        channel too; without one its first reply takes the default.
+
+
+        Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, `channel_id`, one `cc` field
         per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`.
         `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never
         wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is
@@ -443,6 +457,7 @@ paths:
                 subject: {type: string, minLength: 1}
                 body: {type: string, minLength: 1, description: 'Markdown source of the first reply; without it the conversation starts empty'}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                channel_id: {type: string, format: uuid, description: 'The channel it starts from; the default email channel when left out.'}
           multipart/form-data:
             schema:
               type: object
@@ -455,6 +470,7 @@ paths:
                 subject: {type: string, minLength: 1}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                channel_id: {type: string, format: uuid}
                 seen_reply_number: {type: integer, minimum: 0}
                 files:
                   type: array
@@ -686,10 +702,299 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '429': {$ref: '#/components/responses/TrialOutboundLimit'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels:
+    get:
+      operationId: listChannels
+      x-permission: access:read
+      description: >
+        Lists the workspace's channels, oldest first, with their state, and the channel types this server
+        runs: whether a type can be added (`available`), how many of it the workspace has and which is its
+        default (`default_channel_id`). A workspace may have several channels of every type (two support
+        mailboxes, two web forms); one of each is its default (`is_default`), which the routes without a
+        channel id act on, a conversation started without choosing a channel leaves from, and the next
+        oldest becomes when it is removed. Removed channels are left out unless `include_removed=true`
+        (they come last, with `deleted_at` and state `removed`, for naming the channel of older
+        conversations). Every member of the team may read it; changing a channel needs an admin.
+      parameters:
+        - {name: include_removed, in: query, required: false, schema: {type: boolean}}
+      responses:
+        '200':
+          description: The channels and the types
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelList'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createChannel
+      x-permission: access:write
+      description: >
+        Adds a channel of a type with its configuration (`config`, the type's schema in ChannelConfigInput).
+        The type validates it and the channel is stored only when it passes (400 with `fields`). A workspace
+        may add several channels of a type; give each a `name` that tells them apart. An outside account
+        another channel already is answers 409 `channel_account_taken`. A name another live channel of the
+        type has (whatever its case) answers 409 `channel_name_taken`, a support address whose mailbox
+        another email channel of the workspace has (support+vip@ is support@) 409 `support_address_taken`;
+        both with `fields` and `conflict` naming that channel. Without a name the first channel of a type is
+        called as its type, a later one by its address (email) or with a number. The first channel of a
+        type is its default; `is_default: true` makes a later one the default. The first email channel is
+        what `PUT /api/v1/channels/email` connects.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCreate'}}}
+      responses:
+        '201':
+          description: The channel
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/channels/events:
+    get:
+      operationId: listChannelEvents
+      x-permission: access:read
+      description: >
+        The history of the workspace's channels, newest first: who added, renamed, turned on or off,
+        changed, removed a channel, changed a secret (only its last four characters are recorded), and
+        opened or discarded messages a channel held. `channel_id` keeps one channel's; `cursor` is the
+        `next_cursor` of the page before.
+      parameters:
+        - {name: channel_id, in: query, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 200}}
+      responses:
+        '200':
+          description: A page of the history
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelEventPage'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/channels/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getChannel
+      x-permission: access:read
+      description: A channel with its configuration as its type shows it (never a secret). A removed channel answers 404.
+      responses:
+        '200':
+          description: The channel
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateChannel
+      x-permission: access:write
+      description: >
+        Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its
+        type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits,
+        commands; the type's defaults apply to what is left out). A channel that is off receives nothing:
+        what arrives meanwhile is kept for an admin to open or discard (`held_count`), or, for a type that
+        refuses mail while off (the web form), answered as if the channel did not exist. A reply while it
+        is off is saved and its delivery fails with `channel_off`; retry it once the channel is on.
+        Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChannelChange'}}}
+      responses:
+        '200':
+          description: The channel
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: removeChannel
+      x-permission: access:write
+      description: >
+        Removes a channel: its configuration and secrets are deleted, its conversations and their
+        messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel.
+        Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds
+        messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`):
+        open or discard them first. An agent token's call is an agent request a person approves.
+      responses:
+        '204': {description: Removed}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/channels/{id}/credentials:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: setChannelCredential
+      x-permission: access:write
+      description: >
+        Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409
+        `secret_keys_missing` without them). Only its last four characters are shown again. An agent
+        token below the admin tier is refused with 403 `credentials_need_admin_token`: a secret never
+        waits in an agent request.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCredentialInput'}}}
+      responses:
+        '200':
+          description: The secret's hint
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCredential'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/channels/{id}/check:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: checkChannel
+      x-permission: access:write
+      description: Reads the channel's state again and returns it; it changes nothing.
+      responses:
+        '200':
+          description: The channel
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/held/replay:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: replayHeldChannelMessages
+      x-permission: access:write
+      description: >
+        Opens messages the channel held (all, or those of `event_ids`) as conversations, as they would
+        have been had the channel been on, or adds them to `conversation_id` (a conversation of this
+        workspace; 404 otherwise). It works while the channel is still off, and the ceiling on new
+        conversations does not apply. Messages open one by one: one that cannot be opened stops the
+        replay there, the ones opened before it are recorded in the channel's history, the rest stay held.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/HeldReplayInput'}}}
+      responses:
+        '200':
+          description: What became of each message
+          content: {application/json: {schema: {$ref: '#/components/schemas/HeldReplayResult'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /api/v1/channels/{id}/held/discard:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: discardHeldChannelMessages
+      x-permission: access:write
+      description: >
+        Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the
+        history keeps how many. An agent token's call is an agent request a person approves.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/HeldDiscardInput'}}}
+      responses:
+        '200':
+          description: How many were discarded
+          content: {application/json: {schema: {$ref: '#/components/schemas/HeldDiscardResult'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/email:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getEmailChannelByID
+      x-permission: access:read
+      description: >-
+        The settings of one email channel of the workspace, as `GET /api/v1/channels/email` shows the
+        default one: its address, sender name, forwarding address (`hosted_address`), inbound secret state,
+        domain verification and Gmail connection. 404 `channel_not_found` when the id names no email
+        channel of this workspace.
+      responses:
+        '200': {$ref: '#/components/responses/EmailChannelSettings'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/email/domain-verification:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: verifyEmailDomainByID
+      x-permission: access:write
+      description: >-
+        `POST /api/v1/channels/email/domain-verification` for one email channel. The verification belongs to
+        the domain: once one channel of the workspace verified it, every channel on it is verified.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200': {$ref: '#/components/responses/EmailChannelSettings'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+  /api/v1/channels/{id}/email/secret:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: rotateEmailInboundSecretByID
+      x-permission: access:write
+      description: >-
+        Create or replace the inbound secret of one email channel. Mail a forwarder sends with it arrives on
+        that channel. The raw secret is returned once; the previous one stops working.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: New inbound secret, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [inbound_secret, inbound_url]
+                properties:
+                  inbound_secret: {type: string, minLength: 1}
+                  inbound_url: {type: string, format: uri}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/{id}/email/gmail:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: connectGmailByID
+      x-permission: access:write
+      description: >-
+        `POST /api/v1/channels/email/gmail` for one email channel: its replies, and only its, are then sent
+        through that Gmail account. The consent finishes at the same callback, which returns to this
+        channel's settings.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200': {$ref: '#/components/responses/ConsentLink'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: disconnectGmailByID
+      x-permission: access:write
+      description: >-
+        `DELETE /api/v1/channels/email/gmail` for one email channel. The grant is revoked at Google only when
+        no other channel holds the same account. A locked workspace may disconnect.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '204': {description: Gmail disconnected}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email:
     get:
       operationId: getEmailChannel
       x-permission: access:read
+      description: >-
+        The settings of the workspace's default email channel (`is_default`); `channel` is null while email is
+        not connected. Other email channels are read with `GET /api/v1/channels/{id}/email`.
       responses:
         '200': {$ref: '#/components/responses/EmailChannelSettings'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -697,9 +1002,10 @@ paths:
       operationId: putEmailChannel
       x-permission: access:write
       description: >
-        Connect the email channel, change its support address, change its sender name, or both. Send only
-        `sender_name` to rename the sender of a connected channel: the address, its domain verification and
-        its sending domain stay as they are.
+        Connect email (the first email channel), or change the default channel's support address, its sender
+        name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its
+        domain verification and its sending domain stay as they are. Add another mailbox with
+        `POST /api/v1/channels` and change it with `PATCH /api/v1/channels/{id}`.
       requestBody:
         required: true
         content:
@@ -733,13 +1039,14 @@ paths:
     delete:
       operationId: deleteEmailChannel
       x-permission: access:write
-      description: Disconnect the email channel. Conversations and messages stay; the inbound secret stops working.
+      description: Disconnect the default email channel (`DELETE /api/v1/channels/{id}` removes any channel). Conversations and messages stay; the inbound secret stops working; the next oldest email channel becomes the default. Mail held while the channel was off must be opened or discarded first (409 `channel_has_held`).
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '204': {description: Email channel disconnected}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/channels/email/domain-verification:
     post:
       operationId: verifyEmailDomain
@@ -770,7 +1077,7 @@ paths:
     post:
       operationId: rotateEmailInboundSecret
       x-permission: access:write
-      description: Create or replace the inbound secret. The raw secret is returned once; the previous one stops working.
+      description: Create or replace the inbound secret of the default email channel. The raw secret is returned once; the previous one stops working.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
@@ -792,12 +1099,14 @@ paths:
       operationId: connectGmail
       x-permission: access:write
       description: >-
-        Start connecting the workspace's Gmail account, so replies are sent through the Gmail API from that
+        Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that
         address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent
         address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then
         sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same
         signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and
-        nothing that reads mail. Connecting again replaces the earlier account and revokes its grant. 409
+        nothing that reads mail. The account must be the channel's support address mailbox, and one account
+        sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces
+        the earlier account and revokes its grant. 409
         `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its
         Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an
         agent request; the person who approves receives the consent address.
@@ -831,12 +1140,16 @@ paths:
       description: >-
         Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin
         who started the connection (a bearer token is not accepted) and the unused `state` of that start; the
-        state is looked up in that person's workspace only. Every outcome is a 303 to `/settings`:
-        `?gmail=connected`, or `?gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an
+        state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the
+        email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email`
+        while the state is not known): `?tab=replies&gmail=connected`, or `?tab=replies&gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an
         admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than
         10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google),
         `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google
-        named no verified address), `email_channel_missing` and `google_unavailable`. Google's own error text is
+        named no verified address), `address_mismatch` (the account is not the channel's support address
+        mailbox), `account_in_use` (another email channel of the workspace sends through it, named by
+        `&gmail_channel=<id>`), `email_channel_missing` and `google_unavailable`. A refused grant is revoked
+        unless a channel holds the account. Google's own error text is
         never echoed.
       parameters:
         - {name: code, in: query, required: false, schema: {type: string}}
@@ -846,7 +1159,7 @@ paths:
         '303':
           description: Back to the settings page, which explains the outcome.
           headers:
-            Location: {schema: {type: string}, description: 'The path /settings?gmail=connected or /settings?gmail_error=<reason>.'}
+            Location: {schema: {type: string}, description: 'The channel settings path with ?tab=replies&gmail=connected or &gmail_error=<reason>.'}
   /api/v1/channels/email/inbound:
     post:
       operationId: receiveInboundEmail
@@ -854,15 +1167,17 @@ paths:
       x-permission: channels:inbound
       description: >
         Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES
-        forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session.
-        Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened.
-        The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of
-        MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient.
-        On the hosted cloud (HOSTED_MAIL_DOMAIN set) the same secret also carries mail for
+        forwarding, an MTA pipe). Authenticated by an email channel's inbound secret, not by a session: the
+        message arrives on that channel. Every accepted outcome is 200 so the forwarder does not retry; the
+        `status` says what happened. The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by
+        the forwarder of MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN
+        recipient, the channel from the one that conversation's replies leave through. On the hosted cloud
+        (HOSTED_MAIL_DOMAIN set) the same secret also carries mail for
         `<local>@<workspace slug>.<HOSTED_MAIL_DOMAIN>`: the workspace is taken from the topmost
-        `X-Original-To` header, which the forwarder writes from the envelope recipient; To and Cc are never
-        used. A recipient under the hosted domain that matches no workspace with a connected email channel
-        is answered 404 so the forwarder rejects the message.
+        `X-Original-To` header, which the forwarder writes from the envelope recipient, and the channel from
+        the local part (each channel's `hosted_address`; another local part reaches the default channel); To
+        and Cc are never used. A recipient under the hosted domain that matches no workspace with a connected
+        email channel is answered 404 so the forwarder rejects the message.
         Attachments, inline images and the gzip-compressed raw message are stored with the message;
         a storage failure returns 500 and stores nothing.
       requestBody:
@@ -2856,7 +3171,9 @@ paths:
     get:
       operationId: getWebForm
       x-permission: access:read
-      description: State of the public web form channel. A workspace that never set it up has it off.
+      description: >-
+        State of the workspace's default web form (`is_default`). A workspace that never set one up has it
+        off. Other forms are read with `GET /api/v1/channels/{id}`.
       responses:
         '200': {$ref: '#/components/responses/WebFormSettings'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -2865,7 +3182,8 @@ paths:
       operationId: putWebForm
       x-permission: access:write
       description: >-
-        Turn the public web form on or off and replace its allowed origins. Turning it off keeps the
+        Turn the default web form on or off and replace its allowed origins; the first save adds a form.
+        Other forms are changed with `PATCH /api/v1/channels/{id}`. Turning it off keeps the
         origins, so turning it on again needs nothing else. Origins are exact (`scheme://host[:port]`,
         http or https), at most 20, with no path, wildcard or credentials; they are lowercased and
         de-duplicated.
@@ -2900,14 +3218,16 @@ paths:
       security: []
       x-permission: public
       description: >-
-        Public, unauthenticated. A website posts a visitor's email (and optionally a message) and the
-        workspace gets a conversation: the visitor becomes a contact (found by email), the text is an
+        Public, unauthenticated. The workspace's older form address: it posts to the form that has it
+        (`legacy_slug`, the form the workspace had first; making another form the default does not move it);
+        every form also has its own, `POST /api/v1/public/web-forms/{channel_id}`. A website posts a visitor's
+        email (and optionally a message) and the workspace gets a conversation: the visitor becomes a contact (found by email), the text is an
         incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is
         `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled
         `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown
         workspace, a form that is off and a locked workspace all answer the same 404. Browsers may
-        read the answer only from an origin on the workspace's allowed list (CORS). At most 5
-        submissions per client address and workspace per minute, and 30 requests per client address
+        read the answer only from an origin on the form's allowed list (CORS). At most 5
+        submissions per client address and form per minute, and 30 requests per client address
         per minute across all forms; a workspace also accepts at most 50 form conversations per 10
         minutes, counted apart from email. Fields the form does not know are ignored. The message
         is marked `email.via = web_form` with authentication `none` (unverified address).
@@ -2954,6 +3274,73 @@ paths:
       security: []
       x-permission: public
       description: CORS preflight. 204 with the allow headers for an allowed origin; every other case is the same 404 as a missing form.
+      responses:
+        '204':
+          description: Preflight accepted
+          headers:
+            Access-Control-Allow-Origin: {schema: {type: string}}
+            Access-Control-Allow-Methods: {schema: {type: string}}
+            Access-Control-Allow-Headers: {schema: {type: string}}
+            Access-Control-Max-Age: {schema: {type: integer}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/public/web-forms/{channel_id}:
+    parameters:
+      - name: channel_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: submitWebFormByChannel
+      security: []
+      x-permission: public
+      description: >-
+        One form's own address (its `submit_path`), with every rule of `POST /api/v1/public/forms/{workspace_slug}`:
+        the conversation opens on this form, which checks its own allowed origins and counts its own
+        submissions. The address names the form by its random channel id, so it tells nothing of the
+        workspace's other forms. An unknown, removed or off form answers the same 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email, maxLength: 254}
+                message: {type: string, maxLength: 5000}
+                source: {type: string, maxLength: 100, description: 'Where the form sits, for example site:updates'}
+                website: {type: string, description: Honeypot; leave empty}
+      responses:
+        '202':
+          description: Accepted (also for a honeypot hit)
+          headers:
+            Access-Control-Allow-Origin: {schema: {type: string}, description: Set only for an allowed origin}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: {type: boolean}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '415':
+          description: The body is not application/json
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422':
+          description: Invalid input; `error.fields` names each bad field
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429':
+          description: Too many submissions; retry after the `Retry-After` seconds
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
+    options:
+      operationId: preflightWebFormByChannel
+      security: []
+      x-permission: public
+      description: CORS preflight of one form's own address. 204 with the allow headers for an origin on that form's list; every other case is the same 404 as a missing form.
       responses:
         '204':
           description: Preflight accepted
@@ -5326,6 +5713,12 @@ components:
         delivery_failed: {type: boolean}
         source: {type: string, enum: [imported, native]}
         channel: {type: array, maxItems: 5, uniqueItems: true, items: {$ref: '#/components/schemas/ConversationChannel'}}
+        channel_id:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+          description: 'Channels: a conversation that came through one of them or whose replies leave from one of them. A removed channel still filters.'
         created_after: {type: string, format: date-time}
         created_before: {type: string, format: date-time}
         updated_after: {type: string, format: date-time}
@@ -5596,7 +5989,11 @@ components:
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
-        email: {type: string, format: email}
+        email: {type: [string, 'null'], format: email, description: 'Null for a customer known only on a channel (identities).'}
+        identities:
+          type: array
+          description: Who the customer is on channels that know them by something other than email.
+          items: {$ref: '#/components/schemas/ContactIdentity'}
         organization: {type: [string, 'null'], description: 'Company or organization name, for example imported from a Freshdesk company'}
         merged_into_id: {type: [string, 'null'], format: uuid, description: 'The contact this one was merged into; null for a contact of its own'}
         created_at: {type: string, format: date-time}
@@ -6095,6 +6492,11 @@ components:
         assignee_id: {type: [string, 'null'], format: uuid}
         tags: {type: array, items: {$ref: '#/components/schemas/Tag'}}
         channel: {$ref: '#/components/schemas/ConversationChannel'}
+        channel_ref:
+          description: The channel the conversation came through and the one its replies leave through; null for one that came through none (started by a team member, imported, a problem report) and has no channel to reply through.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ChannelRef'}
         origin:
           description: Where an imported conversation came from; null for conversations created in Colliedesk.
           oneOf:
@@ -6119,6 +6521,12 @@ components:
         first_response_due_at: {type: [string, 'null'], format: date-time}
         cc: {type: array, items: {type: string}}
         forwarded_to: {type: array, items: {type: string}}
+        mailboxes:
+          type: array
+          items: {type: string}
+          description: >-
+            The addresses the conversation was sent to at the source, most trusted first; its replies leave
+            from the email channel of the first one the workspace has, else the default.
         stats:
           type: object
           description: >-
@@ -6288,6 +6696,13 @@ components:
       type: object
       required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, ai_draft_outcome, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
+        channel_id: {type: [string, 'null'], format: uuid, description: The channel that carried the message; null for a note and for messages stored before channels were recorded.}
+        external_id: {type: [string, 'null'], description: 'The message''s id on its channel, prefixed by the type ("email:<Message-ID>").'}
+        channel_meta:
+          type: [object, 'null']
+          additionalProperties: true
+          description: What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed).
+
         ai_draft_id: {type: [string, 'null'], format: uuid, description: The AI draft the reply was written from.}
         ai_draft_outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, null], description: 'Whether the reply kept the draft''s words (sent_unchanged, 90 % or more) or was edited; null without a draft.'}
         reply_number:
@@ -6410,6 +6825,14 @@ components:
       required: [status, attempts, last_error, sent_at]
       properties:
         status: {$ref: '#/components/schemas/DeliveryStatus'}
+        reason_code:
+          type: [string, 'null']
+          description: >-
+            A fixed code beside last_error: channel_off (the channel was off; retry once it is on),
+            channel_not_connected (no channel of the type that carries the reply was connected, a web form
+            without email; retry once it is), channel_removed, no_recipient (the customer has no address on
+            the channel), bounced, gave_up.
+            Null for most email failures, whose words are in last_error.
         attempts: {type: integer, minimum: 0}
         last_error:
           type: [string, 'null']
@@ -6461,7 +6884,11 @@ components:
     EmailChannel:
       type: object
       required: [support_address, sender_name, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, dns_records, dns_records_expired_at, created_at, updated_at]
+      description: >
+        One email channel. Its domain's verification and provider domain belong to the domain: two channels
+        of the workspace on one domain show the same, verify it once and share one provider domain.
       properties:
+        channel_id: {type: string, format: uuid, description: The channel these settings belong to.}
         support_address: {type: string, format: email}
         sender_name:
           type: string
@@ -6539,8 +6966,9 @@ components:
         hosted_address:
           type: [string, 'null']
           description: >
-            Forwarding address of this workspace on the hosted cloud, `support@<slug>.<HOSTED_MAIL_DOMAIN>`.
-            Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail
+            Forwarding address of this email channel on the hosted cloud, `<local>@<slug>.<HOSTED_MAIL_DOMAIN>`:
+            `support@` for the workspace's first channel (and while none is connected), a local part of its own
+            for a channel added beside it. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail
             subdomain; change the slug with `PATCH /api/v1/workspace/slug`.
         from_policy:
           type: string
@@ -6576,6 +7004,11 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/MailboxConnection'}
+        address_matches:
+          type: boolean
+          description: >-
+            Only with a connection: whether its account is the channel's support address mailbox. A connection
+            made before Gmail had to match keeps sending; connect it again with the support address to fix it.
     MailboxConnection:
       type: object
       required: [provider, address, status, error_code, error, failed_at, connected_at]
@@ -6590,12 +7023,253 @@ components:
         error: {type: [string, 'null']}
         failed_at: {type: [string, 'null'], format: date-time}
         connected_at: {type: string, format: date-time}
+    ChannelType:
+      type: string
+      enum: [email, web_form]
+      description: A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
+    ChannelState:
+      type: object
+      required: [state, reason_code, message]
+      properties:
+        state:
+          type: string
+          enum: [working, off, needs_attention, not_connected, removed]
+        reason_code:
+          type: [string, 'null']
+          description: >-
+            Why a channel needs attention, a fixed code the web app explains: email `sending_paused`,
+            `cannot_send`, `gmail_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`.
+        message: {type: [string, 'null']}
+    Channel:
+      type: object
+      required: [id, type, name, enabled, status, summary, capabilities, held_count, unsent_count, last_inbound_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/ChannelType'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        enabled: {type: boolean}
+        status: {$ref: '#/components/schemas/ChannelState'}
+        summary: {type: string, description: 'One line under the name: the support address, the allowed origins.'}
+        capabilities:
+          type: array
+          description: Fixed codes of what the channel carries (threads, attachments_in, attachments_out, cc, html, form).
+          items: {type: string}
+        held_count: {type: integer, minimum: 0, description: Messages that arrived while the channel was off and wait to be opened or discarded.}
+        unsent_count: {type: integer, minimum: 0, description: 'Replies whose delivery failed with channel_off; retry them once the channel is on.'}
+        last_inbound_at: {type: [string, 'null'], format: date-time}
+        is_default: {type: boolean, description: 'Whether this is its type''s default channel: a call, link or address that names no channel uses it.'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        deleted_at: {type: string, format: date-time, description: 'Only on a removed channel, which only `include_removed=true` lists.'}
+    EmailChannelConfig:
+      allOf: [{$ref: '#/components/schemas/EmailChannel'}]
+      description: The email channel's configuration, as `GET /api/v1/channels/email` shows it.
+    WebFormChannelConfig:
+      allOf: [{$ref: '#/components/schemas/WebFormSettings'}]
+      description: The web form's configuration, as `GET /api/v1/channels/web-form` shows it.
+    ChannelConfig:
+      description: A channel's configuration, by its type.
+      oneOf:
+        - {$ref: '#/components/schemas/EmailChannelConfig'}
+        - {$ref: '#/components/schemas/WebFormChannelConfig'}
+    ChannelDetail:
+      allOf:
+        - {$ref: '#/components/schemas/Channel'}
+        - type: object
+          required: [config]
+          properties:
+            config: {$ref: '#/components/schemas/ChannelConfig'}
+    ChannelTypeInfo:
+      type: object
+      required: [type, available, count, default_channel_id]
+      properties:
+        type: {$ref: '#/components/schemas/ChannelType'}
+        available: {type: boolean, description: Whether a channel of the type can be added now.}
+        count: {type: integer, minimum: 0, description: How many live channels of the type the workspace has.}
+        default_channel_id: {type: [string, 'null'], format: uuid, description: The type's default channel; null while the workspace has none of it.}
+    ChannelList:
+      type: object
+      required: [items, types]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Channel'}}
+        types: {type: array, items: {$ref: '#/components/schemas/ChannelTypeInfo'}}
+    EmailChannelConfigInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        support_address: {type: string, format: email, maxLength: 254}
+        sender_name: {type: string, minLength: 1, maxLength: 100}
+    WebFormChannelConfigInput:
+      type: object
+      additionalProperties: false
+      properties:
+        allowed_origins: {type: array, maxItems: 20, items: {type: string, maxLength: 200}}
+    ChannelConfigInput:
+      description: A channel's configuration as its type takes it.
+      oneOf:
+        - {$ref: '#/components/schemas/EmailChannelConfigInput'}
+        - {$ref: '#/components/schemas/WebFormChannelConfigInput'}
+    ChannelSettings:
+      type: object
+      description: >-
+        The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days
+        (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits`
+        {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to
+        {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type
+        declares), `notices` {received}. Never a secret.
+      additionalProperties: true
+    ChannelCreate:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: {$ref: '#/components/schemas/ChannelType'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        enabled: {type: boolean}
+        is_default: {type: boolean, description: 'true makes the new channel its type''s default; false is refused (400).'}
+        config: {$ref: '#/components/schemas/ChannelConfigInput'}
+        settings: {$ref: '#/components/schemas/ChannelSettings'}
+    ChannelChange:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        enabled: {type: boolean}
+        is_default:
+          type: boolean
+          description: >-
+            true makes the channel its type's default (recorded as default_changed); the one that was loses
+            it. A type keeps a default while it has a channel, so false is refused (400): make another channel
+            the default instead.
+        config: {$ref: '#/components/schemas/ChannelConfigInput'}
+        settings: {$ref: '#/components/schemas/ChannelSettings'}
+    ChannelCredentialInput:
+      type: object
+      additionalProperties: false
+      required: [name, value]
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9_]{0,40}$'}
+        value: {type: string, minLength: 1, maxLength: 4096}
+    ChannelCredential:
+      type: object
+      required: [name, hint]
+      properties:
+        name: {type: string}
+        hint: {type: [string, 'null'], description: The secret's last four characters.}
+    ChannelEvent:
+      type: object
+      required: [id, at, kind, channel_id, channel_name, channel_type, actor]
+      properties:
+        id: {type: string, format: uuid}
+        at: {type: string, format: date-time}
+        kind:
+          type: string
+          enum: [added, renamed, enabled, disabled, config_changed, credential_changed, removed, held_replayed, held_discarded, default_changed]
+        channel_id: {type: string, format: uuid}
+        channel_name: {type: string}
+        channel_type: {type: string}
+        actor:
+          type: object
+          required: [agent_id, name, token_label]
+          properties:
+            agent_id: {type: [string, 'null'], format: uuid}
+            name: {type: [string, 'null']}
+            token_label: {type: [string, 'null']}
+        fields:
+          type: array
+          items: {type: string}
+          description: 'config_changed: the names of the settings that changed (email support_address, sender_name; web_form allowed_origins; settings for its rules). credential_changed: the name of the secret replaced (email inbound_secret). Never a value. Empty for other kinds.'
+        count: {type: [integer, 'null'], description: 'held_replayed and held_discarded: how many messages were opened or discarded.'}
+    ChannelEventPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ChannelEvent'}}
+        next_cursor: {type: [string, 'null']}
+    HeldReplayInput:
+      type: object
+      additionalProperties: false
+      properties:
+        event_ids: {type: array, maxItems: 500, items: {type: string, format: uuid}}
+        conversation_id: {type: string, format: uuid}
+    HeldReplayResult:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [status, conversation_id, message_id]
+            properties:
+              status: {type: string}
+              conversation_id: {type: [string, 'null'], format: uuid}
+              message_id: {type: [string, 'null'], format: uuid}
+    HeldDiscardInput:
+      type: object
+      additionalProperties: false
+      properties:
+        event_ids: {type: array, maxItems: 500, items: {type: string, format: uuid}}
+    HeldDiscardResult:
+      type: object
+      required: [discarded]
+      properties:
+        discarded: {type: integer, minimum: 0}
+    ChannelRef:
+      type: object
+      required: [id, type, name, enabled, deleted, replies_via]
+      description: >-
+        The channel a conversation came through, and the one its replies leave through (`replies_via`,
+        null when none can carry them): its own when its type sends, else the one its replies are pinned to
+        (the channel it was started from, or that sent its first reply; an import's source mailbox when the
+        workspace has it), else its type's default. A web form's replies leave by email.
+      properties:
+        id: {type: string, format: uuid}
+        type: {type: string}
+        name: {type: string}
+        enabled: {type: boolean}
+        deleted: {type: boolean}
+        replies_via:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, name, enabled]
+              properties:
+                id: {type: string, format: uuid}
+                name: {type: string}
+                enabled: {type: boolean}
+                instead_of:
+                  description: >-
+                    The channel the replies would leave from, removed: the default stands in for it. Null
+                    otherwise.
+                  oneOf:
+                    - {type: 'null'}
+                    - type: object
+                      required: [id, name]
+                      properties:
+                        id: {type: string, format: uuid}
+                        name: {type: string}
+    ContactIdentity:
+      type: object
+      required: [channel_id, kind, value, display_name]
+      properties:
+        channel_id: {type: string, format: uuid}
+        kind: {type: string}
+        value: {type: string}
+        display_name: {type: [string, 'null']}
     InboundEmailResult:
       type: object
       required: [status, reason, conversation_id, message_id, authentication]
       properties:
-        status: {type: string, enum: [created, threaded, duplicate, dropped]}
-        reason: {type: [string, 'null'], description: 'Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient).'}
+        status:
+          type: string
+          enum: [created, threaded, duplicate, dropped, held]
+          description: >-
+            `held`: the email channel is off. The message is kept in the channel (its original is stored)
+            until an admin opens it as a conversation or discards it; nothing is opened meanwhile.
+        reason: {type: [string, 'null'], description: 'Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); why it was held: channel_off.'}
         conversation_id: {type: [string, 'null'], format: uuid}
         message_id: {type: [string, 'null'], format: uuid}
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}
@@ -6603,9 +7277,16 @@ components:
       type: object
       required: [enabled, allowed_origins, submit_path]
       properties:
+        channel_id: {type: string, format: uuid, description: 'The form''s channel; absent while the workspace has no form.'}
         enabled: {type: boolean}
-        allowed_origins: {type: array, items: {type: string}}
-        submit_path: {type: string, description: Path a website posts to; the host is this instance}
+        allowed_origins: {type: array, items: {type: string}, description: 'The origins this form may be posted from; each form has its own, and two forms may list the same.'}
+        legacy_slug: {type: boolean, description: 'Whether the workspace''s older address /api/v1/public/forms/<slug> posts to this form: the form the workspace had first keeps it.'}
+        submit_path:
+          type: string
+          description: >
+            Path a website posts to; the host is this instance: the older `/api/v1/public/forms/<workspace slug>`
+            for the form that has it (`legacy_slug`), else the form's own `/api/v1/public/web-forms/<channel id>`,
+            which every form also answers.
     ProblemReportInput:
       type: object
       required: [description]
@@ -6673,6 +7354,14 @@ components:
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
             check_error_code: {type: string, description: 'Only on ai_check_failed: why the provider check failed (auth, permission, model_not_found, blocked_address, quota_exhausted, timeout, unavailable…).'}
             offset: {type: integer, description: 'Only on upload_offset_mismatch: where the upload stands; send the part that starts there.'}
+            held_count: {type: integer, description: 'Only on channel_has_held: how many messages the channel holds; open or discard them before removing it.'}
+            conflict:
+              type: object
+              required: [channel_id, channel_name]
+              description: 'Only on channel_name_taken and support_address_taken: the channel of this workspace that has the value.'
+              properties:
+                channel_id: {type: string, format: uuid}
+                channel_name: {type: string}
             articles:
               type: array
               description: 'Only on media_in_use: the live articles whose current text names the item.'

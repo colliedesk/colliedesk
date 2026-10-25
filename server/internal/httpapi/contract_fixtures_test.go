@@ -55,6 +55,10 @@ type contractFixture struct {
 	aiTriageID, aiTriageOtherID, aiTriageOtherConversation, aiTriageNewConversation, aiDraftsProviderID string
 	// aiTriageAutoID is a suggestion AI applied by itself on aiTriageAutoConversation, undone by its case.
 	aiTriageAutoID, aiTriageAutoConversation string
+	// webFormChannelID is changed and checked by the channel cases; emailChannelID is removed by one.
+	webFormChannelID, emailChannelID string
+	// secondEmailChannelID is a second email channel of the admin's workspace.
+	secondEmailChannelID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -168,6 +172,25 @@ func newContractFixture(t *testing.T) contractFixture {
 	if response := request(t, api, http.MethodPut, "/api/v1/channels/web-form", map[string]any{"enabled": true, "allowed_origins": []string{}}, adminToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("enable web form status=%d body=%s", response.Code, response.Body.String())
 	}
+	channelIDs := map[string]string{}
+	var channelList struct {
+		Items []struct{ ID, Type string } `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/channels", nil, adminToken, nil), &channelList)
+	for _, item := range channelList.Items {
+		if channelIDs[item.Type] == "" {
+			channelIDs[item.Type] = item.ID
+		}
+	}
+	// A second mailbox on the same domain, for the routes of one email channel of several.
+	var billing struct {
+		ID string `json:"id"`
+	}
+	decode(t, request(t, api, http.MethodPost, "/api/v1/channels", map[string]any{"type": "email", "name": "Billing",
+		"config": map[string]any{"support_address": "billing@contract-all.example.com"}}, adminToken, nil), &billing)
+	if billing.ID == "" {
+		t.Fatal("add a second email channel")
+	}
 
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
 	requestToken := issueToken(t, api, adminToken, "Contract requester", "read").Token
@@ -232,7 +255,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
-	return contractFixture{aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }
@@ -297,7 +320,7 @@ func withFailedEmailReply(t *testing.T, api http.Handler, pool *pgxpool.Pool, ad
 		t.Fatal(err)
 	}
 	replyID := create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Contract reply"})
-	if _, err := pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, replyID); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE channel_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, replyID); err != nil {
 		t.Fatal(err)
 	}
 	return api, secret, replyID

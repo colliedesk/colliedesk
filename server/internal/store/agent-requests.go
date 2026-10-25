@@ -347,7 +347,7 @@ func (s *Store) ConversationParticipants(ctx context.Context, workspaceID, conve
 	var contact string
 	known := map[string]bool{}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `SELECT lower(ct.email) FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(lower(ct.email),'') FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 			WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, conversationID).Scan(&contact); err != nil {
 			return err
 		}

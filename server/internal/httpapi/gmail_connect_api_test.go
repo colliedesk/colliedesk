@@ -45,6 +45,27 @@ func newGmailDesk(t *testing.T, name string) gmailDesk {
 	return desk
 }
 
+// useAddress changes the support address of the session's default email channel, so a Gmail account of
+// that address may be connected to it.
+func (d gmailDesk) useAddress(t *testing.T, session, address string) {
+	t.Helper()
+	if response := request(t, d.api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": address}, session, nil); response.Code != http.StatusOK {
+		t.Fatalf("support address %s: %d %s", address, response.Code, response.Body.String())
+	}
+}
+
+// page is the settings page of the session's default email channel, where a consent for it returns.
+func (d gmailDesk) page(t *testing.T, session string) string {
+	t.Helper()
+	var view struct {
+		Channel struct {
+			ChannelID string `json:"channel_id"`
+		} `json:"channel"`
+	}
+	decode(t, request(t, d.api, http.MethodGet, "/api/v1/channels/email", nil, session, nil), &view)
+	return "/settings/channels/" + view.Channel.ChannelID
+}
+
 func slugOf(name string) string { return strings.ToLower(strings.ReplaceAll(name, " ", "-")) }
 
 func sessionCookieOf(token string) *http.Cookie {
@@ -124,12 +145,12 @@ func TestAdminConnectsGmailAndRepliesAreQueuedForIt(t *testing.T) {
 	if !strings.Contains(consent, url.QueryEscape(gmailCallback)) || !strings.Contains(consent, "gmail.send") {
 		t.Fatalf("consent address = %s", consent)
 	}
-	if location := desk.finish(t, consent, "Help@Gmail-Desk.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail=connected" {
+	if location := desk.finish(t, consent, "Support@Gmail-Desk.example.com", sessionCookieOf(desk.admin)); location != desk.page(t, desk.admin)+"?tab=replies&gmail=connected" {
 		t.Fatalf("Location = %s", location)
 	}
 	after := desk.settings(t, desk.admin)
-	if after.Gmail.Connection == nil || after.Gmail.Connection.Address != "help@gmail-desk.example.com" || after.Gmail.Connection.Status != "connected" ||
-		after.SendingFrom == nil || *after.SendingFrom != "help@gmail-desk.example.com" {
+	if after.Gmail.Connection == nil || after.Gmail.Connection.Address != "support@gmail-desk.example.com" || after.Gmail.Connection.Status != "connected" ||
+		after.SendingFrom == nil || *after.SendingFrom != "support@gmail-desk.example.com" {
 		t.Fatalf("after = %+v sending_from=%v", after.Gmail.Connection, after.SendingFrom)
 	}
 	// The stored grant is sealed: the refresh token is nowhere in the row.
@@ -142,12 +163,12 @@ func TestAdminConnectsGmailAndRepliesAreQueuedForIt(t *testing.T) {
 	contact := create(t, desk.api, desk.admin, "/api/v1/contacts", map[string]any{"name": "Olive", "email": "olive@customer.example"})
 	conversation := create(t, desk.api, desk.admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hi"})
 	create(t, desk.api, desk.admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hello"})
-	if transport := queryString(t, desk.pool, `SELECT transport||'/'||status FROM email_outbox`); transport != "gmail/queued" {
+	if transport := queryString(t, desk.pool, `SELECT transport||'/'||status FROM channel_outbox`); transport != "gmail/queued" {
 		t.Fatalf("outbox row = %s, want gmail/queued", transport)
 	}
 	// The connected address is ours: copying it would send the reply to our own mailbox.
 	copied := request(t, desk.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages",
-		map[string]any{"kind": "outgoing", "body": "Again", "cc": []string{"Help+x@gmail-desk.example.com"}}, desk.admin, nil)
+		map[string]any{"kind": "outgoing", "body": "Again", "cc": []string{"Support+x@gmail-desk.example.com"}}, desk.admin, nil)
 	if copied.Code != http.StatusBadRequest {
 		t.Fatalf("Cc of the connected Gmail address: %d %s", copied.Code, copied.Body.String())
 	}
@@ -175,7 +196,11 @@ func TestAConnectionTheServerCanNoLongerUseFailsRepliesAtOnce(t *testing.T) {
 	admin := createSession(t, api, service, "Lost Google", "admin@lost-google.example.com")
 	connectEmail(t, api, admin, "support@lost-google.example.com")
 	st := store.New(pool)
-	if _, _, err := st.SaveMailboxConnection(context.Background(), workspaceID(t, api, admin), "", "support@lost-google.example.com", google.ScopeGmailSend,
+	channel, err := st.GetEmailChannel(context.Background(), workspaceID(t, api, admin))
+	if err != nil || channel == nil {
+		t.Fatalf("email channel: %v %v", channel, err)
+	}
+	if _, _, err := st.SaveMailboxConnection(context.Background(), workspaceID(t, api, admin), channel.ChannelID, "", "support@lost-google.example.com", google.ScopeGmailSend,
 		store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed-with-a-key-this-server-lacks")}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +211,7 @@ func TestAConnectionTheServerCanNoLongerUseFailsRepliesAtOnce(t *testing.T) {
 	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Olive", "email": "olive@customer.example"})
 	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hi"})
 	create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hello"})
-	if row := queryString(t, pool, `SELECT status||' '||last_error FROM email_outbox`); !strings.HasPrefix(row, "failed ") || !strings.Contains(row, "GOOGLE_OAUTH_CLIENT_ID") {
+	if row := queryString(t, pool, `SELECT status||' '||last_error FROM channel_outbox`); !strings.HasPrefix(row, "failed ") || !strings.Contains(row, "GOOGLE_OAUTH_CLIENT_ID") {
 		t.Fatalf("outbox row = %q, want failed with the missing settings", row)
 	}
 }
@@ -201,7 +226,7 @@ func TestStartingGmailRepeatedlyKeepsOnlyTheLatestConsents(t *testing.T) {
 	if count := queryString(t, desk.pool, `SELECT count(*)::text FROM mailbox_oauth_states`); count != "5" {
 		t.Fatalf("consent states kept = %s, want 5", count)
 	}
-	if location := desk.finish(t, last, "help@many-starts.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail=connected" {
+	if location := desk.finish(t, last, "support@many-starts.example.com", sessionCookieOf(desk.admin)); location != desk.page(t, desk.admin)+"?tab=replies&gmail=connected" {
 		t.Fatalf("newest consent: %s", location)
 	}
 }
@@ -222,7 +247,7 @@ func TestTheCallbackFinishesOnlyForThePersonWhoStartedIt(t *testing.T) {
 	consent := desk.startGmail(t, desk.admin)
 	// A bearer token is not a browser session.
 	target, _ := desk.fake.Consent(consent, "a@callback-desk.example.com")
-	if location := desk.callback(t, strings.TrimPrefix(target, testOrigin), nil, desk.admin); location != "/settings?gmail_error=signed_out" {
+	if location := desk.callback(t, strings.TrimPrefix(target, testOrigin), nil, desk.admin); location != "/settings/channels/type/email?tab=replies&gmail_error=signed_out" {
 		t.Fatalf("bearer callback Location = %s", location)
 	}
 	// Another admin of the same workspace cannot finish someone else's consent.
@@ -232,7 +257,7 @@ func TestTheCallbackFinishesOnlyForThePersonWhoStartedIt(t *testing.T) {
 		Token string `json:"token"`
 	}
 	decode(t, redeemed, &second)
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@callback-desk.example.com", sessionCookieOf(second.Token)); location != "/settings?gmail_error=wrong_person" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@callback-desk.example.com", sessionCookieOf(second.Token)); location != "/settings/channels/type/email?tab=replies&gmail_error=wrong_person" {
 		t.Fatalf("other admin Location = %s", location)
 	}
 	// An agent (not an admin) cannot start or finish.
@@ -240,18 +265,18 @@ func TestTheCallbackFinishesOnlyForThePersonWhoStartedIt(t *testing.T) {
 	if response := request(t, desk.api, http.MethodPost, "/api/v1/channels/email/gmail", nil, agent, nil); response.Code != http.StatusForbidden {
 		t.Fatalf("agent start: %d", response.Code)
 	}
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@callback-desk.example.com", sessionCookieOf(agent)); location != "/settings?gmail_error=forbidden" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@callback-desk.example.com", sessionCookieOf(agent)); location != "/settings/channels/type/email?tab=replies&gmail_error=forbidden" {
 		t.Fatalf("agent callback Location = %s", location)
 	}
 	// Denied at Google, then the same state again: both refused, nothing connected.
 	denied := desk.startGmail(t, desk.admin)
-	if location := desk.finish(t, denied, "", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=denied" {
+	if location := desk.finish(t, denied, "", sessionCookieOf(desk.admin)); location != desk.page(t, desk.admin)+"?tab=replies&gmail_error=denied" {
 		t.Fatalf("denied Location = %s", location)
 	}
-	if location := desk.finish(t, denied, "a@callback-desk.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=expired" {
+	if location := desk.finish(t, denied, "a@callback-desk.example.com", sessionCookieOf(desk.admin)); location != "/settings/channels/type/email?tab=replies&gmail_error=expired" {
 		t.Fatalf("reused state Location = %s", location)
 	}
-	if location := desk.callback(t, "/api/v1/channels/email/gmail/callback?code=x&state=made-up", sessionCookieOf(desk.admin), ""); location != "/settings?gmail_error=expired" {
+	if location := desk.callback(t, "/api/v1/channels/email/gmail/callback?code=x&state=made-up", sessionCookieOf(desk.admin), ""); location != "/settings/channels/type/email?tab=replies&gmail_error=expired" {
 		t.Fatalf("made-up state Location = %s", location)
 	}
 	if view := desk.settings(t, desk.admin); view.Gmail.Connection != nil {
@@ -264,19 +289,19 @@ func TestAConsentStartedInOneWorkspaceNeverConnectsAnother(t *testing.T) {
 	other := createSession(t, desk.api, desk.service, "Desk B", "admin@desk-b.example.com")
 	connectEmail(t, desk.api, other, "support@desk-b.example.com")
 	consent := desk.startGmail(t, desk.admin)
-	target, err := desk.fake.Consent(consent, "victim@desk-b.example.com")
+	target, err := desk.fake.Consent(consent, "support@desk-a.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 	path := strings.TrimPrefix(target, testOrigin)
-	if location := desk.callback(t, path, sessionCookieOf(other), ""); location != "/settings?gmail_error=expired" {
+	if location := desk.callback(t, path, sessionCookieOf(other), ""); location != "/settings/channels/type/email?tab=replies&gmail_error=expired" {
 		t.Fatalf("B finishing A's consent: Location = %s", location)
 	}
 	if view := desk.settings(t, other); view.Gmail.Connection != nil {
 		t.Fatalf("B got a connection: %+v", view.Gmail.Connection)
 	}
 	// The state was looked up in B only, so A can still finish its own consent.
-	if location := desk.callback(t, path, sessionCookieOf(desk.admin), ""); location != "/settings?gmail=connected" {
+	if location := desk.callback(t, path, sessionCookieOf(desk.admin), ""); location != desk.page(t, desk.admin)+"?tab=replies&gmail=connected" {
 		t.Fatalf("A finishing its own consent: Location = %s", location)
 	}
 	if view := desk.settings(t, other); view.Gmail.Connection != nil {
@@ -293,15 +318,15 @@ func TestAConsentStartedInOneWorkspaceNeverConnectsAnother(t *testing.T) {
 func TestGoogleRefusalsAreNamedNotEchoed(t *testing.T) {
 	desk := newGmailDesk(t, "Refusals")
 	desk.fake.Set(func(s *googletest.Server) { s.GrantScope = "openid email" })
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=send_not_granted" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != desk.page(t, desk.admin)+"?tab=replies&gmail_error=send_not_granted" {
 		t.Fatalf("unticked send: %s", location)
 	}
 	desk.fake.Set(func(s *googletest.Server) { s.GrantScope = ""; s.OmitRefreshToken = true })
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=no_refresh_token" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != desk.page(t, desk.admin)+"?tab=replies&gmail_error=no_refresh_token" {
 		t.Fatalf("no refresh token: %s", location)
 	}
 	desk.fake.Set(func(s *googletest.Server) { s.OmitRefreshToken = false; s.TokenDown = true })
-	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != "/settings?gmail_error=google_unavailable" {
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "a@refusals.example.com", sessionCookieOf(desk.admin)); location != desk.page(t, desk.admin)+"?tab=replies&gmail_error=google_unavailable" {
 		t.Fatalf("token endpoint down: %s", location)
 	}
 	if view := desk.settings(t, desk.admin); view.Gmail.Connection != nil {
@@ -311,9 +336,11 @@ func TestGoogleRefusalsAreNamedNotEchoed(t *testing.T) {
 
 func TestDisconnectAndReconnectRevokeTheGrantTheyDrop(t *testing.T) {
 	desk := newGmailDesk(t, "Reconnect")
+	desk.useAddress(t, desk.admin, "first@reconnect.example.com")
 	desk.finish(t, desk.startGmail(t, desk.admin), "first@reconnect.example.com", sessionCookieOf(desk.admin))
 	first := desk.fake.RefreshTokens()
-	// Reconnecting with another account replaces the first and revokes its grant.
+	// Reconnecting with another account (the channel moved to its address) replaces the first and revokes its grant.
+	desk.useAddress(t, desk.admin, "second@reconnect.example.com")
 	desk.finish(t, desk.startGmail(t, desk.admin), "second@reconnect.example.com", sessionCookieOf(desk.admin))
 	if view := desk.settings(t, desk.admin); view.Gmail.Connection == nil || view.Gmail.Connection.Address != "second@reconnect.example.com" {
 		t.Fatalf("after reconnect: %+v", view.Gmail.Connection)
@@ -331,13 +358,14 @@ func TestDisconnectAndReconnectRevokeTheGrantTheyDrop(t *testing.T) {
 		}
 	}
 	view := desk.settings(t, desk.admin)
-	if view.Gmail.Connection != nil || (view.SendingFrom != nil && strings.Contains(*view.SendingFrom, "reconnect.example.com") && *view.SendingFrom != "support@reconnect.example.com") {
+	if view.Gmail.Connection != nil || (view.SendingFrom != nil && strings.Contains(*view.SendingFrom, "reconnect.example.com") && *view.SendingFrom != "second@reconnect.example.com") {
 		t.Fatalf("after disconnect: %+v %v", view.Gmail.Connection, view.SendingFrom)
 	}
 	if response := request(t, desk.api, http.MethodDelete, "/api/v1/channels/email/gmail", nil, desk.admin, nil); response.Code != http.StatusNotFound {
 		t.Fatalf("second disconnect: %d", response.Code)
 	}
 	// Connecting again works after a disconnect, and removing the whole channel revokes too.
+	desk.useAddress(t, desk.admin, "third@reconnect.example.com")
 	desk.finish(t, desk.startGmail(t, desk.admin), "third@reconnect.example.com", sessionCookieOf(desk.admin))
 	if response := request(t, desk.api, http.MethodDelete, "/api/v1/channels/email", nil, desk.admin, nil); response.Code != http.StatusNoContent {
 		t.Fatalf("disconnect channel: %d", response.Code)
@@ -354,7 +382,8 @@ func TestDisconnectAndReconnectRevokeTheGrantTheyDrop(t *testing.T) {
 func TestDroppingAGmailAccountAnotherWorkspaceStillUsesDoesNotRevokeIt(t *testing.T) {
 	desk := newGmailDesk(t, "Shared A")
 	other := createSession(t, desk.api, desk.service, "Shared B", "admin@shared-b.example.com")
-	connectEmail(t, desk.api, other, "support@shared-b.example.com")
+	connectEmail(t, desk.api, other, "team@shared.example.com")
+	desk.useAddress(t, desk.admin, "team@shared.example.com")
 	desk.finish(t, desk.startGmail(t, desk.admin), "team@shared.example.com", sessionCookieOf(desk.admin))
 	desk.finish(t, desk.startGmail(t, other), "team@shared.example.com", sessionCookieOf(other))
 	anyRevoked := func() bool {
@@ -374,10 +403,12 @@ func TestDroppingAGmailAccountAnotherWorkspaceStillUsesDoesNotRevokeIt(t *testin
 		return true
 	}
 	// A switches to another account, then disconnects, then removes its channel: B keeps sending.
+	desk.useAddress(t, desk.admin, "elsewhere@shared.example.com")
 	desk.finish(t, desk.startGmail(t, desk.admin), "elsewhere@shared.example.com", sessionCookieOf(desk.admin))
 	if anyRevoked() {
 		t.Fatal("switching accounts in A revoked the account B still uses")
 	}
+	desk.useAddress(t, desk.admin, "team@shared.example.com")
 	desk.finish(t, desk.startGmail(t, desk.admin), "team@shared.example.com", sessionCookieOf(desk.admin))
 	if response := request(t, desk.api, http.MethodDelete, "/api/v1/channels/email/gmail", nil, desk.admin, nil); response.Code != http.StatusNoContent {
 		t.Fatalf("disconnect A: %d", response.Code)
@@ -412,7 +443,8 @@ func disconnectTogether(t *testing.T, round int) {
 	{
 		desk := newGmailDesk(t, "Race A")
 		other := createSession(t, desk.api, desk.service, "Race B", "admin@race-b.example.com")
-		connectEmail(t, desk.api, other, "support@race-b.example.com")
+		connectEmail(t, desk.api, other, "team@race.example.com")
+		desk.useAddress(t, desk.admin, "team@race.example.com")
 		desk.finish(t, desk.startGmail(t, desk.admin), "team@race.example.com", sessionCookieOf(desk.admin))
 		desk.finish(t, desk.startGmail(t, other), "team@race.example.com", sessionCookieOf(other))
 		start := make(chan struct{})
@@ -447,4 +479,53 @@ func TestAnAgentTokenAsksAPersonToConnectOrDisconnectGmail(t *testing.T) {
 		t.Fatalf("the token can read the consent address: %s", stored.Result)
 	}
 	accepted(t, desk.api, http.MethodDelete, "/api/v1/channels/email/gmail", nil, admin)
+}
+
+// Gmail sends as the channel: the account must be the channel's support address mailbox, and one
+// account sends for one email channel of a workspace. A refused grant nobody holds is revoked; a
+// connection made before the rule keeps sending and says it does not match.
+func TestGmailConnectsOnlyTheChannelsOwnAddressAndOnlyOnce(t *testing.T) {
+	desk := newGmailDesk(t, "Own Address")
+	if location := desk.finish(t, desk.startGmail(t, desk.admin), "someone.else@gmail.example.com", sessionCookieOf(desk.admin)); location != desk.page(t, desk.admin)+"?tab=replies&gmail_error=address_mismatch" {
+		t.Fatalf("another account: Location = %s", location)
+	}
+	for _, token := range desk.fake.RefreshTokens() {
+		if !desk.fake.Revoked(token) {
+			t.Fatal("the refused grant is still alive at Google")
+		}
+	}
+	if view := desk.settings(t, desk.admin); view.Gmail.Connection != nil {
+		t.Fatalf("a refused account connected: %+v", view.Gmail.Connection)
+	}
+	// A connection made before the rule: the default channel sends through billing@, which a second channel is.
+	defaultID := strings.TrimPrefix(desk.page(t, desk.admin), "/settings/channels/")
+	st := store.New(desk.pool)
+	if _, _, err := st.SaveMailboxConnection(t.Context(), workspaceID(t, desk.api, desk.admin), defaultID, "", "billing@own-address.example.com", google.ScopeGmailSend,
+		store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed")}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	var view struct {
+		Gmail struct {
+			AddressMatches *bool `json:"address_matches"`
+		} `json:"gmail"`
+	}
+	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/channels/email", nil, desk.admin, nil), &view)
+	if view.Gmail.AddressMatches == nil || *view.Gmail.AddressMatches {
+		t.Fatalf("address_matches = %v, want false for a connection of another address", view.Gmail.AddressMatches)
+	}
+	billing := addEmailChannel(t, desk.api, desk.admin, "billing@own-address.example.com")
+	response := request(t, desk.api, http.MethodPost, "/api/v1/channels/"+billing+"/email/gmail", nil, desk.admin, nil)
+	var consent struct {
+		URL string `json:"url"`
+	}
+	decode(t, response, &consent)
+	location := desk.finish(t, consent.URL, "billing@own-address.example.com", sessionCookieOf(desk.admin))
+	if location != "/settings/channels/"+billing+"?tab=replies&gmail_error=account_in_use&gmail_channel="+defaultID {
+		t.Fatalf("an account another channel sends through: Location = %s", location)
+	}
+	for _, token := range desk.fake.RefreshTokens() {
+		if desk.fake.Revoked(token) && desk.fake.AccountOf(token) == "billing@own-address.example.com" {
+			t.Fatal("refusing the account revoked it while another channel holds it")
+		}
+	}
 }

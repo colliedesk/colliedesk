@@ -1,7 +1,10 @@
+import { channelUI } from '../../channels/registry';
+
 // Wording of the Filter menu, the filter chips and the saved views menu. It loads with those lazy parts
 // of the inbox, not with the first screen; the words the first screen shows stay in src/messages.ts.
 export const filterMessages = {
-  channels: { email: 'Email', web_form: 'Web form', imported: 'Imported', agent: 'Started by the team', problem_report: 'Problem report' },
+  // How a conversation started without a channel; a channel type's label is its registry entry's (channelLabel).
+  origins: { imported: 'Imported', agent: 'Started by the team', problem_report: 'Problem report' } as Record<string, string>,
   sorts: { updated_desc: 'Latest activity', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first', priority: 'Priority, urgent first', waiting_longest: 'Waiting longest' },
   priority: 'Priority',
   assignee: 'Assignee',
@@ -13,6 +16,10 @@ export const filterMessages = {
   awaitingAny: 'Anyone',
   awaitingOptions: { team: 'Waiting on us', customer: 'Waiting on the customer' },
   channel: 'Channel',
+  // A type with two or more channels lists them, so one mailbox or form can be chosen.
+  channelsOf: (type: string) => `${type} channels`,
+  removedChannel: (name: string) => `${name} (removed)`,
+  unknownChannel: 'A channel',
   source: 'Source',
   sourceAny: 'Any',
   sources: { imported: 'Imported', native: 'Created in Colliedesk' },
@@ -77,3 +84,6 @@ export const savedViewMessages = {
   purges: (when: string) => `Gone for good ${when}`,
   failed: 'The view could not be saved. Check the name and try again.',
 } as const;
+
+// channelLabel names how a conversation started: the channel type's label, or the origin's.
+export const channelLabel = (value: string): string => channelUI(value)?.label ?? filterMessages.origins[value] ?? value;

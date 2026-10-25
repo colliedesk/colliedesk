@@ -131,6 +131,21 @@ var routeTiers = map[string]string{
 	"POST /api/v1/export/link":                                         "approval",
 	"GET /api/v1/channels/web-form":                                    "read",
 	"PUT /api/v1/channels/web-form":                                    "admin",
+	"GET /api/v1/channels":                                             "read",
+	"POST /api/v1/channels":                                            "admin",
+	"GET /api/v1/channels/events":                                      "read",
+	"GET /api/v1/channels/{id}":                                        "read",
+	"PATCH /api/v1/channels/{id}":                                      "admin",
+	"DELETE /api/v1/channels/{id}":                                     "approval",
+	"PUT /api/v1/channels/{id}/credentials":                            "admin",
+	"POST /api/v1/channels/{id}/check":                                 "admin",
+	"POST /api/v1/channels/{id}/held/replay":                           "admin",
+	"POST /api/v1/channels/{id}/held/discard":                          "approval",
+	"GET /api/v1/channels/{id}/email":                                  "read",
+	"POST /api/v1/channels/{id}/email/domain-verification":             "admin",
+	"POST /api/v1/channels/{id}/email/secret":                          "approval",
+	"POST /api/v1/channels/{id}/email/gmail":                           "approval",
+	"DELETE /api/v1/channels/{id}/email/gmail":                         "approval",
 	"GET /api/v1/agent-requests":                                       "read",
 	"GET /api/v1/agent-requests/{id}":                                  "read",
 	"POST /api/v1/agent-requests/{id}/cancel":                          "read",
@@ -176,7 +191,8 @@ var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PU
 
 // credentialRouteKeys carry another service's API key; a lower tier is refused, not filed.
 var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true,
-	"POST /api/v1/ai/providers": true, "POST /api/v1/ai/models": true, "PUT /api/v1/ai/providers/{id}/key": true}
+	"POST /api/v1/ai/providers": true, "POST /api/v1/ai/models": true, "PUT /api/v1/ai/providers/{id}/key": true,
+	"PUT /api/v1/channels/{id}/credentials": true}
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)

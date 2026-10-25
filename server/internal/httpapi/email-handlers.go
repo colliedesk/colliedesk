@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -57,8 +58,18 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, 
 	if settings.FromPolicy == "" {
 		settings.FromPolicy = email.FromPolicyVerified
 	}
-	if address := email.HostedAddress(workspaceSlug, config.HostedMailDomain); address != "" {
+	// The first channel forwards to support@; a channel added beside it has an address of its own.
+	local := "support"
+	if channel != nil {
+		local = channel.HostedLocal
+	}
+	if address := email.HostedLocalAddress(local, workspaceSlug, config.HostedMailDomain); address != "" {
 		settings.HostedAddress = &address
+	}
+	if channel != nil && settings.Gmail.Connection != nil {
+		// A connection made before Gmail had to be the channel's own address keeps sending; it is flagged.
+		matches := email.SameMailbox(settings.Gmail.Connection.Address, channel.SupportAddress)
+		settings.Gmail.AddressMatches = &matches
 	}
 	if channel != nil && mailbox != nil {
 		// Gmail sends by itself, and a broken connection never hands replies to SMTP.
@@ -89,12 +100,44 @@ func (a *API) writeEmailSettings(response http.ResponseWriter, request *http.Req
 		writeInternalError(response, err)
 		return
 	}
-	mailbox, err := a.store.GetMailboxConnection(request.Context(), workspace.ID)
-	if err != nil {
-		writeInternalError(response, err)
-		return
+	var mailbox *domain.MailboxConnection
+	if channel != nil {
+		if mailbox, err = a.store.GetMailboxConnection(request.Context(), workspace.ID, channel.ChannelID); err != nil {
+			writeInternalError(response, err)
+			return
+		}
 	}
 	writeJSON(response, http.StatusOK, a.emailSettings(workspace.Slug, channel, pause, mailbox))
+}
+
+// requestedEmailChannel reads the email channel a route acts on: the one its id names, or the default
+// one on the routes without an id, which a workspace without email answers with nil. An id that names
+// no email channel of the workspace is answered 404 here, and ok is false.
+func (a *API) requestedEmailChannel(response http.ResponseWriter, request *http.Request) (*domain.EmailChannel, bool) {
+	workspaceID := principal(request).Workspace.ID
+	id := request.PathValue("id")
+	if id == "" {
+		channel, err := a.store.GetEmailChannel(request.Context(), workspaceID)
+		if err != nil {
+			writeInternalError(response, err)
+			return nil, false
+		}
+		return channel, true
+	}
+	var channel *domain.EmailChannel
+	var err error
+	if uuidShape.MatchString(id) {
+		channel, err = a.store.GetEmailChannelByID(request.Context(), workspaceID, id)
+	}
+	if err != nil {
+		writeInternalError(response, err)
+		return nil, false
+	}
+	if channel == nil {
+		writeError(response, http.StatusNotFound, "channel_not_found", "No email channel of this workspace has that id.")
+		return nil, false
+	}
+	return channel, true
 }
 
 // tokenDomainChecksPerHour bounds the DNS lookups agent tokens can trigger for one workspace; a person
@@ -113,7 +156,15 @@ func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Requ
 		a.verifyProviderDomain(response, request)
 		return
 	}
-	channel, err := a.store.VerifyEmailDomain(request.Context(), principal(request).Workspace.ID, a.config.LookupTXT, time.Now().UTC())
+	target, ok := a.requestedEmailChannel(response, request)
+	if !ok {
+		return
+	}
+	if target == nil {
+		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
+		return
+	}
+	channel, err := a.store.VerifyEmailDomain(request.Context(), principal(request).Workspace.ID, target.ChannelID, a.config.LookupTXT, time.Now().UTC())
 	if errors.Is(err, store.ErrDomainRecordMissing) {
 		writeError(response, http.StatusConflict, "dns_record_not_found",
 			"Add a TXT record named "+channel.DNSRecordName+" with the value "+channel.DNSRecordValue+", then try again. DNS changes can take a few minutes.")
@@ -126,8 +177,12 @@ func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Requ
 	a.writeEmailSettings(response, request, &channel)
 }
 
-// writeEmailStoreError reports a missing resource as 404 and anything else as a server failure.
+// writeEmailStoreError reports a value another channel has as 409, a missing resource as 404 and
+// anything else as a server failure.
 func writeEmailStoreError(response http.ResponseWriter, err error) {
+	if writeChannelConflict(response, err) {
+		return
+	}
 	if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "not found") {
 		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
 		return
@@ -136,9 +191,8 @@ func writeEmailStoreError(response http.ResponseWriter, err error) {
 }
 
 func (a *API) getEmailChannel(response http.ResponseWriter, request *http.Request) {
-	channel, err := a.store.GetEmailChannel(request.Context(), principal(request).Workspace.ID)
-	if err != nil {
-		writeInternalError(response, err)
+	channel, ok := a.requestedEmailChannel(response, request)
+	if !ok {
 		return
 	}
 	a.writeEmailSettings(response, request, channel)
@@ -166,7 +220,7 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 	if input.SupportAddress == nil {
 		// Only the name changes: the address, its verification and the provider domain stay, whatever
 		// address a stale page or a mistaken caller would have sent along.
-		channel, err := a.store.SetEmailSenderName(request.Context(), workspaceID, *senderName)
+		channel, err := a.store.SetEmailSenderNameAs(request.Context(), workspaceID, *senderName, channelActor(request))
 		if errors.Is(err, store.ErrEmailChannelMissing) {
 			writeError(response, http.StatusBadRequest, "invalid_request", supportAddressRequired)
 			return
@@ -187,7 +241,7 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 		writeInternalError(response, err)
 		return
 	}
-	channel, err := a.store.UpsertEmailChannel(request.Context(), workspaceID, *input.SupportAddress, senderName)
+	channel, err := a.store.UpsertEmailChannelAs(request.Context(), workspaceID, *input.SupportAddress, senderName, channelActor(request))
 	if err != nil {
 		writeEmailStoreError(response, err)
 		return
@@ -234,14 +288,28 @@ func plainAddress(value string) bool {
 
 func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Request) {
 	workspaceID := principal(request).Workspace.ID
+	channel, err := a.store.GetEmailChannel(request.Context(), workspaceID)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	if channel == nil {
+		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
+		return
+	}
 	// Removing the channel removes its Gmail connection with it; the grant is read first so it can be
 	// revoked at Google afterwards.
-	grant, err := a.store.MailboxGrant(request.Context(), workspaceID)
+	grant, err := a.store.MailboxGrant(request.Context(), workspaceID, channel.ChannelID)
 	if err != nil {
 		writeInternalError(response, err)
 		return
 	}
 	deleted, err := a.store.DeleteEmailChannel(request.Context(), workspaceID)
+	var held *channels.HeldError
+	if errors.As(err, &held) {
+		writeHeld(response, held)
+		return
+	}
 	if err != nil {
 		writeInternalError(response, err)
 		return
@@ -250,12 +318,20 @@ func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Req
 		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
 		return
 	}
-	a.revokeSealed(grant, workspaceID)
+	a.revokeSealed(grant, workspaceID, channel.ChannelID)
 	response.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) rotateEmailSecret(response http.ResponseWriter, request *http.Request) {
-	secret, err := a.store.RotateEmailSecret(request.Context(), principal(request).Workspace.ID, time.Now().UTC())
+	channel, ok := a.requestedEmailChannel(response, request)
+	if !ok {
+		return
+	}
+	if channel == nil {
+		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
+		return
+	}
+	secret, err := a.store.RotateEmailSecretAs(request.Context(), principal(request).Workspace.ID, channel.ChannelID, time.Now().UTC(), channelActor(request))
 	if err != nil {
 		writeEmailStoreError(response, err)
 		return

@@ -1,13 +1,14 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { api, InvalidRequestError } from '../../api/client';
+import { api, ConflictError, InvalidRequestError } from '../../api/client';
+import { channelsApi } from '../../api/channels';
 import { contactApi, existingContact } from '../contacts/contact-api';
 import type { ConversationContact, FirstReply } from '../contacts/contact-api';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import type { Contact } from '../../api/schemas';
 import { messages } from '../../messages';
-import { contactMessages } from '../contacts/contact-messages';
+import { contactAddress, contactMessages } from '../contacts/contact-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
 import { RouterLink } from '../../ui/router-link';
 import { ContactPicker } from '../contacts/contact-picker';
@@ -26,15 +27,24 @@ export function StartConversationWindow({ onClose, onStarted }: { onClose: () =>
   const client = useQueryClient();
   const navigate = useNavigate();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const channel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  // The email channels a conversation can start from; the type's default is chosen until the person picks another.
+  const list = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list });
+  const senders: SendingChannel[] = (list.data?.items ?? []).filter((item) => item.type === 'email' && !item.deleted_at)
+    .map((item) => ({ id: item.id, name: item.name, off: !item.enabled }));
+  const [chosen, setChosen] = useState<string>();
+  const channelID = chosen ?? list.data?.types.find((info) => info.type === 'email')?.default_channel_id ?? undefined;
+  const channel = useQuery({ queryKey: ['email-channel', channelID], queryFn: () => channelsApi.email(channelID ?? ''), enabled: Boolean(channelID) });
   const limits = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data?.limits;
-  const outbound = channel.data;
   // On the trial a new conversation reaches a customer who never wrote, which only a verified sending
   // domain or a plan allows; the server stays the judge, this only says so before anything is typed.
-  const blocked: NewConversationBlock = outbound && !outbound.channel ? 'no_channel'
-    : me.data?.plan?.plan === 'trial' && !outbound?.channel?.domain_verified_at ? 'trial' : undefined;
+  const blocked: NewConversationBlock = list.data && !channelID ? 'no_channel'
+    : me.data?.plan?.plan === 'trial' && channel.data && !channel.data.channel?.domain_verified_at ? 'trial' : undefined;
   const start = async (contact: ConversationContact, subject: string, reply: FirstReply) => {
-    const created = await contactApi.startConversation(contact, subject, reply);
+    // A channel removed or turned off while the window was open is shown as it is now.
+    const created = await contactApi.startConversation(contact, subject, { ...reply, channelID }).catch((error: unknown) => {
+      if (channelRefusal(error)) void client.invalidateQueries({ queryKey: ['channels'] });
+      throw error;
+    });
     client.setQueryData(['conversations', 'one', created.id], created);
     void client.invalidateQueries({ queryKey: ['conversations'] });
     void client.invalidateQueries({ queryKey: ['contact', created.contact_id] });
@@ -43,13 +53,29 @@ export function StartConversationWindow({ onClose, onStarted }: { onClose: () =>
     onStarted(created.id);
     void navigate({ to: '/conversations/$conversationId', params: { conversationId: created.id } });
   };
-  return <NewConversationDialog blocked={blocked} checking={me.isPending || channel.isPending} onClose={onClose} onStart={start}
+  const settingsHref = channelID ? `/settings/channels/${encodeURIComponent(channelID)}?tab=replies` : '/settings/channels/type/email?tab=replies';
+  return <NewConversationDialog blocked={blocked} checking={me.isPending || list.isPending || (Boolean(channelID) && channel.isPending)} onClose={onClose} onStart={start}
+    senders={senders} channelID={channelID} onChooseChannel={setChosen} settingsHref={settingsHref}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    onOpenSettings={() => void navigate({ to: '/settings' })} onChoosePlan={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />;
+    onOpenSettings={() => void navigate({ href: settingsHref })} onChoosePlan={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />;
+}
+
+// An email channel a conversation can start from; one that is off is listed but cannot be chosen.
+export interface SendingChannel { id: string; name: string; off: boolean }
+
+// channelRefusal is the server refusing the chosen channel: removed (404) or turned off (409 channel_off).
+function channelRefusal(error: unknown): boolean {
+  return (error instanceof ConflictError && error.detail?.code === 'channel_off') || (error instanceof Error && error.message === 'API 404');
 }
 
 export interface NewConversationDialogProps {
   blocked?: NewConversationBlock;
+  // The email channels of the workspace and the one sending; the choice is offered when there are two or more.
+  senders?: SendingChannel[];
+  channelID?: string;
+  onChooseChannel?: (id: string) => void;
+  // Where the blocked notice leads: the sending channel's settings.
+  settingsHref?: string;
   // The plan or the email channel is still loading, so whether the email may be sent is not known yet.
   checking?: boolean;
   attachmentLimits?: AttachmentLimits;
@@ -75,7 +101,8 @@ function startRefusalText(error: unknown): string {
 
 // NewConversationDialog starts a conversation by email: the customer (found or added), a subject, the
 // message, Cc and files. Nothing typed is lost when the server refuses.
-export function NewConversationDialog({ blocked, checking = false, attachmentLimits, onStart, onOpenSettings, onChoosePlan, onClose }: NewConversationDialogProps) {
+export function NewConversationDialog({ blocked, checking = false, senders = [], channelID, onChooseChannel, settingsHref = '/settings/channels/type/email?tab=replies',
+  attachmentLimits, onStart, onOpenSettings, onChoosePlan, onClose }: NewConversationDialogProps) {
   useReturnFocus('[data-opens="new-conversation"]');
   const [contact, setContact] = useState<Contact>();
   const [adding, setAdding] = useState(false);
@@ -88,6 +115,8 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [problem, setProblem] = useState<string>();
+  // The server refused the chosen channel; said at the choice, with the text kept.
+  const [channelProblem, setChannelProblem] = useState<string>();
   // An address that is already a customer: the contact to use instead.
   const [existing, setExisting] = useState<Contact>();
   const root = useRef<HTMLDivElement>(null);
@@ -99,6 +128,8 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
   const subjectId = useId();
   const bodyId = useId();
   const missingId = useId();
+  const fromId = useId();
+  const fromProblemId = useId();
   const fileProblem = attachmentProblem(files, attachmentLimits);
   const emailInvalid = email.trim() !== '' && !plainAddress.test(email.trim());
   const newContactValid = name.trim() !== '' && plainAddress.test(email.trim());
@@ -110,6 +141,19 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
   ];
   // Nothing is written until the window knows the email may be sent, so no text is typed for nothing.
   const closed = Boolean(blocked) || checking;
+  // The window holds the focus while nothing can be written (so Escape reaches it), then gives it to the
+  // first field, unless the person already moved it.
+  useEffect(() => {
+    const dialog = root.current;
+    if (!dialog) return;
+    if (closed) {
+      if (!dialog.contains(document.activeElement)) dialog.focus();
+      return;
+    }
+    if (document.activeElement === dialog || !dialog.contains(document.activeElement)) {
+      dialog.querySelector<HTMLElement>('.new-conversation-fields input:not([disabled])')?.focus();
+    }
+  }, [closed]);
   const ready = !closed && missing.length === 0 && !fileProblem && !ccBlocking;
   // Escape closes only an empty window; once something is written, only Cancel throws it away.
   const written = [subject, body, name, email].some((text) => text.trim() !== '') || cc.length > 0 || files.length > 0;
@@ -126,6 +170,7 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
     if (!ready || sending) return;
     setSending(true);
     setProblem(undefined);
+    setChannelProblem(undefined);
     setExisting(undefined);
     try {
       const to: ConversationContact = contact ? contact.id : { name: name.trim(), email: email.trim() };
@@ -134,6 +179,7 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
     } catch (error) {
       const known = existingContact(error);
       if (known) setExisting(known);
+      else if (channelRefusal(error) && senders.length > 1) setChannelProblem(error instanceof ConflictError ? error.message : contactMessages.newConversationChannelGone);
       else setProblem(startRefusalText(error));
     } finally {
       setSending(false);
@@ -141,20 +187,29 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
   };
   return (
     <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>
-      <div className="dialog new-conversation" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={dialogKeys(root, closeUnlessWritten)}>
+      <div className="dialog new-conversation" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} tabIndex={-1} onKeyDown={dialogKeys(root, closeUnlessWritten)}>
         <h2 id={titleId}>{contactMessages.newConversationTitle}</h2>
         {blocked && <p role="status" className="composer-notice">
           {blocked === 'trial' ? contactMessages.newConversationTrial : contactMessages.newConversationNeedsChannel}{' '}
-          <RouterLink href="/settings" onFollow={onOpenSettings && (() => { onClose(); onOpenSettings(); })}>
+          <RouterLink href={settingsHref} onFollow={onOpenSettings && (() => { onClose(); onOpenSettings(); })}>
             {blocked === 'trial' ? contactMessages.verifySendingDomain : contactMessages.connectEmailChannel}</RouterLink>
           {blocked === 'trial' && <>{' · '}<RouterLink href="/settings/billing" onFollow={onChoosePlan && (() => { onClose(); onChoosePlan(); })}>{messages.choosePlan}</RouterLink></>}
         </p>}
         <form className="new-conversation-form" onSubmit={(event) => { event.preventDefault(); void send(); }}>
           {/* Nothing can be sent while the workspace is blocked, so nothing can be written either. */}
+          {senders.length > 1 && <div className="new-conversation-from">
+            <label htmlFor={fromId}>{contactMessages.newConversationFrom}</label>
+            <select id={fromId} value={channelID ?? ''} disabled={sending} aria-invalid={channelProblem ? true : undefined} aria-describedby={channelProblem ? fromProblemId : undefined}
+              onChange={(event) => { setChannelProblem(undefined); onChooseChannel?.(event.target.value); }}>
+              {senders.map((sender) => <option key={sender.id} value={sender.id} disabled={sender.off}>{sender.off ? contactMessages.newConversationFromOff(sender.name) : sender.name}</option>)}
+            </select>
+            {channelProblem && <p id={fromProblemId} role="alert" className="error-copy">{channelProblem}</p>}
+          </div>}
           <fieldset className="new-conversation-fields" disabled={closed}>
             {contact && <div className="new-conversation-to">
               <span className="field-label">{contactMessages.newConversationTo}</span>
-              <span>{contactMessages.newConversationPick(contact.name, contact.email)}</span>
+              <span>{contactMessages.newConversationPick(contact.name, contactAddress(contact))}</span>
+              {!contact.email && <span className="muted-copy">{contactMessages.noEmailReplies}</span>}
               <button type="button" disabled={sending} onClick={() => setContact(undefined)}>{contactMessages.newConversationChange}</button>
             </div>}
             {!contact && !adding && <>
@@ -170,7 +225,7 @@ export function NewConversationDialog({ blocked, checking = false, attachmentLim
                 aria-describedby={emailInvalid || existing ? emailHintId : undefined} onChange={(event) => { setEmail(event.target.value); setExisting(undefined); }} />
               {emailInvalid && <p id={emailHintId} className="error-copy">{contactMessages.newConversationContactInvalid}</p>}
               {existing && <div id={emailHintId} className="new-conversation-existing" role="alert">
-                <p className="error-copy">{contactMessages.newConversationExists(existing.name, existing.email)}</p>
+                <p className="error-copy">{contactMessages.newConversationExists(existing.name, contactAddress(existing))}</p>
                 <button type="button" onClick={() => pick(existing)}>{contactMessages.newConversationUse(existing.name)}</button>
               </div>}
               <div className="button-row"><button type="button" onClick={() => { setAdding(false); setExisting(undefined); }}>{contactMessages.newConversationBackToSearch}</button></div>

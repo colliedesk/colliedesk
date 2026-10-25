@@ -236,7 +236,7 @@ func TestOneReportPerDayAndTheInstallIDStays(t *testing.T) {
 	}
 
 	execSQL(t, db, `UPDATE instance SET last_reported_at = now() - interval '24 hours'`)
-	execSQL(t, db, `UPDATE web_form_channels SET enabled = true`)
+	execSQL(t, db, `UPDATE channels SET enabled = true, disabled_at = NULL WHERE type = 'web_form'`)
 	if err := telemetry.New(db, config, server.Client()).SendOnce(ctx); err != nil {
 		t.Fatalf("next-day SendOnce: %v", err)
 	}
@@ -425,8 +425,11 @@ func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	exec(`INSERT INTO workspace_billing(workspace_id,plan,polar_subscription_id,polar_customer_id,status,current_period_end,source_modified_at)
 		VALUES($1,'team','sub_beta','cus_beta','active',now() + interval '20 days',now())`, b.ID)
 
-	exec(`INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name) VALUES($1,'support@beta.example','token','Beta')`, b.ID)
-	exec(`INSERT INTO web_form_channels(workspace_id,enabled) VALUES($1,false)`, a.ID)
+	exec(`WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'email','Email',true) RETURNING id),
+		d AS (INSERT INTO email_domains(workspace_id,domain,verification_token) VALUES($1,'beta.example','token') RETURNING 1)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT $1,c.id,'support@beta.example','Beta','support' FROM c,d`, b.ID)
+	exec(`WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default,enabled,disabled_at) VALUES($1,'web_form','Web form',true,false,now()) RETURNING id)
+		INSERT INTO web_form_channels(workspace_id,channel_id,legacy_slug) SELECT $1,id,true FROM c`, a.ID)
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
 	// Acme's first import report was ready 1 hour 30 minutes 20 seconds after sign-up; a later import
 	// does not move it. A preview, a failed import, an import still running, a report being retried
@@ -484,7 +487,7 @@ func (c *capture) bodyAt(t *testing.T, path string) []byte {
 func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 	db := newDB(t)
 	acme, beta := fixture(t, db)
-	execSQL(t, db, `UPDATE web_form_channels SET enabled = true WHERE workspace_id = $1`, acme)
+	execSQL(t, db, `UPDATE channels SET enabled = true, disabled_at = NULL WHERE type = 'web_form' AND workspace_id = $1`, acme)
 	// Gamma signed up and has imported nothing yet.
 	gamma, _, err := auth.NewWithDB(db, "https://help.acme.com").CreateWorkspace(context.Background(), "Gamma Desk", "owner-g@example.com")
 	if err != nil {

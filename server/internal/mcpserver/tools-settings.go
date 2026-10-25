@@ -41,6 +41,7 @@ type restSession struct {
 
 type restEmailSettings struct {
 	Channel *struct {
+		ChannelID        string     `json:"channel_id"`
 		SupportAddress   string     `json:"support_address"`
 		SenderName       string     `json:"sender_name"`
 		SecretSet        bool       `json:"secret_set"`
@@ -290,15 +291,26 @@ func emailChannelView(settings restEmailSettings) map[string]any {
 	}
 	view["gmail"] = gmail
 	if channel := settings.Channel; channel != nil {
-		view["support_address"], view["sender_name"], view["inbound_secret_set"], view["domain"] = channel.SupportAddress, channel.SenderName, channel.SecretSet, channel.Domain
+		view["channel_id"], view["support_address"], view["sender_name"] = channel.ChannelID, channel.SupportAddress, channel.SenderName
+		view["inbound_secret_set"], view["domain"] = channel.SecretSet, channel.Domain
 		view["domain_verified"], view["dns_record_name"], view["dns_record_value"] = channel.DomainVerifiedAt != nil, channel.DNSRecordName, channel.DNSRecordValue
 	}
 	return view
 }
 
-func emailChannelGet(c *call, _ map[string]any) (any, error) {
+// emailChannelPath is the path of an email channel route: of the channel_id given, else of the default channel.
+func emailChannelPath(c *call, arguments map[string]any, suffix string) string {
+	id, _ := arguments["channel_id"].(string)
+	if id == "" {
+		return "/api/v1/channels/email" + suffix
+	}
+	c.notFound = "No email channel " + id + " in this workspace. List them with colliedesk_channels_list."
+	return "/api/v1/channels/" + url.PathEscape(id) + "/email" + suffix
+}
+
+func emailChannelGet(c *call, arguments map[string]any) (any, error) {
 	var settings restEmailSettings
-	if err := c.get("/api/v1/channels/email", nil, &settings); err != nil {
+	if err := c.get(emailChannelPath(c, arguments, ""), nil, &settings); err != nil {
 		return nil, err
 	}
 	return map[string]any{"email_channel": emailChannelView(settings)}, nil
@@ -312,10 +324,10 @@ func emailChannelUpdate(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"email_channel": emailChannelView(settings)}, nil
 }
 
-func emailDomainVerify(c *call, _ map[string]any) (any, error) {
+func emailDomainVerify(c *call, arguments map[string]any) (any, error) {
 	c.notFound = "The email channel is not connected. Connect it first with colliedesk_email_channel_update."
 	var settings restEmailSettings
-	if err := c.send(http.MethodPost, "/api/v1/channels/email/domain-verification", nil, &settings); err != nil {
+	if err := c.send(http.MethodPost, emailChannelPath(c, arguments, "/domain-verification"), nil, &settings); err != nil {
 		return nil, err
 	}
 	return map[string]any{"email_channel": emailChannelView(settings)}, nil

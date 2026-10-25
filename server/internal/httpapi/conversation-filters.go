@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -21,7 +22,6 @@ var conversationFilterKeys = []string{"status", "priority", "assignee", "tag", "
 var (
 	conversationStatuses   = []string{"open", "pending", "resolved", "closed"}
 	conversationPriorities = []string{"low", "normal", "high", "urgent"}
-	conversationChannels   = []string{"email", "web_form", "imported", "agent", "problem_report"}
 	conversationSorts      = []string{store.ConversationSortUpdatedDesc, store.ConversationSortUpdatedAsc, store.ConversationSortCreatedDesc,
 		store.ConversationSortCreatedAsc, store.ConversationSortPriority, store.ConversationSortWaitingLongest}
 )
@@ -38,9 +38,21 @@ func (e errConversationFilter) Error() string { return e.message }
 
 func filterError(message string) error { return errConversationFilter{message} }
 
-// conversationFilterFromQuery reads the filters of GET /conversations. A value the server does not
-// know is an error, so a typo never looks like an empty inbox.
-func conversationFilterFromQuery(query url.Values) (store.ConversationFilter, error) {
+// conversationChannels are the values of a conversation's channel: every channel type this server
+// runs, then the origins that come through no channel.
+func (a *API) conversationChannels() []string {
+	var values []string
+	if registry := a.store.Channels(); registry != nil {
+		for _, kind := range registry.Types() {
+			values = append(values, string(kind))
+		}
+	}
+	return append(values, domain.ConversationOrigins...)
+}
+
+// conversationFilterFromQuery reads the filters of GET /conversations, with channel one of channels.
+// A value the server does not know is an error, so a typo never looks like an empty inbox.
+func conversationFilterFromQuery(query url.Values, channels []string) (store.ConversationFilter, error) {
 	var filter store.ConversationFilter
 	var err error
 	list := func(key string, allowed []string) []string {
@@ -54,7 +66,7 @@ func conversationFilterFromQuery(query url.Values) (store.ConversationFilter, er
 	}
 	filter.Statuses = list("status", conversationStatuses)
 	filter.Priorities = list("priority", conversationPriorities)
-	filter.Channels = list("channel", conversationChannels)
+	filter.Channels = list("channel", channels)
 	if err == nil && query.Get("assignee") != "" {
 		filter.Assignees, err = commaList("assignee", strings.ToLower(query.Get("assignee")), func(value string) bool {
 			return value == "me" || value == "unassigned" || value == "anyone" || contactIDPattern.MatchString(value)
@@ -62,6 +74,9 @@ func conversationFilterFromQuery(query url.Values) (store.ConversationFilter, er
 	}
 	if err == nil && query.Get("tag") != "" {
 		filter.TagIDs, err = commaList("tag", strings.ToLower(query.Get("tag")), contactIDPattern.MatchString)
+	}
+	if err == nil && query.Get("channel_id") != "" {
+		filter.ChannelIDs, err = commaList("channel_id", strings.ToLower(query.Get("channel_id")), contactIDPattern.MatchString)
 	}
 	if err != nil {
 		return filter, err

@@ -1,0 +1,56 @@
+/* Controls the settings pages share: tabs, switches, notices, form dialogs and their fields. Loaded with
+   the page chunks that use them; scrollbars follow base.css. */
+
+/* Tabs: a segmented track, the open tab raised on it; on a narrow screen it scrolls sideways with no bar. */
+.seg-tabs { display: inline-flex; flex: 0 1 auto; min-width: 0; gap: 2px; overflow-x: auto; scrollbar-width: none;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: 3px; }
+.seg-tabs::-webkit-scrollbar { display: none; }
+.seg-tabs button { --control: 30px; display: inline-flex; align-items: center; gap: 6px; min-height: 30px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; box-shadow: none; padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); font-weight: 500; white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease; }
+.seg-tabs button:hover:not(:disabled) { background: color-mix(in srgb, var(--text-1) 5%, transparent); box-shadow: none; color: var(--text-1); }
+.seg-tabs button[aria-selected="true"], .seg-tabs button[aria-selected="true"]:hover { background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
+.seg-tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+@media (pointer: coarse) { .seg-tabs button { --control: var(--touch); min-height: var(--touch); } }
+@media (prefers-reduced-motion: reduce) { .seg-tabs button { transition: none; } }
+@media (forced-colors: active) { .seg-tabs button[aria-selected="true"] { outline: 2px solid Highlight; } }
+@media (max-width: 30rem) { .seg-tabs button { padding: 0 var(--space-2); } }
+.seg-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 999px; background: color-mix(in srgb, var(--text-1) 8%, transparent);
+  padding: 0 5px; color: var(--text-2); font-size: var(--fs-label); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+button[aria-selected="true"] > .seg-count { background: var(--text-1); color: var(--surface-1); }
+
+/* Notices */
+.notice { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; border: 1px solid var(--note-line); border-radius: var(--radius-lg);
+  background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.notice > svg { flex: none; }
+.notice > span { flex: 1 1 20rem; min-width: 0; }
+.notice strong { font-weight: 600; }
+.notice-plain { border-color: var(--line); background: var(--surface-0); color: var(--text-2); }
+.notice-danger { border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: var(--danger-soft); color: var(--danger); }
+.notice-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-left: auto; }
+
+/* An on/off switch: a checkbox with role switch. */
+.switch { justify-self: end; display: inline-flex; align-items: center; min-height: var(--touch); cursor: pointer; }
+.switch input { appearance: none; position: relative; width: 34px; height: 20px; min-height: 0; margin: 0; border: 0; border-radius: var(--radius-full);
+  background: var(--line-control); cursor: pointer; transition: background-color var(--dur) var(--ease); }
+.switch input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: var(--radius-full);
+  background: var(--surface-1); box-shadow: var(--shadow-1); transition: translate var(--dur) var(--ease); }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { translate: 14px 0; }
+.switch input:disabled { opacity: 0.5; cursor: not-allowed; }
+.switch input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition: none; } }
+
+/* Form dialogs: the footer stays in view, the fields scroll. */
+.form-dialog { display: flex; flex-direction: column; width: min(34rem, 100%); max-height: calc(100dvh - 24px); overflow: hidden; }
+.form-dialog > header, .form-dialog > footer { flex: none; }
+.form-dialog-body { min-height: 0; overflow-y: auto; margin: 0 calc(-1 * var(--space-1)); padding: 0 var(--space-1); display: grid; gap: var(--space-3); }
+.form-dialog > header { display: flex; gap: var(--space-3); align-items: flex-start; }
+.form-dialog > header > div { flex: 1; display: grid; gap: var(--space-1); }
+.form-dialog > header p { color: var(--text-3); font-size: var(--fs-small); }
+.form-dialog-body p { color: var(--text-2); font-size: var(--fs-small); }
+.form-dialog .field input { width: 100%; }
+.form-dialog-footer { align-items: center; justify-content: flex-end; }
+.field-note { font-size: var(--fs-label); }
+.field .field-note.error-copy { color: var(--danger); }
+.field-bad input { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }

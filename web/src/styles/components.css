@@ -128,6 +128,7 @@
 .priority-high { background: var(--warn-soft); color: var(--warn); }
 .priority-urgent { background: var(--danger-soft); color: var(--danger); }
 .tag-pill { color: var(--text-3); font-size: var(--fs-label); }
+.channel-pill { max-width: 12rem; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 6px; color: var(--text-2); font-size: var(--fs-label); line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .tag-pill::before { content: "#"; opacity: 0.7; }
 
 /* Thread. */
@@ -325,6 +326,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .saved-reply-diff del::before { content: "− "; color: var(--danger); }
 .saved-reply-diff ins::before { content: "+ "; color: var(--ok); }
 .composer-notice { margin: 0 var(--space-6) var(--space-2); justify-self: center; width: min(100% - 3rem, 46rem); border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); }
+.composer-from { position: relative; z-index: 1; margin: 0; padding: var(--space-1) var(--space-6); justify-self: stretch; background: var(--surface-1); text-align: center; color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
 
 .list-notice { display: grid; gap: var(--space-2); margin: var(--space-2) var(--space-3); border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); }
 .list-notice p { margin: 0; }
@@ -367,6 +369,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .timeline-header > .thread-back + div { flex-basis: 100%; }
   .composer { padding-inline: var(--space-3); }
   .composer-notice { width: auto; margin-inline: var(--space-3); }
+  .composer-from { padding-inline: var(--space-3); }
   .saved-reply-button kbd { display: none; }
   .saved-reply-picker li { align-content: center; min-height: var(--touch); }
   .status-tabs label { min-height: var(--touch); }
@@ -712,6 +715,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .new-conversation-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 .new-conversation-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; margin: 0; border: 0; padding: 0; }
 .new-conversation-fields:disabled { opacity: 0.6; }
+.dialog.new-conversation:focus-visible { outline: none; }
+.new-conversation-from { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+.new-conversation-from select { min-height: var(--touch); max-width: 100%; }
 .new-conversation-existing { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .contact-history h2:focus { outline: none; }
 .contact-history h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -789,9 +795,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Help under the import's fields and counts stays readable: at least the label size. */
 .import-page small { font-size: var(--fs-label); }
 /* A link that leads on (Open the inbox) looks like the button next to it. */
-.import-page a.button, .agent-tokens a.button, .results-page a.button, .empty-copy a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+.import-page a.button, .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
-@media (pointer: coarse) { .agent-tokens a.button, .results-page a.button, .empty-copy a.button { min-height: var(--touch); } }
+@media (pointer: coarse) { .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button { min-height: var(--touch); } }
 .empty-copy .button-row { justify-content: center; margin-top: var(--space-3); }
 .import-page a.button.primary-action, .agent-tokens a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
 /* On a phone the actions of the import stay at the bottom of the screen, whatever the table above

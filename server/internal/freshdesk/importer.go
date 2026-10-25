@@ -37,6 +37,8 @@ type run struct {
 	workspaceID  string
 	agents       map[int64]fdAgent
 	agentTargets map[int64]string
+	// emailConfigs are the account's mailboxes by id, read once when a ticket names one (nil before).
+	emailConfigs map[int64][]string
 	// deactivatedAgents are the Freshdesk agents matched to a deactivated Colliedesk agent.
 	deactivatedAgents map[int64]bool
 	companies         map[int64]string

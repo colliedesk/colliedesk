@@ -13,7 +13,7 @@ import (
 
 // writeConversation creates (or, for a ticket changed since the last run,
 // updates) the Colliedesk conversation with Freshdesk's own timestamps.
-func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID string, existing *string, archived bool) (string, error) {
+func (r *run) writeConversation(ctx context.Context, ticket fdTicket, mailboxes []string, contactID string, existing *string, archived bool) (string, error) {
 	key := strconv.FormatInt(ticket.ID, 10)
 	status, ok := mapStatus(ticket.Status)
 	if !ok {
@@ -50,13 +50,13 @@ func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID 
 			assignee_id=CASE WHEN $9 THEN assignee_id ELSE $6::uuid END,updated_at=$7,
 			origin=CASE WHEN origin ? 'stats' AND ($10 OR NOT $8::jsonb ? 'stats') THEN $8::jsonb || jsonb_build_object('stats',origin->'stats') ELSE $8::jsonb END
 			WHERE workspace_id=$1 AND id=$2 RETURNING id::text`, r.workspaceID, *existing,
-			subjectOrDefault(ticket.Subject), status, priority, assignee, ticket.UpdatedAt.UTC(), ticketOrigin(ticket), keepAssignee, r.statsFrozen).Scan(&id)
+			subjectOrDefault(ticket.Subject), status, priority, assignee, ticket.UpdatedAt.UTC(), ticketOrigin(ticket, mailboxes), keepAssignee, r.statsFrozen).Scan(&id)
 	}
 	if existing == nil || errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,status,priority,assignee_id,created_at,updated_at,origin,channel)
 			SELECT $1,c.id,$3,$4,$5,$6,$7,$8,$9,$10 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
 			r.workspaceID, contactID, subjectOrDefault(ticket.Subject), status, priority, assignee,
-			ticket.CreatedAt.UTC(), ticket.UpdatedAt.UTC(), ticketOrigin(ticket), domain.ChannelImported).Scan(&id)
+			ticket.CreatedAt.UTC(), ticket.UpdatedAt.UTC(), ticketOrigin(ticket, mailboxes), domain.ChannelImported).Scan(&id)
 		if err == nil {
 			err = r.ledger.mark(ctx, tx, ledgerMark{entity: entityTicket, sourceID: key, targetID: &id, status: ledgerFailed,
 				errText: "incomplete: the import stopped before this ticket finished", meta: &ticketMeta{Archived: archived}})

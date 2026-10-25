@@ -2,8 +2,8 @@ import { track } from '../../lib/product-analytics';
 import type { InboxFilterKind } from '../../lib/product-analytics';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 
-// The kind of filter a key belongs to: tag_match counts as tag, both ends of a range as one.
-const kindOf = (key: InboxQueryKey) => ({ tag_match: 'tag', has_pending_draft: 'draft', delivery_failed: 'delivery' } as Record<string, string>)[key]
+// The kind of filter a key belongs to: tag_match counts as tag, one channel as the channel, both ends of a range as one.
+const kindOf = (key: InboxQueryKey) => ({ tag_match: 'tag', channel_id: 'channel', has_pending_draft: 'draft', delivery_failed: 'delivery' } as Record<string, string>)[key]
   ?? key.replace(/_(after|before)$/, '');
 
 // trackFilterChanges reports each kind of filter that changed, never a value. Only the Filter, Sort and

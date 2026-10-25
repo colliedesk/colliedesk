@@ -60,6 +60,10 @@ conversations with any of them; each filter you add narrows the list further.
   **Started by the team** (created in Colliedesk by a teammate or an agent token) or **Problem report**.
   Conversations that existed before channels were recorded got theirs from their first message; one
   without a message from the customer first counts as started by the team.
+- **Email channels**, **Web form channels**: shown when the workspace has two or more channels of that
+  type. Each one lists the conversations that came through it or whose replies leave from it. The chip
+  names the channel, with "(removed)" for a channel that was removed. In an address it is
+  `?channel_id=<id>`, which **Settings → Channels** links use.
 - **Source**: **Imported** or **Created in Colliedesk**.
 - **Organization**: the exact organization name of the customer, in any case.
 - **Created** and **Last activity**: a range of days, picked in your timezone (see

@@ -177,10 +177,13 @@ jobs:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
       # The arguments of every shard's run, and of the check that the shards cover them.
       E2E_ARGS: --grep-invert @onboarding --fully-parallel --workers=3
+      # The channels journeys read the From line of a reply in Mailpit.
+      MAILPIT_SMTP_PORT: '1025'
+      MAILPIT_API_URL: http://127.0.0.1:8025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background
-        run: sh .github/scripts/ci-services.sh start postgres
+        run: sh .github/scripts/ci-services.sh start postgres mailpit
       # setup-go downloads its toolchain on every job (7 to 19 seconds, measured 2026-10-20) unless the
       # tool cache already holds it. Given the exact newest release, it never settles for an older
       # cached patch.
@@ -256,7 +259,7 @@ jobs:
       - name: Point the test servers at the restored Go cache
         run: for name in GOPATH GOMODCACHE GOCACHE; do echo "$name=$(go env "$name")"; done >> "$GITHUB_ENV"
       - name: Wait for test services
-        run: sh .github/scripts/ci-services.sh wait postgres
+        run: sh .github/scripts/ci-services.sh wait postgres mailpit
       - name: Run end-to-end workflows
         working-directory: web
         env:

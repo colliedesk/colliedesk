@@ -25,7 +25,7 @@ func SetConversationTagIn(ctx context.Context, tx pgx.Tx, workspaceID, conversat
 
 func (s *Store) setConversationTag(ctx context.Context, workspaceID, conversationID, tagID string, add bool) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
-		return setConversationTag(ctx, tx, workspaceID, conversationID, tagID, add)
+		return s.withChannelRef(ctx, tx, workspaceID)(setConversationTag(ctx, tx, workspaceID, conversationID, tagID, add))
 	})
 }
 

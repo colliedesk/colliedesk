@@ -161,6 +161,11 @@ var requestTitles = map[string]string{
 	"POST /api/v1/channels/email/secret":                         "Rotate the inbound email secret",
 	"POST " + gmailPath:                                          "Connect Gmail for sending replies",
 	"DELETE " + gmailPath:                                        "Disconnect Gmail",
+	"POST /api/v1/channels/{id}/email/secret":                    "Rotate the inbound secret of an email channel",
+	"POST " + channelGmailPath:                                   "Connect Gmail to an email channel",
+	"DELETE " + channelGmailPath:                                 "Disconnect Gmail from an email channel",
+	"DELETE /api/v1/channels/{id}":                               "Remove a channel",
+	"POST /api/v1/channels/{id}/held/discard":                    "Discard the held messages of a channel",
 	"PATCH /api/v1/workspace/slug":                               "Change the workspace address",
 	"PATCH /api/v1/workspace/timezone":                           "Change the workspace timezone",
 	"PATCH /api/v1/workspace/name":                               "Rename the workspace",
@@ -177,6 +182,7 @@ var requestTitles = map[string]string{
 	"PUT /api/v1/channels/web-form":                              "Change the web form",
 	"PUT /api/v1/channels/email":                                 "Change the email channel",
 	"POST /api/v1/channels/email/domain-verification":            "Verify the email domain",
+	"POST /api/v1/channels/{id}/email/domain-verification":       "Verify the domain of an email channel",
 	"GET /api/v1/billing":                                        "Read the plan and billing status",
 	"POST /api/v1/saved-replies":                                 "Create a saved reply",
 	"PATCH /api/v1/saved-replies/{id}":                           "Edit a saved reply",
@@ -218,7 +224,7 @@ func (a *API) summarizeConversationStart(response http.ResponseWriter, request *
 			writeStoreError(response, err)
 			return "", false
 		}
-		to = contact.Email
+		to = contact.EmailOf()
 	default:
 		writeError(response, http.StatusBadRequest, "invalid_request", "A subject and either contact_id or a new contact are required.")
 		return "", false

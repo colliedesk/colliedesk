@@ -16,6 +16,8 @@ import { lazyPart, Part, PartUnavailable } from '../../ui/lazy-part';
 
 interface ReplyComposerProps {
   disabled?: boolean;
+  // noReplies: no channel carries replies of this conversation (it was removed); private notes still go.
+  noReplies?: boolean;
   // May return a promise: the text is kept, with the reason shown, when it rejects.
   // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
   // only for a reply that copies someone. aiDraft (last) names the AI draft a reply was written from.
@@ -70,8 +72,9 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve }: ReplyComposerProps) {
-  const [kind, setKind] = useState<Kind>('outgoing');
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve }: ReplyComposerProps) {
+  // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
+  const [kind, setKind] = useState<Kind>(noReplies ? 'note' : 'outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
@@ -162,9 +165,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   const canResolve = kind === 'outgoing' && Boolean(onResolve);
   // Whether the last reply asked to resolve too, so Send anyway after a conflict keeps that choice.
   const resolveAfter = useRef(false);
-  const cannotSend = sending || !body.trim() || Boolean(fileProblem) || ccHolds;
+  const blocked = kind === 'outgoing' && noReplies;
+  const cannotSend = sending || !body.trim() || Boolean(fileProblem) || ccHolds || blocked;
   const submit = (resolve = false) => {
-    if (!body.trim() || sending || fileProblem || ccHolds) return;
+    if (!body.trim() || sending || fileProblem || ccHolds || blocked) return;
     const resolving = resolve && canResolve;
     resolveAfter.current = resolving;
     // The reply stays sent when the status change fails; the person is told and can press Resolve. The button
@@ -248,7 +252,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
         )}
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
-          placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
+          placeholder={kind === 'note' ? messages.notePlaceholder : noReplies ? messages.replyNotSendable : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
         {picking && !disabled && (pickers.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
           // Until the chunk is there, the list's own box says it is loading, where the list will be.
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>

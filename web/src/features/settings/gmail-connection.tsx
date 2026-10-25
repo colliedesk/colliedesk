@@ -73,7 +73,9 @@ export function GmailConnection({ gmail, supportAddress, timezone, canManage, on
     <section ref={block} className="gmail-connection" aria-labelledby="gmail-connection-heading">
       <h3 id="gmail-connection-heading">{messages.gmailHeading}</h3>
       <p className="muted-copy">{connection ? messages.gmailConnectedDescription : messages.gmailDescription}</p>
-      {returned && <p role={returned.kind === 'error' ? 'alert' : 'status'} className={returned.kind === 'error' ? 'error-copy' : 'muted-copy'}>{returnText(returned)}</p>}
+      {returned && <p role={returned.kind === 'error' ? 'alert' : 'status'} className={returned.kind === 'error' ? 'error-copy' : 'muted-copy'}>{returnText(returned)}
+        {returned.reason === 'address_mismatch' && <> {messages.gmailSignInAs(supportAddress)}</>}
+        {returned.channel && <> <a href={`/settings/channels/${encodeURIComponent(returned.channel)}?tab=replies`}>{messages.gmailOpenHolder}</a></>}</p>}
       {error && <p role="alert" className="error-copy">{error}</p>}
       {!gmail.available && <>
         <p role="note" className="warning-note">{messages.gmailNotAvailable(gmail.missing_settings)}</p>
@@ -89,7 +91,9 @@ export function GmailConnection({ gmail, supportAddress, timezone, canManage, on
         {canManage && gmail.available && <span className="button-row">{connectButton(messages.reconnectGmail, true)}</span>}
       </div>}
       {connection?.status === 'connected' && gmail.available && <p className="muted-copy">{messages.gmailConnected(connection.address, formatDate(connection.connected_at, timezone))}</p>}
-      {connection && connection.address !== supportAddress.toLowerCase() && <p className="muted-copy">{messages.gmailOtherAddress(connection.address, supportAddress)}</p>}
+      {connection && gmail.address_matches === false
+        ? <p role="note" className="warning-note">{messages.gmailAddressMismatch(connection.address, supportAddress)}</p>
+        : connection && connection.address !== supportAddress.toLowerCase() && <p className="muted-copy">{messages.gmailOtherAddress(connection.address, supportAddress)}</p>}
       {connection && canManage && !confirming && <span className="button-row">
         {connection.status === 'connected' && gmail.available && connectButton(messages.useAnotherGmail)}
         <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirming(true)}>{messages.disconnectGmail}</button>

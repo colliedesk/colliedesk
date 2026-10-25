@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -51,14 +52,33 @@ type Invite struct {
 }
 
 type Contact struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Email        string  `json:"email"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Email is nil for a customer known only on a channel (Identities).
+	Email        *string `json:"email"`
 	Organization *string `json:"organization"`
 	// MergedIntoID is the contact this one was merged into; its conversations and new mail are there.
 	MergedIntoID *string   `json:"merged_into_id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Identities are who the customer is on channels that know them by something other than email.
+	Identities []ContactIdentity `json:"identities"`
+}
+
+// ContactIdentity is who a contact is on one channel.
+type ContactIdentity struct {
+	ChannelID   string  `json:"channel_id"`
+	Kind        string  `json:"kind"`
+	Value       string  `json:"value"`
+	DisplayName *string `json:"display_name"`
+}
+
+// EmailOf is the contact's email, or "" when it has none.
+func (c Contact) EmailOf() string {
+	if c.Email == nil {
+		return ""
+	}
+	return *c.Email
 }
 
 type ContactDetail struct {
@@ -93,7 +113,7 @@ func (e *ContactMergeError) Error() string { return e.Reason }
 type ContactExistsError struct{ Use Contact }
 
 func (e *ContactExistsError) Error() string {
-	return e.Use.Name + " (" + e.Use.Email + ") is already a customer with this address. Find them by name or email instead."
+	return e.Use.Name + " (" + e.Use.EmailOf() + ") is already a customer with this address. Find them by name or email instead."
 }
 
 // ErrMergeUndone means the merge was undone already.
@@ -119,13 +139,44 @@ type Conversation struct {
 	AssigneeID  *string `json:"assignee_id"`
 	Tags        []Tag   `json:"tags"`
 	// Channel is how the conversation started: one of the Channel* values.
-	Channel   string              `json:"channel"`
-	Origin    *ConversationOrigin `json:"origin"`
-	CreatedAt time.Time           `json:"created_at"`
-	UpdatedAt time.Time           `json:"updated_at"`
+	Channel string `json:"channel"`
+	// ChannelID is the channel it came through; nil for one that came through none.
+	ChannelID *string `json:"-"`
+	// ReplyChannelID is the channel its replies were pinned to when its own channel cannot send them.
+	ReplyChannelID *string `json:"-"`
+	// ChannelRef is its channel and the one its replies leave through, nil when there is neither.
+	ChannelRef *ChannelRef         `json:"channel_ref"`
+	Origin     *ConversationOrigin `json:"origin"`
+	CreatedAt  time.Time           `json:"created_at"`
+	UpdatedAt  time.Time           `json:"updated_at"`
 	// LatestReplyNumber is the number of the newest reply (0 before the first): a reply sent with an
 	// older seen_reply_number is refused with ReplyConflictError.
 	LatestReplyNumber int `json:"latest_reply_number"`
+}
+
+// ChannelRef names a conversation's channel and the one its replies leave through.
+type ChannelRef struct {
+	ID         string             `json:"id"`
+	Type       string             `json:"type"`
+	Name       string             `json:"name"`
+	Enabled    bool               `json:"enabled"`
+	Deleted    bool               `json:"deleted"`
+	RepliesVia *ChannelRepliesVia `json:"replies_via"`
+}
+
+// ChannelRepliesVia is the channel replies leave through.
+type ChannelRepliesVia struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	// InsteadOf is the channel the replies would leave from, removed, when the default stands in for it.
+	InsteadOf *ChannelName `json:"instead_of"`
+}
+
+// ChannelName names a channel.
+type ChannelName struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // How a conversation started (conversations.channel).
@@ -139,6 +190,10 @@ const (
 	ChannelProblemReport = "problem_report"
 )
 
+// ConversationOrigins are the ways a conversation starts through no channel. With the registered
+// channel types they are every value of conversations.channel (ConversationChannel in the contract).
+var ConversationOrigins = []string{ChannelImported, ChannelAgent, ChannelProblemReport}
+
 // ConversationOrigin records where an imported conversation came from.
 type ConversationOrigin struct {
 	System     string `json:"system"`
@@ -151,6 +206,9 @@ type ConversationOrigin struct {
 	FirstResponseDueAt  *time.Time `json:"first_response_due_at"`
 	CC                  []string   `json:"cc"`
 	ForwardedTo         []string   `json:"forwarded_to"`
+	// Mailboxes are the addresses the conversation was sent to at the source, most trusted first: its
+	// replies leave from the email channel of the first one this workspace has.
+	Mailboxes []string `json:"mailboxes,omitempty"`
 	// Stats is what the source reported about the ticket, read once; nil when it reported nothing.
 	Stats *OriginStats `json:"stats,omitempty"`
 }
@@ -224,6 +282,11 @@ type Message struct {
 	// ReplyNumber numbers the replies of a conversation in the order they were stored, 1 first; nil for
 	// a note or a customer message.
 	ReplyNumber *int `json:"reply_number"`
+	// ChannelID is the channel that carried it; ExternalID its id there ("<type>:<id>"); ChannelMeta
+	// what the channel knows of it.
+	ChannelID   *string         `json:"channel_id"`
+	ExternalID  *string         `json:"external_id"`
+	ChannelMeta json.RawMessage `json:"channel_meta"`
 }
 
 // ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the
@@ -251,10 +314,12 @@ type Attachment struct {
 
 // MessageDelivery is the email delivery state of an outgoing reply.
 type MessageDelivery struct {
-	Status    string     `json:"status"`
-	Attempts  int        `json:"attempts"`
-	LastError *string    `json:"last_error"`
-	SentAt    *time.Time `json:"sent_at"`
+	Status   string `json:"status"`
+	Attempts int    `json:"attempts"`
+	// LastError says why in words; ReasonCode is the fixed code beside it (channel_off, no_recipient…).
+	LastError  *string    `json:"last_error"`
+	ReasonCode *string    `json:"reason_code"`
+	SentAt     *time.Time `json:"sent_at"`
 }
 
 // Doors an inbound message can come through.
@@ -288,6 +353,10 @@ type EmailAttachment struct {
 }
 
 type EmailChannel struct {
+	// ChannelID is the channel these settings belong to.
+	ChannelID string `json:"channel_id"`
+	// HostedLocal is the local part of the channel's forwarding address on the hosted cloud.
+	HostedLocal    string `json:"-"`
 	SupportAddress string `json:"support_address"`
 	// SenderName is the name customers see in the From line of every reply the channel sends.
 	SenderName       string     `json:"sender_name"`
@@ -320,11 +389,15 @@ type DNSRecord struct {
 
 // WebForm is the workspace's public website form channel. Off until an admin turns it on.
 type WebForm struct {
-	Enabled bool `json:"enabled"`
+	// ChannelID is the form's channel; empty for a workspace that never set one up.
+	ChannelID string `json:"channel_id,omitempty"`
+	Enabled   bool   `json:"enabled"`
 	// AllowedOrigins are the exact origins (scheme://host[:port]) whose pages may call the form.
 	AllowedOrigins []string `json:"allowed_origins"`
 	// SubmitPath is the path a website posts to; the host is the instance's own.
 	SubmitPath string `json:"submit_path"`
+	// LegacySlug marks the form the workspace's older address /api/v1/public/forms/<slug> posts to.
+	LegacySlug bool `json:"legacy_slug"`
 }
 
 func UTC(value time.Time) time.Time { return value.UTC() }

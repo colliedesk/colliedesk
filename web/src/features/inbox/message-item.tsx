@@ -110,11 +110,15 @@ function EmailEnvelope({ email, storedFiles }: { email: NonNullable<Message['ema
 
 function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId: string) => void }) {
   if (!item.delivery) return null;
-  const { status, last_error: lastError } = item.delivery;
+  const { status, last_error: lastError, reason_code: code } = item.delivery;
+  // A reply saved while its channel was off, or before one was connected, waits to be retried; one with no channel or no address
+  // to go to cannot be retried at all. Neither is a failed delivery.
+  const off = status === 'failed' && (code === 'channel_off' || code === 'channel_not_connected');
+  const never = status === 'failed' && (code === 'channel_removed' || code === 'no_recipient');
   return (
     <div className="message-envelope">
-      <span className={`badge badge-delivery-${status}`} title={lastError ?? undefined}>{messages.deliveryStatuses[status]}</span>
-      {status === 'failed' && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
+      <span className={`badge badge-delivery-${off || never ? 'queued' : status}`} title={lastError ?? undefined}>{off ? messages.deliverySavedNotSent : never ? messages.deliveryNotSent : messages.deliveryStatuses[status]}</span>
+      {status === 'failed' && !never && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
       {(status === 'sent' || status === 'failed') && lastError && <span className="delivery-reason">{lastError}</span>}
     </div>
   );

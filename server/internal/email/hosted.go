@@ -45,7 +45,16 @@ func HostedAddress(slug, hostedDomain string) string {
 	if hostedDomain == "" || ValidateHostedSlug(slug) != nil {
 		return ""
 	}
-	return "support@" + slug + "." + hostedDomain
+	return HostedLocalAddress("support", slug, hostedDomain)
+}
+
+// HostedLocalAddress is the forwarding address of one email channel of a workspace on the hosted cloud,
+// <local>@<slug>.<hostedDomain>, or "" when the feature is off.
+func HostedLocalAddress(local, slug, hostedDomain string) string {
+	if hostedDomain == "" || ValidateHostedSlug(slug) != nil || local == "" {
+		return ""
+	}
+	return local + "@" + slug + "." + hostedDomain
 }
 
 // HostedSlug returns the workspace slug of a recipient <local>@<slug>.<hostedDomain>, or "" when the

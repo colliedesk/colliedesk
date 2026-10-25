@@ -18,12 +18,16 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
 
   // Step 2 of the guide: connect the support address and copy the inbound URL and secret.
   await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Channels' }).click();
+  await page.getByRole('link', { name: 'Connect your support email' }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(support);
   await page.getByRole('button', { name: 'Save support address' }).click();
   await page.getByRole('button', { name: 'Create inbound secret' }).click();
   const secret = await page.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
   const inboundURL = await page.getByRole('textbox', { name: 'Inbound URL' }).inputValue();
   expect(inboundURL).toBe(`${baseURL}/api/v1/channels/email/inbound`);
+  // How replies leave is on the channel's Replies tab.
+  await page.getByRole('tab', { name: 'Replies' }).click();
   await expect(page.getByText(`127.0.0.1:${mailpit.smtpPort} · STARTTLS off · no login`)).toBeVisible();
   await expect(page.getByText(`Replies are sent from ${support}.`)).toBeVisible();
 

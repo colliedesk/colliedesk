@@ -124,9 +124,9 @@ test('settings is split into your account and the workspace, with a link to ever
   expect(links).toEqual([
     ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'],
     ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'],
-    ['Built-in AI', '/settings/ai'], ['External AI agents', '#agents-heading'], ['Sessions', '#sessions-heading'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
+    ['Built-in AI', '/settings/ai'], ['External AI agents', '#agents-heading'], ['Sessions', '#sessions-heading'], ['Channels', '/settings/channels'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
   ]);
-  // Built-in AI and the import have their own pages; every other link is a section of this one.
+  // Built-in AI, Channels and the import have their own pages; every other link is a section of this one.
   for (const [, href] of links.filter(([, href]) => href!.startsWith('#'))) expect(document.getElementById(href!.slice(1))).not.toBeNull();
 });
 

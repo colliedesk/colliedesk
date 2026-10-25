@@ -193,22 +193,41 @@ var tokenTiers = map[string]TokenAccess{
 	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),
 	"POST /api/v1/agent-requests/{id}/reject":  personOnly("deciding an agent's request is a person's call"),
 
-	"GET /api/v1/auth/sessions":                       grant(auth.PermTeamRead),
-	"GET /api/v1/auth/invites":                        grant(auth.PermTeamRead),
-	"GET /api/v1/channels/email":                      grant(auth.PermChannelsRead),
-	"GET /api/v1/channels/web-form":                   grant(auth.PermChannelsRead),
-	"PATCH /api/v1/agents/me/timezone":                grant(auth.PermProfileUpdate),
-	"PATCH /api/v1/agents/me/display-name":            grant(auth.PermProfileUpdate),
-	"GET /api/v1/billing":                             grant(auth.PermBillingRead),
-	"PATCH /api/v1/workspace/timezone":                grant(auth.PermWorkspaceUpdate),
-	"PATCH /api/v1/workspace/name":                    grant(auth.PermWorkspaceUpdate),
-	"PATCH /api/v1/agents/{id}":                       grant(auth.PermTeamManageRoles),
-	"DELETE /api/v1/auth/invites/{id}":                grant(auth.PermTeamRevoke),
-	"PUT /api/v1/channels/web-form":                   grant(auth.PermChannelsUpdate),
-	"PUT /api/v1/help-center":                         grant(auth.PermHelpCenterUpdate),
-	"PUT /api/v1/channels/email":                      grant(auth.PermChannelsUpdate),
-	"POST /api/v1/channels/email/domain-verification": grant(auth.PermChannelsUpdate),
-	"DELETE /api/v1/auth/sessions/{id}":               grant(auth.PermTeamRevoke),
+	"GET /api/v1/auth/sessions":              grant(auth.PermTeamRead),
+	"GET /api/v1/auth/invites":               grant(auth.PermTeamRead),
+	"GET /api/v1/channels":                   grant(auth.PermChannelsRead),
+	"GET /api/v1/channels/events":            grant(auth.PermChannelsRead),
+	"GET /api/v1/channels/{id}":              grant(auth.PermChannelsRead),
+	"POST /api/v1/channels":                  grant(auth.PermChannelsUpdate),
+	"PATCH /api/v1/channels/{id}":            grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/check":       grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/held/replay": grant(auth.PermChannelsUpdate),
+	// A channel's secret is a credential route (credentialRoutes): an admin token stores it, a lower one
+	// is refused, so it never waits in a request. Removing a channel is what DELETE /channels/email
+	// already is: a person approves every token's call. Discarding held messages cannot be undone.
+	"PUT /api/v1/channels/{id}/credentials":   grant(auth.PermChannelsManageCredentials),
+	"DELETE /api/v1/channels/{id}":            alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST /api/v1/channels/{id}/held/discard": alwaysAsk(auth.PermChannelsUpdate),
+	// One email channel of several: the same tiers as the routes of the default one.
+	"GET /api/v1/channels/{id}/email":                      grant(auth.PermChannelsRead),
+	"POST /api/v1/channels/{id}/email/domain-verification": grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/email/secret":              alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST " + channelGmailPath:                             alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + channelGmailPath:                           alwaysAsk(auth.PermChannelsManageCredentials),
+	"GET /api/v1/channels/email":                           grant(auth.PermChannelsRead),
+	"GET /api/v1/channels/web-form":                        grant(auth.PermChannelsRead),
+	"PATCH /api/v1/agents/me/timezone":                     grant(auth.PermProfileUpdate),
+	"PATCH /api/v1/agents/me/display-name":                 grant(auth.PermProfileUpdate),
+	"GET /api/v1/billing":                                  grant(auth.PermBillingRead),
+	"PATCH /api/v1/workspace/timezone":                     grant(auth.PermWorkspaceUpdate),
+	"PATCH /api/v1/workspace/name":                         grant(auth.PermWorkspaceUpdate),
+	"PATCH /api/v1/agents/{id}":                            grant(auth.PermTeamManageRoles),
+	"DELETE /api/v1/auth/invites/{id}":                     grant(auth.PermTeamRevoke),
+	"PUT /api/v1/channels/web-form":                        grant(auth.PermChannelsUpdate),
+	"PUT /api/v1/help-center":                              grant(auth.PermHelpCenterUpdate),
+	"PUT /api/v1/channels/email":                           grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/email/domain-verification":      grant(auth.PermChannelsUpdate),
+	"DELETE /api/v1/auth/sessions/{id}":                    grant(auth.PermTeamRevoke),
 
 	"POST /api/v1/auth/tokens":           alwaysAsk(auth.PermTeamCreateTokens),
 	"POST /api/v1/auth/invites":          alwaysAsk(auth.PermTeamInvite),
@@ -282,6 +301,7 @@ var tokenTiers = map[string]TokenAccess{
 	"GET " + foundingPath:                           notForPeople,
 	"GET " + helpCenterTLSAskPath:                   notForPeople,
 	"POST " + webFormSubmitPattern:                  notForPeople,
+	"POST " + webFormChannelPattern:                 notForPeople,
 	"GET " + exportLinkPath + "{token}":             notForPeople,
 }
 
@@ -324,15 +344,17 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 	return true
 }
 
-// credentialRoutes carry another service's API key (a helpdesk to import from, an AI provider): a token
+// credentialRoutes carry another service's API key (a helpdesk to import from, an AI provider, a channel's
+// account): a token
 // below their tier is refused, never filed, because an agent request stores the call's body (and the
 // export carries it).
 var credentialRoutes = map[string]bool{
-	"POST /api/v1/imports":              true,
-	"PUT /api/v1/imports/{id}/key":      true,
-	"POST /api/v1/ai/providers":         true,
-	"POST /api/v1/ai/models":            true,
-	"PUT /api/v1/ai/providers/{id}/key": true,
+	"POST /api/v1/imports":                  true,
+	"PUT /api/v1/imports/{id}/key":          true,
+	"POST /api/v1/ai/providers":             true,
+	"POST /api/v1/ai/models":                true,
+	"PUT /api/v1/ai/providers/{id}/key":     true,
+	"PUT /api/v1/channels/{id}/credentials": true,
 }
 
 // kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits

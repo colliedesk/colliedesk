@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -80,14 +81,21 @@ func getContact(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.
 	return detail, nil
 }
 
-const contactColumns = `id::text,name,email,organization,merged_into_id::text,created_at,updated_at`
+const contactColumns = `id::text,name,email,organization,merged_into_id::text,created_at,updated_at,
+	(SELECT COALESCE(json_agg(json_build_object('channel_id',i.channel_id,'kind',i.kind,'value',i.value,'display_name',i.display_name)
+		ORDER BY i.created_at,i.id),'[]') FROM contact_identities i WHERE i.workspace_id=contacts.workspace_id AND i.contact_id=contacts.id)`
 
 func scanContact(row pgx.Row) (domain.Contact, error) {
 	var contact domain.Contact
-	if err := row.Scan(&contact.ID, &contact.Name, &contact.Email, &contact.Organization, &contact.MergedIntoID, &contact.CreatedAt, &contact.UpdatedAt); err != nil {
+	var identities []byte
+	if err := row.Scan(&contact.ID, &contact.Name, &contact.Email, &contact.Organization, &contact.MergedIntoID, &contact.CreatedAt, &contact.UpdatedAt,
+		&identities); err != nil {
 		return domain.Contact{}, err
 	}
 	contact.CreatedAt, contact.UpdatedAt = domain.UTC(contact.CreatedAt), domain.UTC(contact.UpdatedAt)
+	if err := json.Unmarshal(identities, &contact.Identities); err != nil {
+		return domain.Contact{}, fmt.Errorf("decode contact identities: %w", err)
+	}
 	return contact, nil
 }
 
@@ -185,6 +193,7 @@ func scanContactMerge(row pgx.Row) (domain.ContactMerge, error) {
 		&contact.ID, &contact.Name, &contact.Email, &contact.Organization, &contact.MergedIntoID, &contact.CreatedAt, &contact.UpdatedAt); err != nil {
 		return domain.ContactMerge{}, err
 	}
+	contact.Identities = []domain.ContactIdentity{}
 	merge.MergedAt = domain.UTC(merge.MergedAt)
 	if merge.UndoneAt != nil {
 		undone := domain.UTC(*merge.UndoneAt)
@@ -257,16 +266,16 @@ func (s *Store) MergeContacts(ctx context.Context, workspaceID, keptID, duplicat
 		kept, duplicate := contacts[keptID], contacts[duplicateID]
 		switch {
 		case kept.MergedIntoID != nil:
-			return domain.ContactMerge{}, &domain.ContactMergeError{Reason: kept.Email + " is merged into another contact. Merge into that contact instead."}
+			return domain.ContactMerge{}, &domain.ContactMergeError{Reason: contactLabel(kept) + " is merged into another contact. Merge into that contact instead."}
 		case duplicate.MergedIntoID != nil:
-			return domain.ContactMerge{}, &domain.ContactMergeError{Reason: duplicate.Email + " is merged into another contact already. Undo that merge first."}
+			return domain.ContactMerge{}, &domain.ContactMergeError{Reason: contactLabel(duplicate) + " is merged into another contact already. Undo that merge first."}
 		}
 		var mergedIn bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM contacts WHERE workspace_id=$1 AND merged_into_id=$2)`, workspaceID, duplicateID).Scan(&mergedIn); err != nil {
 			return domain.ContactMerge{}, fmt.Errorf("check merged contacts: %w", err)
 		}
 		if mergedIn {
-			return domain.ContactMerge{}, &domain.ContactMergeError{Reason: "Other contacts are merged into " + duplicate.Email + ". Undo those merges first, or merge them into this contact one by one."}
+			return domain.ContactMerge{}, &domain.ContactMergeError{Reason: "Other contacts are merged into " + contactLabel(duplicate) + ". Undo those merges first, or merge them into this contact one by one."}
 		}
 		// Rows are locked in (workspace_id, id) order, the order the last_public trigger on messages locks them
 		// in, so a merge and a statement writing messages of several of these conversations never deadlock.
@@ -345,4 +354,12 @@ func checkContactNotMerged(ctx context.Context, tx pgx.Tx, workspaceID, contactI
 		return &domain.ContactMergeError{Reason: "This contact is merged into another. Start the conversation with the contact it was merged into."}
 	}
 	return nil
+}
+
+// contactLabel names a contact in a message: its email, or its name when it has none.
+func contactLabel(contact domain.Contact) string {
+	if contact.Email != nil {
+		return *contact.Email
+	}
+	return contact.Name
 }

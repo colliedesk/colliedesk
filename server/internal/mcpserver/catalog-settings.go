@@ -21,10 +21,14 @@ const (
 		`"owner":{"type":"string","description":"Email of the team member it acts as"},"token_tier":{"type":["string","null"],"description":"read, draft, send or admin for an agent token, custom for one with its own permissions; null for a person's sign-in"},"permissions":{"type":"array","items":{"type":"string"},"description":"What an agent token holds (resource:action); empty for a person's sign-in"},` +
 		`"this_token":{"type":"boolean"},"state":{"type":"string","enum":["active","revoked","expired"]},"last_seen_at":{"type":"string"},"expires_at":{"type":"string"}}}`
 
+	// emailChannelInput names one email channel of several; without it a tool acts on the default one.
+	emailChannelInput  = `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"One email channel of several, from colliedesk_channels_list. Leave out for the default one (is_default in colliedesk_channels_list)."}}}`
+	emailChannelChoice = `A workspace may have several email channels: give channel_id for one of them, or leave it out for the default one (is_default).`
+
 	webFormSchema = `{"type":"object","required":["enabled","allowed_origins","submit_path"],"properties":{"enabled":{"type":"boolean"},` +
 		`"allowed_origins":{"type":"array","items":{"type":"string"}},"submit_path":{"type":"string"}}}`
 
-	emailChannelSchema = `{"type":"object","required":["connected"],"properties":{"connected":{"type":"boolean"},"support_address":{"type":"string"},` +
+	emailChannelSchema = `{"type":"object","required":["connected"],"properties":{"connected":{"type":"boolean"},"channel_id":{"type":"string"},"support_address":{"type":"string"},` +
 		`"sender_name":{"type":"string","description":"The name customers see in the From line of every reply (with \" via Colliedesk\" while the domain is not verified)."},` +
 		`"inbound_secret_set":{"type":"boolean","description":"The secret itself is never shown to an agent."},"inbound_url":{"type":"string"},"hosted_address":{"type":["string","null"]},` +
 		`"domain":{"type":"string"},"domain_verified":{"type":"boolean"},"dns_record_name":{"type":"string"},"dns_record_value":{"type":"string"},` +
@@ -222,11 +226,11 @@ func emailChannelGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_email_channel_get",
 		Title: "Show the email channel",
-		Description: `Show the email channel: the support address, whether an inbound secret is set (never the secret), where to forward mail, ` +
-			`the DNS record that verifies the sending domain, and the address replies are sent from.` + "\n\nTier: read.",
+		Description: `Show an email channel: the support address, whether an inbound secret is set (never the secret), where to forward mail, ` +
+			`the DNS record that verifies the sending domain, and the address replies are sent from. ` + emailChannelChoice + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
-		REST:   []string{"GET /api/v1/channels/email"},
-		Input:  noArguments,
+		REST:   []string{"GET /api/v1/channels/email", "GET /api/v1/channels/{id}/email"},
+		Input:  emailChannelInput,
 		Output: `{"type":"object","required":["email_channel"],"properties":{"email_channel":` + emailChannelSchema + `}}`,
 		run:    emailChannelGet,
 	}
@@ -255,10 +259,10 @@ func emailDomainVerifySpec() Spec {
 		Name:  "colliedesk_email_domain_verify",
 		Title: "Verify the email domain",
 		Description: `Check the DNS TXT record that proves the support address's domain is yours, so replies can be sent from it. Add the record shown by colliedesk_email_channel_get first; ` +
-			`when it is not there yet the result says which record to add. It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
+			`when it is not there yet the result says which record to add. A domain verified once is verified for every email channel on it. ` + emailChannelChoice + ` It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
-		REST:   []string{"POST /api/v1/channels/email/domain-verification"},
-		Input:  noArguments,
+		REST:   []string{"POST /api/v1/channels/email/domain-verification", "POST /api/v1/channels/{id}/email/domain-verification"},
+		Input:  emailChannelInput,
 		Output: `{"type":"object","required":["email_channel"],"properties":{"email_channel":` + emailChannelSchema + `}}`,
 		run:    emailDomainVerify,
 	}

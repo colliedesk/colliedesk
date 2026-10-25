@@ -5,7 +5,7 @@ import { channelSchema, conversationSortSchema, prioritySchema, statusSchema } f
 // view (what still needs an answer), and status=all is every status. `result` (the conversations a
 // number of the results page counts) is never saved in a view: its snapshot is replaced.
 
-export const listKeys = ['status', 'priority', 'assignee', 'tag', 'channel'] as const;
+export const listKeys = ['status', 'priority', 'assignee', 'tag', 'channel', 'channel_id'] as const;
 export const textKeys = ['tag_match', 'contact', 'organization', 'awaiting', 'source', 'created_after', 'created_before', 'updated_after', 'updated_before', 'sort', 'search', 'result'] as const;
 export const flagKeys = ['has_pending_draft', 'delivery_failed'] as const;
 
@@ -36,7 +36,7 @@ const resultPattern = /^[0-9a-f-]{36}:(30d|7d)\.[a-z_]+$/;
 const instant = /^\d{4}-\d\d-\d\dT[\d:.]+(Z|[+-]\d\d:\d\d)$/;
 
 function known(key: InboxQueryKey, item: string): boolean {
-  if (key === 'tag' || key === 'contact') return uuid.test(item);
+  if (key === 'tag' || key === 'contact' || key === 'channel_id') return uuid.test(item);
   if (key === 'assignee') return uuid.test(item) || ['me', 'unassigned', 'anyone'].includes(item);
   if (/_(after|before)$/.test(key)) return instant.test(item) && !Number.isNaN(Date.parse(item));
   if (key === 'result') return resultPattern.test(item);

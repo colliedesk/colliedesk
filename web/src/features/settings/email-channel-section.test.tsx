@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render as renderInPage, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderInPage, screen, within } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { EmailChannelSettings } from '../../api/schemas';
@@ -89,7 +89,7 @@ test('disconnecting asks first, says what stops, and can be cancelled', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage onDisconnect={onDisconnect} />);
   fireEvent.click(screen.getByRole('button', { name: /disconnect email/i }));
   const question = screen.getByRole('group', { name: 'Disconnect email?' });
-  expect(question).toHaveTextContent('mail sent to support@example.com stops arriving and replies are no longer emailed');
+  expect(question).toHaveTextContent('mail sent to support@example.com stops arriving. Conversations stay; their replies leave from the default mailbox');
   expect(within(question).getByRole('button', { name: 'Cancel' })).toHaveFocus();
   fireEvent.click(within(question).getByRole('button', { name: 'Cancel' }));
   expect(onDisconnect).not.toHaveBeenCalled();
@@ -191,7 +191,7 @@ test('the address name save shows Saving… and Saved separately from the suppor
   expect(screen.getByRole('button', { name: /save support address/i })).toBeEnabled();
   fireEvent.submit(screen.getByRole('textbox', { name: /workspace address name/i }));
   expect(onSaveSlug).not.toHaveBeenCalled();
-  rerender(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" slugSave={{ saved: true }} />);
+  rerender(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" onSaveSlug={onSaveSlug} slugSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
 });
 
@@ -319,4 +319,20 @@ test('with Gmail sending, a server without SMTP is not a warning, and a broken G
   rerender(<EmailChannelSection settings={broken} timezone="UTC" canManage />);
   expect(screen.queryByText(/configure SMTP on the server/i)).not.toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('Gmail stopped sending');
+});
+
+test('a browser without the clipboard (a server on plain http) says the copy failed instead of doing nothing', async () => {
+  Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+  render(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" />);
+  fireEvent.click(screen.getByRole('button', { name: /copy forwarding address/i }));
+  expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toHaveAttribute('role', 'status');
+  cleanup();
+  render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage />);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy inbound URL' }));
+  expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toBeInTheDocument();
+});
+
+test('a verified domain says every mailbox on it shares the verification', () => {
+  render(<EmailChannelSection part="replies" settings={{ ...connected, channel: { ...connected.channel!, domain_verified_at: '2026-10-15T00:00:00Z' } }} timezone="UTC" canManage />);
+  expect(screen.getByText(/The verification is for example\.com: every mailbox on it shares it\./)).toBeInTheDocument();
 });

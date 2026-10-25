@@ -20,11 +20,11 @@ const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_
 		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number,
-	m.ai_draft_id::text,ad.outcome
+	m.ai_draft_id::text,ad.outcome,m.channel_id::text,m.external_id,m.channel_meta,o.last_error_code
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
 	LEFT JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
-	LEFT JOIN email_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
+	LEFT JOIN channel_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
 	LEFT JOIN sessions t ON t.workspace_id=m.workspace_id AND t.id=m.agent_token_id
 	LEFT JOIN agents ta ON ta.workspace_id=t.workspace_id AND ta.id=t.agent_id
 	LEFT JOIN ai_drafts ad ON ad.workspace_id=m.workspace_id AND ad.id=m.ai_draft_id`
@@ -36,24 +36,29 @@ type rowScanner interface {
 func scanMessage(row rowScanner) (domain.Message, error) {
 	var message domain.Message
 	var meta []byte
-	var status, lastError, tokenID, tokenLabel, tokenScope, tokenAgent *string
+	var status, lastError, tokenID, tokenLabel, tokenScope, tokenAgent, reasonCode *string
+	var channelMeta []byte
 	var attempts *int32
 	var sentAt *time.Time
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
-		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome); err != nil {
+		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber, &message.AIDraftID, &message.AIDraftOutcome,
+		&message.ChannelID, &message.ExternalID, &channelMeta, &reasonCode); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
 	if tokenID != nil && tokenLabel != nil && tokenScope != nil && tokenAgent != nil {
 		message.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *tokenLabel, Scope: *tokenScope, AgentName: *tokenAgent}
 	}
+	if channelMeta != nil {
+		message.ChannelMeta = channelMeta
+	}
 	message.Attachments = []domain.Attachment{}
 	if message.CC == nil {
 		message.CC = []string{}
 	}
 	if status != nil && attempts != nil {
-		message.Delivery = &domain.MessageDelivery{Status: *status, Attempts: int(*attempts), LastError: lastError, SentAt: domain.UTCOptional(sentAt)}
+		message.Delivery = &domain.MessageDelivery{Status: *status, Attempts: int(*attempts), LastError: lastError, ReasonCode: reasonCode, SentAt: domain.UTCOptional(sentAt)}
 	}
 	if meta != nil {
 		var envelope domain.IncomingEmail
@@ -189,7 +194,7 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		return domain.Message{}, err
 	}
 	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,agent_request_id,kind,body,cc,ai_draft_id)
-		SELECT $1,c.id,$3,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7,NULLIF($9,'')::uuid FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
+		SELECT $1,c.id,NULLIF($3::text,'')::uuid,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7,NULLIF($9,'')::uuid FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
 		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc, actor.RequestID, actor.AIDraftID).Scan(&messageID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("create message: %w", err)

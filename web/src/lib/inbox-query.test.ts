@@ -62,3 +62,11 @@ test('a results number opens its conversations in any status, and is never saved
   expect(filtersOf(query)).toEqual({});
   expect(queryOf({ result } as never)).toEqual({ status: 'all' });
 });
+
+test('a channel filter keeps channel ids only, goes to the API, and is saved in a view as a list', () => {
+  const id = '55555555-5555-4555-8555-555555555555';
+  expect(inboxQueryFromSearch({ channel_id: `${id},nope` })).toEqual({ channel_id: id });
+  expect(apiQuery({ channel_id: id }, 1)).toBe(`channel_id=${id}&status=open&page=1&page_size=50`);
+  expect(filtersOf({ status: 'all', channel_id: id })).toEqual({ channel_id: [id] });
+  expect(queryOf({ channel_id: [id] })).toEqual({ status: 'all', channel_id: id });
+});

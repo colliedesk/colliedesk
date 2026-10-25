@@ -13,11 +13,19 @@ const api = vi.hoisted(() => ({
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
   contacts: vi.fn(), createContact: vi.fn(), createConversation: vi.fn(),
   savedReplies: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), contact: vi.fn(),
+  channelCounts: vi.fn(async () => ({ types: [{ type: 'email', count: 1 }] })),
+  emailChannelOf: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
 vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {}, ReplyConflictError: class extends Error {} }));
 vi.mock('./presence-api', () => ({ presenceApi: { announce: api.announcePresence, leave: api.leavePresence }, RetryLater: class extends Error {} }));
+// The window that starts a conversation reads the workspace's email channels: one here, its default.
+const emailChannelID = '99999999-9999-4999-8999-999999999999';
+vi.mock('../../api/channels', () => ({ channelsApi: {
+  list: async () => ({ items: [{ id: emailChannelID, type: 'email', name: 'Email', enabled: true }], types: [{ type: 'email', default_channel_id: emailChannelID }] }),
+  email: () => api.emailChannel(),
+} }));
 vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation, searchContacts: api.contacts }, existingContact: () => undefined }));
 const views = vi.hoisted(() => ({
   list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
@@ -675,7 +683,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   fireEvent.change(within(ready).getByLabelText('Subject'), { target: { value: 'Hello' } });
   fireEvent.change(within(ready).getByLabelText('Message'), { target: { value: 'First words' } });
   fireEvent.click(within(ready).getByRole('button', { name: 'Send' }));
-  await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(pat.id, 'Hello', { body: 'First words', files: [], cc: [] }));
+  await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(pat.id, 'Hello', { body: 'First words', files: [], cc: [], channelID: emailChannelID }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 });
 
@@ -839,4 +847,164 @@ test('Back to Inbox after opening a row goes back in the history, so the browser
   fireEvent.click(await screen.findByRole('button', { name: 'Back to Inbox' }));
   expect(back).toHaveBeenCalledTimes(1);
   back.mockRestore();
+});
+
+test('a conversation whose channel is off says its reply waits, and an admin is led to that channel', async () => {
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'web_form', name: 'Web form', enabled: true, deleted: false,
+    replies_via: { id: '55555555-5555-4555-8555-555555555555', name: 'Email', enabled: false } };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'web_form' as const, channel_ref: ref };
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  const notice = await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/);
+  // One channel of a type: no mailbox name on the rows or the thread.
+  expect(document.querySelector('.channel-pill')).toBeNull();
+  fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
+  expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/55555555-5555-4555-8555-555555555555' });
+  navigate.mockRestore();
+});
+
+test('a web form conversation with no email connected can still be answered, and the box says to connect email', async () => {
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'web_form', name: 'Web form', enabled: true, deleted: false,
+    replies_via: null };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'web_form' as const, channel_ref: ref };
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  const notice = await screen.findByText('Replies to this conversation are not emailed until you connect your support email.');
+  expect(screen.queryByText(/was removed/)).toBeNull();
+  fireEvent.change(screen.getAllByLabelText('Message body').at(-1)!, { target: { value: 'Hello' } });
+  expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeEnabled();
+  fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
+  expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/type/email?tab=replies' });
+  navigate.mockRestore();
+});
+
+test('a conversation whose channel was removed takes private notes but no reply', async () => {
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const ref = { id: '44444444-4444-4444-8444-444444444444', type: 'email', name: 'Email', enabled: false, deleted: true,
+    replies_via: null };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel: 'email' as const, channel_ref: ref };
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByText('Replies to this conversation cannot be sent: Email was removed.')).toBeInTheDocument();
+  const box = screen.getAllByLabelText('Message body').at(-1)!;
+  fireEvent.change(box, { target: { value: 'Hello' } });
+  // The box opens on a private note; a reply is refused with why.
+  expect(screen.getAllByRole('button', { name: 'Add private note' }).at(-1)).toBeEnabled();
+  fireEvent.click(screen.getAllByRole('button', { name: /^Reply/ }).at(-1)!);
+  expect(box).toHaveAttribute('placeholder', 'Replies to this conversation cannot be sent. Write a private note instead (N).');
+  expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeDisabled();
+  navigate.mockRestore();
+});
+
+// With two mailboxes the composer says which one a reply leaves from, and why when the one it was pinned to is gone.
+test('with two mailboxes the composer names the one a reply leaves from', async () => {
+  const sales = { id: '55555555-5555-4555-8555-555555555555', name: 'Sales', enabled: true };
+  const ref = { id: sales.id, type: 'email', name: 'Sales', enabled: true, deleted: false, replies_via: { ...sales, instead_of: null } };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref };
+  const beta = { ...conversation('22222222-2222-4222-8222-222222222223', 'Beta conversation'),
+    channel_ref: { ...ref, id: '33333333-3333-4333-8333-333333333334', name: 'Careers', enabled: false, deleted: true,
+      replies_via: { id: '44444444-4444-4444-8444-444444444445', name: 'Support', enabled: true, instead_of: { id: '33333333-3333-4333-8333-333333333334', name: 'Careers' } } } };
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.emailChannel.mockResolvedValue({ channel: { support_address: 'support@desk.example', domain_verified_at: '2026-10-01T00:00:00Z' }, inbound_url: 'https://desk.example.com/x',
+    smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 2 }] });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha, beta], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockImplementation(async (id: string) => (id === beta.id ? beta : alpha));
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  testRouter.params = { conversationId: alpha.id };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const { unmount } = render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByText('Replies send from Sales.')).toBeInTheDocument();
+  // The row and the thread's header name the mailbox, since there are two.
+  expect(screen.getByRole('button', { name: /Alpha conversation/ })).toHaveTextContent('Sales');
+  expect(document.querySelector('.timeline-header .channel-pill')).toHaveTextContent('Sales');
+  expect(screen.getByRole('button', { name: /Beta conversation/ })).toHaveTextContent('Careers (removed)');
+  unmount();
+  testRouter.params = { conversationId: beta.id };
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByText('Careers was removed; replies send from Support.')).toBeInTheDocument();
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
+});
+
+// The composer speaks of the mailbox the conversation's replies leave from, not of the default one.
+test('the composer warns about the mailbox a reply leaves from, and leads to that mailbox', async () => {
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  const sales = { id: '55555555-5555-4555-8555-555555555555', name: 'Sales', enabled: true };
+  const ref = { id: sales.id, type: 'email', name: 'Sales', enabled: true, deleted: false, replies_via: { ...sales, instead_of: null } };
+  const alpha = { ...conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation'), channel_ref: ref };
+  const settings = (address: string, gmail: 'connected' | 'failed') => ({ channel: { support_address: address, domain_verified_at: null }, inbound_url: 'https://desk.example.com/x',
+    smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: gmail === 'connected' ? address : null,
+    gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/cb', connection: { provider: 'google', address, status: gmail, error_code: gmail === 'failed' ? 'revoked' : null,
+      error: null, failed_at: null, connected_at: '2026-09-01T00:00:00Z' } } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'sam@example.com', display_name: 'Sam', role: 'admin', timezone_override: null }, workspace: { id: '77777777-7777-4777-8777-777777777777', slug: 'beta', name: 'Beta', timezone: 'UTC' } });
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 2 }] });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  testRouter.params = { conversationId: alpha.id };
+  try {
+    // The default mailbox's Gmail broke; Sales sends: nothing to warn about.
+    api.emailChannel.mockResolvedValue(settings('billing@desk.example', 'failed') as never);
+    api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'connected'));
+    const first = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByText('Replies send from Sales.')).toBeInTheDocument();
+    expect(screen.queryByText(/Gmail stopped sending/)).toBeNull();
+    expect(api.emailChannelOf).toHaveBeenCalledWith(sales.id);
+    first.unmount();
+
+    // Sales' Gmail broke: the warning names it and Open Settings leads to Sales.
+    api.emailChannel.mockResolvedValue(settings('billing@desk.example', 'connected') as never);
+    api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'failed'));
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+    const notice = await screen.findByText(/Gmail stopped sending/);
+    fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
+    expect(navigate).toHaveBeenCalledWith({ href: `/settings/channels/${sales.id}?tab=replies` });
+  } finally {
+    api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
+    navigate.mockRestore();
+  }
 });

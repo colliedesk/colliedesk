@@ -221,7 +221,7 @@ test('an empty new workspace explains the next steps instead of a filter message
   render(<InboxPage conversations={[]} canManage />);
   const start = screen.getByRole('region', { name: /get started/i });
   expect(start).toHaveTextContent('No conversations yet');
-  expect(within(start).getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings');
+  expect(within(start).getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings/channels/type/email');
   // An admin imports in the app.
   expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', '/settings/import-freshdesk');
   expect(within(start).getByRole('link', { name: 'Invite your team' })).toHaveAttribute('href', '/settings');
