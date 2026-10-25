@@ -19,11 +19,13 @@ const mocks = vi.hoisted(() => {
   const channelsApi = { list: vi.fn(), listAll: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), replayHeld: vi.fn(), discardHeld: vi.fn(),
     email: vi.fn(), emailSecret: vi.fn(), emailVerifyDomain: vi.fn(), emailConnectGmail: vi.fn(), emailDisconnectGmail: vi.fn(),
     emailConnectMicrosoft: vi.fn(), emailDisconnectMicrosoft: vi.fn(), emailTestMessage: vi.fn() };
-  return { api, channelsApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
+  const aiApi = { channel: vi.fn(), setChannel: vi.fn(), settings: vi.fn() };
+  return { api, channelsApi, aiApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
 });
 vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError, PlanLimitError: mocks.PlanLimitError, UnauthorizedError: mocks.UnauthorizedError }));
 vi.mock('../../../api/channels', () => ({ channelsApi: mocks.channelsApi }));
-const { api, channelsApi } = mocks;
+vi.mock('../../../api/ai', () => ({ aiApi: mocks.aiApi }));
+const { api, channelsApi, aiApi } = mocks;
 
 const EMAIL = '44444444-4444-4444-8444-444444444444';
 const FORM = '55555555-5555-4555-8555-555555555555';
@@ -303,7 +305,7 @@ test('a channel page shows the type tabs then History, and opens a tab from the 
   const navigate = show(EMAIL, { tab: 'replies' });
   expect(await screen.findByRole('heading', { name: 'Email' })).toBeInTheDocument();
   const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
-  expect(tabs).toEqual(['Connection', 'Replies', 'History']);
+  expect(tabs).toEqual(['Connection', 'Replies', 'AI', 'History']);
   expect(screen.getByRole('tab', { name: 'Replies' })).toHaveAttribute('aria-selected', 'true');
   expect(await screen.findByRole('textbox', { name: 'Sender name' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: 'Connection' }));
@@ -767,4 +769,57 @@ test('the Connection tab opens the conversation its test message started, as the
   const navigate = show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/conversations/66666666-6666-4666-8666-666666666666'));
+});
+
+const aiSlot = (slot: 'triage' | 'draft' | 'intake', change: Record<string, unknown> = {}) => ({ slot, source: 'server', provider_id: null, model: 'claude-haiku-5-5', effort: 'low',
+  enabled: true, default_level: slot === 'triage' ? 'suggest' : 'off', automatic: false, auto_parts: [], active: true, off_reason: null, consented_by: null,
+  consented_at: null, updated_by: null, updated_at: null, ...change });
+const aiSettings = (slots = [aiSlot('triage'), aiSlot('draft')]) => ({ server: null, providers: [], slots, events: [], provider_limit: 5, can_store_keys: true,
+  allow_private_base_urls: false, automatic: { per_day: 300, per_minute: 30, used_today: 0, paused_until: null, draft_per_day: 100, drafts_today: 0, drafts_paused_until: null, drafts_reserved_until: null },
+  allowance: null, auto_triage: { applied: 0, undone: 0 }, auto_draft_estimate: { customer_messages: 12, draft_cost_micro_usd: null }, channels: [], source_consents: [] });
+const levelItem = (slot: 'triage' | 'draft', change: Record<string, unknown> = {}) => ({ slot, level: null, effective_level: slot === 'triage' ? 'suggest' : 'off',
+  source: 'workspace', off_reason: null, options: null, ...change });
+const formLevels = (triage = {}, draft = {}) => ({ channel_id: FORM, scopes: [{ scope: '', slots: [levelItem('triage', triage), levelItem('draft', draft)] }] });
+
+test('the AI tab of a channel sets what each feature does by itself there, over the workspace default', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  aiApi.settings.mockResolvedValue(aiSettings());
+  aiApi.channel.mockResolvedValue(formLevels());
+  aiApi.setChannel.mockResolvedValue(formLevels({ level: 'off', effective_level: 'off', source: 'channel' }));
+  show(FORM, { tab: 'ai' });
+  const triage = await screen.findByRole('combobox', { name: 'Triage · Whole channel' });
+  await waitFor(() => expect(within(triage).getByRole('option', { name: 'Workspace default (Suggest)' })).toBeInTheDocument());
+  expect(within(screen.getByRole('combobox', { name: 'Reply drafts · Whole channel' })).queryByRole('option', { name: 'Auto' })).toBeNull();
+  expect(screen.queryByRole('combobox', { name: /Intake/ })).toBeNull();
+  fireEvent.change(triage, { target: { value: 'off' } });
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(FORM, 'triage', { scope: '', level: 'off' }));
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+test('raising drafts on a channel asks first with what it costs, as Built-in AI does', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  aiApi.settings.mockResolvedValue(aiSettings());
+  aiApi.channel.mockResolvedValue(formLevels());
+  aiApi.setChannel.mockResolvedValue(formLevels({}, { level: 'suggest', effective_level: 'suggest', source: 'channel' }));
+  show(FORM, { tab: 'ai' });
+  const drafts = await screen.findByRole('combobox', { name: 'Reply drafts · Whole channel' });
+  await waitFor(() => expect(aiApi.settings).toHaveBeenCalled());
+  await screen.findByRole('option', { name: 'Workspace default (Off)' });
+  fireEvent.change(drafts, { target: { value: 'suggest' } });
+  const dialog = await screen.findByRole('dialog', { name: 'Write a draft for every customer message?' });
+  expect(aiApi.setChannel).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(FORM, 'draft', { scope: '', level: 'suggest' }));
+});
+
+test('a feature the workspace has off is off on the channel and says so; an agent reads without changing', async () => {
+  api.me.mockResolvedValue(me('agent'));
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  aiApi.settings.mockResolvedValue(aiSettings([aiSlot('triage', { enabled: false, default_level: 'off' }), aiSlot('draft')]));
+  aiApi.channel.mockResolvedValue(formLevels({ level: 'auto', effective_level: 'off', source: 'channel', off_reason: 'workspace_off' }));
+  show(FORM, { tab: 'ai' });
+  expect(await screen.findByText('Off: Triage is off for the workspace.')).toBeInTheDocument();
+  expect(screen.getByText('Only admins can change this.')).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Triage · Whole channel' })).toBeDisabled();
+  expect(screen.queryByRole('link', { name: 'Turn on' })).toBeNull();
 });

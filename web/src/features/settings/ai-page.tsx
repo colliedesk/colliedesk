@@ -1,12 +1,16 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import type { AIEvent, AIModelsInput, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
+import type { AIEvent, AILevel, AIModelsInput, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
 import { formatDate, formatDay } from '../../lib/format-date';
+import { Choice } from '../../ui/choice';
 import { Dialog as SharedDialog, Field } from '../../ui/dialog';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiMessages as m } from './ai-messages';
 import { aiChatMessages as chatMessages } from './ai-chat-messages';
 import { AIChatPanel } from './ai-chat-panel';
+import { featureName, levelMeaning, levelName, levelsOf, scopeName } from './ai-levels';
+import { AutoDraftDialog, AutoTriageDialog, money, parts } from './ai-level-dialogs';
+import type { Part } from './ai-level-dialogs';
 import { SettingsNav } from './settings-nav';
 import type { Shown } from './settings-nav';
 import { selfHostGuide } from '../../lib/self-host-guide';
@@ -62,8 +66,6 @@ export interface AIPageProps {
   onSetChatCap?: (cap: number | null) => Promise<unknown>;
 }
 
-// money writes micro-dollars as dollars and cents.
-export const money = (micro: number) => `$${(micro / 1e6).toFixed(2)}`;
 const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 
 // recentMonths lists this UTC month and the five before it, as YYYY-MM.
@@ -76,9 +78,9 @@ export function recentMonths(now: Date = new Date()): string[] {
 
 const slotLabel = (slot: string) => m.slotName[slot as AISlotName] ?? slot;
 
-// focusSwitch puts focus back on an automatic mode's switch once its dialog closes (the dialog is gone
+// focusSwitch puts focus back on a feature's default level once its dialog closes (the dialog is gone
 // from the page, so the browser would leave it on the body).
-const focusSwitch = (slot: AISlotName) => requestAnimationFrame(() => document.getElementById(`ai-auto-${slot}`)?.focus());
+const focusSwitch = (slot: AISlotName) => requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#ai-auto-${slot} input:checked`)?.focus());
 
 // useFocusAfterSave puts focus back on an automatic mode's switch once the change it started is saved:
 // the row is drawn again meanwhile, and focus would otherwise land on the body.
@@ -140,9 +142,9 @@ export function AIPage(props: AIPageProps) {
       {dialog?.kind === 'automatic' && settings && <AutomaticDialog settings={settings} onClose={() => setDialog(undefined)} onSave={props.onSetAutomatic} />}
       {dialog?.kind === 'delete' && settings && <DeleteDialog provider={dialog.provider} settings={settings} onClose={() => setDialog(undefined)} onRemove={props.onRemove} />}
       {dialog?.kind === 'auto-draft' && settings && <AutoDraftDialog slot={dialog.slot} settings={settings} onClose={() => { setDialog(undefined); focusSwitch('draft'); }}
-        onTurnOn={() => { setDialog(undefined); setSlot('draft', { ...slotInput(dialog.slot), automatic: true }); }} />}
+        onTurnOn={() => { setDialog(undefined); setSlot('draft', { ...slotInput(dialog.slot), default_level: 'suggest' }); }} />}
       {dialog?.kind === 'auto-triage' && <AutoTriageDialog slot={dialog.slot} onClose={() => { setDialog(undefined); focusSwitch('triage'); }}
-        onTurnOn={() => { setDialog(undefined); setSlot('triage', { ...slotInput(dialog.slot), automatic: true }); }} />}
+        onTurnOn={() => { setDialog(undefined); setSlot('triage', { ...slotInput(dialog.slot), default_level: 'auto' }); }} />}
     </main>
   );
 }
@@ -209,9 +211,6 @@ function slotInput(slot: AISlot): AISlotInput {
   return input;
 }
 
-type Part = AISlot['auto_parts'][number];
-const parts: Part[] = ['tags', 'priority', 'assignee'];
-const partList = (list: Part[]) => list.map((part) => m.autoPartLower[part]).join(' and ').replace(/ and (?=.* and )/g, ', ');
 
 function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
   const name = slotLabel(slot.slot);
@@ -269,18 +268,25 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
       {!saving && choices.length === 0 && <p className="ai-slot-why help">{m.addFirst}</p>}
       {!saving && stopped && slot.off_reason && <p className="ai-slot-why error-copy">{m.offReason[slot.off_reason]}</p>}
       {slot.slot === 'draft' && <AutoDraft slot={slot} settings={settings} isAdmin={isAdmin} locked={locked} hasProvider={choices.length > 0}
-        onTurnOn={() => onConfirmAuto(slot)} onOff={() => onSetAuto('draft', { ...slotInput(slot), automatic: false })} onRaise={onOpenAutomatic} />}
+        onTurnOn={() => onConfirmAuto(slot)} onOff={() => onSetAuto('draft', { ...slotInput(slot), default_level: 'off' })} onRaise={onOpenAutomatic} />}
       {slot.slot === 'triage' && <AutoTriage slot={slot} settings={settings} isAdmin={isAdmin} locked={locked} hasProvider={choices.length > 0}
         onTurnOn={() => onConfirmAuto(slot)} onSet={(input) => onSetAuto('triage', { ...slotInput(slot), ...input })} />}
+      {/* The help center's chat has no level per channel. */}
+      {slot.slot !== 'intake' && slot.slot !== 'chat' && <ChannelsThatDiffer slot={slot} settings={settings} />}
     </div>
   );
 }
 
-// AutoTriage is the automatic mode of triage suggestions: off until an admin turns it on (a dialog says
-// what it does), the parts it applies, and how it went in 30 days.
+// levelItems are the levels a feature takes, each named for what it does.
+const levelItems = (slot: AISlotName) => levelsOf(slot).map((level) => ({ value: level, label: levelName[level] }));
+
+// AutoTriage is what triage does by itself where no channel says otherwise: off, suggest for each new
+// conversation, or apply by itself (a dialog says what it does first), with the parts it applies and how
+// it went in 30 days.
 function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onSet }: { slot: AISlot; settings: AISettings; isAdmin: boolean; locked: boolean; hasProvider: boolean;
   onTurnOn: () => void; onSet: (input: Partial<AISlotInput>) => void }) {
-  const on = slot.enabled && slot.automatic;
+  const level: AILevel = slot.enabled ? slot.default_level : 'off';
+  const on = level === 'auto';
   const id = useId();
   const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.autoNeedsFeature : undefined;
   const chosen = slot.auto_parts.length > 0 ? slot.auto_parts : (['tags', 'priority'] as Part[]);
@@ -290,82 +296,80 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
   };
   return (
     <div className="ai-auto">
-      <div className="ai-auto-lead"><strong id={id}>{m.autoTitle}</strong>
-        <span aria-live="polite">{on ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>}</span></div>
+      <div className="ai-auto-lead"><strong id={id}>{m.levelHeading}</strong></div>
       {why ? <p className="ai-auto-desc muted-copy" id={`${id}-why`}>{why}</p>
-        : <p className="ai-auto-desc"><span className="ai-long">{m.autoDesc} </span><b>{m.autoDescStrong}</b>{m.autoDescRest}</p>}
-      {!why && <fieldset className="ai-auto-parts"><legend className="sr-only">{m.autoParts}</legend>
+        : on ? <p className="ai-auto-desc"><span className="ai-long">{m.autoDesc} </span><b>{m.autoDescStrong}</b>{m.autoDescRest}</p>
+          : <p className="ai-auto-desc">{levelMeaning.triage[level]}.</p>}
+      {!why && on && <fieldset className="ai-auto-parts"><legend className="sr-only">{m.autoParts}</legend>
         {parts.map((part) => <label key={part} className="ai-pick"><input type="checkbox" checked={chosen.includes(part)}
-          disabled={!on || locked || (chosen.length === 1 && chosen.includes(part))} title={chosen.length === 1 && chosen.includes(part) ? m.autoLastPart : undefined}
+          disabled={locked || (chosen.length === 1 && chosen.includes(part))} title={chosen.length === 1 && chosen.includes(part) ? m.autoLastPart : undefined}
           onChange={() => toggle(part)} />{m.autoPart[part]}</label>)}
-        {on && chosen.length === 1 && <span className="muted-copy ai-auto-hint">{m.autoLastPart}</span>}
-        {on ? <span className="ai-auto-stat">{m.autoStat(settings.auto_triage.applied, settings.auto_triage.undone)} <span className="muted-copy">{m.autoStatWhen}</span></span>
-          : isAdmin && <span className="ai-auto-stat muted-copy ai-long">{m.autoPickLater}</span>}
+        {chosen.length === 1 && <span className="muted-copy ai-auto-hint">{m.autoLastPart}</span>}
+        <span className="ai-auto-stat">{m.autoStat(settings.auto_triage.applied, settings.auto_triage.undone)} <span className="muted-copy">{m.autoStatWhen}</span></span>
       </fieldset>}
-      <label className="switch ai-auto-switch"><input type="checkbox" role="switch" id="ai-auto-triage" aria-label={m.autoTitle} checked={on} disabled={locked || !slot.enabled}
-        aria-describedby={why ? `${id}-why` : undefined}
-        onChange={(event) => (event.target.checked ? onTurnOn() : onSet({ automatic: false }))} /></label>
+      {!why && !on && isAdmin && <p className="ai-auto-note muted-copy ai-long">{m.autoPickLater}</p>}
+      <div className="ai-auto-switch" id="ai-auto-triage">
+        <Choice legend={m.levelLegend(featureName.triage)} hideLegend items={levelItems('triage')} value={level} disabled={locked || !slot.enabled}
+          describedBy={why ? `${id}-why` : id} onChange={(next) => (next === 'auto' ? onTurnOn() : onSet({ default_level: next }))} />
+      </div>
     </div>
   );
 }
 
-// AutoDraft is the automatic mode of reply drafts: a draft for every customer message, off until an
-// admin turns it on (a dialog estimates what it costs); paused for the day at its limit, or until next
-// month once it used half of the included AI.
+// AutoDraft is what reply drafts do by themselves where no channel says otherwise: only when asked, or a
+// draft for every customer message (a dialog estimates what it costs); paused for the day at its limit,
+// or until next month once it used half of the included AI.
 function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onOff, onRaise }: { slot: AISlot; settings: AISettings; isAdmin: boolean; locked: boolean;
   hasProvider: boolean; onTurnOn: () => void; onOff: () => void; onRaise: () => void }) {
-  const on = slot.enabled && slot.automatic;
+  const level: AILevel = slot.enabled ? slot.default_level : 'off';
+  const on = level === 'suggest';
   const limits = settings.automatic;
   const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.autoDraftNeedsFeature : undefined;
   const half = settings.allowance ? money(Math.floor(settings.allowance.limit_micro_usd / 2)) : null;
   const pausedDay = on && limits.drafts_paused_until !== null;
   const pausedHalf = on && !pausedDay && limits.drafts_reserved_until !== null;
   const status = pausedDay ? <span className="status ai-st-warn">{m.autoDraftPausedDay(formatDate(limits.drafts_paused_until ?? '', 'UTC'))}</span>
-    : pausedHalf ? <span className="status ai-st-warn">{m.autoDraftPausedDay(formatDay(limits.drafts_reserved_until ?? '', 'UTC'))}</span>
-      : on ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>;
+    : pausedHalf ? <span className="status ai-st-warn">{m.autoDraftPausedDay(formatDay(limits.drafts_reserved_until ?? '', 'UTC'))}</span> : null;
   return (
     <div className="ai-auto">
-      <div className="ai-auto-lead"><strong>{m.autoDraftTitle}</strong><span aria-live="polite">{status}</span></div>
+      <div className="ai-auto-lead"><strong id="ai-auto-draft-what">{m.levelHeading}</strong>{status && <span aria-live="polite">{status}</span>}</div>
       {why ? <p className="ai-auto-desc muted-copy" id="ai-auto-draft-why">{why}</p>
         : pausedDay ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedDayDesc(limits.drafts_today, limits.draft_per_day)}</b>{m.autoDraftPausedDayRest}</p>
           : pausedHalf ? <p className="ai-auto-desc ai-auto-warn"><b>{m.autoDraftPausedHalfDesc(half)}</b>{m.autoDraftPausedHalfRest}</p>
-            : <p className="ai-auto-desc"><span className="ai-long">{m.autoDraftDesc} </span><b>{m.autoDraftStrong}</b>{m.autoDraftCost(limits.draft_per_day)}</p>}
+            : on ? <p className="ai-auto-desc"><span className="ai-long">{m.autoDraftDesc} </span><b>{m.autoDraftStrong}</b>{m.autoDraftCost(limits.draft_per_day)}</p>
+              : <p className="ai-auto-desc">{levelMeaning.draft.off}. <b>{m.autoDraftStrong}</b></p>}
       <div className="ai-auto-side">
         {on && !pausedDay && !pausedHalf && <span className="ai-auto-stat">{m.autoDraftToday(limits.drafts_today, limits.draft_per_day)}</span>}
         {pausedDay && isAdmin && <button type="button" onClick={onRaise}>{m.autoDraftRaise}</button>}
         {pausedHalf && isAdmin && <a className="button ai-link-button" href="/settings/ai?add=1">{m.autoDraftAddKey}</a>}
         {locked && !why && <span className="sr-only" id="ai-auto-draft-why">{m.autoAdminsOnly}</span>}
-        <label className="switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
-          aria-describedby={why || locked ? 'ai-auto-draft-why' : undefined}
-          onChange={(event) => (event.target.checked ? onTurnOn() : onOff())} /></label>
+        <div id="ai-auto-draft"><Choice legend={m.levelLegend(featureName.draft)} hideLegend items={levelItems('draft')} value={level} disabled={locked || !slot.enabled}
+          describedBy={why || locked ? 'ai-auto-draft-why' : 'ai-auto-draft-what'} onChange={(next) => (next === 'suggest' ? onTurnOn() : onOff())} /></div>
       </div>
     </div>
   );
 }
 
-function AutoDraftDialog({ slot, settings, onClose, onTurnOn }: { slot: AISlot; settings: AISettings; onClose: () => void; onTurnOn: () => void }) {
-  const estimate = settings.auto_draft_estimate;
-  const perDay = settings.automatic.draft_per_day;
-  const server = slot.source === 'server';
-  const each = estimate.draft_cost_micro_usd;
-  const allowance = settings.allowance;
-  const provider = settings.providers.find((item) => item.id === slot.provider_id);
-  const half = allowance ? Math.floor(allowance.limit_micro_usd / 2) : null;
-  return (
-    <Dialog title={m.autoDraftConfirmTitle} help={m.autoDraftConfirmLead} onClose={onClose} onSubmit={onTurnOn}
-      footer={<><button type="button" className="ghost" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" autoFocus>{m.autoConfirmOn}</button></>}>
-      <dl className="ai-estimate">
-        <div><dt>{m.estLast30}</dt><dd>{m.estMessages(estimate.customer_messages)}</dd></div>
-        {each !== null && <div><dt>{m.estAbout}</dt><dd>{m.estMonth(money(each * estimate.customer_messages), money(each))}</dd></div>}
-        {server && allowance && <div><dt>{m.estPlan}</dt><dd>{m.estPlanMonth(money(allowance.limit_micro_usd))}</dd></div>}
-        {!server && <div><dt>{m.estAtMost}</dt><dd>{m.estAtMostDay(perDay)}</dd></div>}
-      </dl>
-      {server && half !== null ? <p className="ai-estimate-note"><b>{m.estHalf(money(half), each ? Math.floor(half / each) : null)}</b>{m.estHalfRest}</p>
-        : !server && <p className="ai-estimate-note"><b>{m.estByo(provider?.label ?? '')}</b>{m.estByoRest}</p>}
-      <ul className="ai-facts">{m.autoDraftFacts(perDay).map((fact) => <li key={fact}>{fact}</li>)}</ul>
-      <p><a href="https://github.com/colliedesk/colliedesk/blob/main/docs/user/ai.md#write-a-draft-when-a-customer-writes" target="_blank" rel="noopener noreferrer">{m.estHow}</a></p>
-    </Dialog>
-  );
+// ChannelsThatDiffer lists the channels whose level of the feature is their own, each a link to its AI
+// tab; a feature the workspace has off runs on none of them, and each says so.
+function ChannelsThatDiffer({ slot, settings }: { slot: AISlot; settings: AISettings }) {
+  const rows = settings.channels.filter((row) => row.slot === slot.slot);
+  if (rows.length === 0) return <p className="ai-differ muted-copy">{m.everyChannelFollows}</p>;
+  const byChannel = new Map<string, { name: string; parts: string[] }>();
+  for (const row of rows) {
+    const entry = byChannel.get(row.channel_id) ?? { name: row.channel_name, parts: [] };
+    entry.parts.push(`${row.scope === '' ? '' : `${scopeName(row.scope)}: `}${levelName[row.level]}`);
+    byChannel.set(row.channel_id, entry);
+  }
+  const off = !slot.enabled;
+  return <div className="ai-differ">
+    <span className="ai-differ-label">{m.channelsThatDiffer}</span>
+    <ul className="ai-chips">{[...byChannel].map(([id, entry]) => {
+      const href = `/settings/channels/${id}?tab=ai`;
+      const text = off ? m.chipOff(entry.name, featureName[slot.slot]) : `${entry.name} · ${entry.parts.join(' · ')}`;
+      return <li key={id}><a className="ai-chip" href={href}>{text}</a></li>;
+    })}</ul>
+  </div>;
 }
 
 // AutoMovedNotice says when triage's automatic mode turned off because the feature moved to another
@@ -378,16 +382,6 @@ function AutoMovedNotice({ settings, slotName, onTurnOn }: { settings: AISetting
   const title = slotName === 'draft' ? m.autoDraftTitle : m.autoTitle;
   return <div className="notice" role="status"><span>{m.autoMovedNotice(title, slotLabel(slotName), String(detail.to?.provider_label ?? ''))}</span>
     <button type="button" onClick={() => onTurnOn(slot)}>{m.autoTurnOnAgain}</button></div>;
-}
-
-function AutoTriageDialog({ slot, onClose, onTurnOn }: { slot: AISlot; onClose: () => void; onTurnOn: () => void }) {
-  const chosen = slot.auto_parts.length > 0 ? slot.auto_parts : (['tags', 'priority'] as Part[]);
-  return (
-    <Dialog title={m.autoConfirmTitle} help={m.autoConfirmLead(partList(chosen))} onClose={onClose} onSubmit={onTurnOn}
-      footer={<><button type="button" className="ghost" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" autoFocus>{m.autoConfirmOn}</button></>}>
-      <ul className="ai-facts">{m.autoConfirmFacts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
-    </Dialog>
-  );
 }
 
 function Meter({ allowance }: { allowance: NonNullable<AISettings['allowance']> }) {
@@ -533,7 +527,26 @@ function eventText(event: AIEvent): string {
     }
     return m.eventAutomatic(to?.per_day ?? 0, to?.per_minute ?? 0);
   }
+  if (event.kind === 'channel_level_changed') {
+    const change = event.detail as { channel_name?: string; scope?: string; before?: AILevel | null; after?: AILevel | null; reason?: string; options_changed?: boolean };
+    const where = `${change.channel_name ?? ''}${change.scope ? ` · ${scopeName(change.scope)}` : ''}`;
+    const named = (level?: AILevel | null) => (level ? levelName[level] : m.levelFollowing);
+    if (change.reason === 'recipient_changed') return m.eventLevelLowered(slot, where, named(change.after));
+    if (change.before === change.after && change.options_changed) return m.eventLevelOptions(slot, where);
+    return m.eventLevel(slot, where, named(change.before), named(change.after));
+  }
+  if (event.kind === 'source_consent_changed') {
+    const change = event.detail as { source_class?: string; consented?: boolean };
+    return change.consented ? m.eventConsentOn(change.source_class ?? '') : m.eventConsentOff(change.source_class ?? '');
+  }
   if (detail.reason === 'provider_removed') return m.eventSlotRemoved(slot, label);
+  const fromLevel = detail.from?.default_level as AILevel | undefined;
+  const toLevel = detail.to?.default_level as AILevel | undefined;
+  // Triage between off and suggest; auto, and drafts' suggest, are the older automatic switch below.
+  if (event.slot === 'triage' && fromLevel && toLevel && fromLevel !== 'auto' && toLevel !== 'auto' && fromLevel !== toLevel
+    && detail.from?.enabled === true && detail.to?.enabled === true && detail.from?.provider_label === detail.to?.provider_label) {
+    return m.eventDefaultLevel(slot, levelName[fromLevel], levelName[toLevel]);
+  }
   const fromAuto = detail.from?.automatic === true;
   const toAuto = detail.to?.automatic === true;
   const autoParts = String(detail.to?.auto_parts ?? '').split(',').filter(Boolean).map((part) => m.autoPartLower[part as Part] ?? part).join(', ');

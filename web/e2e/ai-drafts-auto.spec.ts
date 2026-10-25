@@ -42,13 +42,15 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     const { id } = await provider.json() as { id: string };
     expect((await page.request.put(`${baseURL}/api/v1/ai/slots/draft`, { headers, data: { source: 'provider', provider_id: id, enabled: true } })).status()).toBe(200);
 
-    // Settings → Built-in AI: the switch asks first, with what it costs on the team's own key.
+    // Settings → Built-in AI: raising the drafts' default for channels to Suggest asks first, with what
+    // it costs on the team's own key.
     await page.goto(`${baseURL}/settings/ai`);
-    await page.getByRole('switch', { name: 'Write a draft when a customer writes' }).click();
+    const drafts = page.getByRole('group', { name: 'Reply drafts: default for channels' });
+    await drafts.getByRole('radio', { name: 'Suggest' }).click();
     const dialog = page.getByRole('dialog', { name: 'Write a draft for every customer message?' });
     await expect(dialog.getByText(/Billed to your key, Office model/)).toBeVisible();
     await dialog.getByRole('button', { name: 'Turn on' }).click();
-    await expect(page.getByRole('switch', { name: 'Write a draft when a customer writes' })).toBeChecked();
+    await expect(drafts.getByRole('radio', { name: 'Suggest' })).toBeChecked();
 
     // Adding the provider checked it with one call; from here, one call is one draft.
     const before = model.calls();
