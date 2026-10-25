@@ -15,6 +15,7 @@ import { ContactPicker } from '../contacts/contact-picker';
 import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import type { AttachmentLimits } from './attachment-picker';
 import { CcField } from './cc-field';
+import { largeAttachmentWarning } from './outbound-notice';
 import { replyRefusalText } from './refusal-text';
 
 // Why a new conversation cannot be sent at all, known before the person writes anything.
@@ -56,7 +57,7 @@ export function StartConversationWindow({ onClose, onStarted }: { onClose: () =>
   const settingsHref = channelID ? `/settings/channels/${encodeURIComponent(channelID)}?tab=replies` : '/settings/channels/type/email?tab=replies';
   return <NewConversationDialog blocked={blocked} checking={me.isPending || list.isPending || (Boolean(channelID) && channel.isPending)} onClose={onClose} onStart={start}
     senders={senders} channelID={channelID} onChooseChannel={setChosen} settingsHref={settingsHref}
-    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
+    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(channel.data) } : undefined}
     onOpenSettings={() => void navigate({ href: settingsHref })} onChoosePlan={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />;
 }
 
