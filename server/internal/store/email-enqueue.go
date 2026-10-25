@@ -27,6 +27,17 @@ type OutboundPolicy struct {
 	GmailEnabled bool
 }
 
+// MailboxEnabled reports whether this server has the settings of the provider, so a mailbox connected
+// through it can send.
+func (p OutboundPolicy) MailboxEnabled(provider string) bool {
+	switch provider {
+	case domain.MailboxGoogle:
+		return p.GmailEnabled
+	default:
+		return false
+	}
+}
+
 // WithOutbound returns a store that queues replies according to the policy.
 func (s *Store) WithOutbound(policy OutboundPolicy) *Store {
 	copy := *s
@@ -34,15 +45,15 @@ func (s *Store) WithOutbound(policy OutboundPolicy) *Store {
 	return &copy
 }
 
-// notReadyReason explains why a reply cannot be emailed, or returns "" when it can. A connected Gmail
-// account sends by itself: it needs no relay and no verified domain, and a broken one never hands its
-// replies to the relay instead.
+// notReadyReason explains why a reply cannot be emailed, or returns "" when it can. A connected mailbox
+// sends by itself: it needs no relay and no verified domain, and a broken one never hands its replies to
+// the relay instead.
 func (p OutboundPolicy) notReadyReason(domainVerified bool, mailbox *mailboxState) string {
 	switch {
 	case mailbox != nil && mailbox.status == domain.MailboxFailed:
-		return domain.MailboxFailureText(mailbox.errorCode)
-	case mailbox != nil && !p.GmailEnabled:
-		return domain.MailboxNotConfiguredNote
+		return domain.MailboxFailureText(mailbox.provider, mailbox.errorCode)
+	case mailbox != nil && !p.MailboxEnabled(mailbox.provider):
+		return domain.MailboxNotConfiguredNote(mailbox.provider)
 	case mailbox != nil:
 		return ""
 	case !p.Enabled:
@@ -140,9 +151,9 @@ func (s *Store) assignEmailIdentity(ctx context.Context, tx pgx.Tx, workspaceID,
 	return nil
 }
 
-// mailboxState is the Gmail account connected to an email channel as the outbound rules see it.
+// mailboxState is the mailbox connected to an email channel as the outbound rules see it.
 type mailboxState struct {
-	status, errorCode string
+	provider, status, errorCode string
 }
 
 // transport is what a reply queued now is sent through.
@@ -150,13 +161,13 @@ func (m *mailboxState) transport() string {
 	if m == nil {
 		return "smtp"
 	}
-	return "gmail"
+	return domain.MailboxTransport(m.provider)
 }
 
 func loadMailboxState(ctx context.Context, tx pgx.Tx, workspaceID, channelID string) (*mailboxState, error) {
 	var state mailboxState
-	err := tx.QueryRow(ctx, `SELECT status,COALESCE(error_code,'') FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2`, workspaceID, channelID).
-		Scan(&state.status, &state.errorCode)
+	err := tx.QueryRow(ctx, `SELECT provider,status,COALESCE(error_code,'') FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2`, workspaceID, channelID).
+		Scan(&state.provider, &state.status, &state.errorCode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

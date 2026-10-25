@@ -57,7 +57,7 @@ func (f fixture) connectGmailTo(t *testing.T, channelID string, fake *googletest
 	if err != nil {
 		t.Fatal(err)
 	}
-	stored := store.SealedGrant{KeyID: keyID, Sealed: sealed}
+	stored := store.SealedGrant{KeyID: keyID, Sealed: sealed, Provider: domain.MailboxGoogle}
 	if _, _, err := f.store.SaveMailboxConnection(context.Background(), f.workspaceID, channelID, f.agentID, grant.Address, strings.Join(grant.Scopes, " "), stored, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
@@ -258,11 +258,11 @@ func TestAReplyAcceptedForGmailFailsWhenGmailIsDisconnectedFirst(t *testing.T) {
 	clock := time.Now().UTC().Add(time.Second)
 	worker := gmailWorker(f, smtp, config, &clock)
 	reply := f.write(t, "outgoing", "Hello")
-	if _, err := f.store.DeleteMailboxConnection(context.Background(), f.workspaceID, f.emailChannelID); err != nil {
+	if _, err := f.store.DeleteMailboxConnection(context.Background(), f.workspaceID, f.emailChannelID, domain.MailboxGoogle); err != nil {
 		t.Fatal(err)
 	}
 	process(t, worker)
-	if delivery := f.delivery(t, reply.ID); delivery.Status != "failed" || *delivery.LastError != domain.MailboxDisconnectedNote {
+	if delivery := f.delivery(t, reply.ID); delivery.Status != "failed" || *delivery.LastError != domain.MailboxDisconnectedNote(domain.MailboxGoogle) {
 		t.Fatalf("delivery = %+v", delivery)
 	}
 	if len(smtp.mail()) != 0 || len(fake.Messages()) != 0 {
@@ -286,7 +286,7 @@ func TestAGmailOnlyServerQueuesAndSendsWithoutAnSMTPRelay(t *testing.T) {
 		t.Fatalf("delivery = %+v, gmail %d", delivery, len(fake.Messages()))
 	}
 	// Without Gmail and without a relay the reply fails with the reason, as before.
-	if _, err := f.store.DeleteMailboxConnection(context.Background(), f.workspaceID, f.emailChannelID); err != nil {
+	if _, err := f.store.DeleteMailboxConnection(context.Background(), f.workspaceID, f.emailChannelID, domain.MailboxGoogle); err != nil {
 		t.Fatal(err)
 	}
 	other := f.write(t, "outgoing", "No way out")

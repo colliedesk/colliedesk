@@ -49,7 +49,8 @@ type Config struct {
 	Outbound store.OutboundPolicy
 	// Sender sends replies; nil sends nothing (a test of the frame).
 	Sender *emailoutbox.Worker
-	// RevokeGrant revokes a Gmail grant at Google after the channel holding it was removed; nil revokes nothing.
+	// RevokeGrant revokes a mailbox grant at its provider after the channel holding it was removed; nil
+	// revokes nothing.
 	RevokeGrant func(grant *store.SealedGrant, workspaceID, channelID string)
 }
 
@@ -191,7 +192,7 @@ const (
 
 func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel) (channels.Status, error) {
 	var paused, verified, secret bool
-	var mailboxStatus *string
+	var mailboxStatus, mailboxProvider *string
 	settings, err := store.EmailChannelTx(ctx, tx, channel.WorkspaceID, channel.ID)
 	if err != nil {
 		return channels.Status{}, err
@@ -200,9 +201,9 @@ func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 		return channels.Status{State: channels.StateNotConnected}, nil
 	}
 	verified, secret = settings.DomainVerifiedAt != nil, settings.SecretSet
-	err = tx.QueryRow(ctx, `SELECT w.email_paused_at IS NOT NULL,(SELECT status FROM mailbox_connections m WHERE m.workspace_id=w.id AND m.channel_id=$2::uuid)
-		FROM workspaces w WHERE w.id=$1`, channel.WorkspaceID, channel.ID).
-		Scan(&paused, &mailboxStatus)
+	err = tx.QueryRow(ctx, `SELECT w.email_paused_at IS NOT NULL,m.status,m.provider FROM workspaces w
+		LEFT JOIN mailbox_connections m ON m.workspace_id=w.id AND m.channel_id=$2::uuid WHERE w.id=$1`, channel.WorkspaceID, channel.ID).
+		Scan(&paused, &mailboxStatus, &mailboxProvider)
 	if err != nil {
 		return channels.Status{}, fmt.Errorf("read email channel state: %w", err)
 	}
@@ -215,7 +216,7 @@ func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 		return attention(ReasonSendingPaused)
 	case mailboxStatus != nil && *mailboxStatus == domain.MailboxFailed:
 		return attention(ReasonGmailBroken)
-	case mailboxStatus != nil && !policy.GmailEnabled, mailboxStatus == nil && !policy.Enabled:
+	case mailboxStatus != nil && !policy.MailboxEnabled(*mailboxProvider), mailboxStatus == nil && !policy.Enabled:
 		return attention(ReasonCannotSend)
 	case mailboxStatus == nil && policy.RequireVerifiedDomain && !verified && policy.FallbackDomain == "":
 		return attention(ReasonDomainUnverified)
@@ -225,20 +226,20 @@ func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 	return channels.Status{State: channels.StateWorking}, nil
 }
 
-// BeforeRemove reads the Gmail grant the channel holds, which goes with it, so it is revoked at Google
-// once the removal committed.
+// BeforeRemove reads the mailbox grant the channel holds, which goes with it, so it is revoked at its
+// provider once the removal committed.
 func (c config) BeforeRemove(ctx context.Context, tx pgx.Tx, channel channels.Channel) (func(context.Context), error) {
 	if c.a.config.RevokeGrant == nil {
 		return nil, nil
 	}
 	var grant store.SealedGrant
-	err := tx.QueryRow(ctx, `SELECT token_key_id,refresh_token_sealed,address FROM mailbox_connections WHERE workspace_id=$1 AND channel_id=$2::uuid`, channel.WorkspaceID, channel.ID).
-		Scan(&grant.KeyID, &grant.Sealed, &grant.Address)
+	err := tx.QueryRow(ctx, `SELECT token_key_id,refresh_token_sealed,address,provider FROM mailbox_connections WHERE workspace_id=$1 AND channel_id=$2::uuid`, channel.WorkspaceID, channel.ID).
+		Scan(&grant.KeyID, &grant.Sealed, &grant.Address, &grant.Provider)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read gmail grant: %w", err)
+		return nil, fmt.Errorf("read mailbox grant: %w", err)
 	}
 	return func(context.Context) { c.a.config.RevokeGrant(&grant, channel.WorkspaceID, channel.ID) }, nil
 }

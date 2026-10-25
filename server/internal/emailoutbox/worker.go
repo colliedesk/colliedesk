@@ -155,8 +155,8 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) channels.Send
 		return channels.Defer(w.options.Now().Add(limitDeferral),
 			fmt.Sprintf("Waiting: this workspace reached its hourly limit of %d emailed replies.", w.options.HourlyLimit))
 	}
-	if item.Transport == transportGmail {
-		return w.deliverGmail(ctx, item)
+	if provider, ok := domain.MailboxProviderOf(item.Transport); ok {
+		return w.deliverMailbox(ctx, item, provider)
 	}
 	if w.sender == nil {
 		return channels.Failed("Outgoing email is not configured on this server. Ask the administrator to set SMTP_HOST.")
