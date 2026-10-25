@@ -1,36 +1,33 @@
 -- Channels (docs/internals/channels.md). A channel is one way customers reach a workspace (its email
 -- address, its web form, later a chat account): one row in channels plus the adapter of its type.
 -- Everything that arrives goes through one ingest pipeline and every reply leaves through one outbox,
--- whatever the type. Email and the web form keep their own settings tables, now tied to a channel row.
+-- whatever the type. Email and the web form keep their own settings tables, keyed by their channel: a
+-- workspace may have several channels of a type, one of them its default.
 --
--- Older images keep working on this schema after a rollback that keeps it (expand, then contract):
--- the triggers at the end fill the new columns for the writes they make, and email_outbox stays as
--- a view of the renamed outbox. A later migration removes them once no image older than this one
--- can be rolled back to.
+-- An image older than this migration does not run on this schema: the old columns are moved, not
+-- kept twice. Rolling back is restoring the backup taken before the upgrade with the older image
+-- (docs/self-host/upgrade.md); the down migration exists for a workspace that still fits the old
+-- schema, and refuses otherwise.
 
 -- The registered channel types. connectable=false is only an origin of conversations (an import, a
--- conversation an agent started); nothing connects to it. singleton: at most one live channel of the
--- type per workspace. A new type adds its row in its own migration. Not workspace data: no
--- workspace_id and no grant to the app role (revoked below), which never reads it: the server's
+-- conversation an agent started); nothing connects to it. A workspace may have any number of channels
+-- of a type (two support mailboxes, two web forms). A new type adds its row in its own migration. Not
+-- workspace data: no workspace_id and no grant to the app role (revoked below), which never reads it: the server's
 -- registry knows the types, and foreign keys check it as the owner.
 CREATE TABLE channel_types (
     type text PRIMARY KEY CHECK (type ~ '^[a-z][a-z0-9_]{1,30}$'),
     connectable boolean NOT NULL,
-    singleton boolean NOT NULL DEFAULT false,
-    UNIQUE (type, connectable, singleton)
+    UNIQUE (type, connectable)
 );
-INSERT INTO channel_types (type, connectable, singleton) VALUES
-    ('email', true, true), ('web_form', true, true),
-    ('imported', false, false), ('agent', false, false), ('problem_report', false, false);
+INSERT INTO channel_types (type, connectable) VALUES
+    ('email', true), ('web_form', true), ('imported', false), ('agent', false), ('problem_report', false);
 
 CREATE TABLE channels (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     type text NOT NULL,
-    -- Copied from channel_types through the foreign key below, so only a connectable type has
-    -- channels and the singleton index can read the flag.
+    -- Checked against channel_types through the foreign key below, so only a connectable type has channels.
     connectable boolean NOT NULL DEFAULT true CHECK (connectable),
-    singleton boolean NOT NULL,
     name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 80 AND btrim(name) <> '' AND name !~ '[\x01-\x1f\x7f]'),
     enabled boolean NOT NULL DEFAULT true,
     -- The channel's rules for what arrives and what leaves (join policy, default tags, assignee and
@@ -47,15 +44,22 @@ CREATE TABLE channels (
     -- Removing a channel keeps its row, so conversations still name it; its settings and secrets go.
     deleted_at timestamptz,
     deleted_by_agent_id uuid,
+    -- The channel of its type that answers what names no channel: a conversation started without
+    -- choosing one, the routes of one email channel and one web form, a hosted address no channel
+    -- claims. At most one per type, and a removed channel never is it.
+    is_default boolean NOT NULL DEFAULT false,
     UNIQUE (workspace_id, id),
-    FOREIGN KEY (type, connectable, singleton) REFERENCES channel_types(type, connectable, singleton),
+    FOREIGN KEY (type, connectable) REFERENCES channel_types(type, connectable),
     FOREIGN KEY (workspace_id, created_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (created_by_agent_id),
     FOREIGN KEY (workspace_id, disabled_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (disabled_by_agent_id),
     FOREIGN KEY (workspace_id, deleted_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (deleted_by_agent_id),
     CHECK (enabled = (disabled_at IS NULL)),
-    CHECK (deleted_at IS NULL OR NOT enabled)
+    CHECK (deleted_at IS NULL OR NOT enabled),
+    CHECK (NOT is_default OR deleted_at IS NULL)
 );
-CREATE UNIQUE INDEX channels_singleton_idx ON channels(workspace_id, type) WHERE singleton AND deleted_at IS NULL;
+CREATE UNIQUE INDEX channels_default_idx ON channels(workspace_id, type) WHERE is_default;
+-- Two live channels of a type never share a name, so a person can tell them apart.
+CREATE UNIQUE INDEX channels_name_idx ON channels(workspace_id, type, lower(name)) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX channels_external_account_idx ON channels(type, external_account) WHERE external_account IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX channels_workspace_idx ON channels(workspace_id, created_at) WHERE deleted_at IS NULL;
 
@@ -266,7 +270,7 @@ CREATE TABLE channel_events (
     channel_type text NOT NULL,
     channel_name text NOT NULL,
     kind text NOT NULL CHECK (kind IN ('added', 'renamed', 'enabled', 'disabled', 'config_changed', 'credential_changed',
-        'removed', 'held_replayed', 'held_discarded')),
+        'removed', 'held_replayed', 'held_discarded', 'default_changed')),
     actor_agent_id uuid,
     -- The agent token's session when a token made the change.
     actor_token_id uuid,
@@ -279,18 +283,23 @@ CREATE INDEX channel_events_workspace_idx ON channel_events(workspace_id, create
 CREATE INDEX channel_events_channel_idx ON channel_events(workspace_id, channel_id, created_at DESC, seq DESC);
 
 -- A conversation's origin is a registered type now, not a closed list, and it names the channel it
--- came through (NULL for an origin without one: imported, agent, problem_report).
+-- came through (NULL for an origin without one: imported, agent, problem_report). reply_channel_id
+-- pins the channel its replies leave from when its own channel cannot send (a web form, an import, a
+-- conversation an agent started): set when it starts or on its first reply.
 ALTER TABLE conversations DROP CONSTRAINT conversations_channel_check,
     ADD CONSTRAINT conversations_channel_fkey FOREIGN KEY (channel) REFERENCES channel_types(type),
     ADD COLUMN channel_id uuid,
-    ADD CONSTRAINT conversations_channel_id_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id);
+    ADD COLUMN reply_channel_id uuid,
+    ADD CONSTRAINT conversations_channel_id_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id),
+    ADD CONSTRAINT conversations_reply_channel_fkey FOREIGN KEY (workspace_id, reply_channel_id) REFERENCES channels(workspace_id, id);
 CREATE INDEX conversations_workspace_channel_idx ON conversations(workspace_id, channel_id) WHERE channel_id IS NOT NULL;
+CREATE INDEX conversations_workspace_reply_channel_idx ON conversations(workspace_id, reply_channel_id) WHERE reply_channel_id IS NOT NULL;
 
 -- A message's id on its channel ("<type>:<id>", so ids of two types never meet), the channel that
 -- carried it, and what that channel knows of it. external_id finds duplicates and threads replies;
--- for email it is "email:" and the Message-ID, which stays in email_message_id for older images.
--- channel_id is not filled for older messages: which channel carried them cannot be told for sure (a
--- reply on a web form conversation leaves by email).
+-- for email it is "email:" and the Message-ID, moved here from email_message_id below. channel_id is
+-- not filled for older messages: which channel carried them cannot be told for sure (a reply on a
+-- web form conversation leaves by email).
 ALTER TABLE messages
     ADD COLUMN channel_id uuid,
     ADD COLUMN external_id text CHECK (char_length(external_id) BETWEEN 3 AND 1000),
@@ -301,19 +310,60 @@ ALTER TABLE messages
 -- NULLs never collide.
 ALTER TABLE contacts ALTER COLUMN email DROP NOT NULL;
 
--- Email and web form settings belong to their channel row. workspace_id stays the key: older images
--- read them by workspace.
-ALTER TABLE email_channels ADD COLUMN channel_id uuid UNIQUE,
-    ADD CONSTRAINT email_channels_channel_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id) ON DELETE CASCADE;
-ALTER TABLE web_form_channels ADD COLUMN channel_id uuid UNIQUE,
-    ADD CONSTRAINT web_form_channels_channel_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id) ON DELETE CASCADE;
+-- The state of a support address domain: its TXT verification and the email provider's domain. It
+-- belongs to the domain, not to a mailbox: the email channels of a workspace on one domain verify it
+-- once and share one provider domain. A row lives while a channel of the workspace uses the domain.
+CREATE TABLE email_domains (
+    workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    domain text NOT NULL CHECK (domain = lower(domain) AND domain ~ '^[^@\s]+$'),
+    verification_token text NOT NULL,
+    verified_at timestamptz,
+    provider_domain_id text,
+    provider_domain_records jsonb NOT NULL DEFAULT '[]'::jsonb,
+    provider_domain_created_at timestamptz,
+    provider_domain_expired_at timestamptz,
+    provider_domain_first_verified_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, domain)
+);
+CREATE UNIQUE INDEX email_domains_provider_domain_id_key ON email_domains(provider_domain_id) WHERE provider_domain_id IS NOT NULL;
+-- At most one workspace holds a domain name verified through the provider (20261018082052).
+CREATE UNIQUE INDEX email_domains_provider_verified_key ON email_domains(domain) WHERE provider_domain_id IS NOT NULL AND verified_at IS NOT NULL;
 
--- One outbox for every channel. Its email rows keep every value; email_outbox becomes a view of them
--- for older images, created below.
+-- A support address is a plain lowercase addr-spec with one @ and a local part that does not start
+-- with +, so the mailbox it names (email.MailboxKey) can be read from it in SQL. Refuse, naming the
+-- workspace, rather than change an address a customer forwards to.
+DO $$
+DECLARE
+    bad text;
+BEGIN
+    SELECT string_agg(format('%s <%s>', w.slug, e.support_address), ', ') INTO bad
+        FROM email_channels e JOIN workspaces w ON w.id = e.workspace_id
+        WHERE e.support_address !~ '^[^@+\s][^@\s]*@[^@\s]+$';
+    IF bad IS NOT NULL THEN
+        RAISE EXCEPTION 'support addresses this version cannot keep (more than one @, or a local part that starts with +): %; change them before upgrading', bad;
+    END IF;
+END
+$$;
+
+-- Email and web form settings, the Gmail connection and a consent in flight belong to one channel,
+-- which becomes their key below: a workspace may have two support mailboxes or two forms.
+-- hosted_local is the local part of the channel's forwarding address on the hosted cloud,
+-- <hosted_local>@<slug>.<HOSTED_MAIL_DOMAIN>: support for the channels that exist, so no forwarding
+-- set up today changes; a channel added later gets one from its own address.
+ALTER TABLE email_channels ADD COLUMN channel_id uuid,
+    ADD COLUMN hosted_local text NOT NULL DEFAULT 'support' CHECK (hosted_local ~ '^[a-z0-9][a-z0-9-]{0,62}$');
+-- legacy_slug: the form the workspace's older address /api/v1/public/forms/<slug> posts to. Every
+-- form has its own address by its id; the older one stays with the form the site embedded.
+ALTER TABLE web_form_channels ADD COLUMN channel_id uuid, ADD COLUMN legacy_slug boolean NOT NULL DEFAULT false;
+ALTER TABLE mailbox_connections ADD COLUMN channel_id uuid;
+ALTER TABLE mailbox_oauth_states ADD COLUMN channel_id uuid;
+
+-- One outbox for every channel; its email rows keep every value.
 ALTER TABLE email_outbox RENAME TO channel_outbox;
 ALTER TABLE channel_outbox
     ADD COLUMN channel_type text NOT NULL DEFAULT 'email' REFERENCES channel_types(type),
-    -- NULL only for the history of an email channel removed before this migration.
     ADD COLUMN channel_id uuid,
     -- The id the channel gave the sent message.
     ADD COLUMN external_id text CHECK (char_length(external_id) BETWEEN 1 AND 1000),
@@ -322,169 +372,126 @@ ALTER TABLE channel_outbox
     -- What the channel's adapter keeps about the delivery.
     ADD COLUMN meta jsonb CHECK (meta IS NULL OR (jsonb_typeof(meta) = 'object' AND octet_length(meta::text) <= 16384)),
     ADD CONSTRAINT channel_outbox_channel_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id),
-    -- Only email sends through a transport; the default stays for the inserts of older images.
+    -- Only email sends through a transport.
     ALTER COLUMN transport DROP NOT NULL;
+ALTER TABLE channel_outbox ALTER COLUMN channel_type DROP DEFAULT;
 CREATE INDEX channel_outbox_channel_failed_idx ON channel_outbox(workspace_id, channel_id) WHERE status = 'failed';
 
--- Backfill: every email and web form setup becomes a channel, named as the settings page called it.
--- A web form that is off is a channel that is off, since the time it was last changed.
-INSERT INTO channels (workspace_id, type, singleton, name, enabled, created_at, updated_at)
-    SELECT workspace_id, 'email', true, 'Email', true, created_at, updated_at FROM email_channels;
-INSERT INTO channels (workspace_id, type, singleton, name, enabled, disabled_at, created_at, updated_at)
-    SELECT workspace_id, 'web_form', true, 'Web form', enabled, CASE WHEN NOT enabled THEN updated_at END, created_at, updated_at
+-- Backfill. Every email and web form setup becomes a channel, the default of its type, named as the
+-- settings page called it. A web form that is off is a channel that is off, since its last change.
+INSERT INTO channels (workspace_id, type, name, enabled, is_default, created_at, updated_at)
+    SELECT workspace_id, 'email', 'Email', true, true, created_at, updated_at FROM email_channels;
+INSERT INTO channels (workspace_id, type, name, enabled, disabled_at, is_default, created_at, updated_at)
+    SELECT workspace_id, 'web_form', 'Web form', enabled, CASE WHEN NOT enabled THEN updated_at END, true, created_at, updated_at
     FROM web_form_channels;
-UPDATE email_channels e SET channel_id = c.id FROM channels c WHERE c.workspace_id = e.workspace_id AND c.type = 'email';
-UPDATE web_form_channels f SET channel_id = c.id FROM channels c WHERE c.workspace_id = f.workspace_id AND c.type = 'web_form';
-ALTER TABLE email_channels ALTER COLUMN channel_id SET NOT NULL;
-ALTER TABLE web_form_channels ALTER COLUMN channel_id SET NOT NULL;
--- So a channel's history starts when it did.
+-- Email disconnected, or a form switched off for good, before this migration: its conversations and
+-- deliveries still name the channel they came through, a removed one.
+INSERT INTO channels (workspace_id, type, name, enabled, disabled_at, deleted_at, created_at, updated_at)
+    SELECT workspace_id, type, CASE type WHEN 'email' THEN 'Email' ELSE 'Web form' END, false, now(), now(), min(first_at), now()
+    FROM (SELECT workspace_id, channel AS type, created_at AS first_at FROM conversations WHERE channel IN ('email', 'web_form')
+          UNION ALL SELECT workspace_id, 'email', created_at FROM channel_outbox) used
+    WHERE NOT EXISTS (SELECT 1 FROM channels c WHERE c.workspace_id = used.workspace_id AND c.type = used.type)
+    GROUP BY workspace_id, type;
 INSERT INTO channel_events (workspace_id, channel_id, channel_type, channel_name, kind, detail, created_at)
     SELECT workspace_id, id, type, name, 'added', '{"source": "upgrade"}', created_at FROM channels;
+INSERT INTO channel_events (workspace_id, channel_id, channel_type, channel_name, kind, detail, created_at)
+    SELECT workspace_id, id, type, name, 'removed', '{"source": "upgrade"}', deleted_at FROM channels WHERE deleted_at IS NOT NULL;
 
+-- The domain state moves to email_domains: one row per workspace now, as one channel had it.
+INSERT INTO email_domains (workspace_id, domain, verification_token, verified_at, provider_domain_id, provider_domain_records,
+        provider_domain_created_at, provider_domain_expired_at, provider_domain_first_verified_at, created_at, updated_at)
+    SELECT workspace_id, split_part(support_address, '@', 2), domain_verification_token, domain_verified_at, provider_domain_id, provider_domain_records,
+        provider_domain_created_at, provider_domain_expired_at, provider_domain_first_verified_at, created_at, updated_at
+    FROM email_channels;
+
+UPDATE email_channels e SET channel_id = c.id FROM channels c WHERE c.workspace_id = e.workspace_id AND c.type = 'email' AND c.deleted_at IS NULL;
+UPDATE web_form_channels f SET channel_id = c.id, legacy_slug = true FROM channels c
+    WHERE c.workspace_id = f.workspace_id AND c.type = 'web_form' AND c.deleted_at IS NULL;
+UPDATE mailbox_connections m SET channel_id = e.channel_id FROM email_channels e WHERE e.workspace_id = m.workspace_id;
+-- A consent of a workspace without email keeps no channel: it cannot finish, and it expires within
+-- 10 minutes.
+UPDATE mailbox_oauth_states o SET channel_id = e.channel_id FROM email_channels e WHERE e.workspace_id = o.workspace_id;
 UPDATE conversations v SET channel_id = c.id FROM channels c WHERE c.workspace_id = v.workspace_id AND c.type = v.channel;
+UPDATE channel_outbox o SET channel_id = c.id FROM channels c WHERE c.workspace_id = o.workspace_id AND c.type = 'email';
 UPDATE messages SET external_id = 'email:' || email_message_id WHERE email_message_id IS NOT NULL;
 INSERT INTO conversation_thread_keys (workspace_id, conversation_id, channel_type, key)
     SELECT workspace_id, id, 'email', 'reply-token:' || email_reply_token FROM conversations WHERE email_reply_token IS NOT NULL;
-UPDATE channel_outbox o SET channel_id = c.id FROM channels c WHERE c.workspace_id = o.workspace_id AND c.type = 'email';
+
+-- Nothing is left without its channel; a row that would be is a bug of this migration, not something
+-- to drop.
+DO $$
+DECLARE
+    missing text;
+BEGIN
+    SELECT string_agg(what, ', ') INTO missing FROM (
+        SELECT 'email_channels' AS what WHERE EXISTS (SELECT 1 FROM email_channels WHERE channel_id IS NULL)
+        UNION ALL SELECT 'web_form_channels' WHERE EXISTS (SELECT 1 FROM web_form_channels WHERE channel_id IS NULL)
+        UNION ALL SELECT 'mailbox_connections' WHERE EXISTS (SELECT 1 FROM mailbox_connections WHERE channel_id IS NULL)
+        UNION ALL SELECT 'mailbox_oauth_states' WHERE EXISTS (SELECT 1 FROM mailbox_oauth_states o WHERE channel_id IS NULL
+            AND EXISTS (SELECT 1 FROM email_channels e WHERE e.workspace_id = o.workspace_id))
+        UNION ALL SELECT 'channel_outbox' WHERE EXISTS (SELECT 1 FROM channel_outbox WHERE channel_id IS NULL)
+        UNION ALL SELECT 'conversations' WHERE EXISTS (SELECT 1 FROM conversations WHERE channel IN ('email', 'web_form') AND channel_id IS NULL)
+        UNION ALL SELECT 'messages' WHERE EXISTS (SELECT 1 FROM messages WHERE email_message_id IS NOT NULL AND external_id IS NULL)
+    ) left_out;
+    IF missing IS NOT NULL THEN
+        RAISE EXCEPTION 'rows without their channel after the backfill: %', missing;
+    END IF;
+END
+$$;
+
+-- The new keys. mailbox_connections pointed at email_channels by workspace; it points by channel now.
+ALTER TABLE mailbox_connections DROP CONSTRAINT mailbox_connections_workspace_id_fkey, DROP CONSTRAINT mailbox_connections_pkey;
+DROP INDEX email_channels_provider_domain_id_key;
+DROP INDEX email_channels_provider_verified_domain_key;
+ALTER TABLE email_channels DROP CONSTRAINT email_channels_pkey,
+    ALTER COLUMN channel_id SET NOT NULL,
+    ADD PRIMARY KEY (channel_id),
+    ADD CONSTRAINT email_channels_workspace_channel_key UNIQUE (workspace_id, channel_id),
+    ADD CONSTRAINT email_channels_channel_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id) ON DELETE CASCADE,
+    ADD CONSTRAINT email_channels_support_address_shape CHECK (support_address ~ '^[^@+\s][^@\s]*@[^@\s]+$'),
+    ALTER COLUMN hosted_local DROP DEFAULT,
+    DROP COLUMN domain_verification_token,
+    DROP COLUMN domain_verified_at,
+    DROP COLUMN provider_domain_id,
+    DROP COLUMN provider_domain_records,
+    DROP COLUMN provider_domain_created_at,
+    DROP COLUMN provider_domain_expired_at,
+    DROP COLUMN provider_domain_first_verified_at,
+    ADD COLUMN domain text GENERATED ALWAYS AS (split_part(support_address, '@', 2)) STORED,
+    -- The mailbox the address names: support+billing@acme.com and support@acme.com are one (email.MailboxKey).
+    ADD COLUMN mailbox_key text GENERATED ALWAYS AS (split_part(split_part(support_address, '@', 1), '+', 1) || '@' || split_part(support_address, '@', 2)) STORED;
+ALTER TABLE email_channels ADD CONSTRAINT email_channels_domain_fkey FOREIGN KEY (workspace_id, domain) REFERENCES email_domains(workspace_id, domain);
+-- Two email channels of a workspace never name one mailbox or share a forwarding address.
+CREATE UNIQUE INDEX email_channels_mailbox_idx ON email_channels(workspace_id, mailbox_key);
+CREATE UNIQUE INDEX email_channels_hosted_local_idx ON email_channels(workspace_id, hosted_local);
+
+ALTER TABLE web_form_channels DROP CONSTRAINT web_form_channels_pkey,
+    ALTER COLUMN channel_id SET NOT NULL,
+    ADD PRIMARY KEY (channel_id),
+    ADD CONSTRAINT web_form_channels_channel_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id) ON DELETE CASCADE,
+    -- channels.enabled is where a form is on or off.
+    DROP COLUMN enabled;
+CREATE UNIQUE INDEX web_form_channels_legacy_slug_idx ON web_form_channels(workspace_id) WHERE legacy_slug;
+
+ALTER TABLE mailbox_connections ALTER COLUMN channel_id SET NOT NULL,
+    ADD PRIMARY KEY (channel_id),
+    ADD CONSTRAINT mailbox_connections_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+    ADD CONSTRAINT mailbox_connections_channel_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES email_channels(workspace_id, channel_id) ON DELETE CASCADE;
+-- One Google account sends for one email channel of a workspace.
+CREATE UNIQUE INDEX mailbox_connections_workspace_address_idx ON mailbox_connections(workspace_id, address);
+ALTER TABLE mailbox_oauth_states ADD CONSTRAINT mailbox_oauth_states_channel_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES email_channels(workspace_id, channel_id) ON DELETE CASCADE;
+
+ALTER TABLE channel_outbox ALTER COLUMN channel_id SET NOT NULL;
+
+-- Message-IDs and reply tokens moved to external_id and the thread keys.
+DROP INDEX messages_workspace_email_message_id_idx;
+ALTER TABLE messages DROP COLUMN email_message_id;
+ALTER TABLE conversations DROP COLUMN email_reply_token;
 
 CREATE UNIQUE INDEX messages_workspace_external_id_idx ON messages(workspace_id, external_id) WHERE external_id IS NOT NULL;
 CREATE INDEX messages_channel_incoming_recent_idx ON messages(workspace_id, channel_id, created_at) WHERE kind = 'incoming' AND channel_id IS NOT NULL;
-
--- The outbox under its old name, for older images: their inserts get channel_type 'email' and the
--- 'smtp' transport from the defaults, and their claim locks only email rows.
-CREATE VIEW email_outbox WITH (security_invoker = true) AS
-    SELECT id, workspace_id, message_id, status, attempts, next_attempt_at, locked_until, claim_token, last_error, sent_at,
-           created_at, updated_at, recipients, held_by_pause, transport
-    FROM channel_outbox WHERE channel_type = 'email';
-
--- Compatibility triggers for older images, which write the old columns only (removed with the view).
--- Each finds the live channel of the type in the workspace; channels are singletons for these types.
-
--- Connecting email, or saving the web form, creates its channel row when there is none. Both writers
--- upsert, and a BEFORE INSERT trigger runs before the conflict is found, so an existing channel is
--- reused rather than a second one created.
-CREATE FUNCTION email_channels_link_channel() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW.channel_id IS NULL THEN
-        SELECT id INTO NEW.channel_id FROM channels
-            WHERE workspace_id = NEW.workspace_id AND type = 'email' AND singleton AND deleted_at IS NULL;
-        IF NEW.channel_id IS NULL THEN
-            INSERT INTO channels (workspace_id, type, singleton, name) VALUES (NEW.workspace_id, 'email', true, 'Email')
-                RETURNING id INTO NEW.channel_id;
-            INSERT INTO channel_events (workspace_id, channel_id, channel_type, channel_name, kind)
-                VALUES (NEW.workspace_id, NEW.channel_id, 'email', 'Email', 'added');
-        END IF;
-    END IF;
-    RETURN NEW;
-END
-$$;
-CREATE TRIGGER email_channels_link_channel BEFORE INSERT ON email_channels
-    FOR EACH ROW EXECUTE FUNCTION email_channels_link_channel();
-
--- Disconnecting email removes its channel.
-CREATE FUNCTION email_channels_remove_channel() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    UPDATE channels SET enabled = false, disabled_at = COALESCE(disabled_at, now()), deleted_at = now(), updated_at = now()
-        WHERE workspace_id = OLD.workspace_id AND id = OLD.channel_id AND deleted_at IS NULL
-            -- Not while the workspace itself is being deleted: its channels go with it.
-            AND EXISTS (SELECT 1 FROM workspaces w WHERE w.id = OLD.workspace_id);
-    IF FOUND THEN
-        INSERT INTO channel_events (workspace_id, channel_id, channel_type, channel_name, kind)
-            SELECT workspace_id, id, type, name, 'removed' FROM channels WHERE workspace_id = OLD.workspace_id AND id = OLD.channel_id;
-    END IF;
-    RETURN NULL;
-END
-$$;
-CREATE TRIGGER email_channels_remove_channel AFTER DELETE ON email_channels
-    FOR EACH ROW EXECUTE FUNCTION email_channels_remove_channel();
-
-CREATE FUNCTION web_form_channels_link_channel() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW.channel_id IS NULL THEN
-        SELECT id INTO NEW.channel_id FROM channels
-            WHERE workspace_id = NEW.workspace_id AND type = 'web_form' AND singleton AND deleted_at IS NULL;
-        IF NEW.channel_id IS NULL THEN
-            INSERT INTO channels (workspace_id, type, singleton, name, enabled, disabled_at)
-                VALUES (NEW.workspace_id, 'web_form', true, 'Web form', NEW.enabled, CASE WHEN NOT NEW.enabled THEN now() END)
-                RETURNING id INTO NEW.channel_id;
-            INSERT INTO channel_events (workspace_id, channel_id, channel_type, channel_name, kind)
-                VALUES (NEW.workspace_id, NEW.channel_id, 'web_form', 'Web form', 'added');
-        END IF;
-    END IF;
-    RETURN NEW;
-END
-$$;
-CREATE TRIGGER web_form_channels_link_channel BEFORE INSERT ON web_form_channels
-    FOR EACH ROW EXECUTE FUNCTION web_form_channels_link_channel();
-
--- channels.enabled is the truth; an older image turns the form on and off in web_form_channels, and
--- the channel follows. Current code writes both in one transaction, so this finds nothing to do.
-CREATE FUNCTION web_form_channels_sync_enabled() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    UPDATE channels SET enabled = NEW.enabled, disabled_at = CASE WHEN NEW.enabled THEN NULL ELSE now() END, updated_at = now()
-        WHERE workspace_id = NEW.workspace_id AND id = NEW.channel_id AND enabled IS DISTINCT FROM NEW.enabled AND deleted_at IS NULL;
-    IF FOUND THEN
-        INSERT INTO channel_events (workspace_id, channel_id, channel_type, channel_name, kind)
-            SELECT workspace_id, id, type, name, CASE WHEN NEW.enabled THEN 'enabled' ELSE 'disabled' END
-            FROM channels WHERE workspace_id = NEW.workspace_id AND id = NEW.channel_id;
-    END IF;
-    RETURN NULL;
-END
-$$;
-CREATE TRIGGER web_form_channels_sync_enabled AFTER INSERT OR UPDATE OF enabled ON web_form_channels
-    FOR EACH ROW EXECUTE FUNCTION web_form_channels_sync_enabled();
-
--- A conversation or a delivery written without its channel gets the live channel of its type.
-CREATE FUNCTION conversations_default_channel() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    SELECT id INTO NEW.channel_id FROM channels
-        WHERE workspace_id = NEW.workspace_id AND type = NEW.channel AND singleton AND deleted_at IS NULL;
-    RETURN NEW;
-END
-$$;
-CREATE TRIGGER conversations_default_channel BEFORE INSERT ON conversations
-    FOR EACH ROW WHEN (NEW.channel_id IS NULL) EXECUTE FUNCTION conversations_default_channel();
-
-CREATE FUNCTION channel_outbox_default_channel() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    SELECT id INTO NEW.channel_id FROM channels
-        WHERE workspace_id = NEW.workspace_id AND type = NEW.channel_type AND singleton AND deleted_at IS NULL;
-    RETURN NEW;
-END
-$$;
-CREATE TRIGGER channel_outbox_default_channel BEFORE INSERT ON channel_outbox
-    FOR EACH ROW WHEN (NEW.channel_id IS NULL) EXECUTE FUNCTION channel_outbox_default_channel();
-
--- A Message-ID written the old way is also the message's external id; an email external id written
--- the new way is also the Message-ID older images and the email code read.
-CREATE FUNCTION messages_email_external_id() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'INSERT' AND NEW.email_message_id IS NULL AND NEW.external_id LIKE 'email:%' THEN
-        NEW.email_message_id := substr(NEW.external_id, 7);
-    ELSIF TG_OP = 'UPDATE' AND NEW.external_id IS DISTINCT FROM OLD.external_id AND NEW.email_message_id IS NOT DISTINCT FROM OLD.email_message_id
-            AND NEW.external_id LIKE 'email:%' THEN
-        NEW.email_message_id := substr(NEW.external_id, 7);
-    ELSIF NEW.email_message_id IS NOT NULL AND (NEW.external_id IS NULL OR NEW.external_id = 'email:' || OLD.email_message_id) THEN
-        NEW.external_id := 'email:' || NEW.email_message_id;
-    END IF;
-    RETURN NEW;
-END
-$$;
-CREATE TRIGGER messages_email_external_id BEFORE INSERT OR UPDATE OF email_message_id, external_id ON messages
-    FOR EACH ROW EXECUTE FUNCTION messages_email_external_id();
-
--- A reply token written the old way is also the conversation's email thread key.
-CREATE FUNCTION conversations_email_thread_key() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW.email_reply_token IS NOT NULL AND (TG_OP = 'INSERT' OR OLD.email_reply_token IS DISTINCT FROM NEW.email_reply_token) THEN
-        INSERT INTO conversation_thread_keys (workspace_id, conversation_id, channel_type, key)
-            VALUES (NEW.workspace_id, NEW.id, 'email', 'reply-token:' || NEW.email_reply_token) ON CONFLICT DO NOTHING;
-    END IF;
-    RETURN NULL;
-END
-$$;
-CREATE TRIGGER conversations_email_thread_key AFTER INSERT OR UPDATE OF email_reply_token ON conversations
-    FOR EACH ROW EXECUTE FUNCTION conversations_email_thread_key();
+-- A reply token finds its conversation on the whole server, as the unique email_reply_token did.
+CREATE UNIQUE INDEX conversation_thread_keys_email_token_idx ON conversation_thread_keys(key) WHERE channel_type = 'email';
 
 DO $$
 DECLARE
@@ -497,7 +504,7 @@ BEGIN
         RAISE EXCEPTION 'row-level security is not set up in this schema';
     END IF;
     FOREACH name IN ARRAY ARRAY['channels', 'channel_credentials', 'contact_identities', 'conversation_thread_keys',
-            'channel_inbound_events', 'channel_inbound_files', 'channel_sent_ids', 'channel_events'] LOOP
+            'channel_inbound_events', 'channel_inbound_files', 'channel_sent_ids', 'channel_events', 'email_domains'] LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', name);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', name);
         EXECUTE format($policy$CREATE POLICY workspace_isolation ON %1$I FOR ALL TO %2$I
@@ -510,7 +517,5 @@ BEGIN
     END LOOP;
     -- The default privileges grant every new table to the app role; the registry is not its to read.
     EXECUTE format('REVOKE ALL ON channel_types FROM %I', app_role);
-    -- The view reads channel_outbox as the caller (security_invoker), so its policies still apply.
-    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON email_outbox TO %I', app_role);
 END
 $$;

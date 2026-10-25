@@ -2,12 +2,14 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,30 +33,49 @@ func migrateBefore(t *testing.T, pool *pgxpool.Pool, name string) {
 }
 
 type channelsSeed struct {
-	both, emailOnly, formOff, none                         string
+	both, emailOnly, formOff, none, gone                   string
 	emailConversation, formConversation, agentConversation string
+	goneConversation                                       string
 	reply                                                  string
 }
 
-// seedChannelWorkspaces writes, the way the release before channels did, a workspace with email and
-// an enabled web form, one with email only, one with a web form that is off and one with neither.
+// seedChannelWorkspaces writes, the way the release before channels did, a workspace with email (its
+// domain verified through the provider, Gmail connected, a consent in flight) and an enabled web form,
+// one with email only, one with a web form that is off, one with neither (and a consent that cannot
+// finish), and one that disconnected email after a customer wrote in and a reply left.
 func seedChannelWorkspaces(t *testing.T, pool *pgxpool.Pool) channelsSeed {
 	t.Helper()
 	ctx := context.Background()
 	var s channelsSeed
-	for slug, target := range map[string]*string{"both": &s.both, "email-only": &s.emailOnly, "form-off": &s.formOff, "none": &s.none} {
+	for slug, target := range map[string]*string{"both": &s.both, "email-only": &s.emailOnly, "form-off": &s.formOff, "none": &s.none, "gone": &s.gone} {
 		if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name) VALUES($1,$1) RETURNING id::text`, slug).Scan(target); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for _, id := range []string{s.both, s.emailOnly} {
 		if _, err := pool.Exec(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,created_at)
-			SELECT id,'support@'||slug||'.example','token','2026-10-01 10:00:00+00' FROM workspaces WHERE id=$1`, id); err != nil {
+			SELECT id,'support@'||slug||'.example','token-'||slug,'2026-10-01 10:00:00+00' FROM workspaces WHERE id=$1`, id); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if _, err := pool.Exec(ctx, `UPDATE email_channels SET domain_verified_at='2026-10-02 10:00:00+00',provider_domain_id='pd-both',
+		provider_domain_records='[{"record":"DKIM","type":"TXT","name":"x","value":"y","status":"verified"}]',provider_domain_created_at='2026-10-01 11:00:00+00',
+		provider_domain_first_verified_at='2026-10-02 10:00:00+00' WHERE workspace_id=$1`, s.both); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(ctx, `INSERT INTO web_form_channels(workspace_id,enabled,allowed_origins,updated_at) VALUES
 		($1,true,'{https://both.example}','2026-10-02 10:00:00+00'),($2,false,'{}','2026-10-03 10:00:00+00')`, s.both, s.formOff); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `WITH a AS (INSERT INTO agents(workspace_id,email,display_name,role) VALUES($1,'admin@both.example','Admin','admin') RETURNING id),
+		m AS (INSERT INTO mailbox_connections(workspace_id,provider,address,scopes,token_key_id,refresh_token_sealed) VALUES($1,'google','support@both.example','s','k1','\x01') RETURNING 1)
+		INSERT INTO mailbox_oauth_states(state_hash,workspace_id,agent_id,provider,code_verifier,expires_at)
+		SELECT sha256('both'::bytea),$1,id,'google','v',now()+interval '5 minutes' FROM a`, s.both); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `WITH a AS (INSERT INTO agents(workspace_id,email,display_name,role) VALUES($1,'admin@none.example','Admin','admin') RETURNING id)
+		INSERT INTO mailbox_oauth_states(state_hash,workspace_id,agent_id,provider,code_verifier,expires_at)
+		SELECT sha256('none'::bytea),$1,id,'google','v',now()+interval '5 minutes' FROM a`, s.none); err != nil {
 		t.Fatal(err)
 	}
 	err := pool.QueryRow(ctx, `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ann','ann@example.com') RETURNING id),
@@ -69,6 +90,13 @@ func seedChannelWorkspaces(t *testing.T, pool *pgxpool.Pool) channelsSeed {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,sent_at) VALUES($1,$2,'sent',now())`, s.both, s.reply); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Bo','bo@example.com') RETURNING id),
+		e AS (INSERT INTO conversations(workspace_id,contact_id,subject,channel,created_at) SELECT $1,id,'Old mail','email','2026-09-01 08:00:00+00' FROM c RETURNING id),
+		r AS (INSERT INTO messages(workspace_id,conversation_id,kind,body,email_message_id) SELECT $1,id,'outgoing','bye','<out-1@gone.example>' FROM e RETURNING id),
+		o AS (INSERT INTO email_outbox(workspace_id,message_id,status,sent_at) SELECT $1,id,'sent',now() FROM r RETURNING 1)
+		SELECT id::text FROM e`, s.gone).Scan(&s.goneConversation); err != nil {
 		t.Fatal(err)
 	}
 	return s
@@ -87,24 +115,32 @@ func channelOf(t *testing.T, pool *pgxpool.Pool, workspaceID, kind string) (id s
 	return id, enabled, disabledAt, deleted
 }
 
-// The upgrade makes every email and web form setup a channel and ties what they hold to it, without
-// changing a value an older release wrote.
-func TestChannelsMigrationBackfillsAChannelForEveryEmailAndWebFormSetup(t *testing.T) {
+// upgradedChannels migrates a seeded schema to channels.
+func upgradedChannels(t *testing.T) (*pgxpool.Pool, channelsSeed) {
+	t.Helper()
 	pool := testPool(t)
-	ctx := context.Background()
 	migrateBefore(t, pool, channelsMigration)
 	s := seedChannelWorkspaces(t, pool)
-	if err := Migrate(ctx, pool); err != nil {
+	if err := Migrate(context.Background(), pool); err != nil {
 		t.Fatalf("upgrade: %v", err)
 	}
+	return pool, s
+}
 
-	var channels, setups int
-	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM channels),(SELECT count(*) FROM email_channels)+(SELECT count(*) FROM web_form_channels)`).
-		Scan(&channels, &setups); err != nil {
+// The upgrade makes every email and web form setup a channel, the default of its type, and moves what
+// they held to the channel: settings, domain state, Gmail, consents, Message-IDs and reply tokens. A
+// channel disconnected before it still names the conversations and deliveries it carried.
+func TestChannelsMigrationBackfillsAChannelForEveryEmailAndWebFormSetup(t *testing.T) {
+	pool, s := upgradedChannels(t)
+	ctx := context.Background()
+
+	var live, setups, defaults int
+	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM channels WHERE deleted_at IS NULL),(SELECT count(*) FROM email_channels)+(SELECT count(*) FROM web_form_channels),
+		(SELECT count(*) FROM channels WHERE is_default)`).Scan(&live, &setups, &defaults); err != nil {
 		t.Fatal(err)
 	}
-	if channels != setups || channels != 4 {
-		t.Fatalf("channels=%d, email and web form setups=%d, want 4 each", channels, setups)
+	if live != setups || live != 4 || defaults != 4 {
+		t.Fatalf("live channels=%d, email and web form setups=%d, defaults=%d, want 4 each", live, setups, defaults)
 	}
 	emailID, on, _, _ := channelOf(t, pool, s.both, "email")
 	formID, formOn, _, _ := channelOf(t, pool, s.both, "web_form")
@@ -121,13 +157,50 @@ func TestChannelsMigrationBackfillsAChannelForEveryEmailAndWebFormSetup(t *testi
 	if offID == "" || offOn || offSince == nil || !offSince.Equal(time.Date(2026, 10, 3, 10, 0, 0, 0, time.UTC)) {
 		t.Fatalf("form-off: channel %q on=%v disabled_at=%v, want off since its last change", offID, offOn, offSince)
 	}
-	var linked string
-	if err := pool.QueryRow(ctx, `SELECT channel_id::text FROM email_channels WHERE workspace_id=$1`, s.both).Scan(&linked); err != nil || linked != emailID {
-		t.Fatalf("email_channels.channel_id=%q (%v), want %s", linked, err, emailID)
+	var linked, local string
+	var legacy bool
+	if err := pool.QueryRow(ctx, `SELECT e.channel_id::text,e.hosted_local,f.legacy_slug FROM email_channels e JOIN web_form_channels f USING (workspace_id) WHERE workspace_id=$1`, s.both).
+		Scan(&linked, &local, &legacy); err != nil || linked != emailID || local != "support" || !legacy {
+		t.Fatalf("email_channels.channel_id=%q hosted_local=%q, form legacy_slug=%v (%v), want %s, support, true", linked, local, legacy, err, emailID)
 	}
-	var events int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channel_events WHERE kind='added' AND detail->>'source'='upgrade'`).Scan(&events); err != nil || events != 4 {
-		t.Fatalf("upgrade history events=%d (%v), want 4", events, err)
+	var domainName, token, providerID string
+	var verified *time.Time
+	if err := pool.QueryRow(ctx, `SELECT domain,verification_token,verified_at,provider_domain_id FROM email_domains WHERE workspace_id=$1`, s.both).
+		Scan(&domainName, &token, &verified, &providerID); err != nil || domainName != "both.example" || token != "token-both" || verified == nil || providerID != "pd-both" {
+		t.Fatalf("email_domains: %q %q %v %q (%v)", domainName, token, verified, providerID, err)
+	}
+	var mailboxChannel, consentChannel string
+	if err := pool.QueryRow(ctx, `SELECT (SELECT channel_id::text FROM mailbox_connections WHERE workspace_id=$1),(SELECT channel_id::text FROM mailbox_oauth_states WHERE workspace_id=$1)`, s.both).
+		Scan(&mailboxChannel, &consentChannel); err != nil || mailboxChannel != emailID || consentChannel != emailID {
+		t.Fatalf("gmail channel=%q consent channel=%q (%v), want %s", mailboxChannel, consentChannel, err, emailID)
+	}
+	var orphanChannel *string
+	if err := pool.QueryRow(ctx, `SELECT channel_id::text FROM mailbox_oauth_states WHERE workspace_id=$1`, s.none).Scan(&orphanChannel); err != nil || orphanChannel != nil {
+		t.Fatalf("a consent of a workspace without email: channel %v (%v), want it kept with none", orphanChannel, err)
+	}
+
+	// gone disconnected email before the upgrade: a removed channel carries its history.
+	goneID, _, _, goneDeleted := channelOf(t, pool, s.gone, "email")
+	var goneDefault bool
+	var goneCreated time.Time
+	if err := pool.QueryRow(ctx, `SELECT is_default,created_at FROM channels WHERE id=$1`, goneID).Scan(&goneDefault, &goneCreated); err != nil {
+		t.Fatal(err)
+	}
+	if goneID == "" || !goneDeleted || goneDefault || !goneCreated.Equal(time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("gone: channel %q removed=%v default=%v created=%v", goneID, goneDeleted, goneDefault, goneCreated)
+	}
+	var goneConversation, goneOutbox string
+	if err := pool.QueryRow(ctx, `SELECT (SELECT channel_id::text FROM conversations WHERE id=$2),(SELECT channel_id::text FROM channel_outbox WHERE workspace_id=$1)`,
+		s.gone, s.goneConversation).Scan(&goneConversation, &goneOutbox); err != nil || goneConversation != goneID || goneOutbox != goneID {
+		t.Fatalf("gone: conversation channel=%q delivery channel=%q (%v), want %s", goneConversation, goneOutbox, err, goneID)
+	}
+	var history []string
+	rows, err := pool.Query(ctx, `SELECT kind FROM channel_events WHERE channel_id=$1 ORDER BY created_at,seq`, goneID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if history, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil || fmt.Sprint(history) != "[added removed]" {
+		t.Fatalf("gone history = %v (%v)", history, err)
 	}
 
 	conversationChannel := func(id string) *string {
@@ -147,7 +220,7 @@ func TestChannelsMigrationBackfillsAChannelForEveryEmailAndWebFormSetup(t *testi
 		t.Errorf("a conversation an agent started got channel %s", *got)
 	}
 	var external []string
-	rows, err := pool.Query(ctx, `SELECT external_id FROM messages WHERE workspace_id=$1 AND external_id IS NOT NULL ORDER BY 1`, s.both)
+	rows, err = pool.Query(ctx, `SELECT external_id FROM messages WHERE workspace_id=$1 AND external_id IS NOT NULL ORDER BY 1`, s.both)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,180 +240,66 @@ func TestChannelsMigrationBackfillsAChannelForEveryEmailAndWebFormSetup(t *testi
 		Scan(&outboxChannel, &outboxType, &transport); err != nil || outboxChannel != emailID || outboxType != "email" || transport != "smtp" {
 		t.Errorf("outbox row channel=%q type=%q transport=%q (%v)", outboxChannel, outboxType, transport, err)
 	}
-	var viewRows int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND status='sent'`, s.both).Scan(&viewRows); err != nil || viewRows != 1 {
-		t.Errorf("email_outbox view rows=%d (%v), want 1", viewRows, err)
+	// What only an older image read is gone, not kept twice.
+	for _, old := range []struct{ table, column string }{{"messages", "email_message_id"}, {"conversations", "email_reply_token"},
+		{"web_form_channels", "enabled"}, {"email_channels", "domain_verified_at"}} {
+		var exists bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=$1 AND column_name=$2)`,
+			old.table, old.column).Scan(&exists); err != nil || exists {
+			t.Errorf("%s.%s is still there (%v)", old.table, old.column, err)
+		}
+	}
+	if tableExists(t, pool, "email_outbox") {
+		t.Error("email_outbox is still there")
 	}
 }
 
-// After a rollback of the image that keeps the schema, an older image writes only the old columns.
-// The compatibility triggers give its rows the channel they belong to, as the app role it runs as.
-func TestChannelsMigrationKeepsAnOlderImageWorking(t *testing.T) {
-	pool := testPool(t)
+// The schema keeps a workspace's channels apart: one default per type, names, mailboxes, forwarding
+// addresses and Gmail accounts of live channels never repeat, and a removed channel blocks nothing.
+func TestChannelsSchemaRefusesDuplicates(t *testing.T) {
+	pool, s := upgradedChannels(t)
 	ctx := context.Background()
-	migrateBefore(t, pool, channelsMigration)
-	s := seedChannelWorkspaces(t, pool)
-	if err := Migrate(ctx, pool); err != nil {
-		t.Fatalf("upgrade: %v", err)
-	}
-	db := New(pool)
-	inWorkspace := func(workspaceID, sql string, args ...any) {
+	refused := func(constraint, sql string, args ...any) {
 		t.Helper()
-		if err := db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, sql, args...)
-			return err
-		}); err != nil {
-			t.Fatalf("%s: %v", strings.Fields(sql)[0]+" "+strings.Fields(sql)[2], err)
+		_, err := pool.Exec(ctx, sql, args...)
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || (pgErr.Code != "23505" && pgErr.Code != "23514") || pgErr.ConstraintName != constraint {
+			t.Fatalf("%s: %v, want a violation of %s", sql, err, constraint)
 		}
 	}
-	// The old upsert of email settings (store/email-channels.go) on a workspace that has email reuses its channel.
-	connect := `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name) VALUES($1,$2,'token','Desk')
-		ON CONFLICT(workspace_id) DO UPDATE SET support_address=EXCLUDED.support_address,updated_at=now()`
-	before, _, _, _ := channelOf(t, pool, s.both, "email")
-	inWorkspace(s.both, connect, s.both, "help@both.example")
-	if after, _, _, _ := channelOf(t, pool, s.both, "email"); after != before {
-		t.Fatalf("an upsert on connected email made channel %s, want %s kept", after, before)
+	addEmail := `WITH c AS (INSERT INTO channels(workspace_id,type,name) VALUES($1,'email',$2) RETURNING id,workspace_id)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT workspace_id,id,$3,'Desk',$4 FROM c`
+	refused("channels_default_idx", `INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'email','Second',true)`, s.both)
+	refused("channels_name_idx", `INSERT INTO channels(workspace_id,type,name) VALUES($1,'email','EMAIL')`, s.both)
+	refused("email_channels_mailbox_idx", addEmail, s.both, "Plus", "support+vip@both.example", "plus")
+	refused("email_channels_hosted_local_idx", addEmail, s.both, "Local", "sales@both.example", "support")
+	if _, err := pool.Exec(ctx, addEmail, s.both, "Billing", "billing@both.example", "billing"); err != nil {
+		t.Fatalf("a second mailbox on the domain: %v", err)
 	}
-	// Connecting email in a workspace without it creates the channel.
-	inWorkspace(s.none, connect, s.none, "support@none.example")
-	created, on, _, _ := channelOf(t, pool, s.none, "email")
-	if created == "" || !on {
-		t.Fatalf("connect: channel %q on=%v", created, on)
+	refused("mailbox_connections_workspace_address_idx", `INSERT INTO mailbox_connections(workspace_id,channel_id,provider,address,scopes,token_key_id,refresh_token_sealed)
+		SELECT workspace_id,channel_id,'google','support@both.example','s','k','\x01' FROM email_channels WHERE support_address='billing@both.example'`)
+	if _, err := pool.Exec(ctx, addEmail, s.both, "Other", "x@other.example", "x"); err == nil {
+		t.Fatal("an email channel on a domain without its email_domains row was stored")
 	}
-	// Disconnecting removes it, and connecting again makes a new one.
-	inWorkspace(s.none, `DELETE FROM email_channels WHERE workspace_id=$1`, s.none)
-	if id, on, _, deleted := channelOf(t, pool, s.none, "email"); id != created || on || !deleted {
-		t.Fatalf("disconnect: channel %q on=%v deleted=%v, want %s removed", id, on, deleted, created)
-	}
-	inWorkspace(s.none, connect, s.none, "support@none.example")
-	if again, _, _, deleted := channelOf(t, pool, s.none, "email"); again == created || deleted {
-		t.Fatalf("reconnect: channel %q deleted=%v, want a new live channel", again, deleted)
-	}
+	refused("email_channels_support_address_shape", `UPDATE email_channels SET support_address='+tag@both.example' WHERE support_address='billing@both.example'`)
 
-	// The old web form save (store/web-form.go) turns the channel on and off.
-	save := `INSERT INTO web_form_channels(workspace_id,enabled,allowed_origins) VALUES($1,$2,'{}')
-		ON CONFLICT(workspace_id) DO UPDATE SET enabled=EXCLUDED.enabled,allowed_origins=EXCLUDED.allowed_origins,updated_at=now()`
-	formID, _, _, _ := channelOf(t, pool, s.formOff, "web_form")
-	inWorkspace(s.formOff, save, s.formOff, true)
-	if id, on, since, _ := channelOf(t, pool, s.formOff, "web_form"); id != formID || !on || since != nil {
-		t.Fatalf("turn form on: channel %q on=%v disabled_at=%v, want %s on", id, on, since, formID)
-	}
-	inWorkspace(s.formOff, save, s.formOff, false)
-	if _, on, since, _ := channelOf(t, pool, s.formOff, "web_form"); on || since == nil {
-		t.Fatalf("turn form off: on=%v disabled_at=%v", on, since)
-	}
-	inWorkspace(s.emailOnly, save, s.emailOnly, false)
-	if id, on, since, _ := channelOf(t, pool, s.emailOnly, "web_form"); id == "" || on || since == nil {
-		t.Fatalf("first save of a form that is off: channel %q on=%v disabled_at=%v", id, on, since)
-	}
-	var kinds []string
-	rows, err := pool.Query(ctx, `SELECT kind FROM channel_events WHERE workspace_id=$1 ORDER BY created_at,seq`, s.formOff)
-	if err != nil {
+	// A removed channel's name and its type's default are free again.
+	if _, err := pool.Exec(ctx, `UPDATE channels SET name='Old',enabled=false,disabled_at=now(),deleted_at=now(),is_default=false WHERE workspace_id=$1 AND type='web_form'`, s.both); err != nil {
 		t.Fatal(err)
 	}
-	if kinds, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil || fmt.Sprint(kinds) != "[added enabled disabled]" {
-		t.Fatalf("form-off history = %v (%v)", kinds, err)
+	if _, err := pool.Exec(ctx, `INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'web_form','Old',true)`, s.both); err != nil {
+		t.Fatalf("a removed channel still blocks its name or the default: %v", err)
 	}
-
-	// Conversations, messages, reply tokens and deliveries written the old way.
-	emailID, _, _, _ := channelOf(t, pool, s.both, "email")
-	var conversationID, messageID string
-	if err := db.InWorkspace(ctx, s.both, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `WITH c AS (SELECT id FROM contacts WHERE workspace_id=$1 LIMIT 1),
-			v AS (INSERT INTO conversations(workspace_id,contact_id,subject,channel) SELECT $1,id,'New mail','email' FROM c RETURNING id),
-			m AS (INSERT INTO messages(workspace_id,conversation_id,kind,body,email_message_id) SELECT $1,id,'incoming','x','<in-2@example.com>' FROM v RETURNING id)
-			SELECT (SELECT id::text FROM v),(SELECT id::text FROM m)`, s.both).Scan(&conversationID, &messageID)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	var channel, external *string
-	if err := pool.QueryRow(ctx, `SELECT c.channel_id::text,m.external_id FROM conversations c JOIN messages m ON m.conversation_id=c.id WHERE m.id=$1`, messageID).
-		Scan(&channel, &external); err != nil {
-		t.Fatal(err)
-	}
-	if channel == nil || *channel != emailID || external == nil || *external != "email:<in-2@example.com>" {
-		t.Fatalf("old insert: conversation channel=%v message external_id=%v", channel, external)
-	}
-	var replyID string
-	if err := db.InWorkspace(ctx, s.both, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body) VALUES($1,$2,'outgoing','re') RETURNING id::text`,
-			s.both, conversationID).Scan(&replyID); err != nil {
-			return err
-		}
-		// enqueueReply (store/email-enqueue.go) gives the reply its Message-ID and the conversation a token, then queues it.
-		if _, err := tx.Exec(ctx, `UPDATE messages SET email_message_id='<out-2@both.example>' WHERE workspace_id=$1 AND id=$2`, s.both, replyID); err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `UPDATE conversations SET email_reply_token=COALESCE(email_reply_token,'tok-2') WHERE workspace_id=$1 AND id=$2`, s.both, conversationID); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error,created_at,recipients,transport) VALUES($1,$2,'queued',NULL,now(),1,'smtp')`,
-			s.both, replyID)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := pool.QueryRow(ctx, `SELECT external_id FROM messages WHERE id=$1`, replyID).Scan(&external); err != nil || external == nil || *external != "email:<out-2@both.example>" {
-		t.Fatalf("Message-ID assigned after insert: external_id=%v (%v)", external, err)
-	}
-	var key string
-	if err := pool.QueryRow(ctx, `SELECT key FROM conversation_thread_keys WHERE conversation_id=$1`, conversationID).Scan(&key); err != nil || key != "reply-token:tok-2" {
-		t.Fatalf("reply token key=%q (%v)", key, err)
-	}
-	var outboxChannel, outboxType string
-	if err := pool.QueryRow(ctx, `SELECT channel_id::text,channel_type FROM channel_outbox WHERE message_id=$1`, replyID).Scan(&outboxChannel, &outboxType); err != nil ||
-		outboxChannel != emailID || outboxType != "email" {
-		t.Fatalf("old outbox insert: channel=%q type=%q (%v)", outboxChannel, outboxType, err)
-	}
-
-	// The worker's claim (store/email-outbox.go) through the view, on the privileged path, takes only email rows.
-	if _, err := pool.Exec(ctx, `INSERT INTO channel_types(type,connectable,singleton) VALUES('loopback',true,false)`); err != nil {
-		t.Fatal(err)
-	}
-	var otherMessage string
-	if err := pool.QueryRow(ctx, `WITH ch AS (INSERT INTO channels(workspace_id,type,singleton,name) VALUES($1,'loopback',false,'Loop') RETURNING id),
-		m AS (INSERT INTO messages(workspace_id,conversation_id,kind,body) VALUES($1,$2,'outgoing','loop') RETURNING id),
-		o AS (INSERT INTO channel_outbox(workspace_id,message_id,channel_type,channel_id,transport) SELECT $1,m.id,'loopback',ch.id,NULL FROM m,ch RETURNING 1)
-		SELECT id::text FROM m`, s.both, conversationID).Scan(&otherMessage); err != nil {
-		t.Fatal(err)
-	}
-	var claimed []string
-	if err := db.Privileged(ctx, PrivilegeOutboxClaim, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `WITH due AS (
-				SELECT id FROM email_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
-				ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
-			UPDATE email_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
-			RETURNING o.message_id::text`, time.Now().Add(time.Minute), 10, time.Now().Add(time.Hour))
-		if err != nil {
-			return err
-		}
-		claimed, err = pgx.CollectRows(rows, pgx.RowTo[string])
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if fmt.Sprint(claimed) != fmt.Sprint([]string{replyID}) {
-		t.Fatalf("claim through the view took %v, want only the email reply %s", claimed, replyID)
-	}
-	// Row-level security holds through the view.
-	var seen int
-	if err := db.InWorkspace(ctx, s.formOff, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT count(*) FROM email_outbox`).Scan(&seen)
-	}); err != nil || seen != 0 {
-		t.Fatalf("another workspace saw %d outbox rows through the view (%v)", seen, err)
+	if _, err := pool.Exec(ctx, `UPDATE channels SET is_default=true WHERE deleted_at IS NOT NULL`); err == nil {
+		t.Fatal("a removed channel became a default")
 	}
 }
 
-// Rolling back keeps every email and web form setup and refuses while a row holds what the old
-// schema has no place for.
+// Rolling back works for a workspace that fits the old schema and refuses, naming it, for one that
+// does not: the default channel's settings, domain, Gmail, Message-IDs and reply tokens come back.
 func TestChannelsMigrationRollsBackOnlyWhatItCan(t *testing.T) {
-	pool := testPool(t)
+	pool, s := upgradedChannels(t)
 	ctx := context.Background()
-	migrateBefore(t, pool, channelsMigration)
-	s := seedChannelWorkspaces(t, pool)
-	if err := Migrate(ctx, pool); err != nil {
-		t.Fatalf("upgrade: %v", err)
-	}
 	refused := func(setup, undo, want string) {
 		t.Helper()
 		if _, err := pool.Exec(ctx, setup); err != nil {
@@ -357,10 +316,16 @@ func TestChannelsMigrationRollsBackOnlyWhatItCan(t *testing.T) {
 	refused(`INSERT INTO contacts(workspace_id,name) SELECT id,'Chat only' FROM workspaces WHERE slug='none'`,
 		`DELETE FROM contacts WHERE email IS NULL`, "contacts known only on a channel")
 	refused(`UPDATE channels SET enabled=false,disabled_at=now() WHERE type='email' AND workspace_id=(SELECT id FROM workspaces WHERE slug='both')`,
-		`UPDATE channels SET enabled=true,disabled_at=NULL WHERE type='email'`, "email channel is off")
+		`UPDATE channels SET enabled=true,disabled_at=NULL WHERE type='email' AND deleted_at IS NULL`, "email channel is off")
 	refused(`INSERT INTO channel_inbound_events(workspace_id,channel_id,state,raw,hold_reason) SELECT workspace_id,id,'held','{}','channel_off' FROM channels WHERE type='web_form' LIMIT 1`,
 		`DELETE FROM channel_inbound_events`, "not conversations yet")
-	refused(`INSERT INTO channel_types VALUES('loopback',true,false); INSERT INTO channels(workspace_id,type,singleton,name) SELECT id,'loopback',false,'Loop' FROM workspaces WHERE slug='none'`,
+	refused(`WITH c AS (INSERT INTO channels(workspace_id,type,name) SELECT id,'email','Billing' FROM workspaces WHERE slug='both' RETURNING id,workspace_id)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT workspace_id,id,'billing@both.example','Both','billing' FROM c`,
+		`DELETE FROM channels WHERE name='Billing'`, "both: Email <support@both.example>, Billing <billing@both.example>")
+	refused(`WITH c AS (INSERT INTO channels(workspace_id,type,name) SELECT id,'web_form','Careers form' FROM workspaces WHERE slug='both' RETURNING id,workspace_id)
+		INSERT INTO web_form_channels(workspace_id,channel_id) SELECT workspace_id,id FROM c`,
+		`DELETE FROM channels WHERE name='Careers form'`, "more than one web form (both: Web form, Careers form)")
+	refused(`INSERT INTO channel_types VALUES('loopback',true); INSERT INTO channels(workspace_id,type,name) SELECT id,'loopback','Loop' FROM workspaces WHERE slug='none'`,
 		`DELETE FROM channels WHERE type='loopback'; DELETE FROM channel_types WHERE type='loopback'`, "other than email and web form")
 
 	// The form channel was turned off in the new schema only; rolling back keeps it off.
@@ -370,25 +335,31 @@ func TestChannelsMigrationRollsBackOnlyWhatItCan(t *testing.T) {
 	if err := rollbackThrough(ctx, pool, channelsMigration); err != nil {
 		t.Fatalf("roll back: %v", err)
 	}
-	var setups, sent int
+	var setups, sent, gmail int
 	var formOn bool
+	var verified *time.Time
+	var providerID, messageID, token string
 	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM email_channels)+(SELECT count(*) FROM web_form_channels),
-		(SELECT count(*) FROM email_outbox WHERE status='sent'),(SELECT enabled FROM web_form_channels WHERE workspace_id=$1)`, s.both).
-		Scan(&setups, &sent, &formOn); err != nil {
+		(SELECT count(*) FROM email_outbox WHERE status='sent'),(SELECT enabled FROM web_form_channels WHERE workspace_id=$1),
+		(SELECT domain_verified_at FROM email_channels WHERE workspace_id=$1),(SELECT provider_domain_id FROM email_channels WHERE workspace_id=$1),
+		(SELECT count(*) FROM mailbox_connections WHERE workspace_id=$1),
+		(SELECT email_message_id FROM messages WHERE id=$2),(SELECT email_reply_token FROM conversations WHERE id=$3)`, s.both, s.reply, s.emailConversation).
+		Scan(&setups, &sent, &formOn, &verified, &providerID, &gmail, &messageID, &token); err != nil {
 		t.Fatal(err)
 	}
-	if setups != 4 || sent != 1 || formOn {
-		t.Fatalf("after rollback: setups=%d sent deliveries=%d form on=%v, want 4, 1, off", setups, sent, formOn)
+	if setups != 4 || sent != 2 || formOn || verified == nil || providerID != "pd-both" || gmail != 1 || messageID != "<out-1@both.example>" || token != "tok-1" {
+		t.Fatalf("after rollback: setups=%d sent=%d form on=%v verified=%v provider=%q gmail=%d Message-ID=%q token=%q",
+			setups, sent, formOn, verified, providerID, gmail, messageID, token)
 	}
-	if tableExists(t, pool, "channels") {
-		t.Fatal("channels survived the rollback")
+	if tableExists(t, pool, "channels") || tableExists(t, pool, "email_domains") {
+		t.Fatal("channels or email_domains survived the rollback")
 	}
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatalf("up again: %v", err)
 	}
 	var channels int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channels`).Scan(&channels); err != nil || channels != 4 {
-		t.Fatalf("channels after up again=%d (%v), want 4", channels, err)
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM channels WHERE deleted_at IS NULL`).Scan(&channels); err != nil || channels != 4 {
+		t.Fatalf("live channels after up again=%d (%v), want 4", channels, err)
 	}
 }
 
@@ -402,7 +373,7 @@ func TestHeldInboundEventsCountTowardStorage(t *testing.T) {
 	}
 	var workspaceID, channelID string
 	if err := pool.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name) VALUES('held','Held') RETURNING id),
-		c AS (INSERT INTO channels(workspace_id,type,singleton,name) SELECT id,'web_form',true,'Form' FROM w RETURNING id,workspace_id)
+		c AS (INSERT INTO channels(workspace_id,type,name) SELECT id,'web_form','Form' FROM w RETURNING id,workspace_id)
 		SELECT workspace_id::text,id::text FROM c`).Scan(&workspaceID, &channelID); err != nil {
 		t.Fatal(err)
 	}
@@ -443,29 +414,3 @@ func TestHeldInboundEventsCountTowardStorage(t *testing.T) {
 	}
 }
 
-// The new code writes only external_id; the email code and older images still read the Message-ID.
-func TestEmailExternalIDAlsoFillsTheMessageID(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
-	if err := Migrate(ctx, pool); err != nil {
-		t.Fatal(err)
-	}
-	ids := seedTwoWorkspaces(t, pool)
-	var id string
-	var messageID *string
-	if err := pool.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,external_id)
-		SELECT workspace_id,id,'incoming','x','email:<new@example.com>' FROM conversations WHERE workspace_id=$1 RETURNING id::text,email_message_id`, ids.a).
-		Scan(&id, &messageID); err != nil || messageID == nil || *messageID != "<new@example.com>" {
-		t.Fatalf("insert: email_message_id=%v (%v)", messageID, err)
-	}
-	if err := pool.QueryRow(ctx, `UPDATE messages SET external_id='email:<out@example.com>' WHERE id=$1 RETURNING email_message_id`, id).
-		Scan(&messageID); err != nil || messageID == nil || *messageID != "<out@example.com>" {
-		t.Fatalf("update: email_message_id=%v (%v)", messageID, err)
-	}
-	var external *string
-	if err := pool.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,external_id)
-		SELECT workspace_id,id,'incoming','x','loop:1' FROM conversations WHERE workspace_id=$1 RETURNING email_message_id,external_id`, ids.a).
-		Scan(&messageID, &external); err != nil || messageID != nil || external == nil || *external != "loop:1" {
-		t.Fatalf("another type: email_message_id=%v external_id=%v (%v)", messageID, external, err)
-	}
-}

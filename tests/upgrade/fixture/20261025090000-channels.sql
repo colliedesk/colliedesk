@@ -3,18 +3,19 @@
 -- arrived while off. beta's channels received, collected, dropped, failed and discarded events, one of
 -- each, and sealed a secret. cobalt knows one customer only by a chat id. The sealed secret is fixture
 -- bytes, not a secret that opens.
-INSERT INTO channels (id, workspace_id, type, singleton, name, enabled, settings, external_account, created_by_agent_id,
-        created_at, updated_at, disabled_at, disabled_by_agent_id, deleted_at, deleted_by_agent_id) VALUES
-    (md5('channel-acme-1')::uuid, md5('ws-acme')::uuid, 'email', true, 'Old support mailbox', false, '{}', 'support@acme.example',
+INSERT INTO channels (id, workspace_id, type, name, enabled, settings, external_account, created_by_agent_id,
+        created_at, updated_at, disabled_at, disabled_by_agent_id, deleted_at, deleted_by_agent_id, is_default) VALUES
+    (md5('channel-acme-1')::uuid, md5('ws-acme')::uuid, 'email', 'Old support mailbox', false, '{}', 'support@acme.example',
      md5('agent-acme-admin')::uuid, '2026-10-20 09:00:00+00', '2026-10-24 09:00:00+00',
-     '2026-10-24 09:00:00+00', md5('agent-acme-admin')::uuid, '2026-10-24 09:00:00+00', md5('agent-acme-admin')::uuid),
-    (md5('channel-acme-2')::uuid, md5('ws-acme')::uuid, 'web_form', true, 'Website form', false,
+     '2026-10-24 09:00:00+00', md5('agent-acme-admin')::uuid, '2026-10-24 09:00:00+00', md5('agent-acme-admin')::uuid, false),
+    (md5('channel-acme-2')::uuid, md5('ws-acme')::uuid, 'web_form', 'Website form', false,
      '{"join_policy": "never", "default_tags": ["web-form"]}', NULL,
      md5('agent-acme-admin')::uuid, '2026-10-24 10:00:00+00', '2026-10-24 11:00:00+00',
-     '2026-10-24 11:00:00+00', md5('agent-acme-alex')::uuid, NULL, NULL);
+     '2026-10-24 11:00:00+00', md5('agent-acme-alex')::uuid, NULL, NULL, true);
 
-INSERT INTO web_form_channels (workspace_id, enabled, allowed_origins, created_at, updated_at, channel_id) VALUES
-    (md5('ws-acme')::uuid, false, ARRAY['https://acme.example'], '2026-10-24 10:00:00+00', '2026-10-24 11:00:00+00', md5('channel-acme-2')::uuid);
+-- The form the workspace's older address posts to.
+INSERT INTO web_form_channels (workspace_id, allowed_origins, created_at, updated_at, channel_id, legacy_slug) VALUES
+    (md5('ws-acme')::uuid, ARRAY['https://acme.example'], '2026-10-24 10:00:00+00', '2026-10-24 11:00:00+00', md5('channel-acme-2')::uuid, true);
 
 INSERT INTO channel_events (id, workspace_id, channel_id, channel_type, channel_name, kind, actor_agent_id, actor_token_id, detail, created_at) VALUES
     (md5('chev-acme-1')::uuid, md5('ws-acme')::uuid, md5('channel-acme-1')::uuid, 'email', 'Old support mailbox', 'added',
@@ -49,7 +50,7 @@ INSERT INTO conversation_thread_keys (workspace_id, conversation_id, channel_typ
     SELECT workspace_id, conversation_id, 'web_form', 'form:pricing', '2026-10-24 12:00:00+00'
     FROM messages WHERE workspace_id = md5('ws-beta')::uuid AND channel_meta IS NOT NULL;
 
-UPDATE channel_outbox SET external_id = 'email:' || (SELECT email_message_id FROM messages m
+UPDATE channel_outbox SET external_id = (SELECT external_id FROM messages m
         WHERE m.workspace_id = channel_outbox.workspace_id AND m.id = channel_outbox.message_id),
     meta = '{"transport": "smtp"}'
     WHERE workspace_id = md5('ws-beta')::uuid AND status = 'sent';
@@ -96,3 +97,42 @@ INSERT INTO channel_sent_ids (workspace_id, channel_id, external_id, message_id,
     FROM channel_outbox o, generate_series(1, 2) n
     WHERE o.workspace_id = md5('ws-beta')::uuid AND o.status = 'sent' AND o.id = (
         SELECT id FROM channel_outbox WHERE workspace_id = md5('ws-beta')::uuid AND status = 'sent' ORDER BY id LIMIT 1);
+
+-- beta added a second mailbox on the same domain (verified once, for both), forwarded to its own hosted
+-- address and sending through its own Gmail, and a second form for its careers page, which became the
+-- default form; one consent for that mailbox is in flight.
+INSERT INTO channels (id, workspace_id, type, name, enabled, settings, created_by_agent_id, created_at, updated_at) VALUES
+    (md5('channel-beta-billing')::uuid, md5('ws-beta')::uuid, 'email', 'Billing', true, '{}', md5('agent-beta-admin')::uuid,
+     '2026-10-24 14:00:00+00', '2026-10-24 14:00:00+00'),
+    (md5('channel-beta-careers')::uuid, md5('ws-beta')::uuid, 'web_form', 'Careers form', true, '{}', md5('agent-beta-admin')::uuid,
+     '2026-10-24 14:10:00+00', '2026-10-24 14:10:00+00');
+INSERT INTO email_channels (channel_id, workspace_id, support_address, sender_name, hosted_local, secret_key_id, secret_hash, secret_rotated_at,
+        created_at, updated_at) VALUES
+    (md5('channel-beta-billing')::uuid, md5('ws-beta')::uuid, 'billing@beta.example', 'Beta Billing', 'billing', 'fixture-key-beta-billing',
+     sha256('fixture-inbound-secret-billing'), '2026-10-24 14:00:00+00', '2026-10-24 14:00:00+00', '2026-10-24 14:00:00+00');
+INSERT INTO mailbox_connections (channel_id, workspace_id, provider, address, scopes, token_key_id, refresh_token_sealed, status, connected_by_agent_id,
+        connected_at, updated_at) VALUES
+    (md5('channel-beta-billing')::uuid, md5('ws-beta')::uuid, 'google', 'billing@beta.example', 'https://www.googleapis.com/auth/gmail.send', 'fixture-key-1',
+     decode('01' || md5('nonce-billing') || md5('sealed-refresh-token-billing') || md5('tag-billing'), 'hex'), 'connected', md5('agent-beta-admin')::uuid,
+     '2026-10-24 14:05:00+00', '2026-10-24 14:05:00+00');
+INSERT INTO mailbox_oauth_states (state_hash, workspace_id, agent_id, provider, code_verifier, expires_at, created_at, channel_id) VALUES
+    (sha256('fixture-oauth-state-billing'), md5('ws-beta')::uuid, md5('agent-beta-admin')::uuid, 'google', 'fixture-code-verifier-billing',
+     now() + interval '5 minutes', now(), md5('channel-beta-billing')::uuid);
+INSERT INTO web_form_channels (workspace_id, allowed_origins, created_at, updated_at, channel_id) VALUES
+    (md5('ws-beta')::uuid, ARRAY['https://careers.beta.example'], '2026-10-24 14:10:00+00', '2026-10-24 14:10:00+00', md5('channel-beta-careers')::uuid);
+UPDATE channels SET is_default = false WHERE workspace_id = md5('ws-beta')::uuid AND type = 'web_form' AND id <> md5('channel-beta-careers')::uuid;
+UPDATE channels SET is_default = true WHERE id = md5('channel-beta-careers')::uuid;
+INSERT INTO channel_events (id, workspace_id, channel_id, channel_type, channel_name, kind, actor_agent_id, detail, created_at) VALUES
+    (md5('chev-beta-billing')::uuid, md5('ws-beta')::uuid, md5('channel-beta-billing')::uuid, 'email', 'Billing', 'added',
+     md5('agent-beta-admin')::uuid, '{}', '2026-10-24 14:00:00+00'),
+    (md5('chev-beta-careers')::uuid, md5('ws-beta')::uuid, md5('channel-beta-careers')::uuid, 'web_form', 'Careers form', 'added',
+     md5('agent-beta-admin')::uuid, '{}', '2026-10-24 14:10:00+00'),
+    (md5('chev-beta-default')::uuid, md5('ws-beta')::uuid, md5('channel-beta-careers')::uuid, 'web_form', 'Careers form', 'default_changed',
+     md5('agent-beta-admin')::uuid, '{}', '2026-10-24 14:11:00+00');
+
+-- beta's latest web form conversation was answered from the Billing mailbox, which its replies keep;
+-- an imported conversation knows the mailbox it was sent to at the source.
+UPDATE conversations SET reply_channel_id = md5('channel-beta-billing')::uuid WHERE workspace_id = md5('ws-beta')::uuid AND id = (
+    SELECT id FROM conversations WHERE workspace_id = md5('ws-beta')::uuid AND channel = 'web_form' ORDER BY created_at DESC, id DESC LIMIT 1);
+UPDATE conversations SET origin = jsonb_set(origin, '{mailboxes}', '["billing@beta.example", "support@beta.example"]') WHERE id = (
+    SELECT id FROM conversations WHERE channel = 'imported' AND origin IS NOT NULL ORDER BY created_at, id LIMIT 1);
