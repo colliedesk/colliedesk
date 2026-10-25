@@ -320,7 +320,7 @@ func withFailedEmailReply(t *testing.T, api http.Handler, pool *pgxpool.Pool, ad
 		t.Fatal(err)
 	}
 	replyID := create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Contract reply"})
-	if _, err := pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, replyID); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE channel_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, replyID); err != nil {
 		t.Fatal(err)
 	}
 	return api, secret, replyID

@@ -265,6 +265,8 @@ const (
 	StateOff            = "off"
 	StateNeedsAttention = "needs_attention"
 	StateNotConnected   = "not_connected"
+	// StateRemoved is a removed channel's, shown only where removed channels are listed.
+	StateRemoved = "removed"
 )
 
 // Status is a channel's state with a fixed reason code the web app explains.

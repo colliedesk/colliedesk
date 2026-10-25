@@ -42,7 +42,8 @@ func (f fixture) addEmailChannel(t *testing.T, name, address, senderName string)
 // address, and the Gmail account connected to one of them sends only its replies.
 func TestEachEmailChannelSendsItsRepliesAsItself(t *testing.T) {
 	f := newFixture(t)
-	f.exec(t, `UPDATE email_channels SET sender_name='Outbound Support',domain_verified_at=now() WHERE workspace_id=$1`, f.workspaceID)
+	f.exec(t, `UPDATE email_channels SET sender_name='Outbound Support' WHERE workspace_id=$1`, f.workspaceID)
+	f.exec(t, `UPDATE email_domains SET verified_at=now() WHERE workspace_id=$1`, f.workspaceID)
 	billing, billingConversation := f.addEmailChannel(t, "Billing", "billing@billing.example", "Billing Team")
 	fake, config := gmailStandIn(t)
 	f.connectGmailTo(t, billing.ID, fake, config, "billing@billing.example")

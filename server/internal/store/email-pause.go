@@ -31,7 +31,7 @@ func (s *Store) PauseEmailOnComplaints(ctx context.Context, workspaceID string, 
 		err := tx.QueryRow(ctx, `WITH w AS (SELECT email_paused_at, GREATEST($2::timestamptz, email_pause_resumed_at) AS since FROM workspaces WHERE id=$1)
 			SELECT
 				(SELECT count(*) FROM relay_webhook_events e, w WHERE e.workspace_id=$1 AND e.event_type='email.complained' AND e.received_at>COALESCE(w.since,$2)),
-				(SELECT count(*) FROM email_outbox o, w WHERE o.workspace_id=$1 AND o.sent_at>COALESCE(w.since,$2)),
+				(SELECT count(*) FROM channel_outbox o, w WHERE o.workspace_id=$1 AND o.channel_type='email' AND o.sent_at>COALESCE(w.since,$2)),
 				(SELECT email_paused_at IS NOT NULL FROM w)`, workspaceID, since).Scan(&complaints, &sent, &alreadyPaused)
 		if err != nil {
 			return nil, err
@@ -92,8 +92,8 @@ func (s *Store) ResumeEmailSending(ctx context.Context, workspaceID string) (*do
 		if err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE email_outbox SET next_attempt_at=LEAST(next_attempt_at,now()),held_by_pause=false,updated_at=now()
-			WHERE workspace_id=$1 AND status='queued' AND held_by_pause`, workspaceID); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE channel_outbox SET next_attempt_at=LEAST(next_attempt_at,now()),held_by_pause=false,updated_at=now()
+			WHERE workspace_id=$1 AND channel_type='email' AND status='queued' AND held_by_pause`, workspaceID); err != nil {
 			return nil, err
 		}
 		pause.PausedAt = pause.PausedAt.UTC()

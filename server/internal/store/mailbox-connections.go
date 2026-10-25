@@ -88,8 +88,8 @@ func (s *Store) CreateOAuthState(ctx context.Context, workspaceID, channelID, ag
 }
 
 // TakeOAuthState uses up a consent state of this workspace; an expired one is removed and refused. It is
-// looked up inside the workspace, so a state started in another workspace is not found. A state an
-// older image started names no channel; it connects the workspace's default email channel.
+// looked up inside the workspace, so a state started in another workspace is not found. A state of a
+// workspace that had no email channel at the upgrade names no channel (ChannelID ""): it cannot finish.
 func (s *Store) TakeOAuthState(ctx context.Context, workspaceID, state string, now time.Time) (OAuthState, error) {
 	stateHash := oauthStateHash(state)
 	type taken struct {
@@ -99,7 +99,7 @@ func (s *Store) TakeOAuthState(ctx context.Context, workspaceID, state string, n
 	result, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (taken, error) {
 		var result taken
 		err := tx.QueryRow(ctx, `DELETE FROM mailbox_oauth_states WHERE workspace_id=$1 AND state_hash=$2
-			RETURNING agent_id::text,code_verifier,expires_at>$3,COALESCE(channel_id,`+defaultEmailChannel+`)::text`,
+			RETURNING agent_id::text,code_verifier,expires_at>$3,COALESCE(channel_id::text,'')`,
 			workspaceID, stateHash, now).Scan(&result.state.AgentID, &result.state.Verifier, &result.live, &result.state.ChannelID)
 		return result, err
 	})
@@ -213,6 +213,23 @@ func (s *Store) DeleteMailboxConnection(ctx context.Context, workspaceID, channe
 		return nil, fmt.Errorf("delete mailbox connection: %w", err)
 	}
 	return &grant, nil
+}
+
+// MailboxChannelFor returns the email channel of the workspace whose Gmail connection is the account,
+// connected or failed; "" when none.
+func (s *Store) MailboxChannelFor(ctx context.Context, workspaceID, address string) (string, error) {
+	id, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (string, error) {
+		var id string
+		err := tx.QueryRow(ctx, `SELECT channel_id::text FROM mailbox_connections WHERE workspace_id=$1 AND address=lower($2)`, workspaceID, address).Scan(&id)
+		return id, err
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("find gmail account: %w", err)
+	}
+	return id, nil
 }
 
 // MailboxAddressHeldElsewhere reports whether another email channel, of this workspace or another, holds a

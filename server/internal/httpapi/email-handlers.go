@@ -66,6 +66,11 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, 
 	if address := email.HostedLocalAddress(local, workspaceSlug, config.HostedMailDomain); address != "" {
 		settings.HostedAddress = &address
 	}
+	if channel != nil && settings.Gmail.Connection != nil {
+		// A connection made before Gmail had to be the channel's own address keeps sending; it is flagged.
+		matches := email.SameMailbox(settings.Gmail.Connection.Address, channel.SupportAddress)
+		settings.Gmail.AddressMatches = &matches
+	}
 	if channel != nil && mailbox != nil {
 		// Gmail sends by itself, and a broken connection never hands replies to SMTP.
 		if mailbox.Status == domain.MailboxConnected && a.config.Google.Enabled() {
@@ -172,8 +177,12 @@ func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Requ
 	a.writeEmailSettings(response, request, &channel)
 }
 
-// writeEmailStoreError reports a missing resource as 404 and anything else as a server failure.
+// writeEmailStoreError reports a value another channel has as 409, a missing resource as 404 and
+// anything else as a server failure.
 func writeEmailStoreError(response http.ResponseWriter, err error) {
+	if writeChannelConflict(response, err) {
+		return
+	}
 	if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "not found") {
 		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
 		return

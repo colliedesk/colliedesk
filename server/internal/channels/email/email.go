@@ -81,7 +81,6 @@ const (
 	senderNameInvalid      = "sender_name must be 1 to 100 characters without line breaks or other control characters."
 	brandNameMessage       = "This name is not available. Choose another name, or contact us if it is your own brand."
 	foreignHosted          = "This address belongs to another workspace's forwarding address."
-	addressTaken           = "Another email channel of this workspace already uses this address."
 )
 
 // PlainAddress accepts a bare addr-spec only: no display name, no comments, no line breaks.
@@ -125,17 +124,9 @@ func (c config) Validate(ctx context.Context, tx pgx.Tx, workspaceID string, cur
 				return channels.ConfigChange{}, fieldError("support_address", foreignHosted)
 			}
 		}
-		currentID := ""
-		if current != nil {
-			currentID = current.ID
-		}
-		var taken bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM email_channels WHERE workspace_id=$1 AND support_address=$2 AND channel_id::text<>$3)`,
-			workspaceID, address, currentID).Scan(&taken); err != nil {
-			return channels.ConfigChange{}, fmt.Errorf("check support address: %w", err)
-		}
-		if taken {
-			return channels.ConfigChange{}, fieldError("support_address", addressTaken)
+		// One @ and no + at the start, so the mailbox it names is read the same everywhere (email.MailboxKey).
+		if strings.Count(address, "@") != 1 || mailpkg.MailboxKey(address) == "" || strings.HasPrefix(address, "+") {
+			return channels.ConfigChange{}, fieldError("support_address", supportAddressRequired)
 		}
 		value.SupportAddress = &address
 		detail["support_address"] = address
@@ -154,7 +145,12 @@ func (c config) Validate(ctx context.Context, tx pgx.Tx, workspaceID string, cur
 	if current == nil && value.SupportAddress == nil {
 		return channels.ConfigChange{}, fieldError("support_address", supportAddressRequired)
 	}
-	return channels.ConfigChange{Value: value, Detail: detail}, nil
+	change := channels.ConfigChange{Value: value, Detail: detail}
+	if current == nil {
+		// A second mailbox is called by its address unless it is given a name.
+		change.Name = *value.SupportAddress
+	}
+	return change, nil
 }
 
 func (c config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, change channels.ConfigChange) (channels.Event, error) {

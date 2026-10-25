@@ -42,7 +42,10 @@ func (a *API) getWebForm(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
-	form.SubmitPath = webFormPathPrefix + who.Workspace.Slug
+	form.SubmitPath = webform.SubmitPath(form, who.Workspace.Slug)
+	if form.ChannelID == "" {
+		form.SubmitPath = webFormPathPrefix + who.Workspace.Slug
+	}
 	writeJSON(response, http.StatusOK, form)
 }
 
@@ -66,7 +69,7 @@ func (a *API) putWebForm(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
-	form.SubmitPath = webFormPathPrefix + who.Workspace.Slug
+	form.SubmitPath = webform.SubmitPath(form, who.Workspace.Slug)
 	writeJSON(response, http.StatusOK, form)
 }
 

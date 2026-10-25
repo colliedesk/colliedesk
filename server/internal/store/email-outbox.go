@@ -11,6 +11,10 @@ import (
 
 const maxReplyReferences = 20
 
+// replyTokenOf is the reply token of conversation c, the key its email replies carry back.
+const replyTokenOf = `(SELECT substr(k.key,13) FROM conversation_thread_keys k WHERE k.workspace_id=c.workspace_id AND k.conversation_id=c.id
+	AND k.channel_type='email' AND starts_with(k.key,'reply-token:') ORDER BY k.created_at LIMIT 1)`
+
 // ErrLeaseLost means another worker reclaimed the delivery; this worker's result is discarded.
 var ErrLeaseLost = errors.New("delivery lease was lost")
 
@@ -58,11 +62,11 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	var conversationID string
 	var createdAt time.Time
 	err := tx.QueryRow(ctx, `SELECT COALESCE(ch.sender_name,''),COALESCE(ch.support_address,''),COALESCE(ch.verified,false),w.email_paused_at IS NOT NULL,
-			ct.name,ct.email,c.subject,m.body,COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at,m.cc
+			ct.name,ct.email,c.subject,m.body,COALESCE(CASE WHEN starts_with(m.external_id,'email:') THEN substr(m.external_id,7) END,''),COALESCE(`+replyTokenOf+`,''),c.id::text,m.created_at,m.cc
 		FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 		JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 		JOIN workspaces w ON w.id=m.workspace_id
-		LEFT JOIN (SELECT e.workspace_id,e.channel_id,e.sender_name,e.support_address,d.domain_verified_at IS NOT NULL AS verified
+		LEFT JOIN (SELECT e.workspace_id,e.channel_id,e.sender_name,e.support_address,d.verified_at IS NOT NULL AS verified
 			FROM email_channels e`+emailDomainJoin+`) ch ON ch.workspace_id=m.workspace_id AND ch.channel_id::text=$3
 		WHERE m.workspace_id=$1 AND m.id=$2`, item.WorkspaceID, item.MessageID, item.ChannelID).
 		Scan(&item.SenderName, &item.SupportAddress, &item.DomainVerified, &item.EmailPaused, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
@@ -70,8 +74,8 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	if err != nil {
 		return fmt.Errorf("load delivery %s: %w", item.OutboxID, err)
 	}
-	rows, err := tx.Query(ctx, `SELECT email_message_id,kind FROM messages
-		WHERE workspace_id=$1 AND conversation_id=$2 AND email_message_id IS NOT NULL AND id<>$3 AND created_at<=$4
+	rows, err := tx.Query(ctx, `SELECT substr(external_id,7),kind FROM messages
+		WHERE workspace_id=$1 AND conversation_id=$2 AND starts_with(external_id,'email:') AND id<>$3 AND created_at<=$4
 		ORDER BY created_at,id`, item.WorkspaceID, conversationID, item.MessageID, createdAt)
 	if err != nil {
 		return fmt.Errorf("load thread references: %w", err)
@@ -134,7 +138,7 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 func (s *Store) CountSentSince(ctx context.Context, workspaceID string, since time.Time) (int, error) {
 	count, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (int, error) {
 		var count int
-		err := tx.QueryRow(ctx, `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND status='sent' AND sent_at>$2`,
+		err := tx.QueryRow(ctx, `SELECT count(*) FROM channel_outbox WHERE workspace_id=$1 AND channel_type='email' AND status='sent' AND sent_at>$2`,
 			workspaceID, since).Scan(&count)
 		return count, err
 	})

@@ -513,8 +513,12 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 // fills the type's own table itself in the same transaction (a new workspace's hosted email). Every
 // other channel is added with CreateChannel.
 func AddChannelRow(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type, name string, detail map[string]any) (string, error) {
+	if err := lockChannelType(ctx, tx, workspaceID, kind); err != nil {
+		return "", err
+	}
 	var channel channels.Channel
-	if err := tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name) VALUES($1,$2,$3) RETURNING id::text,workspace_id::text,type,name`,
+	if err := tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name,is_default)
+		VALUES($1,$2,$3,NOT EXISTS (SELECT 1 FROM channels WHERE workspace_id=$1 AND type=$2 AND is_default)) RETURNING id::text,workspace_id::text,type,name`,
 		workspaceID, string(kind), name).Scan(&channel.ID, &channel.WorkspaceID, &channel.Type, &channel.Name); err != nil {
 		return "", channelWriteError(err)
 	}
@@ -522,9 +526,10 @@ func AddChannelRow(ctx context.Context, tx pgx.Tx, workspaceID string, kind chan
 }
 
 // ListChannels describes the workspace's live channels, oldest first.
-func (s *Store) ListChannels(ctx context.Context, workspaceID string) ([]ChannelPublic, error) {
+func (s *Store) ListChannels(ctx context.Context, workspaceID string, includeRemoved bool) ([]ChannelPublic, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]ChannelPublic, error) {
-		rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY created_at,id`, workspaceID)
+		rows, err := tx.Query(ctx, `SELECT `+channelRowColumns+` FROM channels WHERE workspace_id=$1 AND ($2 OR deleted_at IS NULL)
+			ORDER BY deleted_at IS NOT NULL,created_at,id`, workspaceID, includeRemoved)
 		if err != nil {
 			return nil, fmt.Errorf("list channels: %w", err)
 		}
@@ -545,6 +550,11 @@ func (s *Store) ListChannels(ctx context.Context, workspaceID string) ([]Channel
 		for _, channel := range list {
 			if _, ok := s.channels.Adapter(channel.Type); !ok {
 				continue // a type this server no longer runs is kept, not shown
+			}
+			if !channel.Live() {
+				// A removed channel keeps its name for the conversations it carried, and nothing else.
+				described = append(described, ChannelPublic{Channel: channel, Status: channels.Status{State: channels.StateRemoved}})
+				continue
 			}
 			public, err := s.DescribeChannel(ctx, tx, channel)
 			if err != nil {

@@ -71,15 +71,17 @@ func TestEmailResumeRejectsBadInput(t *testing.T) {
 // holdDomain makes the workspace the provider-verified holder of the domain.
 func (e *trialEnv) holdDomain(domain, providerID string) {
 	e.t.Helper()
-	if _, err := e.pool.Exec(context.Background(), `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,domain_verified_at,sender_name)
-		VALUES($1,$2,'token',$3,now(),'Support')`, e.workspaceID, "support@"+domain, providerID); err != nil {
+	if err := e.tryVerifyDomain(domain, providerID); err != nil {
 		e.t.Fatal(err)
 	}
 }
 
+// tryVerifyDomain connects support@<domain> with the domain verified through the provider.
 func (e *trialEnv) tryVerifyDomain(domain, providerID string) error {
-	_, err := e.pool.Exec(context.Background(), `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,domain_verified_at,sender_name)
-		VALUES($1,$2,'token',$3,now(),'Support')`, e.workspaceID, "support@"+domain, providerID)
+	_, err := e.pool.Exec(context.Background(), `WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'email','Email',true) RETURNING id),
+			d AS (INSERT INTO email_domains(workspace_id,domain,verification_token,provider_domain_id,verified_at) VALUES($1,$2,'token',$3,now()) RETURNING 1)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT $1,c.id,'support@'||$2,'Support','support' FROM c,d`,
+		e.workspaceID, domain, providerID)
 	return err
 }
 
@@ -109,11 +111,11 @@ func TestEmailReleaseDomainClearsTheHolderSoTheOwnerCanVerify(t *testing.T) {
 	}
 	var providerID *string
 	var verified *time.Time
-	if err := holder.pool.QueryRow(context.Background(), `SELECT provider_domain_id,domain_verified_at FROM email_channels WHERE workspace_id=$1`, holder.workspaceID).Scan(&providerID, &verified); err != nil {
+	if err := holder.pool.QueryRow(context.Background(), `SELECT provider_domain_id,verified_at FROM email_domains WHERE workspace_id=$1`, holder.workspaceID).Scan(&providerID, &verified); err != nil {
 		t.Fatal(err)
 	}
 	if providerID != nil || verified != nil {
-		t.Fatalf("the holder's channel must lose the provider domain and the verification: %v %v", providerID, verified)
+		t.Fatalf("the holder's domain must lose the provider domain and the verification: %v %v", providerID, verified)
 	}
 	if err := owner.tryVerifyDomain("shared.example.com", "dom_owner"); err != nil {
 		t.Fatalf("after the release the owner must be able to verify: %v", err)

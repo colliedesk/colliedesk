@@ -10,6 +10,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -31,6 +32,9 @@ type gmailSettings struct {
 	MissingSettings []string                  `json:"missing_settings"`
 	RedirectURI     string                    `json:"redirect_uri"`
 	Connection      *domain.MailboxConnection `json:"connection"`
+	// AddressMatches is false for a connection whose account is not the channel's support address;
+	// absent without a connection.
+	AddressMatches *bool `json:"address_matches,omitempty"`
 }
 
 func (a *API) gmailRedirectURI() string { return a.config.Origin + gmailCallbackPath }
@@ -72,15 +76,22 @@ func (a *API) connectGmail(response http.ResponseWriter, request *http.Request) 
 	writeJSON(response, http.StatusOK, map[string]string{"url": a.config.Google.AuthorizationURL(a.gmailRedirectURI(), started.State, started.Verifier)})
 }
 
-// gmailResultPath is the Replies tab of the email channel the consent was for (of the type's first
+// gmailResult is what a finished consent knows besides its outcome: the channel it was for, and the
+// channel that already sends through the account when that is why it was refused.
+type gmailResult struct{ channelID, holderID string }
+
+// gmailResultPath is the Replies tab of the email channel the consent was for (of the default email
 // channel when that is not known), where the "Send from Gmail" block reads the outcome.
-func gmailResultPath(channelID, outcome string) string {
+func gmailResultPath(result gmailResult, outcome string) string {
 	page := "/settings/channels/type/email"
-	if channelID != "" {
-		page = "/settings/channels/" + channelID
+	if result.channelID != "" {
+		page = "/settings/channels/" + result.channelID
 	}
 	if outcome == "connected" {
 		return page + "?tab=replies&gmail=connected"
+	}
+	if result.holderID != "" {
+		return page + "?tab=replies&gmail_error=" + outcome + "&gmail_channel=" + result.holderID
 	}
 	return page + "?tab=replies&gmail_error=" + outcome
 }
@@ -91,17 +102,14 @@ func gmailResultPath(channelID, outcome string) string {
 // workspace. It redoes here what authorize would do for a session route, and answers every outcome
 // with a redirect the settings page explains; Google's own error text is never echoed.
 func (a *API) finishGmailConnect(response http.ResponseWriter, request *http.Request) {
-	channelID, outcome := a.gmailCallbackOutcome(request)
-	http.Redirect(response, request, gmailResultPath(channelID, outcome), http.StatusSeeOther)
+	var result gmailResult
+	outcome := a.finishGmailConsent(request, &result)
+	http.Redirect(response, request, gmailResultPath(result, outcome), http.StatusSeeOther)
 }
 
-// gmailCallbackOutcome finishes the consent; channelID is the channel it was for, once the state is known.
-func (a *API) gmailCallbackOutcome(request *http.Request) (channelID, outcome string) {
-	outcome = a.finishGmailConsent(request, &channelID)
-	return channelID, outcome
-}
-
-func (a *API) finishGmailConsent(request *http.Request, channelID *string) string {
+// finishGmailConsent finishes the consent and returns its outcome; result learns the channel it was
+// for once the state is known.
+func (a *API) finishGmailConsent(request *http.Request, result *gmailResult) string {
 	cookie, err := request.Cookie(sessionCookie)
 	if err != nil || cookie.Value == "" {
 		return "signed_out"
@@ -130,7 +138,7 @@ func (a *API) finishGmailConsent(request *http.Request, channelID *string) strin
 	if started.AgentID != who.Agent.ID {
 		return "wrong_person"
 	}
-	*channelID = started.ChannelID
+	result.channelID = started.ChannelID
 	if query.Get("error") != "" || query.Get("code") == "" {
 		return "denied"
 	}
@@ -147,6 +155,31 @@ func (a *API) finishGmailConsent(request *http.Request, channelID *string) strin
 	case err != nil:
 		slog.Warn("gmail code exchange failed", "error", err, "workspace", who.Workspace.ID)
 		return "google_unavailable"
+	}
+	// A channel sends as its own address: the account must be its support address's mailbox, and one
+	// account sends for one channel of the workspace. A refused grant is revoked unless a channel holds
+	// the account already: Google would revoke that one with it.
+	channel, err := a.store.GetEmailChannelByID(request.Context(), who.Workspace.ID, started.ChannelID)
+	if err != nil {
+		slog.Error("read the email channel of a gmail consent", "error", err, "workspace", who.Workspace.ID)
+		return "google_unavailable"
+	}
+	if channel == nil {
+		a.revokeUnheld(grant.RefreshToken, grant.Address, who.Workspace.ID)
+		return "email_channel_missing"
+	}
+	if !email.SameMailbox(grant.Address, channel.SupportAddress) {
+		a.revokeUnheld(grant.RefreshToken, grant.Address, who.Workspace.ID)
+		return "address_mismatch"
+	}
+	holder, err := a.store.MailboxChannelFor(request.Context(), who.Workspace.ID, grant.Address)
+	if err != nil {
+		slog.Error("check gmail account", "error", err, "workspace", who.Workspace.ID)
+		return "google_unavailable"
+	}
+	if holder != "" && holder != channel.ChannelID {
+		result.holderID = holder
+		return "account_in_use"
 	}
 	keyID, sealed, err := a.config.Google.Keys.Seal([]byte(grant.RefreshToken), google.GrantContext(who.Workspace.ID))
 	// A failure below does not revoke the new grant: Google revokes the whole grant of the account, which
@@ -219,6 +252,18 @@ func (a *API) revokeSealed(grant *store.SealedGrant, workspaceID, channelID stri
 		return
 	}
 	a.revokeGrant(string(token), workspaceID)
+}
+
+// revokeUnheld revokes a grant just received and not stored, unless a channel holds the same account.
+func (a *API) revokeUnheld(token, address, workspaceID string) {
+	held, err := a.store.MailboxAddressHeldElsewhere(context.Background(), "", address)
+	if err != nil {
+		slog.Warn("gmail grant not revoked: could not check other channels", "workspace", workspaceID, "error", err)
+		return
+	}
+	if !held {
+		a.revokeGrant(token, workspaceID)
+	}
 }
 
 func (a *API) revokeGrant(token, workspaceID string) {

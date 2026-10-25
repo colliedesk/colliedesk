@@ -144,7 +144,7 @@ func TestOutboundRetriesWithBackoffThenSendsThreadedReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stored, token string
-	if err := f.pool.QueryRow(context.Background(), `SELECT m.email_message_id,c.email_reply_token FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.id=$1`, reply.ID).Scan(&stored, &token); err != nil {
+	if err := f.pool.QueryRow(context.Background(), `SELECT substr(m.external_id,7),substr(k.key,13) FROM messages m JOIN conversation_thread_keys k ON k.conversation_id=m.conversation_id AND k.channel_type='email' WHERE m.id=$1`, reply.ID).Scan(&stored, &token); err != nil {
 		t.Fatal(err)
 	}
 	header := parsed.Header

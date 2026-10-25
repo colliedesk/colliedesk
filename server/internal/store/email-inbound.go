@@ -53,7 +53,7 @@ func (s *Store) WorkspaceForReplyToken(ctx context.Context, token string) (strin
 // ConversationForReplyToken finds the conversation a reply token belongs to, and its workspace.
 func (s *Store) ConversationForReplyToken(ctx context.Context, token string) (workspaceID, conversationID string, found bool, err error) {
 	err = s.db.Privileged(ctx, database.PrivilegeReplyToken, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT workspace_id::text,id::text FROM conversations WHERE email_reply_token=$1`, token).Scan(&workspaceID, &conversationID)
+		return tx.QueryRow(ctx, `SELECT workspace_id::text,conversation_id::text FROM conversation_thread_keys WHERE channel_type='email' AND key='reply-token:'||$1`, token).Scan(&workspaceID, &conversationID)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", false, nil

@@ -41,8 +41,11 @@ type channelBody struct {
 	HeldCount     int              `json:"held_count"`
 	UnsentCount   int              `json:"unsent_count"`
 	LastInboundAt *string          `json:"last_inbound_at"`
+	IsDefault     bool             `json:"is_default"`
 	CreatedAt     time.Time        `json:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at"`
+	// DeletedAt is set on a removed channel, which only the list with include_removed shows.
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
 type channelDetailBody struct {
@@ -66,17 +69,44 @@ func (a *API) channelJSON(public store.ChannelPublic) channelBody {
 	return channelBody{ID: channel.ID, Type: channel.Type, Name: channel.Name, Enabled: channel.Enabled,
 		Status:  channelStateBody{State: public.Status.State, ReasonCode: optionalText(public.Status.ReasonCode), Message: optionalText(public.Status.Message)},
 		Summary: public.Summary, Capabilities: capabilities, HeldCount: public.Held, UnsentCount: public.Unsent, LastInboundAt: public.LastSeen,
-		CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt}
+		IsDefault: channel.IsDefault, CreatedAt: channel.CreatedAt, UpdatedAt: channel.UpdatedAt, DeletedAt: channel.DeletedAt}
 }
 
 func (a *API) writeChannelDetail(response http.ResponseWriter, status int, public store.ChannelPublic) {
 	writeJSON(response, status, channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config})
 }
 
+// writeChannelConflict answers a value another channel of the workspace has: 409 with the field and
+// the channel, which is always of the same workspace, so naming it tells nothing of another. It reports
+// whether err was such a conflict.
+func writeChannelConflict(response http.ResponseWriter, err error) bool {
+	var nameErr *channels.NameTakenError
+	var addressErr *store.AddressTakenError
+	conflict := func(code, field, message, channelID, channelName string) {
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": code, "message": message,
+			"fields": map[string]string{field: message}, "conflict": map[string]string{"channel_id": channelID, "channel_name": channelName}})})
+	}
+	switch {
+	case errors.As(err, &nameErr):
+		conflict("channel_name_taken", "name", "Another channel of this type is called "+nameErr.ChannelName+".", nameErr.ChannelID, nameErr.ChannelName)
+	case errors.As(err, &addressErr):
+		conflict("support_address_taken", "support_address", "The email channel "+addressErr.ChannelName+" already receives mail for "+addressErr.SupportAddress+
+			" (an address with a +tag reaches the same mailbox).", addressErr.ChannelID, addressErr.ChannelName)
+	case errors.Is(err, channels.ErrConflict):
+		writeError(response, http.StatusConflict, "channel_conflict", "Another change of these channels was made at the same moment. Nothing was changed; try again.")
+	default:
+		return false
+	}
+	return true
+}
+
 // writeChannelError answers the frame's errors the same for every type.
 func writeChannelError(response http.ResponseWriter, err error) {
 	var fieldErr *channels.FieldError
 	var heldErr *channels.HeldError
+	if writeChannelConflict(response, err) {
+		return
+	}
 	switch {
 	case errors.As(err, &fieldErr):
 		code := fieldErr.Code
@@ -138,7 +168,8 @@ func channelActor(request *http.Request) store.ChannelActor {
 
 func (a *API) listChannels(response http.ResponseWriter, request *http.Request) {
 	workspaceID := principal(request).Workspace.ID
-	list, err := a.store.ListChannels(request.Context(), workspaceID)
+	includeRemoved := request.URL.Query().Get("include_removed") == "true"
+	list, err := a.store.ListChannels(request.Context(), workspaceID, includeRemoved)
 	if err != nil {
 		writeChannelError(response, err)
 		return
@@ -153,13 +184,21 @@ func (a *API) listChannels(response http.ResponseWriter, request *http.Request) 
 		items = append(items, a.channelJSON(public))
 	}
 	type typeBody struct {
-		Type      channels.Type `json:"type"`
-		Available bool          `json:"available"`
-		Count     int           `json:"count"`
+		Type             channels.Type `json:"type"`
+		Available        bool          `json:"available"`
+		Count            int           `json:"count"`
+		DefaultChannelID *string       `json:"default_channel_id"`
+	}
+	defaults := map[channels.Type]*string{}
+	for _, public := range list {
+		if public.Channel.IsDefault {
+			id := public.Channel.ID
+			defaults[public.Channel.Type] = &id
+		}
 	}
 	types := []typeBody{}
 	for _, definition := range a.store.Channels().Definitions() {
-		types = append(types, typeBody{Type: definition.Type, Available: true, Count: counts[definition.Type]})
+		types = append(types, typeBody{Type: definition.Type, Available: true, Count: counts[definition.Type], DefaultChannelID: defaults[definition.Type]})
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "types": types})
 }
@@ -191,11 +230,12 @@ func (a *API) recordActivation(workspaceID string, before *store.ChannelPublic, 
 
 func (a *API) createChannel(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Type     channels.Type   `json:"type"`
-		Name     *string         `json:"name"`
-		Enabled  *bool           `json:"enabled"`
-		Config   json.RawMessage `json:"config"`
-		Settings json.RawMessage `json:"settings"`
+		Type      channels.Type   `json:"type"`
+		Name      *string         `json:"name"`
+		Enabled   *bool           `json:"enabled"`
+		IsDefault *bool           `json:"is_default"`
+		Config    json.RawMessage `json:"config"`
+		Settings  json.RawMessage `json:"settings"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Type == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "The body must be a channel with its type.")
@@ -203,7 +243,7 @@ func (a *API) createChannel(response http.ResponseWriter, request *http.Request)
 	}
 	workspaceID := principal(request).Workspace.ID
 	channel, err := a.store.CreateChannel(request.Context(), workspaceID, input.Type,
-		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, Config: input.Config, Settings: input.Settings}, channelActor(request))
+		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings}, channelActor(request))
 	if err != nil {
 		writeChannelError(response, err)
 		return
@@ -223,13 +263,14 @@ func (a *API) updateChannel(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	var input struct {
-		Name     *string         `json:"name"`
-		Enabled  *bool           `json:"enabled"`
-		Config   json.RawMessage `json:"config"`
-		Settings json.RawMessage `json:"settings"`
+		Name      *string         `json:"name"`
+		Enabled   *bool           `json:"enabled"`
+		IsDefault *bool           `json:"is_default"`
+		Config    json.RawMessage `json:"config"`
+		Settings  json.RawMessage `json:"settings"`
 	}
-	if err := decodeJSON(request, &input); err != nil || (input.Name == nil && input.Enabled == nil && input.Config == nil && input.Settings == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send at least one of name, enabled, config or settings.")
+	if err := decodeJSON(request, &input); err != nil || (input.Name == nil && input.Enabled == nil && input.IsDefault == nil && input.Config == nil && input.Settings == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send at least one of name, enabled, is_default, config or settings.")
 		return
 	}
 	workspaceID := principal(request).Workspace.ID
@@ -239,7 +280,7 @@ func (a *API) updateChannel(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	if _, err := a.store.UpdateChannel(request.Context(), workspaceID, id,
-		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, Config: input.Config, Settings: input.Settings}, channelActor(request)); err != nil {
+		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings}, channelActor(request)); err != nil {
 		writeChannelError(response, err)
 		return
 	}

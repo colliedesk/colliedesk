@@ -50,6 +50,8 @@ type Channel struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 	DisabledAt      *time.Time      `json:"disabled_at"`
 	DeletedAt       *time.Time      `json:"deleted_at"`
+	// IsDefault marks its type's default channel.
+	IsDefault bool `json:"is_default"`
 }
 
 // ChannelEvent is one change to a channel (channel_events).
@@ -569,18 +571,20 @@ type Message struct {
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
 type ConversationHead struct {
-	ID         string                     `json:"id"`
-	ContactID  string                     `json:"contact_id"`
-	Subject    string                     `json:"subject"`
-	Status     string                     `json:"status"`
-	Priority   string                     `json:"priority"`
-	AssigneeID *string                    `json:"assignee_id"`
-	Channel    string                     `json:"channel"`
-	ChannelID  *string                    `json:"channel_id"`
-	Origin     *domain.ConversationOrigin `json:"origin"`
-	TagIDs     []string                   `json:"tag_ids"`
-	CreatedAt  time.Time                  `json:"created_at"`
-	UpdatedAt  time.Time                  `json:"updated_at"`
+	ID         string  `json:"id"`
+	ContactID  string  `json:"contact_id"`
+	Subject    string  `json:"subject"`
+	Status     string  `json:"status"`
+	Priority   string  `json:"priority"`
+	AssigneeID *string `json:"assignee_id"`
+	Channel    string  `json:"channel"`
+	ChannelID  *string `json:"channel_id"`
+	// ReplyChannelID is the channel its replies were pinned to when its own channel cannot send.
+	ReplyChannelID *string                    `json:"reply_channel_id"`
+	Origin         *domain.ConversationOrigin `json:"origin"`
+	TagIDs         []string                   `json:"tag_ids"`
+	CreatedAt      time.Time                  `json:"created_at"`
+	UpdatedAt      time.Time                  `json:"updated_at"`
 }
 
 // StatusChange is one change of a conversation's status (conversation_status_changes). Source is

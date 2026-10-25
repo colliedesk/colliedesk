@@ -14,8 +14,10 @@ import (
 // connectEmail gives the workspace an email channel with the sender name.
 func (e *trialEnv) connectEmail(address, senderName string) {
 	e.t.Helper()
-	if _, err := e.pool.Exec(context.Background(), `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name)
-		VALUES($1,$2,'token',$3)`, e.workspaceID, address, senderName); err != nil {
+	if _, err := e.pool.Exec(context.Background(), `WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'email','Email',true) RETURNING id),
+			d AS (INSERT INTO email_domains(workspace_id,domain,verification_token) VALUES($1,split_part($2,'@',2),'token') RETURNING 1)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT $1,c.id,$2,$3,'support' FROM c,d`,
+		e.workspaceID, address, senderName); err != nil {
 		e.t.Fatal(err)
 	}
 }

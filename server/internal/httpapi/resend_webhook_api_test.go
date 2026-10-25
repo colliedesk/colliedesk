@@ -75,15 +75,15 @@ func deliverResend(t *testing.T, api http.Handler, id string, body []byte) strin
 // sentReply makes the queued reply look delivered by the relay at the given time.
 func sentReply(t *testing.T, pool *pgxpool.Pool, reply string, at time.Time) {
 	t.Helper()
-	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET status='sent',sent_at=$2,attempts=1 WHERE message_id=$1`, reply, at); err != nil {
+	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',sent_at=$2,attempts=1 WHERE message_id=$1`, reply, at); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func deliveryOf(t *testing.T, pool *pgxpool.Pool, reply string) (string, string) {
 	t.Helper()
-	return queryString(t, pool, `SELECT status FROM email_outbox WHERE message_id=$1`, reply),
-		queryString(t, pool, `SELECT COALESCE(last_error,'') FROM email_outbox WHERE message_id=$1`, reply)
+	return queryString(t, pool, `SELECT status FROM channel_outbox WHERE message_id=$1`, reply),
+		queryString(t, pool, `SELECT COALESCE(last_error,'') FROM channel_outbox WHERE message_id=$1`, reply)
 }
 
 // legacyFrom is the From address of replies sent before each reply had its own address.
@@ -95,8 +95,8 @@ func legacyFrom(token string) string {
 // 12 hex digits of the reply's random Message-ID, so the address names that one reply.
 func replyFrom(t *testing.T, pool *pgxpool.Pool, reply string) string {
 	t.Helper()
-	token := queryString(t, pool, `SELECT c.email_reply_token FROM conversations c JOIN messages m ON m.conversation_id=c.id WHERE m.id=$1`, reply)
-	messageID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, reply)
+	token := queryString(t, pool, `SELECT substr(k.key,13) FROM conversation_thread_keys k JOIN messages m ON m.conversation_id=k.conversation_id WHERE m.id=$1 AND k.channel_type='email'`, reply)
+	messageID := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, reply)
 	return "Desk via Colliedesk <reply+" + token + "-" + strings.TrimPrefix(messageID, "cd.")[:12] + "@mail.colliedesk.test>"
 }
 
@@ -119,7 +119,7 @@ func TestResendBounceMarksTheReplyDeliveryFailed(t *testing.T) {
 		t.Fatalf("bounce reason not recorded: %q", lastError)
 	}
 	// sent_at stays the record that the relay took the reply; the trial recipient cap counts it.
-	if sentAt := queryString(t, pool, `SELECT COALESCE(sent_at::text,'') FROM email_outbox WHERE message_id=$1`, reply); sentAt == "" {
+	if sentAt := queryString(t, pool, `SELECT COALESCE(sent_at::text,'') FROM channel_outbox WHERE message_id=$1`, reply); sentAt == "" {
 		t.Fatal("marking the reply failed cleared sent_at")
 	}
 }
@@ -158,7 +158,7 @@ func TestResendRedeliveryFailsNoOtherReply(t *testing.T) {
 		t.Fatalf("first delivery status=%q, want applied", status)
 	}
 	// The agent retries the bounced reply; a late redelivery of the same event must not fail it again.
-	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET status='sent',last_error=NULL WHERE message_id=$1`, second); err != nil {
+	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',last_error=NULL WHERE message_id=$1`, second); err != nil {
 		t.Fatal(err)
 	}
 	if status := deliverResend(t, api, "msg_redelivered", body); status != "duplicate" {
@@ -176,7 +176,7 @@ func TestResendBounceBeforeTheReplyIsMarkedSentStillFailsIt(t *testing.T) {
 	admin := createSession(t, api, service, "Resend Race", "admin@resend-race.example.com")
 	_, reply, _ := replyToken(t, api, pool, admin, connectEmail(t, api, admin, "support@resend-race.example.com"), "rrace@customer.example")
 	// The relay accepted the reply and reported a suppressed address before the worker recorded the send.
-	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET attempts=1,locked_until=now()+interval '5 minutes',claim_token=gen_random_uuid() WHERE message_id=$1`, reply); err != nil {
+	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET attempts=1,locked_until=now()+interval '5 minutes',claim_token=gen_random_uuid() WHERE message_id=$1`, reply); err != nil {
 		t.Fatal(err)
 	}
 	body := resendEvent("email.bounced", replyFrom(t, pool, reply), []string{"z@customer.example"}, "", time.Now())
@@ -201,7 +201,7 @@ func TestResendLegacyReplyAddressMatchesOnlyByMessageID(t *testing.T) {
 	if status := deliverResend(t, api, "msg_legacy_guess", guess); status != "ignored" {
 		t.Fatalf("legacy event without our Message-ID: status=%q, want ignored", status)
 	}
-	ourID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, first)
+	ourID := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, first)
 	exact := resendEvent("email.bounced", legacyFrom(token), []string{"z@customer.example"}, "<"+ourID+">", time.Now())
 	if status := deliverResend(t, api, "msg_legacy_exact", exact); status != "applied" {
 		t.Fatalf("legacy event with our Message-ID: status=%q, want applied", status)
@@ -223,7 +223,7 @@ func TestResendEventsThatNameNoReplyOfOursChangeNothing(t *testing.T) {
 	sentReply(t, pool, replyA, time.Now())
 	sentReply(t, pool, replyB, time.Now())
 	fromA := replyFrom(t, pool, replyA)
-	ourIDB := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, replyB)
+	ourIDB := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, replyB)
 
 	for name, body := range map[string][]byte{
 		// A bounce for a Cc copy never fails the reply; one that names the contact next to someone
@@ -291,7 +291,7 @@ func TestResendBounceOfACopiedAddressLeavesTheReplySent(t *testing.T) {
 	sentReply(t, pool, reply, time.Now())
 	// The worker already noted a copy the relay refused at RCPT TO.
 	missed := "Sent to the customer, but not to: boss@customer.example (550 no such user)"
-	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET last_error=$2 WHERE message_id=$1`, reply, missed); err != nil {
+	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET last_error=$2 WHERE message_id=$1`, reply, missed); err != nil {
 		t.Fatal(err)
 	}
 	from := replyFrom(t, pool, reply)

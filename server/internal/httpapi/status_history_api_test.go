@@ -24,7 +24,7 @@ func TestEveryWayAStatusChangesIsRecordedWithWhoChangedIt(t *testing.T) {
 	}, "Where is my invoice?"))
 	conversationID := *first.ConversationID
 	_ = create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Attached."})
-	ourMessageID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE conversation_id=$1 AND kind='outgoing'`, conversationID)
+	ourMessageID := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE conversation_id=$1 AND kind='outgoing'`, conversationID)
 
 	for _, status := range []string{"resolved", "resolved"} {
 		if response := request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversationID, map[string]any{"status": status}, admin, nil); response.Code != http.StatusOK {

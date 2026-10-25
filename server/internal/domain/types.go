@@ -383,6 +383,8 @@ type WebForm struct {
 	AllowedOrigins []string `json:"allowed_origins"`
 	// SubmitPath is the path a website posts to; the host is the instance's own.
 	SubmitPath string `json:"submit_path"`
+	// LegacySlug marks the form the workspace's older address /api/v1/public/forms/<slug> posts to.
+	LegacySlug bool `json:"legacy_slug"`
 }
 
 func UTC(value time.Time) time.Time { return value.UTC() }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -109,13 +110,29 @@ func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conve
 		if kind != "outgoing" {
 			return struct{}{}, nil
 		}
-		route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
-		if err != nil || route.Channel == nil {
+		// The channel the reply leaves from: the conversation's, or for one not stored yet (it opens with
+		// these files) the default email channel.
+		var channelID string
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=$1 AND id::text=$2)`, workspaceID, conversationID).Scan(&exists); err != nil {
 			return struct{}{}, err
 		}
+		if !exists {
+			channel, found, err := s.defaultChannelOfType(ctx, tx, workspaceID, domain.ChannelEmail)
+			if err != nil || !found {
+				return struct{}{}, err
+			}
+			channelID = channel.ID
+		} else {
+			route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
+			if err != nil || route.Channel == nil {
+				return struct{}{}, err
+			}
+			channelID = route.Channel.ID
+		}
 		var verified bool
-		err = tx.QueryRow(ctx, `SELECT d.domain_verified_at IS NOT NULL FROM email_channels e`+emailDomainJoin+` WHERE e.workspace_id=$1 AND e.channel_id::text=$2`,
-			workspaceID, route.Channel.ID).Scan(&verified)
+		err := tx.QueryRow(ctx, `SELECT d.verified_at IS NOT NULL FROM email_channels e`+emailDomainJoin+` WHERE e.workspace_id=$1 AND e.channel_id::text=$2`,
+			workspaceID, channelID).Scan(&verified)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return struct{}{}, nil
 		}

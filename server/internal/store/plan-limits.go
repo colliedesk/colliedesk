@@ -102,7 +102,7 @@ const countedDelivery = `(status <> 'failed' OR sent_at IS NOT NULL)`
 
 // recipientsInWindow sums the people reached by the counted deliveries in the window: the contact plus
 // every Cc address of each reply.
-const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND ` + countedDelivery
+const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM channel_outbox WHERE workspace_id=$1 AND channel_type='email' AND created_at > $2 AND ` + countedDelivery
 
 // customerWroteFirst is true for a conversation that holds a message from the customer: an
 // imported one, or inbound mail that came through the platform forwarder and whose authentication
@@ -201,7 +201,7 @@ func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string
 	var frees time.Time
 	if err := tx.QueryRow(ctx, `SELECT created_at FROM (
 			SELECT created_at, sum(recipients) OVER (ORDER BY created_at DESC, id ROWS UNBOUNDED PRECEDING) AS total
-			FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND `+countedDelivery+`) counted
+			FROM channel_outbox WHERE workspace_id=$1 AND channel_type='email' AND created_at > $2 AND `+countedDelivery+`) counted
 		WHERE total > $3 ORDER BY total LIMIT 1`, workspaceID, windowStart, room).Scan(&frees); err != nil {
 		return fmt.Errorf("find next free slot: %w", err)
 	}

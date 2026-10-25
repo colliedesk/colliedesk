@@ -115,34 +115,49 @@ func (config) Validate(_ context.Context, _ pgx.Tx, _ string, current *channels.
 	return channels.ConfigChange{Value: value, Detail: map[string]any{"allowed_origins": origins}}, nil
 }
 
-// Save writes the origins, and the channel's on or off for older images, which read it here.
+// Save writes the origins.
 func (config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, change channels.ConfigChange) (channels.Event, error) {
 	var origins []string
 	if value, ok := change.Value.(ConfigValue); ok && value.AllowedOrigins != nil {
 		origins = *value.AllowedOrigins
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO web_form_channels(workspace_id,enabled,allowed_origins,channel_id) VALUES($1,$2,COALESCE($3,'{}'::text[]),$4)
-		ON CONFLICT(channel_id) DO UPDATE SET enabled=EXCLUDED.enabled,allowed_origins=COALESCE($3,web_form_channels.allowed_origins),updated_at=now()`,
-		channel.WorkspaceID, channel.Enabled, origins, channel.ID); err != nil {
+	// A form added while the workspace has none takes the workspace's older address too, as every
+	// form had before a workspace could have several; it keeps it while it lives.
+	if _, err := tx.Exec(ctx, `INSERT INTO web_form_channels(workspace_id,allowed_origins,channel_id,legacy_slug)
+		VALUES($1,COALESCE($2,'{}'::text[]),$3,NOT EXISTS (SELECT 1 FROM web_form_channels WHERE workspace_id=$1))
+		ON CONFLICT(channel_id) DO UPDATE SET allowed_origins=COALESCE($2,web_form_channels.allowed_origins),updated_at=now()`,
+		channel.WorkspaceID, origins, channel.ID); err != nil {
 		return channels.Event{}, fmt.Errorf("save web form: %w", err)
 	}
 	return channels.Event{Kind: "config_changed", Detail: change.Detail}, nil
 }
 
 func (config) Public(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
-	form := domain.WebForm{ChannelID: channel.ID, Enabled: channel.Enabled, AllowedOrigins: []string{}, SubmitPath: ChannelSubmitPathPrefix + channel.ID}
-	err := tx.QueryRow(ctx, `SELECT allowed_origins FROM web_form_channels WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID).Scan(&form.AllowedOrigins)
+	form := domain.WebForm{ChannelID: channel.ID, Enabled: channel.Enabled, AllowedOrigins: []string{}}
+	var slug string
+	err := tx.QueryRow(ctx, `SELECT f.allowed_origins,f.legacy_slug,w.slug FROM web_form_channels f JOIN workspaces w ON w.id=f.workspace_id
+		WHERE f.workspace_id=$1 AND f.channel_id=$2`, channel.WorkspaceID, channel.ID).Scan(&form.AllowedOrigins, &form.LegacySlug, &slug)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
+	form.SubmitPath = SubmitPath(form, slug)
 	return form, nil
+}
+
+// SubmitPath is where a website posts to the form: the workspace's older address for the form that
+// has it, else the form's own.
+func SubmitPath(form domain.WebForm, slug string) string {
+	if form.LegacySlug {
+		return SubmitPathPrefix + slug
+	}
+	return ChannelSubmitPathPrefix + form.ChannelID
 }
 
 // ChannelSubmitPathPrefix is where a website posts to one form, followed by its channel id.
 const ChannelSubmitPathPrefix = "/api/v1/public/web-forms/"
 
-// SubmitPathPrefix is where a website posts to the workspace's default form, followed by the
-// workspace slug: the address every form had before a workspace could have several.
+// SubmitPathPrefix is the workspace's older form address, followed by its slug: the address every
+// form had before a workspace could have several. It posts to the form that has it (legacy_slug).
 const SubmitPathPrefix = "/api/v1/public/forms/"
 
 func (c config) Summary(ctx context.Context, tx pgx.Tx, channel channels.Channel) (string, error) {

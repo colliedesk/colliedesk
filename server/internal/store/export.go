@@ -392,7 +392,7 @@ type conversationPage struct {
 
 func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after string) (conversationPage, error) {
 	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}, statusChanges: map[string][]export.StatusChange{}}
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.origin,c.created_at,c.updated_at,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,
 		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id)
 		FROM conversations c WHERE c.workspace_id=$1 AND c.id>$2::uuid ORDER BY c.id LIMIT $3`, workspaceID, after, exportPageConversations)
 	if err != nil {
@@ -403,7 +403,7 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		var head export.ConversationHead
 		var messages int
 		if err := rows.Scan(&head.ID, &head.ContactID, &head.Subject, &head.Status, &head.Priority, &head.AssigneeID,
-			&head.Channel, &head.ChannelID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
+			&head.Channel, &head.ChannelID, &head.ReplyChannelID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
 			rows.Close()
 			return page, fmt.Errorf("export conversations: %w", err)
 		}
@@ -495,7 +495,7 @@ func exportPageTimeEntries(ctx context.Context, tx pgx.Tx, workspaceID string, i
 
 // exportMessages streams one conversation's messages, one row in memory at a time.
 func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, files map[string][]export.Attachment, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,author_agent_id::text,author_name,kind,body,body_html,origin,email_message_id,email_meta,cc,created_at,agent_request_id::text,ai_draft_id::text,
+	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,author_agent_id::text,author_name,kind,body,body_html,origin,CASE WHEN starts_with(external_id,'email:') THEN substr(external_id,7) END,email_meta,cc,created_at,agent_request_id::text,ai_draft_id::text,
 		channel_id::text,external_id,channel_meta
 		FROM messages WHERE workspace_id=$1 AND conversation_id=$2 ORDER BY created_at,id`, workspaceID, conversationID)
 	if err != nil {
@@ -902,7 +902,7 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		var item stored
 		var kind, external string
 		if err := rows.Scan(&item.channel.ID, &item.channel.WorkspaceID, &kind, &item.channel.Name, &item.channel.Enabled, &item.settings, &external,
-			&item.channel.CreatedAt, &item.channel.UpdatedAt, &item.channel.DisabledAt, &item.channel.DeletedAt); err != nil {
+			&item.channel.CreatedAt, &item.channel.UpdatedAt, &item.channel.DisabledAt, &item.channel.DeletedAt, &item.channel.IsDefault); err != nil {
 			rows.Close()
 			return fmt.Errorf("export channels: %w", err)
 		}
@@ -917,7 +917,7 @@ func (s *Store) exportChannels(ctx context.Context, tx pgx.Tx, workspaceID strin
 		channel := item.channel
 		record := export.Channel{ID: channel.ID, Type: string(channel.Type), Name: channel.Name, Enabled: channel.Enabled, Settings: item.settings,
 			CreatedAt: domain.UTC(channel.CreatedAt), UpdatedAt: domain.UTC(channel.UpdatedAt), DisabledAt: domain.UTCOptional(channel.DisabledAt),
-			DeletedAt: domain.UTCOptional(channel.DeletedAt)}
+			DeletedAt: domain.UTCOptional(channel.DeletedAt), IsDefault: channel.IsDefault}
 		if channel.ExternalAccount != "" {
 			record.ExternalAccount = &channel.ExternalAccount
 		}

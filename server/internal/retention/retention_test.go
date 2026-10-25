@@ -876,7 +876,9 @@ func TestDeactivatedAdminsAreNotNoticedAndNeverCountAsReached(t *testing.T) {
 func TestDeletingAWorkspaceKeepsItsProviderDomainsQueuedForDeletion(t *testing.T) {
 	e := newEnv(t)
 	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
-	e.exec(t, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,sender_name) VALUES($1,'support@alpha.example','token','dom_alpha_current','Alpha')`, a.ID)
+	e.exec(t, `WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'email','Email',true) RETURNING id),
+		d AS (INSERT INTO email_domains(workspace_id,domain,verification_token,provider_domain_id) VALUES($1,'alpha.example','token','dom_alpha_current') RETURNING 1)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT $1,c.id,'support@alpha.example','Alpha','support' FROM c,d`, a.ID)
 	e.exec(t, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) VALUES($1,'dom_alpha_earlier')`, a.ID)
 
 	e.run(t, "2027-10-02T00:00:00Z")

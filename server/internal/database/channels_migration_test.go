@@ -413,4 +413,3 @@ func TestHeldInboundEventsCountTowardStorage(t *testing.T) {
 		t.Fatalf("deleted: counted=%d stored=%d, want 0", c, s)
 	}
 }
-

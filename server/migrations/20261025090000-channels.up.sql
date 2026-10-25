@@ -481,7 +481,11 @@ ALTER TABLE mailbox_connections ALTER COLUMN channel_id SET NOT NULL,
 CREATE UNIQUE INDEX mailbox_connections_workspace_address_idx ON mailbox_connections(workspace_id, address);
 ALTER TABLE mailbox_oauth_states ADD CONSTRAINT mailbox_oauth_states_channel_fkey FOREIGN KEY (workspace_id, channel_id) REFERENCES email_channels(workspace_id, channel_id) ON DELETE CASCADE;
 
-ALTER TABLE channel_outbox ALTER COLUMN channel_id SET NOT NULL;
+-- Every delivery names the channel it leaves through, but a reply saved before any channel could carry
+-- it (a web form conversation of a workspace without email): it waits, failed, for a person to retry
+-- it once email is connected.
+ALTER TABLE channel_outbox ADD CONSTRAINT channel_outbox_channel_known
+    CHECK (channel_id IS NOT NULL OR (status = 'failed' AND last_error_code = 'channel_not_connected'));
 
 -- Message-IDs and reply tokens moved to external_id and the thread keys.
 DROP INDEX messages_workspace_email_message_id_idx;

@@ -126,7 +126,7 @@ func TestRepliesAreQueuedForEmailButNotesNever(t *testing.T) {
 	if items[2].Delivery != nil {
 		t.Fatalf("note must never be queued: %+v", items[2])
 	}
-	if count := queryString(t, pool, `SELECT count(*)::text FROM email_outbox WHERE status='queued'`); count != "1" {
+	if count := queryString(t, pool, `SELECT count(*)::text FROM channel_outbox WHERE status='queued'`); count != "1" {
 		t.Fatalf("outbox rows=%s, want 1", count)
 	}
 	retry := request(t, api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages/"+items[1].ID+"/retry", nil, admin, nil)
@@ -145,14 +145,14 @@ func TestRetryDeliveryIsWorkspaceScoped(t *testing.T) {
 	secretB := connectEmail(t, api, adminB, "support@retry-beta.example.com")
 	thread := inboundOK(t, api, secretB, mail([]string{"From: ned@customer.example", "Subject: B", "Message-ID: <b@customer.example>"}, "B."))
 	reply := create(t, api, adminB, "/api/v1/conversations/"+*thread.ConversationID+"/messages", map[string]any{"kind": "outgoing", "body": "B reply."})
-	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET status='failed', last_error='550 rejected'`); err != nil {
+	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='failed', last_error='550 rejected'`); err != nil {
 		t.Fatal(err)
 	}
 	response := request(t, api, http.MethodPost, "/api/v1/conversations/"+*thread.ConversationID+"/messages/"+reply+"/retry", nil, adminA, nil)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("cross-workspace retry status=%d, want 404", response.Code)
 	}
-	if status := queryString(t, pool, `SELECT status FROM email_outbox`); status != "failed" {
+	if status := queryString(t, pool, `SELECT status FROM channel_outbox`); status != "failed" {
 		t.Fatalf("foreign retry changed delivery to %s", status)
 	}
 	response = request(t, api, http.MethodPost, "/api/v1/conversations/"+*thread.ConversationID+"/messages/"+reply+"/retry", nil, adminB, nil)

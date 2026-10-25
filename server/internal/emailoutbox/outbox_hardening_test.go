@@ -66,7 +66,7 @@ func TestPoisonRowDoesNotStallOthersAndAttemptsAreCapped(t *testing.T) {
 
 	crashLoop := f.secondConversationReply(t, "loop@customer.example", "Crash loop.")
 	clock = time.Now().UTC().Add(time.Second)
-	f.exec(t, `UPDATE email_outbox SET attempts=3,locked_until=$2 WHERE message_id=$1`, crashLoop.ID, clock.Add(-time.Second))
+	f.exec(t, `UPDATE channel_outbox SET attempts=3,locked_until=$2 WHERE message_id=$1`, crashLoop.ID, clock.Add(-time.Second))
 	before := len(server.mail())
 	process(t, worker)
 	if delivery := f.deliveryIn(t, crashLoop.ConversationID, crashLoop.ID); delivery.Status != "failed" || len(server.mail()) != before {
@@ -87,7 +87,7 @@ func TestSendingIdentityFollowsDomainVerification(t *testing.T) {
 		t.Run(item.name, func(t *testing.T) {
 			f := newFixture(t)
 			if item.verified != "" {
-				f.exec(t, `UPDATE email_channels SET domain_verified_at=now() WHERE workspace_id=$1`, f.workspaceID)
+				f.exec(t, `UPDATE email_domains SET verified_at=now() WHERE workspace_id=$1`, f.workspaceID)
 			}
 			server := startSMTPServer(t)
 			clock := time.Now().UTC().Add(time.Second)
@@ -101,11 +101,11 @@ func TestSendingIdentityFollowsDomainVerification(t *testing.T) {
 				t.Fatalf("want one mail, got %d (delivery %+v)", len(received), f.delivery(t, reply.ID))
 			}
 			var token string
-			if err := f.pool.QueryRow(context.Background(), `SELECT email_reply_token FROM conversations WHERE id=$1`, f.conversationID).Scan(&token); err != nil {
+			if err := f.pool.QueryRow(context.Background(), `SELECT substr(key,13) FROM conversation_thread_keys WHERE conversation_id=$1 AND channel_type='email'`, f.conversationID).Scan(&token); err != nil {
 				t.Fatal(err)
 			}
 			var messageID string
-			if err := f.pool.QueryRow(context.Background(), `SELECT email_message_id FROM messages WHERE id=$1`, reply.ID).Scan(&messageID); err != nil {
+			if err := f.pool.QueryRow(context.Background(), `SELECT substr(external_id,7) FROM messages WHERE id=$1`, reply.ID).Scan(&messageID); err != nil {
 				t.Fatal(err)
 			}
 			// The address names the reply by the first 12 hex digits of its random Message-ID.

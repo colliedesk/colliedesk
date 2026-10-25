@@ -63,7 +63,7 @@ func (s *Store) PrepareEmailReply(ctx context.Context, tx pgx.Tx, request channe
 	workspaceID, conversationID := request.WorkspaceID, request.ConversationID
 	var supportAddress string
 	var verified bool
-	err := tx.QueryRow(ctx, `SELECT e.support_address,d.domain_verified_at IS NOT NULL FROM email_channels e`+emailDomainJoin+`
+	err := tx.QueryRow(ctx, `SELECT e.support_address,d.verified_at IS NOT NULL FROM email_channels e`+emailDomainJoin+`
 		WHERE e.workspace_id=$1 AND e.channel_id::text=$2`, workspaceID, request.Channel.ID).
 		Scan(&supportAddress, &verified)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -84,7 +84,7 @@ func (s *Store) PrepareEmailReply(ctx context.Context, tx pgx.Tx, request channe
 		}
 		// A reply first queued while its channel was off has no Message-ID and token yet.
 		var assigned bool
-		if err := tx.QueryRow(ctx, `SELECT email_message_id IS NOT NULL FROM messages WHERE workspace_id=$1 AND id=$2`, workspaceID, request.MessageID).Scan(&assigned); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(starts_with(external_id,'email:'),false) FROM messages WHERE workspace_id=$1 AND id=$2`, workspaceID, request.MessageID).Scan(&assigned); err != nil {
 			return channels.Prepared{}, fmt.Errorf("load reply: %w", err)
 		}
 		if !assigned {
@@ -127,7 +127,13 @@ func (s *Store) assignEmailIdentity(ctx context.Context, tx pgx.Tx, workspaceID,
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE conversations SET email_reply_token=COALESCE(email_reply_token,$3) WHERE workspace_id=$1 AND id=$2`,
+	// The conversation's row lock keeps two replies at once from giving it two tokens.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM conversations WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, workspaceID, conversationID); err != nil {
+		return fmt.Errorf("lock conversation: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO conversation_thread_keys(workspace_id,conversation_id,channel_type,key)
+		SELECT $1,$2,'email','reply-token:'||$3 WHERE NOT EXISTS (SELECT 1 FROM conversation_thread_keys
+			WHERE workspace_id=$1 AND conversation_id=$2 AND channel_type='email' AND starts_with(key,'reply-token:'))`,
 		workspaceID, conversationID, token); err != nil {
 		return fmt.Errorf("assign reply token: %w", err)
 	}

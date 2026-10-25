@@ -35,9 +35,9 @@ func (s *Store) GetWebForm(ctx context.Context, workspaceID string) (domain.WebF
 
 func readWebForm(ctx context.Context, tx pgx.Tx, workspaceID, channelID string) (domain.WebForm, error) {
 	form := domain.WebForm{AllowedOrigins: []string{}}
-	err := tx.QueryRow(ctx, `SELECT f.channel_id::text,c.enabled,f.allowed_origins FROM web_form_channels f
+	err := tx.QueryRow(ctx, `SELECT f.channel_id::text,c.enabled,f.allowed_origins,f.legacy_slug FROM web_form_channels f
 		JOIN channels c ON c.workspace_id=f.workspace_id AND c.id=f.channel_id AND c.deleted_at IS NULL WHERE f.workspace_id=$1 AND f.channel_id::text=$2`, workspaceID, channelID).
-		Scan(&form.ChannelID, &form.Enabled, &form.AllowedOrigins)
+		Scan(&form.ChannelID, &form.Enabled, &form.AllowedOrigins, &form.LegacySlug)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return domain.WebForm{}, err
 	}
@@ -88,8 +88,9 @@ type OpenForm struct {
 	Origins                []string
 }
 
-// OpenWebForm resolves the default form of the workspace with this slug, the address forms had before
-// a workspace could have several. ok is false when the slug is unknown, the form is off or the
+// OpenWebForm resolves the form the older address of the workspace with this slug posts to (the form
+// that has legacy_slug, not the default: making another form the default must not move the address a
+// site embedded). ok is false when the slug is unknown, no form has it, the form is off or the
 // workspace is locked, which callers must answer identically.
 func (s *Store) OpenWebForm(ctx context.Context, slug string) (OpenForm, bool, error) {
 	workspaceID, found, err := s.WorkspaceForMailSlug(ctx, slug)
@@ -108,7 +109,7 @@ func (s *Store) OpenWebFormChannel(ctx context.Context, channelID string) (OpenF
 	return s.openWebForm(ctx, channel.WorkspaceID, channel.ID)
 }
 
-// openWebForm reads a form of the workspace (channelID, or the default one when empty).
+// openWebForm reads a form of the workspace (channelID, or the one with the older address when empty).
 func (s *Store) openWebForm(ctx context.Context, workspaceID, channelID string) (OpenForm, bool, error) {
 	type state struct {
 		form   domain.WebForm
@@ -116,11 +117,13 @@ func (s *Store) openWebForm(ctx context.Context, workspaceID, channelID string) 
 	}
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (state, error) {
 		if channelID == "" {
-			live, found, err := s.defaultChannelOfType(ctx, tx, workspaceID, domain.ChannelWebForm)
-			if err != nil || !found {
+			err := tx.QueryRow(ctx, `SELECT channel_id::text FROM web_form_channels WHERE workspace_id=$1 AND legacy_slug`, workspaceID).Scan(&channelID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return state{}, nil
+			}
+			if err != nil {
 				return state{}, err
 			}
-			channelID = live.ID
 		}
 		form, err := readWebForm(ctx, tx, workspaceID, channelID)
 		if err != nil || !form.Enabled || !s.limits {

@@ -20,7 +20,9 @@ var (
 // NameTakenError refuses a name a live channel of the same type has, naming that channel.
 type NameTakenError struct{ ChannelID, ChannelName string }
 
-func (e *NameTakenError) Error() string { return "the channel " + e.ChannelName + " already has this name" }
+func (e *NameTakenError) Error() string {
+	return "the channel " + e.ChannelName + " already has this name"
+}
 
 // HeldError refuses to remove a channel that still holds messages that arrived while it was off:
 // removed, they would be out of reach in the app and still count toward storage.
