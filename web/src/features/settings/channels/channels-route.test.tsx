@@ -532,3 +532,21 @@ test('removing the default of a type with another channel says which one becomes
   fireEvent.click(await screen.findByRole('button', { name: 'Disconnect email' }));
   await waitFor(() => expect(screen.getByRole('alertdialog', { name: 'Disconnect email?' })).toHaveTextContent('Sales becomes the default in its place.'));
 });
+
+test('a web form is added with the name given, and a name another form has is refused at that field', async () => {
+  channelsApi.create.mockRejectedValueOnce(new mocks.ConflictError('Another web form is called Careers.',
+    { code: 'channel_name_taken', conflict: { channel_id: FORM, channel_name: 'Careers' } }))
+    .mockResolvedValueOnce({ ...channel('web_form', { name: 'Shop form' }), config: webFormConfig });
+  const navigate = show('new/web_form');
+  const name = await screen.findByRole('textbox', { name: 'Name' });
+  fireEvent.change(name, { target: { value: 'Careers' } });
+  fireEvent.change(screen.getByRole('textbox', { name: /Allowed origins/i }), { target: { value: 'https://example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
+  expect(name).toHaveAccessibleDescription(/Another web form is called Careers/);
+  expect(screen.getByRole('link', { name: 'Open Careers' })).toHaveAttribute('href', `/settings/channels/${FORM}`);
+  fireEvent.change(name, { target: { value: ' Shop form ' } });
+  fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenLastCalledWith({ type: 'web_form', name: 'Shop form', enabled: true, config: { allowed_origins: ['https://example.com'] } }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
+});

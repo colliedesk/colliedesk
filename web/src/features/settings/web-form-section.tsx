@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
 import { messages } from '../../messages';
 import { CopyButton } from './copy-button';
@@ -13,13 +14,15 @@ interface WebFormSectionProps {
   // part 'embed' is the form as a channel tab shows it: no section frame, and no on/off checkbox, since the
   // channel's own switch turns it on and off.
   part?: 'all' | 'embed';
+  // nameField is the form's name, first, where the form is being added.
+  nameField?: ReactNode;
 }
 
 function parseOrigins(text: string): string[] {
   return text.split('\n').map((line) => line.trim()).filter(Boolean);
 }
 
-export function WebFormSection({ settings, canManage, save, onSave, part = 'all' }: WebFormSectionProps) {
+export function WebFormSection({ settings, canManage, save, onSave, part = 'all', nameField }: WebFormSectionProps) {
   const [enabled, setEnabled] = useState(settings?.enabled ?? false);
   const [origins, setOrigins] = useState((settings?.allowed_origins ?? []).join('\n'));
   useEffect(() => setEnabled(settings?.enabled ?? false), [settings?.enabled]);
@@ -31,6 +34,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
         {!embed && <p role="status" className="saved-state" data-on={settings?.enabled ? 'true' : 'false'}>{state}</p>}
         {canManage
           ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(enabled, parseOrigins(origins)); }}>
+              {nameField}
               {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{messages.webFormAccept}</span></label>}
               <label className="field"><span>{messages.webFormOrigins}</span>
                 <textarea rows={3} value={origins} placeholder="https://example.com" onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
