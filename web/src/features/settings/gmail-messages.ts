@@ -28,7 +28,7 @@ export const gmailMessages = {
   connectingGmail: 'Opening Google…',
   reconnectGmail: 'Reconnect Gmail',
   useAnotherGmail: 'Use another Gmail account',
-  gmailSignInAs: (address: string) => `Select Connect Gmail and choose ${address} at Google.`,
+  gmailSignInAs: (address: string, button: string) => `Select ${button} and choose ${address} at Google.`,
   disconnectGmail: 'Disconnect Gmail',
   disconnectGmailQuestion: 'Disconnect Gmail?',
   disconnectGmailConsequence: (gmail: string) => `Colliedesk loses access to ${gmail}. Replies are then sent the way they were before Gmail was connected; a reply still waiting for Gmail fails and can be retried.`,

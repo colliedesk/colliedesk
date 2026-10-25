@@ -44,9 +44,9 @@ export const microsoftMessages = {
   confirmDisconnectMicrosoft: 'Yes, disconnect Microsoft 365',
   microsoftData: 'How Colliedesk handles data from Microsoft:',
   microsoftPrivacyURL: 'https://colliedesk.com/privacy#microsoft-user-data',
-  microsoftSignInAs: (address: string) => `Select Connect Microsoft 365 and choose ${address} at Microsoft.`,
+  microsoftSignInAs: (address: string, button: string) => `Select ${button} and choose ${address} at Microsoft.`,
   microsoftJustConnected: 'Microsoft 365 is connected.',
-  microsoftAdminConsentDone: 'Your Microsoft 365 admin approved Colliedesk. Select Connect Microsoft 365 to finish.',
+  microsoftAdminConsentDone: (button: string) => `Your Microsoft 365 admin approved Colliedesk. Select ${button} to finish.`,
   microsoftConnectFailed: 'Microsoft 365 could not be connected. Try again.',
   microsoftReturnErrors: {
     signed_out: 'Microsoft 365 was not connected: sign in to Colliedesk in this browser, then select Connect Microsoft 365 again.',

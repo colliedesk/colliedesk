@@ -33,7 +33,7 @@ interface ProviderText {
   disconnect: string;
   disconnectQuestion: string;
   confirmDisconnect: string;
-  signInAs: (address: string) => string;
+  signInAs: (address: string, button: string) => string;
   justConnected: string;
   connectFailed: string;
   returnErrors: Record<string, string>;
@@ -61,12 +61,12 @@ const providers: Record<MailboxProvider, ProviderText> = {
   },
 };
 
-// returnText explains the outcome the provider sent back. Unknown reasons get the generic text: the address is
-// never shown as written.
-function returnText(returned: MailboxReturn): string {
+// returnText explains the outcome the provider sent back; button is what starts that provider's sign-in on
+// screen now. Unknown reasons get the generic text: the address is never shown as written.
+function returnText(returned: MailboxReturn, button: string): string {
   const text = providers[returned.provider ?? 'google'];
   if (returned.kind === 'connected') return text.justConnected;
-  if (returned.kind === 'admin_consent_done') return messages.microsoftAdminConsentDone;
+  if (returned.kind === 'admin_consent_done') return messages.microsoftAdminConsentDone(button);
   const reason = returned.reason ?? '';
   return Object.hasOwn(text.returnErrors, reason) ? text.returnErrors[reason] : text.connectFailed;
 }
@@ -172,12 +172,18 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
   const approvalOpen = returned?.provider === 'microsoft' && returned.kind === 'error' && (returned.reason === 'denied' || returned.reason === 'admin_consent_failed');
   const approval = microsoft?.admin_consent_url && <details className="email-channel-dns-folded mailbox-approval" open={approvalOpen || undefined}>
     <summary>{messages.microsoftAdminApprovalSummary}</summary>
-    <p className="muted-copy">{messages.microsoftAdminApprovalBody}</p>
-    <div className="copy-field">
-      <label className="invite-link"><span className="field-label">{messages.microsoftAdminApprovalLink}</span><input readOnly value={microsoft.admin_consent_url} /></label>
-      <span className="button-row"><CopyButton value={microsoft.admin_consent_url} copiedText={messages.approvalLinkCopied}>{messages.copyApprovalLink}</CopyButton></span>
+    <div className="mailbox-approval-body">
+      <p className="muted-copy">{messages.microsoftAdminApprovalBody}</p>
+      <div className="copy-field">
+        <label className="invite-link"><span className="field-label">{messages.microsoftAdminApprovalLink}</span><input readOnly value={microsoft.admin_consent_url} /></label>
+        <span className="button-row"><CopyButton value={microsoft.admin_consent_url} copiedText={messages.approvalLinkCopied}>{messages.copyApprovalLink}</CopyButton></span>
+      </div>
     </div>
   </details>;
+  // The button that starts a provider's sign-in as the block shows it now, which the outcome names.
+  const buttonFor = (provider: MailboxProvider) => !connection ? providers[provider].connect
+    : provider !== active ? messages.useInstead(providers[provider].label)
+      : connection.status === 'failed' ? providers[provider].reconnect : providers[provider].useAnother;
   // What the operator must set for a provider; with no provider at all it stays open, as it always was.
   const setup = (provider: MailboxProvider, folded: boolean): ReactNode => {
     const missing = provider === 'google' ? gmail.missing_settings : microsoft?.missing_settings ?? [];
@@ -194,9 +200,9 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
     <section ref={block} className="gmail-connection" aria-labelledby="gmail-connection-heading">
       <h3 id="gmail-connection-heading">{messages.mailboxHeading}</h3>
       <p className="muted-copy">{connection ? text.connectedDescription : messages.mailboxDescription}</p>
-      {returned && <p role={returned.kind === 'error' ? 'alert' : 'status'} className={returned.kind === 'error' ? 'error-copy' : 'muted-copy'}>{returnText(returned)}
+      {returned && <p role={returned.kind === 'error' ? 'alert' : 'status'} className={returned.kind === 'error' ? 'error-copy' : 'muted-copy'}>{returnText(returned, buttonFor(returned.provider ?? 'google'))}
         {returned.reason === 'address_mismatch' && returned.provider === 'microsoft' && <> {messages.microsoftAliasNotSupported(supportAddress)}</>}
-        {returned.reason === 'address_mismatch' && <> {providers[returned.provider ?? 'google'].signInAs(supportAddress)}</>}
+        {returned.reason === 'address_mismatch' && <> {providers[returned.provider ?? 'google'].signInAs(supportAddress, buttonFor(returned.provider ?? 'google'))}</>}
         {returned.channel && <> <a href={`/settings/channels/${encodeURIComponent(returned.channel)}?tab=replies`}>{messages.gmailOpenHolder}</a></>}</p>}
       {error && <p role="alert" className="error-copy">{error}</p>}
       {/* The connected provider lost its settings: said plainly. Without a connection, the providers this
@@ -224,8 +230,9 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
       {connection && settings.address_matches === false
         ? <p role="note" className="warning-note">{text.addressMismatch(connection.address, supportAddress)}</p>
         : connection && connection.address !== supportAddress.toLowerCase() && <p className="muted-copy">{messages.gmailOtherAddress(connection.address, supportAddress)}</p>}
-      {/* A reconnect after a sign-in policy blocked the account may need the admin's approval again. */}
-      {connection?.status === 'failed' && active === 'microsoft' && canManage && approval}
+      {/* Microsoft asked for an admin's approval while switching or using another account, or a reconnect after
+          a sign-in policy blocked the account may need it again. */}
+      {connection && canManage && microsoft?.available && (approvalOpen || (connection.status === 'failed' && active === 'microsoft')) && approval}
       {connection && canManage && !confirming && <span className="button-row">
         {connection.status === 'connected' && available(active!) && connectButton(active!, text.useAnother)}
         {other && <button type="button" ref={switchButton} disabled={Boolean(pending)} onClick={() => setConfirming('switch')}>

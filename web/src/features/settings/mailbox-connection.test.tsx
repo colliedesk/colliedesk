@@ -226,3 +226,19 @@ test('a self-hosted admin still sees what the server lacks for Microsoft 365', (
   expect(screen.getByText('Microsoft 365 is not set up on this server')).toBeInTheDocument();
   expect(screen.getByText(/MICROSOFT_OAUTH_CLIENT_ID/)).toBeInTheDocument();
 });
+
+test('Microsoft asking for an admin\'s approval while a channel already sends offers the approval link there too', () => {
+  const { rerender } = render(block({ gmail: { ...gmail, connection: gmailConnection }, returned: { kind: 'error', reason: 'denied', provider: 'microsoft' } }));
+  const fold = () => screen.getByText('Work account? Your IT admin may need to approve Colliedesk first').closest('details')!;
+  expect(fold()).toHaveAttribute('open');
+  expect(within(fold() as HTMLElement).getByRole('textbox', { name: 'Approval link for your Microsoft 365 admin' })).toHaveValue(approval);
+  rerender(block({ microsoft: { ...microsoft, connection: msConnection }, returned: { kind: 'error', reason: 'denied', provider: 'microsoft' } }));
+  expect(fold()).toHaveAttribute('open');
+});
+
+test('an outcome names the button that is on screen now', () => {
+  const { rerender } = render(block({ microsoft: { ...microsoft, connection: msConnection }, returned: { kind: 'error', reason: 'address_mismatch', provider: 'microsoft' } }));
+  expect(screen.getByRole('alert')).toHaveTextContent('Select Use another Microsoft account and choose support@example.com at Microsoft.');
+  rerender(block({ gmail: { ...gmail, connection: gmailConnection }, returned: { kind: 'admin_consent_done', provider: 'microsoft' } }));
+  expect(screen.getByRole('status')).toHaveTextContent('Your Microsoft 365 admin approved Colliedesk. Select Use Microsoft 365 instead to finish.');
+});

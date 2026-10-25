@@ -179,3 +179,9 @@ test('a reply saved before any channel could carry it reads as not sent yet, wit
   expect(screen.getByText(/Connect it, then retry/)).toBeVisible();
   expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
 });
+
+test('a reply waiting because the server\'s Microsoft credentials were refused says why on the timeline, not only in a tooltip', () => {
+  const waiting = 'Waiting: Microsoft refused this server\'s app credentials. The administrator must update MICROSOFT_OAUTH_CLIENT_SECRET.';
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'queued', attempts: 0, last_error: waiting, sent_at: null, reason_code: 'mailbox_server_config' } }} timezone="UTC" />);
+  expect(screen.getByText(waiting)).toBeVisible();
+});

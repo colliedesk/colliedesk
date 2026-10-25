@@ -396,6 +396,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .email-channel-dns { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
 .gmail-connection { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
 .email-channel-dns-folded { display: grid; gap: var(--space-3); }
+.mailbox-approval-body { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
 .email-channel-dns-folded summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
 .email-channel-dns-folded summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
 .message-envelope .delivery-reason { color: var(--text-2); }

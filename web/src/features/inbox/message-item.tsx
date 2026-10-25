@@ -119,7 +119,8 @@ function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId
     <div className="message-envelope">
       <span className={`badge badge-delivery-${off || never ? 'queued' : status}`} title={lastError ?? undefined}>{off ? messages.deliverySavedNotSent : never ? messages.deliveryNotSent : messages.deliveryStatuses[status]}</span>
       {status === 'failed' && !never && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
-      {(status === 'sent' || status === 'failed') && lastError && <span className="delivery-reason">{lastError}</span>}
+      {/* A reply waiting because the server's mailbox credentials were refused says so: it may wait long. */}
+      {(status === 'sent' || status === 'failed' || code === 'mailbox_server_config') && lastError && <span className="delivery-reason">{lastError}</span>}
     </div>
   );
 }
