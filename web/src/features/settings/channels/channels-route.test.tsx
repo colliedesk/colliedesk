@@ -205,7 +205,7 @@ test('connecting email creates the channel with its support address and opens it
   channelsApi.create.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   const navigate = show('new/email');
   fireEvent.change(await screen.findByRole('textbox', { name: 'Support address' }), { target: { value: ' help@example.com ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', config: { support_address: 'help@example.com' } }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${EMAIL}`, true));
 });
@@ -233,7 +233,7 @@ test('a refused connect shows the server message next to the form', async () => 
   channelsApi.create.mockRejectedValue(new mocks.InvalidRequestError('Enter a valid support address.'));
   show('new/email');
   fireEvent.change(await screen.findByRole('textbox', { name: 'Support address' }), { target: { value: 'help@example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid support address.');
 });
 
@@ -244,7 +244,7 @@ test('a second mailbox with an address another channel has is refused at that fi
   fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Sales' } });
   const address = screen.getByRole('textbox', { name: 'Support address' });
   fireEvent.change(address, { target: { value: 'support+x@example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', name: 'Sales', config: { support_address: 'support+x@example.com' } }));
   await waitFor(() => expect(address).toHaveAttribute('aria-invalid', 'true'));
   expect(address).toHaveAccessibleDescription(/Billing already uses/);

@@ -55,7 +55,6 @@ const emailMessages = {
   openChannel: (name: string) => `Open ${name}`,
   name: 'Name',
   nameHint: 'Tells this mailbox apart in the inbox and in Settings. Leave it empty to use the support address.',
-  connect: 'Connect',
 };
 
 function Replies({ channel, canManage, timezone }: ChannelPanelProps) {
@@ -97,7 +96,8 @@ function Connect({ canManage, create }: ConnectProps) {
   const feedback = useSaveFeedback(state, errorID);
   // The refusal is about the field it names: the name or the support address.
   const about = save.error instanceof ConflictError && save.error.detail?.code === 'channel_name_taken' ? 'name' : 'address';
-  if (!canManage) return <p className="muted-copy">{messages.emailNotConnected}</p>;
+  // A teammate reads what is set, as on a connected channel.
+  if (!canManage) return <p><strong>{messages.supportAddress}: </strong><span>{messages.emailNotConnected}</span></p>;
   const invalid = (field: 'name' | 'address') => (feedback.invalid && about === field) || undefined;
   return <form className="settings-body" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate(); }}>
     <label className="field"><span>{emailMessages.name}</span>
@@ -107,7 +107,7 @@ function Connect({ canManage, create }: ConnectProps) {
     <label className="field"><span>{messages.supportAddress}</span>
       <input type="email" required value={address} aria-invalid={invalid('address')} aria-describedby={invalid('address') ? errorID : undefined}
         onChange={(event) => { feedback.touch(); setAddress(event.target.value); }} /></label>
-    <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(emailMessages.connect)}</button></span>
+    <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveSupportAddress)}</button></span>
     {feedback.status}
     {feedback.invalid && state.conflict && conflictLink(state.conflict)}
   </form>;
