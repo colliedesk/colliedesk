@@ -251,7 +251,7 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	if options.Instructions != nil && utf8.RuneCountInString(*options.Instructions) > maxInstructions {
 		return options, invalid("instructions are at most %d characters.", maxInstructions)
 	}
-	if encoded, err := json.Marshal(options); err == nil && len(encoded) > maxIntakeOptionsBytes {
+	if encoded, err := json.Marshal(options); err == nil && jsonbTextBytes(encoded) > maxIntakeOptionsBytes {
 		return options, invalid("Intake's settings of a scope are at most 16 KiB together; shorten the instructions or the redact keywords.")
 	}
 	if len(options.RedactKeywords) > 100 {
@@ -263,6 +263,25 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 		}
 	}
 	return options, nil
+}
+
+// jsonbTextBytes is how long PostgreSQL writes encoded as jsonb text, which the CHECK on
+// channel_ai_levels.options measures: a space after every ',' and ':' between values.
+func jsonbTextBytes(encoded []byte) int {
+	size, inString, escaped := len(encoded), false, false
+	for _, b := range encoded {
+		switch {
+		case escaped:
+			escaped = false
+		case inString && b == '\\':
+			escaped = true
+		case b == '"':
+			inString = !inString
+		case !inString && (b == ',' || b == ':'):
+			size++
+		}
+	}
+	return size
 }
 
 func sortedKeys(m map[string]bool) []string {

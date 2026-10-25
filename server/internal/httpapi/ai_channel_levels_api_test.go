@@ -558,3 +558,29 @@ func TestAnotherModelLowersIntakeOnly(t *testing.T) {
 		t.Fatalf("channel model_changed events = %s", got)
 	}
 }
+
+// Right at 16 KiB, options are either kept or refused with the limit named, never refused by the
+// database with a message that says nothing: the check measures them as the database writes jsonb.
+func TestIntakeOptionsAtTheLimitAreKeptOrRefusedPlainly(t *testing.T) {
+	d := newLevelDesk(t)
+	keywords := make([]string, 100)
+	for i := range keywords {
+		keywords[i] = strings.Repeat("漢", 23) + string(rune('a'+i%26)) + string(rune('a'+i/26))
+	}
+	kept, refused := 0, 0
+	for n := 2880; n <= 2990; n++ {
+		response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest",
+			"options": map[string]any{"instructions": strings.Repeat("漢", n), "redact_keywords": keywords}})
+		switch {
+		case response.Code == http.StatusOK:
+			kept++
+		case response.Code == http.StatusBadRequest && strings.Contains(response.Body, "16 KiB"):
+			refused++
+		default:
+			t.Fatalf("instructions of %d characters: %+v", n, response)
+		}
+	}
+	if kept == 0 || refused == 0 {
+		t.Fatalf("the sweep missed the limit: kept %d, refused %d", kept, refused)
+	}
+}
