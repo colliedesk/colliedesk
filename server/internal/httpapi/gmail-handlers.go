@@ -15,7 +15,9 @@ import (
 )
 
 const (
-	gmailPath         = "/api/v1/channels/email/gmail"
+	gmailPath = "/api/v1/channels/email/gmail"
+	// channelGmailPath connects Gmail to one email channel of several; gmailPath to the default one.
+	channelGmailPath  = "/api/v1/channels/{id}/email/gmail"
 	gmailCallbackPath = "/api/v1/channels/email/gmail/callback"
 	// gmailConsentTTL is how long a started consent can be finished.
 	gmailConsentTTL = 10 * time.Minute
@@ -48,9 +50,17 @@ func (a *API) connectGmail(response http.ResponseWriter, request *http.Request) 
 			"This server cannot connect Gmail yet. The administrator must set "+strings.Join(missing, ", ")+".")
 		return
 	}
+	channel, ok := a.requestedEmailChannel(response, request)
+	if !ok {
+		return
+	}
+	channelID := ""
+	if channel != nil {
+		channelID = channel.ChannelID
+	}
 	who := principal(request)
 	now := a.now()
-	started, err := a.store.CreateOAuthState(request.Context(), who.Workspace.ID, who.Agent.ID, now, now.Add(gmailConsentTTL))
+	started, err := a.store.CreateOAuthState(request.Context(), who.Workspace.ID, channelID, who.Agent.ID, now, now.Add(gmailConsentTTL))
 	if errors.Is(err, store.ErrEmailChannelMissing) {
 		writeError(response, http.StatusConflict, "email_channel_missing", "Connect the email channel with a support address before connecting Gmail.")
 		return
@@ -62,12 +72,17 @@ func (a *API) connectGmail(response http.ResponseWriter, request *http.Request) 
 	writeJSON(response, http.StatusOK, map[string]string{"url": a.config.Google.AuthorizationURL(a.gmailRedirectURI(), started.State, started.Verifier)})
 }
 
-// gmailResultPath is the email channel's Replies tab, where the "Send from Gmail" block reads the outcome.
-func gmailResultPath(outcome string) string {
-	if outcome == "connected" {
-		return "/settings/channels/type/email?tab=replies&gmail=connected"
+// gmailResultPath is the Replies tab of the email channel the consent was for (of the type's first
+// channel when that is not known), where the "Send from Gmail" block reads the outcome.
+func gmailResultPath(channelID, outcome string) string {
+	page := "/settings/channels/type/email"
+	if channelID != "" {
+		page = "/settings/channels/" + channelID
 	}
-	return "/settings/channels/type/email?tab=replies&gmail_error=" + outcome
+	if outcome == "connected" {
+		return page + "?tab=replies&gmail=connected"
+	}
+	return page + "?tab=replies&gmail_error=" + outcome
 }
 
 // finishGmailConnect is where Google sends the person's browser back. The route is public so that
@@ -76,11 +91,17 @@ func gmailResultPath(outcome string) string {
 // workspace. It redoes here what authorize would do for a session route, and answers every outcome
 // with a redirect the settings page explains; Google's own error text is never echoed.
 func (a *API) finishGmailConnect(response http.ResponseWriter, request *http.Request) {
-	outcome := a.gmailCallbackOutcome(request)
-	http.Redirect(response, request, gmailResultPath(outcome), http.StatusSeeOther)
+	channelID, outcome := a.gmailCallbackOutcome(request)
+	http.Redirect(response, request, gmailResultPath(channelID, outcome), http.StatusSeeOther)
 }
 
-func (a *API) gmailCallbackOutcome(request *http.Request) string {
+// gmailCallbackOutcome finishes the consent; channelID is the channel it was for, once the state is known.
+func (a *API) gmailCallbackOutcome(request *http.Request) (channelID, outcome string) {
+	outcome = a.finishGmailConsent(request, &channelID)
+	return channelID, outcome
+}
+
+func (a *API) finishGmailConsent(request *http.Request, channelID *string) string {
 	cookie, err := request.Cookie(sessionCookie)
 	if err != nil || cookie.Value == "" {
 		return "signed_out"
@@ -109,6 +130,7 @@ func (a *API) gmailCallbackOutcome(request *http.Request) string {
 	if started.AgentID != who.Agent.ID {
 		return "wrong_person"
 	}
+	*channelID = started.ChannelID
 	if query.Get("error") != "" || query.Get("code") == "" {
 		return "denied"
 	}
@@ -133,7 +155,7 @@ func (a *API) gmailCallbackOutcome(request *http.Request) string {
 		slog.Error("seal gmail grant", "error", err, "workspace", who.Workspace.ID)
 		return "google_unavailable"
 	}
-	_, replaced, err := a.store.SaveMailboxConnection(request.Context(), who.Workspace.ID, who.Agent.ID, grant.Address, strings.Join(grant.Scopes, " "),
+	_, replaced, err := a.store.SaveMailboxConnection(request.Context(), who.Workspace.ID, started.ChannelID, who.Agent.ID, grant.Address, strings.Join(grant.Scopes, " "),
 		store.SealedGrant{KeyID: keyID, Sealed: sealed}, a.now())
 	if errors.Is(err, store.ErrEmailChannelMissing) {
 		// No channel means no earlier connection of this workspace, so the new grant is only ours to drop.
@@ -146,14 +168,22 @@ func (a *API) gmailCallbackOutcome(request *http.Request) string {
 	}
 	// Revoking the earlier grant of the same account would revoke the new one with it.
 	if replaced != nil && replaced.Address != grant.Address {
-		a.revokeSealed(replaced, who.Workspace.ID)
+		a.revokeSealed(replaced, who.Workspace.ID, started.ChannelID)
 	}
 	return "connected"
 }
 
 func (a *API) disconnectGmail(response http.ResponseWriter, request *http.Request) {
 	workspaceID := principal(request).Workspace.ID
-	removed, err := a.store.DeleteMailboxConnection(request.Context(), workspaceID)
+	channel, ok := a.requestedEmailChannel(response, request)
+	if !ok {
+		return
+	}
+	if channel == nil {
+		writeError(response, http.StatusNotFound, "not_found", "Gmail is not connected.")
+		return
+	}
+	removed, err := a.store.DeleteMailboxConnection(request.Context(), workspaceID, channel.ChannelID)
 	if err != nil {
 		writeInternalError(response, err)
 		return
@@ -162,19 +192,20 @@ func (a *API) disconnectGmail(response http.ResponseWriter, request *http.Reques
 		writeError(response, http.StatusNotFound, "not_found", "Gmail is not connected.")
 		return
 	}
-	a.revokeSealed(removed, workspaceID)
+	a.revokeSealed(removed, workspaceID, channel.ChannelID)
 	response.WriteHeader(http.StatusNoContent)
 }
 
-// revokeSealed revokes a grant this workspace no longer stores. Call it only after the row is gone and
-// committed. Google revokes the account's whole grant to the project, so while another workspace still holds
-// the same address nothing is revoked: that workspace keeps sending, and this workspace's token stays valid
-// at Google until the last holder drops the address. Best effort: a failure is logged without the token.
-func (a *API) revokeSealed(grant *store.SealedGrant, workspaceID string) {
+// revokeSealed revokes a grant an email channel no longer stores. Call it only after the row is gone and
+// committed. Google revokes the account's whole grant to the project, so while another channel, of this
+// workspace or another, still holds the same address nothing is revoked: that channel keeps sending, and
+// this channel's token stays valid at Google until the last holder drops the address. Best effort: a
+// failure is logged without the token.
+func (a *API) revokeSealed(grant *store.SealedGrant, workspaceID, channelID string) {
 	if grant == nil || !a.config.Google.Enabled() {
 		return
 	}
-	held, err := a.store.MailboxAddressHeldElsewhere(context.Background(), workspaceID, grant.Address)
+	held, err := a.store.MailboxAddressHeldElsewhere(context.Background(), channelID, grant.Address)
 	if err != nil {
 		slog.Warn("gmail grant not revoked: could not check other workspaces", "workspace", workspaceID, "error", err)
 		return

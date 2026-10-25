@@ -41,7 +41,7 @@ func TestWebFormPassesTheChannelContract(t *testing.T) {
 			if _, err := st.SetWebForm(context.Background(), workspaceID, true, []string{fmt.Sprintf("https://site%d.example", n)}); err != nil {
 				t.Fatal(err)
 			}
-			channel, found, err := st.LiveChannelOfType(context.Background(), workspaceID, webform.Type)
+			channel, found, err := st.DefaultChannelOfType(context.Background(), workspaceID, webform.Type)
 			if err != nil || !found {
 				t.Fatalf("web form channel: %v %v", found, err)
 			}

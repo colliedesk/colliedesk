@@ -29,7 +29,7 @@ func ingestEmail(t *testing.T, ctx context.Context, st *store.Store, workspaceID
 		return channels.IngestResult{}, err
 	}
 	st = st.WithObjects(storage)
-	channel, found, err := st.LiveChannelOfType(ctx, workspaceID, channelemail.Type)
+	channel, found, err := st.DefaultChannelOfType(ctx, workspaceID, channelemail.Type)
 	if err != nil || !found {
 		return channels.IngestResult{}, err
 	}
@@ -38,4 +38,14 @@ func ingestEmail(t *testing.T, ctx context.Context, st *store.Store, workspaceID
 		return channels.IngestResult{}, err
 	}
 	return results[0], nil
+}
+
+// localStorage is attachment storage of the test's own.
+func localStorage(t *testing.T) attachments.Storage {
+	t.Helper()
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return storage
 }

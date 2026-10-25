@@ -77,11 +77,22 @@ func TestChannelRoutesAndTheEmailRouteShareOneChannel(t *testing.T) {
 	if email.Summary != "help@channel-desk.example.com" || !email.Enabled || !strings.Contains(string(email.Config), `"support_address":"help@channel-desk.example.com"`) {
 		t.Fatalf("created email channel=%+v", email)
 	}
-	again := request(t, api, http.MethodPost, "/api/v1/channels", map[string]any{"type": "email", "config": map[string]any{"support_address": "other@channel-desk.example.com"}}, admin, nil)
-	wantResponse(t, again, http.StatusConflict, "channel_type_limit")
+	// A second mailbox is a second channel; the old route keeps answering for the first, the default.
+	again := request(t, api, http.MethodPost, "/api/v1/channels", map[string]any{"type": "email", "name": "Billing", "config": map[string]any{"support_address": "billing@channel-desk.example.com"}}, admin, nil)
+	if again.Code != http.StatusCreated {
+		t.Fatalf("a second email channel: status=%d body=%s", again.Code, again.Body.String())
+	}
+	var second channelBody
+	decode(t, again, &second)
+	if items, counts := listChannels(t, api, admin); len(items) != 2 || counts["email"] != 2 {
+		t.Fatalf("two email channels list as %v (counts %v)", items, counts)
+	}
 	legacy := request(t, api, http.MethodGet, "/api/v1/channels/email", nil, admin, nil)
 	if legacy.Code != http.StatusOK || !strings.Contains(legacy.Body.String(), "help@channel-desk.example.com") {
-		t.Fatalf("the old route does not see the channel the new one added: %d %s", legacy.Code, legacy.Body.String())
+		t.Fatalf("the old route does not see the default channel: %d %s", legacy.Code, legacy.Body.String())
+	}
+	if removed := request(t, api, http.MethodDelete, "/api/v1/channels/"+second.ID, nil, admin, nil); removed.Code != http.StatusNoContent {
+		t.Fatalf("remove the second email channel: status=%d body=%s", removed.Code, removed.Body.String())
 	}
 	// The same change through either route gives the same channel and counts as activation once each.
 	if status, text := putChannel(t, api, admin, map[string]any{"support_address": "support@channel-desk.example.com"}); status != http.StatusOK {
@@ -95,8 +106,8 @@ func TestChannelRoutesAndTheEmailRouteShareOneChannel(t *testing.T) {
 	if renamed.Code != http.StatusOK {
 		t.Fatalf("rename status=%d body=%s", renamed.Code, renamed.Body.String())
 	}
-	if got := len(funnel.named("email_channel_saved")); got != 3 {
-		t.Fatalf("email_channel_saved recorded %d times, want 3 (connect and two new addresses, not the rename)", got)
+	if got := len(funnel.named("email_channel_saved")); got != 4 {
+		t.Fatalf("email_channel_saved recorded %d times, want 4 (connect, a second mailbox and two new addresses, not the rename)", got)
 	}
 	items, _ := listChannels(t, api, admin)
 	if one := channelOf(t, items, "email"); one.ID != email.ID || one.Name != "Support inbox" || one.Summary != "desk@channel-desk.example.com" {

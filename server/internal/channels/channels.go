@@ -34,6 +34,8 @@ type Channel struct {
 	UpdatedAt       time.Time
 	DisabledAt      *time.Time
 	DeletedAt       *time.Time
+	// IsDefault marks the channel of its type that answers what names no channel.
+	IsDefault bool
 }
 
 // Live is whether the channel was not removed.
@@ -184,8 +186,9 @@ type Definition struct {
 	// Identified says the type's messages carry the channel's id of them, so the same message
 	// delivered twice is stored once. A form post has none: two posts are two messages.
 	Identified bool
-	// Singleton allows at most one live channel of the type per workspace (channel_types.singleton).
-	Singleton bool
+	// SharedIdentity says a customer is the same on every channel of the type (an email address), so
+	// the type's default channel answers the conversations of one that was removed.
+	SharedIdentity bool
 	// Name is the name a new channel of the type gets when none is given.
 	Name string
 	// Guide is the type's page of the user guide, a file of docs/user.
@@ -281,6 +284,9 @@ type RemoveFollowUp interface {
 // ConfigChange is a validated change of a channel's own configuration, to be saved by the same adapter.
 type ConfigChange struct {
 	Value any
+	// Name is what a new channel is called when no name is given and its type has a channel already
+	// (an email channel's support address); empty for the type's name with a number.
+	Name string
 	// ExternalAccount, when not nil, replaces the channel's external account.
 	ExternalAccount *string
 	// Detail is recorded in the channel's history; never a secret.

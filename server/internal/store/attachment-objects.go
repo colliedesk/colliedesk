@@ -109,8 +109,13 @@ func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conve
 		if kind != "outgoing" {
 			return struct{}{}, nil
 		}
+		route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
+		if err != nil || route.Channel == nil {
+			return struct{}{}, err
+		}
 		var verified bool
-		err := tx.QueryRow(ctx, `SELECT domain_verified_at IS NOT NULL FROM email_channels WHERE workspace_id=$1`, workspaceID).Scan(&verified)
+		err = tx.QueryRow(ctx, `SELECT d.domain_verified_at IS NOT NULL FROM email_channels e`+emailDomainJoin+` WHERE e.workspace_id=$1 AND e.channel_id::text=$2`,
+			workspaceID, route.Channel.ID).Scan(&verified)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return struct{}{}, nil
 		}

@@ -49,7 +49,7 @@ type Config struct {
 	// Sender sends replies; nil sends nothing (a test of the frame).
 	Sender *emailoutbox.Worker
 	// RevokeGrant revokes a Gmail grant at Google after the channel holding it was removed; nil revokes nothing.
-	RevokeGrant func(grant *store.SealedGrant, workspaceID string)
+	RevokeGrant func(grant *store.SealedGrant, workspaceID, channelID string)
 }
 
 // Adapter is the email channel type.
@@ -59,7 +59,7 @@ type Adapter struct{ config Config }
 func New(config Config) *Adapter { return &Adapter{config: config} }
 
 func (a *Adapter) Definition() channels.Definition {
-	return channels.Definition{Type: Type, Singleton: true, Identified: true, Name: "Email", Guide: "email-channel.md",
+	return channels.Definition{Type: Type, SharedIdentity: true, Identified: true, Name: "Email", Guide: "email-channel.md",
 		Capabilities: []string{"threads", "attachments_in", "attachments_out", "cc", "html"},
 		ReplyTo:      channels.IdentityEmail, CarriesOtherReplies: true, WhenOff: channels.OffHold, Defaults: defaults,
 		ActivationEvent: "email_channel_saved"}
@@ -81,6 +81,7 @@ const (
 	senderNameInvalid      = "sender_name must be 1 to 100 characters without line breaks or other control characters."
 	brandNameMessage       = "This name is not available. Choose another name, or contact us if it is your own brand."
 	foreignHosted          = "This address belongs to another workspace's forwarding address."
+	addressTaken           = "Another email channel of this workspace already uses this address."
 )
 
 // PlainAddress accepts a bare addr-spec only: no display name, no comments, no line breaks.
@@ -124,6 +125,18 @@ func (c config) Validate(ctx context.Context, tx pgx.Tx, workspaceID string, cur
 				return channels.ConfigChange{}, fieldError("support_address", foreignHosted)
 			}
 		}
+		currentID := ""
+		if current != nil {
+			currentID = current.ID
+		}
+		var taken bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM email_channels WHERE workspace_id=$1 AND support_address=$2 AND channel_id::text<>$3)`,
+			workspaceID, address, currentID).Scan(&taken); err != nil {
+			return channels.ConfigChange{}, fmt.Errorf("check support address: %w", err)
+		}
+		if taken {
+			return channels.ConfigChange{}, fieldError("support_address", addressTaken)
+		}
 		value.SupportAddress = &address
 		detail["support_address"] = address
 	}
@@ -153,15 +166,15 @@ func (c config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, c
 		return channels.Event{Kind: "config_changed", Detail: change.Detail},
 			store.SaveEmailChannel(ctx, tx, channel.WorkspaceID, channel.ID, *value.SupportAddress, value.SenderName)
 	}
-	return channels.Event{Kind: "config_changed", Detail: change.Detail}, store.SetEmailSenderNameTx(ctx, tx, channel.WorkspaceID, *value.SenderName)
+	return channels.Event{Kind: "config_changed", Detail: change.Detail}, store.SetEmailSenderNameTx(ctx, tx, channel.WorkspaceID, channel.ID, *value.SenderName)
 }
 
 func (c config) Public(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
-	return store.EmailChannelTx(ctx, tx, channel.WorkspaceID)
+	return store.EmailChannelTx(ctx, tx, channel.WorkspaceID, channel.ID)
 }
 
 func (c config) Summary(ctx context.Context, tx pgx.Tx, channel channels.Channel) (string, error) {
-	settings, err := store.EmailChannelTx(ctx, tx, channel.WorkspaceID)
+	settings, err := store.EmailChannelTx(ctx, tx, channel.WorkspaceID, channel.ID)
 	if err != nil || settings == nil {
 		return "", err
 	}
@@ -182,13 +195,17 @@ const (
 func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel) (channels.Status, error) {
 	var paused, verified, secret bool
 	var mailboxStatus *string
-	err := tx.QueryRow(ctx, `SELECT w.email_paused_at IS NOT NULL,e.domain_verified_at IS NOT NULL,e.secret_key_id IS NOT NULL,
-			(SELECT status FROM mailbox_connections m WHERE m.workspace_id=e.workspace_id)
-		FROM email_channels e JOIN workspaces w ON w.id=e.workspace_id WHERE e.workspace_id=$1`, channel.WorkspaceID).
-		Scan(&paused, &verified, &secret, &mailboxStatus)
-	if errors.Is(err, pgx.ErrNoRows) {
+	settings, err := store.EmailChannelTx(ctx, tx, channel.WorkspaceID, channel.ID)
+	if err != nil {
+		return channels.Status{}, err
+	}
+	if settings == nil {
 		return channels.Status{State: channels.StateNotConnected}, nil
 	}
+	verified, secret = settings.DomainVerifiedAt != nil, settings.SecretSet
+	err = tx.QueryRow(ctx, `SELECT w.email_paused_at IS NOT NULL,(SELECT status FROM mailbox_connections m WHERE m.workspace_id=w.id AND m.channel_id=$2::uuid)
+		FROM workspaces w WHERE w.id=$1`, channel.WorkspaceID, channel.ID).
+		Scan(&paused, &mailboxStatus)
 	if err != nil {
 		return channels.Status{}, fmt.Errorf("read email channel state: %w", err)
 	}
@@ -218,7 +235,7 @@ func (c config) BeforeRemove(ctx context.Context, tx pgx.Tx, channel channels.Ch
 		return nil, nil
 	}
 	var grant store.SealedGrant
-	err := tx.QueryRow(ctx, `SELECT token_key_id,refresh_token_sealed,address FROM mailbox_connections WHERE workspace_id=$1`, channel.WorkspaceID).
+	err := tx.QueryRow(ctx, `SELECT token_key_id,refresh_token_sealed,address FROM mailbox_connections WHERE workspace_id=$1 AND channel_id=$2::uuid`, channel.WorkspaceID, channel.ID).
 		Scan(&grant.KeyID, &grant.Sealed, &grant.Address)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -226,16 +243,16 @@ func (c config) BeforeRemove(ctx context.Context, tx pgx.Tx, channel channels.Ch
 	if err != nil {
 		return nil, fmt.Errorf("read gmail grant: %w", err)
 	}
-	return func(context.Context) { c.a.config.RevokeGrant(&grant, channel.WorkspaceID) }, nil
+	return func(context.Context) { c.a.config.RevokeGrant(&grant, channel.WorkspaceID, channel.ID) }, nil
 }
 
 func (c config) Remove(ctx context.Context, tx pgx.Tx, channel channels.Channel) error {
-	return store.RemoveEmailChannel(ctx, tx, channel.WorkspaceID)
+	return store.RemoveEmailChannel(ctx, tx, channel.WorkspaceID, channel.ID)
 }
 
 // Snapshot is the support address, which the parser needs to drop our own mail and copies.
 func (c config) Snapshot(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
-	settings, err := store.EmailChannelTx(ctx, tx, channel.WorkspaceID)
+	settings, err := store.EmailChannelTx(ctx, tx, channel.WorkspaceID, channel.ID)
 	if err != nil || settings == nil {
 		return "", err
 	}

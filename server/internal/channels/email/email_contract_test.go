@@ -88,7 +88,7 @@ func TestEmailPassesTheChannelContract(t *testing.T) {
 			if _, err := st.UpsertEmailChannel(context.Background(), workspaceID, fmt.Sprintf("support%d@desk.example.com", n), nil); err != nil {
 				t.Fatal(err)
 			}
-			channel, found, err := st.LiveChannelOfType(context.Background(), workspaceID, channelemail.Type)
+			channel, found, err := st.DefaultChannelOfType(context.Background(), workspaceID, channelemail.Type)
 			if err != nil || !found {
 				t.Fatalf("email channel: %v %v", found, err)
 			}

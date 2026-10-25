@@ -224,7 +224,7 @@ func Outbound(config Config) store.OutboundPolicy {
 
 // Channels is the registry of channel types a configuration runs. revoke, when given, revokes the
 // Gmail grant of a removed email channel at Google.
-func Channels(config Config, outbound store.OutboundPolicy, revoke ...func(*store.SealedGrant, string)) *channels.Registry {
+func Channels(config Config, outbound store.OutboundPolicy, revoke ...func(*store.SealedGrant, string, string)) *channels.Registry {
 	email := channelemail.Config{TrustedAuthServID: config.Email.TrustedAuthServID,
 		HostedMailDomain: config.Email.HostedMailDomain, PlatformForwarding: config.Email.PlatformInboundSecret != "",
 		Cloud: config.Billing.Enabled(), Outbound: outbound}
@@ -306,6 +306,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
+	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
 	return &Server{Handler: withRequestID(mux), api: api}
 }
 
@@ -489,6 +490,13 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/channels/{id}/check", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/channels/{id}/held/replay", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/channels/{id}/held/discard", auth.PermissionAccessWrite},
+		// One email channel or web form of several; the routes above without an id act on the default one.
+		{http.MethodGet, "/api/v1/channels/{id}/email", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/channels/{id}/email/domain-verification", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/email/secret", auth.PermissionAccessWrite},
+		{http.MethodPost, channelGmailPath, auth.PermissionAccessWrite},
+		{http.MethodDelete, channelGmailPath, auth.PermissionAccessWrite},
+		{http.MethodPost, webFormChannelPattern, auth.PermissionPublic},
 	}
 }
 

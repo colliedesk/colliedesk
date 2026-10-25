@@ -46,17 +46,22 @@ type EmailFile struct {
 
 // WorkspaceForReplyToken finds the workspace of the conversation a reply token belongs to.
 func (s *Store) WorkspaceForReplyToken(ctx context.Context, token string) (string, bool, error) {
-	var workspaceID string
-	err := s.db.Privileged(ctx, database.PrivilegeReplyToken, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM conversations WHERE email_reply_token=$1`, token).Scan(&workspaceID)
+	workspaceID, _, found, err := s.ConversationForReplyToken(ctx, token)
+	return workspaceID, found, err
+}
+
+// ConversationForReplyToken finds the conversation a reply token belongs to, and its workspace.
+func (s *Store) ConversationForReplyToken(ctx context.Context, token string) (workspaceID, conversationID string, found bool, err error) {
+	err = s.db.Privileged(ctx, database.PrivilegeReplyToken, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text,id::text FROM conversations WHERE email_reply_token=$1`, token).Scan(&workspaceID, &conversationID)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("find reply token: %w", err)
+		return "", "", false, fmt.Errorf("find reply token: %w", err)
 	}
-	return workspaceID, true, nil
+	return workspaceID, conversationID, true, nil
 }
 
 // WorkspaceForMailSlug finds the workspace whose slug is the mail subdomain of a hosted address.

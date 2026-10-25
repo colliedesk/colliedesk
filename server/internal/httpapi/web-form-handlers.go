@@ -23,11 +23,13 @@ import (
 const (
 	webFormPathPrefix    = webform.SubmitPathPrefix
 	webFormSubmitPattern = webFormPathPrefix + "{workspace_slug}"
-	maxWebFormBody       = 64 << 10
-	maxWebFormMessage    = 5000
-	maxWebFormSource     = 100
-	maxWebFormEmail      = 254
-	webFormPreflightAge  = "600"
+	// webFormChannelPattern is one form's own address, by its channel id.
+	webFormChannelPattern = webform.ChannelSubmitPathPrefix + "{channel_id}"
+	maxWebFormBody        = 64 << 10
+	maxWebFormMessage     = 5000
+	maxWebFormSource      = 100
+	maxWebFormEmail       = 254
+	webFormPreflightAge   = "600"
 )
 
 // slugShape is the shape the workspaces table enforces; anything else cannot be a workspace.
@@ -93,23 +95,39 @@ func (a *API) refuseBusyAddress(response http.ResponseWriter, client string) boo
 	return true
 }
 
+// openRequestedForm reads the form a public request names, after wellFormedFormName: by the workspace
+// slug (its default form) or by its channel id.
+func (a *API) openRequestedForm(request *http.Request) (store.OpenForm, bool, error) {
+	if slug := request.PathValue("workspace_slug"); slug != "" {
+		return a.store.OpenWebForm(request.Context(), slug)
+	}
+	return a.store.OpenWebFormChannel(request.Context(), request.PathValue("channel_id"))
+}
+
+// wellFormedFormName reports whether the request names a form in a shape one can have, before any lookup.
+func wellFormedFormName(request *http.Request) bool {
+	if slug := request.PathValue("workspace_slug"); slug != "" {
+		return len(slug) <= 63 && slugShape.MatchString(slug)
+	}
+	return uuidShape.MatchString(request.PathValue("channel_id"))
+}
+
 // preflightWebForm answers the browser's CORS preflight. Every refusal is the same 404 as a
 // missing form, so an origin that is not listed learns nothing about the workspace.
 func (a *API) preflightWebForm(response http.ResponseWriter, request *http.Request) {
-	slug := request.PathValue("workspace_slug")
-	if len(slug) > 63 || !slugShape.MatchString(slug) {
+	if !wellFormedFormName(request) {
 		writeFormNotFound(response)
 		return
 	}
 	if a.refuseBusyAddress(response, clientAddress(request, a.config.TrustedProxies)) {
 		return
 	}
-	_, origins, open, err := a.store.OpenWebForm(request.Context(), slug)
+	form, open, err := a.openRequestedForm(request)
 	if err != nil {
 		writeInternalError(response, err)
 		return
 	}
-	origin, listed := allowedOrigin(request, origins)
+	origin, listed := allowedOrigin(request, form.Origins)
 	if !open || !listed {
 		writeFormNotFound(response)
 		return
@@ -126,8 +144,7 @@ func (a *API) preflightWebForm(response http.ResponseWriter, request *http.Reque
 // submitWebForm opens a conversation from a public website form. It sends nothing to the submitter.
 // A form that is unknown, off or locked answers one and the same 404.
 func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request) {
-	slug := request.PathValue("workspace_slug")
-	if len(slug) > 63 || !slugShape.MatchString(slug) {
+	if !wellFormedFormName(request) {
 		writeFormNotFound(response)
 		return
 	}
@@ -135,7 +152,7 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	if a.refuseBusyAddress(response, client) {
 		return
 	}
-	workspaceID, origins, open, err := a.store.OpenWebForm(request.Context(), slug)
+	form, open, err := a.openRequestedForm(request)
 	if err != nil {
 		writeInternalError(response, err)
 		return
@@ -146,11 +163,12 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	}
 	header := response.Header()
 	header.Add("Vary", "Origin")
-	if origin, listed := allowedOrigin(request, origins); listed {
+	if origin, listed := allowedOrigin(request, form.Origins); listed {
 		header.Set("Access-Control-Allow-Origin", origin)
 	}
-	// Only a form that exists is charged to the address-and-workspace bucket, so junk slugs cannot fill it.
-	if allowed, wait := a.webForms.allow(client+"|"+slug, a.now()); !allowed {
+	// Only a form that exists is charged to the address-and-form bucket, so junk names cannot fill it;
+	// both addresses of the default form share one bucket.
+	if allowed, wait := a.webForms.allow(client+"|"+form.ChannelID, a.now()); !allowed {
 		header.Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many submissions. Try again in a minute.")
 		return
@@ -184,7 +202,7 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 			"code": "validation_failed", "message": "Check the highlighted fields.", "fields": fields})})
 		return
 	}
-	err = a.submitToWebForm(request, workspaceID, submission)
+	err = a.submitToWebForm(request, form, submission)
 	switch {
 	case errors.Is(err, domain.ErrWebFormClosed), errors.Is(err, channels.ErrChannelOff), errors.Is(err, domain.ErrMailboxClosed):
 		header.Del("Access-Control-Allow-Origin")
@@ -226,14 +244,14 @@ func validateWebForm(emailAddress, message, source string) (store.WebFormSubmiss
 	return store.WebFormSubmission{Email: strings.ToLower(emailAddress), Message: strings.TrimSpace(message), Source: source}, nil
 }
 
-// submitToWebForm hands a submission to the web form channel. A form turned off or a workspace locked
-// since OpenWebForm answers like a form that does not exist.
-func (a *API) submitToWebForm(request *http.Request, workspaceID string, submission store.WebFormSubmission) error {
-	channel, found, err := a.store.LiveChannelOfType(request.Context(), workspaceID, webform.Type)
+// submitToWebForm hands a submission to the form's channel. A form turned off, removed or a workspace
+// locked since it was opened answers like a form that does not exist.
+func (a *API) submitToWebForm(request *http.Request, form store.OpenForm, submission store.WebFormSubmission) error {
+	channel, err := a.store.GetChannel(request.Context(), form.WorkspaceID, form.ChannelID)
 	if err != nil {
 		return err
 	}
-	if !found {
+	if !channel.Live() {
 		return domain.ErrWebFormClosed
 	}
 	body, err := json.Marshal(webform.Submission{Email: submission.Email, Message: submission.Message, Source: submission.Source})

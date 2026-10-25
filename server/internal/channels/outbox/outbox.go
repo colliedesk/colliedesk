@@ -147,9 +147,9 @@ func (w *Worker) deliver(ctx context.Context, claim store.OutboxClaim) error {
 		return errors.Join(err, w.finish(ctx, claim, channels.Failed("The reply could not be loaded for sending.")))
 	}
 	adapter, registered := w.store.Channels().Adapter(claim.Type)
-	singleton := registered && adapter.Definition().Singleton
+	shared := registered && adapter.Definition().SharedIdentity
 	switch {
-	case !out.Channel.Live() && !singleton:
+	case !out.Channel.Live() && !shared:
 		return w.finish(ctx, claim, channels.SendResult{Outcome: channels.OutcomeFailed, Code: store.DeliveryCodeChannelRemoved,
 			Reason: out.Channel.Name + " was removed, so this reply cannot be sent."})
 	case out.Channel.Live() && !out.Channel.Enabled:

@@ -177,3 +177,12 @@ func SameMailbox(address, mailbox string) bool {
 func Domain(address string) string {
 	return address[strings.LastIndex(address, "@")+1:]
 }
+
+// LocalPart returns the part before the last @, lowercased.
+func LocalPart(address string) string {
+	at := strings.LastIndex(address, "@")
+	if at < 0 {
+		return ""
+	}
+	return strings.ToLower(address[:at])
+}

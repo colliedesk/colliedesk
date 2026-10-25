@@ -34,8 +34,8 @@ type ReplyRoute struct {
 
 // replyRoute finds the channel that carries replies of a conversation: its own when its type sends,
 // else the one of the type its type names, else the type that carries other replies. A removed
-// channel of a singleton type gives way to the live channel of that type (email disconnected and
-// connected again still answers its old conversations).
+// channel of a type whose customers are the same on every channel (SharedIdentity) gives way to the
+// type's default channel (email disconnected and connected again still answers its old conversations).
 func (s *Store) replyRoute(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) (ReplyRoute, error) {
 	if s.channels == nil {
 		return ReplyRoute{}, channels.ErrNoRegistry
@@ -55,7 +55,7 @@ func (s *Store) replyRoute(ctx context.Context, tx pgx.Tx, workspaceID, conversa
 		own = &channel
 	}
 	return routeReply(s.channels, channels.Type(origin), own, func(kind channels.Type) (*channels.Channel, error) {
-		live, found, err := s.liveChannelOfType(ctx, tx, workspaceID, kind)
+		live, found, err := s.defaultChannelOfType(ctx, tx, workspaceID, kind)
 		if err != nil || !found {
 			return nil, err
 		}
@@ -63,8 +63,15 @@ func (s *Store) replyRoute(ctx context.Context, tx pgx.Tx, workspaceID, conversa
 	})
 }
 
+// ReplyRoute is replyRoute in its own transaction.
+func (s *Store) ReplyRoute(ctx context.Context, workspaceID, conversationID string) (ReplyRoute, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ReplyRoute, error) {
+		return s.replyRoute(ctx, tx, workspaceID, conversationID)
+	})
+}
+
 // routeReply is the one rule of where a reply leaves: own is the conversation's channel (nil when it
-// came through none), live finds the live channel of a singleton type.
+// came through none), live finds the default channel of a type.
 func routeReply(registry *channels.Registry, origin channels.Type, own *channels.Channel, live func(channels.Type) (*channels.Channel, error)) (ReplyRoute, error) {
 	replyType, ok := registry.ReplyType(origin)
 	if !ok {
@@ -77,7 +84,7 @@ func routeReply(registry *channels.Registry, origin channels.Type, own *channels
 	if !ok {
 		return ReplyRoute{}, nil
 	}
-	if adapter.Definition().Singleton {
+	if own == nil || own.Type != replyType || adapter.Definition().SharedIdentity {
 		channel, err := live(replyType)
 		if err != nil || channel != nil {
 			return ReplyRoute{Channel: channel, Type: replyType}, err
@@ -108,7 +115,7 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 			return err
 		}
 		byID[channel.ID] = &channel
-		if channel.Live() {
+		if channel.IsDefault {
 			liveByType[channel.Type] = &channel
 		}
 	}
@@ -155,7 +162,7 @@ func (s *Store) otherRepliesCarrier(ctx context.Context, tx pgx.Tx, workspaceID 
 	if !ok {
 		return nil, nil
 	}
-	channel, found, err := s.liveChannelOfType(ctx, tx, workspaceID, kind)
+	channel, found, err := s.defaultChannelOfType(ctx, tx, workspaceID, kind)
 	if err != nil || !found {
 		return nil, err
 	}
@@ -425,7 +432,7 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 		out := channels.Outbound{DeliveryID: claim.OutboxID, WorkspaceID: claim.WorkspaceID, Attempt: claim.Attempts}
 		if claim.ChannelID == "" {
 			// History of a channel removed before channels existed: the type's live channel, if any.
-			live, found, err := s.liveChannelOfType(ctx, tx, claim.WorkspaceID, claim.Type)
+			live, found, err := s.defaultChannelOfType(ctx, tx, claim.WorkspaceID, claim.Type)
 			if err != nil {
 				return out, err
 			}
@@ -442,9 +449,9 @@ func (s *Store) LoadOutbound(ctx context.Context, claim OutboxClaim) (channels.O
 				return out, err
 			}
 		}
-		if adapter, ok := s.channels.Adapter(channel.Type); !channel.Live() && ok && adapter.Definition().Singleton {
-			// Disconnected and connected again: the reply leaves through the type's live channel.
-			if live, found, err := s.liveChannelOfType(ctx, tx, claim.WorkspaceID, channel.Type); err != nil {
+		if adapter, ok := s.channels.Adapter(channel.Type); !channel.Live() && ok && adapter.Definition().SharedIdentity {
+			// Its channel was removed: a type whose customers are the same on every channel sends through its default one.
+			if live, found, err := s.defaultChannelOfType(ctx, tx, claim.WorkspaceID, channel.Type); err != nil {
 				return out, err
 			} else if found {
 				if _, err := tx.Exec(ctx, `UPDATE channel_outbox SET channel_id=$3 WHERE workspace_id=$1 AND id=$2`, claim.WorkspaceID, claim.OutboxID, live.ID); err != nil {

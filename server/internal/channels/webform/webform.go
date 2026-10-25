@@ -39,7 +39,7 @@ type Adapter struct{}
 func New() *Adapter { return &Adapter{} }
 
 func (*Adapter) Definition() channels.Definition {
-	return channels.Definition{Type: Type, Singleton: true, Name: "Web form", Guide: "web-form.md", Capabilities: []string{"form"}, ReplyTo: channels.IdentityEmail,
+	return channels.Definition{Type: Type, Name: "Web form", Guide: "web-form.md", Capabilities: []string{"form"}, ReplyTo: channels.IdentityEmail,
 		RepliesVia: domain.ChannelEmail,
 		// An unknown, off or locked form answers the same, so a slug cannot be probed.
 		WhenOff: channels.OffRefuse,
@@ -122,8 +122,7 @@ func (config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, cha
 		origins = *value.AllowedOrigins
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO web_form_channels(workspace_id,enabled,allowed_origins,channel_id) VALUES($1,$2,COALESCE($3,'{}'::text[]),$4)
-		ON CONFLICT(workspace_id) DO UPDATE SET enabled=EXCLUDED.enabled,allowed_origins=COALESCE($3,web_form_channels.allowed_origins),
-			channel_id=EXCLUDED.channel_id,updated_at=now()`,
+		ON CONFLICT(channel_id) DO UPDATE SET enabled=EXCLUDED.enabled,allowed_origins=COALESCE($3,web_form_channels.allowed_origins),updated_at=now()`,
 		channel.WorkspaceID, channel.Enabled, origins, channel.ID); err != nil {
 		return channels.Event{}, fmt.Errorf("save web form: %w", err)
 	}
@@ -131,20 +130,19 @@ func (config) Save(ctx context.Context, tx pgx.Tx, channel channels.Channel, cha
 }
 
 func (config) Public(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
-	form := domain.WebForm{Enabled: channel.Enabled, AllowedOrigins: []string{}}
-	err := tx.QueryRow(ctx, `SELECT allowed_origins FROM web_form_channels WHERE workspace_id=$1`, channel.WorkspaceID).Scan(&form.AllowedOrigins)
+	form := domain.WebForm{ChannelID: channel.ID, Enabled: channel.Enabled, AllowedOrigins: []string{}, SubmitPath: ChannelSubmitPathPrefix + channel.ID}
+	err := tx.QueryRow(ctx, `SELECT allowed_origins FROM web_form_channels WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID).Scan(&form.AllowedOrigins)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, err
 	}
-	var slug string
-	if err := tx.QueryRow(ctx, `SELECT slug FROM workspaces WHERE id=$1`, channel.WorkspaceID).Scan(&slug); err != nil {
-		return nil, err
-	}
-	form.SubmitPath = SubmitPathPrefix + slug
 	return form, nil
 }
 
-// SubmitPathPrefix is where a website posts, followed by the workspace slug.
+// ChannelSubmitPathPrefix is where a website posts to one form, followed by its channel id.
+const ChannelSubmitPathPrefix = "/api/v1/public/web-forms/"
+
+// SubmitPathPrefix is where a website posts to the workspace's default form, followed by the
+// workspace slug: the address every form had before a workspace could have several.
 const SubmitPathPrefix = "/api/v1/public/forms/"
 
 func (c config) Summary(ctx context.Context, tx pgx.Tx, channel channels.Channel) (string, error) {
@@ -162,7 +160,7 @@ const ReasonNoOrigins = "no_origins"
 
 func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel) (channels.Status, error) {
 	var count int
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(cardinality(allowed_origins),0) FROM web_form_channels WHERE workspace_id=$1`, channel.WorkspaceID).Scan(&count); err != nil &&
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(cardinality(allowed_origins),0) FROM web_form_channels WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID).Scan(&count); err != nil &&
 		!errors.Is(err, pgx.ErrNoRows) {
 		return channels.Status{}, err
 	}
@@ -173,7 +171,7 @@ func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 }
 
 func (config) Remove(ctx context.Context, tx pgx.Tx, channel channels.Channel) error {
-	_, err := tx.Exec(ctx, `DELETE FROM web_form_channels WHERE workspace_id=$1`, channel.WorkspaceID)
+	_, err := tx.Exec(ctx, `DELETE FROM web_form_channels WHERE workspace_id=$1 AND channel_id=$2`, channel.WorkspaceID, channel.ID)
 	return err
 }
 

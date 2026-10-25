@@ -91,8 +91,6 @@ func writeChannelError(response http.ResponseWriter, err error) {
 		writeHeld(response, heldErr)
 	case errors.Is(err, channels.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
 		writeError(response, http.StatusNotFound, "channel_not_found", "No channel of this workspace has that id.")
-	case errors.Is(err, channels.ErrTypeLimit):
-		writeError(response, http.StatusConflict, "channel_type_limit", "This workspace already has a channel of this type; one per workspace for now.")
 	case errors.Is(err, channels.ErrExternalAccount):
 		writeError(response, http.StatusConflict, "channel_account_taken", "That account is already connected to a channel.")
 	case errors.Is(err, channels.ErrUnknownType):
@@ -155,20 +153,13 @@ func (a *API) listChannels(response http.ResponseWriter, request *http.Request) 
 		items = append(items, a.channelJSON(public))
 	}
 	type typeBody struct {
-		Type            channels.Type `json:"type"`
-		Available       bool          `json:"available"`
-		MaxPerWorkspace *int          `json:"max_per_workspace"`
-		Count           int           `json:"count"`
+		Type      channels.Type `json:"type"`
+		Available bool          `json:"available"`
+		Count     int           `json:"count"`
 	}
 	types := []typeBody{}
 	for _, definition := range a.store.Channels().Definitions() {
-		item := typeBody{Type: definition.Type, Count: counts[definition.Type]}
-		if definition.Singleton {
-			one := 1
-			item.MaxPerWorkspace = &one
-		}
-		item.Available = item.MaxPerWorkspace == nil || item.Count < *item.MaxPerWorkspace
-		types = append(types, item)
+		types = append(types, typeBody{Type: definition.Type, Available: true, Count: counts[definition.Type]})
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "types": types})
 }

@@ -49,8 +49,9 @@ const (
 	// PrivilegeOutboxClaim leases due outbox rows of every workspace for the email worker.
 	PrivilegeOutboxClaim Privilege = "outbox-claim"
 	// PrivilegeChannelRoute resolves the live channel that is an account outside (a chat account), from
-	// an event a channel's webhook received. Accounts are unique on the server; only the workspace and
-	// channel ids leave the transaction.
+	// an event a channel's webhook received, or that a public address names by its random id (a web
+	// form's own address). Accounts are unique on the server; only the workspace and channel ids leave
+	// the transaction.
 	PrivilegeChannelRoute Privilege = "channel-route"
 	// PrivilegeChannelInboundClaim leases due events of the channel journal of every workspace (received,
 	// failed, or collected until their flush time) for the inbound worker; each is then processed in its

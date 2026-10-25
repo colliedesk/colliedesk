@@ -31,13 +31,13 @@ func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 	}
 	for _, definition := range registry.New(registry.Config{}).Definitions() {
 		kind := string(definition.Type)
-		var connectable, singleton bool
-		if err := pool.QueryRow(ctx, `SELECT connectable,singleton FROM channel_types WHERE type=$1`, kind).Scan(&connectable, &singleton); err != nil {
+		var connectable bool
+		if err := pool.QueryRow(ctx, `SELECT connectable FROM channel_types WHERE type=$1`, kind).Scan(&connectable); err != nil {
 			t.Errorf("%s: no channel_types row (add it in the type's migration): %v", kind, err)
 			continue
 		}
-		if !connectable || singleton != definition.Singleton {
-			t.Errorf("%s: channel_types says connectable=%v singleton=%v, the definition singleton=%v", kind, connectable, singleton, definition.Singleton)
+		if !connectable {
+			t.Errorf("%s: channel_types says it is not connectable", kind)
 		}
 		dir := filepath.Join("..", strings.ReplaceAll(kind, "_", ""))
 		tests, _ := filepath.Glob(filepath.Join(dir, "*_test.go"))

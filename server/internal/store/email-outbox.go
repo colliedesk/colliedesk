@@ -17,8 +17,10 @@ var ErrLeaseLost = errors.New("delivery lease was lost")
 // Delivery is one claimed outbox row with everything needed to compose the email.
 type Delivery struct {
 	OutboxID, WorkspaceID, MessageID string
-	ClaimToken                       string
-	Attempts                         int
+	// ChannelID is the email channel the reply leaves through.
+	ChannelID  string
+	ClaimToken string
+	Attempts   int
 	// SenderName is the channel's name in From and Reply-To; empty only when the channel is gone.
 	SenderName, SupportAddress string
 	DomainVerified             bool
@@ -37,7 +39,7 @@ type Delivery struct {
 	Files []DeliveryFile
 	// Transport is what the reply was accepted for: "smtp", or "gmail" through Mailbox.
 	Transport string
-	// Mailbox is the workspace's connected Gmail account now; nil when none is connected.
+	// Mailbox is the Gmail account connected to the channel now; nil when none is connected.
 	Mailbox *DeliveryMailbox
 }
 
@@ -55,13 +57,14 @@ type DeliveryFile struct {
 func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	var conversationID string
 	var createdAt time.Time
-	err := tx.QueryRow(ctx, `SELECT COALESCE(ch.sender_name,''),COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),w.email_paused_at IS NOT NULL,
+	err := tx.QueryRow(ctx, `SELECT COALESCE(ch.sender_name,''),COALESCE(ch.support_address,''),COALESCE(ch.verified,false),w.email_paused_at IS NOT NULL,
 			ct.name,ct.email,c.subject,m.body,COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at,m.cc
 		FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 		JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 		JOIN workspaces w ON w.id=m.workspace_id
-		LEFT JOIN email_channels ch ON ch.workspace_id=m.workspace_id
-		WHERE m.workspace_id=$1 AND m.id=$2`, item.WorkspaceID, item.MessageID).
+		LEFT JOIN (SELECT e.workspace_id,e.channel_id,e.sender_name,e.support_address,d.domain_verified_at IS NOT NULL AS verified
+			FROM email_channels e`+emailDomainJoin+`) ch ON ch.workspace_id=m.workspace_id AND ch.channel_id::text=$3
+		WHERE m.workspace_id=$1 AND m.id=$2`, item.WorkspaceID, item.MessageID, item.ChannelID).
 		Scan(&item.SenderName, &item.SupportAddress, &item.DomainVerified, &item.EmailPaused, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
 			&item.EmailMessageID, &item.ReplyToken, &conversationID, &createdAt, &item.CC)
 	if err != nil {
@@ -95,7 +98,7 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 		}
 	}
 	var mailbox DeliveryMailbox
-	err = tx.QueryRow(ctx, `SELECT address,status,COALESCE(error_code,''),token_key_id,refresh_token_sealed FROM mailbox_connections WHERE workspace_id=$1`, item.WorkspaceID).
+	err = tx.QueryRow(ctx, `SELECT address,status,COALESCE(error_code,''),token_key_id,refresh_token_sealed FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2`, item.WorkspaceID, item.ChannelID).
 		Scan(&mailbox.Address, &mailbox.Status, &mailbox.ErrorCode, &mailbox.Grant.KeyID, &mailbox.Grant.Sealed)
 	switch {
 	case err == nil:
@@ -145,8 +148,8 @@ func (s *Store) CountSentSince(ctx context.Context, workspaceID string, since ti
 func (s *Store) EmailDelivery(ctx context.Context, workspaceID, outboxID string, attempts int) (Delivery, error) {
 	item := Delivery{OutboxID: outboxID, WorkspaceID: workspaceID, Attempts: attempts}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `SELECT message_id::text,COALESCE(transport,'smtp'),COALESCE(claim_token::text,'') FROM channel_outbox WHERE workspace_id=$1 AND id=$2`,
-			workspaceID, outboxID).Scan(&item.MessageID, &item.Transport, &item.ClaimToken); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT message_id::text,COALESCE(channel_id::text,''),COALESCE(transport,'smtp'),COALESCE(claim_token::text,'') FROM channel_outbox WHERE workspace_id=$1 AND id=$2`,
+			workspaceID, outboxID).Scan(&item.MessageID, &item.ChannelID, &item.Transport, &item.ClaimToken); err != nil {
 			return fmt.Errorf("load delivery %s: %w", outboxID, err)
 		}
 		return loadDelivery(ctx, tx, &item)

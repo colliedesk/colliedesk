@@ -14,20 +14,23 @@ import (
 // reads included, answers 402 workspace_locked, so a route added later is locked by default. The
 // keys are "METHOD pattern" exactly as listed in Routes().
 var lockedAllowed = map[string]bool{
-	"GET /api/v1/auth/me":                true,
-	"POST /api/v1/auth/logout":           true,
-	"GET /api/v1/auth/sessions":          true,
-	"DELETE /api/v1/auth/sessions/{id}":  true,
-	"GET /api/v1/billing":                true,
-	"GET /api/v1/channels/email":         true,
-	"POST /api/v1/billing/checkout":      true,
-	"POST /api/v1/billing/portal":        true,
-	"GET /api/v1/export":                 true,
-	"POST /api/v1/export/link":           true,
-	"DELETE /api/v1/channels/email":      true,
-	"POST /api/v1/channels/email/secret": true,
-	// A locked workspace can still take back Colliedesk's access to its Gmail account.
-	"DELETE " + gmailPath: true,
+	"GET /api/v1/auth/me":                     true,
+	"POST /api/v1/auth/logout":                true,
+	"GET /api/v1/auth/sessions":               true,
+	"DELETE /api/v1/auth/sessions/{id}":       true,
+	"GET /api/v1/billing":                     true,
+	"GET /api/v1/channels/email":              true,
+	"POST /api/v1/billing/checkout":           true,
+	"POST /api/v1/billing/portal":             true,
+	"GET /api/v1/export":                      true,
+	"POST /api/v1/export/link":                true,
+	"DELETE /api/v1/channels/email":           true,
+	"POST /api/v1/channels/email/secret":      true,
+	"GET /api/v1/channels/{id}/email":         true,
+	"POST /api/v1/channels/{id}/email/secret": true,
+	// A locked workspace can still take back Colliedesk's access to its Gmail accounts.
+	"DELETE " + gmailPath:        true,
+	"DELETE " + channelGmailPath: true,
 	// A customer locked out after the trial may be the one who most needs to report a problem.
 	"POST /api/v1/support/problem-reports": true,
 }

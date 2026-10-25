@@ -25,7 +25,7 @@ func (s *Store) WithChannels(registry *channels.Registry) *Store {
 // Channels is the registry the store routes through; nil when none was given.
 func (s *Store) Channels() *channels.Registry { return s.channels }
 
-const channelRowColumns = `id::text,workspace_id::text,type,name,enabled,settings,COALESCE(external_account,''),created_at,updated_at,disabled_at,deleted_at`
+const channelRowColumns = `id::text,workspace_id::text,type,name,enabled,settings,COALESCE(external_account,''),created_at,updated_at,disabled_at,deleted_at,is_default`
 
 // scanChannelRow reads a channel and resolves its settings over its type's defaults. A type this
 // server does not run keeps empty defaults.
@@ -34,7 +34,7 @@ func (s *Store) scanChannelRow(row rowScanner) (channels.Channel, error) {
 	var kind string
 	var settings []byte
 	if err := row.Scan(&channel.ID, &channel.WorkspaceID, &kind, &channel.Name, &channel.Enabled, &settings, &channel.ExternalAccount,
-		&channel.CreatedAt, &channel.UpdatedAt, &channel.DisabledAt, &channel.DeletedAt); err != nil {
+		&channel.CreatedAt, &channel.UpdatedAt, &channel.DisabledAt, &channel.DeletedAt, &channel.IsDefault); err != nil {
 		return channels.Channel{}, err
 	}
 	channel.Type = channels.Type(kind)
@@ -60,10 +60,12 @@ func (s *Store) channelByID(ctx context.Context, tx pgx.Tx, workspaceID, id stri
 	return channel, err
 }
 
-// liveChannelOfType reads the workspace's live channel of a singleton type; found is false when there is none.
-func (s *Store) liveChannelOfType(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type) (channels.Channel, bool, error) {
+// defaultChannelOfType reads the workspace's default channel of a type (is_default); found is false
+// when the type has no channel. It answers what names no channel: the routes of one email channel and
+// one web form, a hosted address no channel claims, and a new conversation started without a channel.
+func (s *Store) defaultChannelOfType(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type) (channels.Channel, bool, error) {
 	channel, err := s.scanChannelRow(tx.QueryRow(ctx, `SELECT `+channelRowColumns+` FROM channels
-		WHERE workspace_id=$1 AND type=$2 AND singleton AND deleted_at IS NULL`, workspaceID, string(kind)))
+		WHERE workspace_id=$1 AND type=$2 AND is_default`, workspaceID, string(kind)))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return channels.Channel{}, false, nil
 	}
@@ -73,14 +75,14 @@ func (s *Store) liveChannelOfType(ctx context.Context, tx pgx.Tx, workspaceID st
 	return channel, true, nil
 }
 
-// LiveChannelOfType is liveChannelOfType in its own transaction.
-func (s *Store) LiveChannelOfType(ctx context.Context, workspaceID string, kind channels.Type) (channels.Channel, bool, error) {
+// DefaultChannelOfType is defaultChannelOfType in its own transaction.
+func (s *Store) DefaultChannelOfType(ctx context.Context, workspaceID string, kind channels.Type) (channels.Channel, bool, error) {
 	type found struct {
 		channel channels.Channel
 		ok      bool
 	}
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (found, error) {
-		channel, ok, err := s.liveChannelOfType(ctx, tx, workspaceID, kind)
+		channel, ok, err := s.defaultChannelOfType(ctx, tx, workspaceID, kind)
 		return found{channel, ok}, err
 	})
 	return got.channel, got.ok, err
@@ -109,6 +111,32 @@ func (s *Store) ChannelForExternalAccount(ctx context.Context, kind channels.Typ
 	}
 	channel, err := s.GetChannel(ctx, workspaceID, id)
 	return channel, err == nil, err
+}
+
+// ChannelByPublicID finds the live channel of a type that a public address names by its id (a web
+// form's own submit address). Channel ids are random, so one form's address tells nothing of another's.
+func (s *Store) ChannelByPublicID(ctx context.Context, kind channels.Type, id string) (channels.Channel, bool, error) {
+	var workspaceID string
+	err := s.db.Privileged(ctx, database.PrivilegeChannelRoute, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM channels WHERE type=$1 AND id::text=$2 AND deleted_at IS NULL`, string(kind), id).Scan(&workspaceID)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return channels.Channel{}, false, nil
+	}
+	if err != nil {
+		return channels.Channel{}, false, fmt.Errorf("route channel id: %w", err)
+	}
+	channel, err := s.GetChannel(ctx, workspaceID, id)
+	return channel, err == nil, err
+}
+
+// lockChannelType serializes the changes that add, remove or move the default of a workspace's
+// channels of one type: the first channel of a type has no row yet to lock.
+func lockChannelType(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text||':channels:'||$2,0))`, workspaceID, string(kind)); err != nil {
+		return fmt.Errorf("lock %s channels: %w", kind, err)
+	}
+	return nil
 }
 
 // ChannelActor is who changes a channel: an agent, through a session or an agent token.

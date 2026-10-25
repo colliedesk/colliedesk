@@ -340,6 +340,10 @@ type EmailAttachment struct {
 }
 
 type EmailChannel struct {
+	// ChannelID is the channel these settings belong to.
+	ChannelID string `json:"channel_id"`
+	// HostedLocal is the local part of the channel's forwarding address on the hosted cloud.
+	HostedLocal    string `json:"-"`
 	SupportAddress string `json:"support_address"`
 	// SenderName is the name customers see in the From line of every reply the channel sends.
 	SenderName       string     `json:"sender_name"`
@@ -372,7 +376,9 @@ type DNSRecord struct {
 
 // WebForm is the workspace's public website form channel. Off until an admin turns it on.
 type WebForm struct {
-	Enabled bool `json:"enabled"`
+	// ChannelID is the form's channel; empty for a workspace that never set one up.
+	ChannelID string `json:"channel_id,omitempty"`
+	Enabled   bool   `json:"enabled"`
 	// AllowedOrigins are the exact origins (scheme://host[:port]) whose pages may call the form.
 	AllowedOrigins []string `json:"allowed_origins"`
 	// SubmitPath is the path a website posts to; the host is the instance's own.

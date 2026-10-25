@@ -68,11 +68,11 @@ func (s *Store) ExpireUnverifiedProviderDomains(ctx context.Context, olderThan, 
 	var released int
 	err := s.db.Privileged(ctx, database.PrivilegeProviderDomainSweep, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `WITH old AS (
-				SELECT workspace_id,provider_domain_id FROM email_channels
+				SELECT workspace_id,channel_id,provider_domain_id FROM email_channels
 				WHERE provider_domain_id IS NOT NULL AND provider_domain_first_verified_at IS NULL AND provider_domain_created_at<=$1 FOR UPDATE),
 			cleared AS (
 				UPDATE email_channels c SET provider_domain_id=NULL,provider_domain_records='[]'::jsonb,provider_domain_created_at=NULL,provider_domain_expired_at=$2,updated_at=$2
-				FROM old WHERE c.workspace_id=old.workspace_id RETURNING c.workspace_id),
+				FROM old WHERE c.channel_id=old.channel_id RETURNING c.workspace_id),
 			queued AS (
 				INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) SELECT workspace_id,provider_domain_id FROM old
 				ON CONFLICT DO NOTHING RETURNING 1)
@@ -123,9 +123,10 @@ func (s *Store) ReleaseVerifiedDomain(ctx context.Context, domainName string, no
 	var released *ReleasedDomain
 	err := s.db.Privileged(ctx, database.PrivilegeProviderDomainSweep, func(tx pgx.Tx) error {
 		var item ReleasedDomain
-		err := tx.QueryRow(ctx, `SELECT c.workspace_id::text,w.slug,c.provider_domain_id FROM email_channels c JOIN workspaces w ON w.id=c.workspace_id
+		var channelID string
+		err := tx.QueryRow(ctx, `SELECT c.workspace_id::text,w.slug,c.provider_domain_id,c.channel_id::text FROM email_channels c JOIN workspaces w ON w.id=c.workspace_id
 			WHERE c.provider_domain_id IS NOT NULL AND c.domain_verified_at IS NOT NULL AND split_part(c.support_address,'@',2)=lower($1) FOR UPDATE OF c`,
-			domainName).Scan(&item.WorkspaceID, &item.Slug, &item.ProviderDomainID)
+			domainName).Scan(&item.WorkspaceID, &item.Slug, &item.ProviderDomainID, &channelID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -136,7 +137,7 @@ func (s *Store) ReleaseVerifiedDomain(ctx context.Context, domainName string, no
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE email_channels SET provider_domain_id=NULL,provider_domain_records='[]'::jsonb,domain_verified_at=NULL,
-				provider_domain_first_verified_at=NULL,provider_domain_created_at=NULL,provider_domain_expired_at=NULL,updated_at=$2 WHERE workspace_id=$1`, item.WorkspaceID, now); err != nil {
+				provider_domain_first_verified_at=NULL,provider_domain_created_at=NULL,provider_domain_expired_at=NULL,updated_at=$2 WHERE channel_id::text=$1`, channelID, now); err != nil {
 			return err
 		}
 		released = &item

@@ -24,6 +24,40 @@ type ChannelInput struct {
 	Config json.RawMessage
 	// Settings replace the rules the channel stores over its type's defaults.
 	Settings json.RawMessage
+	// IsDefault, true, makes the channel its type's default; the one that was loses it. A type keeps
+	// a default while it has a channel, so false is refused: make another channel the default.
+	IsDefault *bool
+}
+
+// nameTaken returns the live channel of the type that has the name (whatever its case), other than
+// except; the caller holds lockChannelType, so the answer stays true until it commits.
+func nameTaken(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type, name, except string) error {
+	var taken channels.NameTakenError
+	err := tx.QueryRow(ctx, `SELECT id::text,name FROM channels WHERE workspace_id=$1 AND type=$2 AND deleted_at IS NULL AND lower(name)=lower($3) AND id::text<>$4`,
+		workspaceID, string(kind), name, except).Scan(&taken.ChannelID, &taken.ChannelName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("check channel name: %w", err)
+	}
+	return &taken
+}
+
+// freeName is base, or base with the first number from 2 that no live channel of the type has.
+func freeName(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type, base string) (string, error) {
+	for n := 1; ; n++ {
+		name := base
+		if n > 1 {
+			suffix := fmt.Sprintf(" %d", n)
+			name = string([]rune(base)[:min(len([]rune(base)), 80-len(suffix))]) + suffix
+		}
+		err := nameTaken(ctx, tx, workspaceID, kind, name, "")
+		var taken *channels.NameTakenError
+		if !errors.As(err, &taken) {
+			return name, err
+		}
+	}
 }
 
 var channelNameControls = regexp.MustCompile(`[\x00-\x1f\x7f]`)
@@ -92,18 +126,20 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 		return channels.Channel{}, err
 	}
 	definition := adapter.Definition()
-	if definition.Singleton {
-		if _, found, err := s.liveChannelOfType(ctx, tx, workspaceID, kind); err != nil {
-			return channels.Channel{}, err
-		} else if found {
-			return channels.Channel{}, channels.ErrTypeLimit
-		}
+	if err := lockChannelType(ctx, tx, workspaceID, kind); err != nil {
+		return channels.Channel{}, err
 	}
-	name := definition.Name
+	var name string
 	if input.Name != nil {
 		if name, err = validChannelName(*input.Name); err != nil {
 			return channels.Channel{}, err
 		}
+		if err := nameTaken(ctx, tx, workspaceID, kind, name, ""); err != nil {
+			return channels.Channel{}, err
+		}
+	}
+	if input.IsDefault != nil && !*input.IsDefault {
+		return channels.Channel{}, notDefaultError()
 	}
 	settings, err := validSettings(definition, input.Settings)
 	if err != nil {
@@ -113,11 +149,35 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	if err != nil {
 		return channels.Channel{}, err
 	}
+	// The first live channel of a type is its default; asked for, a later one takes it over.
+	current, hasDefault, err := s.defaultChannelOfType(ctx, tx, workspaceID, kind)
+	if err != nil {
+		return channels.Channel{}, err
+	}
+	if name == "" {
+		// The first is called as its type; the next ones as the type proposes (an address), or with a number.
+		base := definition.Name
+		if hasDefault && change.Name != "" {
+			base = change.Name
+		}
+		if name, err = validChannelName(base); err != nil {
+			return channels.Channel{}, err
+		}
+		if name, err = freeName(ctx, tx, workspaceID, kind, name); err != nil {
+			return channels.Channel{}, err
+		}
+	}
+	makeDefault := !hasDefault || (input.IsDefault != nil && *input.IsDefault)
+	if makeDefault && hasDefault {
+		if _, err := tx.Exec(ctx, `UPDATE channels SET is_default=false,updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, current.ID); err != nil {
+			return channels.Channel{}, channelWriteError(err)
+		}
+	}
 	enabled := input.Enabled == nil || *input.Enabled
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,singleton,name,enabled,settings,external_account,created_by_agent_id,disabled_at,disabled_by_agent_id)
-		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,'')::uuid,CASE WHEN NOT $5 THEN now() END,CASE WHEN NOT $5 THEN NULLIF($8,'')::uuid END) RETURNING id::text`,
-		workspaceID, string(kind), definition.Singleton, name, enabled, settings, change.ExternalAccount, actor.AgentID).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name,enabled,settings,external_account,created_by_agent_id,disabled_at,disabled_by_agent_id,is_default)
+		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,CASE WHEN NOT $4 THEN now() END,CASE WHEN NOT $4 THEN NULLIF($7,'')::uuid END,$8) RETURNING id::text`,
+		workspaceID, string(kind), name, enabled, settings, change.ExternalAccount, actor.AgentID, makeDefault).Scan(&id)
 	if err != nil {
 		return channels.Channel{}, channelWriteError(err)
 	}
@@ -136,7 +196,35 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	if err := insertChannelEvent(ctx, tx, channel, "added", actor, detail); err != nil {
 		return channels.Channel{}, err
 	}
+	if makeDefault && hasDefault {
+		if err := insertChannelEvent(ctx, tx, channel, "default_changed", actor, map[string]any{"from": current.ID, "to": channel.ID}); err != nil {
+			return channels.Channel{}, err
+		}
+	}
 	return channel, nil
+}
+
+func notDefaultError() error {
+	message := "A type keeps a default channel: make another channel the default instead."
+	return &channels.FieldError{Fields: map[string]string{"is_default": message}, Message: message}
+}
+
+// makeDefault moves the type's default to the channel, recording it; nothing when it is the default.
+// The caller holds lockChannelType. Two statements: one swapping both rows would trip the unique
+// index, which is not deferrable.
+func makeDefault(ctx context.Context, tx pgx.Tx, channel channels.Channel, actor ChannelActor) error {
+	if channel.IsDefault {
+		return nil
+	}
+	var from *string
+	if err := tx.QueryRow(ctx, `UPDATE channels SET is_default=false,updated_at=now() WHERE workspace_id=$1 AND type=$2 AND is_default RETURNING id::text`,
+		channel.WorkspaceID, string(channel.Type)).Scan(&from); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return channelWriteError(err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE channels SET is_default=true,updated_at=now() WHERE workspace_id=$1 AND id=$2`, channel.WorkspaceID, channel.ID); err != nil {
+		return channelWriteError(err)
+	}
+	return insertChannelEvent(ctx, tx, channel, "default_changed", actor, map[string]any{"from": from, "to": channel.ID})
 }
 
 // UpdateChannel renames a channel, turns it on or off, or changes its configuration or settings.
@@ -150,15 +238,28 @@ func (s *Store) UpdateChannel(ctx context.Context, workspaceID, id string, input
 
 // UpdateChannelTx is UpdateChannel inside tx.
 func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id string, input ChannelInput, actor ChannelActor) (channels.Channel, error) {
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM channels WHERE workspace_id=$1 AND id=$2::uuid FOR UPDATE`, workspaceID, id); err != nil {
-		return channels.Channel{}, fmt.Errorf("lock channel: %w", err)
-	}
 	current, err := s.channelByID(ctx, tx, workspaceID, id)
 	if err != nil {
 		return channels.Channel{}, err
 	}
+	// A rename or a new default changes what the type's other channels may do: the type lock first,
+	// then the row.
+	if input.Name != nil || input.IsDefault != nil {
+		if err := lockChannelType(ctx, tx, workspaceID, current.Type); err != nil {
+			return channels.Channel{}, err
+		}
+	}
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM channels WHERE workspace_id=$1 AND id=$2::uuid FOR UPDATE`, workspaceID, id); err != nil {
+		return channels.Channel{}, fmt.Errorf("lock channel: %w", err)
+	}
+	if current, err = s.channelByID(ctx, tx, workspaceID, id); err != nil {
+		return channels.Channel{}, err
+	}
 	if !current.Live() {
 		return channels.Channel{}, channels.ErrNotFound
+	}
+	if input.IsDefault != nil && !*input.IsDefault {
+		return channels.Channel{}, notDefaultError()
 	}
 	adapter, err := s.adapterOf(current.Type)
 	if err != nil {
@@ -171,14 +272,22 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 			return channels.Channel{}, err
 		}
 		if name != current.Name {
+			if err := nameTaken(ctx, tx, workspaceID, current.Type, name, id); err != nil {
+				return channels.Channel{}, err
+			}
 			if _, err := tx.Exec(ctx, `UPDATE channels SET name=$3,updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, id, name); err != nil {
-				return channels.Channel{}, fmt.Errorf("rename channel: %w", err)
+				return channels.Channel{}, channelWriteError(err)
 			}
 			renamed := current
 			renamed.Name = name
 			if err := insertChannelEvent(ctx, tx, renamed, "renamed", actor, map[string]any{"from": current.Name, "to": name}); err != nil {
 				return channels.Channel{}, err
 			}
+		}
+	}
+	if input.IsDefault != nil {
+		if err := makeDefault(ctx, tx, current, actor); err != nil {
+			return channels.Channel{}, err
 		}
 	}
 	if input.Settings != nil {
@@ -268,11 +377,17 @@ func (s *Store) RemoveChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 }
 
 func (s *Store) removeChannel(ctx context.Context, tx pgx.Tx, workspaceID, id string, actor ChannelActor) (func(context.Context), error) {
+	channel, err := s.channelByID(ctx, tx, workspaceID, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := lockChannelType(ctx, tx, workspaceID, channel.Type); err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM channels WHERE workspace_id=$1 AND id=$2::uuid FOR UPDATE`, workspaceID, id); err != nil {
 		return nil, fmt.Errorf("lock channel: %w", err)
 	}
-	channel, err := s.channelByID(ctx, tx, workspaceID, id)
-	if err != nil {
+	if channel, err = s.channelByID(ctx, tx, workspaceID, id); err != nil {
 		return nil, err
 	}
 	if !channel.Live() {
@@ -294,7 +409,7 @@ func (s *Store) removeChannel(ctx context.Context, tx pgx.Tx, workspaceID, id st
 	}
 	// The row is marked removed first, so the type's own delete finds nothing left to do for it.
 	if _, err := tx.Exec(ctx, `UPDATE channels SET enabled=false,disabled_at=COALESCE(disabled_at,now()),settings='{}',external_account=NULL,
-		deleted_at=now(),deleted_by_agent_id=NULLIF($3,'')::uuid,updated_at=now() WHERE workspace_id=$1 AND id=$2`,
+		deleted_at=now(),deleted_by_agent_id=NULLIF($3,'')::uuid,is_default=false,updated_at=now() WHERE workspace_id=$1 AND id=$2`,
 		workspaceID, id, actor.AgentID); err != nil {
 		return nil, fmt.Errorf("remove channel: %w", err)
 	}
@@ -310,7 +425,26 @@ func (s *Store) removeChannel(ctx context.Context, tx pgx.Tx, workspaceID, id st
 	if _, err := tx.Exec(ctx, `DELETE FROM channel_credentials WHERE workspace_id=$1 AND channel_id=$2`, workspaceID, id); err != nil {
 		return nil, fmt.Errorf("delete channel secrets: %w", err)
 	}
-	return after, insertChannelEvent(ctx, tx, channel, "removed", actor, nil)
+	if err := insertChannelEvent(ctx, tx, channel, "removed", actor, nil); err != nil {
+		return nil, err
+	}
+	// The default goes to the oldest live channel of the type; with none left the type has none.
+	if channel.IsDefault {
+		heir, err := s.scanChannelRow(tx.QueryRow(ctx, `SELECT `+channelRowColumns+` FROM channels
+			WHERE workspace_id=$1 AND type=$2 AND deleted_at IS NULL ORDER BY created_at,id LIMIT 1`, workspaceID, string(channel.Type)))
+		switch {
+		case err == nil:
+			if _, err := tx.Exec(ctx, `UPDATE channels SET is_default=true,updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, heir.ID); err != nil {
+				return nil, channelWriteError(err)
+			}
+			if err := insertChannelEvent(ctx, tx, heir, "default_changed", actor, map[string]any{"from": channel.ID, "to": heir.ID}); err != nil {
+				return nil, err
+			}
+		case !errors.Is(err, pgx.ErrNoRows):
+			return nil, fmt.Errorf("find the next default channel: %w", err)
+		}
+	}
+	return after, nil
 }
 
 // channelWriteError names the conflicts of a channel write.
@@ -320,8 +454,9 @@ func channelWriteError(err error) error {
 		switch pgErr.ConstraintName {
 		case "channels_external_account_idx":
 			return channels.ErrExternalAccount
-		case "channels_singleton_idx":
-			return channels.ErrTypeLimit
+		case "channels_default_idx", "channels_name_idx":
+			// Every writer checks under lockChannelType; this is the net under it.
+			return channels.ErrConflict
 		}
 	}
 	return fmt.Errorf("save channel: %w", err)
@@ -374,12 +509,12 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 	return public, nil
 }
 
-// AddChannelRow adds the live channel of a singleton type with its history entry, for a writer that
+// AddChannelRow adds a channel of a type with its history entry, for a writer that
 // fills the type's own table itself in the same transaction (a new workspace's hosted email). Every
 // other channel is added with CreateChannel.
 func AddChannelRow(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type, name string, detail map[string]any) (string, error) {
 	var channel channels.Channel
-	if err := tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,singleton,name) VALUES($1,$2,true,$3) RETURNING id::text,workspace_id::text,type,name`,
+	if err := tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name) VALUES($1,$2,$3) RETURNING id::text,workspace_id::text,type,name`,
 		workspaceID, string(kind), name).Scan(&channel.ID, &channel.WorkspaceID, &channel.Type, &channel.Name); err != nil {
 		return "", channelWriteError(err)
 	}

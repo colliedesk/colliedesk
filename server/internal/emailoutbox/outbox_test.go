@@ -21,6 +21,7 @@ type fixture struct {
 	store          *store.Store
 	pool           *pgxpool.Pool
 	workspaceID    string
+	emailChannelID string
 	agentID        string
 	conversationID string
 	incomingID     string
@@ -45,7 +46,8 @@ func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fix
 		t.Fatal(err)
 	}
 	st := channelStore(t, pool).WithOutbound(store.OutboundPolicy{Enabled: true, GmailEnabled: true})
-	if _, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@"+domainName, nil); err != nil {
+	channel, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@"+domainName, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
 	parsed, err := email.Parse([]byte("From: Olive Customer <olive@customer.example>\r\nTo: support@"+domainName+"\r\n"+
@@ -62,7 +64,7 @@ func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fix
 	if err := pool.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1`, workspace.ID).Scan(&agentID); err != nil {
 		t.Fatal(err)
 	}
-	return fixture{store: st, pool: pool, workspaceID: workspace.ID, agentID: agentID, conversationID: *result.ConversationID, incomingID: *result.MessageID}
+	return fixture{store: st, pool: pool, workspaceID: workspace.ID, emailChannelID: channel.ChannelID, agentID: agentID, conversationID: *result.ConversationID, incomingID: *result.MessageID}
 }
 
 func (f fixture) write(t *testing.T, kind, body string) domain.Message {

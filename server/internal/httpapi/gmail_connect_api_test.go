@@ -175,7 +175,11 @@ func TestAConnectionTheServerCanNoLongerUseFailsRepliesAtOnce(t *testing.T) {
 	admin := createSession(t, api, service, "Lost Google", "admin@lost-google.example.com")
 	connectEmail(t, api, admin, "support@lost-google.example.com")
 	st := store.New(pool)
-	if _, _, err := st.SaveMailboxConnection(context.Background(), workspaceID(t, api, admin), "", "support@lost-google.example.com", google.ScopeGmailSend,
+	channel, err := st.GetEmailChannel(context.Background(), workspaceID(t, api, admin))
+	if err != nil || channel == nil {
+		t.Fatalf("email channel: %v %v", channel, err)
+	}
+	if _, _, err := st.SaveMailboxConnection(context.Background(), workspaceID(t, api, admin), channel.ChannelID, "", "support@lost-google.example.com", google.ScopeGmailSend,
 		store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed-with-a-key-this-server-lacks")}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}

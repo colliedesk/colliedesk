@@ -63,7 +63,8 @@ func (s *Store) PrepareEmailReply(ctx context.Context, tx pgx.Tx, request channe
 	workspaceID, conversationID := request.WorkspaceID, request.ConversationID
 	var supportAddress string
 	var verified bool
-	err := tx.QueryRow(ctx, `SELECT support_address,domain_verified_at IS NOT NULL FROM email_channels WHERE workspace_id=$1`, workspaceID).
+	err := tx.QueryRow(ctx, `SELECT e.support_address,d.domain_verified_at IS NOT NULL FROM email_channels e`+emailDomainJoin+`
+		WHERE e.workspace_id=$1 AND e.channel_id::text=$2`, workspaceID, request.Channel.ID).
 		Scan(&supportAddress, &verified)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return channels.Prepared{}, fmt.Errorf("%w: The email channel is not connected.", ErrOutboundNotReady)
@@ -71,7 +72,7 @@ func (s *Store) PrepareEmailReply(ctx context.Context, tx pgx.Tx, request channe
 	if err != nil {
 		return channels.Prepared{}, fmt.Errorf("load email channel: %w", err)
 	}
-	mailbox, err := loadMailboxState(ctx, tx, workspaceID)
+	mailbox, err := loadMailboxState(ctx, tx, workspaceID, request.Channel.ID)
 	if err != nil {
 		return channels.Prepared{}, err
 	}
@@ -133,7 +134,7 @@ func (s *Store) assignEmailIdentity(ctx context.Context, tx pgx.Tx, workspaceID,
 	return nil
 }
 
-// mailboxState is the workspace's connected Gmail account as the outbound rules see it.
+// mailboxState is the Gmail account connected to an email channel as the outbound rules see it.
 type mailboxState struct {
 	status, errorCode string
 }
@@ -146,9 +147,10 @@ func (m *mailboxState) transport() string {
 	return "gmail"
 }
 
-func loadMailboxState(ctx context.Context, tx pgx.Tx, workspaceID string) (*mailboxState, error) {
+func loadMailboxState(ctx context.Context, tx pgx.Tx, workspaceID, channelID string) (*mailboxState, error) {
 	var state mailboxState
-	err := tx.QueryRow(ctx, `SELECT status,COALESCE(error_code,'') FROM mailbox_connections WHERE workspace_id=$1`, workspaceID).Scan(&state.status, &state.errorCode)
+	err := tx.QueryRow(ctx, `SELECT status,COALESCE(error_code,'') FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2`, workspaceID, channelID).
+		Scan(&state.status, &state.errorCode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

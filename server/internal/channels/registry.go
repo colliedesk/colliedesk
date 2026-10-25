@@ -9,12 +9,18 @@ import (
 var (
 	ErrUnknownType     = errors.New("unknown channel type")
 	ErrNotFound        = errors.New("channel not found")
-	ErrTypeLimit       = errors.New("this workspace already has a channel of this type")
 	ErrChannelOff      = errors.New("the channel is off")
 	ErrExternalAccount = errors.New("that account is connected to another channel")
+	// ErrConflict means another change of the same channels won a race; trying again works.
+	ErrConflict = errors.New("another change of these channels was made at the same moment")
 	// ErrNoRegistry means a store was asked to route a reply without the channel registry.
 	ErrNoRegistry = errors.New("the channel registry is not configured")
 )
+
+// NameTakenError refuses a name a live channel of the same type has, naming that channel.
+type NameTakenError struct{ ChannelID, ChannelName string }
+
+func (e *NameTakenError) Error() string { return "the channel " + e.ChannelName + " already has this name" }
 
 // HeldError refuses to remove a channel that still holds messages that arrived while it was off:
 // removed, they would be out of reach in the app and still count toward storage.

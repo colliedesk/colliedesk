@@ -23,7 +23,7 @@ func loopbackStore(t *testing.T, loops ...*channeltest.Loopback) (*pgxpool.Pool,
 	pool := databasetest.Pool(t)
 	adapters := make([]channels.Adapter, 0, len(loops))
 	for _, loop := range loops {
-		if _, err := pool.Exec(context.Background(), `INSERT INTO channel_types(type,connectable,singleton) VALUES($1,true,false)`, string(loop.Type)); err != nil {
+		if _, err := pool.Exec(context.Background(), `INSERT INTO channel_types(type,connectable) VALUES($1,true)`, string(loop.Type)); err != nil {
 			t.Fatal(err)
 		}
 		adapters = append(adapters, loop)
