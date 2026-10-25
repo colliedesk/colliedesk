@@ -1,7 +1,9 @@
 package mcpserver
 
 import (
-	"encoding/json"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -25,10 +27,17 @@ func registeredTypes() []string {
 	return values
 }
 
+// enumJSON writes the values as a JSON array. They are machine names (channel_types and the origins
+// allow only [a-z0-9_]), checked here, so each is its own JSON string without escaping.
 func enumJSON(values []string) string {
-	encoded, err := json.Marshal(values)
-	if err != nil {
-		panic(err)
+	quoted := make([]string, len(values))
+	for i, value := range values {
+		if !machineName.MatchString(value) {
+			panic("mcpserver: channel value " + strconv.Quote(value) + " is not a machine name")
+		}
+		quoted[i] = `"` + value + `"`
 	}
-	return string(encoded)
+	return "[" + strings.Join(quoted, ",") + "]"
 }
+
+var machineName = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
