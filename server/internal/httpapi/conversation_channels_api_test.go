@@ -231,6 +231,27 @@ func TestAnImportedConversationRepliesFromItsSourceMailbox(t *testing.T) {
 	if via := conversationOf(t, api, admin, fromBilling).ChannelRef; via == nil || via.RepliesVia == nil || via.RepliesVia.ID != billing {
 		t.Fatalf("before any reply, channel_ref = %+v, want replies via billing", via)
 	}
+	// The list reads the mailboxes once for the page and says the same of every row.
+	var page struct {
+		Items []struct {
+			ID         string `json:"id"`
+			ChannelRef *struct {
+				RepliesVia *struct {
+					ID string `json:"id"`
+				} `json:"replies_via"`
+			} `json:"channel_ref"`
+		} `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/conversations?page_size=100", nil, admin, nil), &page)
+	listed := map[string]string{}
+	for _, item := range page.Items {
+		if item.ChannelRef != nil && item.ChannelRef.RepliesVia != nil {
+			listed[item.ID] = item.ChannelRef.RepliesVia.ID
+		}
+	}
+	if listed[fromBilling] != billing || listed[unknown] != support {
+		t.Fatalf("the list says replies leave via %v, want %s for billing@ and the default %s for the other", listed, billing, support)
+	}
 	reply(t, api, admin, fromBilling, "From billing.")
 	reply(t, api, admin, unknown, "From the default.")
 	if got := deliveryChannel(t, pool, fromBilling); got != billing {

@@ -9,6 +9,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -195,8 +196,9 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 	ref := func(channel *channels.Channel) *domain.ChannelRef {
 		return &domain.ChannelRef{ID: channel.ID, Type: string(channel.Type), Name: channel.Name, Enabled: channel.Enabled, Deleted: !channel.Live()}
 	}
-	// The mailbox of an import is read only for an unpinned import, and once per address.
-	mailboxes := map[string]*channels.Channel{}
+	// The mailbox of an import is read only for an unpinned import: the workspace's mailboxes are read
+	// once, at the first one, and every address is looked up in them.
+	var mailboxes map[string]*channels.Channel
 	for i := range items {
 		choice := replyChoice{origin: channels.Type(items[i].Channel)}
 		if items[i].ChannelID != nil {
@@ -211,13 +213,24 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 		route, err := routeReply(s.channels, choice, channelFinder{
 			defaultOf: func(kind channels.Type) (*channels.Channel, error) { return defaults[kind], nil },
 			mailbox: func(addresses []string) (*channels.Channel, error) {
-				key := strings.Join(addresses, ",")
-				if channel, seen := mailboxes[key]; seen {
-					return channel, nil
+				if mailboxes == nil {
+					keys, err := mailboxKeys(ctx, tx, workspaceID)
+					if err != nil {
+						return nil, err
+					}
+					mailboxes = map[string]*channels.Channel{}
+					for key, id := range keys {
+						if channel := byID[id]; channel != nil && channel.Live() {
+							mailboxes[key] = channel
+						}
+					}
 				}
-				channel, err := s.channelOfMailbox(ctx, tx, workspaceID, addresses)
-				mailboxes[key] = channel
-				return channel, err
+				for _, address := range addresses {
+					if channel := mailboxes[email.MailboxKey(address)]; channel != nil {
+						return channel, nil
+					}
+				}
+				return nil, nil
 			},
 		})
 		if err != nil {
@@ -662,4 +675,24 @@ func (s *Store) CountChannelSentSince(ctx context.Context, workspaceID string, k
 			workspaceID, string(kind), since).Scan(&count)
 		return count, err
 	})
+}
+
+// mailboxKeys maps the mailbox of each email channel of the workspace to the channel.
+func mailboxKeys(ctx context.Context, tx pgx.Tx, workspaceID string) (map[string]string, error) {
+	rows, err := tx.Query(ctx, `SELECT mailbox_key,channel_id::text FROM email_channels WHERE workspace_id=$1`, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("read the mailboxes: %w", err)
+	}
+	keys, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) ([2]string, error) {
+		var pair [2]string
+		return pair, row.Scan(&pair[0], &pair[1])
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read the mailboxes: %w", err)
+	}
+	byKey := make(map[string]string, len(keys))
+	for _, pair := range keys {
+		byKey[pair[0]] = pair[1]
+	}
+	return byKey, nil
 }
