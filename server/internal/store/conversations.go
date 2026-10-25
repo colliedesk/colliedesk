@@ -328,7 +328,7 @@ func conversationConditions(workspaceID string, filter ConversationFilter, now t
 	}
 	if len(filter.ChannelIDs) > 0 {
 		ids := q.arg(filter.ChannelIDs)
-		q.and("(c.channel_id::text=ANY(" + ids + "::text[]) OR c.reply_channel_id::text=ANY(" + ids + "::text[]))")
+		q.and("(c.channel_id=ANY(" + ids + "::uuid[]) OR c.reply_channel_id=ANY(" + ids + "::uuid[]))")
 	}
 	if len(filter.Channels) > 0 {
 		q.and("c.channel=ANY(" + q.arg(filter.Channels) + "::text[])")
