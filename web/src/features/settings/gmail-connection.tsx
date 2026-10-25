@@ -74,8 +74,14 @@ function returnText(returned: MailboxReturn): string {
 // useCloud tells Colliedesk Cloud the way the server tells it (realm in problem-report-text.go): the realm
 // analytics name, else cloud sign-in with billing. Read here, in this chunk, so the main bundle does not grow.
 function useCloud() {
+  return useRealm() === 'cloud';
+}
+
+// useRealm is 'cloud', 'self-hosted', or undefined while the public config is on its way.
+function useRealm(): 'cloud' | 'self-hosted' | undefined {
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
-  return (config?.product_analytics.realm ?? (config?.cloud_sign_in.enabled && config.billing.enabled ? 'cloud' : null)) === 'cloud';
+  if (!config) return undefined;
+  return (config.product_analytics.realm ?? (config.cloud_sign_in.enabled && config.billing.enabled ? 'cloud' : null)) === 'cloud' ? 'cloud' : 'self-hosted';
 }
 
 // GmailDataDisclosure says, before an admin goes to Google's consent page, how Colliedesk Cloud handles Google
@@ -125,7 +131,11 @@ interface MailboxConnectionProps {
 // see which account sends and whether it still works, reconnect, switch, disconnect. A channel has one
 // connection. A failed connection is an alert: replies stop until an admin reconnects, and they never leave
 // another way.
-export function MailboxConnection({ gmail, microsoft, supportAddress, timezone, canManage, onConnect, onDisconnect, connectPending, error, returned }: MailboxConnectionProps) {
+export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportAddress, timezone, canManage, onConnect, onDisconnect, connectPending, error, returned }: MailboxConnectionProps) {
+  // Microsoft 365 the server has not set up is only the operator's business: on Colliedesk Cloud (and until
+  // the page knows where it runs) it is left out, with nothing to name; a self-hosted admin sees what to set.
+  const realm = useRealm();
+  const microsoft = offeredMicrosoft && (offeredMicrosoft.available || offeredMicrosoft.connection || realm === 'self-hosted') ? offeredMicrosoft : undefined;
   const connection: Connection | null = gmail.connection ?? microsoft?.connection ?? null;
   const active: MailboxProvider | undefined = connection ? (connection.provider === 'microsoft' ? 'microsoft' : 'google') : undefined;
   const settings = active === 'microsoft' ? microsoft! : gmail;

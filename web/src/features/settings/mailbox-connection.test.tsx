@@ -211,3 +211,18 @@ test('the approver of an agent\'s request to connect Microsoft 365 reads that a 
   render(<MicrosoftRequestNote />);
   expect(screen.getByText('Approving opens Microsoft\'s sign-in page. A work account may need its Microsoft 365 admin\'s approval first.')).toBeInTheDocument();
 });
+
+test('on Colliedesk Cloud a server without Microsoft settings leaves Microsoft 365 out, with no settings to name', () => {
+  const missing = { ...microsoft, available: false, admin_consent_url: null, missing_settings: ['MICROSOFT_OAUTH_CLIENT_ID' as const, 'MICROSOFT_OAUTH_CLIENT_SECRET' as const] };
+  render(block({ microsoft: missing }), cloud);
+  expect(screen.queryByText(/Microsoft 365/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/MICROSOFT_OAUTH/)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeInTheDocument();
+});
+
+test('a self-hosted admin still sees what the server lacks for Microsoft 365', () => {
+  const missing = { ...microsoft, available: false, admin_consent_url: null, missing_settings: ['MICROSOFT_OAUTH_CLIENT_ID' as const] };
+  render(block({ microsoft: missing }));
+  expect(screen.getByText('Microsoft 365 is not set up on this server')).toBeInTheDocument();
+  expect(screen.getByText(/MICROSOFT_OAUTH_CLIENT_ID/)).toBeInTheDocument();
+});
