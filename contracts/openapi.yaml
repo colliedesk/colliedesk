@@ -988,6 +988,36 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/{id}/email/microsoft:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: connectMicrosoftByID
+      x-permission: access:write
+      description: >-
+        `POST /api/v1/channels/email/microsoft` for one email channel: its replies, and only its, are then
+        sent through that Microsoft 365 or Outlook.com mailbox. The consent finishes at the same callback,
+        which returns to this channel's settings.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200': {$ref: '#/components/responses/ConsentLink'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: disconnectMicrosoftByID
+      x-permission: access:write
+      description: >-
+        `DELETE /api/v1/channels/email/microsoft` for one email channel. A locked workspace may disconnect.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '204': {description: Microsoft 365 disconnected}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email:
     get:
       operationId: getEmailChannel
@@ -1160,6 +1190,105 @@ paths:
           description: Back to the settings page, which explains the outcome.
           headers:
             Location: {schema: {type: string}, description: 'The channel settings path with ?tab=replies&gmail=connected or &gmail_error=<reason>.'}
+  /api/v1/channels/email/microsoft:
+    post:
+      operationId: connectMicrosoft
+      x-permission: access:write
+      description: >-
+        Start connecting a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to the default
+        email channel, so its replies are sent through Microsoft Graph from that address and kept in its Sent
+        Items. Incoming mail still arrives by forwarding. Answers Microsoft's sign-in address (`url`), valid
+        for 10 minutes, for the person who asked to open in their browser; Microsoft then sends that browser
+        to `GET /api/v1/channels/email/microsoft/callback`, which finishes only for the same signed-in person.
+        Microsoft is asked for `Mail.Send`, `User.Read`, `offline_access` and `openid`, and nothing that reads
+        mail. The mailbox must be the channel's support address, and one account sends for one email channel
+        of a workspace (the callback says otherwise). Connecting replaces the channel's earlier connection,
+        Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need
+        its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel
+        settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when
+        the server lacks its Microsoft settings (`microsoft.missing_settings` names them). An agent token
+        gets an agent request; the person who approves receives the sign-in address.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200': {$ref: '#/components/responses/ConsentLink'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: disconnectMicrosoft
+      x-permission: access:write
+      description: >-
+        Disconnect Microsoft 365: the grant is deleted here. Microsoft has no API that revokes one app's grant,
+        so Colliedesk stays listed in the account's apps until the person removes it there (My Apps for a
+        work or school account, account.live.com/consent/Manage for a personal one); the deleted token is
+        useless without this server's client secret. Replies are then sent the way the workspace sent before
+        connecting (SMTP); a reply still queued for Microsoft 365 fails with the reason and can be retried. A
+        locked workspace may disconnect. 404 when the channel has no Microsoft 365 connection.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '204': {description: Microsoft 365 disconnected}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email/microsoft/callback:
+    get:
+      operationId: finishMicrosoftConnect
+      security: []
+      x-permission: public
+      summary: Microsoft's redirect after the sign-in and consent pages
+      description: >-
+        Opened by the browser Microsoft redirects, never by an API client. It needs the session cookie of the
+        admin who started the connection (a bearer token is not accepted) and the unused `state` of that
+        start, started for Microsoft 365; the state is looked up in that person's workspace only. Every
+        outcome is a 303 to the Replies tab of the email channel the consent was for
+        (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known):
+        `?tab=replies&microsoft=connected`, or `?tab=replies&microsoft_error=<reason>` with `signed_out`,
+        `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another
+        workspace or provider, or older than 10 minutes), `wrong_person`, `denied` (cancelled at Microsoft,
+        or the organization needs an admin's approval), `send_not_granted`, `no_refresh_token`,
+        `mailbox_unavailable` (the account has no Exchange Online mailbox), `address_mismatch` (the mailbox is
+        not the channel's support address; aliases and shared mailboxes are not supported yet),
+        `account_in_use` (named by `&microsoft_channel=<id>`), `email_channel_missing`,
+        `server_misconfigured` (Microsoft refused this server's client secret) and `microsoft_unavailable`.
+        Microsoft's own error text is never echoed.
+      parameters:
+        - {name: code, in: query, required: false, schema: {type: string}}
+        - {name: state, in: query, required: false, schema: {type: string}}
+        - {name: error, in: query, required: false, schema: {type: string}}
+      responses:
+        '303':
+          description: Back to the settings page, which explains the outcome.
+          headers:
+            Location: {schema: {type: string}, description: 'The channel settings path with ?tab=replies&microsoft=connected or &microsoft_error=<reason>.'}
+  /api/v1/channels/email/microsoft/admin-consent:
+    get:
+      operationId: finishMicrosoftAdminConsent
+      security: []
+      x-permission: public
+      summary: Microsoft's redirect after an organization's admin approved Colliedesk
+      description: >-
+        Opened by the browser of the organization's admin, who often has no Colliedesk session. Microsoft
+        answers `admin_consent=True` (or `error`) and a `tenant` that is not trusted for anything; there is no
+        code and nothing is stored. With a Colliedesk session it is a 303 to the Replies tab of the email
+        channel named by `state` (when it is one of the session's workspace) with `?microsoft=admin_consent_done`
+        or `?microsoft_error=admin_consent_failed`; without one it is a short page telling the admin to ask
+        their Colliedesk admin to select Connect Microsoft 365 again.
+      parameters:
+        - {name: admin_consent, in: query, required: false, schema: {type: string}}
+        - {name: state, in: query, required: false, schema: {type: string}}
+        - {name: error, in: query, required: false, schema: {type: string}}
+      responses:
+        '303':
+          description: Back to the settings page of the signed-in person.
+          headers:
+            Location: {schema: {type: string}, description: 'The channel settings path with ?tab=replies&microsoft=admin_consent_done or &microsoft_error=admin_consent_failed.'}
+        '200':
+          description: A page for an admin without a Colliedesk session.
+          content:
+            text/html:
+              schema: {type: string}
   /api/v1/channels/email/inbound:
     post:
       operationId: receiveInboundEmail
@@ -6945,9 +7074,10 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail]
+      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail, microsoft]
       properties:
         gmail: {$ref: '#/components/schemas/GmailSettings'}
+        microsoft: {$ref: '#/components/schemas/MicrosoftSettings'}
         sending_pause:
           description: >
             Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and
@@ -6977,8 +7107,9 @@ components:
         sending_from:
           type: [string, 'null']
           description: >-
-            The From address replies use now; null when replies cannot be emailed. With Gmail connected it is the
-            Gmail address, and null while that connection has failed (replies never fall back to SMTP then).
+            The From address replies use now; null when replies cannot be emailed. With a mailbox connected (Gmail
+            or Microsoft 365) it is that address, and null while that connection has failed (replies never fall back
+            to SMTP then).
         channel:
           oneOf:
             - {type: 'null'}
@@ -7001,6 +7132,7 @@ components:
           format: uri
           description: The redirect URI to register on the OAuth client in Google Cloud console.
         connection:
+          description: The channel's Gmail connection; null when it has none (or sends through Microsoft 365).
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/MailboxConnection'}
@@ -7009,17 +7141,68 @@ components:
           description: >-
             Only with a connection: whether its account is the channel's support address mailbox. A connection
             made before Gmail had to match keeps sending; connect it again with the support address to fix it.
+    MicrosoftSettings:
+      type: object
+      required: [available, missing_settings, redirect_uri, admin_consent_redirect_uri, admin_consent_url, large_attachment_bytes, server_credentials_refused, connection]
+      properties:
+        available:
+          type: boolean
+          description: Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys).
+        missing_settings:
+          type: array
+          items: {type: string, enum: [MICROSOFT_OAUTH_CLIENT_ID, MICROSOFT_OAUTH_CLIENT_SECRET, MAILBOX_TOKEN_KEYS]}
+          description: The server settings still needed before Microsoft 365 can be connected; empty when available.
+        redirect_uri:
+          type: string
+          format: uri
+          description: The Web redirect URI to register on the app in Microsoft Entra.
+        admin_consent_redirect_uri:
+          type: string
+          format: uri
+          description: The second redirect URI to register, where an organization's admin returns after approving Colliedesk.
+        admin_consent_url:
+          type: [string, 'null']
+          format: uri
+          description: >-
+            The address to send an organization's Microsoft 365 admin when Microsoft says the person needs an
+            admin's approval; after the admin approves, the person connects again. Null when Microsoft 365 is not
+            available or the server accepts personal accounts only.
+        large_attachment_bytes:
+          type: integer
+          description: >-
+            From this total size of files the web app warns that Microsoft may refuse the reply. Microsoft
+            documents no limit for sending; a refused reply fails with the reason and keeps its files.
+        server_credentials_refused:
+          type: boolean
+          description: >-
+            True while a reply of this channel waits because Microsoft refused this server's own app credentials
+            (MICROSOFT_OAUTH_CLIENT_SECRET wrong or expired). The connection is fine; the operator must update the
+            secret, and reconnecting does not help.
+        connection:
+          description: The channel's Microsoft 365 connection; null when it has none (or sends through Gmail).
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MailboxConnection'}
+        address_matches:
+          type: boolean
+          description: 'Only with a connection: whether its mailbox is the channel''s support address.'
     MailboxConnection:
       type: object
       required: [provider, address, status, error_code, error, failed_at, connected_at]
       properties:
-        provider: {type: string, enum: [google]}
-        address: {type: string, format: email, description: The Google account replies are sent from.}
+        provider: {type: string, enum: [google, microsoft]}
+        address: {type: string, format: email, description: The mailbox replies are sent from.}
         status:
           type: string
           enum: [connected, failed]
-          description: '`failed` when Google stopped honouring the grant: replies fail with `error` until an admin reconnects.'
-        error_code: {type: [string, 'null'], enum: [revoked, permission, null], description: 'revoked: Google refuses the grant. permission: Gmail refuses to send for it.'}
+          description: '`failed` when the provider stopped honouring the grant: replies fail with `error` until an admin reconnects.'
+        error_code:
+          type: [string, 'null']
+          enum: [revoked, permission, mailbox_unavailable, null]
+          description: >-
+            revoked: the provider refuses the grant (access removed, expired, password reset, a sign-in policy).
+            permission: the provider refuses to send for it. mailbox_unavailable: the Microsoft account has no
+            Exchange Online mailbox any more.
         error: {type: [string, 'null']}
         failed_at: {type: [string, 'null'], format: date-time}
         connected_at: {type: string, format: date-time}
@@ -7038,7 +7221,7 @@ components:
           type: [string, 'null']
           description: >-
             Why a channel needs attention, a fixed code the web app explains: email `sending_paused`,
-            `cannot_send`, `gmail_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`.
+            `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`.
         message: {type: [string, 'null']}
     Channel:
       type: object

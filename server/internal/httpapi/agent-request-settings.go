@@ -257,6 +257,8 @@ var channelRequestActions = map[string]string{
 	"POST /api/v1/channels/{id}/email/domain-verification": "Check the DNS record of the domain of the channel",
 	"POST " + channelGmailPath:                             "Connect Gmail to the channel",
 	"DELETE " + channelGmailPath:                           "Disconnect Gmail from the channel",
+	"POST " + channelMicrosoftPath:                         "Connect Microsoft 365 to the channel",
+	"DELETE " + channelMicrosoftPath:                       "Disconnect Microsoft 365 from the channel",
 }
 
 // channelLabel names a channel of the workspace for a person: its name and what it is (an email

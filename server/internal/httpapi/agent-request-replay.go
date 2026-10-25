@@ -39,6 +39,8 @@ var withheldResults = map[string]bool{
 	"POST " + gmailPath:                       true,
 	"POST /api/v1/channels/{id}/email/secret": true,
 	"POST " + channelGmailPath:                true,
+	"POST " + microsoftPath:                   true,
+	"POST " + channelMicrosoftPath:            true,
 	"GET /api/v1/export":                      true,
 	"POST /api/v1/export/link":                true,
 	"POST /api/v1/billing/checkout":           true,

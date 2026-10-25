@@ -50,6 +50,12 @@ const withChannel = {
   inbound_url: 'https://desk.example.com/x', smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
   from_policy: 'any', sending_from: 'support@example.com', hosted_address: null, domain_verification: 'txt', sending_pause: null,
   gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null },
+  microsoft: {
+    available: false, missing_settings: ['MICROSOFT_OAUTH_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_SECRET'],
+    redirect_uri: 'https://desk.example.com/api/v1/channels/email/microsoft/callback',
+    admin_consent_redirect_uri: 'https://desk.example.com/api/v1/channels/email/microsoft/admin-consent',
+    admin_consent_url: null, large_attachment_bytes: 3145728, server_credentials_refused: false, connection: null,
+  },
 };
 const webFormConfig = { enabled: true, allowed_origins: ['https://example.com'], submit_path: '/api/v1/public/forms/beta-desk' };
 

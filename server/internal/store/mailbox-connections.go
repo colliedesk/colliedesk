@@ -30,6 +30,9 @@ type SealedGrant struct {
 	Address string
 	// Provider is who issued the grant (domain.MailboxGoogle); it chooses how it is opened and revoked.
 	Provider string
+	// AccountID is the provider's own id of the account (Microsoft: the user's object id), stored when the
+	// grant is saved; empty when the provider names none.
+	AccountID string
 }
 
 // OAuthState is a consent in flight: the state the provider sends back, the PKCE verifier and the
@@ -167,12 +170,12 @@ func (s *Store) SaveMailboxConnection(ctx context.Context, workspaceID, channelI
 		case !errors.Is(err, pgx.ErrNoRows):
 			return result, err
 		}
-		result.connection, err = scanMailbox(tx.QueryRow(ctx, `INSERT INTO mailbox_connections(workspace_id,provider,address,scopes,token_key_id,refresh_token_sealed,connected_by_agent_id,connected_at,updated_at,channel_id)
-			VALUES($1,$9,lower($2),$3,$4,$5,NULLIF($6,'')::uuid,$7,$7,$8::uuid)
-			ON CONFLICT(channel_id) DO UPDATE SET provider=EXCLUDED.provider,address=EXCLUDED.address,scopes=EXCLUDED.scopes,token_key_id=EXCLUDED.token_key_id,
+		result.connection, err = scanMailbox(tx.QueryRow(ctx, `INSERT INTO mailbox_connections(workspace_id,provider,address,scopes,token_key_id,refresh_token_sealed,connected_by_agent_id,connected_at,updated_at,channel_id,account_id)
+			VALUES($1,$9,lower($2),$3,$4,$5,NULLIF($6,'')::uuid,$7,$7,$8::uuid,NULLIF($10,''))
+			ON CONFLICT(channel_id) DO UPDATE SET provider=EXCLUDED.provider,address=EXCLUDED.address,scopes=EXCLUDED.scopes,token_key_id=EXCLUDED.token_key_id,account_id=EXCLUDED.account_id,
 				refresh_token_sealed=EXCLUDED.refresh_token_sealed,status='connected',error_code=NULL,failed_at=NULL,
 				connected_by_agent_id=EXCLUDED.connected_by_agent_id,connected_at=EXCLUDED.connected_at,updated_at=EXCLUDED.updated_at
-			RETURNING `+mailboxColumns, workspaceID, address, scopes, grant.KeyID, grant.Sealed, agentID, now, channelID, grant.Provider))
+			RETURNING `+mailboxColumns, workspaceID, address, scopes, grant.KeyID, grant.Sealed, agentID, now, channelID, grant.Provider, grant.AccountID))
 		return result, err
 	})
 	var pgErr *pgconn.PgError
@@ -253,6 +256,44 @@ func (s *Store) MailboxAddressHeldElsewhere(ctx context.Context, channelID, prov
 		return false, fmt.Errorf("check shared mailbox grant: %w", err)
 	}
 	return held, nil
+}
+
+// MailboxWaitsForServer reports whether a reply of the channel waits because the provider refused this
+// server's own app credentials (domain.MailboxServerConfigCode): the connection is fine, the operator
+// must fix the server.
+func (s *Store) MailboxWaitsForServer(ctx context.Context, workspaceID, channelID string) (bool, error) {
+	waits, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		var waits bool
+		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM channel_outbox WHERE workspace_id=$1 AND channel_id::text=$2 AND status='queued' AND last_error_code=$3)`,
+			workspaceID, channelID, domain.MailboxServerConfigCode).Scan(&waits)
+		return waits, err
+	})
+	if err != nil {
+		return false, fmt.Errorf("check replies waiting for the server: %w", err)
+	}
+	return waits, nil
+}
+
+// MailboxRef names one channel's mailbox connection.
+type MailboxRef struct{ WorkspaceID, ChannelID string }
+
+// MailboxesToKeepAlive lists, in every workspace, up to limit connected mailboxes of the provider whose
+// grant was last stored before the given time (a send stores the rotated grant), oldest first.
+func (s *Store) MailboxesToKeepAlive(ctx context.Context, provider string, before time.Time, limit int) ([]MailboxRef, error) {
+	var due []MailboxRef
+	err := s.db.Privileged(ctx, database.PrivilegeMailboxKeepAlive, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text,channel_id::text FROM mailbox_connections
+			WHERE provider=$1 AND status='connected' AND updated_at<$2 ORDER BY updated_at LIMIT $3`, provider, before, limit)
+		if err != nil {
+			return err
+		}
+		due, err = pgx.CollectRows(rows, pgx.RowToStructByPos[MailboxRef])
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list mailboxes to keep alive: %w", err)
+	}
+	return due, nil
 }
 
 // MarkMailboxFailed records why the connection stopped working, only while it still holds the grant the

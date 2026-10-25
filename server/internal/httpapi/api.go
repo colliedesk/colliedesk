@@ -25,6 +25,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -53,6 +54,9 @@ type Config struct {
 	// Google is the operator's OAuth client for connecting Gmail; with a setting missing, Gmail cannot be
 	// connected and the settings name what is missing.
 	Google google.Config
+	// Microsoft is the operator's app registration for connecting Microsoft 365; with a setting missing,
+	// Microsoft 365 cannot be connected and the settings name what is missing. It seals with Google.Keys.
+	Microsoft microsoft.Config
 	// ImportKeys holds the Freshdesk keys of in-app imports; the worker of the process shares it. Nil
 	// makes one from Google.Keys (tests).
 	ImportKeys *importjobs.Keys
@@ -216,6 +220,7 @@ func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refre
 func Outbound(config Config) store.OutboundPolicy {
 	return store.OutboundPolicy{
 		GmailEnabled:          config.Google.Enabled(),
+		MicrosoftEnabled:      config.Microsoft.Enabled(),
 		Enabled:               config.Email.SMTP.Configured(),
 		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
 		FallbackDomain:        config.Email.MailFromDomain,
@@ -223,7 +228,7 @@ func Outbound(config Config) store.OutboundPolicy {
 }
 
 // Channels is the registry of channel types a configuration runs. revoke, when given, revokes the
-// Gmail grant of a removed email channel at Google.
+// mailbox grant of a removed email channel at its provider.
 func Channels(config Config, outbound store.OutboundPolicy, revoke ...func(*store.SealedGrant, string, string)) *channels.Registry {
 	email := channelemail.Config{TrustedAuthServID: config.Email.TrustedAuthServID,
 		HostedMailDomain: config.Email.HostedMailDomain, PlatformForwarding: config.Email.PlatformInboundSecret != "",
@@ -497,6 +502,13 @@ func Routes() []Route {
 		{http.MethodPost, channelGmailPath, auth.PermissionAccessWrite},
 		{http.MethodDelete, channelGmailPath, auth.PermissionAccessWrite},
 		{http.MethodPost, webFormChannelPattern, auth.PermissionPublic},
+		// Microsoft 365, beside Gmail: the default email channel, the callbacks, then one channel of several.
+		{http.MethodPost, microsoftPath, auth.PermissionAccessWrite},
+		{http.MethodDelete, microsoftPath, auth.PermissionAccessWrite},
+		{http.MethodGet, microsoftCallbackPath, auth.PermissionPublic},
+		{http.MethodGet, microsoftAdminConsentPath, auth.PermissionPublic},
+		{http.MethodPost, channelMicrosoftPath, auth.PermissionAccessWrite},
+		{http.MethodDelete, channelMicrosoftPath, auth.PermissionAccessWrite},
 	}
 }
 

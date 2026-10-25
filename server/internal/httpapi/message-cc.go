@@ -45,7 +45,7 @@ func (a *API) cleanCC(ctx context.Context, workspaceID, kind string, raw []strin
 			return nil, a.invalidCC("A reply cannot be copied to this workspace's own support or forwarding address.")
 		}
 		if slices.ContainsFunc(gmail, func(sender string) bool { return email.SameMailbox(address, sender) }) {
-			return nil, a.invalidCC("A reply cannot be copied to the Gmail address it is sent from.")
+			return nil, a.invalidCC("A reply cannot be copied to the mailbox address it is sent from.")
 		}
 		if !seen[address] {
 			seen[address] = true

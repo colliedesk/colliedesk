@@ -43,6 +43,8 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listChannels, a.createChannel, a.listChannelEvents, a.getChannel, a.updateChannel, a.removeChannel, a.setChannelCredential, a.checkChannel,
 		a.replayHeldChannelMessages, a.discardHeldChannelMessages,
 		a.getEmailChannel, a.verifyEmailDomain, a.rotateEmailSecret, a.connectGmail, a.disconnectGmail, a.submitWebForm,
+		a.connectMicrosoft, a.disconnectMicrosoft, a.finishMicrosoftConnect, a.finishMicrosoftAdminConsent,
+		a.connectMicrosoft, a.disconnectMicrosoft,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

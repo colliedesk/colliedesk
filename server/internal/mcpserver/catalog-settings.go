@@ -35,7 +35,12 @@ const (
 		`"smtp_configured":{"type":"boolean"},"sending_from":{"type":["string","null"]},` +
 		`"gmail":{"type":"object","description":"Gmail connected for sending: replies go out from address through Gmail. status failed means replies fail until a person reconnects (colliedesk_gmail_connect_request).",` +
 		`"required":["available","connected"],"properties":{"available":{"type":"boolean","description":"Whether this server can connect Gmail."},"connected":{"type":"boolean"},` +
-		`"address":{"type":"string"},"status":{"type":"string","enum":["connected","failed"]},"error":{"type":["string","null"]}}}}}`
+		`"address":{"type":"string"},"status":{"type":"string","enum":["connected","failed"]},"error":{"type":["string","null"]}}},` +
+		`"microsoft":{"type":"object","description":"Microsoft 365 connected for sending: replies go out from address through Microsoft. A channel has one mailbox connection, Gmail or Microsoft 365. status failed means replies fail until a person reconnects (colliedesk_microsoft_connect_request); server_credentials_refused means replies wait for the server's administrator and reconnecting does not help.",` +
+		`"required":["available","connected"],"properties":{"available":{"type":"boolean","description":"Whether this server can connect Microsoft 365."},"connected":{"type":"boolean"},` +
+		`"address":{"type":"string"},"status":{"type":"string","enum":["connected","failed"]},"error":{"type":["string","null"]},` +
+		`"admin_consent_url":{"type":["string","null"],"description":"Where an organization's Microsoft 365 admin approves Colliedesk when a person's sign-in needs it; give it to a person, never open it."},` +
+		`"server_credentials_refused":{"type":"boolean"}}}}}`
 )
 
 func workspaceSettingsGetSpec() Spec {

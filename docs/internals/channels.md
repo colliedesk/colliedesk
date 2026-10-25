@@ -80,9 +80,12 @@ its own change.
   address: `support` for the workspace's first, the support address's local part for later ones.
 - **Verification belongs to the domain** (`email_domains`, keyed by workspace and domain): mailboxes on
   one domain share it, and a domain row goes when its last mailbox does (`releaseUnusedDomain`).
-- **Gmail per channel.** A new connection must be the channel's support address (`address_mismatch`)
-  and an account sends for one channel (`account_in_use`). A connection made before that rule keeps
-  sending and reads `address_matches: false`.
+- **A mailbox per channel.** A channel has one mailbox connection, Gmail or Microsoft 365
+  (`mailbox_connections.provider`); connecting the other provider replaces it. A new connection must be the
+  channel's support address (`address_mismatch`) and an account sends for one channel of a workspace at any
+  provider (`account_in_use`). A connection made before that rule keeps sending and reads
+  `address_matches: false`. A consent state belongs to its provider (`TakeOAuthState` filters by it), and a
+  disconnect removes only that provider's connection ([email](email.md#sending-through-microsoft-365-issue-95-step-1)).
 - **Where a reply leaves** is one rule (`routeReply`): the conversation's own channel when its type
   sends (removed: a `SharedIdentity` type answers through its default); else the channel the replies
   are pinned to (`conversations.reply_channel_id`; removed: the default stands in, `replies_via.instead_of`
@@ -93,7 +96,7 @@ its own change.
 - **The web form's older address** (`/public/forms/<slug>`) belongs to the form with `legacy_slug`,
   set on the workspace's first form; every form also answers `/public/web-forms/<id>`.
 - **Removing** is a soft delete: the row keeps its name for old conversations; settings and secrets go.
-- **A server without SMTP and Gmail** leaves email replies to a server that can send them and sends
+- **A server without SMTP, Gmail and Microsoft 365** leaves email replies to a server that can send them and sends
   every other type's (`outbox.Options.Skip`).
 
 ## Rollback is the backup

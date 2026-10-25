@@ -1,5 +1,5 @@
 // Package emailoutbox is the email channel's sender: it sends queued replies through SMTP, or through
-// the workspace's connected Gmail account. The shared outbox worker (channels/outbox) claims, retries
+// the channel's connected mailbox (Gmail, Microsoft 365). The shared outbox worker (channels/outbox) claims, retries
 // and backs off; Worker runs it with this sender, for the server and the tests of email delivery.
 package emailoutbox
 
@@ -22,6 +22,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/google"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
@@ -59,6 +60,8 @@ type Options struct {
 	HourlyLimit int
 	// Google sends the replies of workspaces that connected Gmail; nil fails them with the reason.
 	Google *google.Config
+	// Microsoft sends the replies of channels that connected Microsoft 365; nil fails them with the reason.
+	Microsoft *microsoft.Config
 }
 
 // Worker drains the email outbox.
@@ -68,7 +71,8 @@ type Worker struct {
 	options Options
 }
 
-// New builds a worker over the store and sender. A nil sender (no SMTP relay) still sends through Gmail.
+// New builds a worker over the store and sender. A nil sender (no SMTP relay) still sends through a
+// connected mailbox.
 func New(st *store.Store, sender Sender, options Options) *Worker {
 	if options.Now == nil {
 		options.Now = func() time.Time { return time.Now().UTC() }
@@ -124,7 +128,7 @@ func (w *Worker) Prepare(ctx context.Context, tx pgx.Tx, request channels.Prepar
 	return host.PrepareEmailReply(ctx, tx, request)
 }
 
-// Send sends one claimed reply through SMTP or Gmail.
+// Send sends one claimed reply through SMTP or a connected mailbox.
 func (w *Worker) Send(ctx context.Context, out channels.Outbound, kit channels.SendKit) channels.SendResult {
 	sender := *w
 	if host, ok := kit.Host().(*store.Store); ok {

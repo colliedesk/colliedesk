@@ -12,6 +12,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -78,6 +79,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		config.ProblemReportWorkspace = "contract-support"
 		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
 		config.Google = google.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Keys: keys, Base: "http://127.0.0.1:1"}
+		config.Microsoft = microsoft.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Tenant: "common", Keys: keys, Base: "http://127.0.0.1:1"}
 		config.AI = fakeAIConfig(&aiprovider.Fake{})
 	})
 	createSession(t, api, service, "Contract Support", "support@contract-support.example.com")

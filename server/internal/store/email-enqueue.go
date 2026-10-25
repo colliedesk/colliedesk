@@ -25,6 +25,8 @@ type OutboundPolicy struct {
 	// GmailEnabled is whether this server has its Google settings; without them a stored Gmail connection
 	// cannot send, and its replies fail at once instead of waiting.
 	GmailEnabled bool
+	// MicrosoftEnabled is the same for Microsoft 365 and its Microsoft settings.
+	MicrosoftEnabled bool
 }
 
 // MailboxEnabled reports whether this server has the settings of the provider, so a mailbox connected
@@ -33,6 +35,8 @@ func (p OutboundPolicy) MailboxEnabled(provider string) bool {
 	switch provider {
 	case domain.MailboxGoogle:
 		return p.GmailEnabled
+	case domain.MailboxMicrosoft:
+		return p.MicrosoftEnabled
 	default:
 		return false
 	}

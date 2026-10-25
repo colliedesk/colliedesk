@@ -141,8 +141,8 @@ export const emailChannelSchema = z.object({
   dns_records: z.array(emailDnsRecordSchema), dns_records_expired_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'EmailChannel'>>;
 export const mailboxConnectionSchema = z.object({
-  provider: z.enum(['google']), address: z.string().email(), status: z.enum(['connected', 'failed']),
-  error_code: z.enum(['revoked', 'permission']).nullable(), error: z.string().nullable(),
+  provider: z.enum(['google', 'microsoft']), address: z.string().email(), status: z.enum(['connected', 'failed']),
+  error_code: z.enum(['revoked', 'permission', 'mailbox_unavailable']).nullable(), error: z.string().nullable(),
   failed_at: nullableDate, connected_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'MailboxConnection'>>;
 export const gmailSettingsSchema = z.object({
@@ -150,12 +150,19 @@ export const gmailSettingsSchema = z.object({
   missing_settings: z.array(z.enum(['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
   redirect_uri: z.string().url(), connection: mailboxConnectionSchema.nullable(), address_matches: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'GmailSettings'>>;
+export const microsoftSettingsSchema = z.object({
+  available: z.boolean(),
+  missing_settings: z.array(z.enum(['MICROSOFT_OAUTH_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
+  redirect_uri: z.string().url(), admin_consent_redirect_uri: z.string().url(), admin_consent_url: z.string().url().nullable(),
+  large_attachment_bytes: z.number().int().nonnegative(), server_credentials_refused: z.boolean(),
+  connection: mailboxConnectionSchema.nullable(), address_matches: z.boolean().optional(),
+}) satisfies z.ZodType<Generated<'MicrosoftSettings'>>;
 export const consentLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'connectGmail', 200>>;
 // How many live channels each type has: the inbox says which mailbox a reply leaves from once there are two.
 // The whole list and its schemas load with Settings, not with the inbox.
 export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number() })) });
 export const emailChannelSettingsSchema = z.object({
-  channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema,
+  channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema, microsoft: microsoftSettingsSchema,
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
   domain_verification: z.enum(['txt', 'provider']),
   sending_pause: z.object({ paused_at: z.string().datetime(), reason: z.string() }).nullable(),

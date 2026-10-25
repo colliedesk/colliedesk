@@ -273,3 +273,44 @@ naming `MAILBOX_TOKEN_KEYS`; the connection is kept, so fixing the keys is enoug
 
 A server with Gmail and no SMTP relay works for workspaces that connected Gmail; for the others,
 replies are marked **Delivery failed** until a relay is set.
+
+## Send replies through Microsoft 365
+
+An admin connects a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to an email channel
+in the [email channel settings](../user/email-channel.md). Colliedesk asks Microsoft only for permission to
+send email and to read the account's address (`Mail.Send`, `User.Read`, `offline_access`, `openid`); it
+cannot read the mailbox. Microsoft sending uses your own app registration in Microsoft Entra. Without
+these settings Colliedesk names what is missing and keeps sending through SMTP.
+
+1. In the [Microsoft Entra admin center](https://entra.microsoft.com), open **Entra ID** → **App
+   registrations** → **New registration**.
+   - **Supported account types:** for a server that only your organization uses, choose **Single tenant**
+     and set `MICROSOFT_OAUTH_TENANT` to your tenant id. A multi-tenant app whose publisher Microsoft has
+     not verified is often blocked in other organizations until their admin approves it, so single tenant
+     is the simple choice for self-hosting. Choose **Any Entra ID Tenant + Personal Microsoft accounts**
+     only to accept Outlook.com and other organizations too (keep `MICROSOFT_OAUTH_TENANT` at `common`).
+   - **Redirect URI:** platform **Web**, your `APP_ORIGIN` followed by
+     `/api/v1/channels/email/microsoft/callback`, for example
+     `https://desk.example.com/api/v1/channels/email/microsoft/callback`. Then, under **Authentication**,
+     add a second Web redirect URI ending in `/api/v1/channels/email/microsoft/admin-consent`, where an
+     organization's admin returns after approving Colliedesk. Both are shown in the channel settings.
+2. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**: `Mail.Send`,
+   `User.Read`, `offline_access`, `openid`. None needs admin consent; with a single-tenant app you may
+   still select **Grant admin consent** so nobody in your organization is asked.
+3. **Certificates & secrets** → **New client secret**. Microsoft allows at most 24 months and recommends
+   less than 12. Copy the **Value** at once (it is shown only once). Write down the date it expires: when it
+   expires, every Microsoft 365 channel stops sending at the same time. Replies then wait with a note naming
+   `MICROSOFT_OAUTH_CLIENT_SECRET` and the connections are kept, so setting a new secret is enough.
+4. Set these variables on the server and restart it:
+
+| Variable | Meaning |
+|---|---|
+| `MICROSOFT_OAUTH_CLIENT_ID` | **Application (client) ID** of the app registration. |
+| `MICROSOFT_OAUTH_CLIENT_SECRET` | The client secret's **Value**. |
+| `MICROSOFT_OAUTH_TENANT` | `common` (default: work, school and personal accounts), `organizations` (work and school only), `consumers` (personal only), or your tenant id or domain for a single-tenant app. |
+| `MAILBOX_TOKEN_KEYS` | The same key ring as Gmail: it encrypts the stored Microsoft access too. |
+
+Microsoft replaces the stored access every time it is used and drops it after 90 days unused, so the
+server renews a connection that sent nothing for a week. Microsoft has no way for Colliedesk to revoke its
+access: disconnecting deletes it from your server (it is useless without your client secret), and the
+person removes Colliedesk in their Microsoft account as the settings page explains.

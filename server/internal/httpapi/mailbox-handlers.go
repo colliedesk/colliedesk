@@ -21,8 +21,8 @@ const (
 	mailboxCallTimeout = 20 * time.Second
 )
 
-// mailboxProvider is what connecting an email channel's mailbox needs of its provider (Gmail). An email
-// channel has one mailbox connection: connecting through another provider replaces it.
+// mailboxProvider is what connecting an email channel's mailbox needs of its provider (Gmail, Microsoft
+// 365). An email channel has one mailbox connection: connecting through another provider replaces it.
 type mailboxProvider interface {
 	// name is the provider as stored (mailbox_connections.provider).
 	name() string
@@ -43,7 +43,7 @@ type mailboxProvider interface {
 	// authorizationURL is where the person's browser consents; hint is the address to sign in as.
 	authorizationURL(redirectURI, state, verifier, hint string) string
 	// exchange trades the code for a grant. A refusal the settings page explains is returned as its
-	// outcome code; err is anything else, and reads as unavailable.
+	// outcome code (with err when it is worth logging); err alone is anything else, and reads as unavailable.
 	exchange(ctx context.Context, code, verifier, redirectURI string) (grant mailboxGrant, refused string, err error)
 	// revokes reports whether the provider can revoke one grant; revoke does it.
 	revokes() bool
@@ -54,12 +54,14 @@ type mailboxProvider interface {
 type mailboxGrant struct {
 	RefreshToken string
 	Address      string
-	Scopes       []string
+	// AccountID is the provider's own id of the account, when it names one.
+	AccountID string
+	Scopes    []string
 }
 
 // mailboxProviders are the providers an email channel can connect, by name.
 func (a *API) mailboxProviders() map[string]mailboxProvider {
-	return map[string]mailboxProvider{a.gmail().name(): a.gmail()}
+	return map[string]mailboxProvider{a.gmail().name(): a.gmail(), a.microsoft().name(): a.microsoft()}
 }
 
 func (a *API) redirectURI(p mailboxProvider) string { return a.config.Origin + p.callbackPath() }
@@ -165,6 +167,9 @@ func (a *API) finishMailboxConsent(p mailboxProvider, request *http.Request, res
 	defer cancel()
 	grant, refused, err := p.exchange(ctx, query.Get("code"), started.Verifier, a.redirectURI(p))
 	if refused != "" {
+		if err != nil {
+			slog.Error("mailbox code exchange refused", "provider", p.name(), "outcome", refused, "error", err, "workspace", who.Workspace.ID)
+		}
 		return refused
 	}
 	if err != nil {
@@ -204,7 +209,7 @@ func (a *API) finishMailboxConsent(p mailboxProvider, request *http.Request, res
 		return p.unavailable()
 	}
 	_, replaced, err := a.store.SaveMailboxConnection(request.Context(), who.Workspace.ID, started.ChannelID, who.Agent.ID, grant.Address, strings.Join(grant.Scopes, " "),
-		store.SealedGrant{KeyID: keyID, Sealed: sealed, Provider: p.name()}, a.now())
+		store.SealedGrant{KeyID: keyID, Sealed: sealed, Provider: p.name(), AccountID: grant.AccountID}, a.now())
 	if errors.Is(err, store.ErrEmailChannelMissing) {
 		// No channel means no earlier connection of this workspace, so the new grant is only ours to drop.
 		a.revokeGrant(p, grant.RefreshToken, who.Workspace.ID)

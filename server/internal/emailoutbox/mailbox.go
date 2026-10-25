@@ -13,7 +13,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 )
 
-// mailboxProvider is what sending through a connected mailbox needs of its provider (Gmail).
+// mailboxProvider is what sending through a connected mailbox needs of its provider (Gmail, Microsoft 365).
 type mailboxProvider interface {
 	// configured reports whether this server has the provider's settings.
 	configured() bool
@@ -29,7 +29,7 @@ type mailboxProvider interface {
 // mailboxVerdict is what a provider's error means.
 type mailboxVerdict struct {
 	kind verdictKind
-	// code is the connection's error code of verdictBroken.
+	// code is the connection's error code of verdictBroken, or the delivery's code of verdictDefer.
 	code string
 	// until is when a verdictDefer reply is tried again.
 	until time.Time
@@ -57,6 +57,9 @@ func (w *Worker) mailboxes() map[string]mailboxProvider {
 	providers := map[string]mailboxProvider{}
 	if w.options.Google != nil {
 		providers[domain.MailboxGoogle] = gmailSender{config: *w.options.Google}
+	}
+	if w.options.Microsoft != nil {
+		providers[domain.MailboxMicrosoft] = microsoftSender{config: *w.options.Microsoft, now: w.options.Now}
 	}
 	return providers
 }
@@ -115,7 +118,12 @@ func (w *Worker) deliverMailbox(ctx context.Context, item store.Delivery, provid
 		w.options.Logger.Warn("mailbox delivery failed", "provider", provider, "workspace", item.WorkspaceID, "message", item.MessageID, "error", err)
 		return channels.Failed(truncate(reason))
 	case verdictDefer:
-		return channels.Defer(verdict.until, truncate(reason))
+		if verdict.code == domain.MailboxServerConfigCode {
+			w.options.Logger.Error("the mailbox provider refused this server's credentials", "provider", provider, "workspace", item.WorkspaceID, "error", err)
+		}
+		result := channels.Defer(verdict.until, truncate(reason))
+		result.Code = verdict.code
+		return result
 	default:
 		return w.retry(ctx, item, errors.New(reason))
 	}
@@ -145,7 +153,7 @@ func (w *Worker) sendThrough(ctx context.Context, sender mailboxProvider, item s
 // keepRotatedGrant stores a refresh token the provider replaced. Failing to store it only logs: the old
 // one keeps working until the provider says otherwise, which then shows as a broken connection.
 func (w *Worker) keepRotatedGrant(ctx context.Context, sender mailboxProvider, item store.Delivery, rotated string) {
-	if err := w.storeGrant(ctx, sender, item, []byte(rotated)); err != nil {
+	if err := w.storeGrant(ctx, sender, item.WorkspaceID, &item.Mailbox.Grant, []byte(rotated)); err != nil {
 		w.options.Logger.Warn("keep rotated mailbox grant", "provider", item.Mailbox.Grant.Provider, "workspace", item.WorkspaceID, "error", err)
 	}
 }
@@ -153,26 +161,26 @@ func (w *Worker) keepRotatedGrant(ctx context.Context, sender mailboxProvider, i
 // resealGrant seals a grant opened with an older key again with the first key, so the older key can be
 // removed from MAILBOX_TOKEN_KEYS. A failure only logs; the reply goes on with the grant it opened.
 func (w *Worker) resealGrant(ctx context.Context, sender mailboxProvider, item store.Delivery, refresh []byte) {
-	if err := w.storeGrant(ctx, sender, item, refresh); err != nil {
+	if err := w.storeGrant(ctx, sender, item.WorkspaceID, &item.Mailbox.Grant, refresh); err != nil {
 		w.options.Logger.Warn("seal mailbox grant with the current key", "provider", item.Mailbox.Grant.Provider, "workspace", item.WorkspaceID, "error", err)
 	}
 }
 
-// storeGrant seals the refresh token with the first key and replaces the grant this delivery holds. The
-// delivery then holds the new seal, so a failure recorded later in the same delivery matches the stored row.
-func (w *Worker) storeGrant(ctx context.Context, sender mailboxProvider, item store.Delivery, refresh []byte) error {
-	keyID, sealed, err := sender.keys().Seal(refresh, sender.grantContext(item.WorkspaceID))
+// storeGrant seals the refresh token with the first key and replaces the grant held (by a delivery or the
+// keep-alive). The holder then holds the new seal, so a failure recorded later matches the stored row.
+func (w *Worker) storeGrant(ctx context.Context, sender mailboxProvider, workspaceID string, held *store.SealedGrant, refresh []byte) error {
+	keyID, sealed, err := sender.keys().Seal(refresh, sender.grantContext(workspaceID))
 	if err != nil {
 		return err
 	}
-	replacement := store.SealedGrant{KeyID: keyID, Sealed: sealed, Address: item.Mailbox.Grant.Address, Provider: item.Mailbox.Grant.Provider}
-	replaced, err := w.store.ReplaceMailboxGrant(ctx, item.WorkspaceID, item.Mailbox.Grant, replacement, w.options.Now())
+	replacement := store.SealedGrant{KeyID: keyID, Sealed: sealed, Address: held.Address, Provider: held.Provider}
+	replaced, err := w.store.ReplaceMailboxGrant(ctx, workspaceID, *held, replacement, w.options.Now())
 	if err != nil {
 		return err
 	}
-	// Not replaced: a reconnect changed the row meanwhile, and this delivery keeps matching nothing.
+	// Not replaced: a reconnect changed the row meanwhile, and the holder keeps matching nothing.
 	if replaced {
-		item.Mailbox.Grant = replacement
+		*held = replacement
 	}
 	return nil
 }

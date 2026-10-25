@@ -149,6 +149,18 @@ func gmailDisconnectRequestSpec() Spec {
 		[]string{"DELETE /api/v1/channels/email/gmail", "DELETE /api/v1/channels/{id}/email/gmail"}, emailChannelInput, gmailDisconnectRequest)
 }
 
+func microsoftConnectRequestSpec() Spec {
+	return approvalSpec("colliedesk_microsoft_connect_request", "Ask a person to connect Microsoft 365 for sending",
+		`Ask an admin to connect a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to an email channel, so its replies are sent from that address through Microsoft and kept in its Sent Items (incoming mail still arrives by forwarding). The person who approves gets Microsoft's sign-in page and signs in there; you never see it. The mailbox must be the channel's support address; aliases and shared mailboxes are not supported yet. A work account may first need its organization's Microsoft 365 admin to approve Colliedesk (microsoft.admin_consent_url of colliedesk_email_channel_get). Connecting replaces the channel's Gmail or earlier Microsoft 365 connection. Needs the email channel and the server's Microsoft settings (see colliedesk_email_channel_get, microsoft). `+emailChannelChoice,
+		[]string{"POST /api/v1/channels/email/microsoft", "POST /api/v1/channels/{id}/email/microsoft"}, emailChannelInput, microsoftConnectRequest)
+}
+
+func microsoftDisconnectRequestSpec() Spec {
+	return approvalSpec("colliedesk_microsoft_disconnect_request", "Ask to disconnect Microsoft 365",
+		`Ask to disconnect the Microsoft 365 mailbox of an email channel: Colliedesk deletes its access, and its replies go out the way they did before Microsoft 365 was connected. Microsoft cannot be asked to revoke it, so Colliedesk stays listed in the account's apps until the person removes it there. A reply still waiting to be sent through Microsoft 365 fails and can be retried. `+emailChannelChoice,
+		[]string{"DELETE /api/v1/channels/email/microsoft", "DELETE /api/v1/channels/{id}/email/microsoft"}, emailChannelInput, microsoftDisconnectRequest)
+}
+
 func emailSecretRotateRequestSpec() Spec {
 	return approvalSpec("colliedesk_email_secret_rotate_request", "Ask to rotate the inbound email secret",
 		`Ask for a new inbound secret of an email channel, for example after the old one leaked; mail forwarded with it arrives on that channel. The person who approves sees the new secret once and updates the mail forwarder; it is never shown to you. `+emailChannelChoice,

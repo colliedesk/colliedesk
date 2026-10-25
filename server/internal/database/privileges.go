@@ -85,6 +85,10 @@ const (
 	// address, after a workspace dropped its own. Google revokes an account's whole grant to the project, so
 	// the grant is revoked only when no workspace holds it. Only a yes or no leaves the transaction.
 	PrivilegeMailboxGrantShared Privilege = "mailbox-grant-shared"
+	// PrivilegeMailboxKeepAlive lists, in every workspace, the connected mailboxes of a provider whose grant
+	// was not renewed for a week, so a quiet Microsoft 365 grant is refreshed before it expires unused. Only
+	// workspace and channel ids leave the transaction; each grant is read and renewed in its own workspace.
+	PrivilegeMailboxKeepAlive Privilege = "mailbox-keep-alive"
 	// PrivilegeAIJobClaim leases due AI tasks of every workspace for the AI worker; closes the usage rows
 	// a dead process left started; expires AI drafts and triage suggestions nobody decided on for a week and erases the text of
 	// drafts that ended 90 days ago. Only task ids, workspace ids and claim tokens leave the claim; each

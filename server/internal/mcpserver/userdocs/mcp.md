@@ -139,6 +139,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_email_secret_rotate_request` | Asks for a new inbound email secret; the approver sees it | `read` |
 | `colliedesk_gmail_connect_request` | Asks an admin to connect Gmail for sending replies; the approver gets Google's consent page | `read` |
 | `colliedesk_gmail_disconnect_request` | Asks to disconnect Gmail | `read` |
+| `colliedesk_microsoft_connect_request` | Asks an admin to connect Microsoft 365 for sending replies; the approver gets Microsoft's sign-in page | `read` |
+| `colliedesk_microsoft_disconnect_request` | Asks to disconnect Microsoft 365 | `read` |
 | `colliedesk_workspace_slug_change_request` | Asks to change the workspace address | `read` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |

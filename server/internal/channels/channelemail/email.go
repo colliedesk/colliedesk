@@ -186,6 +186,7 @@ const (
 	ReasonSendingPaused    = "sending_paused"
 	ReasonCannotSend       = "cannot_send"
 	ReasonGmailBroken      = "gmail_broken"
+	ReasonMicrosoftBroken  = "microsoft_broken"
 	ReasonDomainUnverified = "domain_unverified"
 	ReasonNoInboundSecret  = "no_inbound_secret"
 )
@@ -214,6 +215,8 @@ func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 	switch {
 	case paused:
 		return attention(ReasonSendingPaused)
+	case mailboxStatus != nil && *mailboxStatus == domain.MailboxFailed && *mailboxProvider == domain.MailboxMicrosoft:
+		return attention(ReasonMicrosoftBroken)
 	case mailboxStatus != nil && *mailboxStatus == domain.MailboxFailed:
 		return attention(ReasonGmailBroken)
 	case mailboxStatus != nil && !policy.MailboxEnabled(*mailboxProvider), mailboxStatus == nil && !policy.Enabled:
