@@ -259,8 +259,17 @@ func TestPastItsTimeTheRulesDecide(t *testing.T) {
 	// A batch behind a card of its lane waits in the queue right after it.
 	d.send(t, channeltest.LoopbackEvent{ID: "c-2", From: "c", Group: "g2", Text: "hello again"})
 	d.flush(t)
-	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "c")); got != "review/lane_blocked" {
+	behind := d.gatheringOf(t, "c")
+	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, behind); got != "review/lane_blocked" {
 		t.Fatalf("behind a card = %s", got)
+	}
+	// Once a person decided the card before it, it goes back to be decided.
+	first := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND review_reason='ai_unavailable'`)
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, first, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT state||'/'||(decide_by IS NOT NULL)::text FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, behind); got != "deciding/true" {
+		t.Fatalf("after the card before it = %s", got)
 	}
 }
 

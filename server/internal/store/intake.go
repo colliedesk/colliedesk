@@ -37,6 +37,31 @@ const (
 // DecideWithin is how long a gathering waits for AI before the rules' decision applies.
 const DecideWithin = 2 * time.Minute
 
+// autoMaxAge is how old a batch may be for AI to decide it by itself once the card before it in its
+// lane is decided.
+const autoMaxAge = 2 * time.Hour
+
+// unblockLane gives the next card of a lane that waited only for the one before it back to its decider,
+// once no other card of the lane waits for a person.
+func unblockLane(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID string, now time.Time) error {
+	tag, err := tx.Exec(ctx, `WITH lane AS (SELECT lane_key FROM intake_gatherings WHERE workspace_id=$1 AND id::text=$2),
+		next AS (SELECT g.id FROM intake_gatherings g, lane WHERE g.workspace_id=$1 AND g.lane_key=lane.lane_key AND g.state='review'
+			AND g.review_reason='lane_blocked' ORDER BY g.closed_at,g.id LIMIT 1)
+		UPDATE intake_gatherings SET state='deciding',review_reason=NULL,decide_by=$3,updated_at=$4
+		WHERE workspace_id=$1 AND id IN (SELECT id FROM next) AND closed_at>$5
+			AND NOT EXISTS(SELECT 1 FROM intake_gatherings o, lane WHERE o.workspace_id=$1 AND o.lane_key=lane.lane_key AND o.state='review'
+				AND o.review_reason<>'lane_blocked')`, workspaceID, gatheringID, now.Add(DecideWithin), now, now.Add(-autoMaxAge))
+	if err != nil {
+		return fmt.Errorf("unblock gathering lane: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		_, err = tx.Exec(ctx, `UPDATE channel_thread_items i SET disposition='gathering',disposition_reason='deciding' FROM intake_gatherings g
+			WHERE i.workspace_id=$1 AND g.workspace_id=i.workspace_id AND g.id=i.gathering_id AND g.state='deciding'
+			AND i.disposition='pending_review'`, workspaceID)
+	}
+	return err
+}
+
 // Intake levels a scope's intake is at (ai_level).
 const (
 	intakeOff     = "off"
@@ -250,6 +275,9 @@ func concludeGathering(ctx context.Context, tx pgx.Tx, workspaceID string, apply
 		WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, g.id, state, conversationID, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback); err != nil {
 		return fmt.Errorf("conclude gathering: %w", err)
 	}
+	if err := unblockLane(ctx, tx, workspaceID, g.id, now); err != nil {
+		return err
+	}
 	return recordIntakeDecision(ctx, tx, workspaceID, apply, g, now)
 }
 
@@ -307,6 +335,9 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 			if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='not_request',disposition_reason='ignored'
 				WHERE workspace_id=$1 AND gathering_id::text=$2`, workspaceID, id); err != nil {
 				return struct{}{}, fmt.Errorf("ignore gathering items: %w", err)
+			}
+			if err := unblockLane(ctx, tx, workspaceID, id, now); err != nil {
+				return struct{}{}, err
 			}
 		case rules.Review:
 			if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='review',review_reason=$3,decide_by=NULL,fallback=$4,updated_at=$5
