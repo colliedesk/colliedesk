@@ -85,9 +85,12 @@ A self-hosted server shows no such link: it sends through your own Google OAuth 
    **Retry delivery**, go out through it with the same threading headers, so customer answers join
    the same conversation.
 
-Connect the account of your support address. If you connect another one (for example
-`acme.help@gmail.com` while customers write to `support@example.com`), customers see that account as
-the sender, and their answers still go to the support address. Settings says so.
+Connect the account of your support address: a channel sends as its own address. Google bringing back
+another account (for example `acme.help@gmail.com` while customers write to `support@example.com`)
+connects nothing, and Settings says to sign in with the support address. An account another email
+channel of the workspace already sends through is refused too, with a link to that channel. A
+connection made before this rule with another account keeps sending; **Send from Gmail** warns that
+it does not match and suggests connecting the right one.
 
 **When Gmail stops working.** If the access is removed in the Google account, the password changes,
 or Google refuses to send, **Send from Gmail** turns into an alert with the reason. Replies are then
@@ -108,6 +111,40 @@ page. On Colliedesk Cloud the request card shows the same note on Google data fi
 
 On a server you run, Gmail sending needs your own Google OAuth client. See
 [send replies through Gmail](../self-host/email.md#send-replies-through-gmail).
+
+## Several mailboxes
+
+A workspace can have several email channels, one per support address: `support@example.com` and
+`billing@example.com`, or a second domain. Add one with **Settings → Channels → Add channel → Connect
+your support email**: give it a **Name** (left empty, it is called by its address) and its **Support
+address**. Two channels never share a mailbox: `support+billing@example.com` is the same mailbox as
+`support@example.com`, so it is refused, with a link to the channel that has it.
+
+Each mailbox has its own settings, on its own page:
+
+- **Forwarding.** On Colliedesk Cloud each mailbox has its own forwarding address: the first one is
+  `support@<workspace>.colliedesk.com`, a later one is named after its support address
+  (`billing@<workspace>.colliedesk.com`, with `-2` added when that is taken). Forward each mailbox to
+  its own forwarding address. On your own server each mailbox has its own inbound secret: give each
+  forwarder the secret of its mailbox. Mail that reaches a mailbox opens its conversation in that
+  channel.
+- **Sender name, Gmail and sending pause** belong to the mailbox.
+- **Domain verification belongs to the domain.** Two mailboxes on `example.com` share it: verify
+  once, and a later mailbox on the domain is verified at once. **Replies** says so.
+
+The **Workspace address name** sits on **Settings → Channels**, above the list: it is part of every
+mailbox's forwarding address, so changing it changes them all.
+
+Replies leave from the mailbox the conversation came through; see
+[channels](channels.md#several-mailboxes-in-the-inbox) for the default, starting a conversation from
+a chosen mailbox and filtering by one. A conversation imported from Freshdesk or Help Scout keeps the
+mailbox it was sent to (`origin.mailboxes`), and its replies leave from the channel with that support
+address when there is one.
+
+Through the API each mailbox's settings and actions are under `/api/v1/channels/{id}/email`
+(`/secret`, `/domain-verification`, `/gmail`), and `PATCH /api/v1/channels/{id}` with `config`
+changes its address or sender name. `/api/v1/channels/email` and the MCP tools without `channel_id`
+act on the default mailbox, as before.
 
 ## Send from your own domain
 

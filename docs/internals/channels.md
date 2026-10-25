@@ -61,29 +61,59 @@ its own change.
 - **A reply whose channel is off, removed or cannot reach the customer** gets a failed delivery with
   `last_error_code` (`channel_off`, `channel_removed`, `no_recipient`), so the thread says why and Retry
   works once it is fixed. Nothing is resent by itself.
-- **Where a reply leaves** is one rule (`routeReply`): the conversation's channel when its type sends;
-  else the type it names; for a conversation that came through none, the type that carries other
-  replies (`CarriesOtherReplies`, email). A removed channel of a singleton type gives way to the live one.
+- **Several channels of a type.** Nothing is one per workspace: a type has any number of live
+  channels, one of them its default (`channels.is_default`, one per type by `channels_default_idx`,
+  never on a removed row). What names no channel goes to the default: the singular routes
+  (`/channels/email`, `/public/forms/<slug>`), MCP tools without `channel_id`, a new conversation
+  without `channel_id`. Removing the default hands it to the oldest live channel of the type in the same
+  transaction, after the `removed` event, with a `default_changed` event.
+- **Anti-duplication has three layers.** The store checks under the type's advisory lock
+  (`<workspace>:channels:<type>`) and answers `channels.NameTakenError` / `AddressTakenError` with the
+  channel that has the value; the API turns them into 409 with `conflict: {channel_id, channel_name}`;
+  the web app puts the refusal at the field with a link. The unique indexes (`channels_name_idx` on
+  `lower(name)` per type, `email_channels` on `mailbox_key`, `mailbox_connections` on the address) are
+  the net under a race; they surface as `ErrConflict`.
+- **One mailbox, one channel.** `email_channels.mailbox_key` (generated) drops a `+tag` and the case,
+  so `support+x@` and `support@` are one mailbox. `hosted_local` names each channel's Cloud forwarding
+  address: `support` for the workspace's first, the support address's local part for later ones.
+- **Verification belongs to the domain** (`email_domains`, keyed by workspace and domain): mailboxes on
+  one domain share it, and a domain row goes when its last mailbox does (`releaseUnusedDomain`).
+- **Gmail per channel.** A new connection must be the channel's support address (`address_mismatch`)
+  and an account sends for one channel (`account_in_use`). A connection made before that rule keeps
+  sending and reads `address_matches: false`.
+- **Where a reply leaves** is one rule (`routeReply`): the conversation's own channel when its type
+  sends (removed: a `SharedIdentity` type answers through its default); else the channel the replies
+  are pinned to (`conversations.reply_channel_id`; removed: the default stands in, `replies_via.instead_of`
+  says so, nothing is pinned again); not pinned yet: an import's source mailbox (`origin.mailboxes`)
+  when the workspace has it, else the type that carries other replies (`CarriesOtherReplies`, email) by
+  its default. The first reply pins. A pinned channel that is off fails `channel_off`; it never falls
+  back to the default.
+- **The web form's older address** (`/public/forms/<slug>`) belongs to the form with `legacy_slug`,
+  set on the workspace's first form; every form also answers `/public/web-forms/<id>`.
 - **Removing** is a soft delete: the row keeps its name for old conversations; settings and secrets go.
 - **A server without SMTP and Gmail** leaves email replies to a server that can send them and sends
   every other type's (`outbox.Options.Skip`).
 
-## Older images (expand, contract)
+## Rollback is the backup
 
-The migration `20261025090000-channels` keeps an image older than it working on the new schema after a
-rollback that keeps it: `email_outbox` is a view of the outbox's email rows, and triggers fill the new
-columns for its writes (a channel row when it connects email or saves the form, `channel_id` of new
-conversations and deliveries, `external_id` from `email_message_id` and back, thread keys from reply
-tokens, the channel's on and off from `web_form_channels.enabled`). Current code writes both sides.
-Remove the view, the triggers, `email_message_id`, `email_reply_token` and `web_form_channels.enabled` in
-one later migration, once no image older than this one is a rollback target.
+The migration `20261025090000-channels` keeps no layer for an image older than it: configuration is
+keyed by `channel_id` in one place, Message-IDs live in `messages.external_id`, reply tokens in
+`conversation_thread_keys`, and `email_outbox` is gone. An older image does not run on the new schema,
+so the way back is the backup and the old image ([upgrade](../self-host/upgrade.md#roll-back)), as for
+every release. This is a deliberate exception to expand/contract: a compatibility layer would have
+had to fold several channels of a type into one row. The down migration exists for tests and refuses
+a database with two channels of a type, naming them.
 
 ## Traps
 
 - `channel_types` is not granted to the app role (row-level security gate); foreign keys check it as the
   owner, and nothing at runtime reads it.
-- The upserts of `email_channels` and `web_form_channels` fire their BEFORE INSERT trigger even when they
-  update: the trigger reuses the live channel instead of making a second one.
+- The upgrade gives a workspace whose email or web form setup was gone before it a **removed** channel
+  (with its `added` and `removed` events), so its old conversations keep a channel.
+- `mailbox_connections.channel_id` stays nullable for an OAuth state started on the singular route
+  before the upgrade; `TakeOAuthState` compares `COALESCE(channel_id::text,'')`.
+- `channel_outbox.channel_id` may be null only for a delivery that failed `channel_not_connected`
+  (`channel_outbox_channel_known`).
 - `contacts.email` is nullable. The web app parses responses with zod at runtime: a schema that still
   says `string` breaks the whole list, which typecheck does not catch (`api/schemas.test.ts`).
 - `channel_inbound_events` with an empty `EventIDs` array: compare with `COALESCE($n::text[],'{}')`;

@@ -27,10 +27,24 @@ The form is **off** until you add it. Turn it off and on again with its switch i
 Channels** (see [Channels](channels.md#turn-a-channel-off)); your origins stay saved. While it is off, the form answers `404`, the same as a workspace that does not
 exist. A locked workspace (trial over, nothing paid) answers the same way.
 
+## Several forms
+
+A workspace can have several web forms, for example one on the shop and one on the careers page: add
+another with **Settings → Channels → Add channel → Add a web form**. Each form has its own Submit URL
+and its own allowed origins (two forms may list the same site), and a submission opens its
+conversation in the form it was posted to, so the inbox can filter by form. Replies to a form
+conversation are emailed from the default mailbox, and keep leaving from the mailbox of the first
+reply.
+
+The older slug address belongs to the form that had it, whichever form is the default; removing that
+form leaves the older address answering `404`.
+
 ## Send a submission
 
-The settings page shows the **Submit URL**: `<your Colliedesk address>/api/v1/public/forms/<workspace slug>`.
-Post JSON from a page on an allowed origin:
+The settings page shows the form's **Submit URL**: `<your Colliedesk address>/api/v1/public/web-forms/<form id>`.
+A workspace's first form also keeps the older address, `<your Colliedesk address>/api/v1/public/forms/<workspace slug>`,
+so sites that embed it keep working; its **Embed** tab shows that address and says the form also has
+its own. Post JSON from a page on an allowed origin:
 
 ```js
 await fetch('https://desk.example.com/api/v1/public/forms/acme', {
@@ -50,7 +64,7 @@ await fetch('https://desk.example.com/api/v1/public/forms/acme', {
 Answers:
 
 - `202 {"ok": true}`: stored (or dropped as spam).
-- `404`: unknown workspace, form off, or workspace locked.
+- `404`: unknown workspace or form, form off or removed, or workspace locked.
 - `422`: invalid input; `error.fields` names each field, for example `{"email": "Enter a valid email address."}`.
 - `429`: too many submissions (see Limits). `Retry-After` says how long to wait.
 - `415`: the body is not `application/json`.

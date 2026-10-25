@@ -21,10 +21,25 @@ and its state:
 ## Add a channel
 
 Select **Add channel** and pick a type (with no channel yet, the page lists the types at once:
-**Connect your support email**, **Add a web form**). A workspace has one email channel and one web
-form for now; a type you already have cannot be picked again ("One per workspace for now"). Live chat
-is listed as not available yet. The channel exists once you save its first settings: for email, the
-support address; for the web form, its allowed origins.
+**Connect your support email**, **Add a web form**). Live chat is listed as not available yet. The
+channel exists once you save its first settings: for email, a name and the support address; for the
+web form, its allowed origins.
+
+A workspace can have several channels of a type: a mailbox for support and one for billing, a form
+on your shop and one on your careers page. Pick the type again to add another.
+
+- **Names.** Two live channels of a type never share a name (any case). The first channel of a type
+  is called after it (**Email**, **Web form**); a later mailbox left without a name takes its support
+  address, a later form gets a number (**Web form 2**). Rename a channel at the top of its page; a
+  name another channel has is refused at the field, with a link to that channel.
+- **The default.** One channel of each type is its default, marked **Default** in the list. What
+  names no channel goes to it: a new conversation started without choosing a mailbox, a reply to a
+  conversation that came through no channel, the older web form address. **Make default** on a
+  channel's page moves it. Removing the default makes the oldest other channel of the type the
+  default, and the question says which one.
+- **What two channels cannot share** is said at the field, with the channel that has it: two email
+  channels never have the same support address (`support+x@` is the same mailbox as `support@`), and
+  a Gmail account sends for one email channel only. Two web forms may list the same website.
 
 Each channel has its own page with its type's tabs (email: **Connection**, how mail arrives, and
 **Replies**, how replies leave; web form: **Embed**) and **History**. Old links to the email and web
@@ -61,20 +76,33 @@ first (the Remove question and **Disconnect email** say how many). Removing a ch
 settings and secrets. Its conversations and their messages stay and
 still name it ("Email (removed)"). Removing email is **Disconnect email** on its **Connection** tab; other channels have
 **Remove channel**, which asks first.
-Adding the type again makes a new channel; conversations of a removed email channel are answered
-through the new one.
+A conversation of a removed email channel is answered through the default mailbox, and its composer
+says so ("Billing was removed; replies send from Support").
+
+## Several mailboxes in the inbox
+
+- **Start a conversation** asks **Send from** when the workspace has two email channels, with the
+  default chosen; a channel that is off is listed but cannot be picked.
+- **Replies** leave from the mailbox the conversation came through. A conversation that came through
+  a web form, or was started by the team, keeps the mailbox of its first reply. With two mailboxes the
+  composer says which one ("Replies send from Billing").
+- **Filter → Email channels** (shown when a type has two channels) lists the conversations of one
+  channel: those that came through it and those whose replies leave from it. A removed channel still
+  filters ("Careers (removed)"), and a saved view keeps the choice.
 
 ## History
 
 **Settings → Channels → History**, and the **History** tab of each channel, list who added, renamed,
-turned on or off, changed (which settings: the support address, the sender name, the allowed origins)
-or removed a channel, replaced one of its secrets (never its value), and how many held messages were
+turned on or off, changed (which settings: the support address, the sender name, the allowed origins),
+made the default or removed a channel, replaced one of its secrets (never its value), and how many held messages were
 opened or discarded.
 
 ## For AI agents and the API
 
-Everything above is available through `GET/POST /api/v1/channels`, `GET/PATCH/DELETE
-/api/v1/channels/{id}`, `/api/v1/channels/{id}/held/replay` and `/held/discard`, and
+Everything above is available through `GET/POST /api/v1/channels` (`include_removed=true` lists
+removed channels too; each type says its `default_channel_id`), `GET/PATCH/DELETE
+/api/v1/channels/{id}` (`is_default: true` makes it the default; a name or address another channel
+has is a 409 with `conflict` naming that channel), `/api/v1/channels/{id}/held/replay` and `/held/discard`, and
 `/api/v1/channels/events`, and through the MCP tools `colliedesk_channels_*` ([MCP](mcp.md)). A channel's
 rules (`settings`: how messages join conversations, default tags and priority, rate limits) can be
 changed there only, not in Settings yet. Removing a channel, storing its secret and discarding held

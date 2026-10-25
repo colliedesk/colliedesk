@@ -14,6 +14,7 @@ retry: finished items are never copied twice.
 | Conversations of one inbox | Conversations with the original subject, status, assignee, tags and timestamps. The conversation number is shown in the conversation details |
 | Customer threads | Incoming messages |
 | Replies | Outgoing messages, with the original author, time and to/cc/bcc |
+| The inbox's address | Kept with each conversation (`origin.mailboxes`). With [several email channels](email-channel.md#several-mailboxes), replies leave from the channel with that support address, otherwise from the default one |
 | Notes | **Private notes.** A note is never shown as sent to the customer |
 | Forwards and logged phone calls | Private notes that keep their Help Scout kind |
 | Chat threads | Incoming or outgoing messages, by who wrote them |
