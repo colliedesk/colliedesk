@@ -101,10 +101,13 @@ func (s *Store) GatheringEvents(ctx context.Context, workspaceID, id string) (st
 		channelID string
 		events    []InboundEvent
 	}
+	if !isID(id) {
+		return "", nil, ErrGatheringNotFound
+	}
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (found, error) {
 		var f found
 		var state string
-		err := tx.QueryRow(ctx, `SELECT channel_id::text,state FROM intake_gatherings WHERE workspace_id=$1 AND id::text=$2`, workspaceID, id).Scan(&f.channelID, &state)
+		err := tx.QueryRow(ctx, `SELECT channel_id::text,state FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, id).Scan(&f.channelID, &state)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return f, ErrGatheringNotFound
 		}
@@ -115,7 +118,7 @@ func (s *Store) GatheringEvents(ctx context.Context, workspaceID, id string) (st
 			return f, ErrGatheringDecided
 		}
 		rows, err := tx.Query(ctx, `SELECT id::text,workspace_id::text,channel_id::text,COALESCE(external_event_id,''),state,raw,COALESCE(raw_object_key,''),
-			COALESCE(hold_reason,''),received_at FROM channel_inbound_events WHERE workspace_id=$1 AND gathering_id::text=$2 ORDER BY received_at,id`, workspaceID, id)
+			COALESCE(hold_reason,''),received_at FROM channel_inbound_events WHERE workspace_id=$1 AND gathering_id=$2::uuid ORDER BY received_at,id`, workspaceID, id)
 		if err != nil {
 			return f, err
 		}

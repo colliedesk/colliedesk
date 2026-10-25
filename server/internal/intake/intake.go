@@ -72,7 +72,7 @@ func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d
 		if d.ConversationID != "" {
 			return store.GatheringOutcome{}, ErrInvalid
 		}
-		apply.ForceNew = true
+		apply.ForceNew, apply.Command, apply.Subject = true, d.Command, d.Subject
 		_, err = s.pipeline.ApplyGathering(ctx, workspaceID, gatheringID, "", apply)
 	case Attach:
 		if d.ConversationID == "" {

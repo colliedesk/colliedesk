@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
@@ -44,7 +45,7 @@ const autoMaxAge = 2 * time.Hour
 // unblockLane gives the next card of a lane that waited only for the one before it back to its decider,
 // once no other card of the lane waits for a person.
 func unblockLane(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID string, now time.Time) error {
-	tag, err := tx.Exec(ctx, `WITH lane AS (SELECT lane_key FROM intake_gatherings WHERE workspace_id=$1 AND id::text=$2),
+	tag, err := tx.Exec(ctx, `WITH lane AS (SELECT lane_key FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid),
 		next AS (SELECT g.id FROM intake_gatherings g, lane WHERE g.workspace_id=$1 AND g.lane_key=lane.lane_key AND g.state='review'
 			AND g.review_reason='lane_blocked' ORDER BY g.closed_at,g.id LIMIT 1)
 		UPDATE intake_gatherings SET state='deciding',review_reason=NULL,decide_by=$3,updated_at=$4
@@ -195,6 +196,9 @@ var (
 	ErrGatheringNotFound = errors.New("no gathering with that id")
 )
 
+// isID says id is a uuid, as the queries of a gathering compare it (so its index serves them).
+func isID(id string) bool { return itemID.MatchString(strings.ToLower(id)) }
+
 // Deciders of a gathering, as intake_gatherings.decided_by names them.
 const (
 	DecidedByRules = "rules"
@@ -212,6 +216,9 @@ type IntakeApply struct {
 	Fallback bool
 	Actor    ChannelActor
 	ForceNew bool
+	// Command and Subject are a person's for the conversation a new request opens: the command's tags
+	// and priority, and its subject.
+	Command, Subject string
 	// Decision is the row intake_decisions keeps of an AI's or a person's decision; nil for the rules.
 	Decision *IntakeDecisionInput
 }
@@ -232,9 +239,12 @@ type pendingGathering struct {
 // lockGathering locks a gathering that is still to be decided and checks it holds exactly eventIDs.
 func lockGathering(ctx context.Context, tx pgx.Tx, workspaceID, id string, eventIDs []string) (pendingGathering, error) {
 	var g pendingGathering
+	if !isID(id) {
+		return g, ErrGatheringNotFound
+	}
 	err := tx.QueryRow(ctx, `SELECT g.id::text,g.state,g.rules_action,g.rules_rule,
 			COALESCE((SELECT array_agg(e.id::text ORDER BY e.id) FROM channel_inbound_events e WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id),'{}')
-		FROM intake_gatherings g WHERE g.workspace_id=$1 AND g.id::text=$2 FOR UPDATE OF g`, workspaceID, id).Scan(&g.id, &g.state, &g.rulesAction, &g.rulesRule, &g.events)
+		FROM intake_gatherings g WHERE g.workspace_id=$1 AND g.id=$2::uuid FOR UPDATE OF g`, workspaceID, id).Scan(&g.id, &g.state, &g.rulesAction, &g.rulesRule, &g.events)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return g, ErrGatheringNotFound
 	}
@@ -305,12 +315,15 @@ func recordIntakeDecision(ctx context.Context, tx pgx.Tx, workspaceID string, ap
 // every conversation (requeue takes it back), review puts it in the queue with why. A gathering
 // already decided otherwise is ErrGatheringDecided.
 func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, action, reviewReason string, apply IntakeApply, now time.Time) error {
+	if !isID(id) {
+		return ErrGatheringNotFound
+	}
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
 		if action == rules.Review && reviewReason == ReviewRequeued {
 			// Requeue: an ignored gathering goes back to the queue; the decision stays in its history.
 			tag, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='review',review_reason='requeued',requeued_at=$3,requeued_by_agent_id=NULLIF($4,'')::uuid,
 					decided_by=NULL,decided_at=NULL,decided_by_agent_id=NULL,decided_by_token_id=NULL,updated_at=$3
-				WHERE workspace_id=$1 AND id::text=$2 AND state='ignored'`, workspaceID, id, now, apply.Actor.AgentID)
+				WHERE workspace_id=$1 AND id=$2::uuid AND state='ignored'`, workspaceID, id, now, apply.Actor.AgentID)
 			if err != nil {
 				return struct{}{}, fmt.Errorf("requeue gathering: %w", err)
 			}
@@ -318,7 +331,7 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 				return struct{}{}, gatheringMissingOr(ctx, tx, workspaceID, id, ErrGatheringDecided)
 			}
 			_, err = tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='pending_review',disposition_reason='requeued'
-				WHERE workspace_id=$1 AND gathering_id::text=$2`, workspaceID, id)
+				WHERE workspace_id=$1 AND gathering_id=$2::uuid`, workspaceID, id)
 			return struct{}{}, err
 		}
 		g, err := lockGathering(ctx, tx, workspaceID, id, nil)
@@ -329,11 +342,11 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 		case rules.Ignore:
 			if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='ignored',review_reason=NULL,decide_by=NULL,decided_by=$3,decided_at=$4,
 					decided_by_agent_id=NULLIF($5,'')::uuid,decided_by_token_id=NULLIF($6,'')::uuid,fallback=$7,updated_at=$4
-				WHERE workspace_id=$1 AND id::text=$2`, workspaceID, id, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback); err != nil {
+				WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, id, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback); err != nil {
 				return struct{}{}, fmt.Errorf("ignore gathering: %w", err)
 			}
 			if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='not_request',disposition_reason='ignored'
-				WHERE workspace_id=$1 AND gathering_id::text=$2`, workspaceID, id); err != nil {
+				WHERE workspace_id=$1 AND gathering_id=$2::uuid`, workspaceID, id); err != nil {
 				return struct{}{}, fmt.Errorf("ignore gathering items: %w", err)
 			}
 			if err := unblockLane(ctx, tx, workspaceID, id, now); err != nil {
@@ -341,11 +354,11 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 			}
 		case rules.Review:
 			if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='review',review_reason=$3,decide_by=NULL,fallback=$4,updated_at=$5
-				WHERE workspace_id=$1 AND id::text=$2`, workspaceID, id, reviewReason, apply.Fallback, now); err != nil {
+				WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, id, reviewReason, apply.Fallback, now); err != nil {
 				return struct{}{}, fmt.Errorf("queue gathering: %w", err)
 			}
 			if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='pending_review',disposition_reason=$3
-				WHERE workspace_id=$1 AND gathering_id::text=$2`, workspaceID, id, reviewReason); err != nil {
+				WHERE workspace_id=$1 AND gathering_id=$2::uuid`, workspaceID, id, reviewReason); err != nil {
 				return struct{}{}, fmt.Errorf("queue gathering items: %w", err)
 			}
 		default:
@@ -359,7 +372,7 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 // gatheringMissingOr tells a gathering that is not there from one in another state.
 func gatheringMissingOr(ctx context.Context, tx pgx.Tx, workspaceID, id string, otherwise error) error {
 	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM intake_gatherings WHERE workspace_id=$1 AND id::text=$2)`, workspaceID, id).Scan(&exists); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid)`, workspaceID, id).Scan(&exists); err != nil {
 		return err
 	}
 	if !exists {
@@ -402,9 +415,12 @@ type GatheringOutcome struct {
 
 // GatheringOutcomeOf reads how a gathering stands.
 func (s *Store) GatheringOutcomeOf(ctx context.Context, workspaceID, id string) (GatheringOutcome, error) {
+	if !isID(id) {
+		return GatheringOutcome{}, ErrGatheringNotFound
+	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (GatheringOutcome, error) {
 		var o GatheringOutcome
-		err := tx.QueryRow(ctx, `SELECT state,COALESCE(conversation_id::text,''),COALESCE(decided_by,'') FROM intake_gatherings WHERE workspace_id=$1 AND id::text=$2`,
+		err := tx.QueryRow(ctx, `SELECT state,COALESCE(conversation_id::text,''),COALESCE(decided_by,'') FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`,
 			workspaceID, id).Scan(&o.State, &o.ConversationID, &o.DecidedBy)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return o, ErrGatheringNotFound

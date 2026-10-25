@@ -76,6 +76,8 @@ type contractFixture struct {
 	secondEmailChannelID string
 	// aiChatID is a handed-off chat with an answer, its sources and feedback: read, then deleted.
 	aiChatID string
+	// intakeCardID is a card of the intake queue, set aside and put back by the intake cases.
+	intakeCardID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -283,7 +285,13 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
-	return contractFixture{operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	var intakeCardID string
+	if err := pool.QueryRow(context.Background(), `INSERT INTO intake_gatherings(workspace_id,channel_id,scope,lane_key,state,review_reason,rules_action,rules_rule,opened_at,closed_at)
+		SELECT workspace_id,id,'group','thread:contract','review','no_command','review','review_hold',now(),now() FROM channels WHERE id=$1 RETURNING id::text`,
+		channelIDs["web_form"]).Scan(&intakeCardID); err != nil {
+		t.Fatal(err)
+	}
+	return contractFixture{intakeCardID: intakeCardID, operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }

@@ -130,6 +130,39 @@ a page a customer sees. Email and web forms have no places. For AI agents and th
 `colliedesk_conversation_chat_get`, `colliedesk_channel_threads_list`, `colliedesk_channel_thread_items` and
 `colliedesk_channel_unresolved_items`.
 
+## Intake queue
+
+On a chat channel's scope that collects messages (its groups, on most chat types), what one customer says
+in one go is a **card**: messages close together are collected, each customer apart from the others even
+when they write in turn. The channel's rules decide each card as they always did: a command opens a
+conversation, a reply to a message continues its conversation (in a group, only a conversation that
+customer wrote in), and what the rules hold for a person waits in the queue. When AI intake runs by itself
+on the scope (**Auto**, [AI per channel](ai.md#what-ai-does-by-itself-per-channel)), a card the rules
+could only decide by default waits up to two minutes for AI, held like any held message; if AI does not
+decide in time, the rules' decision applies (the card says **fallback**), and nothing is ever lost.
+A card behind one of the same customer that waits for a person waits right after it, and goes back to
+be decided once that one is.
+
+A person decides a card: **open a conversation** with what it said, as one message (never joining a
+conversation found since; optionally with one of the channel's commands, for its tags and priority, and a
+subject), **add it** to a conversation, or **set it aside** (it stays held and can be put back). Deciding
+the same way twice changes nothing; once a card is decided, another decision is refused and says how it
+was decided. Messages of a card are decided in the queue, not one by one as held messages; only what was
+set aside can be discarded with the held messages. Email and web forms have no cards: every message is
+decided by the channel's rules, as before.
+
+For AI agents and the API: `GET /api/v1/intake/gatherings` (`state=review`, `deciding`, `ignored` or
+`decided`, `channel_id`, `scope`), `GET /api/v1/intake/gatherings/{id}`, `POST
+/api/v1/intake/gatherings/{id}/decide` (`action` `create`, `attach` with `conversation_id`, or `ignore`),
+`POST /api/v1/intake/gatherings/{id}/requeue`, `GET /api/v1/intake/stats` and `GET
+/api/v1/conversations/{id}/intake` (why each message is in a conversation), and the MCP tools
+`colliedesk_intake_list`, `colliedesk_intake_get`, `colliedesk_intake_decide`, `colliedesk_intake_requeue`,
+`colliedesk_intake_stats` and `colliedesk_conversation_intake_get`. Reading cards needs `messages:read`;
+opening a conversation from one needs the send tier (the channel may tell the customer it was received),
+the other decisions the draft tier; below it, a decision becomes a [request a person
+approves](agent-requests.md). Through the API, send the same `Idempotency-Key` header on every retry of one
+decision or requeue: a repeat answers what the first one got and decides nothing more.
+
 ## AI on a channel
 
 Each channel's **AI** tab sets what each AI feature does by itself on it (triage and drafts; intake

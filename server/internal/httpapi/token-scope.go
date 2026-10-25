@@ -339,6 +339,14 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/channels/{id}/threads":                  grant(auth.PermMessagesRead),
 	"GET /api/v1/channels/{id}/threads/{threadId}/items": grant(auth.PermMessagesRead),
 	"GET /api/v1/channel-thread-items":                   grant(auth.PermMessagesRead),
+	// The intake queue shows what customers wrote; deciding a card opens a conversation (and may tell
+	// the customer it was received), joins one or sets the card aside.
+	"GET /api/v1/intake/gatherings":               grant(auth.PermMessagesRead),
+	"GET /api/v1/intake/gatherings/{id}":          grant(auth.PermMessagesRead),
+	"POST " + intakeDecideRoute:                   byHandler(auth.PermConversationsUpdate),
+	"POST /api/v1/intake/gatherings/{id}/requeue": grant(auth.PermConversationsUpdate),
+	"GET /api/v1/intake/stats":                    grant(auth.PermConversationsRead),
+	"GET /api/v1/conversations/{id}/intake":       grant(auth.PermMessagesRead),
 	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or
 	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
 	"GET /api/v1/ai/usage":      grant(auth.PermBillingRead),

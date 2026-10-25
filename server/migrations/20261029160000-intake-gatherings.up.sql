@@ -53,6 +53,8 @@ CREATE INDEX intake_gatherings_lane ON intake_gatherings(workspace_id, lane_key,
 -- What is past its time to decide, across workspaces.
 CREATE INDEX intake_gatherings_due ON intake_gatherings(decide_by) WHERE state = 'deciding';
 CREATE INDEX intake_gatherings_conversation ON intake_gatherings(workspace_id, conversation_id) WHERE conversation_id IS NOT NULL;
+-- What was decided and what was set aside, newest first.
+CREATE INDEX intake_gatherings_decided ON intake_gatherings(workspace_id, decided_at DESC, id DESC) WHERE state IN ('created', 'attached', 'applied', 'ignored');
 
 -- Every time AI or a person decided a gathering, as it was: never changed, the labels of intake's eval.
 CREATE TABLE intake_decisions (
@@ -109,6 +111,7 @@ ALTER TABLE channel_inbound_events ADD COLUMN gathering_id uuid,
     ADD FOREIGN KEY (workspace_id, gathering_id) REFERENCES intake_gatherings(workspace_id, id) ON DELETE SET NULL (gathering_id);
 CREATE INDEX channel_inbound_events_gathering ON channel_inbound_events(workspace_id, gathering_id) WHERE gathering_id IS NOT NULL;
 ALTER TABLE channel_thread_items ADD FOREIGN KEY (workspace_id, gathering_id) REFERENCES intake_gatherings(workspace_id, id) ON DELETE SET NULL (gathering_id);
+CREATE INDEX channel_thread_items_gathering ON channel_thread_items(workspace_id, gathering_id, occurred_at) WHERE gathering_id IS NOT NULL;
 ALTER TABLE ai_tasks ADD COLUMN gathering_id uuid,
     ADD FOREIGN KEY (workspace_id, gathering_id) REFERENCES intake_gatherings(workspace_id, id) ON DELETE CASCADE;
 

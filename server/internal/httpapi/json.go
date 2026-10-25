@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -142,4 +143,22 @@ func writeTrialOutbound(response http.ResponseWriter, refusal *domain.TrialOutbo
 	response.Header().Set("Retry-After", strconv.Itoa(seconds))
 	writeJSON(response, http.StatusTooManyRequests, map[string]any{"error": errorBody(response, map[string]any{
 		"code": "trial_outbound_limit", "message": refusal.Error(), "retry_after_seconds": seconds})})
+}
+
+// readJSONBody reads a JSON object body of at most domain.MaxAgentRequestBody into target, refusing
+// unknown fields, and returns its bytes for a call that may be filed for a person to approve.
+func readJSONBody(request *http.Request, target any) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(request.Body, domain.MaxAgentRequestBody+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > domain.MaxAgentRequestBody {
+		return nil, errors.New("the body is over 64 KiB")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return nil, fmt.Errorf("decode JSON: %w", err)
+	}
+	return body, nil
 }

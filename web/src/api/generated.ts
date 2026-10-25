@@ -1097,6 +1097,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/intake/gatherings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The intake queue of chat channels: what customers said in one go on a scope that collects messages (a gathering), by list. review: what waits for a person, oldest first (review_reason says why; lane_blocked waits behind an earlier card of the same sender). deciding: what waits for AI, until decide_by. ignored: what was set aside, newest first. decided: what was opened, joined, applied or set aside, newest first. Email and web forms have no gatherings. */
+        get: operations["listIntakeGatherings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intake/gatherings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description A card of the intake queue with everything its customer said (oldest first) and every decision made on it (newest first). */
+        get: operations["getIntakeGathering"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intake/gatherings/{id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Decides a card that waits for a person or for AI: create opens a conversation with what it said, as one message (never joining a conversation its thread found since; command and subject are optional, a command of the channel that opens a request), attach adds it to conversation_id, ignore sets it aside (requeue takes it back). conversation_id is one where the reply reaches the same people: in a group, a conversation of the same place; in a one-to-one chat, one of the same customer on the same channel; or the conversation the rules named. A conversation merged into another is joined through the one it was merged into, which must be one of these. Any other is 400 and nothing is decided; a closed one of the same place opens again. The same decision again changes nothing; another one once the card is decided is 409 gathering_decided, with how it stands. An agent token needs messages:send to create (the channel may tell the customer it was received) and conversations:update otherwise; without it the call is filed for a person (202). A repeat with the same Idempotency-Key answers what the first one got and decides nothing; the key with another decision or card is refused with 422, code `idempotency_key_reused`. */
+        post: operations["decideIntakeGathering"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intake/gatherings/{id}/requeue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Takes a card that was set aside (by a person, AI or the rules) back to the queue, review_reason requeued. Its decisions stay in its history. A card in the queue already is left as it is; one opened or joined is 409. A repeat with the same Idempotency-Key answers what the first one got; the key with another card is refused with 422, code `idempotency_key_reused`. */
+        post: operations["requeueIntakeGathering"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/intake/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Counts the gatherings that closed in the last days (one channel, or all), by state and by who decided, how many fell back on the rules, and how many of AI's decisions a person changed. */
+        get: operations["getIntakeStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Why each message from a channel is in this conversation: what decided it (the rules by match or by default, a person, or AI) and the chat gathering it came in, with that gathering's decisions (the newest 50 gatherings). */
+        get: operations["getConversationIntake"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channel-thread-items": {
         parameters: {
             query?: never;
@@ -4607,11 +4717,7 @@ export interface components {
              * @enum {string}
              */
             role: "customer" | "staff" | "bot";
-            sender: {
-                kind: string | null;
-                value: string | null;
-                name: string | null;
-            };
+            sender: components["schemas"]["ChatSender"];
             /** Format: uuid */
             contact_id: string | null;
             /** Format: uuid */
@@ -4673,6 +4779,149 @@ export interface components {
         ChatThreadPage: {
             items: components["schemas"]["ChatThread"][];
             next_cursor: string | null;
+        };
+        IntakeGathering: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            channel_id: string;
+            scope: string;
+            /** Format: uuid */
+            thread_id: string | null;
+            /** @description The place and sender whose cards are decided one after the other. */
+            lane_key: string;
+            /** Format: uuid */
+            contact_id: string | null;
+            /**
+             * @description applied: the rules decided, AI only suggests.
+             * @enum {string}
+             */
+            state: "deciding" | "review" | "created" | "attached" | "ignored" | "applied" | "cancelled";
+            /** @enum {string|null} */
+            review_reason: "no_command" | "ai_unsure" | "ai_unavailable" | "too_old" | "credential" | "target_changed" | "lane_blocked" | "requeued" | "gate_closed" | null;
+            /** @description What the channel's rules decided when it closed; what applies when AI does not decide in time. */
+            rules: {
+                /** @enum {string} */
+                action: "create" | "attach" | "review" | "archive";
+                rule: string;
+                /** Format: uuid */
+                target_conversation_id: string | null;
+            };
+            /**
+             * Format: uuid
+             * @description The conversation it opened or joined.
+             */
+            conversation_id: string | null;
+            /** @enum {string|null} */
+            decided_by: "rules" | "ai" | "agent" | null;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: uuid */
+            decided_by_agent_id: string | null;
+            /** @description The rules decided because AI did not in time or failed. */
+            fallback: boolean;
+            /** Format: date-time */
+            opened_at: string;
+            /** Format: date-time */
+            closed_at: string;
+            /**
+             * Format: date-time
+             * @description Until when AI may decide it.
+             */
+            decide_by: string | null;
+            /** Format: date-time */
+            requeued_at: string | null;
+            /** Format: uuid */
+            requeued_by_agent_id: string | null;
+            item_count: number;
+            sender: components["schemas"]["ChatSender"];
+            /** @description The beginning of what the customer wrote first. */
+            preview: string;
+        };
+        ChatSender: {
+            kind: string | null;
+            value: string | null;
+            name: string | null;
+        };
+        IntakeDecision: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            decider: "ai" | "agent";
+            /** @enum {string} */
+            basis: "model" | "person";
+            /** @enum {string} */
+            action: "create" | "attach" | "ignore" | "review";
+            /** Format: uuid */
+            target_conversation_id: string | null;
+            /** Format: uuid */
+            runner_up_conversation_id: string | null;
+            runner_up_confidence: number | null;
+            command: string | null;
+            subject: string | null;
+            /** @enum {string|null} */
+            reply_kind: "substantive" | "acknowledgement" | null;
+            confidence: number | null;
+            /** @description AI's reason; erased 90 days after. */
+            reason: string | null;
+            applied: boolean;
+            not_applied_reason: string | null;
+            fallback: boolean;
+            /** Format: uuid */
+            corrects_decision_id: string | null;
+            model: string | null;
+            /** Format: uuid */
+            agent_id: string | null;
+            via_token: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        IntakeGatheringDetail: components["schemas"]["IntakeGathering"] & {
+            items: components["schemas"]["ChatItem"][];
+            decisions: components["schemas"]["IntakeDecision"][];
+        };
+        IntakeGatheringPage: {
+            items: components["schemas"]["IntakeGathering"][];
+            next_cursor: string | null;
+        };
+        IntakeDecideInput: {
+            /** @enum {string} */
+            action: "create" | "attach" | "ignore";
+            /**
+             * Format: uuid
+             * @description With attach.
+             */
+            conversation_id?: string;
+            /** @description With create: a command of the channel that opens a request, for its tags and priority. */
+            command?: string;
+            /** @description With create. */
+            subject?: string;
+        };
+        IntakeStats: {
+            days: number;
+            gatherings: number;
+            by_state: {
+                [key: string]: number;
+            };
+            decided_by: {
+                [key: string]: number;
+            };
+            fallback: number;
+            ai_decisions: number;
+            /** @description AI's decisions a person changed afterwards. */
+            ai_corrected: number;
+        };
+        ConversationIntake: {
+            messages: {
+                /** Format: uuid */
+                message_id: string;
+                /** @enum {string|null} */
+                decision_basis: "match" | "default" | "person" | "model" | null;
+                decision_rule: string | null;
+                /** Format: uuid */
+                gathering_id: string | null;
+            }[];
+            gatherings: components["schemas"]["IntakeGatheringDetail"][];
         };
         ChannelAIInput: {
             /** @description '' for the whole channel, or one of its type's scopes. */
@@ -8146,6 +8395,27 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The card was decided otherwise meanwhile (gathering_decided); nothing changed */
+        IntakeGatheringDecided: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    error: {
+                        /** @enum {string} */
+                        code: "gathering_decided";
+                        message: string;
+                        request_id?: string;
+                        state: string;
+                        /** @enum {string|null} */
+                        decided_by: "rules" | "ai" | "agent" | null;
+                        /** Format: uuid */
+                        conversation_id: string | null;
+                    };
+                };
+            };
+        };
         /** @description Temporary server failure; the message was not stored and the forwarder should retry */
         InternalError: {
             headers: {
@@ -10941,6 +11211,182 @@ export interface operations {
             };
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listIntakeGatherings: {
+        parameters: {
+            query?: {
+                state?: "review" | "deciding" | "ignored" | "decided";
+                channel_id?: string;
+                scope?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeGatheringPage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getIntakeGathering: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeGatheringDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    decideIntakeGathering: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntakeDecideInput"];
+            };
+        };
+        responses: {
+            /** @description The card as decided */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeGatheringDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["IntakeGatheringDecided"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    requeueIntakeGathering: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card back in the queue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeGatheringDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["IntakeGatheringDecided"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    getIntakeStats: {
+        parameters: {
+            query?: {
+                channel_id?: string;
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The counts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeStats"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getConversationIntake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Why the messages are here */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationIntake"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

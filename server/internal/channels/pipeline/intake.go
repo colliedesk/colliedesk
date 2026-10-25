@@ -2,10 +2,14 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
+
+// ErrNotAnOpenCommand means a decision named a command of the channel that does not open a request.
+var ErrNotAnOpenCommand = errors.New("not a command of the channel that opens a request")
 
 // ApplyGathering applies a decision of a gathering of intake that opens a message: its held events,
 // parsed again, are replayed as the one message the batch is, into a new conversation (apply.ForceNew)
@@ -35,7 +39,18 @@ func (p *Pipeline) ApplyGathering(ctx context.Context, workspaceID, gatheringID,
 		ids[i] = event.ID
 	}
 	apply.GatheringID = gatheringID
-	result, err := p.store.IngestInbound(ctx, store.IngestRequest{WorkspaceID: workspaceID, ChannelID: channelID, Inbound: merge(items), EventIDs: ids,
+	merged := merge(items)
+	if apply.Command != "" {
+		command, ok := channel.Settings.Commands[apply.Command]
+		if !ok || (command.Action != "" && command.Action != channels.ActionOpen) {
+			return channels.IngestResult{}, ErrNotAnOpenCommand
+		}
+		merged.Intent = channels.Intent{Kind: channels.IntentCommand, Command: apply.Command}
+	}
+	if apply.Subject != "" {
+		merged.Subject = apply.Subject
+	}
+	result, err := p.store.IngestInbound(ctx, store.IngestRequest{WorkspaceID: workspaceID, ChannelID: channelID, Inbound: merged, EventIDs: ids,
 		Now: p.now(), Replay: true, IntoConversation: conversationID, DecidedBy: apply.Actor.AgentID, Intake: &apply})
 	if err == nil && result.Status == store.ResultSkipped {
 		return result, store.ErrGatheringDecided

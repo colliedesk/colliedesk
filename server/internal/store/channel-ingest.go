@@ -387,6 +387,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if !exists {
 			return result, pgx.ErrNoRows
 		}
+		// A card joins only a conversation it offers, so its reply never goes to someone else.
+		if request.Intake != nil && request.Intake.GatheringID != "" {
+			may, err := gatheringMayJoin(ctx, tx, workspaceID, request.Intake.GatheringID, request.IntoConversation)
+			if err != nil {
+				return result, err
+			}
+			if !may {
+				return result, ErrNotACandidate
+			}
+		}
 	} else {
 		if commanded && command.Action == channels.ActionReopen && in.Intent.Ref != "" {
 			err := tx.QueryRow(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND id::text=$2 AND contact_id=$3`,
