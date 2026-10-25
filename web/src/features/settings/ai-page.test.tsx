@@ -475,3 +475,20 @@ test('the data notice says what a draft keeps, for how long, and that it is expo
   expect(notice).toHaveTextContent('Private notes are never sent. A draft keeps its text and your request for 90 days after it ended, and both are in the export.');
   expect(notice).not.toHaveTextContent('prompts are not stored');
 });
+
+
+test('a channel level equal to what it follows is not listed as differing, and a level the server lowered says why', () => {
+  const on = slot({ source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, default_level: 'suggest' });
+  const drafts = slot({ slot: 'draft', source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true, default_level: 'off' });
+  const level = (change: Partial<AISettings['channels'][number]>) => ({ channel_id: '44444444-4444-4444-8444-444444444444', channel_name: 'Contact form', scope: '',
+    slot: 'draft' as const, level: 'off' as const, effective_level: 'off' as const, off_reason: null, options: null, updated_by: null, updated_at: '2026-10-25T10:00:00Z', ...change });
+  const lowered = { id: '33333333-3333-4333-8333-333333333334', kind: 'channel_level_changed' as const, actor_agent_id: null, actor_name: 'Mai Tran', via_token: false,
+    provider_id: null, provider_label: null, slot: 'intake' as const, created_at: '2026-10-25T10:00:00Z',
+    detail: { channel_name: 'Zalo HC Labs', scope: 'group', before: 'auto', after: 'suggest', reason: 'model_changed', options_changed: false } };
+  page({ settings: settings({ providers: [provider({ used_by: ['triage', 'draft'] })], slots: [on, drafts],
+    channels: [level({}), level({ slot: 'triage', level: 'suggest', effective_level: 'suggest' })], events: [lowered] }) });
+  expect(screen.queryByRole('link', { name: /Contact form/ })).toBeNull();
+  expect(screen.getAllByText('Every channel follows this default.')).toHaveLength(2);
+  fireEvent.click(screen.getByRole('tab', { name: 'History' }));
+  expect(screen.getByText(/moved Chat intake to another model, so it went down to Suggest on Zalo HC Labs · Groups/)).toBeInTheDocument();
+});

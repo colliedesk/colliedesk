@@ -40,10 +40,14 @@ export function ChannelAITab({ channel, isAdmin }: { channel: ChannelDetail; isA
   if (!levels.data) return <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>;
   const data = levels.data;
   const slotOf = (slot: AISlotName) => settings.data?.slots.find((item) => item.slot === slot);
-  // Raising triage to auto, or drafts to written by themselves, asks first, as on Built-in AI.
+  // What a scope follows when its own level goes: the channel's, or for the channel the workspace's.
+  const followed = (scope: string, slot: AISlotName): AILevel => (scope === '' ? slotOf(slot)?.default_level ?? 'off' : configured(data, settings.data, '', slot));
+  // Raising triage to auto, or drafts to written by themselves, asks first, as on Built-in AI, also when
+  // the scope gets there by following a default that is there.
   const pick = (change: Change) => {
-    const raises = change.level !== null && change.level !== configured(data, settings.data, change.scope, change.slot)
-      && ((change.slot === 'triage' && change.level === 'auto') || (change.slot === 'draft' && change.level === 'suggest'));
+    const target = change.level ?? followed(change.scope, change.slot);
+    const raises = target !== configured(data, settings.data, change.scope, change.slot)
+      && ((change.slot === 'triage' && target === 'auto') || (change.slot === 'draft' && target === 'suggest'));
     if (raises && slotOf(change.slot)) setAsking(change);
     else save.mutate(change);
   };
@@ -59,9 +63,8 @@ export function ChannelAITab({ channel, isAdmin }: { channel: ChannelDetail; isA
         {scopes.map((entry) => {
           const item = entry.slots.find((candidate) => candidate.slot === slot);
           if (!item) return <td key={entry.scope} data-scope={scopeName(entry.scope)} />;
-          const followed = entry.scope === '' ? settings.data?.slots.find((candidate) => candidate.slot === slot)?.default_level ?? 'off'
-            : configured(data, settings.data, '', slot);
-          const follow = entry.scope === '' ? m.aiFollowWorkspace(levelName[followed]) : m.aiFollowChannel(levelName[followed]);
+          const inherited = followed(entry.scope, slot);
+          const follow = entry.scope === '' ? m.aiFollowWorkspace(levelName[inherited]) : m.aiFollowChannel(levelName[inherited]);
           const label = `${featureName[slot]} · ${scopeName(entry.scope)}`;
           const asked = configured(data, settings.data, entry.scope, slot);
           return <td key={entry.scope} data-scope={scopeName(entry.scope)}>

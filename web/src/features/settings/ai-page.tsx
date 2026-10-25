@@ -353,7 +353,10 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
 // ChannelsThatDiffer lists the channels whose level of the feature is their own, each a link to its AI
 // tab; a feature the workspace has off runs on none of them, and each says so.
 function ChannelsThatDiffer({ slot, settings }: { slot: AISlot; settings: AISettings }) {
-  const rows = settings.channels.filter((row) => row.slot === slot.slot);
+  // A level equal to what the scope would follow anyway (the channel's, then the workspace's) differs from nothing.
+  const own = (channel: string, scope: string) => settings.channels.find((row) => row.channel_id === channel && row.scope === scope && row.slot === slot.slot)?.level;
+  const rows = settings.channels.filter((row) => row.slot === slot.slot
+    && row.level !== (row.scope === '' ? slot.default_level : own(row.channel_id, '') ?? slot.default_level));
   if (rows.length === 0) return <p className="ai-differ muted-copy">{m.everyChannelFollows}</p>;
   const byChannel = new Map<string, { name: string; parts: string[] }>();
   for (const row of rows) {
@@ -532,6 +535,7 @@ function eventText(event: AIEvent): string {
     const where = `${change.channel_name ?? ''}${change.scope ? ` · ${scopeName(change.scope)}` : ''}`;
     const named = (level?: AILevel | null) => (level ? levelName[level] : m.levelFollowing);
     if (change.reason === 'recipient_changed') return m.eventLevelLowered(slot, where, named(change.after));
+    if (change.reason === 'model_changed') return m.eventLevelLoweredModel(slot, where, named(change.after));
     if (change.before === change.after && change.options_changed) return m.eventLevelOptions(slot, where);
     return m.eventLevel(slot, where, named(change.before), named(change.after));
   }

@@ -823,3 +823,18 @@ test('a feature the workspace has off is off on the channel and says so; an agen
   expect(screen.getByRole('combobox', { name: 'Triage · Whole channel' })).toBeDisabled();
   expect(screen.queryByRole('link', { name: 'Turn on' })).toBeNull();
 });
+
+test('following a workspace default that applies by itself asks first, as picking Auto does', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  aiApi.settings.mockResolvedValue(aiSettings([aiSlot('triage', { default_level: 'auto', auto_parts: ['tags', 'priority'] }), aiSlot('draft')]));
+  aiApi.channel.mockResolvedValue(formLevels({ level: 'off', effective_level: 'off', source: 'channel' }));
+  aiApi.setChannel.mockResolvedValue(formLevels({ effective_level: 'auto' }));
+  show(FORM, { tab: 'ai' });
+  const triage = await screen.findByRole('combobox', { name: 'Triage · Whole channel' });
+  await screen.findByRole('option', { name: 'Workspace default (Auto)' });
+  fireEvent.change(triage, { target: { value: '' } });
+  const dialog = await screen.findByRole('dialog', { name: 'Apply triage suggestions automatically?' });
+  expect(aiApi.setChannel).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(FORM, 'triage', { scope: '', level: null }));
+});
