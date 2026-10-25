@@ -10,7 +10,7 @@ export const microsoftMessages = {
   microsoftAdminOnly: 'Only an admin can connect Microsoft 365.',
   // Before Microsoft verifies the publisher, an organization often lets only its admin approve an app that sends email.
   microsoftAdminApprovalSummary: 'Work account? Your IT admin may need to approve Colliedesk first',
-  microsoftAdminApprovalBody: 'Many organizations only let an admin approve apps that send email. If Microsoft says you need admin approval, send this link to your Microsoft 365 admin. After they approve, select Connect Microsoft 365 again.',
+  microsoftAdminApprovalBody: (button: string) => `Many organizations only let an admin approve apps that send email. If Microsoft says you need admin approval, send this link to your Microsoft 365 admin. After they approve, select ${button} again.`,
   microsoftAdminApprovalLink: 'Approval link for your Microsoft 365 admin',
   copyApprovalLink: 'Copy link',
   approvalLinkCopied: 'Link copied',

@@ -242,3 +242,14 @@ test('an outcome names the button that is on screen now', () => {
   rerender(block({ gmail: { ...gmail, connection: gmailConnection }, returned: { kind: 'admin_consent_done', provider: 'microsoft' } }));
   expect(screen.getByRole('status')).toHaveTextContent('Your Microsoft 365 admin approved Colliedesk. Select Use Microsoft 365 instead to finish.');
 });
+
+test('a server that lost its Microsoft settings says what to set, not that a wrong secret is being retried', () => {
+  render(block({ microsoft: { ...microsoft, available: false, missing_settings: ['MICROSOFT_OAUTH_CLIENT_SECRET'], connection: msConnection, server_credentials_refused: true } }));
+  expect(screen.getByRole('note')).toHaveTextContent('Microsoft 365 sending is not set up on this server');
+  expect(screen.queryByText(/misconfigured/)).not.toBeInTheDocument();
+});
+
+test('the approval fold names the button that starts the sign-in now', () => {
+  render(block({ gmail: { ...gmail, connection: gmailConnection }, returned: { kind: 'error', reason: 'denied', provider: 'microsoft' } }));
+  expect(screen.getByText(/After they approve, select Use Microsoft 365 instead again\./)).toBeInTheDocument();
+});

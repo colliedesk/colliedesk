@@ -168,22 +168,22 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
   );
   const unconnected = (['google', 'microsoft'] as const).filter((provider) => provider === 'google' || microsoft);
   const offered = unconnected.filter(available);
+  // The button that starts a provider's sign-in as the block shows it now, which the outcome names.
+  const buttonFor = (provider: MailboxProvider) => !connection ? providers[provider].connect
+    : provider !== active ? messages.useInstead(providers[provider].label)
+      : connection.status === 'failed' ? providers[provider].reconnect : providers[provider].useAnother;
   // Microsoft said the person needs an admin's approval, or the approval failed: the link opens at once.
   const approvalOpen = returned?.provider === 'microsoft' && returned.kind === 'error' && (returned.reason === 'denied' || returned.reason === 'admin_consent_failed');
   const approval = microsoft?.admin_consent_url && <details className="email-channel-dns-folded mailbox-approval" open={approvalOpen || undefined}>
     <summary>{messages.microsoftAdminApprovalSummary}</summary>
     <div className="mailbox-approval-body">
-      <p className="muted-copy">{messages.microsoftAdminApprovalBody}</p>
+      <p className="muted-copy">{messages.microsoftAdminApprovalBody(buttonFor('microsoft'))}</p>
       <div className="copy-field">
         <label className="invite-link"><span className="field-label">{messages.microsoftAdminApprovalLink}</span><input readOnly value={microsoft.admin_consent_url} /></label>
         <span className="button-row"><CopyButton value={microsoft.admin_consent_url} copiedText={messages.approvalLinkCopied}>{messages.copyApprovalLink}</CopyButton></span>
       </div>
     </div>
   </details>;
-  // The button that starts a provider's sign-in as the block shows it now, which the outcome names.
-  const buttonFor = (provider: MailboxProvider) => !connection ? providers[provider].connect
-    : provider !== active ? messages.useInstead(providers[provider].label)
-      : connection.status === 'failed' ? providers[provider].reconnect : providers[provider].useAnother;
   // What the operator must set for a provider; with no provider at all it stays open, as it always was.
   const setup = (provider: MailboxProvider, folded: boolean): ReactNode => {
     const missing = provider === 'google' ? gmail.missing_settings : microsoft?.missing_settings ?? [];
@@ -225,7 +225,8 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
         {canManage && available(active!) && <span className="button-row">{connectButton(active!, text.reconnect, true)}</span>}
       </div>}
       {connection?.status === 'connected' && available(active!) && <p className="muted-copy">{text.connected(connection.address, formatDate(connection.connected_at, timezone))}</p>}
-      {connection && active === 'microsoft' && microsoft?.server_credentials_refused && canManage &&
+      {/* Only while the server has Microsoft settings: without them, the note above says what to set. */}
+      {connection && active === 'microsoft' && microsoft?.available && microsoft.server_credentials_refused && canManage &&
         <p role="note" className="warning-note">{messages.microsoftServerCredentials}</p>}
       {connection && settings.address_matches === false
         ? <p role="note" className="warning-note">{text.addressMismatch(connection.address, supportAddress)}</p>
