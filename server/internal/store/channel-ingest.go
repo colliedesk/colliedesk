@@ -220,8 +220,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		decision := rules.Decide(rules.Facts{Cancel: true})
 		if in.Aggregate != nil {
 			// Cancelling throws away what was being collected with it.
-			if _, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET state='dropped',drop_reason=$4,flush_at=NULL,processed_at=$5
-				WHERE workspace_id=$1 AND channel_id=$2 AND state='pending' AND aggregate_key=$3`,
+			if _, err := tx.Exec(ctx, `WITH cancelled AS (
+					UPDATE channel_inbound_events SET state='dropped',drop_reason=$4,flush_at=NULL,processed_at=$5
+					WHERE workspace_id=$1 AND channel_id=$2 AND state='pending' AND aggregate_key=$3 RETURNING id)
+				UPDATE channel_thread_items SET disposition='not_request',disposition_reason=$4
+				WHERE workspace_id=$1 AND inbound_event_id IN (SELECT id FROM cancelled)`,
 				workspaceID, channel.ID, in.Aggregate.Key, channels.DropCancelled, now); err != nil {
 				return result, fmt.Errorf("cancel collected messages: %w", err)
 			}

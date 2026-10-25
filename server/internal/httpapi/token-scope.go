@@ -336,9 +336,9 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/ai/source-consents/{class}": grant(auth.PermAISettingsUpdate),
 	// What was said in a chat channel's places, as the conversations' messages are read.
 	"GET /api/v1/conversations/{id}/chat":                grant(auth.PermMessagesRead),
-	"GET /api/v1/channels/{id}/threads":                  grant(auth.PermConversationsRead),
+	"GET /api/v1/channels/{id}/threads":                  grant(auth.PermMessagesRead),
 	"GET /api/v1/channels/{id}/threads/{threadId}/items": grant(auth.PermMessagesRead),
-	"GET /api/v1/channel-thread-items":                   grant(auth.PermConversationsRead),
+	"GET /api/v1/channel-thread-items":                   grant(auth.PermMessagesRead),
 	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or
 	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
 	"GET /api/v1/ai/usage":      grant(auth.PermBillingRead),

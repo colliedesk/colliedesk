@@ -117,3 +117,29 @@ func TestRepliesAreItemsAndNothingIsCountedTwice(t *testing.T) {
 		t.Fatalf("items = %s, want 3", got)
 	}
 }
+
+// A cancel concludes what was being collected with it as not a request, every item of it; a message an
+// admin discards leaves nothing of what it said in its place.
+func TestACancelConcludesItsItemsAndADiscardRemovesThem(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "k-1", From: "u1", Text: "draft of a request", Collect: true},
+		channeltest.LoopbackEvent{ID: "k-2", From: "u1", Text: "never mind", Collect: true, Intent: channels.IntentCancel})
+	if got := d.one(t, `SELECT string_agg(disposition||':'||disposition_reason,',' ORDER BY external_id) FROM channel_thread_items WHERE workspace_id=$1`); got != "not_request:cancelled,not_request:cancelled" {
+		t.Fatalf("items after a cancel = %s", got)
+	}
+	off := false
+	if _, err := d.store.UpdateChannel(ctx, d.workspaceID, d.channel.ID, store.ChannelInput{Enabled: &off}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "k-3", From: "u2", Text: "a secret the admin discards"})
+	if got := d.one(t, `SELECT count(*)::text FROM channel_thread_items WHERE workspace_id=$1 AND body LIKE '%secret%'`); got != "1" {
+		t.Fatalf("held item = %s", got)
+	}
+	if _, err := d.store.DiscardHeld(ctx, d.workspaceID, d.channel.ID, nil, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM channel_thread_items WHERE workspace_id=$1 AND body LIKE '%secret%'`); got != "0" {
+		t.Fatalf("a discarded message's item stayed: %s", got)
+	}
+}

@@ -172,6 +172,12 @@ func (s *Store) DiscardHeld(ctx context.Context, workspaceID, channelID string, 
 			return discarded{}, err
 		}
 		count := len(keys)
+		// What a discarded message said goes from its chat place too (and with it any link).
+		if _, err := tx.Exec(ctx, `DELETE FROM channel_thread_items i USING channel_inbound_events e
+			WHERE i.workspace_id=$1 AND e.workspace_id=i.workspace_id AND e.id=i.inbound_event_id AND e.channel_id=$2 AND e.state='discarded'`,
+			workspaceID, channelID); err != nil {
+			return discarded{}, fmt.Errorf("discard held chat items: %w", err)
+		}
 		if count > 0 {
 			if err := insertChannelEvent(ctx, tx, channel, "held_discarded", actor, map[string]any{"count": count}); err != nil {
 				return discarded{}, err
