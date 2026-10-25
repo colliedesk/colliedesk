@@ -3,11 +3,14 @@ package channeltest_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
+	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -121,5 +124,180 @@ func TestAtAutoWhatTheRulesDecideByDefaultWaitsForTheDecider(t *testing.T) {
 	d.flush(t)
 	if got := d.one(t, `SELECT state||'/'||rules_rule||'/'||decided_by FROM intake_gatherings WHERE workspace_id=$1 AND lane_key LIKE '%:loopback_user:b'`); got != "created/command_open/rules" {
 		t.Fatalf("a command at auto = %s", got)
+	}
+}
+
+func (d loopDesk) intake() *intake.Service {
+	return intake.New(d.store, d.pipeline, func() time.Time { return *d.clock })
+}
+
+// gatheringOf is the id of the newest gathering of a sender ("a", "b"…).
+func (d loopDesk) gatheringOf(t *testing.T, sender string) string {
+	t.Helper()
+	return d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND lane_key LIKE '%:loopback_user:'||$2 ORDER BY closed_at DESC,created_at DESC LIMIT 1`, sender)
+}
+
+// A person's decision of a held batch opens the one message the batch is, says so in the journal and
+// the gathering's history, and links its items as a person's.
+func TestAPersonDecidesAGatheringAsOneMessage(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"},
+		channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "since this morning"})
+	d.flush(t)
+	id := d.gatheringOf(t, "a")
+	outcome, err := d.intake().Decide(context.Background(), d.workspaceID, id, intake.Decision{Action: intake.Create}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID})
+	if err != nil || outcome.State != store.GatheringCreated || outcome.ConversationID == "" {
+		t.Fatalf("decide = %+v, %v", outcome, err)
+	}
+	if got := d.one(t, `SELECT string_agg(body,'|') FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "the stock export fails\nsince this morning" {
+		t.Fatalf("messages = %q", got)
+	}
+	if got := d.one(t, `SELECT string_agg(state||':'||decision_basis||':'||decision_rule,',') FROM channel_inbound_events WHERE workspace_id=$1`); got != "processed:person:intake_create,processed:person:intake_create" {
+		t.Fatalf("journal = %s", got)
+	}
+	if got := d.one(t, `SELECT decider||'/'||basis||'/'||action||'/'||applied::text||'/'||cardinality(items_seen)::text||'/'||agent_id::text FROM intake_decisions WHERE workspace_id=$1`); got != "agent/person/create/true/2/"+d.agentID {
+		t.Fatalf("decision = %s", got)
+	}
+	if got := d.one(t, `SELECT string_agg(reason,',') FROM conversation_thread_items WHERE workspace_id=$1`); got != "agent,agent" {
+		t.Fatalf("links = %s", got)
+	}
+	// The same decision again is the same; another is refused, with how it stands.
+	if again, err := d.intake().Decide(context.Background(), d.workspaceID, id, intake.Decision{Action: intake.Create}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil || again != outcome {
+		t.Fatalf("again = %+v, %v", again, err)
+	}
+	var conflict *intake.ConflictError
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, id, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); !errors.As(err, &conflict) || conflict.Outcome.State != store.GatheringCreated {
+		t.Fatalf("another decision = %v", err)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM intake_decisions WHERE workspace_id=$1`); got != "1" {
+		t.Fatalf("decisions = %s", got)
+	}
+}
+
+// A batch decided to be a new request opens one even when its sender's later batch opened a
+// conversation its thread now finds.
+func TestANewRequestNeverJoinsAConversationOpenedSinceItWasHeld(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	held := d.gatheringOf(t, "a")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "report bug: the printer is down"})
+	d.flush(t)
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, held, intake.Decision{Action: intake.Create}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT count(DISTINCT conversation_id)::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "2" {
+		t.Fatalf("conversations of a = %s", got)
+	}
+}
+
+// A person and the sweep deciding at once apply one decision.
+func TestAPersonAndTheSweepDecideAGatheringOnce(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	id := d.gatheringOf(t, "a")
+	*d.clock = d.clock.Add(3 * time.Minute)
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, errs[0] = d.intake().Decide(context.Background(), d.workspaceID, id, intake.Decision{Action: intake.Create}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID})
+	}()
+	go func() {
+		defer wg.Done()
+		_, errs[1] = d.intake().Sweep(context.Background())
+	}()
+	wg.Wait()
+	var conflict *intake.ConflictError
+	if errs[1] != nil || (errs[0] != nil && !errors.As(errs[0], &conflict)) {
+		t.Fatalf("errors = %v", errs)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "1" {
+		t.Fatalf("messages = %s", got)
+	}
+}
+
+// Past its time, a gathering AI did not decide gets the rules' decision (T-R2): what they would open is
+// opened, what they hold for a person waits in the queue, and a commands-only scope's chatter goes to the
+// queue because AI was meant to look at it.
+func TestPastItsTimeTheRulesDecide(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 0 {
+		t.Fatalf("a sweep in time = %d, %v", n, err)
+	}
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 1 {
+		t.Fatalf("sweep = %d, %v", n, err)
+	}
+	if got := d.one(t, `SELECT state||'/'||decided_by||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1`); got != "created/rules/true" {
+		t.Fatalf("gathering = %s", got)
+	}
+	if got := d.one(t, `SELECT decision_basis||':'||decision_rule FROM channel_inbound_events WHERE workspace_id=$1`); got != "default:new_thread" {
+		t.Fatalf("journal = %s", got)
+	}
+	settings := json.RawMessage(`{"scopes":{"group":{"gather":{"quiet_seconds":300,"max_seconds":1200},"mode":"commands"}}}`)
+	if _, err := d.store.UpdateChannel(context.Background(), d.workspaceID, d.channel.ID, store.ChannelInput{Settings: settings}, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Group: "g2", Text: "good morning"})
+	d.flush(t)
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if _, err := d.intake().Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||rules_action||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "c")); got != "review/ai_unavailable/archive/true" {
+		t.Fatalf("chatter = %s", got)
+	}
+	// A batch behind a card of its lane waits in the queue right after it.
+	d.send(t, channeltest.LoopbackEvent{ID: "c-2", From: "c", Group: "g2", Text: "hello again"})
+	d.flush(t)
+	if got := d.one(t, `SELECT state||'/'||review_reason FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, d.gatheringOf(t, "c")); got != "review/lane_blocked" {
+		t.Fatalf("behind a card = %s", got)
+	}
+}
+
+// The held messages of a gathering are decided in the queue: replaying or discarding held messages one
+// by one leaves them; what intake set aside may be thrown away, and then its gathering is over.
+func TestHeldMessagesOfTheQueueAreDecidedThere(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "ok thanks"})
+	d.flush(t)
+	ctx := context.Background()
+	if held, err := d.store.HeldEvents(ctx, d.workspaceID, d.channel.ID, nil); err != nil || len(held) != 0 {
+		t.Fatalf("held one by one = %d, %v", len(held), err)
+	}
+	if n, err := d.store.DiscardHeld(ctx, d.workspaceID, d.channel.ID, nil, store.ChannelActor{AgentID: d.agentID}); err != nil || n != 0 {
+		t.Fatalf("discard while deciding = %d, %v", n, err)
+	}
+	id := d.gatheringOf(t, "a")
+	if _, err := d.intake().Decide(ctx, d.workspaceID, id, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT state||'/'||disposition_reason FROM channel_thread_items i JOIN intake_gatherings g ON g.workspace_id=i.workspace_id AND g.id=i.gathering_id WHERE i.workspace_id=$1`); got != "ignored/ignored" {
+		t.Fatalf("set aside = %s", got)
+	}
+	if outcome, err := d.intake().Requeue(ctx, d.workspaceID, id, store.ChannelActor{AgentID: d.agentID}); err != nil || outcome.State != store.GatheringReview {
+		t.Fatalf("requeue = %+v, %v", outcome, err)
+	}
+	if _, err := d.intake().Decide(ctx, d.workspaceID, id, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := d.store.DiscardHeld(ctx, d.workspaceID, d.channel.ID, nil, store.ChannelActor{AgentID: d.agentID}); err != nil || n != 1 {
+		t.Fatalf("discard what was set aside = %d, %v", n, err)
+	}
+	if got := d.one(t, `SELECT state FROM intake_gatherings WHERE workspace_id=$1`); got != "cancelled" {
+		t.Fatalf("gathering = %s", got)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM intake_decisions WHERE workspace_id=$1 AND action='ignore'`); got != "2" {
+		t.Fatalf("ignore decisions = %s", got)
 	}
 }

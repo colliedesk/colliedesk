@@ -24,6 +24,8 @@ const (
 	Match   = "match"
 	Default = "default"
 	Person  = "person"
+	// Model: AI decided where the rules only had a default.
+	Model = "model"
 )
 
 // Rules, as the journal names them (channel_inbound_events.decision_rule).

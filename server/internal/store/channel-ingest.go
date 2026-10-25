@@ -35,6 +35,8 @@ type IngestRequest struct {
 	DecidedBy string
 	// Flushing stores collected events as one message now (their Aggregate is not applied again).
 	Flushing bool
+	// Intake applies a decision of a gathering: EventIDs are all its held events, replayed as one.
+	Intake *IntakeApply
 }
 
 // IngestInbound is the one writer of conversations, contacts and messages from a channel: duplicate,
@@ -111,6 +113,13 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if locked != len(request.EventIDs) {
 			result.Status = ResultSkipped
 			return result, nil
+		}
+	}
+	// A decision of a gathering applies only while it is undecided and holds exactly these events.
+	var pending pendingGathering
+	if request.Intake != nil {
+		if pending, err = lockGathering(ctx, tx, request.WorkspaceID, request.Intake.GatheringID, request.EventIDs); err != nil {
+			return result, err
 		}
 	}
 	journal := journalWriter{tx: tx, channel: channel, request: request, now: now}
@@ -386,13 +395,17 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 				return result, fmt.Errorf("find conversation to reopen: %w", err)
 			}
 		}
-		if facts.RefConversation == "" {
+		// A gathering decided to be a new request opens one, whatever conversation its thread found since.
+		if facts.RefConversation == "" && (request.Intake == nil || !request.Intake.ForceNew) {
 			if facts.Thread, err = findChannelThread(ctx, tx, channel, in.Thread, shared, senderKey, now); err != nil {
 				return result, err
 			}
 		}
 	}
 	decision := rules.Decide(facts)
+	if request.Intake != nil {
+		decision = request.Intake.basisOf(decision, pending)
+	}
 	if level == intakeAuto && decision.Basis == rules.Default {
 		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
 	}
@@ -467,9 +480,22 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		objectKey: original, basis: decision.Basis, rule: decision.Rule}); err != nil {
 		return result, err
 	}
+	link := linkReasonOf(decision)
+	if request.Intake != nil && request.Intake.Decider != DecidedByRules {
+		link = request.Intake.Decider
+	}
 	if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemConversation, contactID: contactID, conversationID: conversationID,
-		messageID: messageID, linkReason: linkReasonOf(decision)}); err != nil {
+		messageID: messageID, linkReason: link}); err != nil {
 		return result, err
+	}
+	if request.Intake != nil {
+		state := GatheringAttached
+		if result.Status == channels.ResultCreated {
+			state = GatheringCreated
+		}
+		if err := concludeGathering(ctx, tx, workspaceID, *request.Intake, pending, state, conversationID, now); err != nil {
+			return result, err
+		}
 	}
 	if level != "" {
 		decided := gathering{state: GatheringAttached, decision: decision, conversationID: conversationID, contactID: contactID, decidedByRules: true}

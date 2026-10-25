@@ -2,11 +2,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/intake/rules"
 	"github.com/jackc/pgx/v5"
 )
@@ -157,4 +159,225 @@ func (s *Store) holdForIntake(ctx context.Context, tx pgx.Tx, journal *journalWr
 		return result, err
 	}
 	return finish(result)
+}
+
+// Errors of deciding a gathering.
+var (
+	// ErrGatheringDecided means the gathering was decided meanwhile (by a person, AI or the rules), or
+	// its items changed: the decision is not applied.
+	ErrGatheringDecided = errors.New("this gathering was decided meanwhile")
+	// ErrGatheringNotFound means no gathering of the workspace has that id.
+	ErrGatheringNotFound = errors.New("no gathering with that id")
+)
+
+// Deciders of a gathering, as intake_gatherings.decided_by names them.
+const (
+	DecidedByRules = "rules"
+	DecidedByAI    = "ai"
+	DecidedByAgent = "agent"
+)
+
+// IntakeApply is how a decision of a gathering is applied by IngestInbound: its held events, replayed
+// as one message, open a conversation (ForceNew: never one a thread key found meanwhile) or join
+// IntoConversation, while the gathering is still undecided and holds exactly those events.
+type IntakeApply struct {
+	GatheringID string
+	// Decider is rules (the fallback of what they decided when it closed), ai or agent.
+	Decider  string
+	Fallback bool
+	Actor    ChannelActor
+	ForceNew bool
+	// Decision is the row intake_decisions keeps of an AI's or a person's decision; nil for the rules.
+	Decision *IntakeDecisionInput
+}
+
+// IntakeDecisionInput is what intake_decisions keeps of one decision.
+type IntakeDecisionInput struct {
+	Action, TargetConversationID, Command, Subject, ReplyKind, Reason string
+	Confidence                                                        *float64
+	CorrectsDecisionID                                                string
+}
+
+// pendingGathering is an undecided gathering, locked, with its events.
+type pendingGathering struct {
+	id, state, rulesAction, rulesRule string
+	events                            []string
+}
+
+// lockGathering locks a gathering that is still to be decided and checks it holds exactly eventIDs.
+func lockGathering(ctx context.Context, tx pgx.Tx, workspaceID, id string, eventIDs []string) (pendingGathering, error) {
+	var g pendingGathering
+	err := tx.QueryRow(ctx, `SELECT g.id::text,g.state,g.rules_action,g.rules_rule,
+			COALESCE((SELECT array_agg(e.id::text ORDER BY e.id) FROM channel_inbound_events e WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id),'{}')
+		FROM intake_gatherings g WHERE g.workspace_id=$1 AND g.id::text=$2 FOR UPDATE OF g`, workspaceID, id).Scan(&g.id, &g.state, &g.rulesAction, &g.rulesRule, &g.events)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return g, ErrGatheringNotFound
+	}
+	if err != nil {
+		return g, fmt.Errorf("lock gathering: %w", err)
+	}
+	if g.state != GatheringDeciding && g.state != GatheringReview {
+		return g, ErrGatheringDecided
+	}
+	if eventIDs != nil {
+		seen := slices.Clone(eventIDs)
+		slices.Sort(seen)
+		if !slices.Equal(seen, g.events) {
+			return g, ErrGatheringDecided
+		}
+	}
+	return g, nil
+}
+
+// basisOf is what the journal says decided a message of a gathering.
+func (a IntakeApply) basisOf(decision rules.Decision, g pendingGathering) rules.Decision {
+	switch a.Decider {
+	case DecidedByAgent:
+		decision.Basis, decision.Rule = rules.Person, "intake_"+decision.Action
+	case DecidedByAI:
+		decision.Basis, decision.Rule = rules.Model, "intake_"+decision.Action
+	default:
+		decision.Basis, decision.Rule = rules.Default, g.rulesRule
+	}
+	return decision
+}
+
+// concludeGathering records how a gathering was decided once its message is stored, with the
+// decision intake_decisions keeps.
+func concludeGathering(ctx context.Context, tx pgx.Tx, workspaceID string, apply IntakeApply, g pendingGathering, state, conversationID string, now time.Time) error {
+	if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state=$3,review_reason=NULL,decide_by=NULL,conversation_id=NULLIF($4,'')::uuid,decided_by=$5,decided_at=$6,
+			decided_by_agent_id=NULLIF($7,'')::uuid,decided_by_token_id=NULLIF($8,'')::uuid,fallback=$9,updated_at=$6
+		WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, g.id, state, conversationID, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback); err != nil {
+		return fmt.Errorf("conclude gathering: %w", err)
+	}
+	return recordIntakeDecision(ctx, tx, workspaceID, apply, g, now)
+}
+
+func recordIntakeDecision(ctx context.Context, tx pgx.Tx, workspaceID string, apply IntakeApply, g pendingGathering, now time.Time) error {
+	d := apply.Decision
+	if d == nil {
+		return nil
+	}
+	basis := "person"
+	if apply.Decider == DecidedByAI {
+		basis = "model"
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO intake_decisions(workspace_id,gathering_id,decider,basis,action,target_conversation_id,command,subject,reply_kind,confidence,reason,
+			applied,items_seen,fallback,corrects_decision_id,agent_id,token_id,created_at)
+		VALUES($1,$2::uuid,$3,$4,$5,NULLIF($6,'')::uuid,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''),true,$12::uuid[],$13,NULLIF($14,'')::uuid,
+			NULLIF($15,'')::uuid,NULLIF($16,'')::uuid,$17)`,
+		workspaceID, g.id, apply.Decider, basis, d.Action, d.TargetConversationID, d.Command, clip(d.Subject, 200), d.ReplyKind, d.Confidence, clip(d.Reason, 2000),
+		g.events, apply.Fallback, d.CorrectsDecisionID, apply.Actor.AgentID, apply.Actor.TokenID, now); err != nil {
+		return fmt.Errorf("record intake decision: %w", err)
+	}
+	return nil
+}
+
+// SetGatheringState decides a gathering without a message: ignore keeps what it said held and out of
+// every conversation (requeue takes it back), review puts it in the queue with why. A gathering
+// already decided otherwise is ErrGatheringDecided.
+func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, action, reviewReason string, apply IntakeApply, now time.Time) error {
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		if action == rules.Review && reviewReason == ReviewRequeued {
+			// Requeue: an ignored gathering goes back to the queue; the decision stays in its history.
+			tag, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='review',review_reason='requeued',requeued_at=$3,requeued_by_agent_id=NULLIF($4,'')::uuid,
+					decided_by=NULL,decided_at=NULL,decided_by_agent_id=NULL,decided_by_token_id=NULL,updated_at=$3
+				WHERE workspace_id=$1 AND id::text=$2 AND state='ignored'`, workspaceID, id, now, apply.Actor.AgentID)
+			if err != nil {
+				return struct{}{}, fmt.Errorf("requeue gathering: %w", err)
+			}
+			if tag.RowsAffected() == 0 {
+				return struct{}{}, gatheringMissingOr(ctx, tx, workspaceID, id, ErrGatheringDecided)
+			}
+			_, err = tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='pending_review',disposition_reason='requeued'
+				WHERE workspace_id=$1 AND gathering_id::text=$2`, workspaceID, id)
+			return struct{}{}, err
+		}
+		g, err := lockGathering(ctx, tx, workspaceID, id, nil)
+		if err != nil {
+			return struct{}{}, err
+		}
+		switch action {
+		case rules.Ignore:
+			if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='ignored',review_reason=NULL,decide_by=NULL,decided_by=$3,decided_at=$4,
+					decided_by_agent_id=NULLIF($5,'')::uuid,decided_by_token_id=NULLIF($6,'')::uuid,fallback=$7,updated_at=$4
+				WHERE workspace_id=$1 AND id::text=$2`, workspaceID, id, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback); err != nil {
+				return struct{}{}, fmt.Errorf("ignore gathering: %w", err)
+			}
+			if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='not_request',disposition_reason='ignored'
+				WHERE workspace_id=$1 AND gathering_id::text=$2`, workspaceID, id); err != nil {
+				return struct{}{}, fmt.Errorf("ignore gathering items: %w", err)
+			}
+		case rules.Review:
+			if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='review',review_reason=$3,decide_by=NULL,fallback=$4,updated_at=$5
+				WHERE workspace_id=$1 AND id::text=$2`, workspaceID, id, reviewReason, apply.Fallback, now); err != nil {
+				return struct{}{}, fmt.Errorf("queue gathering: %w", err)
+			}
+			if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='pending_review',disposition_reason=$3
+				WHERE workspace_id=$1 AND gathering_id::text=$2`, workspaceID, id, reviewReason); err != nil {
+				return struct{}{}, fmt.Errorf("queue gathering items: %w", err)
+			}
+		default:
+			return struct{}{}, fmt.Errorf("a gathering is not decided %q without a message", action)
+		}
+		return struct{}{}, recordIntakeDecision(ctx, tx, workspaceID, apply, g, now)
+	})
+	return err
+}
+
+// gatheringMissingOr tells a gathering that is not there from one in another state.
+func gatheringMissingOr(ctx context.Context, tx pgx.Tx, workspaceID, id string, otherwise error) error {
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM intake_gatherings WHERE workspace_id=$1 AND id::text=$2)`, workspaceID, id).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrGatheringNotFound
+	}
+	return otherwise
+}
+
+// DueGathering is a gathering past its time to be decided.
+type DueGathering struct {
+	WorkspaceID, ID, RulesAction string
+}
+
+// DueGatherings lists, across workspaces, gatherings AI did not decide in time, oldest first.
+func (s *Store) DueGatherings(ctx context.Context, now time.Time, limit int) ([]DueGathering, error) {
+	var due []DueGathering
+	err := s.db.Privileged(ctx, database.PrivilegeIntakeDueClaim, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text,id::text,rules_action FROM intake_gatherings WHERE state='deciding' AND decide_by<=$1
+			ORDER BY decide_by LIMIT $2`, now, limit)
+		if err != nil {
+			return err
+		}
+		due, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (DueGathering, error) {
+			var g DueGathering
+			return g, row.Scan(&g.WorkspaceID, &g.ID, &g.RulesAction)
+		})
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list due gatherings: %w", err)
+	}
+	return due, nil
+}
+
+// GatheringOutcome is how a gathering stands: its state, the conversation it opened or joined, and who
+// decided it.
+type GatheringOutcome struct {
+	State, ConversationID, DecidedBy string
+}
+
+// GatheringOutcomeOf reads how a gathering stands.
+func (s *Store) GatheringOutcomeOf(ctx context.Context, workspaceID, id string) (GatheringOutcome, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (GatheringOutcome, error) {
+		var o GatheringOutcome
+		err := tx.QueryRow(ctx, `SELECT state,COALESCE(conversation_id::text,''),COALESCE(decided_by,'') FROM intake_gatherings WHERE workspace_id=$1 AND id::text=$2`,
+			workspaceID, id).Scan(&o.State, &o.ConversationID, &o.DecidedBy)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return o, ErrGatheringNotFound
+		}
+		return o, err
+	})
 }

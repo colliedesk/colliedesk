@@ -25,6 +25,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
+	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -195,6 +196,9 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	}
 	journal := pipeline.New(channelStore, nil)
 	g.Go(func(ctx context.Context) { journal.Run(ctx, 2*time.Second) })
+	// What chat intake did not decide in time gets the channel's rules (docs/internals/channels.md "Intake").
+	intakeSweep := intake.New(channelStore, journal, nil)
+	g.Go(func(ctx context.Context) { intakeSweep.Run(ctx, 15*time.Second) })
 	if emailConfig.ResendAPIKey != "" {
 		// Provider domains a workspace stopped using, or left behind by being deleted, free their slots here.
 		client := &resend.Client{APIKey: emailConfig.ResendAPIKey, Base: emailConfig.ResendAPIBase}
