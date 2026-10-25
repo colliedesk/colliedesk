@@ -54,6 +54,26 @@ type Channel struct {
 	IsDefault bool `json:"is_default"`
 }
 
+// ChannelAILevel is the level a channel sets for an AI feature on one of its scopes (” is the
+// whole channel), with intake's options there.
+type ChannelAILevel struct {
+	ChannelID string          `json:"channel_id"`
+	Scope     string          `json:"scope"`
+	Slot      string          `json:"slot"`
+	Level     string          `json:"level"`
+	Options   json.RawMessage `json:"options"`
+	UpdatedBy *string         `json:"updated_by"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+// AISourceConsent is an admin's consent that intake may send a kind of context (images,
+// contact_profile, external:<name>) besides the conversation's text.
+type AISourceConsent struct {
+	SourceClass string    `json:"source_class"`
+	ConsentedBy *string   `json:"consented_by"`
+	ConsentedAt time.Time `json:"consented_at"`
+}
+
 // ChannelEvent is one change to a channel (channel_events).
 type ChannelEvent struct {
 	ID           string          `json:"id"`
@@ -433,18 +453,21 @@ type AIProvider struct {
 
 // AISlot is one AI feature's setting: where it runs, the model, on or off, and who consented.
 type AISlot struct {
-	Slot        string     `json:"slot"`
-	UsesServer  bool       `json:"uses_server"`
-	ProviderID  *string    `json:"provider_id"`
-	Model       *string    `json:"model"`
-	Effort      string     `json:"effort"`
-	Enabled     bool       `json:"enabled"`
-	Automatic   bool       `json:"automatic"`
-	AutoParts   []string   `json:"auto_parts"`
-	ConsentedBy *string    `json:"consented_by"`
-	ConsentedAt *time.Time `json:"consented_at"`
-	UpdatedBy   *string    `json:"updated_by"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	Slot       string  `json:"slot"`
+	UsesServer bool    `json:"uses_server"`
+	ProviderID *string `json:"provider_id"`
+	Model      *string `json:"model"`
+	Effort     string  `json:"effort"`
+	Enabled    bool    `json:"enabled"`
+	// DefaultLevel is what the feature does by itself where no channel says otherwise: off, suggest,
+	// auto. Automatic is the older switch it replaced, read from it (triage auto, drafts suggest).
+	DefaultLevel string     `json:"default_level"`
+	Automatic    bool       `json:"automatic"`
+	AutoParts    []string   `json:"auto_parts"`
+	ConsentedBy  *string    `json:"consented_by"`
+	ConsentedAt  *time.Time `json:"consented_at"`
+	UpdatedBy    *string    `json:"updated_by"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 	// MonthlyCapMicroUSD is the AI chat feature's own monthly spending limit; null is none.
 	MonthlyCapMicroUSD *int64 `json:"monthly_cap_micro_usd"`
 }
@@ -768,6 +791,8 @@ type ConversationHead struct {
 	AssigneeID *string `json:"assignee_id"`
 	Channel    string  `json:"channel"`
 	ChannelID  *string `json:"channel_id"`
+	// ChannelScope is the scope of its channel's type the first message came in (a chat's group).
+	ChannelScope *string `json:"channel_scope"`
 	// ReplyChannelID is the channel its replies were pinned to when its own channel cannot send.
 	ReplyChannelID *string                    `json:"reply_channel_id"`
 	Origin         *domain.ConversationOrigin `json:"origin"`
@@ -796,7 +821,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelInboundEvent*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AISourceConsent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelAILevel*, ChannelInboundEvent*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -821,6 +846,7 @@ type Sink interface {
 	AIProvider(AIProvider) error
 	AISlot(AISlot) error
 	AISettingsEvent(AISettingsEvent) error
+	AISourceConsent(AISourceConsent) error
 	AIUsage(AIUsage) error
 	AIDraft(AIDraft) error
 	AITriage(AITriage) error
@@ -833,6 +859,7 @@ type Sink interface {
 	FixEvent(FixEvent) error
 	Channel(Channel) error
 	ChannelEvent(ChannelEvent) error
+	ChannelAILevel(ChannelAILevel) error
 	ChannelInboundEvent(ChannelInboundEvent) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error

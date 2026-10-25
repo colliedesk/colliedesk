@@ -3,6 +3,7 @@ package channels
 import (
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // Errors of the frame, the same for every type.
@@ -58,6 +59,12 @@ func NewRegistry(adapters ...Adapter) (*Registry, error) {
 		}
 		if definition.WhenOff != OffHold && definition.WhenOff != OffRefuse {
 			return nil, fmt.Errorf("channel type %s: WhenOff must be %q or %q", definition.Type, OffHold, OffRefuse)
+		}
+		for _, scope := range definition.IntakeScopes {
+			rules, ok := definition.Defaults.Scopes[scope]
+			if !slices.Contains(definition.Scopes, scope) || !ok || rules.Gather == nil {
+				return nil, fmt.Errorf("channel type %s: intake scope %q must be one of its scopes and collect its messages (a Gather in Defaults)", definition.Type, scope)
+			}
 		}
 		if adapter.Outbound() == nil && definition.RepliesVia == "" {
 			return nil, fmt.Errorf("channel type %s sends nothing and names no type that sends its replies", definition.Type)

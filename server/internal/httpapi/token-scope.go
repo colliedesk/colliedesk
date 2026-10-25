@@ -326,6 +326,14 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/ai/providers/{id}/check": grant(auth.PermAISettingsUpdate),
 	"DELETE /api/v1/ai/providers/{id}":     grant(auth.PermAISettingsUpdate),
 	"PUT /api/v1/ai/slots/{slot}":          alwaysAsk(auth.PermAISettingsUpdate),
+	// A channel's AI level: lowering it is ai_settings:update; raising it (or loosening intake's
+	// options) lets AI do more by itself, so the handler files it for a person whatever the token holds.
+	"GET /api/v1/channels/{id}/ai": grant(auth.PermChannelsRead),
+	"PUT " + channelAIRoute:        byHandler(auth.PermAISettingsUpdate),
+	// Agreeing that intake may send another kind of data (images, a contact's profile) is data
+	// leaving, like turning a feature on; taking it back only lowers.
+	"PUT /api/v1/ai/source-consents/{class}":    alwaysAsk(auth.PermAISettingsUpdate),
+	"DELETE /api/v1/ai/source-consents/{class}": grant(auth.PermAISettingsUpdate),
 	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or
 	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
 	"GET /api/v1/ai/usage":      grant(auth.PermBillingRead),

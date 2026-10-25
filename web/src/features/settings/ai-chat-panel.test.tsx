@@ -108,7 +108,7 @@ test('on a workspace key an admin sets the monthly spend limit in dollars, and e
   aiApi.chatUsage.mockResolvedValue(usage({ answer_limit: null, day_answer_limit: null, spent_micro_usd: 0, spent_percent: null }));
   aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
   const setCap = vi.fn().mockResolvedValue(undefined);
-  const slot = { slot: 'chat', source: 'provider', provider_id: null, model: 'claude-haiku-5-5', effort: 'low', enabled: true, automatic: false, auto_parts: [],
+  const slot = { slot: 'chat', source: 'provider', provider_id: null, model: 'claude-haiku-5-5', effort: 'low', enabled: true, default_level: 'off' as const, automatic: false, auto_parts: [],
     active: true, off_reason: null, consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null } as const;
   wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} onSetCap={setCap} />);
   const field = await screen.findByRole('textbox', { name: 'Monthly spend limit (US dollars)' });
@@ -127,7 +127,7 @@ test('on a workspace key an admin sets the monthly spend limit in dollars, and e
 test('a model the server has no price for says so instead of $0.00, and offers no limit in dollars', async () => {
   aiApi.chatUsage.mockResolvedValue(usage({ answers: 21, answer_limit: null, day_answer_limit: null, spent_micro_usd: null, spent_percent: null, unpriced_model: 'claude-haiku-5-5' }));
   aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
-  const slot = { slot: 'chat', source: 'server', provider_id: null, model: 'claude-haiku-5-5', effort: 'low', enabled: true, automatic: false, auto_parts: [],
+  const slot = { slot: 'chat', source: 'server', provider_id: null, model: 'claude-haiku-5-5', effort: 'low', enabled: true, default_level: 'off' as const, automatic: false, auto_parts: [],
     active: true, off_reason: null, consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null } as const;
   wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} onSetCap={vi.fn()} />);
   expect(await screen.findByText('Price unknown')).toBeTruthy();
@@ -151,7 +151,7 @@ test('an admin tries the chat and reads the whole answer with what it read', asy
   aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
   aiApi.chatPreview.mockResolvedValue({ answer: 'Orders ship in 2 days [#12].', status: 'answered', sources: [{ number: 12, title: 'Shipping times', folder: 'Orders' }],
     redacted: false, whole: true, articles: 38, took_ms: 1400 });
-  const slot = { slot: 'chat', source: 'server', provider_id: null, model: 'claude-haiku-5-5', effort: 'low', enabled: true, automatic: false, auto_parts: [],
+  const slot = { slot: 'chat', source: 'server', provider_id: null, model: 'claude-haiku-5-5', effort: 'low', enabled: true, default_level: 'off' as const, automatic: false, auto_parts: [],
     active: true, off_reason: null, consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null } as const;
   wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} />);
   fireEvent.change(await screen.findByRole('textbox', { name: 'Ask as a customer would' }), { target: { value: 'When does it ship?' } });

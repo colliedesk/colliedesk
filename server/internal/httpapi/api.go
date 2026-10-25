@@ -708,6 +708,11 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/channels/{id}/check", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/channels/{id}/held/replay", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/channels/{id}/held/discard", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/channels/{id}/ai", auth.PermissionAccessRead},
+		// The handler decides by the body: a token below its tier, or a raise, files a request.
+		{http.MethodPut, channelAIRoute, auth.PermissionAccessRead},
+		{http.MethodPut, "/api/v1/ai/source-consents/{class}", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/ai/source-consents/{class}", auth.PermissionAccessWrite},
 		// One email channel or web form of several; the routes above without an id act on the default one.
 		{http.MethodGet, "/api/v1/channels/{id}/email", auth.PermissionAccessRead},
 		{http.MethodPost, "/api/v1/channels/{id}/email/domain-verification", auth.PermissionAccessWrite},

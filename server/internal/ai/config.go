@@ -21,8 +21,8 @@ const (
 	SlotChat = "chat"
 )
 
-// Slots lists every slot in display order.
-var Slots = []string{SlotTriage, SlotDraft, SlotChat}
+// Slots lists every slot in display order. Intake (levels.go) runs only on chat channels.
+var Slots = []string{SlotTriage, SlotDraft, SlotChat, SlotIntake}
 
 // DefaultServerLabel names the server's provider when AI_SERVER_LABEL is not set.
 const DefaultServerLabel = "Server provider"

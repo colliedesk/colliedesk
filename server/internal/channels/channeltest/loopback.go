@@ -120,6 +120,8 @@ type Loopback struct {
 	Quiet, Max time.Duration
 	// PartSize splits a longer reply into parts of this many bytes; zero sends one part.
 	PartSize int
+	// IntakeScopes are the scopes it declares for intake (each needs a Gather in Defaults.Scopes).
+	IntakeScopes []string
 }
 
 // NewLoopback returns the Async loopback type with an endpoint.
@@ -134,7 +136,7 @@ func NewLoopback(kind channels.Type, mode channels.IngestMode) *Loopback {
 
 func (l *Loopback) Definition() channels.Definition {
 	return channels.Definition{Type: l.Type, Identified: true, Name: "Loopback", Capabilities: []string{"threads", "attachments_in", "attachments_out"},
-		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: []string{"user", "group"},
+		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: []string{"user", "group"}, IntakeScopes: l.IntakeScopes,
 		FileLimits: channels.FileLimits{PerFile: 1000, PerEvent: 5000},
 		Routes:     []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
 		HelpCenterRoutes: []channels.HelpCenterRoute{{Method: http.MethodGet, Path: "/" + string(l.Type), Handler: l.helpCenter},

@@ -374,7 +374,9 @@ func (s *Service) autoApply(ctx context.Context, tx pgx.Tx, workspaceID, convers
 	applied = TriageSet{TagIDs: []string{}}
 	var on bool
 	var parts []string
-	err = tx.QueryRow(ctx, `SELECT enabled AND automatic, auto_parts FROM ai_slots WHERE workspace_id=$1 AND slot='triage'`, workspaceID).Scan(&on, &parts)
+	err = tx.QueryRow(ctx, `SELECT ai_level($1,c.channel_id,c.channel_scope,'triage')='auto', s.auto_parts
+		FROM conversations c JOIN ai_slots s ON s.workspace_id=c.workspace_id AND s.slot='triage' WHERE c.workspace_id=$1 AND c.id=$2`,
+		workspaceID, conversationID).Scan(&on, &parts)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !on) {
 		return applied, skipped, left, nil
 	}

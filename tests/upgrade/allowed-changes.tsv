@@ -20,3 +20,4 @@ email_channels	provider_domain_first_verified_at	20261025090000-channels.up.sql	
 messages	email_message_id	20261025090000-channels.up.sql	Moved to messages.external_id as email:<Message-ID>, values kept
 conversations	email_reply_token	20261025090000-channels.up.sql	Moved to conversation_thread_keys as reply-token:<token> (channel_type email), values kept
 web_form_channels	enabled	20261025090000-channels.up.sql	Moved to channels.enabled and channels.disabled_at of the form's channel, values kept
+ai_slots	automatic	20261029120000-ai-channel-levels.up.sql	Moved to ai_slots.default_level: triage on and automatic is auto, triage on is suggest, drafts automatic is suggest, drafts on is off (a draft only when asked); the same customer message queues the same automatic work, and the API still reads automatic from default_level

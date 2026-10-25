@@ -266,12 +266,8 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
 
 ## Triage applied by itself
 
-1. **Two levels of consent.** Turning triage on lets ticket data go to its provider; `ai_slots.automatic`
-   lets suggestions change tickets. `SetSlot` keeps `automatic` when a request does not name it (an
-   older client does not turn it off), turns it off with the feature and when the feature moves to
-   another provider (unless the same request turns it on), and refuses it for drafts until they have an
-   automatic mode. CHECK `NOT automatic OR enabled`; deleting a provider turns both off. Restore
-   (`restore-workspace.sh`) sets it false: a restore never changes tickets by itself.
+1. **Two levels of consent.** Turning triage on lets ticket data go to its provider; level `auto`
+   (below, "Levels per channel") lets suggestions change tickets.
 2. **Applied in the transaction that records the answer.** `runTriage` locks the suggestion, then the
    conversation (the order accept and undo take them), drops what the conversation has and what a person
    changed since (`stale`), and `autoApply` fills only what nobody set: tags added, the priority only
@@ -293,8 +289,8 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
 
 1. **Queued by a trigger.** `ai_draft_on_customer_message` (AFTER INSERT ON messages) queues an
    automatic draft task and a pending `ai_drafts` row (`automatic`, `answers_message_id`) for each
-   customer message without `origin` and not failing its sender check, while the draft slot is on with
-   `automatic`. One task waits per conversation (unique partial index); a message before it runs moves
+   customer message without `origin` and not failing its sender check, while drafts are at level
+   `suggest` on the conversation's channel (`ai_level`). One task waits per conversation (unique partial index); a message before it runs moves
    it a minute later (five at most from the first) and makes it answer the newest message. An
    outgoing reply cancels the waiting one (`answered`). Everything is SQL in the transaction that
    writes the message.
@@ -312,6 +308,47 @@ closes its row. Only a call that would not fit with nothing running fails `ai_al
 3. **People first.** `CreateDraft` cancels the waiting automatic draft and supersedes a ready one;
    automatic drafts never touch a person's. The model also says `reply_needed`, kept for automatic
    drafts only.
+
+## Levels per channel
+
+Migration `20261029120000-ai-channel-levels`. A workspace still decides whether a feature may send
+data anywhere (`ai_slots.enabled`, its consent, provider, model); a level decides only what the
+feature does by itself: `off`, `suggest`, `auto`.
+
+1. **One function answers it.** `ai_level(workspace, channel, scope, slot)`: `off` while the slot is
+   not enabled, else the scope's row of `channel_ai_levels`, the channel's row (scope `''`), then
+   `ai_slots.default_level`. Both triggers and the two Go checks (`autoApply`, `automaticDraftWanted`)
+   call it with the conversation's `channel_id` and `channel_scope`; a conversation of no channel passes
+   NULLs and gets the default. Its parameters are `p_*`: in a SQL function a parameter named like a
+   column (`scope`) is read as the column, and the scope test would always be true.
+2. **The old switches mapped one to one.** Triage `enabled` was already "suggest" (the trigger wrote a
+   suggestion for every new conversation); draft `enabled` was "on demand". So triage enabled →
+   `suggest`, triage automatic → `auto`, draft enabled → `off`, draft automatic → `suggest`.
+   `automatic` is gone from the table; the API still returns it, read from the level, and still takes
+   it (`nextLevel`), so an older client keeps what it meant. `TestAIChannelLevelsMigrationKeepsWhatEachWorkspaceRanByItself`
+   checks that the same customer message queues the same tasks before and after.
+3. **What never runs by itself.** CHECKs refuse `auto` for drafts (AI never sends) and for intake as
+   a workspace default: intake's gate is a channel's, so a chat channel added later never starts at
+   `auto`. Intake rows exist only on a scope its type declares (`Definition.IntakeScopes`, which the
+   registry refuses unless the scope collects with a `Gather`); the database does not know the types,
+   so `SetChannelLevel` checks and answers 422 `intake_not_supported`.
+4. **A raise waits for a person.** `PUT /channels/{id}/ai/{slot}` is classified `byHandler`: the
+   handler files every token's call below `ai_settings:update`, and `SetChannelLevel(mayRaise=false)`
+   refuses, under the slot rows' lock, a change that raises the configured level of any scope it
+   reaches (removing a scope's row raises it when what it follows is higher) or loosens intake's
+   options (a lower threshold, a source turned on, other instructions); the handler files that too.
+   The level lives here, not in `channels.settings`, because `PATCH /channels/{id}` is a lower tier.
+5. **A new consent takes back what ran by itself.** When `SetSlot` records consent again (another
+   provider or model, or the feature turned on again), the workspace's level starts over (triage
+   `suggest`, others `off`) and `lowerChannelLevels` lowers every channel row a step (auto → suggest,
+   drafts suggest → off) in the same transaction, with `reason: recipient_changed` in both histories.
+   Deleting a provider sets the slot off; channel rows stay and read `workspace_off`. A restore lowers
+   both the same way.
+6. **Two histories.** A change writes `ai_settings_events(channel_level_changed)` and
+   `channel_events(ai_changed)`; the channel's history shows only which feature.
+7. **Source consents.** `ai_source_consents` holds an admin's consent per class of extra context
+   (`images`, `contact_profile`, `external:<name>`); giving one is Approval for every token (data
+   leaving), taking it back is the admin tier.
 
 ## Testing
 

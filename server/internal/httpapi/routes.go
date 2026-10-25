@@ -49,6 +49,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getSetupProgress, a.setSetupGuideHidden,
 		a.listChannels, a.createChannel, a.listChannelEvents, a.getChannel, a.updateChannel, a.removeChannel, a.setChannelCredential, a.checkChannel,
 		a.replayHeldChannelMessages, a.discardHeldChannelMessages,
+		a.getChannelAI, a.setChannelAI, a.setAISourceConsent, a.removeAISourceConsent,
 		a.getEmailChannel, a.verifyEmailDomain, a.rotateEmailSecret, a.connectGmail, a.disconnectGmail, a.submitWebForm,
 		a.connectMicrosoft, a.disconnectMicrosoft, a.finishMicrosoftConnect, a.finishMicrosoftAdminConsent,
 		a.connectMicrosoft, a.disconnectMicrosoft,

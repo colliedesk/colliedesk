@@ -79,7 +79,7 @@ func TestTheChatFeatureTakesAMonthlyLimitOfItsOwn(t *testing.T) {
 		Slots []chatSlotView `json:"slots"`
 	}
 	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/ai", nil, desk.adminA, nil), &settings)
-	if len(settings.Slots) != 3 || settings.Slots[2].Slot != "chat" || !settings.Slots[2].Enabled {
+	if len(settings.Slots) != 4 || settings.Slots[2].Slot != "chat" || !settings.Slots[2].Enabled {
 		t.Fatalf("slots = %+v", settings.Slots)
 	}
 	// Another workspace's settings never show it.
