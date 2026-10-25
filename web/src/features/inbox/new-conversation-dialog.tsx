@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api, ConflictError, InvalidRequestError } from '../../api/client';
@@ -141,6 +141,19 @@ export function NewConversationDialog({ blocked, checking = false, senders = [],
   ];
   // Nothing is written until the window knows the email may be sent, so no text is typed for nothing.
   const closed = Boolean(blocked) || checking;
+  // The window holds the focus while nothing can be written (so Escape reaches it), then gives it to the
+  // first field, unless the person already moved it.
+  useEffect(() => {
+    const dialog = root.current;
+    if (!dialog) return;
+    if (closed) {
+      if (!dialog.contains(document.activeElement)) dialog.focus();
+      return;
+    }
+    if (document.activeElement === dialog || !dialog.contains(document.activeElement)) {
+      dialog.querySelector<HTMLElement>('.new-conversation-fields input:not([disabled])')?.focus();
+    }
+  }, [closed]);
   const ready = !closed && missing.length === 0 && !fileProblem && !ccBlocking;
   // Escape closes only an empty window; once something is written, only Cancel throws it away.
   const written = [subject, body, name, email].some((text) => text.trim() !== '') || cc.length > 0 || files.length > 0;
@@ -174,7 +187,7 @@ export function NewConversationDialog({ blocked, checking = false, senders = [],
   };
   return (
     <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>
-      <div className="dialog new-conversation" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={dialogKeys(root, closeUnlessWritten)}>
+      <div className="dialog new-conversation" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} tabIndex={-1} onKeyDown={dialogKeys(root, closeUnlessWritten)}>
         <h2 id={titleId}>{contactMessages.newConversationTitle}</h2>
         {blocked && <p role="status" className="composer-notice">
           {blocked === 'trial' ? contactMessages.newConversationTrial : contactMessages.newConversationNeedsChannel}{' '}

@@ -211,3 +211,16 @@ test('with one email channel the window asks nothing about channels', () => {
   wrap(<NewConversationDialog onStart={vi.fn()} onClose={vi.fn()} channelID="c1" senders={[{ id: 'c1', name: 'Support', off: false }]} />);
   expect(screen.queryByLabelText('Send from')).not.toBeInTheDocument();
 });
+
+// While the window checks whether the email may be sent, it holds the focus itself, so Escape closes it;
+// once it knows, the focus goes to the customer search.
+test('the window takes the focus while it checks, and gives it to the search once it can be written', () => {
+  const onClose = vi.fn();
+  const { rerender } = wrap(<NewConversationDialog checking onStart={vi.fn()} onClose={onClose} />);
+  const dialog = screen.getByRole('dialog', { name: 'Start a conversation' });
+  expect(dialog).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  expect(onClose).toHaveBeenCalledTimes(1);
+  rerender(<QueryClientProvider client={new QueryClient()}><NewConversationDialog onStart={vi.fn()} onClose={onClose} /></QueryClientProvider>);
+  expect(screen.getByLabelText('Find a customer by name or email')).toHaveFocus();
+});
