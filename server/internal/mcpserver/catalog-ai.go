@@ -14,13 +14,19 @@ const (
 		`"models":{"type":"array","items":{"type":"string"},"description":"The first is the one a check uses."},` +
 		`"check_status":{"type":"string","enum":["ok","failing"]},"check_error_code":{"type":["string","null"]},"checked_at":{"type":"string"},` +
 		`"created_by":{"type":["string","null"]},"created_at":{"type":"string"},"updated_at":{"type":"string"},` +
-		`"used_by":{"type":"array","items":` + aiSlotName + `}}}`
+		`"used_by":{"type":"array","items":` + aiSlotName + `},` +
+		`"routing":{"anyOf":[` + aiRoutingSchema + `,{"type":"null"}],"description":"OpenRouter's routing by data policy; null on another server."}}}`
+
+	aiRoutingSchema = `{"type":"object","additionalProperties":false,"required":["data_collection","zdr"],"properties":{` +
+		`"data_collection":{"type":"string","enum":["allow","deny"],"description":"deny: only providers that do not store or train on what they are sent."},` +
+		`"zdr":{"type":"boolean","description":"true: only providers with zero data retention."}}}`
 
 	aiSlotName  = `{"type":"string","enum":["triage","draft","chat","intake"]}`
 	aiLevelName = `{"type":"string","enum":["off","suggest","auto"]}`
 
 	aiSlotSchema = `{"type":"object","required":["slot","source","enabled","default_level","active"],"properties":{"slot":` + aiSlotName + `,` +
 		`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":["string","null"]},"model":{"type":["string","null"]},` +
+		`"fallback_model":{"type":["string","null"],"description":"Intake only: the same provider's model it tries when model fails or answers what cannot be read."},` +
 		`"effort":{"type":"string","enum":["low","medium","high"]},"enabled":{"type":"boolean"},` +
 		`"default_level":` + aiLevelName + `,"automatic":{"type":"boolean","description":"Deprecated: default_level auto (triage) or suggest (drafts)."},` +
 		`"active":{"type":"boolean","description":"On, and its provider and model are still there: the feature runs."},` +
@@ -76,6 +82,7 @@ func aiProviderAddSpec() Spec {
 		Title: "Add an AI provider",
 		Description: `Add a provider with the workspace's own key: anthropic (the Claude API, no base_url) or openai_compatible (OpenAI, OpenRouter, vLLM, Ollama; ` +
 			`base_url with its version path, for example https://openrouter.ai/api/v1, public https unless the server operator allows private addresses). ` +
+			`On OpenRouter, routing keeps the requests on providers that do not store or train on data (data_collection deny) or keep nothing (zdr). ` +
 			aiKeyNotice + ` A failed check saves nothing and says why (ai_check_failed with check_error_code). At most 5 providers; adding one turns no feature on.` +
 			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
 		Tier: "admin",
@@ -83,7 +90,7 @@ func aiProviderAddSpec() Spec {
 		Input: `{"type":"object","additionalProperties":false,"required":["kind","label","models"],"properties":{` +
 			`"kind":{"type":"string","enum":["anthropic","openai_compatible"]},"label":{"type":"string","minLength":1,"maxLength":80},` +
 			`"base_url":{"type":"string","maxLength":500},"api_key":{"type":"string","maxLength":500},` +
-			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}}}}`,
+			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}},"routing":` + aiRoutingSchema + `}}`,
 		Output: aiProviderOutput,
 		run:    aiProviderAdd,
 	}
@@ -93,17 +100,19 @@ func aiProviderUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_provider_update",
 		Title: "Change an AI provider",
-		Description: `Rename a provider or change its models. A new first model is checked (one billed request) before it is saved. ` +
+		Description: `Rename a provider, change its models, or change an OpenRouter provider's routing by data policy. A new first model is checked (one billed request) before it is saved. ` +
 			`The base URL never changes: a new address is another provider, added with its key, so its features need turning on again. ` +
-			`A model a feature uses cannot be removed (ai_model_in_use).` +
-			"\n\nTier: admin.",
+			`A model a feature uses, or intake's fallback model, cannot be removed (ai_model_in_use). Tightening routing runs at once; loosening it ` +
+			`(data_collection deny to allow, zdr true to false) lets customers' data reach more providers, so it is filed as an agent request a person approves.` +
+			"\n\nTier: admin (loosening routing always waits for a person).",
 		Tier: "admin", Idempotent: true,
 		REST: []string{"PATCH /api/v1/ai/providers/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `,` +
 			`"label":{"type":"string","minLength":1,"maxLength":80},` +
-			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}}}}`,
-		Output: aiProviderOutput,
-		run:    aiProviderUpdate,
+			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}},"routing":` + aiRoutingSchema + `}}`,
+		Output: `{"type":"object","properties":{"provider":` + aiProviderSchema + `,"agent_request":` + filedRequestSchema + `,"next":{"type":"string"}},` +
+			`"anyOf":[{"required":["provider"]},{"required":["agent_request","next"]}]}`,
+		run: aiProviderUpdate,
 	}
 }
 
@@ -161,6 +170,7 @@ func aiSlotSetRequestSpec() Spec {
 		[]string{"PUT /api/v1/ai/slots/{slot}"},
 		`{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":`+aiSlotName+`,`+
 			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",`+uuid+`},"model":{"type":"string","maxLength":200},`+
+			`"fallback_model":{"type":"string","maxLength":200,"description":"Intake only: another of the same provider's models, tried when model fails or answers what cannot be read; an empty string removes it, left out it is kept."},`+
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},`+
 			`"default_level":`+aiLevelName+`,`+
 			`"automatic":{"type":"boolean","description":"Deprecated, use default_level: true is auto for triage and suggest for drafts."},`+
@@ -173,7 +183,8 @@ func aiUsageGetSpec() Spec {
 		Name:  "colliedesk_ai_usage_get",
 		Title: "Show AI usage",
 		Description: `Show one UTC month of the workspace's AI calls per feature and provider: calls, failed and automatic calls, tokens in and out, ` +
-			`and what the server's provider spent in micro-dollars, with this month's allowance when the server sets one. No prompt or answer is ever stored.` +
+			`what the server's provider spent in micro-dollars, and provider_cost: what the provider itself reported, in its own unit (OpenRouter: credits, not dollars), ` +
+			`with this month's allowance when the server sets one. No prompt or answer is ever stored.` +
 			"\n\nTier: admin.",
 		Tier: "admin", ReadOnly: true,
 		REST:  []string{"GET /api/v1/ai/usage"},
@@ -189,16 +200,18 @@ func aiAutomaticLimitsSetSpec() Spec {
 		Name:  "colliedesk_ai_automatic_limits_set",
 		Title: "Set the automatic AI limits",
 		Description: `Set how many automatic AI tasks (a triage suggestion for each new ticket) the workspace runs a UTC day and a minute; ` +
-			`the defaults are 300 and 30. Past the daily limit automatic tasks wait for the next day; what a person asks for is never limited this way.` +
+			`the defaults are 300 and 30, with at most draft_per_day automatic drafts (100) and intake_per_day intake decisions (300) inside them. Past the daily limit automatic tasks wait for the next day; what a person asks for is never limited this way.` +
 			"\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
 		REST: []string{"PUT /api/v1/ai/automatic-limits"},
 		Input: `{"type":"object","additionalProperties":false,"required":["per_day","per_minute"],"properties":{` +
 			`"per_day":{"type":"integer","minimum":0,"maximum":10000},"per_minute":{"type":"integer","minimum":0,"maximum":1000},` +
-			`"draft_per_day":{"type":"integer","minimum":0,"maximum":10000,"description":"Automatic drafts a day, inside per_day; kept when left out."}}}`,
+			`"draft_per_day":{"type":"integer","minimum":0,"maximum":10000,"description":"Automatic drafts a day, inside per_day; kept when left out."},` +
+			`"intake_per_day":{"type":"integer","minimum":0,"maximum":10000,"description":"Intake decisions a day, inside per_day; kept when left out."}}}`,
 		Output: `{"type":"object","required":["automatic"],"properties":{"automatic":{"type":"object","required":["per_day","per_minute","used_today"],"properties":{` +
 			`"per_day":{"type":"integer"},"per_minute":{"type":"integer"},"used_today":{"type":"integer"},"paused_until":{"type":["string","null"]},` +
-			`"draft_per_day":{"type":"integer"},"drafts_today":{"type":"integer"},"drafts_paused_until":{"type":["string","null"]},"drafts_reserved_until":{"type":["string","null"]}}}}}`,
+			`"draft_per_day":{"type":"integer"},"drafts_today":{"type":"integer"},"drafts_paused_until":{"type":["string","null"]},"drafts_reserved_until":{"type":["string","null"]},` +
+			`"intake_per_day":{"type":"integer"},"intake_today":{"type":"integer"},"intake_paused_until":{"type":["string","null"]}}}}}`,
 		run: aiAutomaticLimitsSet,
 	}
 }

@@ -141,6 +141,7 @@ var requestTitles = map[string]string{
 	"POST /api/v1/conversations":                                 "Open a conversation",
 	"PUT " + channelAIRoute:                                      "Set an AI level of a channel",
 	"PUT /api/v1/ai/source-consents/{class}":                     "Let AI intake send more data",
+	"PATCH /api/v1/ai/providers/{id}":                            "Loosen an AI provider's routing",
 	"DELETE /api/v1/ai/source-consents/{class}":                  "Stop AI intake sending some data",
 	"PATCH /api/v1/conversations/{id}":                           "Change a conversation",
 	"PUT /api/v1/conversations/{id}/tags/{tagId}":                "Tag a conversation",

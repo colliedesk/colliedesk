@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -20,6 +22,16 @@ type OpenAIConfig struct {
 	// APIKey is empty for a server without authentication (a local Ollama).
 	APIKey     string
 	HTTPClient *http.Client
+	// Routing is how OpenRouter picks the provider that serves a request; other servers ignore it.
+	Routing Routing
+}
+
+// Routing is OpenRouter's provider routing by data policy (https://openrouter.ai/docs/features/provider-routing):
+// DataCollection "deny" keeps a request off providers that store or train on data, ZDR on providers
+// with zero data retention. The zero value adds nothing.
+type Routing struct {
+	DataCollection string
+	ZDR            bool
 }
 
 type openAIProvider struct {
@@ -29,6 +41,7 @@ type openAIProvider struct {
 	openAIHost bool
 	// openRouterHost: OpenRouter routes each request to one of several providers of the model.
 	openRouterHost bool
+	routing        Routing
 }
 
 // NewOpenAICompatible returns the OpenAI-compatible adapter.
@@ -46,8 +59,15 @@ func NewOpenAICompatible(config OpenAIConfig) (Provider, error) {
 		apiKey:         config.APIKey,
 		http:           httpClient,
 		openAIHost:     strings.EqualFold(base.Hostname(), "api.openai.com"),
-		openRouterHost: strings.EqualFold(base.Hostname(), "openrouter.ai"),
+		openRouterHost: IsOpenRouter(base.String()),
+		routing:        config.Routing,
 	}, nil
+}
+
+// IsOpenRouter reports whether a base URL is OpenRouter's, the only server that reads Routing.
+func IsOpenRouter(baseURL string) bool {
+	base, err := url.Parse(baseURL)
+	return err == nil && strings.EqualFold(base.Hostname(), "openrouter.ai")
 }
 
 func (p *openAIProvider) Kind() Kind { return KindOpenAICompatible }
@@ -56,9 +76,32 @@ func (p *openAIProvider) Check(ctx context.Context, model string) (Response, err
 	return p.Complete(ctx, checkRequest(model))
 }
 
+// openAIMessage is a turn: Content is a string, or content parts when it carries images.
 type openAIMessage struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"`
+}
+
+type openAIPart struct {
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	ImageURL *struct {
+		URL string `json:"url"`
+	} `json:"image_url,omitempty"`
+}
+
+func openAIContent(message Message) any {
+	if len(message.Images) == 0 {
+		return message.Text
+	}
+	parts := []openAIPart{{Type: "text", Text: message.Text}}
+	for _, image := range message.Images {
+		part := openAIPart{Type: "image_url", ImageURL: &struct {
+			URL string `json:"url"`
+		}{URL: "data:" + image.MediaType + ";base64," + base64.StdEncoding.EncodeToString(image.Data)}}
+		parts = append(parts, part)
+	}
+	return parts
 }
 
 type openAIChoice struct {
@@ -79,11 +122,13 @@ type openAIReply struct {
 		PromptTokensDetails *struct {
 			CachedTokens int64 `json:"cached_tokens"`
 		} `json:"prompt_tokens_details"`
+		// Cost is OpenRouter's, in its credits, sent with every answer.
+		Cost *float64 `json:"cost"`
 	} `json:"usage"`
 }
 
 // body builds the chat completion request.
-func (p *openAIProvider) body(request Request, stream bool) map[string]any {
+func (p *openAIProvider) body(ctx context.Context, request Request, stream bool) map[string]any {
 	body := map[string]any{"model": request.Model, "stream": stream}
 	if stream {
 		// The last chunk then carries the usage; without it a streamed call is not metered.
@@ -94,7 +139,7 @@ func (p *openAIProvider) body(request Request, stream bool) map[string]any {
 		messages = append(messages, openAIMessage{Role: "system", Content: system})
 	}
 	for _, message := range request.Messages {
-		messages = append(messages, openAIMessage{Role: string(message.Role), Content: message.Text})
+		messages = append(messages, openAIMessage{Role: string(message.Role), Content: openAIContent(message)})
 	}
 	body["messages"] = messages
 	// OpenAI's reasoning models refuse max_tokens and take reasoning_effort; the servers that copy
@@ -105,6 +150,20 @@ func (p *openAIProvider) body(request Request, stream bool) map[string]any {
 	} else {
 		body["max_tokens"] = request.MaxOutput
 	}
+	// OpenRouter reads the effort inside reasoning. It goes only to a model that reasons at that
+	// effort: with require_parameters a model that does not would have no provider left.
+	route := map[string]any{}
+	if p.openRouterHost {
+		if p.reasonsAt(ctx, request.Model, request.Effort) {
+			body["reasoning"] = map[string]any{"effort": string(request.Effort)}
+		}
+		if p.routing.DataCollection != "" {
+			route["data_collection"] = p.routing.DataCollection
+		}
+		if p.routing.ZDR {
+			route["zdr"] = true
+		}
+	}
 	if request.Schema != nil {
 		body["response_format"] = map[string]any{
 			"type":        "json_schema",
@@ -113,8 +172,11 @@ func (p *openAIProvider) body(request Request, stream bool) map[string]any {
 		// By default OpenRouter may route to a provider that ignores response_format; this keeps the
 		// request on the providers that take every parameter it carries.
 		if p.openRouterHost {
-			body["provider"] = map[string]any{"require_parameters": true}
+			route["require_parameters"] = true
 		}
+	}
+	if len(route) > 0 {
+		body["provider"] = route
 	}
 	return body
 }
@@ -157,7 +219,7 @@ func (p *openAIProvider) Complete(ctx context.Context, request Request) (Respons
 	if request.Warm {
 		return Response{}, errors.New("aiprovider: this provider keeps no prompt cache to warm")
 	}
-	reply, err := p.send(ctx, p.body(request, false), "application/json")
+	reply, err := p.send(ctx, p.body(ctx, request, false), "application/json")
 	if err != nil {
 		return Response{}, err
 	}
@@ -194,6 +256,8 @@ type openAIChunk struct {
 		PromptTokensDetails *struct {
 			CachedTokens int64 `json:"cached_tokens"`
 		} `json:"prompt_tokens_details"`
+		// Cost is OpenRouter's, in its credits, as in a reply that is not streamed.
+		Cost *float64 `json:"cost"`
 	} `json:"usage"`
 }
 
@@ -206,7 +270,7 @@ func (p *openAIProvider) Stream(ctx context.Context, request Request, onText fun
 	if request.Warm {
 		return Response{}, errors.New("aiprovider: a request that warms the cache is never streamed")
 	}
-	reply, err := p.send(ctx, p.body(request, true), "text/event-stream")
+	reply, err := p.send(ctx, p.body(ctx, request, true), "text/event-stream")
 	if err != nil {
 		return Response{}, err
 	}
@@ -320,6 +384,10 @@ func openAIResponse(request Request, parsed openAIReply, requestID string) Respo
 		response.JSON = schemaJSON(request, response.Text)
 	}
 	usage := Usage{}
+	if parsed.Usage != nil && parsed.Usage.Cost != nil {
+		cost := *parsed.Usage.Cost
+		response.ProviderCost = &cost
+	}
 	if parsed.Usage != nil {
 		usage = Usage{Reported: true, InputTokens: parsed.Usage.PromptTokens, OutputTokens: parsed.Usage.CompletionTokens}
 		if details := parsed.Usage.PromptTokensDetails; details != nil {

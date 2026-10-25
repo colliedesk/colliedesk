@@ -21,15 +21,18 @@ const aiSourceConsentSchema = z.object({
   source_class: z.string(), consented_by: z.string().uuid().nullable(), consented_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'AISourceConsent'>>;
 const kindSchema = z.enum(['anthropic', 'openai_compatible']) satisfies z.ZodType<Generated<'AIProviderKind'>>;
+const aiRoutingSchema = z.object({
+  data_collection: z.enum(['allow', 'deny']), zdr: z.boolean(),
+}) satisfies z.ZodType<Generated<'AIProviderRouting'>>;
 export const aiProviderSchema = z.object({
   id: z.string().uuid(), kind: kindSchema, label: z.string(), base_url: z.string().nullable(), auth_kind: z.enum(['api_key', 'none']),
   key_hint: z.string().nullable(), models: z.array(z.string()), check_status: z.enum(['ok', 'failing']), check_error_code: z.string().nullable(),
   checked_at: z.string().datetime(), created_by: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
-  used_by: z.array(aiSlotNameSchema),
+  used_by: z.array(aiSlotNameSchema), routing: aiRoutingSchema.nullable(),
 }) satisfies z.ZodType<Generated<'AIProvider'>>;
 export const aiSlotSchema = z.object({
   slot: aiSlotNameSchema, source: z.enum(['server', 'provider', 'none']), provider_id: z.string().uuid().nullable(), model: z.string().nullable(),
-  effort: z.enum(['low', 'medium', 'high']), enabled: z.boolean(), default_level: aiLevelSchema, automatic: z.boolean(), auto_parts: z.array(z.enum(['tags', 'priority', 'assignee'])),
+  fallback_model: z.string().nullable(), effort: z.enum(['low', 'medium', 'high']), enabled: z.boolean(), default_level: aiLevelSchema, automatic: z.boolean(), auto_parts: z.array(z.enum(['tags', 'priority', 'assignee'])),
   active: z.boolean(),
   off_reason: z.enum(['server_provider_missing', 'server_provider_off', 'model_not_offered']).nullable(),
   consented_by: z.string().uuid().nullable(), consented_at: nullableDate, updated_by: z.string().uuid().nullable(), updated_at: nullableDate,
@@ -39,6 +42,7 @@ export const aiSlotSchema = z.object({
 export const aiAutomaticSchema = z.object({
   per_day: z.number().int(), per_minute: z.number().int(), used_today: z.number().int(), paused_until: nullableDate,
   draft_per_day: z.number().int(), drafts_today: z.number().int(), drafts_paused_until: nullableDate, drafts_reserved_until: nullableDate,
+  intake_per_day: z.number().int(), intake_today: z.number().int(), intake_paused_until: nullableDate,
 }) satisfies z.ZodType<Generated<'AIAutomaticLimits'>>;
 const aiAllowanceSchema = z.object({
   limit_micro_usd: z.number().int(), used_micro_usd: z.number().int(), resets_at: z.string().datetime(),
@@ -49,7 +53,7 @@ export const aiUsageSchema = z.object({
   rows: z.array(z.object({
     feature: z.enum(['check', 'triage', 'draft', 'chat', 'intake']), billed_to: z.enum(['server', 'workspace_key']), provider_label: z.string(),
     calls: z.number().int(), failed: z.number().int(), automatic: z.number().int(), input_tokens: z.number().int(), output_tokens: z.number().int(),
-    cost_micro_usd: z.number().int().nullable(),
+    cost_micro_usd: z.number().int().nullable(), provider_cost: z.number().nullable(),
   })),
 }) satisfies z.ZodType<Generated<'AIUsage'>>;
 const aiEventSchema = z.object({

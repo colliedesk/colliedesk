@@ -504,6 +504,9 @@ type AIProvider struct {
 	CreatedBy      *string   `json:"created_by"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
+	// Routing is OpenRouter's routing by data policy, as stored: {"data_collection":"deny","zdr":true},
+	// {} for OpenRouter's default.
+	Routing json.RawMessage `json:"routing"`
 }
 
 // AISlot is one AI feature's setting: where it runs, the model, on or off, and who consented.
@@ -512,8 +515,10 @@ type AISlot struct {
 	UsesServer bool    `json:"uses_server"`
 	ProviderID *string `json:"provider_id"`
 	Model      *string `json:"model"`
-	Effort     string  `json:"effort"`
-	Enabled    bool    `json:"enabled"`
+	// FallbackModel is intake's: the model it tries when Model fails.
+	FallbackModel *string `json:"fallback_model"`
+	Effort        string  `json:"effort"`
+	Enabled       bool    `json:"enabled"`
 	// DefaultLevel is what the feature does by itself where no channel says otherwise: off, suggest,
 	// auto. Automatic is the older switch it replaced, read from it (triage auto, drafts suggest).
 	DefaultLevel string     `json:"default_level"`
@@ -623,6 +628,8 @@ type AIUsage struct {
 	CostMicroUSD      *int64          `json:"cost_micro_usd"`
 	// ReservedMicroUSD is the most the call could cost, held against the allowance while it ran.
 	ReservedMicroUSD *int64 `json:"reserved_micro_usd"`
+	// ProviderCost is what the provider said the call cost, in its own unit (OpenRouter: credits).
+	ProviderCost *float64 `json:"provider_cost"`
 }
 
 // AIDraft is one AI reply draft and how it ended. Its text and prompt are empty 90 days after it ended.

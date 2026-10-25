@@ -81,6 +81,22 @@ policy; read it before you add one, for example [Anthropic's](https://www.anthro
 To keep data on your own servers, add an OpenAI-compatible provider on your network (vLLM, Ollama)
 and use it for every feature.
 
+### OpenRouter: which providers serve your requests
+
+OpenRouter sends each request to one of the companies that serve the model. Its **routing** keeps your
+requests on some of them: `data_collection: deny` only on providers that do not store or train on what
+they are sent, `zdr: true` only on providers with zero data retention
+([OpenRouter's provider routing](https://openrouter.ai/docs/features/provider-routing)). Set it with the
+provider (`routing` on `POST /api/v1/ai/providers` and `PATCH /api/v1/ai/providers/{id}`, or the MCP
+tools `colliedesk_ai_provider_add` and `colliedesk_ai_provider_update`); Settings does not show it yet.
+A model that no such provider serves fails its check, so you know before a feature uses it. Tightening
+the routing takes effect at once. Loosening it (deny to allow, zero retention off) lets customers' data
+reach more providers, so from an AI agent it always becomes a [request a person approves](agent-requests.md).
+Other servers have no routing, and refuse it.
+
+On OpenRouter, a feature's **effort** goes to the models OpenRouter lists as reasoning at that effort;
+another model answers without one, as before.
+
 ## Work runs in the background
 
 Suggestions and drafts run as background tasks, so no screen waits for a model: a task that hits a
@@ -239,13 +255,23 @@ Intake may also send pictures customers sent, the customer's profile, or an inte
 once an admin agreed to each (`colliedesk_ai_source_consent_request`, taken back with
 `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
 
+## When intake's model fails
+
+Intake can have a **fallback model**: another of its provider's models, tried once when its model
+times out, is busy, refuses for its rate, is gone, or answers what Colliedesk cannot read. A refused key
+or an account out of credit is not tried again on the other model. Each call is in the usage. Set it
+with `fallback_model` on `PUT /api/v1/ai/slots/intake` (an empty string removes it); the provider cannot
+drop a model intake uses this way. A new fallback model takes intake back to Suggest on every channel,
+as another model does.
+
 ## Limits
 
 1. **Automatic runs.** Work Colliedesk starts on its own (a triage suggestion for each new ticket, a
    draft for each customer message when that is on) stops at 300 a day (UTC) and 30 a minute in a
    workspace, of which 100 a day may be drafts, whichever provider runs it, so a flood of
-   tickets cannot run up a bill. Past the daily limit automatic suggestions wait until 00:00 UTC; what
-   an agent asks for still runs. Admins change both numbers in **Settings → Built-in AI → Features**
+   tickets cannot run up a bill. Intake's decisions on chat channels count too, at most 300 a day of
+   them (`intake_per_day`), so a busy group cannot spend the day's triage and drafts. Past the daily
+   limit automatic suggestions wait until 00:00 UTC; what an agent asks for still runs. Admins change both numbers in **Settings → Built-in AI → Features**
    (**Automatic runs**, **Change**). Each task counts once, however many times it is retried.
 2. **Included AI.** The server's provider can come with a monthly allowance (on Colliedesk Cloud,
    included in your plan). When it is used up, features on the server's provider stop until the first
@@ -268,7 +294,9 @@ channel too. Its use, its chats and their transcripts are on the **AI chat** tab
 **Settings → Built-in AI → History** lists who added, changed or deleted a provider or a key, and who turned a
 feature on, off or elsewhere, with keys shown only by their last 4 characters. Every call to a provider
 leaves one usage record (the feature, the model, tokens in and out, whether it failed, and for the
-server's provider its cost at that day's prices), never the text sent or received. **Settings → Built-in AI →
+server's provider its cost at that day's prices), never the text sent or received. When the provider
+reports what a call cost (OpenRouter does with every answer), that is kept too, in the provider's own
+unit: OpenRouter's credits, never converted to dollars. **Settings → Built-in AI →
 Usage** sums a month per feature and provider. Both are in the [export](export.md).
 
 ## Agents and external AI agents
