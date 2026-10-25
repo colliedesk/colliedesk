@@ -223,3 +223,35 @@ func TestEmailChannelRoutesStayInTheirWorkspace(t *testing.T) {
 		t.Fatal("beta's channel changed")
 	}
 }
+
+// A request an agent files about one mailbox names it, so the person approving knows which one.
+func TestARequestAboutAMailboxNamesIt(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Named Requests", "admin@named-requests.example.com")
+	connectEmail(t, api, admin, "support@named-requests.example.com")
+	billing := addEmailChannel(t, api, admin, "billing@named-requests.example.com")
+	if response := request(t, api, http.MethodPatch, "/api/v1/channels/"+billing, map[string]any{"name": "Billing"}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("rename: %d %s", response.Code, response.Body.String())
+	}
+	token := issueToken(t, api, admin, "Ops agent", "admin").Token
+	for _, item := range []struct {
+		method, path string
+		body         any
+		want         string
+	}{
+		{http.MethodDelete, "/api/v1/channels/" + billing, nil, "Remove the channel Billing (billing@named-requests.example.com)"},
+		{http.MethodPut, "/api/v1/channels/" + billing + "/credentials", map[string]any{"name": "api_key", "value": "secret-value-1234"}, "Store a secret of the channel Billing (billing@named-requests.example.com)"},
+		{http.MethodPost, "/api/v1/channels/" + billing + "/held/discard", nil, "Discard the held messages of the channel Billing (billing@named-requests.example.com)"},
+		{http.MethodPost, "/api/v1/channels/" + billing + "/email/secret", nil, "Rotate the inbound secret of the channel Billing (billing@named-requests.example.com)"},
+		{http.MethodPost, "/api/v1/channels/" + billing + "/email/gmail", nil, "Connect Gmail to the channel Billing (billing@named-requests.example.com)"},
+		{http.MethodDelete, "/api/v1/channels/" + billing + "/email/gmail", nil, "Disconnect Gmail from the channel Billing (billing@named-requests.example.com)"},
+	} {
+		created := accepted(t, api, item.method, item.path, item.body, token)
+		if !strings.HasPrefix(created.Summary, item.want) {
+			t.Errorf("%s %s: summary %q, want it to start with %q", item.method, item.path, created.Summary, item.want)
+		}
+		if strings.Contains(created.Summary, "secret-value") {
+			t.Errorf("%s %s: the summary shows the secret: %q", item.method, item.path, created.Summary)
+		}
+	}
+}
