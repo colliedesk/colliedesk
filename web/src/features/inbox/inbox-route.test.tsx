@@ -867,6 +867,8 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   const notice = await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/);
+  // One channel of a type: no mailbox name on the rows or the thread.
+  expect(document.querySelector('.channel-pill')).toBeNull();
   fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
   expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/55555555-5555-4555-8555-555555555555' });
   navigate.mockRestore();
@@ -951,6 +953,10 @@ test('with two mailboxes the composer names the one a reply leaves from', async 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const { unmount } = render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   expect(await screen.findByText('Replies send from Sales.')).toBeInTheDocument();
+  // The row and the thread's header name the mailbox, since there are two.
+  expect(screen.getByRole('button', { name: /Alpha conversation/ })).toHaveTextContent('Sales');
+  expect(document.querySelector('.timeline-header .channel-pill')).toHaveTextContent('Sales');
+  expect(screen.getByRole('button', { name: /Beta conversation/ })).toHaveTextContent('Careers (removed)');
   unmount();
   testRouter.params = { conversationId: beta.id };
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);

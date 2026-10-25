@@ -12,6 +12,8 @@ import { useListKeys } from './use-list-keys';
 
 interface ConversationListProps {
   items: Conversation[];
+  // Names a conversation's channel where the workspace has two of its type.
+  channelLabel?: (conversation: Conversation) => string | undefined;
   selectedId?: string;
   timezone: string;
   onSelect?: (id: string) => void;
@@ -65,7 +67,7 @@ function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boo
 }
 
 const visibleTags = 2;
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
+export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
   failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
@@ -146,6 +148,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
             <span className="conversation-meta">
               <StatusLabel status={item.status} />
               <PriorityLabel priority={item.priority} />
+              {channelLabel?.(item) && <span className="channel-pill">{channelLabel(item)}</span>}
               {draftIds?.has(item.id) && <span className="badge badge-draft">{messages.draftWaiting}</span>}
               {open && open.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ViewerStack viewers={open} timezone={timezone} />} />}
               {item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}

@@ -128,6 +128,7 @@
 .priority-high { background: var(--warn-soft); color: var(--warn); }
 .priority-urgent { background: var(--danger-soft); color: var(--danger); }
 .tag-pill { color: var(--text-3); font-size: var(--fs-label); }
+.channel-pill { max-width: 12rem; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 6px; color: var(--text-2); font-size: var(--fs-label); line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .tag-pill::before { content: "#"; opacity: 0.7; }
 
 /* Thread. */

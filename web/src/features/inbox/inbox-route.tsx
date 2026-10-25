@@ -168,7 +168,14 @@ export function InboxRoute() {
   const senderID = selected?.channel_ref?.replies_via?.id;
   const emailChannel = useQuery({ queryKey: senderID ? ['email-channel', senderID] : ['email-channel'],
     queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()) });
-  const mailboxes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types.find((info) => info.type === 'email')?.count ?? 0;
+  const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types;
+  const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
+  // A type with two channels or more names the channel on each row and thread; with one, nothing changes.
+  const several = new Set(channelTypes?.filter((info) => info.count > 1).map((info) => info.type));
+  const channelLabel = (conversation: Conversation) => {
+    const ref = conversation.channel_ref;
+    return ref && several.has(ref.type) ? (ref.deleted ? messages.removedChannel(ref.name) : ref.name) : undefined;
+  };
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
   const limits = config?.limits;
@@ -273,7 +280,7 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outbound} sendsFrom={sendsFrom} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
