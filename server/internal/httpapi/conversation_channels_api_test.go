@@ -210,3 +210,36 @@ func TestConversationsFilterByChannel(t *testing.T) {
 		t.Fatalf("saved view with channel_id: %d %s", view.Code, view.Body.String())
 	}
 }
+
+// An imported conversation's replies leave from the email channel of the mailbox it was sent to at the
+// source, when the workspace has one, and keep it; one whose mailbox it has not leaves from the default.
+func TestAnImportedConversationRepliesFromItsSourceMailbox(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Imported Boxes", "admin@imported-boxes.example.com")
+	connectEmail(t, api, admin, "support@imported-boxes.example.com")
+	support := emailChannelOf(t, api, admin, "").Channel.ChannelID
+	billing := addEmailChannel(t, api, admin, "billing@imported-boxes.example.com")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Olive", "email": "olive@customer.example"})
+	imported := func(mailboxes string) string {
+		t.Helper()
+		return queryString(t, pool, `INSERT INTO conversations(workspace_id,contact_id,subject,channel,origin)
+			SELECT workspace_id,id,'Imported','imported',jsonb_build_object('system','freshdesk','external_id','1','mailboxes',$2::jsonb)
+			FROM contacts WHERE id=$1 RETURNING id::text`, contact, mailboxes)
+	}
+	fromBilling := imported(`["Billing+Desk@Imported-Boxes.example.com", "support@imported-boxes.example.com"]`)
+	unknown := imported(`["sales@elsewhere.example.com"]`)
+	if via := conversationOf(t, api, admin, fromBilling).ChannelRef; via == nil || via.RepliesVia == nil || via.RepliesVia.ID != billing {
+		t.Fatalf("before any reply, channel_ref = %+v, want replies via billing", via)
+	}
+	reply(t, api, admin, fromBilling, "From billing.")
+	reply(t, api, admin, unknown, "From the default.")
+	if got := deliveryChannel(t, pool, fromBilling); got != billing {
+		t.Fatalf("the import of billing@ replied from %s, want %s", got, billing)
+	}
+	if got := deliveryChannel(t, pool, unknown); got != support {
+		t.Fatalf("an import of another mailbox replied from %s, want the default %s", got, support)
+	}
+	if pinned := queryString(t, pool, `SELECT reply_channel_id::text FROM conversations WHERE id=$1`, fromBilling); pinned != billing {
+		t.Fatalf("the first reply pinned %s, want %s", pinned, billing)
+	}
+}

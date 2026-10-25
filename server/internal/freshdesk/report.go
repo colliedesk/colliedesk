@@ -254,10 +254,10 @@ type StorageCapCheck struct {
 // report never implies more than it delivers.
 var notImported = []string{
 	"Custom ticket fields and custom contact fields",
-	"Ticket group, product, company link, email_config_id, escalation flags, watchers, parent/child and merge links",
+	"Ticket group, product, company link, escalation flags, watchers, parent/child and merge links (the ticket's mailbox, from email_config_id, is kept to choose the email channel of its replies)",
 	"Contact phone numbers, other emails, addresses, job titles and social handles",
 	"Companies other than their name (domains, notes, custom fields)",
-	"Message structured_body, support_email, notified_to and edit history (last_edited_*)",
+	"Message structured_body, notified_to and edit history (last_edited_*)",
 	"Satisfaction ratings, SLA policies, automations",
 	"Files attached to canned responses (saved replies hold text only; the report lists the canned responses that had files)",
 	"Knowledge base: article translations are stored and exported but not shown in Colliedesk yet; translated category and folder names are not imported; tags, SEO data, views and votes are kept only in the article's source_meta",

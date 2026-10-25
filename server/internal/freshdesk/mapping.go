@@ -120,7 +120,7 @@ func (r *run) conversationMessage(c fdConversation) newMessage {
 
 var ticketSources = map[int]string{1: "email", 2: "portal", 3: "phone", 7: "chat", 9: "feedback_widget", 10: "outbound_email"}
 
-func ticketOrigin(ticket fdTicket) *domain.ConversationOrigin {
+func ticketOrigin(ticket fdTicket, mailboxes []string) *domain.ConversationOrigin {
 	source := "other"
 	if name, ok := ticketSources[ticket.Source]; ok {
 		source = name
@@ -132,7 +132,7 @@ func ticketOrigin(ticket fdTicket) *domain.ConversationOrigin {
 	}
 	return &domain.ConversationOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(ticket.ID, 10), ResponderExternalID: responder, Type: ticket.Type,
 		Source: &source, DueAt: utcPointer(ticket.DueBy), FirstResponseDueAt: utcPointer(ticket.FrDueBy),
-		CC: list(ticket.CcEmails), ForwardedTo: list(ticket.FwdEmails), Stats: originStats(ticket.Stats, ticket.Status)}
+		CC: list(ticket.CcEmails), ForwardedTo: list(ticket.FwdEmails), Stats: originStats(ticket.Stats, ticket.Status), Mailboxes: mailboxes}
 }
 
 func originStats(stats *fdStats, freshdeskStatus int) *domain.OriginStats {
