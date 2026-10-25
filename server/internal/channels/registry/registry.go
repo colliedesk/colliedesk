@@ -4,19 +4,19 @@ package registry
 
 import (
 	"github.com/colliedesk/colliedesk/server/internal/channels"
-	"github.com/colliedesk/colliedesk/server/internal/channels/email"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/webform"
 )
 
 // Config is what the types need of the server.
 type Config struct {
-	Email email.Config
+	Email channelemail.Config
 }
 
 // New returns the registry of every type, in the order the web app lists them.
 func New(config Config) *channels.Registry {
 	registry, err := channels.NewRegistry(
-		email.New(config.Email),
+		channelemail.New(config.Email),
 		webform.New(),
 	)
 	if err != nil {

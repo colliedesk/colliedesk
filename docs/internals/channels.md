@@ -36,7 +36,9 @@ fails when shared code names a type; `TestEveryRegisteredTypeIsWhole` when a reg
    and `web/src/channels/registry.test.ts` fail until all three agree. The server's conversation filter,
    saved views and MCP tool schemas read the registry (`mcpserver/channel-values.go`).
 3. `server/internal/channels/<type>/`: the adapter, its own routes in `Definition.Routes` (mounted by the
-   API under `/api/v1`) and tools in `Definition.Tools`.
+   API under `/api/v1`) and tools in `Definition.Tools`. Its directory's name is unique among the
+   server's packages, since `go test -c` in CI names each test binary by it: email's is `channelemail`,
+   apart from the parser `internal/email`.
 4. One line in `server/internal/channels/registry/registry.go`.
 5. A test that runs `channeltest.Run` against it: the contract every type passes (new message, duplicate,
    thread and reopen, off, other workspace, rate limit, failed processing, sending, retries, off while

@@ -1,4 +1,4 @@
-package email_test
+package channelemail_test
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
-	channelemail "github.com/colliedesk/colliedesk/server/internal/channels/email"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	mailpkg "github.com/colliedesk/colliedesk/server/internal/email"

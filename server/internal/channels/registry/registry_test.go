@@ -3,7 +3,9 @@ package registry_test
 import (
 	"context"
 	"os"
+	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -29,7 +31,8 @@ func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 	if start := strings.Index(contract, "\n    ChannelType:\n"); start >= 0 {
 		channelTypeEnum = contract[start : start+200]
 	}
-	for _, definition := range registry.New(registry.Config{}).Definitions() {
+	types := registry.New(registry.Config{})
+	for _, definition := range types.Definitions() {
 		kind := string(definition.Type)
 		var connectable bool
 		if err := pool.QueryRow(ctx, `SELECT connectable FROM channel_types WHERE type=$1`, kind).Scan(&connectable); err != nil {
@@ -39,7 +42,10 @@ func TestEveryRegisteredTypeIsWhole(t *testing.T) {
 		if !connectable {
 			t.Errorf("%s: channel_types says it is not connectable", kind)
 		}
-		dir := filepath.Join("..", strings.ReplaceAll(kind, "_", ""))
+		// The adapter's own package: its directory is named apart from every other package of the
+		// server (internal/email is the email parser), since go test -c names a binary by it.
+		adapter, _ := types.Adapter(definition.Type)
+		dir := filepath.Join("..", path.Base(packagePath(adapter)))
 		tests, _ := filepath.Glob(filepath.Join(dir, "*_test.go"))
 		found := false
 		for _, path := range tests {
@@ -105,4 +111,16 @@ func pascal(kind string) string {
 		}
 	}
 	return b.String()
+}
+
+// packagePath is the import path of the package that defines the value's type.
+func packagePath(value any) string {
+	kind := reflect.TypeOf(value)
+	for kind != nil && kind.Kind() == reflect.Pointer {
+		kind = kind.Elem()
+	}
+	if kind == nil {
+		return ""
+	}
+	return kind.PkgPath()
 }

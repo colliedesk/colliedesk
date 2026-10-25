@@ -12,7 +12,7 @@ import (
 	"strconv"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
-	channelemail "github.com/colliedesk/colliedesk/server/internal/channels/email"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"

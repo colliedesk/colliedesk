@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
-	channelemail "github.com/colliedesk/colliedesk/server/internal/channels/email"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"io"

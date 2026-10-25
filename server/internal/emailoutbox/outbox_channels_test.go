@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
-	channelemail "github.com/colliedesk/colliedesk/server/internal/channels/email"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"

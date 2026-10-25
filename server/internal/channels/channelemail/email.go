@@ -1,7 +1,7 @@
-// Package email is the email channel: a support address that receives mail forwarded to it and sends
+// Package channelemail is the email channel: a support address that receives mail forwarded to it and sends
 // replies through SMTP or the workspace's Gmail. Its configuration is the email_channels table, its
 // input the message parser of internal/email, its output the sender of internal/emailoutbox.
-package email
+package channelemail
 
 import (
 	"bytes"

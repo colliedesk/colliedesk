@@ -6,7 +6,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
-	channelemail "github.com/colliedesk/colliedesk/server/internal/channels/email"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/email"
