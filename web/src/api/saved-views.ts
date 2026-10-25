@@ -13,6 +13,7 @@ export const conversationFiltersSchema = z.object({
   tag: z.array(z.string().uuid()).optional(), tag_match: z.enum(['any', 'all']).optional(), contact: z.string().uuid().optional(),
   organization: z.string().optional(), awaiting: z.enum(['team', 'customer']).optional(), has_pending_draft: z.boolean().optional(),
   delivery_failed: z.boolean().optional(), source: z.enum(['imported', 'native']).optional(), channel: z.array(channelSchema).optional(),
+  channel_id: z.array(z.string().uuid()).optional(),
   created_after: z.string().datetime({ offset: true }).optional(), created_before: z.string().datetime({ offset: true }).optional(),
   updated_after: z.string().datetime({ offset: true }).optional(), updated_before: z.string().datetime({ offset: true }).optional(),
   sort: conversationSortSchema.optional(), search: z.string().optional(),

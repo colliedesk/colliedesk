@@ -6,16 +6,21 @@ import type { ChannelsSearch } from './channels-route';
 
 const mocks = vi.hoisted(() => {
   class InvalidRequestError extends Error {}
+  class ConflictError extends InvalidRequestError {
+    detail?: Record<string, unknown>;
+    constructor(message: string, detail?: Record<string, unknown>) { super(message); this.detail = detail; }
+  }
   class PlanLimitError extends Error {}
   class UnauthorizedError extends Error {}
   const api = {
     me: vi.fn(), config: vi.fn(), emailChannel: vi.fn(), saveEmailChannel: vi.fn(), saveEmailSenderName: vi.fn(), updateWorkspaceSlug: vi.fn(),
     rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(), connectGmail: vi.fn(), disconnectGmail: vi.fn(),
   };
-  const channelsApi = { list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), replayHeld: vi.fn(), discardHeld: vi.fn() };
-  return { api, channelsApi, InvalidRequestError, PlanLimitError, UnauthorizedError };
+  const channelsApi = { list: vi.fn(), listAll: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), replayHeld: vi.fn(), discardHeld: vi.fn(),
+    email: vi.fn(), emailSecret: vi.fn(), emailVerifyDomain: vi.fn(), emailConnectGmail: vi.fn(), emailDisconnectGmail: vi.fn() };
+  return { api, channelsApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
 });
-vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, PlanLimitError: mocks.PlanLimitError, UnauthorizedError: mocks.UnauthorizedError }));
+vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError, PlanLimitError: mocks.PlanLimitError, UnauthorizedError: mocks.UnauthorizedError }));
 vi.mock('../../../api/channels', () => ({ channelsApi: mocks.channelsApi }));
 const { api, channelsApi } = mocks;
 
@@ -26,14 +31,15 @@ const me = (role: 'admin' | 'agent') => ({
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', plan: null,
 });
 const channel = (type: 'email' | 'web_form', change: Record<string, unknown> = {}) => ({
-  id: type === 'email' ? EMAIL : FORM, type, name: type === 'email' ? 'Email' : 'Web form', enabled: true,
+  id: type === 'email' ? EMAIL : FORM, type, name: type === 'email' ? 'Email' : 'Web form', enabled: true, is_default: true,
   status: { state: 'working', reason_code: null, message: null }, summary: type === 'email' ? 'support@example.com' : 'https://example.com',
   capabilities: type === 'email' ? ['threads', 'cc'] : ['form'], held_count: 0, unsent_count: 0, last_inbound_at: null,
   created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z', ...change,
 });
-// As the server answers: a type is available while the workspace has fewer than its most.
+// As the server answers: every type can be added again; its default is the channel these fixtures have.
 const types = (emailCount = 1, formCount = 1) => [
-  { type: 'email', available: emailCount < 1, max_per_workspace: 1, count: emailCount }, { type: 'web_form', available: formCount < 1, max_per_workspace: 1, count: formCount },
+  { type: 'email', available: true, count: emailCount, default_channel_id: emailCount ? EMAIL : null },
+  { type: 'web_form', available: true, count: formCount, default_channel_id: formCount ? FORM : null },
 ];
 const withChannel = {
   channel: {
@@ -52,6 +58,7 @@ beforeEach(() => {
   api.me.mockResolvedValue(me('admin'));
   api.config.mockResolvedValue({ billing: { enabled: false }, cloud_sign_in: { enabled: false, publishable_key: null }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
   api.emailChannel.mockResolvedValue(withChannel);
+  channelsApi.email.mockResolvedValue(withChannel);
   channelsApi.events.mockResolvedValue({ items: [], next_cursor: null });
 });
 
@@ -128,30 +135,58 @@ test('turning a channel on needs no question', async () => {
   expect(screen.queryByRole('alertdialog')).toBeNull();
 });
 
-test('Add channel lists the types, one per workspace, and is off once every type is added', async () => {
-  channelsApi.list.mockResolvedValue({ items: [channel('email')], types: types(1, 0) });
+test('Add channel lists every type, a type already added too, and only Live chat is not available yet', async () => {
+  channelsApi.list.mockResolvedValue({ items: [channel('email'), channel('web_form')], types: types() });
   const navigate = show('');
-  fireEvent.click(await screen.findByRole('button', { name: 'Add channel' }));
+  const add = await screen.findByRole('button', { name: 'Add channel' });
+  expect(add).toBeEnabled();
+  fireEvent.click(add);
   const dialog = screen.getByRole('dialog', { name: 'Add channel' });
-  expect(within(dialog).getByText('Email').closest('[aria-disabled="true"]')).toHaveTextContent('One per workspace for now');
   expect(within(dialog).getByText('Live chat').closest('[aria-disabled="true"]')).toHaveTextContent('Not available yet');
-  fireEvent.click(within(dialog).getByRole('button', { name: /Add a web form/ }));
-  expect(navigate).toHaveBeenCalledWith('/settings/channels/new/web_form');
+  fireEvent.click(within(dialog).getByRole('button', { name: /support email/i }));
+  expect(navigate).toHaveBeenCalledWith('/settings/channels/new/email');
 });
 
-test('with every type added, Add channel is disabled and says why', async () => {
-  channelsApi.list.mockResolvedValue({ items: [channel('email'), channel('web_form')], types: types() });
+test('the default channel of a type with two says Default; the other offers Make default', async () => {
+  const second = channel('email', { id: '99999999-9999-4999-8999-999999999999', name: 'Sales', is_default: false, summary: 'sales@example.com' });
+  channelsApi.list.mockResolvedValue({ items: [channel('email'), second], types: types(2, 0) });
   show('');
-  const add = await screen.findByRole('button', { name: 'Add channel' });
-  expect(add).toBeDisabled();
-  expect(add).toHaveAccessibleDescription(/one of each per workspace/);
+  expect(await screen.findByText('sales@example.com')).toBeInTheDocument();
+  expect(screen.getAllByText('Default')).toHaveLength(1);
+});
+
+test('Make default makes the channel the default of its type and says so where the button was', async () => {
+  const second = channel('email', { id: '99999999-9999-4999-8999-999999999999', name: 'Sales', is_default: false, summary: 'sales@example.com' });
+  channelsApi.get.mockResolvedValue({ ...second, config: withChannel.channel });
+  channelsApi.update.mockImplementation(async () => {
+    channelsApi.get.mockResolvedValue({ ...second, is_default: true, config: withChannel.channel });
+    return { ...second, is_default: true, config: withChannel.channel };
+  });
+  show(second.id);
+  fireEvent.click(await screen.findByRole('button', { name: 'Make default' }));
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(second.id, { is_default: true }));
+  const said = await screen.findByText(/Sales is now the default/);
+  await waitFor(() => expect(document.activeElement).toBe(said.closest('[role="status"]')));
+});
+
+test('a name another channel has is refused at the name, with a link to that channel', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
+  channelsApi.update.mockRejectedValue(new mocks.ConflictError('Another channel is called Careers.',
+    { code: 'channel_name_taken', conflict: { channel_id: EMAIL, channel_name: 'Careers' } }));
+  show(FORM);
+  const name = await screen.findByRole('textbox', { name: 'Name' });
+  fireEvent.change(name, { target: { value: 'Careers' } });
+  fireEvent.submit(name);
+  await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'));
+  expect(name).toHaveAccessibleDescription(/Another channel is called Careers/);
+  expect(screen.getByRole('link', { name: 'Open Careers' })).toHaveAttribute('href', `/settings/channels/${EMAIL}`);
 });
 
 test('replies not sent while a channel was off are counted, with the inbox filter that lists them', async () => {
   channelsApi.list.mockResolvedValue({ items: [channel('email', { unsent_count: 2 })], types: types(1, 0) });
   show('');
   const notice = await screen.findByText(/2 replies were not sent while Email was off/);
-  expect(within(notice.closest('.notice') as HTMLElement).getByRole('link', { name: 'See them' })).toHaveAttribute('href', '/?delivery_failed=true&channel=email');
+  expect(within(notice.closest('.notice') as HTMLElement).getByRole('link', { name: 'See them' })).toHaveAttribute('href', `/?delivery_failed=true&channel_id=${EMAIL}`);
 });
 
 test('the type shortcut opens the channel of that type and keeps what the address carried', async () => {
@@ -167,11 +202,10 @@ test('the type shortcut opens the connect form when the workspace has no channel
 });
 
 test('connecting email creates the channel with its support address and opens it', async () => {
-  api.emailChannel.mockResolvedValue({ ...withChannel, channel: null });
   channelsApi.create.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   const navigate = show('new/email');
   fireEvent.change(await screen.findByRole('textbox', { name: 'Support address' }), { target: { value: ' help@example.com ' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', config: { support_address: 'help@example.com' } }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${EMAIL}`, true));
 });
@@ -196,12 +230,26 @@ test('a refused web form connect shows the server message', async () => {
 });
 
 test('a refused connect shows the server message next to the form', async () => {
-  api.emailChannel.mockResolvedValue({ ...withChannel, channel: null });
   channelsApi.create.mockRejectedValue(new mocks.InvalidRequestError('Enter a valid support address.'));
   show('new/email');
   fireEvent.change(await screen.findByRole('textbox', { name: 'Support address' }), { target: { value: 'help@example.com' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Enter a valid support address.');
+});
+
+test('a second mailbox with an address another channel has is refused at that field, with a link to that channel', async () => {
+  channelsApi.create.mockRejectedValue(new mocks.ConflictError('Billing already uses support+x@example.com.',
+    { code: 'support_address_taken', conflict: { channel_id: EMAIL, channel_name: 'Billing' } }));
+  show('new/email');
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Sales' } });
+  const address = screen.getByRole('textbox', { name: 'Support address' });
+  fireEvent.change(address, { target: { value: 'support+x@example.com' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', name: 'Sales', config: { support_address: 'support+x@example.com' } }));
+  await waitFor(() => expect(address).toHaveAttribute('aria-invalid', 'true'));
+  expect(address).toHaveAccessibleDescription(/Billing already uses/);
+  expect(screen.getByRole('textbox', { name: 'Name' })).not.toHaveAttribute('aria-invalid');
+  expect(screen.getByRole('link', { name: 'Open Billing' })).toHaveAttribute('href', `/settings/channels/${EMAIL}`);
 });
 
 test('a channel page shows the type tabs then History, and opens a tab from the address', async () => {
@@ -243,7 +291,7 @@ test('Connect Gmail sends the browser to Google, and the outcome it comes back w
   window.history.replaceState(null, '', `/settings/channels/${EMAIL}?tab=replies&gmail_error=denied`);
   Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign, search: '?tab=replies&gmail_error=denied', pathname: `/settings/channels/${EMAIL}`, hash: '' } });
   try {
-    api.connectGmail.mockResolvedValue({ url: 'https://accounts.google.com/o/oauth2/v2/auth?state=x' });
+    channelsApi.emailConnectGmail.mockResolvedValue({ url: 'https://accounts.google.com/o/oauth2/v2/auth?state=x' });
     channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
     show(EMAIL, { tab: 'replies', gmail_error: 'denied' });
     expect(await screen.findByText('Gmail was not connected: access was cancelled at Google.')).toBeInTheDocument();
@@ -254,15 +302,14 @@ test('Connect Gmail sends the browser to Google, and the outcome it comes back w
   }
 });
 
-test('saving the sender name sends only the trimmed name, never the address this page loaded', async () => {
-  api.saveEmailSenderName.mockResolvedValue(withChannel);
+test('saving the sender name sends only the trimmed name to this channel, never the address this page loaded', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  channelsApi.update.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL, { tab: 'replies' });
   const field = await screen.findByRole('textbox', { name: 'Sender name' });
   fireEvent.change(field, { target: { value: ' Colliedesk Support ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
-  await waitFor(() => expect(api.saveEmailSenderName).toHaveBeenCalledWith('Colliedesk Support'));
-  expect(api.saveEmailChannel).not.toHaveBeenCalled();
+  await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(EMAIL, { config: { sender_name: 'Colliedesk Support' } }));
 });
 
 test('the web form save shows Saved after it succeeds', async () => {
@@ -386,24 +433,24 @@ test('removing the last channel says so above the empty list, with the focus the
 
 test('creating the inbound secret reloads the channel, so its state and notice follow', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'needs_attention', reason_code: 'no_inbound_secret', message: null } }), config: withChannel.channel });
-  api.emailChannel.mockResolvedValue({ ...withChannel, channel: { ...withChannel.channel, secret_set: false, secret_rotated_at: null } });
-  api.rotateEmailSecret.mockResolvedValue({ inbound_secret: 'k.secret', inbound_url: 'https://desk.example.com/x' });
+  channelsApi.email.mockResolvedValue({ ...withChannel, channel: { ...withChannel.channel, secret_set: false, secret_rotated_at: null } });
+  channelsApi.emailSecret.mockResolvedValue({ inbound_secret: 'k.secret', inbound_url: 'https://desk.example.com/x' });
   show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Create inbound secret' }));
-  await waitFor(() => expect(api.rotateEmailSecret).toHaveBeenCalled());
+  await waitFor(() => expect(channelsApi.emailSecret).toHaveBeenCalledWith(EMAIL));
   await waitFor(() => expect(channelsApi.get).toHaveBeenCalledTimes(2));
 });
 
 test('rotating the inbound secret asks first: the old one stops at once', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
-  api.rotateEmailSecret.mockResolvedValue({ inbound_secret: 'k.secret', inbound_url: 'https://desk.example.com/x' });
+  channelsApi.emailSecret.mockResolvedValue({ inbound_secret: 'k.secret', inbound_url: 'https://desk.example.com/x' });
   show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Rotate inbound secret' }));
   const question = screen.getByRole('alertdialog', { name: 'Rotate the inbound secret?' });
   expect(question).toHaveTextContent('stops working at once');
-  expect(api.rotateEmailSecret).not.toHaveBeenCalled();
+  expect(channelsApi.emailSecret).not.toHaveBeenCalled();
   fireEvent.click(within(question).getByRole('button', { name: 'Rotate secret' }));
-  await waitFor(() => expect(api.rotateEmailSecret).toHaveBeenCalled());
+  await waitFor(() => expect(channelsApi.emailSecret).toHaveBeenCalledWith(EMAIL));
 });
 
 test('opening held messages says how many opened and links to them; discarding says how many went', async () => {
@@ -413,7 +460,7 @@ test('opening held messages says how many opened and links to them; discarding s
   show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Open them as conversations' }));
   const opened = await screen.findByText(/3 messages opened in the inbox\. 1 was already there or set aside by the channel's rules\./);
-  expect(within(opened.closest('.notice') as HTMLElement).getByRole('link', { name: 'View them in the inbox' })).toHaveAttribute('href', '/?channel=email');
+  expect(within(opened.closest('.notice') as HTMLElement).getByRole('link', { name: 'View them in the inbox' })).toHaveAttribute('href', `/?channel_id=${EMAIL}`);
   fireEvent.click(screen.getByRole('button', { name: 'Discard 3 messages…' }));
   fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Discard' }));
   expect(await screen.findByText('3 messages discarded.')).toBeInTheDocument();
@@ -475,4 +522,13 @@ test('History lists who changed which channel, newest first, and pages on', asyn
   fireEvent.click(screen.getByRole('button', { name: 'Show more' }));
   expect(await screen.findByText(/added Email/)).toBeInTheDocument();
   expect(channelsApi.events).toHaveBeenLastCalledWith(undefined, 'c1');
+});
+
+test('removing the default of a type with another channel says which one becomes the default', async () => {
+  const second = channel('email', { id: '99999999-9999-4999-8999-999999999999', name: 'Sales', is_default: false, summary: 'sales@example.com' });
+  channelsApi.list.mockResolvedValue({ items: [channel('email'), second], types: types(2, 0) });
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Disconnect email' }));
+  await waitFor(() => expect(screen.getByRole('alertdialog', { name: 'Disconnect email?' })).toHaveTextContent('It is the default: Sales becomes the default.'));
 });

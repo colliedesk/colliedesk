@@ -12,6 +12,8 @@ import { Dialog } from '../../../ui/dialog';
 import { PlusIcon } from '../../../ui/icons';
 import { Part, PartUnavailable } from '../../../ui/lazy-part';
 import { panelID, tabID, Tabs } from '../../../ui/tabs';
+import { NameForm } from '../name-form';
+import { saveState } from '../save-feedback';
 import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { channelsMessages as m } from './channels-messages';
@@ -90,37 +92,36 @@ function LoadFailed({ onRetry }: { onRetry: () => void }) {
 }
 
 const stateLabel: Record<Channel['status']['state'], string> = {
-  working: m.statusWorking, off: m.statusOff, needs_attention: m.statusNeedsAttention, not_connected: m.statusNotConnected,
+  working: m.statusWorking, off: m.statusOff, needs_attention: m.statusNeedsAttention, not_connected: m.statusNotConnected, removed: m.statusRemoved,
 };
-const stateClass: Record<Channel['status']['state'], string> = { working: 'ch-st-ok', off: 'ch-st-off', needs_attention: 'ch-st-warn', not_connected: 'ch-st-off' };
+const stateClass: Record<Channel['status']['state'], string> = { working: 'ch-st-ok', off: 'ch-st-off', needs_attention: 'ch-st-warn', not_connected: 'ch-st-off', removed: 'ch-st-off' };
 
 function StatePill({ channel }: { channel: Channel }) {
   return <span className={`status ${stateClass[channel.status.state]}`}>{stateLabel[channel.status.state]}</span>;
 }
 
-// The types this server runs, in the registry's order, only those the web knows. One the workspace already
-// has its most of stays listed as full, so the person sees why it cannot be added again.
-function addable(list: ChannelList | undefined): { ui: ChannelUI; info: ChannelTypeInfo; full: boolean }[] {
+// The types this server runs, in the registry's order, only those the web knows. A workspace may add
+// several channels of every type.
+function addable(list: ChannelList | undefined): { ui: ChannelUI; info: ChannelTypeInfo }[] {
   return channelTypes.flatMap((ui) => {
     const info = list?.types.find((type) => type.type === ui.type);
-    if (!info) return [];
-    const full = info.max_per_workspace !== null && info.count >= info.max_per_workspace;
-    return info.available || full ? [{ ui, info, full }] : [];
+    return info?.available ? [{ ui, info }] : [];
   });
 }
+
+// typeCount is how many live channels of the channel's type the workspace has: past one, names and
+// the Default mark tell them apart.
+const typeCount = (list: ChannelList | undefined, type: string) => list?.types.find((info) => info.type === type)?.count ?? 0;
 
 // TypePicker lists the types to connect: links on the empty page, choices in Add channel.
 function TypePicker({ list, navigate, choose }: { list: ChannelList | undefined; navigate: PageProps['navigate']; choose?: (href: string) => void }) {
   return <ul className="ch-types">
-    {addable(list).map(({ ui, full }) => {
+    {addable(list).map(({ ui }) => {
       const href = `${base}/new/${ui.type}`;
-      const why = `ch-full-${ui.type}`;
       return <li key={ui.type}>
-        {full
-          ? <span className="ch-type" aria-disabled="true" aria-describedby={why}><ui.Icon /><span><strong>{ui.label}</strong><small id={why}>{m.onePerWorkspace}</small></span></span>
-          : choose
-            ? <button type="button" className="ch-type" onClick={() => choose(href)}><ui.Icon /><span><strong>{ui.connectLabel}</strong><small>{ui.description}</small></span></button>
-            : <AppLink href={href} navigate={navigate} className="ch-type"><ui.Icon /><span><strong>{ui.connectLabel}</strong><small>{ui.description}</small></span></AppLink>}
+        {choose
+          ? <button type="button" className="ch-type" onClick={() => choose(href)}><ui.Icon /><span><strong>{ui.connectLabel}</strong><small>{ui.description}</small></span></button>
+          : <AppLink href={href} navigate={navigate} className="ch-type"><ui.Icon /><span><strong>{ui.connectLabel}</strong><small>{ui.description}</small></span></AppLink>}
       </li>;
     })}
     {upcomingChannels.map((upcoming) => <li key={upcoming.label}>
@@ -144,16 +145,12 @@ function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: '
   const [adding, setAdding] = useState(false);
   const prefix = useId();
   const list = channels.data;
-  const allFull = addable(list).every((type) => type.full);
   const show = (next: 'channels' | 'history') => navigate(withSearch(base, next === 'history' ? { tab: 'history' } : {}), true);
   const attention = (list?.items ?? []).filter((channel) => channel.status.state === 'needs_attention');
   return <>
     <div className="ch-tabs-row">
       <Tabs label={m.tabs} prefix={prefix} value={tab} onChange={show} tabs={[{ id: 'channels', label: m.tabChannels, count: list?.items.length }, { id: 'history', label: m.tabHistory }]} />
-      {isAdmin && list && list.items.length > 0 && <>
-        <button type="button" className="ch-add" onClick={() => setAdding(true)} disabled={allFull} aria-describedby={allFull ? 'ch-all-added' : undefined}><PlusIcon /><span>{m.addChannel}</span></button>
-        {allFull && <span id="ch-all-added" hidden>{m.allAdded}</span>}
-      </>}
+      {isAdmin && list && list.items.length > 0 && <button type="button" className="ch-add" onClick={() => setAdding(true)}><PlusIcon /><span>{m.addChannel}</span></button>}
     </div>
     <div role="tabpanel" id={panelID(prefix, tab)} aria-labelledby={tabID(prefix, tab)} className="ch-stack">
       {tab === 'history' ? <History timezone={timezone} />
@@ -172,8 +169,10 @@ function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: '
                       <AppLink href={`${base}/${channel.id}`} navigate={navigate}>{m.fix}</AppLink></span>)}</span></div>}
                   {list.items.filter((channel) => channel.enabled && channel.unsent_count > 0).map((channel) => <Unsent key={channel.id} channel={channel} navigate={navigate} />)}
                   <section className="panel ch-list" aria-label={m.tabChannels}>
-                    {list.items.map((channel) => <ChannelRow key={channel.id} channel={channel} isAdmin={isAdmin} navigate={navigate} />)}
+                    {list.items.map((channel) => <ChannelRow key={channel.id} channel={channel} isAdmin={isAdmin} navigate={navigate}
+                      markDefault={channel.is_default === true && typeCount(list, channel.type) > 1} />)}
                   </section>
+                  {isAdmin && <TypeOverviews list={list} />}
                 </>}
     </div>
     {adding && <AddChannel list={list} onClose={() => setAdding(false)} navigate={navigate} />}
@@ -182,14 +181,15 @@ function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: '
 
 function Unsent({ channel, navigate }: { channel: Channel; navigate: PageProps['navigate'] }) {
   return <div className="notice notice-plain" role="status"><span>{m.unsent(channel.unsent_count, channel.name)}</span>
-    <span className="notice-actions"><AppLink href={`/?delivery_failed=true&channel=${channel.type}`} navigate={navigate}>{m.seeThem}</AppLink></span></div>;
+    <span className="notice-actions"><AppLink href={`/?delivery_failed=true&channel_id=${channel.id}`} navigate={navigate}>{m.seeThem}</AppLink></span></div>;
 }
 
-function ChannelRow({ channel, isAdmin, navigate }: { channel: Channel; isAdmin: boolean; navigate: PageProps['navigate'] }) {
+function ChannelRow({ channel, isAdmin, navigate, markDefault }: { channel: Channel; isAdmin: boolean; navigate: PageProps['navigate']; markDefault: boolean }) {
   const ui = channelUI(channel.type);
   const href = `${base}/${channel.id}`;
   return <div className={`ch-row${channel.enabled ? '' : ' ch-row-off'}`}>
-    <div className="ch-row-name">{ui && <ui.Icon />}<span><strong>{channel.name}</strong>{channel.summary && <small>{channel.summary}</small>}</span></div>
+    <div className="ch-row-name">{ui && <ui.Icon />}<span><strong>{channel.name}</strong>{markDefault && <span className="ch-default">{m.defaultLabel}</span>}
+      {channel.summary && <small>{channel.summary}</small>}</span></div>
     <div className="ch-row-state"><StatePill channel={channel} />
       {channel.held_count > 0 && <small>{m.held(channel.held_count, channel.name)}</small>}</div>
     <div className="ch-row-actions">
@@ -241,10 +241,11 @@ function AddChannel({ list, onClose, navigate }: { list: ChannelList | undefined
   </Dialog>;
 }
 
-// TypeShortcut opens the workspace's channel of a type, or that type's connect form when there is none.
+// TypeShortcut opens the workspace's default channel of a type, or that type's connect form when there is none.
 function TypeShortcut({ type, search, navigate }: PageProps & { type: string; search: ChannelsSearch }) {
   const channels = useChannels();
-  const channel = channels.data?.items.find((item) => item.type === type);
+  const defaultID = channels.data?.types.find((info) => info.type === type)?.default_channel_id;
+  const channel = channels.data?.items.find((item) => item.id === defaultID) ?? channels.data?.items.find((item) => item.type === type);
   const ready = Boolean(channels.data);
   useEffect(() => {
     if (!ready) return;
@@ -285,6 +286,10 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
   const prefix = useId();
   const channel = detail.data;
   const ui = channel ? channelUI(channel.type) : undefined;
+  // Removing the default hands it to the oldest other live channel of the type, as the server does.
+  const channels = useChannels();
+  const nextDefault = channel && channels.data?.items.filter((item) => item.type === channel.type && item.id !== channel.id)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))[0];
   // The inbox reads the channel too (its type's settings, the conversations' channel_ref), so they reload.
   const removed = async () => {
     const keys = ['channels', 'channel-events', 'conversations', ...(ui?.caches ?? [])];
@@ -309,10 +314,11 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
         <div className="ch-row-actions"><StatePill channel={channel} />{isAdmin && <EnabledSwitch channel={channel} />}</div>
       </div>
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
+      <ChannelIdentity channel={channel} label={ui.label} isAdmin={isAdmin} navigate={navigate} />
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
       {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
       {heldDone && <p className="notice notice-plain" role="status" tabIndex={-1} ref={heldNote}><span>{heldDone.kind === 'opened' ? m.heldOpened(heldDone.count, heldDone.skipped ?? 0) : m.heldDiscarded(heldDone.count)}</span>
-        {heldDone.kind === 'opened' && <span className="notice-actions"><AppLink href={`/?channel=${channel.type}`} navigate={navigate}>{m.viewInInbox}</AppLink></span>}</p>}
+        {heldDone.kind === 'opened' && <span className="notice-actions"><AppLink href={`/?channel_id=${channel.id}`} navigate={navigate}>{m.viewInInbox}</AppLink></span>}</p>}
       {channel.enabled && channel.unsent_count > 0 && <Unsent channel={channel} navigate={navigate} />}
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
       <div role="tabpanel" id={panelID(prefix, open)} aria-labelledby={tabID(prefix, open)} className="ch-panel">
@@ -332,6 +338,7 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
       footer={<><button type="button" autoFocus onClick={() => setRemoving(false)}>{m.cancel}</button>
         <button type="submit" className="danger-action" disabled={channel.held_count > 0}>{ui.removal?.confirm ?? m.removeConfirm}</button></>}>
       <p>{ui.removal?.body(channel) ?? m.removeBody}</p>
+      {channel.is_default && <p>{nextDefault ? m.removeDefaultNext(nextDefault.name) : m.removeDefaultNone(ui.label)}</p>}
       {channel.held_count > 0 && <p role="alert" className="error-copy">{m.removeHeld(channel.held_count)}</p>}
     </Dialog>}
   </>;
@@ -389,4 +396,39 @@ function History({ timezone, channelID }: { timezone: string; channelID?: string
       {events.isFetchingNextPage ? messages.loading : m.showMore}</button></span>}
     <p className="help">{m.historyHelp}</p>
   </>;
+}
+
+// ChannelIdentity is the channel's name, which an admin changes here, and whether it is its type's
+// default, which an admin moves here.
+function ChannelIdentity({ channel, label, isAdmin, navigate }: { channel: ChannelDetail; label: string; isAdmin: boolean; navigate: PageProps['navigate'] }) {
+  const client = useQueryClient();
+  const reload = () => client.invalidateQueries({ predicate: (query) => ['channels', 'channel', 'channel-events', 'conversations'].includes(String(query.queryKey[0])) });
+  const rename = useMutation({ mutationFn: (name: string) => channelsApi.update(channel.id, { name }), onSuccess: reload });
+  const makeDefault = useMutation({ mutationFn: () => channelsApi.update(channel.id, { is_default: true }), onSuccess: reload });
+  // The button goes once it worked; the words that say so take the focus it had.
+  const done = useRef<HTMLParagraphElement>(null);
+  const succeeded = makeDefault.isSuccess;
+  // The words show once the channel read again says it is the default.
+  const said = succeeded && channel.is_default === true;
+  useEffect(() => { if (said) done.current?.focus(); }, [said]);
+  return <div className="ch-identity">
+    {isAdmin && <NameForm label={m.nameLabel} saveLabel={m.saveName} hint={m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
+      onSave={(name) => rename.mutate(name)} conflictLink={(conflict) => <AppLink href={`${base}/${conflict.channel_id}`} navigate={navigate}>{m.openTaken(conflict.channel_name)}</AppLink>} />}
+    <div className="ch-default-row">
+      {channel.is_default
+        ? succeeded
+          ? <p className="notice notice-plain" role="status" tabIndex={-1} ref={done}><span>{m.madeDefault(channel.name)}</span></p>
+          : <p><span className="ch-default">{m.defaultOf(label)}</span></p>
+        : isAdmin && <span className="button-row"><button type="button" disabled={makeDefault.isPending} onClick={() => makeDefault.mutate()}>
+            {makeDefault.isPending ? m.saving : m.makeDefault}</button></span>}
+      {makeDefault.isError && <span role="alert" className="error-copy">{makeDefault.error instanceof InvalidRequestError ? makeDefault.error.message : m.actionFailed}</span>}
+    </div>
+  </div>;
+}
+
+// TypeOverviews are what a type shows about all its channels on the list, for an admin (the hosted
+// forwarding addresses of email).
+function TypeOverviews({ list }: { list: ChannelList }) {
+  return <>{addable(list).filter(({ info }) => info.count > 0 && info.default_channel_id).map(({ ui, info }) =>
+    <Part key={ui.type} part={ui.panels} failed={null} render={({ Overview }) => (Overview ? <Overview defaultChannelID={info.default_channel_id ?? ''} /> : null)} />)}</>;
 }

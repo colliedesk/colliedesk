@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { EmailChannelSettings, EmailDnsRecord } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
@@ -23,6 +24,8 @@ interface EmailChannelSectionProps {
   senderNameSave?: SaveState;
   slugSave?: SaveState;
   onSave?: (address: string) => void;
+  // addressConflictLink, for an address another channel has (addressSave.conflict), is a link to it.
+  addressConflictLink?: (conflict: NonNullable<SaveState['conflict']>) => ReactNode;
   onSaveSenderName?: (name: string) => void;
   onSaveSlug?: (slug: string) => void;
   onRotate?: () => void;
@@ -42,7 +45,7 @@ interface EmailChannelSectionProps {
 }
 
 export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, senderNameSave, slugSave, onSave, onSaveSenderName, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending,
-  onConnectGmail, onDisconnectGmail, gmailPending, gmailError, gmailReturned, part = 'all' }: EmailChannelSectionProps) {
+  onConnectGmail, onDisconnectGmail, gmailPending, gmailError, gmailReturned, part = 'all', addressConflictLink }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   // A connected Gmail account sends by itself; a broken one says so in its own block.
   const gmailConnection = channel ? settings?.gmail.connection ?? null : null;
@@ -51,7 +54,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
   const [slug, setSlug] = useState(workspaceSlug ?? '');
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
-  const addressFeedback = useSaveFeedback(addressSave);
+  const addressError = useId();
+  const addressFeedback = useSaveFeedback(addressSave, addressError);
   const slugFeedback = useSaveFeedback(slugSave);
   // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
@@ -77,9 +81,11 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const addressPart = <>
         {canManage
           ? <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!addressFeedback.pending) onSave?.(address.trim()); }}>
-              <label className="field"><span>{messages.supportAddress}</span><input type="email" value={address} onChange={(event) => { addressFeedback.touch(); setAddress(event.target.value); }} required /></label>
+              <label className="field"><span>{messages.supportAddress}</span><input type="email" value={address} aria-invalid={addressFeedback.invalid || undefined}
+                aria-describedby={addressFeedback.invalid ? addressError : undefined} onChange={(event) => { addressFeedback.touch(); setAddress(event.target.value); }} required /></label>
               <button className="primary-action" type="submit" disabled={addressFeedback.pending}>{addressFeedback.saveLabel(messages.saveSupportAddress)}</button>
               {addressFeedback.status}
+              {addressFeedback.invalid && addressSave?.conflict && addressConflictLink?.(addressSave.conflict)}
             </form>
           : <p><strong>{messages.supportAddress}: </strong><span>{channel ? channel.support_address : messages.emailNotConnected}</span></p>}
   </>;
@@ -95,7 +101,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           </div>
           <p className="muted-copy">{messages.forwardingHelp}</p>
           <ul className="muted-copy"><li>{messages.forwardingGmail}</li><li>{messages.forwardingOutlook}</li></ul>
-          {canManage && <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!slugFeedback.pending) onSaveSlug?.(slug.trim()); }}>
+          {canManage && onSaveSlug && <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!slugFeedback.pending) onSaveSlug(slug.trim()); }}>
             <label className="field"><span>{messages.workspaceAddressName}</span><input value={slug} onChange={(event) => { slugFeedback.touch(); setSlug(event.target.value); }} required /></label>
             <button type="submit" disabled={slugFeedback.pending}>{slugFeedback.saveLabel(messages.saveAddressName)}</button>
             {slugFeedback.status}
@@ -125,7 +131,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </>;
   const domainPart = <>
         {channel && (channel.domain_verified_at
-          ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
+          ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))} {sharedDomain(channel.domain)}</p>
           : gmailSending
             // Gmail replies need no verified domain; the records stay one click away for SMTP.
             ? <details className="email-channel-dns-folded" open={Boolean(verifyError) || undefined}>
@@ -178,6 +184,9 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
     </section>
   );
 }
+
+// sharedDomain says a verification is the domain's: every mailbox on it shares it.
+const sharedDomain = (domain: string) => `The verification is for ${domain}: every mailbox on it shares it.`;
 
 // Headings of the Replies tab, which the Settings page did not have.
 const repliesHeadings = { leave: 'How replies leave', name: 'The name customers see', domain: 'Your domain' };

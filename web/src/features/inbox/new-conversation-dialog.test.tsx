@@ -180,3 +180,34 @@ test('Enter picks from the answer to what is typed now, not from the list of the
   fireEvent.keyDown(search, { key: 'Enter' });
   expect(screen.getByText('Sam Other <sam@other.example>')).toBeInTheDocument();
 });
+
+// The window with two email channels: the person chooses which one sends, an off channel is listed but
+// cannot be chosen, and a channel the server refuses is said at the choice with the text kept.
+function TwoChannels({ onStart }: { onStart: (...args: unknown[]) => Promise<unknown> }) {
+  const [channelID, setChannelID] = useState('c1');
+  return <NewConversationDialog onStart={onStart} onClose={vi.fn()} channelID={channelID} onChooseChannel={setChannelID}
+    senders={[{ id: 'c1', name: 'Support', off: false }, { id: 'c2', name: 'Billing', off: false }, { id: 'c3', name: 'Old', off: true }]} />;
+}
+
+test('with two email channels the window asks which one sends, and a channel turned off is said at that choice', async () => {
+  api.contacts.mockResolvedValue({ items: [pat], has_more: false });
+  const onStart = vi.fn().mockRejectedValueOnce(new ConflictError('This channel is off: turn it on, or start from another channel. Nothing was stored.', { code: 'channel_off' }));
+  wrap(<TwoChannels onStart={onStart} />);
+  const from = screen.getByLabelText('Send from');
+  expect(from).toHaveValue('c1');
+  expect(screen.getByRole('option', { name: 'Old (off)' })).toBeDisabled();
+  fireEvent.change(from, { target: { value: 'c2' } });
+  expect(from).toHaveValue('c2');
+  fireEvent.change(screen.getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
+  fireEvent.click(await screen.findByRole('option', { name: /Pat Prospect/ }));
+  write('Invoice', 'Here it is.');
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(from).toHaveAccessibleDescription(/This channel is off/));
+  expect(from).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText('Message')).toHaveValue('Here it is.');
+});
+
+test('with one email channel the window asks nothing about channels', () => {
+  wrap(<NewConversationDialog onStart={vi.fn()} onClose={vi.fn()} channelID="c1" senders={[{ id: 'c1', name: 'Support', off: false }]} />);
+  expect(screen.queryByLabelText('Send from')).not.toBeInTheDocument();
+});

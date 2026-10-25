@@ -64,6 +64,8 @@ interface InboxPageProps {
   onPage?: (page: number) => void;
   onRetryDelivery?: (messageId: string) => void;
   outboundNotice?: string;
+  // sendsFrom names the channel a reply leaves from, when the workspace has more than one it could be.
+  sendsFrom?: string;
   // outboundLink is where Open Settings in that notice leads: the channel that cannot send.
   outboundLink?: SettingsTarget;
   // noReplies: the conversation's channel was removed, so the composer sends notes only.
@@ -114,7 +116,7 @@ function ShownCount({ count, page, pageSize, more }: { count: number; page: numb
   return <span><span aria-hidden="true">{`${first}–${last}`}</span><span className="sr-only">{messages.inboxShown(first, last)}</span></span>;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const latestCustomerMessage = useMemo(() => [...timeline].reverse().find((item) => item.kind === 'incoming')?.id, [timeline]);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -225,6 +227,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, thread
           viewers={openViewers} onSetStatus={selected && onSetStatus ? (status) => onSetStatus(selected.id, status) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={() => onOpenSettings(outboundLink)}>{messages.openSettings}</button></>}</p>}
+        {sendsFrom && <p className="composer-from">{sendsFrom}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}

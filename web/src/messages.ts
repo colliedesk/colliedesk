@@ -385,6 +385,8 @@ export const messages = {
     : 'Replies are not emailed: Gmail stopped sending. Ask an admin to reconnect Gmail, then retry the failed replies.',
   openSettings: 'Open Settings',
   channelOff: (name: string) => `${name} is off: this reply is saved but not sent until the channel is on.`,
+  sendsFrom: (name: string) => `Replies send from ${name}.`,
+  sendsInsteadOf: (removed: string, name: string) => `${removed} was removed; replies send from ${name}.`,
   channelRemoved: (name: string) => `Replies to this conversation cannot be sent: ${name} was removed.`,
   repliesNotConnected: 'Replies to this conversation are not emailed until you connect your support email.',
   planNotices: 'Plan notices',

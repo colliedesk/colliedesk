@@ -11,7 +11,10 @@ const api = vi.hoisted(() => ({
   savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
   connectGmail: vi.fn(), disconnectGmail: vi.fn(), createAgentToken: vi.fn(),
 }));
-const errors = vi.hoisted(() => ({ PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {}, UnauthorizedError: class extends Error {} }));
+const errors = vi.hoisted(() => {
+  class InvalidRequestError extends Error {}
+  return { PlanLimitError: class extends Error {}, InvalidRequestError, ConflictError: class extends InvalidRequestError {}, UnauthorizedError: class extends Error {} };
+});
 vi.mock('../../api/client', () => ({ api, ...errors }));
 // The help center card has tests of its own (features/kb); here it stands for itself in the page.
 vi.mock('../kb/help-center-card', () => ({ HelpCenterSettings: () => <p>Help center card</p> }));

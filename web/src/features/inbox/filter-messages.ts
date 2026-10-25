@@ -16,6 +16,10 @@ export const filterMessages = {
   awaitingAny: 'Anyone',
   awaitingOptions: { team: 'Waiting on us', customer: 'Waiting on the customer' },
   channel: 'Channel',
+  // A type with two or more channels lists them, so one mailbox or form can be chosen.
+  channelsOf: (type: string) => `${type} channels`,
+  removedChannel: (name: string) => `${name} (removed)`,
+  unknownChannel: 'A channel',
   source: 'Source',
   sourceAny: 'Any',
   sources: { imported: 'Imported', native: 'Created in Colliedesk' },

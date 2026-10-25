@@ -191,7 +191,7 @@ test('the address name save shows Saving… and Saved separately from the suppor
   expect(screen.getByRole('button', { name: /save support address/i })).toBeEnabled();
   fireEvent.submit(screen.getByRole('textbox', { name: /workspace address name/i }));
   expect(onSaveSlug).not.toHaveBeenCalled();
-  rerender(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" slugSave={{ saved: true }} />);
+  rerender(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" onSaveSlug={onSaveSlug} slugSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
 });
 
@@ -330,4 +330,9 @@ test('a browser without the clipboard (a server on plain http) says the copy fai
   render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage />);
   fireEvent.click(screen.getByRole('button', { name: 'Copy inbound URL' }));
   expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toBeInTheDocument();
+});
+
+test('a verified domain says every mailbox on it shares the verification', () => {
+  render(<EmailChannelSection part="replies" settings={{ ...connected, channel: { ...connected.channel!, domain_verified_at: '2026-10-15T00:00:00Z' } }} timezone="UTC" canManage />);
+  expect(screen.getByText(/The verification is for example\.com: every mailbox on it shares it\./)).toBeInTheDocument();
 });

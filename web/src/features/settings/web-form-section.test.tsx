@@ -97,3 +97,8 @@ test('one copy message at a time: copying the code replaces what copying the URL
   expect(await screen.findByText('Code copied')).toBeInTheDocument();
   expect(screen.queryByText('URL copied')).toBeNull();
 });
+
+test('the form with the workspace\'s older address also gives its own', () => {
+  render(<WebFormSection settings={{ ...on, channel_id: '55555555-5555-4555-8555-555555555555', legacy_slug: true }} canManage onSave={vi.fn()} />);
+  expect(screen.getByText(new RegExp(`it also has its own, ${window.location.origin}/api/v1/public/web-forms/55555555-5555-4555-8555-555555555555`))).toBeInTheDocument();
+});

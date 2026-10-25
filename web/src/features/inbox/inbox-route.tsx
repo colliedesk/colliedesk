@@ -164,6 +164,7 @@ export function InboxRoute() {
   // Fetched once and shared with Settings, so the picker opens from memory.
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  const mailboxes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types.find((info) => info.type === 'email')?.count ?? 0;
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
   const limits = config?.limits;
@@ -175,6 +176,10 @@ export function InboxRoute() {
   const channelNotice = via && (removed ? messages.channelRemoved(via.name) : via.replies_via === null ? messages.repliesNotConnected
     : via.replies_via.enabled ? undefined : messages.channelOff(via.replies_via.name));
   const outbound = channelNotice ?? outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  // Which mailbox a reply leaves from, once there are two; and why, when the one it was pinned to is gone.
+  const sender = via?.replies_via;
+  const sendsFrom = !sender || outbound ? undefined : sender.instead_of ? messages.sendsInsteadOf(sender.instead_of.name, sender.name)
+    : mailboxes > 1 ? messages.sendsFrom(sender.name) : undefined;
   // A reply that just failed may mean Gmail stopped sending; the channel is read again so the notice above
   // the composer follows without a reload.
   const failedDeliveries = timeline.data?.items.filter((item) => item.delivery?.status === 'failed').map((item) => item.id).join(',') ?? '';
@@ -264,7 +269,7 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outbound} noReplies={removed} outboundLink={via?.replies_via && channelNotice ? `/settings/channels/${via.replies_via.id}` : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} sendsFrom={sendsFrom} noReplies={removed} outboundLink={via?.replies_via && channelNotice ? `/settings/channels/${via.replies_via.id}` : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}

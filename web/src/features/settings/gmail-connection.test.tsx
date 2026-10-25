@@ -173,3 +173,22 @@ test('the outcome is shown in the block', () => {
   render(<GmailConnection gmail={connected} supportAddress="support@example.com" timezone="UTC" canManage returned={{ kind: 'connected' }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Gmail is connected.');
 });
+
+test('a Gmail account that is not the support address keeps sending and says to connect the matching one', () => {
+  render(<GmailConnection gmail={{ ...connected, address_matches: false, connection: { ...connected.connection!, address: 'old@example.com' } }} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.getByRole('note')).toHaveTextContent('old@example.com is not this channel\'s support address. Replies still leave through it; connect Gmail again with support@example.com to match.');
+});
+
+test('an account another channel sends through is refused, with a link to that channel', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage
+    returned={{ kind: 'error', reason: 'account_in_use', channel: '99999999-9999-4999-8999-999999999999' }} />);
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('another email channel of this workspace already sends through this account');
+  expect(within(alert).getByRole('link')).toHaveAttribute('href', '/settings/channels/99999999-9999-4999-8999-999999999999?tab=replies');
+});
+
+test('the channel a refused account belongs to is read from the address and cleaned from it', () => {
+  window.history.replaceState(null, '', '/settings/channels/abc?tab=replies&gmail_error=account_in_use&gmail_channel=def');
+  expect(gmailReturn()).toEqual({ kind: 'error', reason: 'account_in_use', channel: 'def' });
+  expect(window.location.search).toBe('?tab=replies');
+});

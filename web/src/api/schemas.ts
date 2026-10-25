@@ -78,7 +78,7 @@ export const contactSchema = z.object({
 const stringList = z.array(z.string());
 export const conversationOriginSchema = z.object({
   system: z.string(), external_id: z.string(), type: z.string().nullable(), source: z.string().nullable(),
-  due_at: nullableDate, first_response_due_at: nullableDate, cc: stringList, forwarded_to: stringList,
+  due_at: nullableDate, first_response_due_at: nullableDate, cc: stringList, forwarded_to: stringList, mailboxes: stringList.optional(),
 }) satisfies z.ZodType<Generated<'ConversationOrigin'>>;
 export const messageOriginSchema = z.object({
   system: z.string(), external_id: z.string(),
@@ -95,7 +95,8 @@ export const conversationSchema = z.object({
   tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   latest_reply_number: z.number().int().nonnegative(),
   channel_ref: z.object({ id: z.string(), type: z.string(), name: z.string(), enabled: z.boolean(), deleted: z.boolean(),
-    replies_via: z.object({ id: z.string(), name: z.string(), enabled: z.boolean() }).nullable() }).nullable().optional(),
+    replies_via: z.object({ id: z.string(), name: z.string(), enabled: z.boolean(),
+      instead_of: z.object({ id: z.string(), name: z.string() }).nullable().optional() }).nullable() }).nullable().optional(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
 export const messageDeliverySchema = z.object({
@@ -135,7 +136,7 @@ export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
 }) satisfies z.ZodType<Generated<'EmailDNSRecord'>>;
 export const emailChannelSchema = z.object({
-  support_address: z.string().email(), sender_name: z.string(), secret_set: z.boolean(), secret_rotated_at: nullableDate,
+  channel_id: z.string().uuid().optional(), support_address: z.string().email(), sender_name: z.string(), secret_set: z.boolean(), secret_rotated_at: nullableDate,
   domain: z.string(), domain_verified_at: nullableDate, dns_record_name: z.string(), dns_record_value: z.string(),
   dns_records: z.array(emailDnsRecordSchema), dns_records_expired_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'EmailChannel'>>;
@@ -147,9 +148,12 @@ export const mailboxConnectionSchema = z.object({
 export const gmailSettingsSchema = z.object({
   available: z.boolean(),
   missing_settings: z.array(z.enum(['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
-  redirect_uri: z.string().url(), connection: mailboxConnectionSchema.nullable(),
+  redirect_uri: z.string().url(), connection: mailboxConnectionSchema.nullable(), address_matches: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'GmailSettings'>>;
 export const consentLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'connectGmail', 200>>;
+// How many live channels each type has: the inbox says which mailbox a reply leaves from once there are two.
+// The whole list and its schemas load with Settings, not with the inbox.
+export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number() })) });
 export const emailChannelSettingsSchema = z.object({
   channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema,
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
@@ -158,7 +162,7 @@ export const emailChannelSettingsSchema = z.object({
   smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),
 }) satisfies z.ZodType<Generated<'EmailChannelSettings'>>;
 export const webFormSettingsSchema = z.object({
-  enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(),
+  channel_id: z.string().uuid().optional(), enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(), legacy_slug: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'WebFormSettings'>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({

@@ -42,6 +42,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
         {settings && <label className="invite-link"><span className="field-label">{messages.webFormSubmitUrl}</span>
           <input readOnly value={`${window.location.origin}${settings.submit_path}`} /><small>{messages.webFormSubmitHelp}</small></label>}
         {settings && embed && <EmbedCode url={`${window.location.origin}${settings.submit_path}`} />}
+        {settings?.legacy_slug && settings.channel_id && <p className="muted-copy">{legacyNote(`${window.location.origin}/api/v1/public/web-forms/${settings.channel_id}`)}</p>}
       </div>;
   if (embed) return body;
   return (
@@ -78,3 +79,6 @@ function EmbedCode({ url }: { url: string }) {
     </section>
   </>;
 }
+
+// legacyNote: the form with the workspace's older address also answers its own, which a new site may use.
+const legacyNote = (own: string) => `Sites already embed this form's address above; it also has its own, ${own}, which keeps working whichever form is the default.`;

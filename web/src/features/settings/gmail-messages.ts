@@ -23,6 +23,8 @@ export const gmailMessages = {
   disconnectGmailConsequence: (gmail: string) => `Colliedesk loses access to ${gmail}. Replies are then sent the way they were before Gmail was connected; a reply still waiting for Gmail fails and can be retried.`,
   confirmDisconnectGmail: 'Yes, disconnect Gmail',
   gmailConnected: (gmail: string, when: string) => `Replies are sent through Gmail from ${gmail}, connected ${when}.`,
+  gmailOpenHolder: 'Open that channel',
+  gmailAddressMismatch: (gmail: string, support: string) => `${gmail} is not this channel's support address. Replies still leave through it; connect Gmail again with ${support} to match.`,
   gmailOtherAddress: (gmail: string, support: string) => `Customers see ${gmail} as the sender. Their answers still go to ${support}, so keep forwarding it here.`,
   gmailFailedTitle: 'Gmail stopped sending',
   gmailFailedBody: (reason: string, when: string) => `${reason} Since ${when}, replies are not sent through Gmail and not sent any other way.`,
@@ -40,6 +42,8 @@ export const gmailMessages = {
     no_refresh_token: 'Gmail was not connected: Google did not grant lasting access. Try again.',
     no_address: 'Gmail was not connected: Google did not confirm the account’s email address.',
     email_channel_missing: 'Gmail was not connected: save a support address first.',
+    address_mismatch: 'Gmail was not connected: sign in to Google with this channel\'s support address. A channel sends as its own address.',
+    account_in_use: 'Gmail was not connected: another email channel of this workspace already sends through this account.',
     google_unavailable: 'Gmail was not connected: Google could not be reached. Try again in a minute.',
   } as Record<string, string>,
 };

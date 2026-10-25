@@ -22,6 +22,8 @@ export interface ChannelPanels {
   // One component per tab id the type declares.
   Tabs: Record<string, ComponentType<ChannelPanelProps>>;
   Connect: ComponentType<ConnectProps>;
+  // Overview is what the type shows on the channel list about all its channels, for an admin.
+  Overview?: ComponentType<{ defaultChannelID: string }>;
 }
 
 // ChannelUI is all the web app knows about a channel type. The shared pages (features/settings/channels)
