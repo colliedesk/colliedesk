@@ -187,6 +187,41 @@ func TestARefusedClientSecretKeepsTheConnectionAndTheReplyWaits(t *testing.T) {
 	}
 }
 
+// An organization that removes or disables the app in its tenant ends that grant (unauthorized_client): the
+// connection fails with a reconnect, unlike a refused server secret, which keeps it.
+func TestAnAppRemovedByTheOrganizationBreaksTheConnection(t *testing.T) {
+	f := newFixture(t)
+	fake, config := microsoftStandIn(t)
+	f.connectMicrosoft(t, fake, config, "help@acme.example")
+	clock := time.Now().UTC().Add(time.Second)
+	worker := microsoftWorker(f, startSMTPServer(t), config, &clock)
+	fake.Set(func(s *microsofttest.Server) {
+		s.TokenFailures = []microsofttest.TokenFailure{{Status: http.StatusBadRequest, Error: "unauthorized_client", Codes: []int{700016}}}
+	})
+	reply := f.write(t, "outgoing", "Hello")
+	process(t, worker)
+	if delivery := f.delivery(t, reply.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "Reconnect Microsoft 365") {
+		t.Fatalf("delivery = %+v", delivery)
+	}
+	if connection := f.mailboxStatus(t); connection.Status != "failed" || *connection.ErrorCode != domain.MailboxRevoked {
+		t.Fatalf("connection = %+v", connection)
+	}
+
+	// The keep-alive tells the same apart for a quiet channel.
+	other := addWorkspace(t, f.pool, "Quiet Desk", "quiet.example.com")
+	other.connectMicrosoft(t, fake, config, "help@quiet.example.com")
+	keepClock := time.Now().UTC().Add(8 * 24 * time.Hour)
+	fake.Set(func(s *microsofttest.Server) {
+		s.TokenFailures = []microsofttest.TokenFailure{{Status: http.StatusBadRequest, Error: "unauthorized_client", Codes: []int{7000112}}}
+	})
+	if _, err := microsoftWorker(other, startSMTPServer(t), config, &keepClock).KeepAlive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if connection := other.mailboxStatus(t); connection.Status != "failed" || *connection.ErrorCode != domain.MailboxRevoked {
+		t.Fatalf("quiet connection after the app was disabled = %+v", connection)
+	}
+}
+
 func TestMicrosoftThrottlingWaitsAndOtherRefusalsSayWhy(t *testing.T) {
 	f := newFixture(t)
 	fake, config := microsoftStandIn(t)

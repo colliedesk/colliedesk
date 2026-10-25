@@ -456,8 +456,10 @@ listed in the plan of issue #95; the ones a decision rests on are named below.
   die after 90 days unused (AADSTS700082) and a revoked grant shows before a customer waits.
 - **Token errors by `error`, never by `error_description`** (reference-error-codes). `invalid_grant`,
   `interaction_required`, `consent_required` → `revoked` (removed, expired, password reset, a sign-in policy
-  such as MFA or Conditional Access). `invalid_client` / `unauthorized_client` (a wrong or expired client
-  secret, AADSTS7000215/7000222) are **the server's fault**: the connection stays `connected`, the reply is
+  such as MFA or Conditional Access), and so is `unauthorized_client`: the account's organization removed or
+  disabled the app in its tenant (AADSTS700016, 7000112; v2-oauth2-auth-code-flow: "isn't added to the
+  user's Microsoft Entra tenant"), which ends that grant only. `invalid_client` (a wrong or expired client
+  secret, AADSTS7000215/7000222) is **the server's fault**: the connection stays `connected`, the reply is
   deferred every 15 minutes with `last_error_code=mailbox_server_config` and `MailboxServerConfigNote`
   (spending no attempt), and the settings say `server_credentials_refused` so nobody reconnects in vain. At
   consent the same refusal is `server_misconfigured`.

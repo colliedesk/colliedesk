@@ -155,6 +155,9 @@ func TestAccessTokenRotatesAndClassifiesTokenErrors(t *testing.T) {
 	for _, failure := range []microsofttest.TokenFailure{
 		{Status: 400, Error: "invalid_grant", Codes: []int{700082}},
 		{Status: 400, Error: "interaction_required", Codes: []int{50076}},
+		// The account's organization removed or disabled the app (AADSTS700016, 7000112): that grant is gone,
+		// the server's credentials are fine.
+		{Status: 400, Error: "unauthorized_client", Codes: []int{700016}},
 	} {
 		fake.Set(func(s *microsofttest.Server) { s.TokenFailures = []microsofttest.TokenFailure{failure} })
 		if _, _, err := config.AccessToken(context.Background(), rotated); !errors.Is(err, microsoft.ErrRevoked) || errors.Is(err, microsoft.ErrClientConfig) {

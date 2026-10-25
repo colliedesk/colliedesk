@@ -212,8 +212,8 @@ var (
 	// ErrRevoked means the refresh token no longer works (removed, expired after 90 days unused, password
 	// reset, a sign-in policy that now needs the person): reconnect.
 	ErrRevoked = errors.New("the Microsoft 365 connection was revoked or expired")
-	// ErrClientConfig means Microsoft refused this server's own app credentials (a wrong or expired
-	// client secret): the operator must fix the server; the connection itself is fine.
+	// ErrClientConfig means Microsoft refused this server's own app credentials (invalid_client: a wrong or
+	// expired client secret): the operator must fix the server; the connection itself is fine.
 	ErrClientConfig = errors.New("microsoft refused this server's client credentials")
 	// ErrUnauthorized means Graph refused the access token (401).
 	ErrUnauthorized = errors.New("microsoft graph refused the access token")
@@ -371,9 +371,11 @@ func (c Config) token(ctx context.Context, form url.Values) (tokenAnswer, error)
 	_ = json.Unmarshal(body, &answer)
 	// React to error, never to error_description (reference-error-codes); the AADSTS numbers only go to logs.
 	switch {
-	case answer.Error == "invalid_grant", answer.Error == "interaction_required", answer.Error == "consent_required":
+	// unauthorized_client is the account's organization: the app is not (any more) added to its tenant, or it
+	// was disabled there (AADSTS700016, 7000112). That grant is gone; the server's credentials are fine.
+	case answer.Error == "invalid_grant", answer.Error == "interaction_required", answer.Error == "consent_required", answer.Error == "unauthorized_client":
 		return tokenAnswer{}, fmt.Errorf("%w (%s %s)", ErrRevoked, answer.Error, stsCodes(answer.ErrorCodes))
-	case answer.Error == "invalid_client", answer.Error == "unauthorized_client":
+	case answer.Error == "invalid_client":
 		return tokenAnswer{}, fmt.Errorf("%w (%s %s)", ErrClientConfig, answer.Error, stsCodes(answer.ErrorCodes))
 	case response.StatusCode != http.StatusOK:
 		// Never the body: it can echo the client id. The error code alone is enough to act on.

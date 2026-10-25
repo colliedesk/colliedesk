@@ -4,6 +4,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
+	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 )
 
 type emailChannelView struct {
@@ -193,7 +197,14 @@ func TestEachMailboxSecretBringsMailToItsChannel(t *testing.T) {
 
 // The routes of one email channel of several answer only for this workspace's email channels.
 func TestEmailChannelRoutesStayInTheirWorkspace(t *testing.T) {
-	api, service, _, _ := testAPIWithConfig(t, nil)
+	keys, err := tokenseal.ParseKeys("k1:AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Microsoft 365 is set up, so its routes reach the channel lookup instead of answering 409 first.
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.Microsoft = microsoft.Config{ClientID: "ms-client", ClientSecret: "ms-secret", Tenant: "common", Keys: keys, Base: "http://127.0.0.1:1"}
+	})
 	alpha := createSession(t, api, service, "Alpha Boxes", "admin@alpha-boxes.example.com")
 	beta := createSession(t, api, service, "Beta Boxes", "admin@beta-boxes.example.com")
 	connectEmail(t, api, alpha, "support@alpha-boxes.example.com")
@@ -212,7 +223,8 @@ func TestEmailChannelRoutesStayInTheirWorkspace(t *testing.T) {
 	}
 	for _, id := range []string{betaChannel, formID, "00000000-0000-4000-8000-000000000000", "not-an-id"} {
 		for _, call := range []struct{ method, path string }{{http.MethodGet, "/email"}, {http.MethodPost, "/email/secret"},
-			{http.MethodPost, "/email/domain-verification"}, {http.MethodDelete, "/email/gmail"}} {
+			{http.MethodPost, "/email/domain-verification"}, {http.MethodDelete, "/email/gmail"},
+			{http.MethodPost, "/email/microsoft"}, {http.MethodDelete, "/email/microsoft"}} {
 			response := request(t, api, call.method, "/api/v1/channels/"+id+call.path, nil, alpha, nil)
 			if response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "beta-boxes") {
 				t.Errorf("%s %s of %s: %d %s, want 404", call.method, call.path, id, response.Code, response.Body.String())
