@@ -7057,7 +7057,7 @@ components:
         held_count: {type: integer, minimum: 0, description: Messages that arrived while the channel was off and wait to be opened or discarded.}
         unsent_count: {type: integer, minimum: 0, description: 'Replies whose delivery failed with channel_off; retry them once the channel is on.'}
         last_inbound_at: {type: [string, 'null'], format: date-time}
-        is_default: {type: boolean, description: 'Whether this is its type''s default channel: what names no channel goes to it.'}
+        is_default: {type: boolean, description: 'Whether this is its type''s default channel: a call, link or address that names no channel uses it.'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         deleted_at: {type: string, format: date-time, description: 'Only on a removed channel, which only `include_removed=true` lists.'}

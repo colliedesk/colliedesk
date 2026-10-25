@@ -530,5 +530,5 @@ test('removing the default of a type with another channel says which one becomes
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Disconnect email' }));
-  await waitFor(() => expect(screen.getByRole('alertdialog', { name: 'Disconnect email?' })).toHaveTextContent('It is the default: Sales becomes the default.'));
+  await waitFor(() => expect(screen.getByRole('alertdialog', { name: 'Disconnect email?' })).toHaveTextContent('Sales becomes the default in its place.'));
 });

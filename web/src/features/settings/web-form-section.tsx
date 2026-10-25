@@ -81,4 +81,4 @@ function EmbedCode({ url }: { url: string }) {
 }
 
 // legacyNote: the form with the workspace's older address also answers its own, which a new site may use.
-const legacyNote = (own: string) => `Sites already embed this form's address above; it also has its own, ${own}, which keeps working whichever form is the default.`;
+const legacyNote = (own: string) => `The address above is the workspace's older one, which this form keeps. It also has its own, ${own}, which a new site can use.`;

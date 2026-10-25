@@ -192,3 +192,8 @@ test('the channel a refused account belongs to is read from the address and clea
   expect(gmailReturn()).toEqual({ kind: 'error', reason: 'account_in_use', channel: 'def' });
   expect(window.location.search).toBe('?tab=replies');
 });
+
+test('Google signing in another account says which account to choose', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage returned={{ kind: 'error', reason: 'address_mismatch' }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Google signed in another account. A channel sends as its own support address. Select Connect Gmail and choose support@example.com at Google.');
+});

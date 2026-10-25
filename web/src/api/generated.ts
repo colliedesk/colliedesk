@@ -4782,7 +4782,7 @@ export interface components {
             unsent_count: number;
             /** Format: date-time */
             last_inbound_at: string | null;
-            /** @description Whether this is its type's default channel: what names no channel goes to it. */
+            /** @description Whether this is its type's default channel: a call, link or address that names no channel uses it. */
             is_default?: boolean;
             /** Format: date-time */
             created_at: string;

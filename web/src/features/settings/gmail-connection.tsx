@@ -74,6 +74,7 @@ export function GmailConnection({ gmail, supportAddress, timezone, canManage, on
       <h3 id="gmail-connection-heading">{messages.gmailHeading}</h3>
       <p className="muted-copy">{connection ? messages.gmailConnectedDescription : messages.gmailDescription}</p>
       {returned && <p role={returned.kind === 'error' ? 'alert' : 'status'} className={returned.kind === 'error' ? 'error-copy' : 'muted-copy'}>{returnText(returned)}
+        {returned.reason === 'address_mismatch' && <> {messages.gmailSignInAs(supportAddress)}</>}
         {returned.channel && <> <a href={`/settings/channels/${encodeURIComponent(returned.channel)}?tab=replies`}>{messages.gmailOpenHolder}</a></>}</p>}
       {error && <p role="alert" className="error-copy">{error}</p>}
       {!gmail.available && <>

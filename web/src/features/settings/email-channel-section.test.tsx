@@ -89,7 +89,7 @@ test('disconnecting asks first, says what stops, and can be cancelled', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage onDisconnect={onDisconnect} />);
   fireEvent.click(screen.getByRole('button', { name: /disconnect email/i }));
   const question = screen.getByRole('group', { name: 'Disconnect email?' });
-  expect(question).toHaveTextContent('mail sent to support@example.com stops arriving and replies are no longer emailed');
+  expect(question).toHaveTextContent('mail sent to support@example.com stops arriving. Conversations stay; their replies leave from the default mailbox');
   expect(within(question).getByRole('button', { name: 'Cancel' })).toHaveFocus();
   fireEvent.click(within(question).getByRole('button', { name: 'Cancel' }));
   expect(onDisconnect).not.toHaveBeenCalled();

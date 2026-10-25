@@ -100,5 +100,5 @@ test('one copy message at a time: copying the code replaces what copying the URL
 
 test('the form with the workspace\'s older address also gives its own', () => {
   render(<WebFormSection settings={{ ...on, channel_id: '55555555-5555-4555-8555-555555555555', legacy_slug: true }} canManage onSave={vi.fn()} />);
-  expect(screen.getByText(new RegExp(`it also has its own, ${window.location.origin}/api/v1/public/web-forms/55555555-5555-4555-8555-555555555555`))).toBeInTheDocument();
+  expect(screen.getByText(new RegExp(`also has its own, ${window.location.origin}/api/v1/public/web-forms/55555555-5555-4555-8555-555555555555`))).toBeInTheDocument();
 });

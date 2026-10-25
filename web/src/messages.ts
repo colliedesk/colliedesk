@@ -329,7 +329,7 @@ export const messages = {
   rotateInboundSecret: 'Rotate inbound secret',
   disconnectEmail: 'Disconnect email',
   disconnectEmailQuestion: 'Disconnect email?',
-  disconnectEmailConsequence: (address: string) => `For the whole team, mail sent to ${address} stops arriving and replies are no longer emailed. Conversations stay.`,
+  disconnectEmailConsequence: (address: string) => `For the whole team, mail sent to ${address} stops arriving. Conversations stay; their replies leave from the default mailbox, or are not emailed when no mailbox is left.`,
   confirmDisconnectEmail: 'Yes, disconnect',
   cancel: 'Cancel',
   emailNotConnected: 'Email is not connected.',
