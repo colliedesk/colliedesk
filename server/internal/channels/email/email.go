@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/mail"
+	"slices"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
@@ -246,13 +247,32 @@ func (c config) Remove(ctx context.Context, tx pgx.Tx, channel channels.Channel)
 	return store.RemoveEmailChannel(ctx, tx, channel.WorkspaceID, channel.ID)
 }
 
-// Snapshot is the support address, which the parser needs to drop our own mail and copies.
+// snapshot is what the parser needs to drop our own mail and copies: the channel's support address,
+// and every address mail of the workspace leaves from (its mailboxes and the Gmail accounts they send
+// through).
+type snapshot struct {
+	Support string
+	Own     []string
+}
+
 func (c config) Snapshot(ctx context.Context, tx pgx.Tx, channel channels.Channel) (any, error) {
 	settings, err := store.EmailChannelTx(ctx, tx, channel.WorkspaceID, channel.ID)
 	if err != nil || settings == nil {
-		return "", err
+		return snapshot{}, err
 	}
-	return settings.SupportAddress, nil
+	own, err := store.OwnEmailAddressesTx(ctx, tx, channel.WorkspaceID)
+	if err != nil {
+		return snapshot{}, err
+	}
+	return snapshot{Support: settings.SupportAddress, Own: own}, nil
+}
+
+// ownAddress reports whether mail from address comes from the workspace itself.
+func (s snapshot) ownAddress(address string) bool {
+	if address == s.Support {
+		return true
+	}
+	return slices.ContainsFunc(s.Own, func(own string) bool { return mailpkg.SameMailbox(address, own) })
 }
 
 // Envelope is what the inbound route learned of a message beside its bytes, kept in the journal so a
@@ -272,8 +292,9 @@ const bounceReason = "The recipient's mail server bounced this reply."
 
 // Parse makes a message of a parsed email (what the inbound route read), or of a held message's
 // stored original and its envelope.
-func (i inbound) Parse(_ context.Context, _ channels.Channel, snapshot any, raw channels.Raw) ([]channels.Inbound, error) {
-	supportAddress, _ := snapshot.(string)
+func (i inbound) Parse(_ context.Context, _ channels.Channel, snapshotOf any, raw channels.Raw) ([]channels.Inbound, error) {
+	own, _ := snapshotOf.(snapshot)
+	supportAddress := own.Support
 	parsed, ok := raw.Parsed.(mailpkg.Inbound)
 	body := raw.Body
 	if !ok {
@@ -330,7 +351,7 @@ func (i inbound) Parse(_ context.Context, _ channels.Channel, snapshot any, raw 
 		CC: copiedAddresses(parsed, supportAddress)}
 	in.Summary, _ = json.Marshal(Envelope{MessageID: parsed.MessageID, From: parsed.FromAddress, Platform: parsed.Platform, Cc: parsed.Cc})
 	switch {
-	case parsed.FromAddress == supportAddress:
+	case own.ownAddress(parsed.FromAddress):
 		in.DropReason = mailpkg.DropOwnAddress
 	case parsed.DropReason == mailpkg.DropMailerDaemon && len(parsed.BouncedMessageIDs) > 0:
 		in.Kind = channels.KindDeliveryUpdate

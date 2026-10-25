@@ -255,3 +255,22 @@ func TestARequestAboutAMailboxNamesIt(t *testing.T) {
 		}
 	}
 }
+
+// Mail from another mailbox of the workspace is the workspace's own, as mail from the receiving one is:
+// it opens no conversation with the team as the customer.
+func TestMailFromAnotherMailboxOfTheWorkspaceIsItsOwn(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Own Boxes", "admin@own-boxes.example.com")
+	secret := connectEmail(t, api, admin, "support@own-boxes.example.com")
+	addEmailChannel(t, api, admin, "billing@own-boxes.example.com")
+	result := inboundOK(t, api, secret, mail([]string{"From: Billing <Billing+desk@own-boxes.example.com>", "To: support@own-boxes.example.com",
+		"Subject: Internal", "Message-ID: <internal@own-boxes.example.com>"}, "From the billing mailbox."))
+	if result.Status != "dropped" || result.Reason == nil || *result.Reason != "own_address" || result.ConversationID != nil {
+		t.Fatalf("mail from billing@ to support@: %+v, want dropped/own_address", result)
+	}
+	// A customer still writes in.
+	if result := inboundOK(t, api, secret, mail([]string{"From: olive@customer.example", "To: support@own-boxes.example.com",
+		"Subject: Help", "Message-ID: <help@customer.example>"}, "Help.")); result.Status != "created" {
+		t.Fatalf("customer mail: %+v, want created", result)
+	}
+}

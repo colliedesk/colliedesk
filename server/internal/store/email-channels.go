@@ -566,6 +566,18 @@ func (s *Store) ChannelForHostedAddress(ctx context.Context, workspaceID, local 
 	return *id, true, nil
 }
 
+// OwnEmailAddressesTx is every address mail of the workspace leaves from, its mailboxes and Gmail
+// accounts together.
+func OwnEmailAddressesTx(ctx context.Context, tx pgx.Tx, workspaceID string) ([]string, error) {
+	var own []string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(array_agg(address),'{}') FROM (SELECT support_address AS address FROM email_channels WHERE workspace_id=$1
+		UNION SELECT address FROM mailbox_connections WHERE workspace_id=$1) own`, workspaceID).Scan(&own)
+	if err != nil {
+		return nil, fmt.Errorf("list own email addresses: %w", err)
+	}
+	return own, nil
+}
+
 // OwnEmailAddresses lists what mail of the workspace comes from: the support addresses of its email
 // channels and the Gmail accounts they send through.
 func (s *Store) OwnEmailAddresses(ctx context.Context, workspaceID string) (support, gmail []string, err error) {
