@@ -22,8 +22,8 @@ const (
 		`"this_token":{"type":"boolean"},"state":{"type":"string","enum":["active","revoked","expired"]},"last_seen_at":{"type":"string"},"expires_at":{"type":"string"}}}`
 
 	// emailChannelInput names one email channel of several; without it a tool acts on the default one.
-	emailChannelInput  = `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"One email channel of several, from colliedesk_channels_list. Leave out for the default (oldest) one."}}}`
-	emailChannelChoice = `A workspace may have several email channels: give channel_id for one of them, or leave it out for the default (oldest) one.`
+	emailChannelInput  = `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"One email channel of several, from colliedesk_channels_list. Leave out for the default one (is_default in colliedesk_channels_list)."}}}`
+	emailChannelChoice = `A workspace may have several email channels: give channel_id for one of them, or leave it out for the default one (is_default).`
 
 	webFormSchema = `{"type":"object","required":["enabled","allowed_origins","submit_path"],"properties":{"enabled":{"type":"boolean"},` +
 		`"allowed_origins":{"type":"array","items":{"type":"string"}},"submit_path":{"type":"string"}}}`

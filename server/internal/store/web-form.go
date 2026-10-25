@@ -17,7 +17,7 @@ type WebFormSubmission struct {
 	Source  string
 }
 
-// GetWebForm returns the settings of the workspace's default web form (its oldest live one); a
+// GetWebForm returns the settings of the workspace's default web form (`is_default`); a
 // workspace that never set one up has it off. The channel's on or off is the truth.
 func (s *Store) GetWebForm(ctx context.Context, workspaceID string) (domain.WebForm, error) {
 	form, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.WebForm, error) {

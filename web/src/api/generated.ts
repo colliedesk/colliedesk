@@ -516,7 +516,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The settings of the workspace's default email channel (its oldest); `channel` is null while email is not connected. Other email channels are read with `GET /api/v1/channels/{id}/email`. */
+        /** @description The settings of the workspace's default email channel (`is_default`); `channel` is null while email is not connected. Other email channels are read with `GET /api/v1/channels/{id}/email`. */
         get: operations["getEmailChannel"];
         /** @description Connect email (the first email channel), or change the default channel's support address, its sender name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its domain verification and its sending domain stay as they are. Add another mailbox with `POST /api/v1/channels` and change it with `PATCH /api/v1/channels/{id}`. */
         put: operations["putEmailChannel"];
@@ -1856,7 +1856,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description State of the workspace's default web form (its oldest). A workspace that never set one up has it off. Other forms are read with `GET /api/v1/channels/{id}`. */
+        /** @description State of the workspace's default web form (`is_default`). A workspace that never set one up has it off. Other forms are read with `GET /api/v1/channels/{id}`. */
         get: operations["getWebForm"];
         /** @description Turn the default web form on or off and replace its allowed origins; the first save adds a form. Other forms are changed with `PATCH /api/v1/channels/{id}`. Turning it off keeps the origins, so turning it on again needs nothing else. Origins are exact (`scheme://host[:port]`, http or https), at most 20, with no path, wildcard or credentials; they are lowercased and de-duplicated. */
         put: operations["putWebForm"];

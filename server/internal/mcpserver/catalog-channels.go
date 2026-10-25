@@ -25,7 +25,7 @@ func channelsListSpec() Spec {
 		Name:  "colliedesk_channels_list",
 		Title: "List the channels",
 		Description: `List the workspace's channels (its support email, its web form...) with their state (working, off, needs_attention with a reason code), ` +
-			`how many messages each holds because it was off, how many replies were not sent while it was off, and the channel types this server runs with how many of each the workspace has. A workspace may have several channels of a type (two support mailboxes, two web forms); the oldest of a type is its default.` + "\n\nTier: read.",
+			`how many messages each holds because it was off, how many replies were not sent while it was off, and the channel types this server runs with how many of each the workspace has. A workspace may have several channels of a type (two support mailboxes, two web forms); one of each type is its default (is_default), which an admin can move.` + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST:   []string{"GET /api/v1/channels"},
 		Input:  noArguments,

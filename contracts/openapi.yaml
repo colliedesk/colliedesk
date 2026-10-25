@@ -993,7 +993,7 @@ paths:
       operationId: getEmailChannel
       x-permission: access:read
       description: >-
-        The settings of the workspace's default email channel (its oldest); `channel` is null while email is
+        The settings of the workspace's default email channel (`is_default`); `channel` is null while email is
         not connected. Other email channels are read with `GET /api/v1/channels/{id}/email`.
       responses:
         '200': {$ref: '#/components/responses/EmailChannelSettings'}
@@ -3172,7 +3172,7 @@ paths:
       operationId: getWebForm
       x-permission: access:read
       description: >-
-        State of the workspace's default web form (its oldest). A workspace that never set one up has it
+        State of the workspace's default web form (`is_default`). A workspace that never set one up has it
         off. Other forms are read with `GET /api/v1/channels/{id}`.
       responses:
         '200': {$ref: '#/components/responses/WebFormSettings'}

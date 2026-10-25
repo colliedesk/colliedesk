@@ -133,7 +133,7 @@ func billingRequestSpec() Spec {
 
 func emailChannelDisconnectRequestSpec() Spec {
 	return approvalSpec("colliedesk_email_channel_disconnect_request", "Ask to disconnect the email channel",
-		`Ask to disconnect the workspace's default (oldest) email channel: its mail stops coming in and its replies stop going out until an admin connects it again. To remove another channel, use colliedesk_channels_delete_request.`,
+		`Ask to disconnect the workspace's default email channel (is_default): its mail stops coming in and its replies stop going out until an admin connects it again. To remove another channel, use colliedesk_channels_delete_request.`,
 		[]string{"DELETE /api/v1/channels/email"}, noArguments, emailChannelDisconnectRequest)
 }
 
