@@ -33,8 +33,24 @@ Press **Decide** on a card to read every message of it, then pick one:
 - **Not a request**: sets the card aside, with why (just chat, answered in chat, already reported,
   something else). Nothing is sent.
 
+When AI intake runs on the channel ([AI per channel](ai.md#what-ai-does-by-itself-per-channel)), a card
+it did not decide alone shows **Suggested by AI**: what it would do (open a conversation with a subject and
+command, add it to a conversation, or set it aside), how sure it is, the runner-up conversation, its reason,
+and why it did not do it alone (not sure enough, too old, a password in it, not allowed yet). **Follow
+suggestion** decides the card that way; a suggestion to join a resolved conversation says that following
+it reopens it. The decide form also starts from the suggestion. Whether a person followed or changed what
+AI suggested is kept with the card's decisions, to measure how often AI is right.
+
 Each decision is one press and is saved once: when a teammate (or AI) decided the card first, the card
 leaves Waiting and the page says who decided it, with the conversation it opened or joined.
+
+## A customer who writes after it was resolved
+
+When a customer only thanks the team after their conversation was resolved ("ok", "thank you"), AI intake
+adds the message to that conversation and keeps it **Resolved**, so nobody has to resolve it again and no
+draft is written for it. The message says **Written after it was resolved · kept Resolved**, with
+**Reopen** while the conversation is still resolved. A closed conversation reopens as usual, and a message
+with a new question reopens it.
 
 ## AI dismissed and Decided
 
@@ -46,7 +62,7 @@ by a person or AI, has **Put back in queue**: it returns to Waiting, and its ear
 history. A card that opened or joined a conversation links to it.
 
 The line at the top counts the last 7 days: the cards, how many became conversations, and how many of
-AI's automatic decisions a person corrected. Pick a channel and scope above the list to see only its
+AI's decisions (what it did and what it suggested) a person decided otherwise. Pick a channel and scope above the list to see only its
 cards.
 
 For AI agents and the API, the same cards and decisions are in [Intake queue](channels.md#intake-queue).

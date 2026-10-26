@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { expect, test, vi } from 'vitest';
-import { AGENT, CONVERSATION, OTHER_CONVERSATION, candidate, detail, gathering } from './intake.test.fixture';
+import { AGENT, CONVERSATION, DECISION, OTHER_CONVERSATION, candidate, detail, gathering, suggestion } from './intake.test.fixture';
 import { IntakeCard } from './intake-card';
 
 const props = (overrides: Partial<ComponentProps<typeof IntakeCard>> = {}): ComponentProps<typeof IntakeCard> => ({
@@ -75,6 +75,11 @@ test('a call that was not saved says so and can be sent again', async () => {
 test('a card holding a password says so, and one behind another of its lane says why it waits', () => {
   const { rerender } = render(<IntakeCard {...props({ item: gathering({ review_reason: 'credential' }) })} />);
   expect(screen.getByText(/Ask the customer to change it/)).toBeInTheDocument();
+  // A group card without a command whose AI suggestion was held back for a password warns the same way.
+  rerender(<IntakeCard {...props({ item: gathering({ review_reason: 'no_command', suggestion: suggestion({ not_applied_reason: 'credential' }) }) })} />);
+  expect(screen.getByText(/Ask the customer to change it/)).toBeInTheDocument();
+  rerender(<IntakeCard {...props({ item: gathering({ review_reason: 'no_command', suggestion: suggestion({ not_applied_reason: 'below_threshold' }) }) })} />);
+  expect(screen.queryByText(/Ask the customer to change it/)).not.toBeInTheDocument();
   rerender(<IntakeCard {...props({ item: gathering({ review_reason: 'lane_blocked' }) })} />);
   expect(screen.getByText('Waiting for the card above')).toBeInTheDocument();
   expect(screen.getByText(/Deciding that one first keeps their messages in order/)).toBeInTheDocument();
@@ -131,4 +136,55 @@ test('a chat message keeps the line breaks the customer typed, however long the 
   const body = 'The scale in the second warehouse stopped printing labels this morning\nwe restarted it';
   render(<IntakeCard {...props({ open: true, detail: detail({ items: [{ ...detail().items[0], body }] }) })} />);
   expect(document.querySelector('.intake-item-body')?.textContent).toBe(body);
+});
+
+test('a waiting card shows what AI suggests, how sure it is, why, and the runner-up; Follow sends that suggestion', async () => {
+  const handlers = props({ item: gathering({ suggestion: suggestion() }) });
+  render(<IntakeCard {...handlers} />);
+  const block = screen.getByRole('group', { name: 'Suggested by AI' });
+  expect(block).toHaveTextContent('Add to “Scale prints blank labels” · 92%');
+  expect(block).toHaveTextContent('or “Login fails” · 61%');
+  expect(block).toHaveTextContent('Same scale, same morning');
+  fireEvent.click(within(block).getByRole('button', { name: 'Follow suggestion' }));
+  expect(handlers.onDecide).toHaveBeenCalledWith({ action: 'attach', conversation_id: CONVERSATION, follows_decision_id: DECISION });
+});
+
+test('a suggestion to join a resolved conversation says it reopens it; one to open or set aside sends its subject, command or reason', async () => {
+  const onDecide = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = render(<IntakeCard {...props({ onDecide, item: gathering({ suggestion: suggestion({ target_status: 'resolved' }) }) })} />);
+  expect(screen.getByRole('group', { name: 'Suggested by AI' })).toHaveTextContent('Resolved: following reopens it');
+  rerender(<IntakeCard {...props({ onDecide, item: gathering({ suggestion: suggestion({ target_status: 'resolved', reply_kind: 'acknowledgement' }) }) })} />);
+  expect(screen.getByRole('group', { name: 'Suggested by AI' })).toHaveTextContent('Resolved: a thank-you, so it stays resolved');
+  rerender(<IntakeCard {...props({ onDecide, item: gathering({ suggestion: suggestion({ action: 'create', target_conversation_id: null, target_subject: null, target_status: null,
+    subject: 'Scale prints nothing', command: 'bug', confidence: 0.88 }) }) })} />);
+  expect(screen.getByRole('group', { name: 'Suggested by AI' })).toHaveTextContent('New conversation: “Scale prints nothing” · bug · 88%');
+  fireEvent.click(screen.getByRole('button', { name: 'Follow suggestion' }));
+  expect(onDecide).toHaveBeenLastCalledWith({ action: 'create', subject: 'Scale prints nothing', command: 'bug', follows_decision_id: DECISION });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Follow suggestion' })).toBeEnabled());
+  rerender(<IntakeCard {...props({ onDecide, item: gathering({ suggestion: suggestion({ action: 'ignore', target_conversation_id: null, target_subject: null, target_status: null,
+    ignore_reason: 'chat', runner_up_conversation_id: null, runner_up_subject: null, runner_up_confidence: null }) }) })} />);
+  expect(screen.getByRole('group', { name: 'Suggested by AI' })).toHaveTextContent('Not a request: Just chat · 92%');
+  fireEvent.click(screen.getByRole('button', { name: 'Follow suggestion' }));
+  expect(onDecide).toHaveBeenLastCalledWith({ action: 'ignore', ignore_reason: 'chat', follows_decision_id: DECISION });
+});
+
+test('a suggestion AI could not act on says why; the decide form starts from it', () => {
+  render(<IntakeCard {...props({ open: true, detail: detail({ candidates: [candidate({ conversation_id: OTHER_CONVERSATION, subject: 'Login fails' }), candidate()] }),
+    item: gathering({ suggestion: suggestion({ not_applied_reason: 'below_threshold' }) }) })} />);
+  expect(screen.getByRole('group', { name: 'Suggested by AI' })).toHaveTextContent('Not sure enough to do it alone');
+  expect(screen.getByRole('radio', { name: 'Add to a conversation' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: /Scale prints blank labels/ })).toBeChecked();
+});
+
+test('a card the rules filed while AI only suggests shows the suggestion without Follow', () => {
+  render(<IntakeCard {...props({ item: gathering({ state: 'applied', review_reason: null, decided_by: 'rules', conversation_id: CONVERSATION,
+    decided_at: '2026-10-26T02:03:00Z', suggestion: suggestion() }) })} />);
+  expect(screen.getByRole('group', { name: 'Suggested by AI' })).toHaveTextContent('Add to “Scale prints blank labels”');
+  expect(screen.queryByRole('button', { name: 'Follow suggestion' })).not.toBeInTheDocument();
+});
+
+test('a decided card shows no suggestion', () => {
+  render(<IntakeCard {...props({ item: gathering({ state: 'created', review_reason: null, decided_by: 'agent', decided_by_agent_id: AGENT, conversation_id: CONVERSATION,
+    decided_at: '2026-10-26T02:03:00Z', suggestion: suggestion() }) })} />);
+  expect(screen.queryByRole('group', { name: 'Suggested by AI' })).not.toBeInTheDocument();
 });
