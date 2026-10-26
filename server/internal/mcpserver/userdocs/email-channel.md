@@ -27,6 +27,17 @@ change where your mailbox forwards:
      in Colliedesk; open it and select the confirmation link. Then choose **Forward a copy of
      incoming mail** and save.
    - **Outlook:** Settings → Mail → Forwarding, enter the address and select **Start forwarding**.
+     In Microsoft 365, forwarding outside your organization is often blocked: the sender gets a bounce
+     with `5.7.520 Access denied, Your organization does not allow external forwarding`. Your Microsoft
+     365 admin allows it for the support mailbox only:
+     1. Open the [Microsoft Defender portal anti-spam policies](https://security.microsoft.com/antispam)
+        (role Security Administrator or Organization Management).
+     2. Select **Create policy** → **Outbound** and name it, for example `Colliedesk forwarding`.
+     3. Under **Users, groups, and domains**, add only the support mailbox.
+     4. Under **Protection settings**, set **Automatic forwarding rules** to **On - Forwarding is
+        enabled**, then select **Create**.
+     5. If mail still bounces, a remote domain setting or a mail flow rule of the organization may also
+        block forwarding, and a block wins; your admin checks those too.
 4. Send a test message to your support address. It opens a conversation.
 
 Forwarded mail keeps its original sender, so the conversation is with your customer, not with your
@@ -77,11 +88,11 @@ requirements, with a link to the [privacy policy](https://colliedesk.com/privacy
 A self-hosted server shows no such link: it sends through your own Google OAuth client (see below).
 
 1. Connect the email channel first (a saved Support address).
-2. Open **Settings → Channels → Email → Replies → Send from Gmail** and select **Connect Gmail**.
+2. Open **Settings → Channels → Email → Replies → Send from your mailbox** and select **Connect Gmail**.
 3. Google asks you to choose the account and allow **Send email on your behalf**. Leave that box
    ticked. Google then brings you back to Settings, which says whether Gmail is connected and, if not,
    why.
-4. **Send from Gmail** now shows the account. Replies, including copies (Cc), attached files and
+4. **Send from your mailbox** now shows the account. Replies, including copies (Cc), attached files and
    **Retry delivery**, go out through it with the same threading headers, so customer answers join
    the same conversation.
 
@@ -89,11 +100,11 @@ Connect the account of your support address: a channel sends as its own address.
 another account (for example `acme.help@gmail.com` while customers write to `support@example.com`)
 connects nothing, and Settings says to sign in with the support address. An account another email
 channel of the workspace already sends through is refused too, with a link to that channel. A
-connection made before this rule with another account keeps sending; **Send from Gmail** warns that
+connection made before this rule with another account keeps sending; **Send from your mailbox** warns that
 it does not match and suggests connecting the right one.
 
 **When Gmail stops working.** If the access is removed in the Google account, the password changes,
-or Google refuses to send, **Send from Gmail** turns into an alert with the reason. Replies are then
+or Google refuses to send, **Send from your mailbox** turns into an alert with the reason. Replies are then
 marked **Delivery failed** with the same reason. They are never sent another way without you knowing.
 Select **Reconnect Gmail**, then **Retry delivery** on the failed replies.
 
@@ -111,6 +122,69 @@ page. On Colliedesk Cloud the request card shows the same note on Google data fi
 
 On a server you run, Gmail sending needs your own Google OAuth client. See
 [send replies through Gmail](../self-host/email.md#send-replies-through-gmail).
+
+## Send replies from Microsoft 365
+
+If your support address is a Microsoft 365 mailbox (a work or school account) or an Outlook.com mailbox
+(a personal Microsoft account), an admin can connect it. Replies are then sent through Microsoft from
+that address, and a copy of each reply stays in the mailbox's **Sent Items**. Incoming mail still
+arrives by forwarding, as set up above. Colliedesk asks Microsoft only for permission to send email and
+to read the account's address (`Mail.Send`, `User.Read`, `offline_access`, `openid`); it cannot read
+the mailbox.
+
+1. Connect the email channel first (a saved Support address).
+2. Open **Settings → Channels → Email → Replies → Send from your mailbox** and select **Connect
+   Microsoft 365**.
+3. Microsoft asks you to sign in. Choose the mailbox of your support address and select **Accept**.
+   Microsoft then brings you back to Settings, which says whether Microsoft 365 is connected and, if
+   not, why.
+4. **Send from your mailbox** now shows the mailbox. Replies, including copies (Cc), attached files and
+   **Retry delivery**, go out through it with the same threading headers, so customer answers join the
+   same conversation.
+
+**Admin approval.** Many organizations only let an admin approve apps that send email. If Microsoft says
+you need admin approval, open **Work account? Your IT admin may need to approve Colliedesk first** under
+**Connect Microsoft 365**, select **Copy link** and send the link to your Microsoft 365 admin. After they
+approve, select **Connect Microsoft 365** again. Microsoft may keep you on its "Need admin approval"
+page instead of bringing you back to Colliedesk; come back to Settings yourself once your admin
+approved.
+
+Connect the mailbox of your support address: a channel sends as its own address. Microsoft signing in
+another mailbox connects nothing, and Settings says which mailbox to choose. If your support address is
+an alias or a shared mailbox in Microsoft 365, it cannot be connected yet. A Microsoft account created
+with another provider's address (for example a Gmail address) has no Outlook mailbox to send from and is
+refused too. An account another email channel of the workspace already sends through is refused, with a
+link to that channel.
+
+**When Microsoft 365 stops working.** If access is removed in the Microsoft account, the password is
+reset, a sign-in policy of your organization now blocks Colliedesk, or the mailbox loses its license,
+**Send from your mailbox** turns into an alert with the reason. Replies are then marked **Delivery
+failed** with the same reason; they are never sent another way without you knowing. Select **Reconnect
+Microsoft 365**, then **Retry delivery** on the failed replies. If the server's own Microsoft settings
+stop working (its client secret expired), the connection stays, replies wait with a note for the
+administrator, and reconnecting does not help.
+
+**Disconnect Microsoft 365** asks first, then deletes Colliedesk's access to the mailbox. Microsoft has no
+way for Colliedesk to remove itself from your account, so Colliedesk stays listed among the account's
+apps until you remove it there: at [My Apps](https://myapps.microsoft.com) for a work or school account,
+or at [Microsoft account permissions](https://account.live.com/consent/Manage) for a personal account.
+Replies then go out the way they did before Microsoft 365 was connected; a reply that was still waiting
+for Microsoft 365 fails with a note and can be retried.
+
+A channel sends through one mailbox. Selecting **Use Gmail instead** or **Use Microsoft 365 instead**
+asks first, then replaces the connection; replies still waiting for the old one fail and can be
+retried.
+
+**Large attachments.** Microsoft may refuse a reply with large files. When the files of a reply are
+larger than 3 MB and it goes through Microsoft 365, the reply box warns you. If Microsoft refuses the
+reply, it is marked **Delivery failed** with the reason and keeps its files: remove a file and retry.
+
+Agents (AI) cannot connect or disconnect Microsoft 365 themselves: `colliedesk_microsoft_connect_request`
+and `colliedesk_microsoft_disconnect_request` file a request, and the admin who approves it gets
+Microsoft's sign-in page. See [Agent requests](agent-requests.md).
+
+On a server you run, Microsoft 365 sending needs your own app registration in Microsoft Entra. See
+[send replies through Microsoft 365](../self-host/email.md#send-replies-through-microsoft-365).
 
 ## Several mailboxes
 

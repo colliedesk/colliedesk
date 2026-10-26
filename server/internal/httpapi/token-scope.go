@@ -214,6 +214,8 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/channels/{id}/email/secret":              alwaysAsk(auth.PermChannelsManageCredentials),
 	"POST " + channelGmailPath:                             alwaysAsk(auth.PermChannelsManageCredentials),
 	"DELETE " + channelGmailPath:                           alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST " + channelMicrosoftPath:                         alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + channelMicrosoftPath:                       alwaysAsk(auth.PermChannelsManageCredentials),
 	"GET /api/v1/channels/email":                           grant(auth.PermChannelsRead),
 	"GET /api/v1/channels/web-form":                        grant(auth.PermChannelsRead),
 	"PATCH /api/v1/agents/me/timezone":                     grant(auth.PermProfileUpdate),
@@ -242,6 +244,9 @@ var tokenTiers = map[string]TokenAccess{
 	// browser); disconnecting changes the address customers get replies from.
 	"POST " + gmailPath:   alwaysAsk(auth.PermChannelsManageCredentials),
 	"DELETE " + gmailPath: alwaysAsk(auth.PermChannelsManageCredentials),
+	// Microsoft 365 the same way: the sign-in address is for a person's browser.
+	"POST " + microsoftPath:   alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + microsoftPath: alwaysAsk(auth.PermChannelsManageCredentials),
 
 	// Imports read and write the whole workspace: admin. An undo deletes what an import brought in, so
 	// every token asks a person. The two routes that take a Freshdesk key are refused below admin
@@ -290,7 +295,10 @@ var tokenTiers = map[string]TokenAccess{
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
-	"GET " + gmailCallbackPath:                      notForPeople,
+	"GET " + gmailCallbackPath: notForPeople,
+	// Microsoft's redirects: the consent finishes like Gmail's; the admin consent stores nothing.
+	"GET " + microsoftCallbackPath:                  notForPeople,
+	"GET " + microsoftAdminConsentPath:              notForPeople,
 	"POST /api/v1/auth/cloud/exchange":              notForPeople,
 	"POST " + cloudSignupPath:                       notForPeople,
 	"POST /api/v1/auth/redeem":                      notForPeople,

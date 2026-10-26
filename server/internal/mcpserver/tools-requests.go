@@ -270,6 +270,14 @@ func gmailDisconnectRequest(c *call, arguments map[string]any) (any, error) {
 	return ask(c, http.MethodDelete, emailChannelPath(c, arguments, "/gmail"), nil)
 }
 
+func microsoftConnectRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodPost, emailChannelPath(c, arguments, "/microsoft"), nil)
+}
+
+func microsoftDisconnectRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodDelete, emailChannelPath(c, arguments, "/microsoft"), nil)
+}
+
 func workspaceSlugRequest(c *call, arguments map[string]any) (any, error) {
 	return ask(c, http.MethodPatch, "/api/v1/workspace/slug", arguments)
 }

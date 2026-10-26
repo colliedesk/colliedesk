@@ -14,7 +14,7 @@ import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
-import { outboundNotice } from './outbound-notice';
+import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
 import { useConversationPresence } from './use-conversation-presence';
@@ -279,7 +279,7 @@ export function InboxRoute() {
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
-    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
+    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
     outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}

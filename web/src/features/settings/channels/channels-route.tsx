@@ -27,7 +27,7 @@ import './channels.css';
 //   /settings/channels/new/<type>      the type's connect form; the channel exists once it is saved
 //   /settings/channels/type/<type>     the workspace's channel of that type, or its connect form
 
-export interface ChannelsSearch { tab?: string; gmail?: string; gmail_error?: string }
+export interface ChannelsSearch { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string }
 
 export interface ChannelsRouteProps {
   // path is what follows /settings/channels/ ('' for the list).

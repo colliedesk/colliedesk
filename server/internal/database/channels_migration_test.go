@@ -413,3 +413,56 @@ func TestHeldInboundEventsCountTowardStorage(t *testing.T) {
 		t.Fatalf("deleted: counted=%d stored=%d, want 0", c, s)
 	}
 }
+
+const microsoftMigration = "20261025120000-microsoft-connection.up.sql"
+
+// Microsoft 365 joins Gmail as a mailbox provider: a connection, a consent, its replies' transport and its
+// mailbox_unavailable reason are accepted. Rolling back refuses while any of them exists, naming the
+// workspace, and drops nothing; without them it restores the Gmail-only checks.
+func TestMicrosoftConnectionMigrationAcceptsMicrosoftAndRollsBackOnlyWithoutIt(t *testing.T) {
+	pool, s := upgradedChannels(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE mailbox_connections SET provider='microsoft',account_id='00000000-0000-0000-0000-00000000abcd',
+		status='failed',error_code='mailbox_unavailable',failed_at=now() WHERE workspace_id=$1`, s.both); err != nil {
+		t.Fatalf("microsoft connection refused: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE mailbox_oauth_states SET provider='microsoft' WHERE workspace_id=$1`, s.both); err != nil {
+		t.Fatalf("microsoft consent refused: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE channel_outbox SET transport='microsoft' WHERE message_id=$1`, s.reply); err != nil {
+		t.Fatalf("microsoft transport refused: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE channel_outbox SET transport='outlook' WHERE message_id=$1`, s.reply); err == nil {
+		t.Fatal("an unknown transport was accepted")
+	}
+	err := rollbackThrough(ctx, pool, microsoftMigration)
+	if err == nil || !strings.Contains(err.Error(), "workspaces both") {
+		t.Fatalf("rollback with a Microsoft connection: %v, want a refusal naming the workspace", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE mailbox_connections SET provider='google',account_id=NULL,status='connected',error_code=NULL,failed_at=NULL WHERE workspace_id=$1`, s.both); err != nil {
+		t.Fatal(err)
+	}
+	if err := rollbackThrough(ctx, pool, microsoftMigration); err == nil || !strings.Contains(err.Error(), "replies went through it") {
+		t.Fatalf("rollback with a reply sent through Microsoft: %v, want a refusal", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE channel_outbox SET transport='smtp' WHERE message_id=$1`, s.reply); err != nil {
+		t.Fatal(err)
+	}
+	if err := rollbackThrough(ctx, pool, microsoftMigration); err != nil {
+		t.Fatalf("roll back: %v", err)
+	}
+	var connections, consents int
+	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM mailbox_connections),(SELECT count(*) FROM mailbox_oauth_states WHERE workspace_id=$1)`, s.both).
+		Scan(&connections, &consents); err != nil {
+		t.Fatal(err)
+	}
+	if connections != 1 || consents != 0 {
+		t.Fatalf("after rollback: connections=%d, Microsoft consents left=%d; want the Gmail connection kept and the consent gone", connections, consents)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE mailbox_connections SET provider='microsoft' WHERE workspace_id=$1`, s.both); err == nil {
+		t.Fatal("the rolled back schema accepted a Microsoft connection")
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("up again: %v", err)
+	}
+}

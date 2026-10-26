@@ -31,6 +31,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -48,6 +49,10 @@ var importJobNetwork func(*freshdesk.Options)
 
 // googleBaseURL replaces Google's addresses with a local stand-in; only end-to-end builds set it.
 var googleBaseURL = ""
+
+// microsoftBaseURL replaces Microsoft's sign-in and Graph addresses with a local stand-in; only
+// end-to-end builds set it.
+var microsoftBaseURL = ""
 
 func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -110,6 +115,11 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
+	// Microsoft 365 seals its grants with the same ring (MAILBOX_TOKEN_KEYS), parsed once above.
+	microsoftConfig, err := microsoft.ConfigFromEnv(os.Getenv, googleConfig.Keys)
+	if err != nil {
+		return err
+	}
 	helpCenterDomain, err := helpcenter.DomainFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -122,21 +132,27 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		slog.Warn("AI_SERVER_MONTHLY_ALLOWANCE holds only while the OpenAI-compatible server reports token usage; calls without usage cost nothing against it")
 	}
 	googleConfig.Base = googleBaseURL
+	microsoftConfig.Base = microsoftBaseURL
 	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
-	// worker sends every channel's replies, email through SMTP or Gmail; without either, replies that
-	// need them fail with the reason. The journal worker processes what Async channels received.
-	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Billing: billing}
+	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
+	// replies that need them fail with the reason. The journal worker processes what Async channels received.
+	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing}
 	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig))).
 		WithSealKeys(googleConfig.Keys).WithPlanLimits(billing.Enabled())
 	var sender emailoutbox.Sender
 	if emailConfig.SMTP.Configured() {
 		sender = email.SMTPSender{Config: emailConfig.SMTP}
 	}
-	if emailConfig.SMTP.Configured() || googleConfig.Enabled() {
-		// A server with Gmail and no relay still sends email; replies that need SMTP fail with the reason.
+	if emailConfig.SMTP.Configured() || googleConfig.Enabled() || microsoftConfig.Enabled() {
+		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
 		worker := emailoutbox.New(channelStore, sender,
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig})
+			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig})
 		go worker.Run(ctx, 5*time.Second)
+		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly
+		// and shows a revoked one before a customer waits for a reply.
+		if microsoftConfig.Enabled() {
+			go worker.RunKeepAlive(ctx, time.Hour)
+		}
 	} else {
 		// Without either, email waits for a server that can send it; every other channel is sent here.
 		go outbox.New(channelStore, outbox.Options{Skip: []channels.Type{channelemail.Type}}).Run(ctx, 5*time.Second)
@@ -202,7 +218,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
 	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1", PlanLimits: billing.Enabled()}
-	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.

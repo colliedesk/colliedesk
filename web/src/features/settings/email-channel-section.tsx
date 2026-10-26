@@ -4,7 +4,7 @@ import type { EmailChannelSettings, EmailDnsRecord } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { PartUnavailable } from '../../ui/lazy-part';
-import type { GmailReturn } from './gmail-return';
+import type { MailboxProvider, MailboxReturn } from './gmail-return';
 import { CopyButton } from './copy-button';
 import { NameForm } from './name-form';
 import { useSaveFeedback } from './save-feedback';
@@ -34,21 +34,23 @@ interface EmailChannelSectionProps {
   // Why the last domain check did not verify; the server's own wording.
   verifyError?: string;
   verifyPending?: boolean;
-  onConnectGmail?: () => void;
-  onDisconnectGmail?: () => void;
-  gmailPending?: boolean;
-  gmailError?: string;
-  gmailReturned?: GmailReturn;
+  // The channel's mailbox (Gmail or Microsoft 365): connect, disconnect, the provider whose sign-in is
+  // opening, why the last action failed and the outcome a provider sent back.
+  onConnectMailbox?: (provider: MailboxProvider) => void;
+  onDisconnectMailbox?: (provider: MailboxProvider) => void;
+  mailboxPending?: MailboxProvider;
+  mailboxError?: string;
+  mailboxReturned?: MailboxReturn;
   // part shows one half of the channel as a channel tab does, without the section frame: how mail arrives
   // (connection) or how replies leave (replies). All, the default, is the whole section.
   part?: 'all' | 'connection' | 'replies';
 }
 
 export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, senderNameSave, slugSave, onSave, onSaveSenderName, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending,
-  onConnectGmail, onDisconnectGmail, gmailPending, gmailError, gmailReturned, part = 'all', addressConflictLink }: EmailChannelSectionProps) {
+  onConnectMailbox, onDisconnectMailbox, mailboxPending, mailboxError, mailboxReturned, part = 'all', addressConflictLink }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
-  // A connected Gmail account sends by itself; a broken one says so in its own block.
-  const gmailConnection = channel ? settings?.gmail.connection ?? null : null;
+  // A connected mailbox sends by itself; a broken one says so in its own block.
+  const mailboxConnection = channel ? settings?.gmail.connection ?? settings?.microsoft.connection ?? null : null;
   const gmail = gmailPart.use();
   const [address, setAddress] = useState(channel?.support_address ?? '');
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
@@ -70,7 +72,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   }, [confirmingDisconnect]);
   const smtp = settings?.smtp;
   const hostedAddress = settings?.hosted_address ?? null;
-  const gmailSending = gmailConnection?.status === 'connected' && settings?.gmail.available === true;
+  const mailboxSending = mailboxConnection?.status === 'connected' &&
+    (mailboxConnection.provider === 'microsoft' ? settings?.microsoft.available : settings?.gmail.available) === true;
   const dnsVerification = channel && <div className="email-channel-dns">
     <p className="muted-copy">{settings?.domain_verification === 'provider' ? messages.providerProofHelp : messages.domainVerificationHelp}</p>
     <label className="invite-link"><span className="field-label">{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
@@ -133,8 +136,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const domainPart = <>
         {channel && (channel.domain_verified_at
           ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))} {sharedDomain(channel.domain)}</p>
-          : gmailSending
-            // Gmail replies need no verified domain; the records stay one click away for SMTP.
+          : mailboxSending
+            // Replies through a mailbox need no verified domain; the records stay one click away for SMTP.
             ? <details className="email-channel-dns-folded" open={Boolean(verifyError) || undefined}>
                 <summary>{messages.domainVerificationNotNeeded}</summary>
                 {dnsVerification}
@@ -148,14 +151,15 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         </div>}
   </>;
   const sendingPart = <>
-        {channel && !gmailConnection && (settings?.sending_from
+        {channel && !mailboxConnection && (settings?.sending_from
           ? <p className="muted-copy">{messages.sendingFrom(settings.sending_from)}</p>
           : <p role="status" className="error-copy">{messages.cannotSend}</p>)}
   </>;
   const gmailBlock = <>
         {channel && settings && (gmail.status === 'ready'
-          ? <gmail.module.GmailConnection gmail={settings.gmail} supportAddress={channel.support_address} timezone={timezone} canManage={canManage}
-              onConnect={onConnectGmail} onDisconnect={onDisconnectGmail} connectPending={gmailPending} error={gmailError} returned={gmailReturned} />
+          ? <gmail.module.MailboxConnection gmail={settings.gmail} microsoft={settings.microsoft} supportAddress={channel.support_address} timezone={timezone}
+              canManage={canManage} onConnect={onConnectMailbox} onDisconnect={onDisconnectMailbox} connectPending={mailboxPending} error={mailboxError}
+              returned={mailboxReturned} />
           : gmail.status === 'error'
             ? <PartUnavailable />
             // Holds the block's place while its chunk arrives, so what follows does not jump.
@@ -164,12 +168,12 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const smtpPart = <>
         {smtp && (smtp.configured
           ? <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p>
-          : !gmailConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{messages.smtpNotConfigured}</p>)}
+          : !mailboxConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{messages.smtpNotConfigured}</p>)}
   </>;
   const repliesPart = <>{domainPart}{pausePart}{sendingPart}{gmailBlock}{smtpPart}</>;
   if (part === 'connection') return <div className="settings-body">{addressPart}{arrivalPart}</div>;
   // The Replies tab groups the same blocks under headings: how replies leave now first, then the name,
-  // the domain and Gmail.
+  // the domain and the mailbox.
   if (part === 'replies') return <div className="settings-body email-replies">
     <section aria-labelledby="replies-leave-heading"><h3 id="replies-leave-heading">{repliesHeadings.leave}</h3>{pausePart}{sendingPart}{smtpPart}</section>
     {channel && <section aria-labelledby="replies-name-heading"><h3 id="replies-name-heading">{repliesHeadings.name}</h3>{senderPart}</section>}

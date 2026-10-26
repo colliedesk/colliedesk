@@ -41,13 +41,15 @@ type Delivery struct {
 	// CC is the list stored with the reply; a retry sends to the same addresses.
 	CC    []string
 	Files []DeliveryFile
-	// Transport is what the reply was accepted for: "smtp", or "gmail" through Mailbox.
+	// Transport is what the reply was accepted for: "smtp", or a mailbox provider's ("gmail") through
+	// Mailbox.
 	Transport string
-	// Mailbox is the Gmail account connected to the channel now; nil when none is connected.
+	// Mailbox is the mailbox connected to the channel now; nil when none is connected.
 	Mailbox *DeliveryMailbox
 }
 
-// DeliveryMailbox is the connected Gmail account a reply leaves through, with its sealed grant.
+// DeliveryMailbox is the connected mailbox a reply leaves through, with its sealed grant. Its provider is
+// Grant.Provider.
 type DeliveryMailbox struct {
 	Address, Status, ErrorCode string
 	Grant                      SealedGrant
@@ -102,8 +104,9 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 		}
 	}
 	var mailbox DeliveryMailbox
-	err = tx.QueryRow(ctx, `SELECT address,status,COALESCE(error_code,''),token_key_id,refresh_token_sealed FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2`, item.WorkspaceID, item.ChannelID).
-		Scan(&mailbox.Address, &mailbox.Status, &mailbox.ErrorCode, &mailbox.Grant.KeyID, &mailbox.Grant.Sealed)
+	err = tx.QueryRow(ctx, `SELECT status,COALESCE(error_code,''),`+grantColumns+` FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2`, item.WorkspaceID, item.ChannelID).
+		Scan(&mailbox.Status, &mailbox.ErrorCode, &mailbox.Grant.KeyID, &mailbox.Grant.Sealed, &mailbox.Grant.Address, &mailbox.Grant.Provider)
+	mailbox.Address = mailbox.Grant.Address
 	switch {
 	case err == nil:
 		item.Mailbox = &mailbox

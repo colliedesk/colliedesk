@@ -244,7 +244,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .composer-files li > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .composer-files li button { --control: 24px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
 .composer-files li button svg { width: 12px; height: 12px; }
-.composer-attachments-problem { flex-basis: 100%; margin: 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-label); }
+.composer-attachments-problem, .composer-attachments-warning { flex-basis: 100%; margin: 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-label); }
 .composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
 /* A narrow reply box keeps every tool on screen: the tools show their icon only (the label stays their
    accessible name) and their keycaps go. The shortcut hint lives in the composer head. */
@@ -396,6 +396,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .email-channel-dns { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
 .gmail-connection { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
 .email-channel-dns-folded { display: grid; gap: var(--space-3); }
+.mailbox-approval-body { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
 .email-channel-dns-folded summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
 .email-channel-dns-folded summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
 .message-envelope .delivery-reason { color: var(--text-2); }
@@ -732,7 +733,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .new-conversation .composer-cc:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .new-conversation .composer-cc input { min-height: 32px; }
 .new-conversation .composer-cc input:focus-visible { outline: 0; }
-.new-conversation .composer-cc .composer-attachments-problem { margin-inline: var(--space-1); }
+.new-conversation .composer-cc .composer-attachments-problem, .new-conversation .composer-cc .composer-attachments-warning { margin-inline: var(--space-1); }
 .new-conversation .cc-label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
 .new-conversation .composer-attachments { padding: 0; }
 .attach-button-labelled { --control: 32px; border-color: var(--line-control); background: var(--surface-1); box-shadow: var(--shadow-1); color: var(--text-1); padding: 0 var(--space-3); }

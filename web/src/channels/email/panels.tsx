@@ -5,7 +5,8 @@ import { channelsApi } from '../../api/channels';
 import { Dialog } from '../../ui/dialog';
 import { messages } from '../../messages';
 import { EmailChannelSection, gmailPart } from '../../features/settings/email-channel-section';
-import { gmailReturn } from '../../features/settings/gmail-return';
+import { mailboxReturn } from '../../features/settings/gmail-return';
+import type { MailboxProvider } from '../../features/settings/gmail-return';
 import { NameForm } from '../../features/settings/name-form';
 import { saveState, useSaveFeedback } from '../../features/settings/save-feedback';
 import type { SaveState } from '../../features/settings/save-feedback';
@@ -62,21 +63,29 @@ function Replies({ channel, canManage, timezone }: ChannelPanelProps) {
   const saveSenderName = useMutation({ mutationFn: (name: string) => channelsApi.update(channel.id, { config: { sender_name: name } }), onSuccess: refresh });
   // A refused check still reloads: the provider's per-record status changed.
   const verifyDomain = useMutation({ mutationFn: () => channelsApi.emailVerifyDomain(channel.id), onSettled: refresh });
-  // Connecting Gmail leaves for Google's consent page; Google sends the browser back here with the outcome.
-  const [gmailReturned] = useState(gmailReturn);
+  // Connecting a mailbox leaves for the provider's sign-in page (Google, Microsoft); the provider sends the
+  // browser back here with the outcome.
+  const [mailboxReturned] = useState(mailboxReturn);
   useEffect(gmailPart.preload, []);
-  const connectGmail = useMutation({ mutationFn: () => channelsApi.emailConnectGmail(channel.id), onSuccess: ({ url }) => window.location.assign(url) });
-  const disconnectGmail = useMutation({ mutationFn: () => channelsApi.emailDisconnectGmail(channel.id), onSettled: refresh });
-  const gmailFailure = connectGmail.error ?? disconnectGmail.error;
-  const gmailError = gmailFailure ? (gmailFailure instanceof InvalidRequestError ? gmailFailure.message : messages.settingsActionFailed) : undefined;
+  const connectMailbox = useMutation({
+    mutationFn: (provider: MailboxProvider) => (provider === 'microsoft' ? channelsApi.emailConnectMicrosoft : channelsApi.emailConnectGmail)(channel.id),
+    onSuccess: ({ url }) => window.location.assign(url),
+  });
+  const disconnectMailbox = useMutation({
+    mutationFn: (provider: MailboxProvider) => (provider === 'microsoft' ? channelsApi.emailDisconnectMicrosoft : channelsApi.emailDisconnectGmail)(channel.id),
+    onSettled: refresh,
+  });
+  const mailboxFailure = connectMailbox.error ?? disconnectMailbox.error;
+  const mailboxError = mailboxFailure ? (mailboxFailure instanceof InvalidRequestError ? mailboxFailure.message : messages.settingsActionFailed) : undefined;
   return <>
     {verifyDomain.isError && !(verifyDomain.error instanceof InvalidRequestError) && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
     <EmailChannelSection part="replies" settings={settings.data} timezone={timezone} canManage={canManage}
       senderNameSave={saveState(saveSenderName)} onSaveSenderName={(name) => saveSenderName.mutate(name)}
       onVerifyDomain={() => verifyDomain.mutate()} verifyPending={verifyDomain.isPending}
       verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined}
-      onConnectGmail={() => connectGmail.mutate()} onDisconnectGmail={() => disconnectGmail.mutate()}
-      gmailPending={connectGmail.isPending || connectGmail.isSuccess} gmailError={gmailError} gmailReturned={gmailReturned} />
+      onConnectMailbox={(provider) => connectMailbox.mutate(provider)} onDisconnectMailbox={(provider) => disconnectMailbox.mutate(provider)}
+      mailboxPending={connectMailbox.isPending || connectMailbox.isSuccess ? connectMailbox.variables : undefined} mailboxError={mailboxError}
+      mailboxReturned={mailboxReturned} />
   </>;
 }
 

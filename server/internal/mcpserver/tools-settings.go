@@ -64,6 +64,16 @@ type restEmailSettings struct {
 			Error   *string `json:"error"`
 		} `json:"connection"`
 	} `json:"gmail"`
+	Microsoft struct {
+		Available         bool    `json:"available"`
+		AdminConsentURL   *string `json:"admin_consent_url"`
+		ServerCredentials bool    `json:"server_credentials_refused"`
+		Connection        *struct {
+			Address string  `json:"address"`
+			Status  string  `json:"status"`
+			Error   *string `json:"error"`
+		} `json:"connection"`
+	} `json:"microsoft"`
 }
 
 func workspaceSettingsGet(c *call, _ map[string]any) (any, error) {
@@ -290,6 +300,12 @@ func emailChannelView(settings restEmailSettings) map[string]any {
 		gmail["connected"], gmail["address"], gmail["status"], gmail["error"] = true, connection.Address, connection.Status, connection.Error
 	}
 	view["gmail"] = gmail
+	microsoft := map[string]any{"available": settings.Microsoft.Available, "connected": false, "admin_consent_url": settings.Microsoft.AdminConsentURL,
+		"server_credentials_refused": settings.Microsoft.ServerCredentials}
+	if connection := settings.Microsoft.Connection; connection != nil {
+		microsoft["connected"], microsoft["address"], microsoft["status"], microsoft["error"] = true, connection.Address, connection.Status, connection.Error
+	}
+	view["microsoft"] = microsoft
 	if channel := settings.Channel; channel != nil {
 		view["channel_id"], view["support_address"], view["sender_name"] = channel.ChannelID, channel.SupportAddress, channel.SenderName
 		view["inbound_secret_set"], view["domain"] = channel.SecretSet, channel.Domain

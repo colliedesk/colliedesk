@@ -1,8 +1,18 @@
-// Text of the "Send from Gmail" block. It lives beside the block, not in messages.ts, so it loads with the
-// block's own chunk: Settings is rarely opened and the main bundle has a fixed budget (performance.md).
+// Text of the "Send from your mailbox" block and its Gmail part. It lives beside the block, not in messages.ts, so
+// it loads with the block's own chunk: Settings is rarely opened and the main bundle has a fixed budget
+// (performance.md). Microsoft 365's own text is in microsoft-messages.ts.
 export const gmailMessages = {
-  gmailHeading: 'Send from Gmail',
-  gmailDescription: 'Connect the Gmail account of your support address: replies are sent through Gmail from that address, and a copy stays in its Sent folder. Incoming mail still arrives by forwarding. Colliedesk can only send; it cannot read the mailbox.',
+  mailboxHeading: 'Send from your mailbox',
+  mailboxDescription: 'Connect the mailbox of your support address: replies are sent from that address and a copy stays in its Sent folder. Incoming mail still arrives by forwarding. Colliedesk can only send; it cannot read the mailbox.',
+  mailboxAdminOnly: 'Only an admin can connect a mailbox.',
+  gmailLabel: 'Gmail',
+  useInstead: (provider: string) => `Use ${provider} instead`,
+  // Switching replaces the channel's one connection; it asks before leaving for the other provider's sign-in.
+  switchQuestion: (to: string) => `Connect ${to} instead?`,
+  switchConsequence: (to: string, from: string) => `Connecting ${to} replaces ${from} for this channel. Replies still waiting for ${from} fail and can be retried.`,
+  continueTo: (site: string) => `Continue to ${site}`,
+  gmailSite: 'Google',
+  microsoftSite: 'Microsoft',
   gmailConnectedDescription: 'Replies go out through Gmail and stay in its Sent folder; incoming mail still arrives by forwarding. Colliedesk can only send; it cannot read the mailbox.',
   // Shown only on Colliedesk Cloud: the statement binds HC Labs' Google client, not a self-hosted server's.
   gmailGoogleData: 'Colliedesk’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. How we handle Google data:',
@@ -18,7 +28,7 @@ export const gmailMessages = {
   connectingGmail: 'Opening Google…',
   reconnectGmail: 'Reconnect Gmail',
   useAnotherGmail: 'Use another Gmail account',
-  gmailSignInAs: (address: string) => `Select Connect Gmail and choose ${address} at Google.`,
+  gmailSignInAs: (address: string, button: string) => `Select ${button} and choose ${address} at Google.`,
   disconnectGmail: 'Disconnect Gmail',
   disconnectGmailQuestion: 'Disconnect Gmail?',
   disconnectGmailConsequence: (gmail: string) => `Colliedesk loses access to ${gmail}. Replies are then sent the way they were before Gmail was connected; a reply still waiting for Gmail fails and can be retried.`,
@@ -31,6 +41,7 @@ export const gmailMessages = {
   gmailFailedBody: (reason: string, when: string) => `${reason} Since ${when}, replies are not sent through Gmail and not sent any other way.`,
   gmailNotAvailable: (settings: string[]) => `Gmail sending is not set up on this server. The administrator sets ${settings.join(', ')} (see the email channel guide).`,
   gmailRedirectUri: 'Redirect URI to register in Google Cloud',
+  gmailNotSetUpSummary: 'Gmail is not set up on this server',
   gmailJustConnected: 'Gmail is connected.',
   gmailConnectFailed: 'Gmail could not be connected. Try again.',
   gmailReturnErrors: {

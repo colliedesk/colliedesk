@@ -6,6 +6,8 @@ import { PaperclipIcon, XIcon } from '../../ui/icons';
 export interface AttachmentLimits {
   bytes: number;
   files: number;
+  // warn says, without stopping the reply, that the way it leaves may refuse this many file bytes.
+  warn?: { bytes: number; text: string };
 }
 
 // attachmentProblem says why the chosen files cannot be sent, so the composer warns before upload.
@@ -29,6 +31,8 @@ interface AttachmentPickerProps {
 export function AttachmentPicker({ files, onChange, limits, disabled, labelled = false }: AttachmentPickerProps) {
   const input = useRef<HTMLInputElement>(null);
   const problem = attachmentProblem(files, limits);
+  const total = files.reduce((sum, file) => sum + file.size, 0);
+  const warning = !problem && limits?.warn && total > limits.warn.bytes ? limits.warn.text : undefined;
   return (
     <div className="composer-attachments">
       <input ref={input} type="file" multiple hidden tabIndex={-1} aria-label={messages.attachFiles} disabled={disabled} onChange={(event) => {
@@ -51,6 +55,7 @@ export function AttachmentPicker({ files, onChange, limits, disabled, labelled =
         </ul>
       )}
       {problem && <p role="alert" className="composer-attachments-problem">{problem}</p>}
+      {warning && <p role="status" className="composer-attachments-warning">{warning}</p>}
     </div>
   );
 }

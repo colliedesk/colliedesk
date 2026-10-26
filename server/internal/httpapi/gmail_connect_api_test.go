@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/google/googletest"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -201,7 +202,7 @@ func TestAConnectionTheServerCanNoLongerUseFailsRepliesAtOnce(t *testing.T) {
 		t.Fatalf("email channel: %v %v", channel, err)
 	}
 	if _, _, err := st.SaveMailboxConnection(context.Background(), workspaceID(t, api, admin), channel.ChannelID, "", "support@lost-google.example.com", google.ScopeGmailSend,
-		store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed-with-a-key-this-server-lacks")}, time.Now().UTC()); err != nil {
+		store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed-with-a-key-this-server-lacks"), Provider: domain.MailboxGoogle}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	desk := gmailDesk{api: api, admin: admin}
@@ -501,7 +502,7 @@ func TestGmailConnectsOnlyTheChannelsOwnAddressAndOnlyOnce(t *testing.T) {
 	defaultID := strings.TrimPrefix(desk.page(t, desk.admin), "/settings/channels/")
 	st := store.New(desk.pool)
 	if _, _, err := st.SaveMailboxConnection(t.Context(), workspaceID(t, desk.api, desk.admin), defaultID, "", "billing@own-address.example.com", google.ScopeGmailSend,
-		store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed")}, time.Now().UTC()); err != nil {
+		store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed"), Provider: domain.MailboxGoogle}, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	var view struct {

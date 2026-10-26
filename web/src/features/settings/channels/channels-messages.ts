@@ -94,6 +94,7 @@ const reasons: Record<string, string> = {
   sending_paused: 'Sending is paused.',
   cannot_send: 'Replies cannot be sent yet.',
   gmail_broken: 'The Gmail connection stopped working.',
+  microsoft_broken: 'The Microsoft 365 connection stopped working.',
   domain_unverified: 'The domain is not verified yet.',
   no_inbound_secret: 'No inbound secret is set, so no mail can arrive.',
   no_origins: 'No website is allowed to post to it yet.',
