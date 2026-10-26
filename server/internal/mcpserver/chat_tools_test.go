@@ -131,6 +131,17 @@ func TestIntakeToolsReturnWhatCustomersWroteAsUntrusted(t *testing.T) {
 	if summary := e.ok(reader, "colliedesk_intake_summary", map[string]any{}); at(t, summary, "waiting") != float64(1) || at(t, summary, "available") != true {
 		t.Fatalf("summary = %v", summary)
 	}
+	// What AI suggested is written from what customers wrote, and names their conversations.
+	if _, err := e.pool.Exec(ctx, `INSERT INTO intake_decisions(workspace_id,gathering_id,decider,basis,action,target_conversation_id,runner_up_conversation_id,subject,
+			reason,confidence,applied,not_applied_reason,items_seen)
+		SELECT g.workspace_id,g.id,'ai','model','attach',c.id,c.id,'MALLORY-AISUBJECT','MALLORY-AIREASON',0.8,false,'gate_closed','{}'
+		FROM intake_gatherings g JOIN conversations c ON c.workspace_id=g.workspace_id AND c.subject='MALLORY-CANDIDATE' WHERE g.id=$1`, card); err != nil {
+		t.Fatal(err)
+	}
+	if suggested := e.ok(reader, "colliedesk_intake_get", map[string]any{"gathering_id": card}); at(t, suggested, "card", "suggestion", "action") != "attach" ||
+		at(t, suggested, "card", "suggestion", "untrusted_customer_content", "target_subject") != "MALLORY-CANDIDATE" {
+		t.Fatalf("suggestion = %v", at(t, suggested, "card", "suggestion"))
+	}
 	for _, tool := range []string{"colliedesk_intake_get", "colliedesk_intake_list"} {
 		result := structured(t, e.call(reader, tool, map[string]any{"gathering_id": card}))
 		if tool == "colliedesk_intake_list" {

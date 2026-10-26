@@ -244,6 +244,8 @@ type IntakeDecisionInput struct {
 	IgnoreReason       string
 	Confidence         *float64
 	CorrectsDecisionID string
+	// FollowsDecisionID is the AI suggestion a person decided as.
+	FollowsDecisionID string
 }
 
 // pendingGathering is an undecided gathering, locked, with its events.
@@ -334,11 +336,11 @@ func recordIntakeDecision(ctx context.Context, tx pgx.Tx, workspaceID string, ap
 		basis = "model"
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO intake_decisions(workspace_id,gathering_id,decider,basis,action,target_conversation_id,command,subject,reply_kind,confidence,reason,
-			applied,items_seen,fallback,corrects_decision_id,agent_id,token_id,created_at,ignore_reason)
+			applied,items_seen,fallback,corrects_decision_id,agent_id,token_id,created_at,ignore_reason,follows_decision_id)
 		VALUES($1,$2::uuid,$3,$4,$5,NULLIF($6,'')::uuid,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''),true,$12::uuid[],$13,NULLIF($14,'')::uuid,
-			NULLIF($15,'')::uuid,NULLIF($16,'')::uuid,$17,NULLIF($18,''))`,
+			NULLIF($15,'')::uuid,NULLIF($16,'')::uuid,$17,NULLIF($18,''),NULLIF($19,'')::uuid)`,
 		workspaceID, g.id, apply.Decider, basis, d.Action, d.TargetConversationID, d.Command, clip(d.Subject, 200), d.ReplyKind, d.Confidence, clip(d.Reason, 2000),
-		g.events, apply.Fallback, d.CorrectsDecisionID, apply.Actor.AgentID, apply.Actor.TokenID, now, d.IgnoreReason); err != nil {
+		g.events, apply.Fallback, d.CorrectsDecisionID, apply.Actor.AgentID, apply.Actor.TokenID, now, d.IgnoreReason, d.FollowsDecisionID); err != nil {
 		return fmt.Errorf("record intake decision: %w", err)
 	}
 	return nil

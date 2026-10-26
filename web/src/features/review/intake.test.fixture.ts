@@ -13,7 +13,7 @@ export const gathering = (overrides: Partial<IntakeGathering> = {}): IntakeGathe
   conversation_id: null, decided_by: null, decided_at: null, decided_by_agent_id: null, ignore_reason: null, fallback: false,
   opened_at: '2026-10-26T02:00:00Z', closed_at: '2026-10-26T02:01:00Z', decide_by: null, requeued_at: null, requeued_by_agent_id: null,
   item_count: 2, sender: { kind: 'zalo_uid', value: 'u1', name: 'Lan Nguyen' }, place: { kind: 'group', name: 'Customer A support' },
-  preview: 'The scale stopped printing labels', ...overrides,
+  preview: 'The scale stopped printing labels', suggestion: null, ...overrides,
 });
 
 export const chatItem = (overrides: Partial<ChatItem> = {}): ChatItem => ({

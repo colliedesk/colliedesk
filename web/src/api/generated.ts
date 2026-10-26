@@ -4924,6 +4924,48 @@ export interface components {
             } | null;
             /** @description The beginning of what the customer wrote first. */
             preview: string;
+            /** @description What AI suggested and did not do, the newest, unless a person decided since. Follow it with follows_decision_id. */
+            suggestion: components["schemas"]["IntakeSuggestion"] | null;
+        };
+        IntakeSuggestion: {
+            /** Format: uuid */
+            decision_id: string;
+            /** @enum {string} */
+            action: "create" | "attach" | "ignore";
+            /**
+             * Format: uuid
+             * @description With attach.
+             */
+            target_conversation_id: string | null;
+            target_subject: string | null;
+            /** @description resolved or closed: following it reopens the conversation, unless reply_kind is acknowledgement. */
+            target_status: components["schemas"]["ConversationStatus"] | null;
+            /**
+             * Format: uuid
+             * @description The second most likely conversation.
+             */
+            runner_up_conversation_id: string | null;
+            runner_up_subject: string | null;
+            runner_up_confidence: number | null;
+            confidence: number | null;
+            /** @description With create: the command whose tags and priority it opens with. */
+            command: string | null;
+            /** @description With create. */
+            subject: string | null;
+            /**
+             * @description acknowledgement: the customer only thanked or acknowledged.
+             * @enum {string|null}
+             */
+            reply_kind: "substantive" | "acknowledgement" | null;
+            ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
+            reason: string | null;
+            /**
+             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error.
+             * @enum {string}
+             */
+            not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error";
+            /** Format: date-time */
+            created_at: string;
         };
         /**
          * @description chat: not a request; handled_in_chat: the team answered it in the chat; duplicate: said in another card or conversation already.
@@ -4991,8 +5033,16 @@ export interface components {
             ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             not_applied_reason: string | null;
             fallback: boolean;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description The AI decision a person undid or decided otherwise than.
+             */
             corrects_decision_id: string | null;
+            /**
+             * Format: uuid
+             * @description The AI suggestion a person decided as.
+             */
+            follows_decision_id: string | null;
             model: string | null;
             /** Format: uuid */
             agent_id: string | null;
@@ -5025,6 +5075,11 @@ export interface components {
             /** @description With create. */
             subject?: string;
             ignore_reason?: components["schemas"]["IntakeIgnoreReason"];
+            /**
+             * Format: uuid
+             * @description The AI suggestion of this card the decision follows (Follow suggestion); its reply_kind comes with it. Another card's, or no AI decision, is refused.
+             */
+            follows_decision_id?: string;
         };
         IntakeStats: {
             days: number;

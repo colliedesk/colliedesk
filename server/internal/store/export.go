@@ -1248,7 +1248,7 @@ func exportIntake(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 	}
 	decisions, err := tx.Query(ctx, `SELECT id::text,gathering_id::text,decider,basis,action,target_conversation_id::text,runner_up_conversation_id::text,
 			runner_up_confidence::float8,command,subject,reply_kind,related_conversation_id::text,confidence::float8,reason,applied,ignore_reason,not_applied_reason,
-			items_seen::text[],fallback,corrects_decision_id::text,manifest,task_id::text,model,prompt_version,latency_ms,error_code,agent_id::text,token_id::text,created_at
+			items_seen::text[],fallback,corrects_decision_id::text,follows_decision_id::text,manifest,task_id::text,model,prompt_version,latency_ms,error_code,agent_id::text,token_id::text,created_at
 		FROM intake_decisions WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export intake decisions: %w", err)
@@ -1257,7 +1257,7 @@ func exportIntake(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 		var r export.IntakeDecision
 		if err := decisions.Scan(&r.ID, &r.GatheringID, &r.Decider, &r.Basis, &r.Action, &r.TargetConversationID, &r.RunnerUpConversationID,
 			&r.RunnerUpConfidence, &r.Command, &r.Subject, &r.ReplyKind, &r.RelatedConversationID, &r.Confidence, &r.Reason, &r.Applied, &r.IgnoreReason, &r.NotAppliedReason,
-			&r.ItemsSeen, &r.Fallback, &r.CorrectsDecisionID, &r.Manifest, &r.TaskID, &r.Model, &r.PromptVersion, &r.LatencyMS, &r.ErrorCode, &r.AgentID,
+			&r.ItemsSeen, &r.Fallback, &r.CorrectsDecisionID, &r.FollowsDecisionID, &r.Manifest, &r.TaskID, &r.Model, &r.PromptVersion, &r.LatencyMS, &r.ErrorCode, &r.AgentID,
 			&r.TokenID, &r.CreatedAt); err != nil {
 			decisions.Close()
 			return fmt.Errorf("export intake decisions: %w", err)

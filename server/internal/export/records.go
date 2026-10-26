@@ -149,6 +149,7 @@ type IntakeDecision struct {
 	ItemsSeen              []string        `json:"items_seen"`
 	Fallback               bool            `json:"fallback"`
 	CorrectsDecisionID     *string         `json:"corrects_decision_id"`
+	FollowsDecisionID      *string         `json:"follows_decision_id"`
 	Manifest               json.RawMessage `json:"manifest"`
 	TaskID                 *string         `json:"task_id"`
 	Model                  *string         `json:"model"`

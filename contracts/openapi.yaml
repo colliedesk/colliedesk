@@ -8189,7 +8189,7 @@ components:
     IntakeGathering:
       type: object
       required: [id, channel_id, scope, thread_id, lane_key, contact_id, state, review_reason, rules, conversation_id, decided_by, decided_at, decided_by_agent_id,
-        ignore_reason, fallback, opened_at, closed_at, decide_by, requeued_at, requeued_by_agent_id, item_count, sender, place, preview]
+        ignore_reason, fallback, opened_at, closed_at, decide_by, requeued_at, requeued_by_agent_id, item_count, sender, place, preview, suggestion]
       properties:
         id: {type: string, format: uuid}
         channel_id: {type: string, format: uuid}
@@ -8229,6 +8229,31 @@ components:
             kind: {type: string, enum: [direct, group]}
             name: {type: [string, 'null']}
         preview: {type: string, maxLength: 280, description: 'The beginning of what the customer wrote first.'}
+        suggestion:
+          anyOf: [{$ref: '#/components/schemas/IntakeSuggestion'}, {type: 'null'}]
+          description: 'What AI suggested and did not do, the newest, unless a person decided since. Follow it with follows_decision_id.'
+    IntakeSuggestion:
+      type: object
+      required: [decision_id, action, target_conversation_id, target_subject, target_status, runner_up_conversation_id, runner_up_subject, runner_up_confidence,
+        confidence, command, subject, reply_kind, ignore_reason, reason, not_applied_reason, created_at]
+      properties:
+        decision_id: {type: string, format: uuid}
+        action: {type: string, enum: [create, attach, ignore]}
+        target_conversation_id: {type: [string, 'null'], format: uuid, description: With attach.}
+        target_subject: {type: [string, 'null']}
+        target_status: {anyOf: [{$ref: '#/components/schemas/ConversationStatus'}, {type: 'null'}], description: 'resolved or closed: following it reopens the conversation, unless reply_kind is acknowledgement.'}
+        runner_up_conversation_id: {type: [string, 'null'], format: uuid, description: The second most likely conversation.}
+        runner_up_subject: {type: [string, 'null']}
+        runner_up_confidence: {type: [number, 'null']}
+        confidence: {type: [number, 'null']}
+        command: {type: [string, 'null'], description: 'With create: the command whose tags and priority it opens with.'}
+        subject: {type: [string, 'null'], description: With create.}
+        reply_kind: {type: [string, 'null'], enum: [substantive, acknowledgement, null], description: 'acknowledgement: the customer only thanked or acknowledged.'}
+        ignore_reason: {anyOf: [{$ref: '#/components/schemas/IntakeIgnoreReason'}, {type: 'null'}]}
+        reason: {type: [string, 'null']}
+        not_applied_reason: {type: string, enum: [level_suggest, below_threshold, too_old, credential, person_first, target_changed, lane_blocked, gate_closed, limit, error],
+          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error.'}
+        created_at: {type: string, format: date-time}
     IntakeIgnoreReason: {type: string, enum: [chat, handled_in_chat, duplicate, other], description: 'chat: not a request; handled_in_chat: the team answered it in the chat; duplicate: said in another card or conversation already.'}
     IntakeCandidate:
       type: object
@@ -8269,7 +8294,7 @@ components:
     IntakeDecision:
       type: object
       required: [id, decider, basis, action, target_conversation_id, runner_up_conversation_id, runner_up_confidence, command, subject, reply_kind, confidence, reason,
-        applied, ignore_reason, not_applied_reason, fallback, corrects_decision_id, model, agent_id, via_token, created_at]
+        applied, ignore_reason, not_applied_reason, fallback, corrects_decision_id, follows_decision_id, model, agent_id, via_token, created_at]
       properties:
         id: {type: string, format: uuid}
         decider: {type: string, enum: [ai, agent]}
@@ -8287,7 +8312,8 @@ components:
         ignore_reason: {anyOf: [{$ref: '#/components/schemas/IntakeIgnoreReason'}, {type: 'null'}], description: 'With ignore: why it was set aside, when the decider said.'}
         not_applied_reason: {type: [string, 'null']}
         fallback: {type: boolean}
-        corrects_decision_id: {type: [string, 'null'], format: uuid}
+        corrects_decision_id: {type: [string, 'null'], format: uuid, description: 'The AI decision a person undid or decided otherwise than.'}
+        follows_decision_id: {type: [string, 'null'], format: uuid, description: 'The AI suggestion a person decided as.'}
         model: {type: [string, 'null']}
         agent_id: {type: [string, 'null'], format: uuid}
         via_token: {type: boolean}
@@ -8318,6 +8344,7 @@ components:
         command: {type: string, minLength: 1, maxLength: 40, description: 'With create: a command of the channel that opens a request, for its tags and priority.'}
         subject: {type: string, minLength: 1, maxLength: 200, description: With create.}
         ignore_reason: {$ref: '#/components/schemas/IntakeIgnoreReason'}
+        follows_decision_id: {type: string, format: uuid, description: 'The AI suggestion of this card the decision follows (Follow suggestion); its reply_kind comes with it. Another card''s, or no AI decision, is refused.'}
     IntakeStats:
       type: object
       required: [days, gatherings, by_state, decided_by, fallback, ai_decisions, ai_corrected]

@@ -35,6 +35,8 @@ type Decision struct {
 	Command, Subject, ReplyKind, Reason string
 	Confidence                          *float64
 	CorrectsDecisionID                  string
+	// FollowsDecisionID is the AI suggestion of the card a person names as the one they follow.
+	FollowsDecisionID string
 }
 
 // ConflictError is a decision that came after another: the gathering stands as Outcome.
@@ -46,6 +48,10 @@ func (e *ConflictError) Error() string {
 
 // ErrInvalid is a decision that cannot be made (an unknown action, an attach without a conversation).
 var ErrInvalid = errors.New("invalid intake decision")
+
+// ErrNotASuggestion is a decision that names, as the suggestion it follows, what is not an AI suggestion
+// of the card.
+var ErrNotASuggestion = store.ErrNotASuggestion
 
 // Service decides gatherings.
 type Service struct {
@@ -66,10 +72,21 @@ func New(st *store.Store, p *pipeline.Pipeline, now func() time.Time) *Service {
 // Decide applies a person's (decider agent) or AI's decision. The same decision again changes nothing;
 // another one once the gathering is decided is a ConflictError.
 func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d Decision, decider string, actor store.ChannelActor) (store.GatheringOutcome, error) {
+	var err error
+	// A conversation merged into another is joined through the one it was merged into, never reopened.
+	if d.Action == Attach && d.ConversationID != "" {
+		if d.ConversationID, err = s.store.SurvivingConversation(ctx, workspaceID, d.ConversationID); err != nil {
+			return store.GatheringOutcome{}, err
+		}
+	}
+	if decider == store.DecidedByAgent {
+		if d, err = s.labelled(ctx, workspaceID, gatheringID, d); err != nil {
+			return store.GatheringOutcome{}, err
+		}
+	}
 	apply := store.IntakeApply{Decider: decider, Actor: actor, Decision: &store.IntakeDecisionInput{Action: d.Action, TargetConversationID: d.ConversationID,
 		Command: d.Command, Subject: d.Subject, ReplyKind: d.ReplyKind, Reason: d.Reason, IgnoreReason: d.IgnoreReason, Confidence: d.Confidence,
-		CorrectsDecisionID: d.CorrectsDecisionID}}
-	var err error
+		CorrectsDecisionID: d.CorrectsDecisionID, FollowsDecisionID: d.FollowsDecisionID}}
 	// A card of messages a person took back to the queue holds no held events: its messages move.
 	var detached *store.DetachedCard
 	if d.Action == Create || d.Action == Attach {
@@ -121,6 +138,26 @@ func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d
 		return store.GatheringOutcome{}, err
 	}
 	return s.store.GatheringOutcomeOf(ctx, workspaceID, gatheringID)
+}
+
+// labelled says which AI suggestion a person's decision follows (the same action, and for attach the
+// same conversation; it takes the suggestion's reply kind) or corrects: the one they named, else the
+// newest. These are the labels of intake's eval.
+func (s *Service) labelled(ctx context.Context, workspaceID, gatheringID string, d Decision) (Decision, error) {
+	suggestion, err := s.store.SuggestionToLabel(ctx, workspaceID, gatheringID, d.FollowsDecisionID)
+	if err != nil || suggestion == nil {
+		return d, err
+	}
+	d.FollowsDecisionID = ""
+	if suggestion.Action == d.Action && (d.Action != Attach || suggestion.TargetConversationID == d.ConversationID) {
+		d.FollowsDecisionID = suggestion.ID
+		if d.ReplyKind == "" {
+			d.ReplyKind = suggestion.ReplyKind
+		}
+	} else if d.CorrectsDecisionID == "" {
+		d.CorrectsDecisionID = suggestion.ID
+	}
+	return d, nil
 }
 
 // same says a gathering already stands as d would leave it.
