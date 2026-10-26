@@ -146,12 +146,14 @@ func TestRedactHidesAPasswordNextToALabelOnItsOwn(t *testing.T) {
 		})
 	}
 	for in, want := range map[string]string{
-		"Abc@12345 is my password":     hidden + " is my password",
-		"Abc@12345 là mật khẩu":        hidden + " là mật khẩu",
-		"Hunter2024 is the password.":  hidden + " is the password.",
-		"order SO2026001 is late":      "order SO2026001 is late",
-		"my password is wrong":         "my password is wrong",
-		"call me at 0912345678 please": "call me at 0912345678 please",
+		"Abc@12345 is my password":                 hidden + " is my password",
+		"Abc@12345 là mật khẩu":                    hidden + " là mật khẩu",
+		"Hunter2024 is the password.":              hidden + " is the password.",
+		"Matkhau123 là mật khẩu của tôi":           hidden + " là mật khẩu của tôi",
+		"Hunter2024 is the password of my account": hidden + " is the password of my account",
+		"order SO2026001 is late":                  "order SO2026001 is late",
+		"my password is wrong":                     "my password is wrong",
+		"call me at 0912345678 please":             "call me at 0912345678 please",
 	} {
 		if got, _ := redactOne(viKeywords, in); got != want {
 			t.Errorf("redact(%q) = %q, want %q", in, got, want)

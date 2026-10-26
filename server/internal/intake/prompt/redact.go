@@ -64,7 +64,7 @@ type redactor struct {
 	hintPattern  *regexp.Regexp
 	otpWords     []string
 	// labelOnly is a line that is a credential label and nothing after it ("password:", a label and a
-	// few words); beforeLabel is a value a few plain words before a label that ends the sentence.
+	// few words); beforeLabel is a value a few plain words before a label near the end of the sentence.
 	labelOnly   *regexp.Regexp
 	beforeLabel *regexp.Regexp
 }
@@ -84,7 +84,7 @@ func newRedactor(keywords []string) *redactor {
 		hintPattern:  regexp.MustCompile(`(?i)(?:^|[^\p{L}\p{N}])(?:` + quoteAll(hints) + `)(?:[^\p{L}\p{N}]|$)`),
 		otpWords:     otp,
 		labelOnly:    regexp.MustCompile(`(?i)^\s*(?:\p{L}+\s+){0,2}(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[:=]?\s*$`),
-		beforeLabel:  regexp.MustCompile(`(?i)(^|\s)(\S+)((?:\s+\p{L}+){0,3}\s+(?:` + alternatives + `)\s*[.!?]?\s*)$`),
+		beforeLabel:  regexp.MustCompile(`(?i)(^|\s)(\S+)((?:\s+\p{L}+){0,3}\s+(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[.!?]?\s*)$`),
 	}
 }
 
@@ -347,7 +347,7 @@ func secretAfter(line string, from int) (int, int, bool) {
 	return 0, 0, false
 }
 
-// hideBeforeLabel hides a password written before its label: "Abc@12345 is my password".
+// hideBeforeLabel hides a password written before its label: "Abc@12345 is my password (of the shop)".
 func (r *redactor) hideBeforeLabel(line string, kind *lineKind) string {
 	m := r.beforeLabel.FindStringSubmatchIndex(line)
 	if m == nil {
