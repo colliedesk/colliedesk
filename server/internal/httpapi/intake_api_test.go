@@ -372,14 +372,16 @@ func TestAnIntakeCardSaysWhatAPersonNeedsToDecideIt(t *testing.T) {
 func TestDecidingACardWithoutMessagesReadReturnsNoCustomerText(t *testing.T) {
 	d := newLevelDesk(t)
 	card := d.heldCard(t, d.workspaceA, d.chatA, "u1", "SECRET stock export fails")
+	d.groupConversation(t, d.workspaceA, d.chatA, "CANDSUBJECT printer", "open", 1)
 	token := issueCustomToken(t, d.api, d.adminA, "decider", "conversations:update").Token
 	for _, call := range []struct {
 		path string
 		body any
-	}{{"/decide", map[string]any{"action": "ignore"}}, {"/requeue", nil}} {
+	}{{"/requeue", nil}, {"/decide", map[string]any{"action": "ignore"}}, {"/requeue", nil}} {
 		response := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+call.path, call.body, token, nil)
-		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "SECRET") || strings.Contains(response.Body.String(), "Minh") ||
-			!strings.Contains(response.Body.String(), `"state"`) {
+		body := response.Body.String()
+		if response.Code != http.StatusOK || strings.Contains(body, "SECRET") || strings.Contains(body, "Minh") || strings.Contains(body, "CANDSUBJECT") ||
+			strings.Contains(body, "levelchat_user:u1") || !strings.Contains(body, `"state"`) {
 			t.Fatalf("%s: %d %s", call.path, response.Code, response.Body.String())
 		}
 	}

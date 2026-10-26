@@ -178,9 +178,11 @@ func (a *API) decideOnce(response http.ResponseWriter, request *http.Request, op
 	})
 }
 
-// withoutCustomerText keeps of a card how it stands and drops what the customer wrote and who they are.
+// withoutCustomerText keeps of a card how it stands and drops what the customer wrote and who they are:
+// the lane names the sender, and the conversations it may join carry customers' subjects and names.
 func withoutCustomerText(detail store.IntakeGatheringDetail) store.IntakeGatheringDetail {
-	detail.Preview, detail.Sender, detail.Items = "", store.ChatSender{}, []store.ChatItem{}
+	detail.Preview, detail.Sender, detail.Items, detail.LaneKey = "", store.ChatSender{}, []store.ChatItem{}, ""
+	detail.Candidates = []store.IntakeCandidate{}
 	if detail.Place != nil {
 		detail.Place = &store.IntakePlace{Kind: detail.Place.Kind}
 	}
