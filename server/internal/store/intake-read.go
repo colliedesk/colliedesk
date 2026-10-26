@@ -148,16 +148,25 @@ const (
 // MaxIntakePage is the most cards a page holds.
 const MaxIntakePage = 50
 
+// gatheringItemRows are the items of card g, as i: those it holds now, and those that came in it and were
+// taken back to the queue since (the journal still names the card they came in), so a decided card keeps
+// showing what it decided on. Each branch reads its own index: the item of each event is looked up one by
+// one (LIMIT 1 keeps the planner from hashing every item of the workspace).
+const gatheringItemRows = `(SELECT i.* FROM channel_thread_items i WHERE i.workspace_id=g.workspace_id AND i.gathering_id=g.id
+	UNION ALL SELECT i.* FROM channel_inbound_events e CROSS JOIN LATERAL (SELECT * FROM channel_thread_items i
+		WHERE i.workspace_id=e.workspace_id AND i.inbound_event_id=e.id LIMIT 1) i
+	WHERE e.workspace_id=g.workspace_id AND e.gathering_id=g.id AND i.gathering_id IS DISTINCT FROM g.id) i`
+
 const gatheringColumns = `g.id::text,g.channel_id::text,g.scope,g.thread_id::text,g.lane_key,g.contact_id::text,g.state,g.review_reason,g.rules_action,g.rules_rule,
 	g.rules_basis,g.rules_target::text,g.conversation_id::text,g.decided_by,g.decided_at,g.decided_by_agent_id::text,g.ignore_reason,g.fallback,g.opened_at,g.closed_at,
 	g.decide_by,g.requeued_at,g.requeued_by_agent_id::text,
-	(SELECT count(*) FROM channel_thread_items i WHERE i.workspace_id=g.workspace_id AND i.gathering_id=g.id),
+	(SELECT count(*) FROM ` + gatheringItemRows + `),
 	f.sender_kind,f.sender_value,f.sender_name,t.kind,t.name,COALESCE(left(f.body,280),''),
 	s.id::text,s.action,s.target_conversation_id::text,s.target_subject,s.target_status,s.runner_up_conversation_id::text,s.runner_up_subject,
 	s.runner_up_confidence::float8,s.confidence::float8,s.command,s.subject,s.reply_kind,s.ignore_reason,s.reason,s.not_applied_reason,s.created_at`
 
-const gatheringFrom = `FROM intake_gatherings g LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.body FROM channel_thread_items i
-	WHERE i.workspace_id=g.workspace_id AND i.gathering_id=g.id ORDER BY i.occurred_at,i.id LIMIT 1) f ON true
+const gatheringFrom = `FROM intake_gatherings g LEFT JOIN LATERAL (SELECT i.sender_kind,i.sender_value,i.sender_name,i.body FROM ` + gatheringItemRows + `
+	ORDER BY i.occurred_at,i.id LIMIT 1) f ON true
 	LEFT JOIN channel_threads t ON t.workspace_id=g.workspace_id AND t.id=g.thread_id
 	LEFT JOIN LATERAL (SELECT d.id,d.action,d.target_conversation_id,tc.subject AS target_subject,tc.status AS target_status,d.runner_up_conversation_id,
 			rc.subject AS runner_up_subject,d.runner_up_confidence,d.confidence,d.command,d.subject,d.reply_kind,d.ignore_reason,d.reason,d.not_applied_reason,d.created_at
@@ -411,8 +420,8 @@ func (s *Store) IntakeSummaryOf(ctx context.Context, workspaceID string) (Intake
 }
 
 func gatheringItems(ctx context.Context, tx pgx.Tx, workspaceID, id string) ([]ChatItem, error) {
-	rows, err := tx.Query(ctx, `SELECT `+chatItemColumns+` FROM channel_thread_items i WHERE i.workspace_id=$1 AND i.gathering_id=$2::uuid
-		ORDER BY i.occurred_at,i.id`, workspaceID, id)
+	rows, err := tx.Query(ctx, `SELECT `+chatItemColumns+` FROM intake_gatherings g CROSS JOIN LATERAL `+gatheringItemRows+`
+		WHERE g.workspace_id=$1 AND g.id=$2::uuid ORDER BY i.occurred_at,i.id`, workspaceID, id)
 	if err != nil {
 		return nil, fmt.Errorf("read gathering items: %w", err)
 	}

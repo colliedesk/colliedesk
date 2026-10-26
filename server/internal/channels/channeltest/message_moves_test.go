@@ -231,6 +231,41 @@ func TestAChatMessageTakenBackToTheQueueIsDecidedAgain(t *testing.T) {
 	}
 }
 
+// A decided card keeps showing what it decided on after its messages are taken back to the queue: who
+// wrote, how many messages and the first words, in the list and in its detail.
+func TestADecidedCardKeepsItsMessagesAfterTheyAreTakenBack(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	card := d.gatheringOf(t, "a")
+	message := d.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`)
+	source := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2::uuid`, message)
+	back, err := d.store.MoveMessages(ctx, d.workspaceID, source, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{Queue: true}},
+		store.Actor{AgentID: d.agentID}, *d.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := d.store.IntakeGatherings(ctx, d.workspaceID, store.IntakeListDecided, "", "", "", "", store.MaxIntakePage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(page.Items, func(g store.IntakeGathering) bool { return g.ID == card })
+	if i < 0 {
+		t.Fatalf("decided list = %+v, want card %s", page.Items, card)
+	}
+	if got := page.Items[i]; got.ItemCount != 1 || got.Sender.Value == nil || got.Preview != "the stock export fails" {
+		t.Fatalf("decided card = count %d, sender %+v, preview %q", got.ItemCount, got.Sender, got.Preview)
+	}
+	if detail, err := d.store.IntakeGatheringByID(ctx, d.workspaceID, card, *d.clock); err != nil || len(detail.Items) != 1 {
+		t.Fatalf("decided card detail = %d items, %v", len(detail.Items), err)
+	}
+	// The card of the taken back message shows it too, and only it.
+	if detail, err := d.store.IntakeGatheringByID(ctx, d.workspaceID, *back.Move.GatheringID, *d.clock); err != nil || detail.ItemCount != 1 || len(detail.Items) != 1 {
+		t.Fatalf("taken back card = count %d, %d items, %v", detail.ItemCount, len(detail.Items), err)
+	}
+}
+
 // Moving messages AI added to a conversation records a person's decision that corrects AI's, for the
 // "AI corrected" count and evaluation; moving messages a person added records none.
 func TestMovingWhatAIAppliedRecordsACorrection(t *testing.T) {
