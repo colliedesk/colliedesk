@@ -226,7 +226,8 @@ func TestSplittingAndClosingASourceThatWasNoNewRequest(t *testing.T) {
 	request(t, d.api, http.MethodPost, "/api/v1/conversations/"+lee+"/messages", map[string]any{"kind": "note", "body": "Called Lee"}, d.admin, nil)
 	if response := request(t, d.api, http.MethodPost, "/api/v1/conversations/"+lee+"/messages/move", map[string]any{"message_ids": []string{leeMessage},
 		"to": map[string]any{"conversation_id": printer}, "close_source": true}, d.admin, nil); response.Code != http.StatusConflict ||
-		!strings.Contains(response.Body.String(), "source_has_activity") {
+		!strings.Contains(response.Body.String(), "source_has_activity") || strings.Contains(response.Body.String(), "close_source") {
+		// The web app shows the message as it comes, so it speaks of closing, not of a request field.
 		t.Fatalf("close a worked-on conversation: %d %s", response.Code, response.Body.String())
 	}
 	d.move(t, d.admin, printer, map[string]any{"message_ids": []string{first}, "to": map[string]any{"conversation_id": lee}, "close_source": true}, http.StatusBadRequest)

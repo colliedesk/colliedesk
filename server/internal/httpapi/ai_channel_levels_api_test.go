@@ -331,6 +331,22 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 			t.Fatalf("pattern %q: %+v", pattern[:min(len(pattern), 20)], response)
 		}
 	}
+	// The settings page shows a refusal as it comes: it names the setting as the page does, and which pattern.
+	for _, tc := range []struct {
+		options map[string]any
+		says    string
+	}{
+		{map[string]any{"create_threshold": 0.3}, "threshold to open a conversation"},
+		{map[string]any{"redact_patterns": []map[string]any{{"pattern": `\b\d{12}\b`, "mask": "id_number"}, {"pattern": `(`, "mask": "phone"}}}, "Pattern 2 "},
+		{map[string]any{"redact_patterns": []map[string]any{{"pattern": `\d*`, "mask": "phone"}}}, "Pattern 1 "},
+		{map[string]any{"redact_patterns": []map[string]any{{"pattern": `\d{12}`, "mask": "name"}}}, "Pattern 1 "},
+	} {
+		response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": tc.options})
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body, tc.says) ||
+			strings.Contains(response.Body, "redact_patterns") || strings.Contains(response.Body, "_threshold") {
+			t.Fatalf("refusal of %v = %+v, want it to say %q without a field name", tc.options, response, tc.says)
+		}
+	}
 	bad := map[string]any{"contact_labels": map[string]any{"account": []string{" stk "}}}
 	if response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": bad}); response.Code != http.StatusBadRequest {
 		t.Fatalf("a label with spaces at its ends: %+v", response)

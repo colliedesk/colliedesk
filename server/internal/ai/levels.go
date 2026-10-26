@@ -201,32 +201,33 @@ var redactMasks = []string{"phone", "id_number", "account_number", "hidden"}
 var emptyMatchProbes = []string{"", "a", "1", " ", ".", "call me at 0912 345 678, ok?", "Ünïcödé đơn 12"}
 
 // checkRedactPattern refuses a pattern that does not compile, is too long or too large once compiled,
-// or matches the empty string (it would mask between every character).
-func checkRedactPattern(p IntakeRedactPattern) error {
+// or matches the empty string (it would mask between every character). n is its place in the list, as the
+// settings page numbers it.
+func checkRedactPattern(n int, p IntakeRedactPattern) error {
 	if !slices.Contains(redactMasks, p.Mask) {
-		return invalid("Each of redact_patterns has a mask: phone, id_number, account_number or hidden.")
+		return invalid("Pattern %d is shown as phone, id_number, account_number or hidden.", n)
 	}
-	if n := utf8.RuneCountInString(p.Pattern); n == 0 || n > maxRedactPatternRunes {
-		return invalid("Each of redact_patterns is 1 to %d characters.", maxRedactPatternRunes)
+	if runes := utf8.RuneCountInString(p.Pattern); runes == 0 || runes > maxRedactPatternRunes {
+		return invalid("Pattern %d is 1 to %d characters.", n, maxRedactPatternRunes)
 	}
 	parsed, err := syntax.Parse(p.Pattern, syntax.Perl)
 	if err != nil {
-		return invalid("A pattern of redact_patterns is not a valid RE2 expression: %s", p.Pattern)
+		return invalid("Pattern %d is not a valid RE2 expression: %s", n, p.Pattern)
 	}
 	program, err := syntax.Compile(parsed.Simplify())
 	if err != nil || len(program.Inst) > maxRedactPatternProgram {
-		return invalid("A pattern of redact_patterns is too large: %s", p.Pattern)
+		return invalid("Pattern %d is too large: %s", n, p.Pattern)
 	}
 	compiled, err := regexp.Compile(p.Pattern)
 	if err != nil {
-		return invalid("A pattern of redact_patterns is not a valid RE2 expression: %s", p.Pattern)
+		return invalid("Pattern %d is not a valid RE2 expression: %s", n, p.Pattern)
 	}
 	// A pattern that can match no character at all (an empty string, a word boundary) would put its mask
 	// between letters: it is tried on texts of each kind of character.
 	for _, probe := range emptyMatchProbes {
 		for _, span := range compiled.FindAllStringIndex(probe, -1) {
 			if span[0] == span[1] {
-				return invalid("A pattern of redact_patterns can match nothing at all, so it would mask between letters: %s", p.Pattern)
+				return invalid("Pattern %d can match nothing at all, so it would mask between letters: %s", n, p.Pattern)
 			}
 		}
 	}
@@ -328,9 +329,10 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	if err := decoder.Decode(&options); err != nil {
 		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions, redact_keywords, contact_labels, redact_patterns, gate_override and gate_override_reason.")
 	}
-	for name, value := range map[string]*float64{"create_threshold": options.CreateThreshold, "attach_threshold": options.AttachThreshold, "ignore_threshold": options.IgnoreThreshold} {
+	// The settings page shows a refusal as it comes, so a threshold is named as the page names it.
+	for name, value := range map[string]*float64{"open a conversation": options.CreateThreshold, "add to a conversation": options.AttachThreshold, "set a message aside as not a request": options.IgnoreThreshold} {
 		if value != nil && (*value < 0.5 || *value > 0.99) {
-			return options, invalid("%s is between 0.5 and 0.99.", name)
+			return options, invalid("The threshold to %s is between 0.5 and 0.99.", name)
 		}
 	}
 	if value := options.AutoMaxAgeSeconds; value != nil && (*value < 60 || *value > 24*60*60) {
@@ -377,10 +379,10 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 		return options, invalid("gate_override_reason is at most %d characters.", maxOverrideReason)
 	}
 	if len(options.RedactPatterns) > maxRedactPatterns {
-		return options, invalid("redact_patterns holds at most %d patterns.", maxRedactPatterns)
+		return options, invalid("At most %d patterns to mask.", maxRedactPatterns)
 	}
-	for _, pattern := range options.RedactPatterns {
-		if err := checkRedactPattern(pattern); err != nil {
+	for i, pattern := range options.RedactPatterns {
+		if err := checkRedactPattern(i+1, pattern); err != nil {
 			return options, err
 		}
 	}
