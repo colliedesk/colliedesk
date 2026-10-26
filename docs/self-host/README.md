@@ -109,6 +109,7 @@ Security fixes go to the latest release and to `edge` only.
 - [Autofix: the GitHub App](github-app.md)
 - [Backups and database](database.md)
 - [Upgrade, roll back and restore a workspace](upgrade.md)
+- [Score AI intake on your own cases](intake-eval.md)
 
 ## Troubleshooting and support
 

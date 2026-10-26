@@ -1,0 +1,6 @@
+{"place":"group","items":[{"role":"customer","sender":"Lan","text":"the stock export fails","at":"2026-10-20T03:00:00Z"}],"candidates":[],"commands":["open"],"label":{"action":"create"}}
+{"place":"group","items":[{"role":"customer","sender":"Lan","text":"still failing","at":"2026-10-20T04:00:00Z"}],"candidates":[{"ref":"170","reporter":"Lan","subject":"Stock export fails","status":"open","updated_at":"2026-10-20T03:00:00Z"}],"label":{"action":"attach","target_ref":"170"}}
+{"place":"group","items":[{"role":"customer","sender":"Minh","text":"the printer is jammed again"}],"candidates":[{"ref":"171","reporter":"Minh","subject":"Printer jam","status":"resolved","updated_at":"2026-10-19T03:00:00Z"}],"label":{"action":"create"}}
+{"place":"group","items":[{"role":"customer","sender":"Hoa","text":"haha ok"}],"candidates":[],"label":{"action":"ignore"}}
+{"place":"group","items":[{"role":"customer","sender":"Hoa","text":"please look at the scale"}],"candidates":[],"label":{"action":"create"}}
+{"place":"group","items":[{"role":"customer","sender":"Lan","text":"same as before"}],"candidates":[{"ref":"170","reporter":"Lan","subject":"Stock export fails","status":"open","updated_at":"2026-10-20T03:00:00Z"}],"label":{"action":"attach","target_ref":"999"}}

@@ -303,9 +303,8 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions, images []a
 		}
 		return false
 	}
-	out := prompt.Snapshot{Location: location, Sources: options.Sources, Skipped: map[string]string{}, RedactKeywords: options.RedactKeywords,
-		ContactLabels: prompt.ContactLabels{Account: options.ContactLabels.Account, ID: options.ContactLabels.ID, Patterns: maskPatterns(options.RedactPatterns)},
-		Instructions:  *options.Instructions}
+	out := OptionsSnapshot(options)
+	out.Location, out.Skipped = location, map[string]string{}
 	g := snap.Gathering
 	if g.Place != nil {
 		out.Place = prompt.Place{OneToOne: g.Place.Kind != "group"}
@@ -354,6 +353,15 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions, images []a
 		out.Commands = append(out.Commands, prompt.Command{Key: command})
 	}
 	return out
+}
+
+// OptionsSnapshot is what a channel scope's intake options put in every prompt: its sources, its words and
+// patterns to hide or mask, and its instructions. An offline evaluation starts from it too.
+func OptionsSnapshot(options ai.IntakeOptions) prompt.Snapshot {
+	options = options.Effective()
+	return prompt.Snapshot{Sources: options.Sources, RedactKeywords: options.RedactKeywords,
+		ContactLabels: prompt.ContactLabels{Account: options.ContactLabels.Account, ID: options.ContactLabels.ID, Patterns: maskPatterns(options.RedactPatterns)},
+		Instructions:  *options.Instructions}
 }
 
 func maskPatterns(patterns []ai.IntakeRedactPattern) []prompt.MaskPattern {
