@@ -34,7 +34,7 @@ Press **Decide** on a card to read every message of it, then pick one:
   something else). Nothing is sent.
 
 Each decision is one press and is saved once: when a teammate (or AI) decided the card first, the card
-says who and shows how it stands.
+leaves Waiting and the page says who decided it, with the conversation it opened or joined.
 
 ## AI dismissed and Decided
 

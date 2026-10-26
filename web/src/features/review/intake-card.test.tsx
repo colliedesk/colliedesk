@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { expect, test, vi } from 'vitest';
-import { ConflictError } from '../../api/client';
 import { AGENT, CONVERSATION, OTHER_CONVERSATION, candidate, detail, gathering } from './intake.test.fixture';
 import { IntakeCard } from './intake-card';
 
@@ -62,16 +61,15 @@ test('Not a request sends why', () => {
   expect(handlers.onDecide).toHaveBeenCalledWith({ action: 'ignore', ignore_reason: 'handled_in_chat' });
 });
 
-test('a card someone else decided first says who, and a failed call can be sent again', async () => {
-  const onDecide = vi.fn()
-    .mockRejectedValueOnce(new Error('API 500'))
-    .mockRejectedValueOnce(new ConflictError('This card was decided already.', { code: 'gathering_decided', state: 'created', decided_by: 'agent', decided_by_agent_id: AGENT }));
+test('a call that was not saved says so and can be sent again', async () => {
+  const onDecide = vi.fn().mockRejectedValueOnce(new Error('API 500')).mockResolvedValueOnce(undefined);
   render(<IntakeCard {...props({ open: true, detail: detail(), onDecide })} />);
   fireEvent.click(screen.getByRole('button', { name: 'Create conversation' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('It was not saved');
   await waitFor(() => expect(screen.getByRole('button', { name: 'Create conversation' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Create conversation' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Ann Agent decided this card already');
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  expect(onDecide).toHaveBeenCalledTimes(2);
 });
 
 test('a card holding a password says so, and one behind another of its lane says why it waits', () => {

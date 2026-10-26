@@ -66,7 +66,7 @@ export const reviewMessages = {
   ignoreReason: 'Why',
   ignoreReasons: { chat: 'Just chat', handled_in_chat: 'Answered in chat', duplicate: 'Already reported', other: 'Something else' } satisfies Record<IntakeIgnoreReason, string>,
   failedAction: 'It was not saved. Check your connection, then try again.',
-  decidedElsewhere: (who: string) => `${who} decided this card already. It now shows how it stands.`,
+  decidedElsewhere: (who: string, name: string) => `${who} decided ${name}'s card first.`,
   putBack: 'Put back in queue',
   done: {
     created: (name: string) => `${name}'s card opened a conversation.`,
@@ -88,6 +88,7 @@ export const reviewMessages = {
   rulesMatch: 'Rules · match',
   rulesDefault: 'Rules · default',
   ai: 'AI',
+  rules: 'The rules',
   fallback: 'Fallback: AI did not decide in time',
   setAsideWhy: (reason: string) => `Set aside: ${reason}`,
 };

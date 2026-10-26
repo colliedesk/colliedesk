@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { ConflictError } from '../../api/client';
 import type { ChatItem, IntakeDecideInput, IntakeGathering, IntakeGatheringDetail, IntakeIgnoreReason } from '../../api/intake';
 import { formatDate } from '../../lib/format-date';
 import { PlainTextBody } from '../inbox/plain-text-body';
@@ -22,7 +21,8 @@ interface IntakeCardProps {
   timezone: string;
   channelName: (id: string) => string;
   agentName: (id: string | null) => string;
-  // Each resolves once the server saved it and rejects with why it did not.
+  // Each resolves once the server saved it (or someone decided the card first; the page says so) and rejects
+  // when it was not saved.
   onDecide: (input: IntakeDecideInput) => Promise<unknown>;
   onRequeue: () => Promise<unknown>;
 }
@@ -58,13 +58,8 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
     setProblem(undefined);
     try {
       await action();
-    } catch (error) {
-      const conflict = error instanceof ConflictError && error.detail?.code === 'gathering_decided' ? error.detail : undefined;
-      if (conflict) {
-        const by = conflict.decided_by === 'ai' ? m.ai : conflict.decided_by === 'rules' ? m.rulesDefault
-          : agentName(typeof conflict.decided_by_agent_id === 'string' ? conflict.decided_by_agent_id : null);
-        setProblem(m.decidedElsewhere(by));
-      } else setProblem(m.failedAction);
+    } catch {
+      setProblem(m.failedAction);
     } finally {
       setBusy(false);
     }

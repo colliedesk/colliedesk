@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../api/client';
+import { api, ConflictError } from '../../api/client';
 import { intakeApi } from '../../api/intake';
 import { useCreateAction } from '../../api/use-create';
 import type { IntakeDecideInput, IntakeGathering, IntakeGatheringDetail, IntakeListQuery } from '../../api/intake';
@@ -56,10 +56,19 @@ export function ReviewRoute({ tab, filter, onChange }: ReviewRouteProps) {
   const [done, setDone] = useState<{ text: string; conversationID: string | null }>();
   const after = async (item: IntakeGathering, call: Promise<IntakeGatheringDetail>, said: (name: string) => string) => {
     setDone(undefined);
+    const name = item.sender.name ?? m.someone;
     try {
       const card = await call;
-      setDone({ text: said(item.sender.name ?? m.someone), conversationID: card.state === 'created' || card.state === 'attached' ? card.conversation_id : null });
+      setDone({ text: said(name), conversationID: card.state === 'created' || card.state === 'attached' ? card.conversation_id : null });
       if (openID === item.id) setOpenID(undefined);
+    } catch (error) {
+      // Someone (or AI, or the rules) decided the card first: it leaves the list on the refresh below, so the
+      // page says who, with the conversation it opened or joined.
+      const conflict = error instanceof ConflictError && error.detail?.code === 'gathering_decided' ? error.detail : undefined;
+      if (!conflict) throw error;
+      const by = conflict.decided_by === 'ai' ? m.ai : conflict.decided_by === 'rules' ? m.rules
+        : names.get(typeof conflict.decided_by_agent_id === 'string' ? conflict.decided_by_agent_id : '') ?? m.aTeammate;
+      setDone({ text: m.decidedElsewhere(by, name), conversationID: typeof conflict.conversation_id === 'string' ? conflict.conversation_id : null });
     } finally {
       refresh();
     }

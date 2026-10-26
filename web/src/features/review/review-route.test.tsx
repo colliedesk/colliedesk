@@ -4,7 +4,8 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { AGENT, CARD, CHANNEL, CONVERSATION, detail, gathering } from './intake.test.fixture';
 import { ReviewRoute } from './review-route';
 
-const { api, ConflictError } = vi.hoisted(() => ({ api: { me: vi.fn(), agents: vi.fn() }, ConflictError: class extends Error {} }));
+const { api, ConflictError } = vi.hoisted(() => ({ api: { me: vi.fn(), agents: vi.fn() },
+  ConflictError: class extends Error { constructor(message: string, readonly detail?: Record<string, unknown>) { super(message); } } }));
 const intake = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), decide: vi.fn(), requeue: vi.fn(), stats: vi.fn() }));
 const summary = vi.hoisted(() => vi.fn());
 vi.mock('../../api/client', () => ({ api, ConflictError }));
@@ -43,6 +44,19 @@ test('Waiting lists the cards for a person of the channel picked; a card opens w
   // The lists, the counts and the badge are read again.
   await waitFor(() => expect(intake.list.mock.calls.length).toBeGreaterThan(1));
   await waitFor(() => expect(summary.mock.calls.length).toBeGreaterThan(1));
+});
+
+test('a card a teammate decided first leaves Waiting and the page says who decided it, with its conversation', async () => {
+  intake.decide.mockRejectedValue(new ConflictError('This card was decided already.', { code: 'gathering_decided', state: 'attached', decided_by: 'agent',
+    decided_by_agent_id: AGENT, conversation_id: CONVERSATION }));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: 'Decide' }));
+  await screen.findByLabelText('Subject');
+  intake.list.mockResolvedValue(page([]));
+  fireEvent.click(screen.getByRole('button', { name: 'Create conversation' }));
+  await waitFor(() => expect(screen.queryByRole('article')).not.toBeInTheDocument());
+  expect(screen.getByText("Ann Agent decided Lan Nguyen's card first.")).toHaveAttribute('role', 'status');
+  expect(screen.getByRole('link', { name: 'Open the conversation' })).toHaveAttribute('href', `/conversations/${CONVERSATION}`);
 });
 
 test('AI dismissed reads what AI set aside, and Put back sends the card back', async () => {
