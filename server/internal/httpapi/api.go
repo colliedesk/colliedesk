@@ -29,6 +29,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
+	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
@@ -284,6 +285,12 @@ func (s *Server) AI() *ai.Service { return s.api.ai }
 // GitHubSync is Autofix's GitHub side (the reconcile pass, the repository check), nil while the server's
 // GitHub App is not set up.
 func (s *Server) GitHubSync() *githubsync.Service { return s.api.githubSync }
+
+// IntakeHandler decides the intake cards of chat channels for the AI worker; a nil gate keeps every gate
+// closed (AI suggests, the rules apply).
+func (s *Server) IntakeHandler(gate intake.Gate) ai.Handler {
+	return s.api.intakeService().WithGate(gate).AIHandler()
+}
 
 // RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
 // does nothing when billing is off.

@@ -4960,10 +4960,10 @@ export interface components {
             ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             reason: string | null;
             /**
-             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error.
+             * @description Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).
              * @enum {string}
              */
-            not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error";
+            not_applied_reason: "level_suggest" | "below_threshold" | "too_old" | "credential" | "person_first" | "target_changed" | "lane_blocked" | "gate_closed" | "limit" | "error" | "several_candidates" | "no_content";
             /** Format: date-time */
             created_at: string;
         };

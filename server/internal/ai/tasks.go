@@ -69,10 +69,12 @@ type Task struct {
 	WorkspaceID    string
 	Kind           string
 	ConversationID string
-	Automatic      bool
-	Actor          Actor
-	Attempts       int
-	CreatedAt      time.Time
+	// GatheringID is the intake card an intake task decides.
+	GatheringID string
+	Automatic   bool
+	Actor       Actor
+	Attempts    int
+	CreatedAt   time.Time
 }
 
 // NewTask is what Enqueue needs.

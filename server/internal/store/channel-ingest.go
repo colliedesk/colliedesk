@@ -413,8 +413,15 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}); err != nil {
 			return held, err
 		}
-		if _, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision}); err != nil {
+		id, err := recordGathering(ctx, tx, &journal, in, gathering{state: GatheringReview, reviewReason: ReviewNoCommand, decision: decision})
+		if err != nil {
 			return held, err
+		}
+		// A person decides; at suggest AI says what it would.
+		if level == intakeSuggest {
+			if err := enqueueIntake(ctx, tx, workspaceID, id, now); err != nil {
+				return held, err
+			}
 		}
 		return finish(held)
 	}
@@ -566,8 +573,14 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		case result.Status == channels.ResultCreated:
 			decided.state = GatheringCreated
 		}
-		if _, err := recordGathering(ctx, tx, &journal, in, decided); err != nil {
+		id, err := recordGathering(ctx, tx, &journal, in, decided)
+		if err != nil {
 			return result, err
+		}
+		if decided.state == GatheringApplied {
+			if err := enqueueIntake(ctx, tx, workspaceID, id, now); err != nil {
+				return result, err
+			}
 		}
 	}
 	if result.Status == channels.ResultCreated && channel.Settings.Notices.Received != "" {

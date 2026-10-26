@@ -132,7 +132,43 @@ Email and web forms declare none, so their path gains no row and no query beyond
    people through: a group's open or pending conversations active in 72 hours, a one-to-one customer's on
    the same channel, then resolved ones within `reopen_window_days`; never a closed one. They are built
    when the card is read, so they include what the card before it just opened. A person may still attach
-   anywhere in the workspace through the API.
+   anywhere in the workspace through the API; a conversation merged away (`merged_into_id`) is followed to
+   the one it was merged into.
+
+### AI decides
+
+1. **One task a card, one card a lane.** The ingest transaction queues the `intake` AI task in SQL (the
+   store cannot import `ai`): `holdForIntake` and every conclusion of a card (`unblockLane`) ask for the
+   lane's next turn, which goes to the oldest `deciding` card that never had a task, only while no card of
+   the lane has one waiting or running and none waits for a person. At `suggest`, a card the rules applied
+   by default or held for a person gets a task of its own. `ai_tasks_intake_gathering` keeps one live task
+   a card. The worker polls (5 s), so a card waits seconds for AI, never the request that brought it.
+2. **The prompt is built from a snapshot.** `store.IntakeSnapshotOf` reads the card, its scope's level and
+   options, the workspace's consents, its items, 40 items of the place before it (the prompt shows 15; the
+   rest only pair a login with its password), the quoted items, the candidates (the same set a person is
+   offered, the rules' target first) and the channel's commands. `intake/prompt` lays it out with no clock
+   and no database, so an evaluation replays the same text, and refuses an answer naming a conversation it
+   was not offered (`target_invalid` after one more ask). Prompts and answers are not stored; the decision
+   keeps the manifest (sources, counts, cuts, what was hidden) and `prompt_version`.
+3. **Every gate is closed.** `intake.Gate` decides whether AI may act on its own; until IN5 measures a
+   channel's readiness the default refuses every action (`gate_closed`). AI applies only at `auto`, on a
+   card still `deciding`, through an open gate, at or above the scope's threshold, without a credential,
+   with something to read, within `auto_max_age_seconds`, and for attach while the customer has one open
+   conversation it could mean (`attach_requires_single_candidate`). Otherwise its decision is recorded
+   with `applied=false` and why, and a card that waited at `auto` gets the rules' decision at once
+   (`fallback=false`; true when the model failed): the customer never waits for AI that may not act. A
+   commands-only scope's chatter then waits for a person with the reason AI did not act.
+4. **Who decided first wins.** The suggestion is written in the task's own transaction (`Run.Record`), so a
+   cancelled task records nothing; a card a person decided meanwhile records `person_first`, one the rules
+   decided past its time `too_old`. An applied decision goes through `Service.Decide` like a person's and
+   loses to whoever locked the card first.
+5. **A task that ends without deciding hands the card to the rules.** When the worker cancels or fails an
+   intake task (the day's `intake_per_day`, the feature off, a locked workspace, retries spent), it sets
+   the card's `decide_by` to now, so the next sweep applies the rules instead of waiting two minutes.
+6. **People label AI.** A person's decision is compared with the card's newest unapplied AI decision (or
+   the one `follows_decision_id` names, which must be one of the card's): the same action and conversation
+   follows it (`follows_decision_id`, taking its `reply_kind`), anything else corrects it
+   (`corrects_decision_id`). These are the labels intake's evaluation reads.
 
 ## Chat threads
 

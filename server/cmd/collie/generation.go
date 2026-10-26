@@ -284,6 +284,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	aiWorker := ai.NewWorker(api.AI(), db, ai.WorkerOptions{})
 	aiWorker.Handle(ai.SlotDraft, api.AI().DraftHandler())
 	aiWorker.Handle(ai.SlotTriage, api.AI().TriageHandler())
+	aiWorker.Handle(ai.SlotIntake, api.IntakeHandler(nil))
 	g.Go(aiWorker.Run)
 	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach. Switched off,
 	// nothing new is sent (the API refuses it) but the fixes already sent are still followed to their end.

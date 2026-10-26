@@ -8251,8 +8251,9 @@ components:
         reply_kind: {type: [string, 'null'], enum: [substantive, acknowledgement, null], description: 'acknowledgement: the customer only thanked or acknowledged.'}
         ignore_reason: {anyOf: [{$ref: '#/components/schemas/IntakeIgnoreReason'}, {type: 'null'}]}
         reason: {type: [string, 'null']}
-        not_applied_reason: {type: string, enum: [level_suggest, below_threshold, too_old, credential, person_first, target_changed, lane_blocked, gate_closed, limit, error],
-          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error.'}
+        not_applied_reason: {type: string, enum: [level_suggest, below_threshold, too_old, credential, person_first, target_changed, lane_blocked, gate_closed, limit, error,
+            several_candidates, no_content],
+          description: 'Why AI did not do it: level_suggest (the scope only suggests), gate_closed (AI may not act on its own yet), below_threshold, too_old, credential (the messages hold a credential), target_changed, person_first, limit, error, several_candidates (the customer has two or more conversations it could join), no_content (nothing it could read).'}
         created_at: {type: string, format: date-time}
     IntakeIgnoreReason: {type: string, enum: [chat, handled_in_chat, duplicate, other], description: 'chat: not a request; handled_in_chat: the team answered it in the chat; duplicate: said in another card or conversation already.'}
     IntakeCandidate:
