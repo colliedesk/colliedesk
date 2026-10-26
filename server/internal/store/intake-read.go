@@ -492,7 +492,7 @@ func (s *Store) IntakeStatsOf(ctx context.Context, workspaceID, channelID string
 		if err := rows.Err(); err != nil {
 			return stats, err
 		}
-		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE d.decider='ai'),
+		err = tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE d.decider='ai' AND d.action<>'review'),
 				count(*) FILTER (WHERE d.decider='ai' AND EXISTS(SELECT 1 FROM intake_decisions c WHERE c.workspace_id=d.workspace_id AND c.corrects_decision_id=d.id))
 			FROM intake_decisions d JOIN intake_gatherings g ON g.workspace_id=d.workspace_id AND g.id=d.gathering_id
 			WHERE d.workspace_id=$1 AND g.closed_at>=$2 AND (NULLIF($3,'') IS NULL OR g.channel_id=NULLIF($3,'')::uuid)`, workspaceID, since, channelID).

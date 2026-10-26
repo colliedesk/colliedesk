@@ -70,7 +70,7 @@ func New(st *store.Store, p *pipeline.Pipeline, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: st, pipeline: p, now: now, logger: slog.Default(), gate: closedGate{}, breaker: newBreaker()}
+	return &Service{store: st, pipeline: p, now: now, logger: slog.Default(), gate: readinessGate{store: st, now: now}, breaker: newBreaker()}
 }
 
 // Decide applies a person's (decider agent) or AI's decision. The same decision again changes nothing;

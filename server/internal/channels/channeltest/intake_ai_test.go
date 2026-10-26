@@ -487,6 +487,44 @@ func TestACardsPicturesReachAModelThatReadsThem(t *testing.T) {
 	}
 }
 
+// With the readiness gate, AI acts on its own once the scope's labels open the action: an evaluation of
+// the model and prompt it runs opens ignore; people taking back what it set aside and opening it correct it.
+func TestReadinessOpensWhatAIDoesOnItsOwn(t *testing.T) {
+	d := newAIDesk(t, nil)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "ok thanks all"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "ignore", "ignore_reason": "chat", "confidence": 0.99})
+	d.runAI(t)
+	if got := d.decisions(t); got != "ignore/gate_closed" {
+		t.Fatalf("before any label: %s", got)
+	}
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO intake_eval_runs(workspace_id,channel_id,scope,model,prompt_version,dataset_sha256,counts)
+		VALUES($1,$2,'group','claude-haiku-5-5',$3,repeat('d',64),'{"ignore":{"labels":40,"correct":39,"severe":0,"light":1}}')`,
+		d.workspaceID, d.channel.ID, prompt.Version); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Text: "haha nice"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "ignore", "ignore_reason": "chat", "confidence": 0.99})
+	d.runAI(t)
+	if got := d.decisions(t); got != "ignore/gate_closed,ignore/applied" {
+		t.Fatalf("after the evaluation: %s", got)
+	}
+	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND state='ignored'`)
+	actor := store.ChannelActor{AgentID: d.agentID}
+	if _, err := d.intake().Requeue(context.Background(), d.workspaceID, card, actor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, card, intake.Decision{Action: intake.Create, Subject: "Not chat"}, store.DecidedByAgent, actor); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT p.action FROM intake_decisions p JOIN intake_decisions a ON a.id=p.corrects_decision_id
+		WHERE p.workspace_id=$1 AND a.decider='ai' AND a.applied`); got != "create" {
+		t.Fatalf("the person's decision corrects AI's ignore as %s", got)
+	}
+}
+
 // A thank-you AI joins to a resolved conversation keeps it resolved and asks for no automatic draft; what
 // adds something to it reopens it.
 func TestAThankYouKeepsAResolvedConversationResolved(t *testing.T) {

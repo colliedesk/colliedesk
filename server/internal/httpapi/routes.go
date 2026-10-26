@@ -50,6 +50,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listChannels, a.createChannel, a.listChannelEvents, a.getChannel, a.updateChannel, a.removeChannel, a.setChannelCredential, a.checkChannel,
 		a.replayHeldChannelMessages, a.discardHeldChannelMessages,
 		a.getChannelAI, a.setChannelAI, a.setAISourceConsent, a.removeAISourceConsent,
+		a.getIntakeReadiness, a.recordIntakeEvaluation, a.listIntakeEvaluations,
 		a.getConversationChat, a.listChannelThreads, a.listThreadItems, a.listUnresolvedItems,
 		a.listIntakeGatherings, a.getIntakeGathering, a.decideIntakeGathering, a.requeueIntakeGathering, a.getIntakeSummary, a.getIntakeStats, a.getConversationIntake,
 		a.moveConversationMessages, a.listMessageMoves, a.undoMessageMove,

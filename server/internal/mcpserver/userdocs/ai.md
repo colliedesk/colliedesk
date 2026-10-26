@@ -270,6 +270,31 @@ on OpenRouter, a model that lists images among its inputs. At most four of a car
 most 5 MB, never with messages that talk about a password or a code. A card that is only pictures is then
 decided like any other.
 
+## When AI acts on its own
+
+At **Auto**, intake's AI opens, joins or sets aside a card by itself only for an action its labels show it
+gets right on that channel's scope; any other action stays a suggestion on the card and the rules decide
+at once. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
+otherwise or moves the messages AI placed (it was wrong), and offline evaluations an operator recorded for
+the model intake runs and this server's prompt version (`collie intake-eval`). A decision nobody looked at counts for nothing: silence
+is not a label.
+
+| Action | Opens with | Never with |
+|---|---|---|
+| Open a conversation | 30 labels, 90 % right | more than one conversation opened for chatter in a week |
+| Add to a conversation | 30 labels, 95 % right | a new request merged into an old conversation (in the last 30 days) |
+| Set aside | 30 labels, 95 % right | a request set aside (in the last 30 days) |
+
+People's labels count for 30 days; an evaluation counts only for the model and prompt version it ran, and
+a newer run of the same dataset replaces it. Since cards at Auto go to the rules when AI may not act, most
+never reach a person: in practice a gate opens with an evaluation, or with an admin's override.
+An admin may open an action by hand before its labels do (`gate_override` with a `gate_override_reason`,
+which needs the approval raising AI needs). Readiness is `GET /api/v1/channels/{id}/ai/intake/readiness?scope=`
+(each action's gate, labels, what it misses, what AI did on its own and how much people corrected, and what
+a month costs) and the MCP tool `colliedesk_channel_ai_intake_readiness_get`; evaluations are
+`POST`/`GET /api/v1/channels/{id}/ai/intake/evaluations` (`colliedesk_channel_ai_intake_evaluation_record_request`,
+which always waits for a person, and `colliedesk_channel_ai_intake_evaluations_list`).
+
 ## When intake's model fails
 
 Intake can have a **fallback model**: another of its provider's models, tried once when its model

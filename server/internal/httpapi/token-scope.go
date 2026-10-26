@@ -334,6 +334,11 @@ var tokenTiers = map[string]TokenAccess{
 	// leaving, like turning a feature on; taking it back only lowers.
 	"PUT /api/v1/ai/source-consents/{class}":    alwaysAsk(auth.PermAISettingsUpdate),
 	"DELETE /api/v1/ai/source-consents/{class}": grant(auth.PermAISettingsUpdate),
+	// Readiness says whether AI may act on its own; recording an evaluation can open a gate, so a token's
+	// record waits for a person like any raise.
+	"GET /api/v1/channels/{id}/ai/intake/readiness":    grant(auth.PermChannelsRead),
+	"POST /api/v1/channels/{id}/ai/intake/evaluations": alwaysAsk(auth.PermAISettingsUpdate),
+	"GET /api/v1/channels/{id}/ai/intake/evaluations":  grant(auth.PermChannelsRead),
 	// What was said in a chat channel's places, as the conversations' messages are read.
 	"GET /api/v1/conversations/{id}/chat":                grant(auth.PermMessagesRead),
 	"GET /api/v1/channels/{id}/threads":                  grant(auth.PermMessagesRead),

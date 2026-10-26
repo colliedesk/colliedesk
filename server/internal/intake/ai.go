@@ -18,29 +18,48 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Gate says whether AI may act on its own on a channel's scope, for an action. Until readiness is
-// measured on a channel's own decisions, every gate is closed: at auto, AI suggests and the rules apply.
+// Gate says whether AI may act on its own on a channel's scope, for an action. A gate the scope's
+// readiness does not open keeps the action a suggestion: at auto, AI suggests and the rules apply.
 type Gate interface {
-	Open(ctx context.Context, workspaceID, channelID, scope, action string) bool
+	Open(ctx context.Context, q GateQuery) bool
+}
+
+// GateQuery is the action AI would take on a card of a scope, with the model it ran and the actions an
+// admin opened by hand.
+type GateQuery struct {
+	WorkspaceID, ChannelID, Scope, Action, Model string
+	Overrides                                    []string
 }
 
 type closedGate struct{}
 
-func (closedGate) Open(context.Context, string, string, string, string) bool { return false }
+func (closedGate) Open(context.Context, GateQuery) bool { return false }
 
 type openGate struct{}
 
-func (openGate) Open(context.Context, string, string, string, string) bool { return true }
+func (openGate) Open(context.Context, GateQuery) bool { return true }
 
 // OpenGate opens every gate: for tests and evaluation, never a default.
 var OpenGate Gate = openGate{}
 
-// WithGate returns the service deciding with gate; nil keeps every gate closed.
+// readinessGate opens an action's gate when the scope's readiness for the model and the prompt's
+// Version does (people's explicit labels and offline evaluations), or an admin opened it by hand.
+type readinessGate struct {
+	store *store.Store
+	now   func() time.Time
+}
+
+func (g readinessGate) Open(ctx context.Context, q GateQuery) bool {
+	readiness, err := g.store.IntakeReadinessOf(ctx, q.WorkspaceID, q.ChannelID, q.Scope, q.Model, prompt.Version, q.Overrides, g.now().UTC())
+	return err == nil && readiness.Open(q.Action)
+}
+
+// WithGate returns the service deciding with gate; nil opens a gate only when the scope's readiness does.
 func (s *Service) WithGate(gate Gate) *Service {
 	copied := *s
 	copied.gate = gate
 	if gate == nil {
-		copied.gate = closedGate{}
+		copied.gate = readinessGate{store: s.store, now: s.now}
 	}
 	return &copied
 }
@@ -141,7 +160,7 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 		decision = Decision{Action: rules.Review, Reason: ""}
 	}
 
-	reason := s.notApplied(ctx, workspaceID, snap, options, built, decision, code)
+	reason := s.notApplied(ctx, workspaceID, run.Binding.Model, snap, options, built, decision, code)
 	if reason == "" {
 		applied, err := s.applyAI(ctx, workspaceID, gatheringID, decision, detail)
 		switch {
@@ -191,7 +210,7 @@ const (
 // waits for it, through an open gate, sure enough, about what it could read without a credential, soon
 // enough, and for attach the one conversation of the customer it could mean. Whether that conversation is
 // still one the card may join is checked when the decision is applied (store.ErrNotACandidate).
-func (s *Service) notApplied(ctx context.Context, workspaceID string, snap store.IntakeSnapshot, options ai.IntakeOptions, built prompt.Context, d Decision, code string) string {
+func (s *Service) notApplied(ctx context.Context, workspaceID, model string, snap store.IntakeSnapshot, options ai.IntakeOptions, built prompt.Context, d Decision, code string) string {
 	g := snap.Gathering
 	threshold := map[string]float64{prompt.ActionCreate: *options.CreateThreshold, prompt.ActionAttach: *options.AttachThreshold, prompt.ActionIgnore: *options.IgnoreThreshold}
 	switch {
@@ -205,7 +224,8 @@ func (s *Service) notApplied(ctx context.Context, workspaceID string, snap store
 		return "no_content"
 	case s.now().Sub(g.ClosedAt) > time.Duration(*options.AutoMaxAgeSeconds)*time.Second:
 		return "too_old"
-	case !s.gate.Open(ctx, workspaceID, g.ChannelID, g.Scope, d.Action):
+	case !s.gate.Open(ctx, GateQuery{WorkspaceID: workspaceID, ChannelID: g.ChannelID, Scope: g.Scope, Action: d.Action, Model: model,
+		Overrides: options.GateOverride}):
 		return "gate_closed"
 	case d.Confidence == nil || *d.Confidence < threshold[d.Action]:
 		return "below_threshold"

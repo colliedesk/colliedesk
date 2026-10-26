@@ -286,8 +286,8 @@ func (s *Server) AI() *ai.Service { return s.api.ai }
 // GitHub App is not set up.
 func (s *Server) GitHubSync() *githubsync.Service { return s.api.githubSync }
 
-// IntakeHandler decides the intake cards of chat channels for the AI worker; a nil gate keeps every gate
-// closed (AI suggests, the rules apply).
+// IntakeHandler decides the intake cards of chat channels for the AI worker; a nil gate opens an action's
+// gate only when the scope's readiness does (otherwise AI suggests and the rules apply).
 func (s *Server) IntakeHandler(gate intake.Gate) ai.Handler {
 	return s.api.intakeService().WithGate(gate).AIHandler()
 }
@@ -720,6 +720,9 @@ func Routes() []Route {
 		{http.MethodPut, channelAIRoute, auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/ai/source-consents/{class}", auth.PermissionAccessWrite},
 		{http.MethodDelete, "/api/v1/ai/source-consents/{class}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/channels/{id}/ai/intake/readiness", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/channels/{id}/ai/intake/evaluations", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/channels/{id}/ai/intake/evaluations", auth.PermissionAccessRead},
 		{http.MethodGet, "/api/v1/conversations/{id}/chat", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/channels/{id}/threads", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/channels/{id}/threads/{threadId}/items", auth.PermissionConversationsRead},

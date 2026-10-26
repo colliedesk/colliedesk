@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -163,7 +164,14 @@ type IntakeOptions struct {
 	// RedactPatterns are the channel's own shapes of an identifier no label names (RE2 syntax), each
 	// masked as its kind before AI reads a message.
 	RedactPatterns []IntakeRedactPattern `json:"redact_patterns,omitempty"`
+	// GateOverride opens the gate of actions (create, attach, ignore) by hand, before readiness does,
+	// with GateOverrideReason saying why.
+	GateOverride       []string `json:"gate_override,omitempty"`
+	GateOverrideReason *string  `json:"gate_override_reason,omitempty"`
 }
+
+// maxOverrideReason bounds why an admin opened a gate by hand.
+const maxOverrideReason = 500
 
 // IntakeRedactPattern is one of a channel's patterns and what it masks: phone, id_number,
 // account_number or hidden.
@@ -270,6 +278,14 @@ func (o IntakeOptions) Effective() IntakeOptions {
 	if patterns == nil {
 		patterns = []IntakeRedactPattern{}
 	}
+	override := o.GateOverride
+	if override == nil {
+		override = []string{}
+	}
+	reason := ""
+	if o.GateOverrideReason != nil {
+		reason = *o.GateOverrideReason
+	}
 	labels := IntakeContactLabels{Account: []string{}, ID: []string{}}
 	if o.ContactLabels != nil {
 		labels.Account = append(labels.Account, o.ContactLabels.Account...)
@@ -278,7 +294,8 @@ func (o IntakeOptions) Effective() IntakeOptions {
 	return IntakeOptions{CreateThreshold: number(o.CreateThreshold, defaultCreateThreshold), AttachThreshold: number(o.AttachThreshold, defaultAttachThreshold),
 		IgnoreThreshold: number(o.IgnoreThreshold, defaultIgnoreThreshold), AttachRequiresSingleCandidate: &single,
 		AutoMaxAgeSeconds: whole(o.AutoMaxAgeSeconds, defaultAutoMaxAgeSeconds), ReopenWindowDays: whole(o.ReopenWindowDays, defaultReopenWindowDays),
-		Sources: sources, Instructions: &instructions, RedactKeywords: keywords, ContactLabels: &labels, RedactPatterns: patterns}
+		Sources: sources, Instructions: &instructions, RedactKeywords: keywords, ContactLabels: &labels, RedactPatterns: patterns,
+		GateOverride: override, GateOverrideReason: &reason}
 }
 
 var keywordPattern = regexp.MustCompile(`^\S(.{0,78}\S)?$`)
@@ -292,7 +309,7 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&options); err != nil {
-		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions, redact_keywords, contact_labels and redact_patterns.")
+		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions, redact_keywords, contact_labels, redact_patterns, gate_override and gate_override_reason.")
 	}
 	for name, value := range map[string]*float64{"create_threshold": options.CreateThreshold, "attach_threshold": options.AttachThreshold, "ignore_threshold": options.IgnoreThreshold} {
 		if value != nil && (*value < 0.5 || *value > 0.99) {
@@ -326,6 +343,21 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 		if !keywordPattern.MatchString(word) {
 			return options, invalid("Each of redact_keywords is 1 to 80 characters without spaces at its ends.")
 		}
+	}
+	for i, action := range options.GateOverride {
+		if !slices.Contains(store.IntakeActions, action) || slices.Contains(options.GateOverride[:i], action) {
+			return options, invalid("gate_override names actions once each: create, attach, ignore.")
+		}
+	}
+	reason := ""
+	if options.GateOverrideReason != nil {
+		reason = strings.TrimSpace(*options.GateOverrideReason)
+	}
+	if len(options.GateOverride) > 0 && reason == "" {
+		return options, invalid("Opening a gate by hand needs gate_override_reason: why AI may act before its labels show it is ready.")
+	}
+	if utf8.RuneCountInString(reason) > maxOverrideReason {
+		return options, invalid("gate_override_reason is at most %d characters.", maxOverrideReason)
 	}
 	if len(options.RedactPatterns) > maxRedactPatterns {
 		return options, invalid("redact_patterns holds at most %d patterns.", maxRedactPatterns)
@@ -378,7 +410,7 @@ func sortedKeys(m map[string]bool) []string {
 
 // optionsLoosen says whether going from before to after lets intake do more by itself: a lower
 // threshold, attaching among several candidates, older batches, a longer reopen window, a source
-// turned on, fewer words redacted or masked, or other instructions. Only a change that tightens needs no approval.
+// turned on, fewer words redacted or masked, a gate opened by hand, or other instructions. Only a change that tightens needs no approval.
 func optionsLoosen(before, after IntakeOptions) bool {
 	b, a := before.Effective(), after.Effective()
 	if *a.CreateThreshold < *b.CreateThreshold || *a.AttachThreshold < *b.AttachThreshold || *a.IgnoreThreshold < *b.IgnoreThreshold {
@@ -412,6 +444,11 @@ func optionsLoosen(before, after IntakeOptions) bool {
 	}
 	for _, pattern := range b.RedactPatterns {
 		if !slices.Contains(a.RedactPatterns, pattern) {
+			return true
+		}
+	}
+	for _, action := range a.GateOverride {
+		if !slices.Contains(b.GateOverride, action) {
 			return true
 		}
 	}
