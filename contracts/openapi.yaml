@@ -2072,6 +2072,81 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/messages/move:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: moveConversationMessages
+      x-permission: conversations:write
+      description: >
+        Moves customer messages (and their files) of this conversation: to another conversation of the
+        workspace (to.conversation_id), into a new conversation (to.new, a split), or, for a chat channel's
+        messages, back to the intake queue (to.queue; email and web forms have none: 422 no_intake_queue).
+        Replies and notes of the team stay. A resolved or closed conversation that gets them reopens.
+        close_source with to.conversation_id takes every customer message of this conversation and closes
+        it, pointing to where they went ("not a new request"); refused with 409 source_has_activity once
+        someone replied, wrote a note or assigned it. Nothing is sent to the customer. warnings says the
+        messages now sit in a conversation of another contact (replies go to that conversation's contact)
+        or of another channel. Every move is undone with POST /api/v1/message-moves/{id}/undo. A repeat with
+        the same Idempotency-Key answers the first move and moves nothing; the key with other messages or
+        another target is refused with 422, code `idempotency_key_reused`.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MessageMoveInput'}}}
+      responses:
+        '200':
+          description: The move
+          content: {application/json: {schema: {$ref: '#/components/schemas/MessageMoveResult'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: >-
+            no_intake_queue: these messages came through no chat scope with an intake queue; or
+            idempotency_key_reused: the Idempotency-Key already names another move, and nothing was moved
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /api/v1/conversations/{id}/message-moves:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listMessageMoves
+      x-permission: conversations:read
+      description: The newest 100 moves of messages out of or into this conversation, newest first, each with whether it can still be undone.
+      responses:
+        '200':
+          description: The moves
+          content: {application/json: {schema: {$ref: '#/components/schemas/MessageMovePage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/message-moves/{id}/undo:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: undoMessageMove
+      x-permission: conversations:write
+      description: >
+        Puts the messages of a move back where they were, with the statuses it changed while nobody changed
+        them since: a conversation it closed reopens, one it opened (a split) closes and points back. Undoing
+        it again changes nothing. Only the newest move of a message is undone (409 move_superseded); a move
+        to the intake queue whose card was decided since is not (409 move_decided). A repeat with the same
+        Idempotency-Key answers what the first one got; the key with another move is refused with 422, code
+        `idempotency_key_reused`.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: The move, undone
+          content: {application/json: {schema: {$ref: '#/components/schemas/MessageMove'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/channel-thread-items:
     get:
       operationId: listUnresolvedChatItems
@@ -8254,6 +8329,59 @@ components:
         fallback: {type: integer}
         ai_decisions: {type: integer}
         ai_corrected: {type: integer, description: "AI's decisions a person changed afterwards."}
+    MessageMoveInput:
+      type: object
+      additionalProperties: false
+      required: [message_ids, to]
+      properties:
+        message_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}, description: Customer messages of this conversation.}
+        to:
+          type: object
+          additionalProperties: false
+          description: 'Exactly one of conversation_id, new or queue.'
+          properties:
+            conversation_id: {type: string, format: uuid}
+            new:
+              type: object
+              additionalProperties: false
+              required: [subject]
+              properties:
+                subject: {type: string, minLength: 1, maxLength: 200}
+            queue: {type: boolean, enum: [true]}
+        close_source: {type: boolean, description: 'With to.conversation_id: every customer message of this conversation goes, and it closes pointing there.'}
+    MessageMove:
+      type: object
+      required: [id, message_ids, from_conversation_id, to_conversation_id, created_conversation, closed_source, gathering_id, decision_id, moved_by_agent_id,
+        via_token, moved_at, undone_at, undone_by_agent_id, undoable]
+      properties:
+        id: {type: string, format: uuid}
+        message_ids: {type: array, items: {type: string, format: uuid}}
+        from_conversation_id: {type: string, format: uuid}
+        to_conversation_id: {type: [string, 'null'], format: uuid, description: Null for a move back to the intake queue.}
+        created_conversation: {type: boolean, description: The move opened to_conversation_id (a split).}
+        closed_source: {type: boolean, description: The move took every customer message of the source and closed it.}
+        gathering_id: {type: [string, 'null'], format: uuid, description: The intake card a move to the queue made.}
+        decision_id: {type: [string, 'null'], format: uuid, description: 'The person''s intake decision it recorded, when it corrected what AI had applied.'}
+        moved_by_agent_id: {type: [string, 'null'], format: uuid}
+        via_token: {type: boolean, description: An AI agent moved them with a token.}
+        moved_at: {type: string, format: date-time}
+        undone_at: {type: [string, 'null'], format: date-time}
+        undone_by_agent_id: {type: [string, 'null'], format: uuid}
+        undoable: {type: boolean, description: 'Not undone, the newest move of each of its messages, and (to the queue) its card not decided since.'}
+    MessageMoveResult:
+      type: object
+      required: [move, warnings]
+      properties:
+        move: {$ref: '#/components/schemas/MessageMove'}
+        warnings:
+          type: array
+          items: {type: string, enum: [other_contact, other_channel]}
+          description: 'other_contact: a message now sits in a conversation of another contact, whose replies go to that contact; other_channel: a message came through another channel than the conversation''s.'
+    MessageMovePage:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/MessageMove'}}
     ConversationIntake:
       type: object
       required: [messages, gatherings]
@@ -10389,6 +10517,7 @@ components:
       required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, ai_draft_outcome, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
         channel_id: {type: [string, 'null'], format: uuid, description: The channel that carried the message; null for a note and for messages stored before channels were recorded.}
+        other_contact_id: {type: [string, 'null'], format: uuid, description: 'A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.'}
         external_id: {type: [string, 'null'], description: 'The message''s id on its channel, prefixed by the type ("email:<Message-ID>").'}
         channel_meta:
           type: [object, 'null']

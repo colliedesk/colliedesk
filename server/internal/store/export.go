@@ -395,7 +395,7 @@ type conversationPage struct {
 
 func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after string) (conversationPage, error) {
 	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}, statusChanges: map[string][]export.StatusChange{}}
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.channel_scope,c.reply_channel_id::text,c.origin,c.created_at,c.updated_at,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.channel_id::text,c.channel_scope,c.reply_channel_id::text,c.merged_into_id::text,c.origin,c.created_at,c.updated_at,
 		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id)
 		FROM conversations c WHERE c.workspace_id=$1 AND c.id>$2::uuid ORDER BY c.id LIMIT $3`, workspaceID, after, exportPageConversations)
 	if err != nil {
@@ -406,7 +406,7 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		var head export.ConversationHead
 		var messages int
 		if err := rows.Scan(&head.ID, &head.ContactID, &head.Subject, &head.Status, &head.Priority, &head.AssigneeID,
-			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
+			&head.Channel, &head.ChannelID, &head.ChannelScope, &head.ReplyChannelID, &head.MergedIntoID, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
 			rows.Close()
 			return page, fmt.Errorf("export conversations: %w", err)
 		}
@@ -502,7 +502,8 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		channel_id::text,external_id,channel_meta,
 		(SELECT e.decision_basis FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.decision_basis IS NOT NULL LIMIT 1),
 		(SELECT e.decision_rule FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.decision_rule IS NOT NULL LIMIT 1),
-		(SELECT e.gathering_id::text FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.gathering_id IS NOT NULL LIMIT 1)
+		(SELECT e.gathering_id::text FROM channel_inbound_events e WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id AND e.gathering_id IS NOT NULL LIMIT 1),
+		other_contact_id::text,detached_at,detached_by_agent_id::text
 		FROM messages m WHERE workspace_id=$1 AND conversation_id=$2 ORDER BY created_at,id`, workspaceID, conversationID)
 	if err != nil {
 		return fmt.Errorf("export messages: %w", err)
@@ -513,10 +514,11 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		var meta, channelMeta []byte
 		if err := rows.Scan(&record.ID, &record.ConversationID, &record.AuthorAgentID, &record.AuthorName, &record.Kind, &record.Body,
 			&record.BodyHTML, &record.Origin, &record.EmailMessageID, &meta, &record.CC, &record.CreatedAt, &record.AgentRequestID, &record.AIDraftID,
-			&record.ChannelID, &record.ExternalID, &channelMeta, &record.DecisionBasis, &record.DecisionRule, &record.GatheringID); err != nil {
+			&record.ChannelID, &record.ExternalID, &channelMeta, &record.DecisionBasis, &record.DecisionRule, &record.GatheringID,
+			&record.OtherContactID, &record.DetachedAt, &record.DetachedByAgentID); err != nil {
 			return fmt.Errorf("export messages: %w", err)
 		}
-		record.CreatedAt = domain.UTC(record.CreatedAt)
+		record.CreatedAt, record.DetachedAt = domain.UTC(record.CreatedAt), domain.UTCOptional(record.DetachedAt)
 		record.EmailMeta = meta
 		if channelMeta != nil {
 			record.ChannelMeta = channelMeta
@@ -1265,5 +1267,34 @@ func exportIntake(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 			return err
 		}
 	}
-	return rowsError("export intake decisions", decisions)
+	if err := rowsError("export intake decisions", decisions); err != nil {
+		return err
+	}
+	return exportMessageMoves(ctx, tx, workspaceID, sink)
+}
+
+// exportMessageMoves writes every move of customer messages, undone ones included.
+func exportMessageMoves(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,message_ids::text[],from_conversation_id::text,to_conversation_id::text,created_conversation,closed_source,
+			source_status_before,target_status_before,thread_keys_moved,gathering_id::text,decision_id::text,moved_by_agent_id::text,moved_by_token_id::text,
+			moved_at,undone_at,undone_by_agent_id::text,undone_by_token_id::text
+		FROM message_moves WHERE workspace_id=$1 ORDER BY seq`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export message moves: %w", err)
+	}
+	for rows.Next() {
+		var r export.MessageMove
+		if err := rows.Scan(&r.ID, &r.MessageIDs, &r.FromConversationID, &r.ToConversationID, &r.CreatedConversation, &r.ClosedSource, &r.SourceStatusBefore,
+			&r.TargetStatusBefore, &r.ThreadKeysMoved, &r.GatheringID, &r.DecisionID, &r.MovedByAgentID, &r.MovedByTokenID, &r.MovedAt, &r.UndoneAt,
+			&r.UndoneByAgentID, &r.UndoneByTokenID); err != nil {
+			rows.Close()
+			return fmt.Errorf("export message moves: %w", err)
+		}
+		r.MovedAt, r.UndoneAt = domain.UTC(r.MovedAt), domain.UTCOptional(r.UndoneAt)
+		if err := sink.MessageMove(r); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	return rowsError("export message moves", rows)
 }

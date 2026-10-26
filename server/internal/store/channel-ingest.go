@@ -461,15 +461,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, fmt.Errorf("reopen conversation: %w", err)
 		}
 	}
-	for _, key := range in.Thread.Record {
-		if _, err := tx.Exec(ctx, `INSERT INTO conversation_thread_keys(workspace_id,conversation_id,channel_type,key) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-			workspaceID, conversationID, string(channel.Type), key); err != nil {
-			return result, fmt.Errorf("record thread key: %w", err)
-		}
-	}
 	messageID, err := insertChannelMessage(ctx, tx, channel, conversationID, externalID, in)
 	if err != nil {
 		return result, err
+	}
+	// A key names the message that recorded it, so moving the message moves the key.
+	for _, key := range in.Thread.Record {
+		if _, err := tx.Exec(ctx, `INSERT INTO conversation_thread_keys(workspace_id,conversation_id,channel_type,key,message_id) VALUES($1,$2,$3,$4,$5)
+			ON CONFLICT DO NOTHING`, workspaceID, conversationID, string(channel.Type), key, messageID); err != nil {
+			return result, fmt.Errorf("record thread key: %w", err)
+		}
 	}
 	original, err := linkChannelFiles(ctx, tx, s.objects, workspaceID, messageID, files, in.EmailMeta != nil)
 	if err != nil {

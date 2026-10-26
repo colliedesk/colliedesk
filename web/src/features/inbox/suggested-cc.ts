@@ -7,9 +7,10 @@ import { maxCc } from './cc-field';
 // the reply in To. Older mail has no Cc, so it offers nothing. The sender writes the Cc line, so mail
 // whose authentication did not pass offers nothing either: it would prefill whoever a forger named.
 // On the hosted cloud the server trusts a Cc line only on mail from the platform forwarder; mail posted
-// to the workspace's own inbound address is written by its admin, so it offers nothing there.
+// to the workspace's own inbound address is written by its admin, so it offers nothing there. Mail moved
+// in from another customer's conversation is not this customer's thread and offers nothing either.
 export function suggestedCc(timeline: Message[], { hosted = false }: { hosted?: boolean } = {}): string[] {
-  const received = timeline.filter((item) => item.kind === 'incoming' && item.email);
+  const received = timeline.filter((item) => item.kind === 'incoming' && item.email && !item.other_contact_id);
   const latest = received.at(-1)?.email;
   if (!latest || latest.authentication !== 'pass') return [];
   if (hosted && latest.via !== 'platform') return [];

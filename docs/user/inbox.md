@@ -257,6 +257,30 @@ In the details pane (**Show details** on a narrower screen):
 - **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
 
+**Move messages to another conversation**
+A customer's message that landed in the wrong conversation can be moved, with its files: to another
+conversation, or into a new conversation of its own (a split). Only customer messages move; the team's
+replies and notes stay where they are. Nothing is sent to the customer.
+- A resolved or closed conversation that gets a moved message reopens, as it does when the customer
+  writes again.
+- When every customer message of a conversation goes to another and nobody replied in it, wrote a note
+  or assigned it yet, the move can also close it as no new request (`close_source`); it then points to
+  where its messages went. Once someone worked on it, closing is refused and only the messages move.
+- A message moved into a conversation of another customer stays theirs: replies go to the conversation's
+  customer only, never suggest copying the writer and never thread on their mail. The move says so
+  (`other_contact`), and says when the message came through another channel (`other_channel`).
+- A customer's later answer to a moved message follows it to where it went.
+- Every move can be undone: the messages go back, a conversation the move closed reopens, a status it
+  changed comes back while nobody changed the conversation or wrote in it since, and a conversation a
+  split opened closes and points back. Only the newest move of a message can be undone.
+
+AI agents move messages with the MCP tools `colliedesk_messages_move`, `colliedesk_message_moves_list`
+and `colliedesk_message_move_undo`, or the API `POST /api/v1/conversations/{id}/messages/move`
+(`message_ids`, `to: {conversation_id}` or `{new: {subject}}`, `close_source`), `GET
+/api/v1/conversations/{id}/message-moves` (the moves out of and into a conversation) and `POST
+/api/v1/message-moves/{id}/undo`; moving and undoing need the draft tier. Through the API, send the same
+`Idempotency-Key` header on every retry of one move or undo: a repeat answers what the first one got.
+
 **Trial and locked workspaces** (hosted cloud only)
 During the trial a banner under the workspace name shows the days left. When the trial or the
 subscription ends, the inbox is replaced by a page that says so, with the ways forward for admins.

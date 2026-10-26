@@ -148,6 +148,8 @@ export const messageSchema = z.object({
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(), reply_number: z.number().int().positive().nullable(),
+  // A customer message moved in from another contact's conversation; an older server sends nothing.
+  other_contact_id: z.string().uuid().nullable().optional(),
 }) satisfies z.ZodType<Generated<'Message'>>;
 export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),

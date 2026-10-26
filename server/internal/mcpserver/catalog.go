@@ -57,6 +57,7 @@ func Catalog() []Spec {
 		channelAIGetSpec(), channelAISetSpec(), aiSourceConsentRequestSpec(), aiSourceConsentRemoveSpec(),
 		conversationChatGetSpec(), channelThreadsListSpec(), channelThreadItemsSpec(), channelUnresolvedItemsSpec(),
 		intakeListSpec(), intakeGetSpec(), intakeDecideSpec(), intakeRequeueSpec(), intakeSummarySpec(), intakeStatsSpec(), conversationIntakeGetSpec(),
+		messagesMoveSpec(), messageMovesListSpec(), messageMoveUndoSpec(),
 		aiDraftCreateSpec(), aiDraftGetSpec(), aiDraftsListSpec(), aiDraftDiscardSpec(),
 		aiTriageGetSpec(), aiTriageCreateSpec(), aiTriageAcceptSpec(), aiTriageDismissSpec(), aiTriageUndoSpec(),
 		resultsGetSpec(), resultsShareLinkGetSpec(), resultsShareLinkCreateSpec(), resultsShareLinkRevokeSpec(), resultsEmailSetSpec(),

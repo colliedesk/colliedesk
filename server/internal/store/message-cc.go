@@ -39,9 +39,10 @@ func (s *Store) checkTrialCC(ctx context.Context, tx pgx.Tx, workspaceID, conver
 }
 
 // customerAddresses collects the sender and Cc addresses of the customer mail that proves the customer
-// wrote first (see customerWroteFirst).
+// wrote first (see customerWroteFirst). Mail moved in from another contact's conversation proves nothing
+// of this one.
 func customerAddresses(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) (map[string]bool, error) {
-	rows, err := tx.Query(ctx, `SELECT email_meta,origin FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming'
+	rows, err := tx.Query(ctx, `SELECT email_meta,origin FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming' AND other_contact_id IS NULL
 		AND (origin IS NOT NULL OR (email_meta->>'via'='platform' AND COALESCE(email_meta->>'authentication','none') <> 'fail'))`,
 		workspaceID, conversationID)
 	if err != nil {
