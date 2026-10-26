@@ -43,9 +43,15 @@ test('intake on a chat channel: Suggest with settings of its own, then Auto asks
   await expect(page.getByRole('switch', { name: 'Chat intake on' })).toBeChecked();
   const intakeDefault = page.getByRole('group', { name: 'Intake: default for channels' });
   await expect(intakeDefault.getByRole('radio')).toHaveCount(2);
+  await intakeDefault.getByRole('radio', { name: 'Suggest' }).click();
+  await expect(intakeDefault.getByRole('radio', { name: 'Suggest' })).toBeChecked();
 
-  // The channel's AI tab: Suggest on its groups, then its settings.
+  // The channel's AI tab: its groups follow the default, so their settings are the default's until the
+  // scope has its own level.
   await page.goto(`${origin}/settings/channels/${channel}?tab=ai`);
+  const following = page.getByRole('form', { name: 'Intake settings · Groups' });
+  await expect(following).toContainText('These follow the default. Pick Suggest or Auto for Groups above to set its own.');
+  await expect(following.getByRole('button', { name: 'Save intake settings' })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Intake · Groups' }).selectOption('suggest');
   const form = page.getByRole('form', { name: 'Intake settings · Groups' });
   await form.getByLabel('Add to a conversation').fill('0.93');

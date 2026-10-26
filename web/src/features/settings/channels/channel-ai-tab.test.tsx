@@ -249,3 +249,22 @@ test('the estimate is in the provider\'s own credits, or a share of the included
   fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'auto' } });
   expect(await screen.findByText(/about \$0.22, 4% of the AI included each month/)).toBeInTheDocument();
 });
+
+test('a scope that follows the default shows its settings read-only and says how to set its own', async () => {
+  aiApi.channel.mockResolvedValue(levels({ level: null, effective_level: 'suggest', source: 'workspace', options: { create_threshold: 0.85 } }));
+  aiApi.settings.mockResolvedValue({ ...settings(), slots: [slot('triage'), slot('draft'), { ...slot('intake'), default_level: 'suggest' }] } as unknown as AISettings);
+  view();
+  const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
+  expect(within(form).getByText('These follow the default. Pick Suggest or Auto for Groups above to set its own.')).toBeInTheDocument();
+  expect(within(form).getByLabelText('Open a conversation')).toBeDisabled();
+  expect(within(form).queryByRole('button', { name: 'Save intake settings' })).not.toBeInTheDocument();
+});
+
+test('an age set to seconds that are not whole minutes is kept when other fields are saved', async () => {
+  aiApi.channel.mockResolvedValue(levels({ options: { auto_max_age_seconds: 90 } }));
+  view();
+  const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
+  fireEvent.change(within(form).getByLabelText('Reopen a resolved conversation within (days)'), { target: { value: '3' } });
+  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: { auto_max_age_seconds: 90, reopen_window_days: 3 } }));
+});

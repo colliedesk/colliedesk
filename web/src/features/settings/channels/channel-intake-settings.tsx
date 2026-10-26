@@ -61,6 +61,7 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
     keywords: (saved.redact_keywords ?? []).join('\n'), accounts: (saved.contact_labels?.account ?? []).join('\n'), ids: (saved.contact_labels?.id ?? []).join('\n'),
   }));
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [ageTouched, setAgeTouched] = useState(false);
   const [problem, setProblem] = useState<string>();
   const consents = new Set(settings?.source_consents.map((consent) => consent.source_class));
   const set = <K extends keyof typeof values>(key: K, value: (typeof values)[K]) => { setValues((current) => ({ ...current, [key]: value })); setState('idle'); };
@@ -70,7 +71,9 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
     for (const item of thresholds) { const value = number(values[item.key]); if (value !== undefined) next[item.key] = value; }
     if (!values.single) next.attach_requires_single_candidate = false;
     if (number(values.reopen) !== undefined) next.reopen_window_days = number(values.reopen);
-    if (number(values.age) !== undefined) next.auto_max_age_seconds = Math.round((number(values.age) ?? 0) * 60);
+    // Shown in whole minutes: a value set in seconds goes back as it was unless the field was changed.
+    if (ageTouched && number(values.age) !== undefined) next.auto_max_age_seconds = Math.round((number(values.age) ?? 0) * 60);
+    else if (!ageTouched && saved.auto_max_age_seconds !== undefined) next.auto_max_age_seconds = saved.auto_max_age_seconds;
     if (Object.keys(values.sources).length > 0) next.sources = values.sources;
     if (lines(values.keywords).length > 0) next.redact_keywords = lines(values.keywords);
     const patterns = values.patterns.filter((item) => item.pattern.trim() !== '').map((item) => ({ pattern: item.pattern.trim(), mask: item.mask }));
@@ -89,11 +92,13 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
       setState('idle');
     }
   };
-  const locked = !isAdmin || state === 'saving';
+  // A scope that follows the default takes the default's settings: the server keeps settings with a level.
+  const follows = level === null;
+  const locked = !isAdmin || follows || state === 'saving';
   const heading = `${id}-heading`;
   return <form className="ch-intake" aria-labelledby={heading} onSubmit={(event) => void submit(event)} noValidate>
     <h3 id={heading}>{m.intakeSettings(scopeName(scope))}</h3>
-    <p className="ch-ai-lead">{m.intakeSettingsLead}</p>
+    <p className="ch-ai-lead">{follows ? m.intakeSettingsFollow(scopeName(scope)) : m.intakeSettingsLead}</p>
     <fieldset className="ch-intake-group" disabled={locked}>
       <legend>{m.intakeThresholds}</legend>
       <p className="help">{m.intakeThresholdsHelp}</p>
@@ -108,7 +113,7 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
         <label className="field"><span>{m.intakeReopenWindow}</span>
           <input type="number" min={0} max={90} step={1} placeholder="7" value={values.reopen} onChange={(event) => set('reopen', event.target.value)} /></label>
         <label className="field"><span>{m.intakeMaxAge}</span>
-          <input type="number" min={1} max={1440} step={1} placeholder="120" value={values.age} onChange={(event) => set('age', event.target.value)} /></label>
+          <input type="number" min={1} max={1440} step={1} placeholder="120" value={values.age} onChange={(event) => { setAgeTouched(true); set('age', event.target.value); }} /></label>
       </div>
     </fieldset>
     <fieldset className="ch-intake-group" disabled={locked}>
@@ -159,7 +164,7 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
           onChange={(event) => set('instructions', event.target.value)} />
         <small className="help" id={`${id}-instructions-count`}>{m.intakeInstructionsCount(values.instructions.length)}</small></div>
     </fieldset>
-    {isAdmin && <div className="button-row">
+    {isAdmin && !follows && <div className="button-row">
       <button type="submit" className="primary-action" disabled={locked}>{m.intakeSave}</button>
       {state === 'saved' && <span role="status" className="muted-copy">{m.intakeSaved}</span>}
     </div>}

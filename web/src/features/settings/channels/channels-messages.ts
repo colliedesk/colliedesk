@@ -21,6 +21,7 @@ export const channelsMessages = {
   // Intake's settings on a scope of a chat channel (docs/user/ai.md "Intake").
   intakeSettings: (scope: string) => `Intake settings · ${scope}`,
   intakeSettingsLead: 'How AI decides on what customers write here. A field left empty keeps the default shown.',
+  intakeSettingsFollow: (scope: string) => `These follow the default. Pick Suggest or Auto for ${scope} above to set its own.`,
   intakeThresholds: 'Deciding alone (Auto)',
   intakeThresholdsHelp: 'How sure AI must be (0.50 to 0.99) to do each by itself; below that it only suggests in Review.',
   intakeCreateThreshold: 'Open a conversation',
