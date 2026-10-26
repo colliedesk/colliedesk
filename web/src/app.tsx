@@ -6,6 +6,7 @@ import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { usePendingRequests } from './features/requests/use-pending-requests';
+import { useIntakeSummary } from './features/review/use-intake-summary';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
@@ -18,7 +19,7 @@ import { AppShell } from './features/shell/app-shell';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { BookIcon, ChartIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
+import { BookIcon, ChartIcon, ChatIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
@@ -42,6 +43,8 @@ const resultsRoutePart = lazyPart(() => import('./features/results/results-route
 // Agent requests are their own chunk too: the rail link starts loading it on hover and focus.
 const requestsRoutePart = lazyPart(() => import('./features/requests/requests-route'));
 const resultsSharePart = lazyPart(() => import('./features/results/results-share-route'));
+// Review (the intake queue of chat channels) is its own chunk; only workspaces with a chat channel open it.
+const reviewRoutePart = lazyPart(() => import('./features/review/review-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 
@@ -75,6 +78,8 @@ function AppLayout() {
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
   // Fixes is in the Autofix chunk, loaded only where the server runs Autofix and this browser turned its preview on.
   const fixes = autofixPreviewOn() && config.data?.autofix?.available === true && Boolean(me.data) && !signedOut && !locked;
+  // Cards of chat channels waiting in Review; the link shows only where a chat channel collects messages.
+  const intake = useIntakeSummary(!onSignIn && Boolean(me.data) && !signedOut && !locked).data;
   // Sign-in pages have nowhere to navigate to yet.
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
@@ -92,6 +97,7 @@ function AppLayout() {
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
+  const inReview = path.startsWith('/review');
   const inKnowledge = path.startsWith('/knowledge');
   const inResults = path.startsWith('/results');
   const inFixes = path.startsWith('/fixes');
@@ -103,11 +109,14 @@ function AppLayout() {
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
+      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inReview || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
       <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
         aria-current={inRequests ? 'page' : undefined} onPointerEnter={requestsRoutePart.preload} onFocus={requestsRoutePart.preload}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
       {fixes && <Part part={autofixPart} render={({ FixesRailLink }) => <FixesRailLink current={inFixes} />} />}
+      {intake?.available && <Link to="/review" className="rail-link" data-tip={messages.review} aria-label={intake.waiting > 0 ? messages.reviewWaiting(intake.waiting) : messages.review}
+        aria-current={inReview ? 'page' : undefined} onPointerEnter={reviewRoutePart.preload} onFocus={reviewRoutePart.preload}><ChatIcon /><span className="rail-label" aria-hidden="true">{messages.review}</span>
+        {intake.waiting > 0 && <span className="rail-badge" aria-hidden="true">{intake.waiting > 99 ? '99+' : intake.waiting}</span>}</Link>}
       <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
       <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
@@ -219,6 +228,26 @@ const requestsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/requests',
   component: () => <Part part={requestsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ RequestsRoute }) => <RequestsRoute />} />,
+});
+// The tab and the channel filter of Review are in the address, so a link opens the same list.
+type ReviewSearch = { tab?: 'dismissed' | 'decided'; channel?: string; scope?: string };
+const reviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/review',
+  validateSearch: (search: Record<string, unknown>): ReviewSearch => ({
+    ...(search.tab === 'dismissed' || search.tab === 'decided' ? { tab: search.tab } : {}),
+    ...(typeof search.channel === 'string' && typeof search.scope === 'string' ? { channel: search.channel, scope: search.scope } : {}),
+  }),
+  component: function Review() {
+    const { tab, channel, scope } = reviewRoute.useSearch();
+    const navigate = useNavigate();
+    return <Part part={reviewRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ReviewRoute }) => <ReviewRoute tab={tab ?? 'waiting'}
+      filter={channel && scope ? `${channel}:${scope}` : ''}
+      onChange={(next, filter) => {
+        const [nextChannel, nextScope] = filter.split(':');
+        void navigate({ to: '/review', search: { ...(next === 'waiting' ? {} : { tab: next }), ...(filter ? { channel: nextChannel, scope: nextScope } : {}) }, replace: true });
+      }} />} />;
+  },
 });
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -338,7 +367,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, reviewRoute, billingRoute, importRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

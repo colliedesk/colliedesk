@@ -179,7 +179,7 @@ if they like: not a request, answered in the chat, said already, or another reas
 the same way twice changes nothing; once a card is decided, another decision is refused and says how it
 was decided. Messages of a card are decided in the queue, not one by one as held messages; only what was
 set aside can be discarded with the held messages. Email and web forms have no cards: every message is
-decided by the channel's rules, as before.
+decided by the channel's rules, as before. In the web app, people decide cards on [Review](review.md).
 
 For AI agents and the API: `GET /api/v1/intake/gatherings` (`state=review`, `deciding`, `ignored` or
 `decided`, `channel_id`, `scope`, `decided_by` `rules`, `ai` or `agent`), `GET
