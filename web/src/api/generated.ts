@@ -5998,11 +5998,8 @@ export interface components {
         ConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
-        /**
-         * @description How the conversation started. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem.
-         * @enum {string}
-         */
-        ConversationChannel: "email" | "web_form" | "help_chat" | "imported" | "agent" | "problem_report";
+        /** @description How the conversation started: a channel type this server runs, or an origin that comes through no channel. Values: email, web_form, help_chat, imported, agent, problem_report. A test build may run another type (the loopback chat stand-in), so a client names a value it does not know by itself. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem. */
+        ConversationChannel: string;
         /**
          * @default updated_desc
          * @enum {string}
@@ -7561,11 +7558,8 @@ export interface components {
             /** Format: date-time */
             connected_at: string;
         };
-        /**
-         * @description A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
-         * @enum {string}
-         */
-        ChannelType: "email" | "web_form" | "help_chat";
+        /** @description A channel type this server runs, by the name its registry gives it. Shipped types: email, web_form, help_chat. A test build may run another (the loopback chat stand-in), so a client shows a type it does not know by its name. A new type adds its value to the shipped types here and its configuration to ChannelConfig. */
+        ChannelType: string;
         ChannelState: {
             /**
              * @description `waiting`: set up, but nothing has arrived on the channel yet (reason `no_message_yet`); it turns `working` with the first message received, which proves the way in works.

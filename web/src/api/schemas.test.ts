@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { contactListSchema } from './schemas';
+import { channelListSchema } from './channels';
+import { contactListSchema, conversationPageSchema } from './schemas';
+import { channelLabel } from '../features/inbox/filter-messages';
 import { contactAddress } from '../features/contacts/contact-messages';
 
 const known = {
@@ -15,5 +17,22 @@ describe('contact without email', () => {
     expect(contactAddress(list.items[1])).toBe('Minh T.');
     expect(contactAddress(list.items[0])).toBe('ann@example.com');
     expect(contactAddress({ email: null, identities: [] })).toBe('No email');
+  });
+});
+
+describe('a channel type this app does not know', () => {
+  // A chat type (a Zalo OA, the loopback stand-in of end-to-end builds) is a name the server's registry
+  // gives; the inbox and Settings → Channels list it instead of failing to load.
+  it('parses conversations and channels of it and names it by its type', () => {
+    const page = conversationPageSchema.parse({ items: [{ latest_reply_number: 0, id: '44444444-4444-4444-8444-444444444444', contact_id: known.id,
+      contact_name: 'Minh', subject: 'Stock export', status: 'open', priority: 'normal', assignee_id: null, tags: [], channel: 'zalo', origin: null,
+      created_at: '2026-10-24T10:00:00Z', updated_at: '2026-10-24T10:00:00Z' }], page: 1, page_size: 50, has_next_page: false });
+    expect(page.items[0].channel).toBe('zalo');
+    expect(channelLabel('zalo')).toBe('zalo');
+    const list = channelListSchema.parse({ items: [{ id: '55555555-5555-4555-8555-555555555555', type: 'zalo', name: 'Zalo HC Labs', enabled: true,
+      status: { state: 'working', reason_code: null, message: null }, summary: '', capabilities: [], held_count: 0, unsent_count: 0, last_inbound_at: null,
+      created_at: '2026-10-24T10:00:00Z', updated_at: '2026-10-24T10:00:00Z' }],
+    types: [{ type: 'zalo', available: true, count: 1, default_channel_id: null }] });
+    expect(list.items[0].type).toBe('zalo');
   });
 });

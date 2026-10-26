@@ -7,7 +7,8 @@ import type { Generated } from './schemas';
 // Channels load with their settings pages, a lazy part, so their schemas and calls are not in the first bundle.
 
 const nullableDate = z.string().datetime().nullable();
-export const channelTypeSchema = z.enum(['email', 'web_form', 'help_chat']) satisfies z.ZodType<Generated<'ChannelType'>>;
+// A type the server's registry names; a type this app has no screens for is listed by its name (channels/registry.ts).
+export const channelTypeSchema = z.string().regex(/^[a-z_]{1,40}$/) satisfies z.ZodType<Generated<'ChannelType'>>;
 const channelStateSchema = z.object({
   state: z.enum(['working', 'waiting', 'off', 'needs_attention', 'not_connected', 'removed']), reason_code: z.string().nullable(), message: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'ChannelState'>>;
