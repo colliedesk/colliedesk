@@ -280,6 +280,87 @@ func TestPastItsTimeTheRulesDecide(t *testing.T) {
 	}
 }
 
+// When the rules decide in AI's place, they decide as they would now (T-6): a sender's second batch,
+// held while the first waited too, continues the conversation the first one opened instead of opening
+// another, and so does one that waited behind a card a person decided. The journal says which rule it was.
+func TestPastItsTimeTheRulesDecideAsTheyWouldNow(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "since this morning"})
+	d.flush(t)
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 2 {
+		t.Fatalf("sweep = %d, %v", n, err)
+	}
+	if got := d.gatherings(t); got != "created/create/new_thread/rules:1,attached/create/new_thread/rules:1" {
+		t.Fatalf("gatherings = %s", got)
+	}
+	if got := d.one(t, `SELECT count(DISTINCT conversation_id)::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "1" {
+		t.Fatalf("conversations = %s", got)
+	}
+	if got := d.one(t, `SELECT decision_basis||':'||decision_rule FROM channel_inbound_events WHERE workspace_id=$1 AND external_event_id='a-2'`); got != "match:thread_key" {
+		t.Fatalf("journal of the second = %s", got)
+	}
+	// Behind a card a person decides: the next batch waits, then the rules continue what the person opened.
+	ctx := context.Background()
+	actor := store.ChannelActor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Text: "printer?"})
+	d.flush(t)
+	first := d.gatheringOf(t, "b")
+	if _, err := d.intake().Decide(ctx, d.workspaceID, first, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, actor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.intake().Requeue(ctx, d.workspaceID, first, actor); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "b-2", From: "b", Group: "g1", Text: "it is the one on floor 2"})
+	d.flush(t)
+	behind := d.gatheringOf(t, "b")
+	if _, err := d.intake().Decide(ctx, d.workspaceID, first, intake.Decision{Action: intake.Create}, store.DecidedByAgent, actor); err != nil {
+		t.Fatal(err)
+	}
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if _, err := d.intake().Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT g.state||'/'||(g.conversation_id=f.conversation_id)::text FROM intake_gatherings g, intake_gatherings f
+		WHERE g.workspace_id=$1 AND g.id=$2::uuid AND f.id=$3::uuid`, behind, first); got != "attached/true" {
+		t.Fatalf("behind the decided card = %s", got)
+	}
+}
+
+// A decided card keeps the contact of the customer who wrote it, also when a person adds it to another
+// customer's conversation.
+func TestADecidedCardKeepsItsSendersContact(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	d.intakeAt(t, "auto")
+	ctx := context.Background()
+	actor := store.ChannelActor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	cardA := d.gatheringOf(t, "a")
+	opened, err := d.intake().Decide(ctx, d.workspaceID, cardA, intake.Decision{Action: intake.Create}, store.DecidedByAgent, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Text: "same for me"})
+	d.flush(t)
+	cardB := d.gatheringOf(t, "b")
+	if _, err := d.intake().Decide(ctx, d.workspaceID, cardB, intake.Decision{Action: intake.Attach, ConversationID: opened.ConversationID}, store.DecidedByAgent, actor); err != nil {
+		t.Fatal(err)
+	}
+	contactOf := `SELECT COALESCE((SELECT contact_id::text FROM contact_identities WHERE workspace_id=$1 AND value=$2),'none')`
+	cardContact := `SELECT COALESCE(contact_id::text,'none') FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`
+	if got, want := d.one(t, cardContact, cardA), d.one(t, contactOf, "a"); got != want || got == "none" {
+		t.Fatalf("A's card contact = %s, want %s", got, want)
+	}
+	if got, want := d.one(t, cardContact, cardB), d.one(t, contactOf, "b"); got != want || got == "none" {
+		t.Fatalf("B's card contact = %s, want %s", got, want)
+	}
+}
+
 // The held messages of a gathering are decided in the queue: replaying or discarding held messages one
 // by one leaves them; what intake set aside may be thrown away, and then its gathering is over.
 func TestHeldMessagesOfTheQueueAreDecidedThere(t *testing.T) {

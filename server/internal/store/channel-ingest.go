@@ -414,7 +414,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	}
 	decision := rules.Decide(facts)
 	if request.Intake != nil {
-		decision = request.Intake.basisOf(decision, pending)
+		decision = request.Intake.basisOf(decision)
 	}
 	if level == intakeAuto && decision.Basis == rules.Default {
 		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
@@ -503,7 +503,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if result.Status == channels.ResultCreated {
 			state = GatheringCreated
 		}
-		if err := concludeGathering(ctx, tx, workspaceID, *request.Intake, pending, state, conversationID, now); err != nil {
+		if err := concludeGathering(ctx, tx, workspaceID, *request.Intake, pending, state, conversationID, contactID, now); err != nil {
 			return result, err
 		}
 	}

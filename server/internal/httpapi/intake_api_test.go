@@ -368,6 +368,23 @@ func TestAnIntakeCardSaysWhatAPersonNeedsToDecideIt(t *testing.T) {
 	}
 }
 
+// A token that may decide cards but not read what customers wrote gets the card back without it.
+func TestDecidingACardWithoutMessagesReadReturnsNoCustomerText(t *testing.T) {
+	d := newLevelDesk(t)
+	card := d.heldCard(t, d.workspaceA, d.chatA, "u1", "SECRET stock export fails")
+	token := issueCustomToken(t, d.api, d.adminA, "decider", "conversations:update").Token
+	for _, call := range []struct {
+		path string
+		body any
+	}{{"/decide", map[string]any{"action": "ignore"}}, {"/requeue", nil}} {
+		response := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+call.path, call.body, token, nil)
+		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "SECRET") || strings.Contains(response.Body.String(), "Minh") ||
+			!strings.Contains(response.Body.String(), `"state"`) {
+			t.Fatalf("%s: %d %s", call.path, response.Code, response.Body.String())
+		}
+	}
+}
+
 // A channel with cards of the intake queue still to be decided is not removed, and the refusal says how
 // many of its held messages are decided in the queue rather than opened or discarded one by one.
 func TestRemovingAChannelSaysWhichHeldMessagesAreCardsOfTheQueue(t *testing.T) {

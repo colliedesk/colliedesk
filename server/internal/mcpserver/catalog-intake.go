@@ -14,7 +14,7 @@ import (
 
 const (
 	intakeCardSchema = `{"type":"object","required":["id","channel_id","state","rules","item_count","untrusted_customer_content"],"properties":{` +
-		`"id":{"type":"string"},"channel_id":{"type":"string"},"scope":{"type":"string"},"thread_id":{"type":["string","null"]},"lane_key":{"type":"string"},` +
+		`"id":{"type":"string"},"channel_id":{"type":"string"},"scope":{"type":"string"},"thread_id":{"type":["string","null"]},` +
 		`"contact_id":{"type":["string","null"]},"state":{"type":"string","enum":["deciding","review","created","attached","ignored","applied","cancelled"]},` +
 		`"review_reason":{"type":["string","null"],"description":"Why it waits for a person: no_command, ai_unavailable, lane_blocked (behind an earlier card of the same sender), requeued…"},` +
 		`"rules":{"type":"object","description":"What the channel's rules decided: what applies when AI does not decide in time."},` +
@@ -55,7 +55,7 @@ func intakeGetSpec() Spec {
 	return Spec{
 		Name: "colliedesk_intake_get", Title: "Read an intake card",
 		Description: `Read a card of the intake queue: everything its customer said, oldest first, every decision made on it (by AI or a person), newest first, ` +
-				`and while it is to be decided the conversations it may join (candidates) and the channel's commands that open a request. ` +
+			`and while it is to be decided the conversations it may join (candidates) and the channel's commands that open a request. ` +
 			untrustedNotice + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST:   []string{"GET /api/v1/intake/gatherings/{id}"},
@@ -78,7 +78,7 @@ func intakeDecideSpec() Spec {
 		Input: `{"type":"object","additionalProperties":false,"required":["gathering_id","action"],"properties":{` + intakeIDInput + `,` +
 			`"action":{"type":"string","enum":["create","attach","ignore"]},"conversation_id":{"type":"string",` + uuid + `,"description":"With attach."},` +
 			`"command":{"type":"string","minLength":1,"maxLength":40},"subject":{"type":"string","minLength":1,"maxLength":200},` +
-				`"ignore_reason":{"type":"string","enum":["chat","handled_in_chat","duplicate","other"],"description":"With ignore: not a request, answered in the chat, said already, or another reason."}}}`,
+			`"ignore_reason":{"type":"string","enum":["chat","handled_in_chat","duplicate","other"],"description":"With ignore: not a request, answered in the chat, said already, or another reason."}}}`,
 		Output: `{"type":"object","properties":{"card":` + intakeCardSchema + `,"items":{"type":"array"},"decisions":{"type":"array"},"agent_request":` + filedRequestSchema +
 			`,"next":{"type":"string"}},"anyOf":[{"required":["card"]},{"required":["agent_request","next"]}]}`,
 		run: intakeDecide,
@@ -144,7 +144,6 @@ type intakeCardJSON struct {
 	ChannelID      string          `json:"channel_id"`
 	Scope          string          `json:"scope"`
 	ThreadID       *string         `json:"thread_id"`
-	LaneKey        string          `json:"lane_key"`
 	ContactID      *string         `json:"contact_id"`
 	State          string          `json:"state"`
 	ReviewReason   *string         `json:"review_reason"`
@@ -204,7 +203,7 @@ func intakeCardOut(card intakeCardJSON) map[string]any {
 			untrusted["place_name"] = *card.Place.Name
 		}
 	}
-	return map[string]any{"id": card.ID, "channel_id": card.ChannelID, "scope": card.Scope, "thread_id": card.ThreadID, "lane_key": card.LaneKey,
+	return map[string]any{"id": card.ID, "channel_id": card.ChannelID, "scope": card.Scope, "thread_id": card.ThreadID,
 		"contact_id": card.ContactID, "state": card.State, "review_reason": card.ReviewReason, "rules": card.Rules, "conversation_id": card.ConversationID,
 		"decided_by": card.DecidedBy, "decided_at": card.DecidedAt, "decided_by_agent_id": card.DecidedByAgent, "ignore_reason": card.IgnoreReason,
 		"fallback": card.Fallback, "opened_at": card.OpenedAt, "closed_at": card.ClosedAt, "decide_by": card.DecideBy, "item_count": card.ItemCount,

@@ -94,7 +94,9 @@ Email and web forms declare none, so their path gains no row and no query beyond
    the rules' decisions stay in the journal only.
 4. **The sweep is the fallback.** `intake.Service.Sweep` (every 15 s in `collie serve`, claimed across
    workspaces under `PrivilegeIntakeDueClaim`) applies the rules' decision to what is past `decide_by`
-   (two minutes): `create` is replayed with `ForceNew`, `review` goes to the queue (`no_command`), and a
+   (two minutes): `create` is replayed through the rules as they stand then, without `ForceNew` (a
+   sender's batch held while an earlier one waited too continues the conversation that one opened, as
+   without AI; the journal names the rule that applied), `review` goes to the queue (`no_command`), and a
    commands-only scope's chatter goes to the queue too (`ai_unavailable`): an admin turned AI on so it
    would be looked at. `fallback=true` says so.
 5. **Lanes.** A gathering's lane is its place and sender (`lane_key`). At `auto`, a batch behind a card

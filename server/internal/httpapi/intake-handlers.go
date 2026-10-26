@@ -155,20 +155,42 @@ func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.
 }
 
 // decideOnce runs a decision on the card of the request's path under its Idempotency-Key and answers the
-// card as it stands: a press sent again answers what the first one got and decides nothing more.
+// card as it stands: a press sent again answers what the first one got and decides nothing more. A token
+// that may decide cards but not read messages gets it without what the customer wrote, as reading the card
+// would refuse it; which of the two it gets is part of the input, so a repeat never shows more.
 func (a *API) decideOnce(response http.ResponseWriter, request *http.Request, operation string, input []string, decide func(context.Context) error) {
-	a.runOnce(response, request, http.StatusOK, operation, append([]string{request.PathValue("id")}, input...), func(ctx context.Context) (any, error) {
+	who := principal(request)
+	hidden := who.IsToken() && !who.Allows(auth.PermMessagesRead)
+	a.runOnce(response, request, http.StatusOK, operation, append([]string{request.PathValue("id"), strconv.FormatBool(hidden)}, input...), func(ctx context.Context) (any, error) {
 		if err := decide(ctx); err != nil {
 			writeIntakeError(response, err)
 			return nil, errAnswered
 		}
-		card, err := a.store.IntakeGatheringByID(ctx, principal(request).Workspace.ID, request.PathValue("id"), a.now())
+		card, err := a.store.IntakeGatheringByID(ctx, who.Workspace.ID, request.PathValue("id"), a.now())
 		if err != nil {
 			writeIntakeError(response, err)
 			return nil, errAnswered
 		}
+		if hidden {
+			card = withoutCustomerText(card)
+		}
 		return card, nil
 	})
+}
+
+// withoutCustomerText keeps of a card how it stands and drops what the customer wrote and who they are.
+func withoutCustomerText(detail store.IntakeGatheringDetail) store.IntakeGatheringDetail {
+	detail.Preview, detail.Sender, detail.Items = "", store.ChatSender{}, []store.ChatItem{}
+	if detail.Place != nil {
+		detail.Place = &store.IntakePlace{Kind: detail.Place.Kind}
+	}
+	decisions := make([]store.IntakeDecisionView, len(detail.Decisions))
+	for i, decision := range detail.Decisions {
+		decision.Subject, decision.Reason = nil, nil
+		decisions[i] = decision
+	}
+	detail.Decisions = decisions
+	return detail
 }
 
 type intakeDecisionInput struct {

@@ -19,24 +19,24 @@ type IntakeGathering struct {
 	Scope     string  `json:"scope"`
 	ThreadID  *string `json:"thread_id"`
 	// LaneKey names the lane (place and sender) whose gatherings are decided one after the other.
-	LaneKey           string      `json:"lane_key"`
-	ContactID         *string     `json:"contact_id"`
-	State             string      `json:"state"`
-	ReviewReason      *string     `json:"review_reason"`
-	Rules             IntakeRules `json:"rules"`
-	ConversationID    *string     `json:"conversation_id"`
-	DecidedBy         *string     `json:"decided_by"`
-	DecidedAt         *time.Time  `json:"decided_at"`
-	DecidedByAgentID  *string     `json:"decided_by_agent_id"`
-	IgnoreReason      *string     `json:"ignore_reason"`
-	Fallback          bool        `json:"fallback"`
-	OpenedAt          time.Time   `json:"opened_at"`
-	ClosedAt          time.Time   `json:"closed_at"`
-	DecideBy          *time.Time  `json:"decide_by"`
-	RequeuedAt        *time.Time  `json:"requeued_at"`
-	RequeuedByAgentID *string     `json:"requeued_by_agent_id"`
-	ItemCount         int         `json:"item_count"`
-	Sender            ChatSender  `json:"sender"`
+	LaneKey           string       `json:"lane_key"`
+	ContactID         *string      `json:"contact_id"`
+	State             string       `json:"state"`
+	ReviewReason      *string      `json:"review_reason"`
+	Rules             IntakeRules  `json:"rules"`
+	ConversationID    *string      `json:"conversation_id"`
+	DecidedBy         *string      `json:"decided_by"`
+	DecidedAt         *time.Time   `json:"decided_at"`
+	DecidedByAgentID  *string      `json:"decided_by_agent_id"`
+	IgnoreReason      *string      `json:"ignore_reason"`
+	Fallback          bool         `json:"fallback"`
+	OpenedAt          time.Time    `json:"opened_at"`
+	ClosedAt          time.Time    `json:"closed_at"`
+	DecideBy          *time.Time   `json:"decide_by"`
+	RequeuedAt        *time.Time   `json:"requeued_at"`
+	RequeuedByAgentID *string      `json:"requeued_by_agent_id"`
+	ItemCount         int          `json:"item_count"`
+	Sender            ChatSender   `json:"sender"`
 	Place             *IntakePlace `json:"place"`
 	// Preview is the beginning of what the customer wrote first.
 	Preview string `json:"preview"`

@@ -280,25 +280,26 @@ func lockGathering(ctx context.Context, tx pgx.Tx, workspaceID, id string, event
 	return g, nil
 }
 
-// basisOf is what the journal says decided a message of a gathering.
-func (a IntakeApply) basisOf(decision rules.Decision, g pendingGathering) rules.Decision {
+// basisOf is what the journal says decided a message of a gathering: a person, AI, or the rules as they
+// decided when the gathering was applied.
+func (a IntakeApply) basisOf(decision rules.Decision) rules.Decision {
 	switch a.Decider {
 	case DecidedByAgent:
 		decision.Basis, decision.Rule = rules.Person, "intake_"+decision.Action
 	case DecidedByAI:
 		decision.Basis, decision.Rule = rules.Model, "intake_"+decision.Action
-	default:
-		decision.Basis, decision.Rule = rules.Default, g.rulesRule
 	}
 	return decision
 }
 
-// concludeGathering records how a gathering was decided once its message is stored, with the
-// decision intake_decisions keeps.
-func concludeGathering(ctx context.Context, tx pgx.Tx, workspaceID string, apply IntakeApply, g pendingGathering, state, conversationID string, now time.Time) error {
+// concludeGathering records how a gathering was decided once its message is stored, with the contact of
+// the customer who wrote it (found only now: a held batch creates none) and the decision intake_decisions
+// keeps.
+func concludeGathering(ctx context.Context, tx pgx.Tx, workspaceID string, apply IntakeApply, g pendingGathering, state, conversationID, contactID string, now time.Time) error {
 	if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state=$3,review_reason=NULL,decide_by=NULL,conversation_id=NULLIF($4,'')::uuid,decided_by=$5,decided_at=$6,
-			decided_by_agent_id=NULLIF($7,'')::uuid,decided_by_token_id=NULLIF($8,'')::uuid,fallback=$9,updated_at=$6
-		WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, g.id, state, conversationID, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback); err != nil {
+			decided_by_agent_id=NULLIF($7,'')::uuid,decided_by_token_id=NULLIF($8,'')::uuid,fallback=$9,contact_id=COALESCE(NULLIF($10,'')::uuid,contact_id),updated_at=$6
+		WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, g.id, state, conversationID, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback,
+		contactID); err != nil {
 		return fmt.Errorf("conclude gathering: %w", err)
 	}
 	if err := unblockLane(ctx, tx, workspaceID, g.id, now); err != nil {

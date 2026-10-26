@@ -121,6 +121,10 @@ func TestIntakeToolsReturnWhatCustomersWroteAsUntrusted(t *testing.T) {
 	if candidates := at(t, waiting, "candidates").([]any); len(candidates) != 1 || at(t, waiting, "card", "place_kind") != "group" {
 		t.Fatalf("card = %v", waiting)
 	}
+	// The lane names the sender: it stays out of what an agent reads outside untrusted content.
+	if _, named := at(t, waiting, "card").(map[string]any)["lane_key"]; named {
+		t.Fatalf("card names its lane: %v", waiting)
+	}
 	if commands := at(t, waiting, "commands").([]any); len(commands) != 1 || commands[0] != "bug" {
 		t.Fatalf("commands = %v", commands)
 	}

@@ -147,9 +147,11 @@ func (s *Service) Requeue(ctx context.Context, workspaceID, gatheringID string, 
 const sweepBatch = 100
 
 // Sweep applies the rules' decision to the gatherings AI did not decide in time (fallback): what they
-// would open is opened, what they would hold for a person goes to the queue, and the chatter of a scope
-// that opens only on a command goes to the queue too (an admin turned AI on so it is looked at). A
-// gathering a person decided meanwhile is left as it is. It returns how many it applied.
+// would open is replayed through the rules as they stand now, so a batch held while an earlier one of
+// its sender waited too continues the conversation that one opened, as without AI; what they would hold
+// for a person goes to the queue, and the chatter of a scope that opens only on a command goes to the
+// queue too (an admin turned AI on so it is looked at). A gathering a person decided meanwhile is left as
+// it is. It returns how many it applied.
 func (s *Service) Sweep(ctx context.Context) (int, error) {
 	due, err := s.store.DueGatherings(ctx, s.now().UTC(), sweepBatch)
 	if err != nil {
@@ -162,7 +164,6 @@ func (s *Service) Sweep(ctx context.Context) (int, error) {
 		var err error
 		switch g.RulesAction {
 		case rules.Create:
-			apply.ForceNew = true
 			_, err = s.pipeline.ApplyGathering(ctx, g.WorkspaceID, g.ID, "", apply)
 		case rules.Review:
 			err = s.store.SetGatheringState(ctx, g.WorkspaceID, g.ID, Review, store.ReviewNoCommand, apply, s.now().UTC())
