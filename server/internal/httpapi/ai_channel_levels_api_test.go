@@ -345,6 +345,43 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 	}
 }
 
+// A channel's own settings never become another channel's: every channel of a type reads the type's
+// defaults, and a chat type's defaults hold maps (its commands) that one channel's settings must not write
+// into. A card of workspace B lists the commands of its own chat only. (A web form's default tags are a
+// new list each time the type is read, so they are no such path.)
+func TestAChannelsSettingsNeverReachAnotherWorkspacesChannel(t *testing.T) {
+	d := newLevelDesk(t)
+	ctx := context.Background()
+	if response := request(t, d.api, http.MethodPatch, "/api/v1/channels/"+d.chatA, map[string]any{"settings": json.RawMessage(
+		`{"default_tags":["alpha-vip"],"commands":{"vip":{"phrases":["alpha vip please"],"tags":["alpha-vip"]}}}`)}, d.adminA, nil); response.Code != http.StatusOK {
+		t.Fatalf("set chat A's settings: %d %s", response.Code, response.Body.String())
+	}
+	cardOf := func(workspace, channel string) string {
+		var id string
+		if err := d.pool.QueryRow(ctx, `WITH th AS (INSERT INTO channel_threads(workspace_id,channel_id,kind,external_id,opens_conversations)
+				VALUES($1,$2,'group','group:1',true) RETURNING id)
+			INSERT INTO intake_gatherings(workspace_id,channel_id,scope,lane_key,thread_id,state,review_reason,rules_action,rules_rule,opened_at,closed_at)
+			SELECT $1,$2,'group','thread:'||th.id||':u',th.id,'review','no_command','create','new_thread',now(),now() FROM th RETURNING id::text`,
+			workspace, channel).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	for _, card := range []struct{ token, id, want string }{
+		{d.adminB, cardOf(d.workspaceB, d.chatB), `["bug"]`},
+		{d.adminA, cardOf(d.workspaceA, d.chatA), `["bug","vip"]`},
+	} {
+		response := request(t, d.api, http.MethodGet, "/api/v1/intake/gatherings/"+card.id, nil, card.token, nil)
+		var detail struct {
+			Commands json.RawMessage `json:"commands"`
+		}
+		decode(t, response, &detail)
+		if string(detail.Commands) != card.want {
+			t.Fatalf("commands of card %s = %s, want %s", card.id, detail.Commands, card.want)
+		}
+	}
+}
+
 // Moving a feature to another provider takes back what channels let it do by itself (the consent was
 // for another recipient), in the same change, with the reason in both histories.
 func TestChangingTheRecipientLowersEveryChannelThatRanByItself(t *testing.T) {

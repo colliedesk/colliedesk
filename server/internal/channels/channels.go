@@ -12,7 +12,9 @@ package channels
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -187,7 +189,12 @@ func (s Settings) Merge(override json.RawMessage) (Settings, error) {
 	if len(override) == 0 {
 		return s, nil
 	}
+	// s is a type's defaults, shared by every channel of the type: decoding writes into the maps and the
+	// slice it finds, so it decodes into copies of them.
 	merged := s
+	merged.DefaultTags = slices.Clone(s.DefaultTags)
+	merged.Commands = maps.Clone(s.Commands)
+	merged.Scopes = maps.Clone(s.Scopes)
 	if err := json.Unmarshal(override, &merged); err != nil {
 		return Settings{}, err
 	}
