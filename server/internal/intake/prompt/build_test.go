@@ -143,6 +143,12 @@ func TestBuildHidesAPasswordSentAloneAfterSomeoneAskedForIt(t *testing.T) {
 	if strings.Contains(c.User, "Hunter2024x") || !c.Credential {
 		t.Errorf("credential=%v, prompt:\n%s", c.Credential, c.User)
 	}
+	// A few words first ("ok sure") do not let the secret through.
+	s.Before = []Item{{ID: "m2", At: at(1), From: support, Text: "please send the password"}, {ID: "m3", At: at(2), From: lan, Text: "ok sure"}}
+	s.Incoming = []Item{{ID: "m4", At: at(3), From: lan, Text: "Hunter2024x"}}
+	if c := Build(s); strings.Contains(c.User, "Hunter2024x") || !c.Credential {
+		t.Errorf("after ok sure: credential=%v, prompt:\n%s", c.Credential, c.User)
+	}
 	// Without a question about credentials before it, a word is a word.
 	s.Before = []Item{{ID: "m2", At: at(1), From: support, Text: "which model is it?"}}
 	s.Incoming = []Item{{ID: "m3", At: at(2), From: lan, Text: "Scale2024x"}}
