@@ -1,0 +1,30 @@
+/* Moving messages: the menu in a customer message's header, the moves log at the top of the timeline and the
+   move dialog. Loaded with the message-moves part; scrollbars follow base.css. */
+.message-meta:has(> .message-move-menu) { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+/* A mouse gets a compact menu button in the header; a finger keeps the 44 px target. */
+@media (pointer: fine) { .message-move-menu .action-menu summary { min-width: 28px; min-height: 28px; } }
+.message-move-problem { grid-column: 1 / -1; margin: 0; font-size: var(--fs-small); }
+.message-intake { color: var(--text-3); }
+
+.message-moves { display: grid; gap: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.message-moves-row { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; color: var(--text-2); }
+.message-moves-row > svg { flex: none; width: 14px; height: 14px; margin-top: 3px; color: var(--text-3); }
+.message-moves-row > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.message-moves-row small { display: block; }
+.message-moves-row .link-action { flex: none; }
+.message-moves-row[data-undone] > span { color: var(--text-3); }
+
+.move-dialog { width: min(40rem, 100%); }
+.move-messages { display: grid; gap: 2px; margin: 0; border: 0; padding: 0; }
+.move-messages legend { margin-bottom: var(--space-1); padding: 0; color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }
+.move-message { display: flex; align-items: flex-start; gap: var(--space-2); min-height: var(--touch, 44px); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); cursor: pointer; }
+.move-message:hover { background: color-mix(in srgb, var(--text-1) 5%, transparent); }
+.move-message input { margin-top: 3px; }
+.move-message > span { display: grid; min-width: 0; }
+.move-message-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move-message time { font-size: var(--fs-label); }
+.move-close { display: flex; align-items: flex-start; gap: var(--space-2); cursor: pointer; }
+.move-close input { margin-top: 3px; }
+.move-close > span { display: grid; gap: 2px; }
+.move-close small { font-size: var(--fs-label); }
+.move-dialog .candidate-list { max-height: 14rem; }
