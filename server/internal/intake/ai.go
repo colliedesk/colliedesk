@@ -116,9 +116,10 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	code := ""
 	for attempt := 0; attempt < 2; attempt++ {
 		if response, err = run.Metered(ctx, request); err != nil {
-			// Only the provider's own failures count: not a held allowance, not a stopping process.
+			// Only the provider failing counts: not a held allowance, not a stopping process, not a refusal of
+			// what this card holds (a request the provider will not take, too large).
 			var providerErr *aiprovider.Error
-			if errors.As(err, &providerErr) && ctx.Err() == nil {
+			if errors.As(err, &providerErr) && ctx.Err() == nil && providerErr.Code != aiprovider.ErrorBadRequest && providerErr.Code != aiprovider.ErrorTooLarge {
 				s.breaker.fail(workspaceID, s.now())
 			}
 			return err

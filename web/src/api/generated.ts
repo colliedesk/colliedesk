@@ -4777,7 +4777,7 @@ export interface components {
                 account?: string[];
                 id?: string[];
             };
-            /** @description The channel's own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that matches the empty string, is too large or does not compile is refused. Removing one needs the approval raising AI needs. */
+            /** @description The channel's own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that can match no character (an empty string, a word boundary alone), is too large or does not compile is refused. Removing one needs the approval raising AI needs. */
             redact_patterns?: {
                 pattern: string;
                 /** @enum {string} */

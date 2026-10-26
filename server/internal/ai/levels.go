@@ -197,6 +197,9 @@ const (
 
 var redactMasks = []string{"phone", "id_number", "account_number", "hidden"}
 
+// emptyMatchProbes hold each kind of character a message has: letters, digits, spaces, punctuation.
+var emptyMatchProbes = []string{"", "a", "1", " ", ".", "call me at 0912 345 678, ok?", "Ünïcödé đơn 12"}
+
 // checkRedactPattern refuses a pattern that does not compile, is too long or too large once compiled,
 // or matches the empty string (it would mask between every character).
 func checkRedactPattern(p IntakeRedactPattern) error {
@@ -218,8 +221,14 @@ func checkRedactPattern(p IntakeRedactPattern) error {
 	if err != nil {
 		return invalid("A pattern of redact_patterns is not a valid RE2 expression: %s", p.Pattern)
 	}
-	if compiled.MatchString("") {
-		return invalid("A pattern of redact_patterns matches nothing at all, so it would mask everywhere: %s", p.Pattern)
+	// A pattern that can match no character at all (an empty string, a word boundary) would put its mask
+	// between letters: it is tried on texts of each kind of character.
+	for _, probe := range emptyMatchProbes {
+		for _, span := range compiled.FindAllStringIndex(probe, -1) {
+			if span[0] == span[1] {
+				return invalid("A pattern of redact_patterns can match nothing at all, so it would mask between letters: %s", p.Pattern)
+			}
+		}
 	}
 	return nil
 }

@@ -325,7 +325,7 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 		"options": map[string]any{"attach_threshold": 0.95, "contact_labels": labels["contact_labels"], "redact_patterns": patterns[:1]}}); response.Code != http.StatusAccepted {
 		t.Fatalf("take a pattern out: %+v", response)
 	}
-	for _, pattern := range []string{`\d*`, `(`, `[a-z]{999}[a-z]{999}[a-z]{999}`, strings.Repeat("a", 201)} {
+	for _, pattern := range []string{`\d*`, `\b`, `\b\d*`, `(?:\b)`, `\d*\b`, `(`, `[a-z]{999}[a-z]{999}[a-z]{999}`, strings.Repeat("a", 201)} {
 		body := map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"redact_patterns": []map[string]any{{"pattern": pattern, "mask": "phone"}}}}
 		if response := d.setLevel(t, d.adminA, d.chatA, "intake", body); response.Code != http.StatusBadRequest {
 			t.Fatalf("pattern %q: %+v", pattern[:min(len(pattern), 20)], response)

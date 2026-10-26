@@ -258,7 +258,7 @@ number", "passport") are masked. A channel in another language adds its own word
 for those before a bank account or an identity document number, and `redact_patterns` for the shapes of
 an identifier no word names (a national ID number, a phone number written without its prefix): each a
 pattern in RE2 syntax with what it masks (`phone`, `id_number`, `account_number` or `hidden`), at most 20
-of 200 characters; a pattern that would match nothing at all, is too large or does not compile is refused.
+of 200 characters; a pattern that can match no character at all (an empty string, a word boundary alone), is too large or does not compile is refused.
 Taking a word or a pattern out masks less, so it needs the approval raising AI needs.
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only

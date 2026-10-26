@@ -176,14 +176,16 @@ Email and web forms declare none, so their path gains no row and no query beyond
    automatic draft. The AI's own label stays in `intake_decisions.reply_kind`. The rules never set it, so email keeps reopening on a thank-you as it always did.
 8. **A failing model is left alone.** Five failed calls in a row (provider errors or answers that are not
    a decision) pause a workspace's intake for ten minutes in the process (`intake_paused`): its cards go to
-   the rules at once.
+   the rules at once. A refusal of what one card holds (`bad_request`, `too_large`) is that card's, not the
+   provider failing, and does not count.
 9. **Reasons go first.** AI's `reason` is written from what customers said; `PruneIntakeReasons` erases it
    after 90 days (daily, `PrivilegeIntakeReasonPrune`). The decision and its labels stay.
 10. **Pictures need three yeses.** The images source on, the workspace's `images` consent, and
    `aiprovider.ImageTaker` saying the model and its fallback read pictures (Claude: always; OpenRouter:
    `architecture.input_modalities` from the same hourly `/models` cache as reasoning). The bytes are the
    files the frame fetched before the batch was held (`channel_inbound_files`, stored), at most four of
-   5 MB; the manifest says `consent`, `model_text_only`, `off` or `credential` when none went.
+   5 MB, typed by their bytes (`http.DetectContentType`), not by what the channel called them: a file that
+   is no PNG, JPEG, GIF or WebP is left out. The manifest says `consent`, `model_text_only`, `off` or `credential` when none went.
 11. **A channel's patterns run before the frame's phone numbers**, so a number of the channel's own shape
    is named as its kind. They are checked when saved (RE2, at most 2000 instructions compiled, never the
    empty match); one that no longer compiles masks nothing rather than failing the card.

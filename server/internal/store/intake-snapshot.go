@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"slices"
 	"time"
 
@@ -264,7 +265,13 @@ func (s *Store) IntakeImagesOf(ctx context.Context, workspaceID, gatheringID str
 		if err != nil || int64(len(data)) > maxBytes {
 			continue
 		}
-		images = append(images, IntakeImage{ContentType: f.contentType, Data: data})
+		// The type is what the bytes are, not what the channel called them: a provider refuses a picture
+		// that is none.
+		detected := http.DetectContentType(data)
+		if !slices.Contains(intakeImageTypes, detected) {
+			continue
+		}
+		images = append(images, IntakeImage{ContentType: detected, Data: data})
 	}
 	return images, nil
 }

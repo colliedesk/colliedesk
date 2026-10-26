@@ -26,6 +26,8 @@ func mediaServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 		switch r.URL.Path {
 		case "/ok.txt":
 			_, _ = w.Write([]byte("photo bytes"))
+		case "/screen.png":
+			_, _ = w.Write([]byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"))
 		case "/big.bin":
 			_, _ = w.Write([]byte(strings.Repeat("x", 2000)))
 		case "/flaky.txt":

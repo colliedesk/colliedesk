@@ -3,6 +3,7 @@ package channeltest_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -443,7 +444,7 @@ func TestACardsPicturesReachAModelThatReadsThem(t *testing.T) {
 	// A chat type serves pictures by link; the frame fetches them before the batch is held.
 	server, _ := mediaServer(t)
 	d.pipeline = guardedPipeline(d.loopDesk, server)
-	picture := []channeltest.LoopbackLink{{URL: server.URL + "/ok.txt", Name: "screen.png", Type: "image/png"}}
+	picture := []channeltest.LoopbackLink{{URL: server.URL + "/screen.png", Name: "screen.png", Type: "image/png"}}
 	imagesOf := func() (int, string) {
 		requests := d.fake.Requests()
 		last := requests[len(requests)-1]
@@ -522,6 +523,54 @@ func TestReadinessOpensWhatAIDoesOnItsOwn(t *testing.T) {
 	if got := d.one(t, `SELECT p.action FROM intake_decisions p JOIN intake_decisions a ON a.id=p.corrects_decision_id
 		WHERE p.workspace_id=$1 AND a.decider='ai' AND a.applied`); got != "create" {
 		t.Fatalf("the person's decision corrects AI's ignore as %s", got)
+	}
+}
+
+// A file a chat type calls a picture but that is none never reaches the model, and a model refusing what
+// a card holds never pauses the workspace's intake: only the provider failing does.
+func TestBrokenPicturesNeitherReachTheModelNorPauseIntake(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	server, _ := mediaServer(t)
+	d.pipeline = guardedPipeline(d.loopDesk, server)
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_source_consents(workspace_id,source_class) VALUES($1,'images')`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	d.fake.ImageModels = []string{"claude-haiku-5-5"}
+	refused := 0
+	d.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
+		if len(request.Messages[0].Images) > 0 || strings.Contains(request.Messages[0].Text, "refuse me") {
+			refused++
+			return aiprovider.Response{}, &aiprovider.Error{Code: aiprovider.ErrorBadRequest}
+		}
+		raw := `{"action":"create","target":"","runner_up":"","runner_up_confidence":0,"command":"","subject":"S","reply_kind":"substantive","ignore_reason":"","confidence":0.5,"reason":"x"}`
+		return aiprovider.Response{Text: raw, JSON: raw, Stop: aiprovider.StopDone, Model: "claude-haiku-5-5"}, nil
+	}
+	notPicture := []channeltest.LoopbackLink{{URL: server.URL + "/ok.txt", Name: "screen.png", Type: "image/png"}}
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("p%d", i)
+		d.send(t, channeltest.LoopbackEvent{ID: id, From: id, Group: "g1", Text: "see the screen", Links: notPicture})
+		d.flush(t)
+		d.runAI(t)
+	}
+	if refused != 0 {
+		t.Fatalf("bytes that are no picture reached the model %d times", refused)
+	}
+	// Five cards the model refuses, then one more, all within the breaker's pause.
+	var events []channeltest.LoopbackEvent
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("r%d", i)
+		events = append(events, channeltest.LoopbackEvent{ID: id, From: id, Group: "g1", Text: "refuse me"})
+	}
+	events = append(events, channeltest.LoopbackEvent{ID: "z-1", From: "z", Group: "g1", Text: "the printer is off"})
+	d.send(t, events...)
+	d.flush(t)
+	before := len(d.fake.Requests())
+	for i := 0; i < 6; i++ {
+		d.runAI(t)
+	}
+	if got := len(d.fake.Requests()) - before; got != 6 {
+		t.Fatalf("after five refused cards: %d calls, want 6 (tasks %s)", got, d.tasks(t))
 	}
 }
 
