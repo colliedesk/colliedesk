@@ -383,7 +383,7 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
       <Tabs label={channel.name} prefix={prefix} value={open} tabs={tabs} onChange={(next) => navigate(withSearch(`${base}/${id}`, { tab: next }), true)} />
       <div role="tabpanel" id={panelID(prefix, open)} aria-labelledby={tabID(prefix, open)} className="ch-panel">
         {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
-          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} />
+          : open === 'ai' ? <ChannelAITab channel={channel} isAdmin={isAdmin} timezone={timezone} />
           : ui && <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
               const Panel = panels[open];
               return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;

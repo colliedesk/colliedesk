@@ -64,6 +64,8 @@ export interface AIPageProps {
   initialTab?: AITab;
   // onSetChatCap sets the AI chat feature's own monthly spend limit (null removes it).
   onSetChatCap?: (cap: number | null) => Promise<unknown>;
+  // chatChannels: the workspace has a chat channel that collects messages, so intake has a row.
+  chatChannels?: boolean;
 }
 
 const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
@@ -193,7 +195,7 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
     <section className="panel ai-slots" aria-label={m.features}>
       <div className="ai-slot-head" aria-hidden="true"><span>{m.columnFeature}</span><span>{m.columnProvider}</span><span>{m.columnModel}</span><span>{m.columnAutomatic}</span><span>{m.columnOn}</span></div>
       {/* Intake runs only on chat channels; its row comes with them. */}
-      {settings.slots.filter((slot) => slot.slot !== 'intake').map((slot) => <SlotRow key={slot.slot} slot={slot} {...props} />)}
+      {settings.slots.filter((slot) => slot.slot !== 'intake' || props.chatChannels).map((slot) => <SlotRow key={slot.slot} slot={slot} {...props} />)}
     </section>
     <div className="panel ai-sends"><InfoIcon /><span><span className="ai-long">{m.sends} </span><b>{m.sendsStrong}</b></span></div>
   </div>;
@@ -257,8 +259,8 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
           {models.map((model) => <option key={model} value={model}>{model}</option>)}
         </select></label>
       <div className="ai-slot-limit"><span className="ai-cell-label">{m.columnAutomatic}</span>
-        {slot.slot === 'triage' || slot.automatic ? <><span>{slot.slot === 'triage' ? m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)
-          : m.draftLimits(settings.automatic.draft_per_day)}</span>
+        {slot.slot === 'triage' || slot.slot === 'intake' || slot.automatic ? <><span>{slot.slot === 'triage' ? m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)
+          : slot.slot === 'intake' ? m.intakeLimits(settings.automatic.intake_per_day) : m.draftLimits(settings.automatic.draft_per_day)}</span>
           {isAdmin && <button type="button" className="link-button" onClick={onOpenAutomatic} aria-label={m.changeAutomatic}>{m.change}</button>}</>
           : <span className="muted-copy">{slot.slot === 'chat' ? m.chatRuns : m.noAutomatic}</span>}
       </div>
@@ -271,8 +273,10 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
         onTurnOn={() => onConfirmAuto(slot)} onOff={() => onSetAuto('draft', { ...slotInput(slot), default_level: 'off' })} onRaise={onOpenAutomatic} />}
       {slot.slot === 'triage' && <AutoTriage slot={slot} settings={settings} isAdmin={isAdmin} locked={locked} hasProvider={choices.length > 0}
         onTurnOn={() => onConfirmAuto(slot)} onSet={(input) => onSetAuto('triage', { ...slotInput(slot), ...input })} />}
+      {slot.slot === 'intake' && <IntakeDefault slot={slot} locked={locked} hasProvider={choices.length > 0}
+        onSet={(level) => onSetAuto('intake', { ...slotInput(slot), default_level: level })} />}
       {/* The help center's chat has no level per channel. */}
-      {slot.slot !== 'intake' && slot.slot !== 'chat' && <ChannelsThatDiffer slot={slot} settings={settings} />}
+      {slot.slot !== 'chat' && <ChannelsThatDiffer slot={slot} settings={settings} />}
     </div>
   );
 }
@@ -311,6 +315,26 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
       <div className="ai-auto-switch" id="ai-auto-triage">
         <Choice legend={m.levelLegend(featureName.triage)} hideLegend items={levelItems('triage')} value={level} disabled={locked || !slot.enabled}
           describedBy={why ? `${id}-why` : id} onChange={(next) => (next === 'auto' ? onTurnOn() : onSet({ default_level: next }))} />
+      </div>
+    </div>
+  );
+}
+
+// IntakeDefault is what intake does where no chat channel says otherwise: the channel's rules alone, or
+// the rules with AI's suggestion in Review. Deciding by itself (Auto) is set on each channel, where its
+// readiness is known.
+function IntakeDefault({ slot, locked, hasProvider, onSet }: { slot: AISlot; locked: boolean; hasProvider: boolean; onSet: (level: AILevel) => void }) {
+  const level: AILevel = slot.enabled && slot.default_level !== 'auto' ? slot.default_level : 'off';
+  const id = useId();
+  const why = !hasProvider ? m.autoNeedsProvider : !slot.enabled ? m.intakeNeedsFeature : undefined;
+  return (
+    <div className="ai-auto">
+      <div className="ai-auto-lead"><strong id={id}>{m.levelHeading}</strong></div>
+      {why ? <p className="ai-auto-desc muted-copy" id={`${id}-why`}>{why}</p> : <p className="ai-auto-desc">{levelMeaning.intake[level]}.</p>}
+      <p className="ai-auto-note muted-copy">{m.intakeChatOnly}</p>
+      <div className="ai-auto-switch">
+        <Choice legend={m.levelLegend(featureName.intake)} hideLegend items={levelItems('intake').filter((item) => item.value !== 'auto')} value={level}
+          disabled={locked || !slot.enabled} describedBy={why ? `${id}-why` : id} onChange={onSet} />
       </div>
     </div>
   );

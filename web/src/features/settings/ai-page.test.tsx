@@ -492,3 +492,18 @@ test('a channel level equal to what it follows is not listed as differing, and a
   fireEvent.click(screen.getByRole('tab', { name: 'History' }));
   expect(screen.getByText(/moved Chat intake to another model, so it went down to Suggest on Zalo HC Labs · Groups/)).toBeInTheDocument();
 });
+
+test('chat intake has a row only where a chat channel collects messages; its default is Off or Suggest, Auto is per channel', () => {
+  const intake = slot({ slot: 'intake', source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true });
+  const withIntake = settings({ providers: [provider({ used_by: ['intake'] })], slots: [slot(), slot({ slot: 'draft' }), intake] });
+  page({ settings: withIntake });
+  expect(screen.queryByText('Chat intake')).not.toBeInTheDocument();
+  cleanup();
+  const handlers = page({ settings: withIntake, chatChannels: true });
+  const level = screen.getByRole('group', { name: 'Intake: default for channels' });
+  expect(within(level).getAllByRole('radio').map((radio) => radio.closest('label')?.textContent)).toEqual(['Off', 'Suggest']);
+  expect(screen.getByText(/Auto is set on each chat channel/)).toBeInTheDocument();
+  expect(screen.getByText('300 decisions a day, inside the automatic runs')).toBeInTheDocument();
+  fireEvent.click(within(level).getByRole('radio', { name: 'Suggest' }));
+  expect(handlers.onSetSlot).toHaveBeenCalledWith('intake', expect.objectContaining({ source: 'provider', provider_id: providerID, default_level: 'suggest' }));
+});

@@ -10,6 +10,7 @@ import type { FieldError } from './ai-page';
 import { useCreateAction } from '../../api/use-create';
 import { AIChatSettingsRoute } from './ai-chat-route';
 import { useBillingShown } from '../billing/billing-shown';
+import { useIntakeSummary } from '../review/use-intake-summary';
 
 const consentKey = 'colliedesk.ai-consent-dismissed';
 
@@ -69,6 +70,8 @@ function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: s
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const isAdmin = me.data?.agent.role === 'admin';
   const billingShown = useBillingShown(isAdmin);
+  // Intake has a row once the workspace has a chat channel that collects messages (the rail's summary).
+  const chatChannels = useIntakeSummary().data?.available ?? false;
   const workspaceID = me.data?.workspace.id ?? '';
   const [dismissedNow, setDismissed] = useState(false);
   const dismissed = dismissedNow || (workspaceID !== '' && readDismissed(workspaceID));
@@ -106,7 +109,7 @@ function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: s
   const failed = [slot, consent, check].find((mutation) => mutation.isError)?.error;
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   const error = failed ? refusal(failed).text : undefined;
-  return <AIPage isAdmin={isAdmin} workspaceName={me.data.workspace.name} timezone={me.data.timezone ?? 'UTC'}
+  return <AIPage chatChannels={chatChannels} isAdmin={isAdmin} workspaceName={me.data.workspace.name} timezone={me.data.timezone ?? 'UTC'}
     shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
       billing: billingShown, importData: isAdmin, ai: true }}
     settings={settings.data} loadFailed={settings.isError} showConsent={!dismissed && neverSet(settings.data)}

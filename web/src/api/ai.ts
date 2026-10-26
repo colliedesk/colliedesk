@@ -133,6 +133,19 @@ export type AIEvent = z.infer<typeof aiEventSchema>;
 export type AISlotName = z.infer<typeof aiSlotNameSchema>;
 export type AILevel = z.infer<typeof aiLevelSchema>;
 export type AIChannelLevel = z.infer<typeof aiChannelLevelSchema>;
+const labelCountsSchema = z.object({ labels: z.number().int(), correct: z.number().int(), wrong: z.number().int(), severe: z.number().int() });
+const intakeReadinessSchema = z.object({
+  channel_id: z.string().uuid(), scope: z.string(), model: z.string(), prompt_version: z.string(),
+  actions: z.array(labelCountsSchema.extend({
+    action: z.enum(['create', 'attach', 'ignore']), gate: z.enum(['open', 'closed', 'overridden']), needed: z.number().int(), accuracy_needed: z.number(),
+    missing: z.array(z.enum(['labels', 'accuracy', 'severe', 'junk'])), live: labelCountsSchema,
+    evaluation: labelCountsSchema.extend({ run_at: z.string().datetime() }).nullable(),
+  })),
+  applied: z.object({ decisions: z.number().int(), corrected: z.number().int(), correction_rate: z.number().nullable() }),
+  estimate: z.object({ days: z.number().int(), cards: z.number().int(), ai_calls: z.number().int(),
+    cost_per_call: z.object({ micro_usd: z.number().int().nullable(), provider_cost: z.number().nullable() }) }),
+}) satisfies z.ZodType<Generated<'IntakeReadiness'>>;
+export type IntakeReadiness = z.infer<typeof intakeReadinessSchema>;
 export type ChannelAI = z.infer<typeof channelAISchema>;
 export type ChannelAIInput = RequestBody<'setChannelAI'>;
 export type AIUsage = z.infer<typeof aiUsageSchema>;
@@ -156,6 +169,7 @@ export const aiApi = {
   setSlot: (slot: AISlotName, input: AISlotInput) => request(`/api/v1/ai/slots/${slot}`, aiSlotSchema, { method: 'PUT', body: json<'setAISlot'>(input) }),
   // A channel's levels on each of its scopes; setting one answers the levels after the change.
   channel: (id: string) => request(`/api/v1/channels/${id}/ai`, channelAISchema),
+  readiness: (id: string, scope: string) => request(`/api/v1/channels/${id}/ai/intake/readiness?scope=${encodeURIComponent(scope)}`, intakeReadinessSchema),
   setChannel: (id: string, slot: AISlotName, input: ChannelAIInput) =>
     request(`/api/v1/channels/${id}/ai/${slot}`, channelAISchema, { method: 'PUT', body: json<'setChannelAI'>(input) }),
   usage: (month: string) => request(`/api/v1/ai/usage?month=${encodeURIComponent(month)}`, aiUsageSchema),
