@@ -85,6 +85,17 @@ func (s *Store) IntakeSnapshotOf(ctx context.Context, workspaceID, gatheringID s
 		if snap.Items, err = snapshotItems(ctx, tx, `i.gathering_id=$2::uuid ORDER BY i.occurred_at,i.id`, workspaceID, gatheringID); err != nil {
 			return snap, err
 		}
+		known := map[string]string{}
+		if err := knownContacts(ctx, tx, workspaceID, g.ChannelID, snap.Items, known); err != nil {
+			return snap, err
+		}
+		var sender string
+		for _, item := range snap.Items {
+			if item.Role == "customer" && item.ContactID != nil {
+				sender = *item.ContactID
+				break
+			}
+		}
 		if len(snap.Items) > 0 {
 			first := snap.Items[0]
 			before, err := snapshotItems(ctx, tx, `i.thread_id=$2::uuid AND i.gathering_id IS DISTINCT FROM $3::uuid AND (i.occurred_at,i.id)<($4,$5::uuid)
@@ -93,9 +104,19 @@ func (s *Store) IntakeSnapshotOf(ctx context.Context, workspaceID, gatheringID s
 				return snap, err
 			}
 			slices.Reverse(before)
+			if err := knownContacts(ctx, tx, workspaceID, g.ChannelID, before, known); err != nil {
+				return snap, err
+			}
 			snap.Before = before
 			if snap.Quoted, err = snapshotQuoted(ctx, tx, workspaceID, first.ThreadID, slices.Concat(snap.Before, snap.Items)); err != nil {
 				return snap, err
+			}
+			for id, quoted := range snap.Quoted {
+				one := []IntakeSnapshotItem{quoted}
+				if err := knownContacts(ctx, tx, workspaceID, g.ChannelID, one, known); err != nil {
+					return snap, err
+				}
+				snap.Quoted[id] = one[0]
 			}
 		}
 		candidates, err := gatheringCandidates(ctx, tx, workspaceID, g, now)
@@ -116,8 +137,8 @@ func (s *Store) IntakeSnapshotOf(ctx context.Context, workspaceID, gatheringID s
 			FROM intake_gatherings g LEFT JOIN channel_threads t ON t.workspace_id=g.workspace_id AND t.id=g.thread_id
 			JOIN contacts p ON p.workspace_id=g.workspace_id AND p.id=COALESCE(g.contact_id,
 				(SELECT i.contact_id FROM channel_thread_items i WHERE i.workspace_id=g.workspace_id AND i.gathering_id=g.id AND i.contact_id IS NOT NULL LIMIT 1),
-				CASE WHEN t.kind<>'group' THEN t.contact_id END)
-			WHERE g.workspace_id=$1 AND g.id=$2::uuid`, workspaceID, gatheringID).Scan(&contact.ID, &contact.Name, &contact.Organization, &contact.OpenConversations)
+				NULLIF($3,'')::uuid, CASE WHEN t.kind<>'group' THEN t.contact_id END)
+			WHERE g.workspace_id=$1 AND g.id=$2::uuid`, workspaceID, gatheringID, sender).Scan(&contact.ID, &contact.Name, &contact.Organization, &contact.OpenConversations)
 		switch {
 		case err == nil:
 			snap.Contact = &contact
@@ -148,6 +169,31 @@ func snapshotItems(ctx context.Context, tx pgx.Tx, where, workspaceID string, ar
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+// knownContacts gives the customers' items that have no contact yet (a held batch) the contact their
+// sender's identity already belongs to, so a customer is the same person in the card, before it and in the
+// conversations they wrote in. It creates none; known caches the lookups by identity.
+func knownContacts(ctx context.Context, tx pgx.Tx, workspaceID, channelID string, items []IntakeSnapshotItem, known map[string]string) error {
+	for i, item := range items {
+		if item.ContactID != nil || item.Role != "customer" || item.Sender.Kind == nil || item.Sender.Value == nil {
+			continue
+		}
+		key := *item.Sender.Kind + ":" + *item.Sender.Value
+		contactID, seen := known[key]
+		if !seen {
+			var err error
+			contactID, err = knownContact(ctx, tx, workspaceID, channelID, *item.Sender.Kind, *item.Sender.Value)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("find sender's contact: %w", err)
+			}
+			known[key] = contactID
+		}
+		if contactID != "" {
+			items[i].ContactID = &contactID
+		}
+	}
+	return nil
 }
 
 // snapshotQuoted reads the messages of the place that items reply to.

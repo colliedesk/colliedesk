@@ -241,6 +241,60 @@ func TestOneCardOfALaneIsWithAIAtATime(t *testing.T) {
 	}
 }
 
+// Cards that waited behind one a person decides get their turn with AI one after the other, even while
+// more of them still wait behind.
+func TestALaneBlockedBehindAPersonGoesBackToAI(t *testing.T) {
+	d := newAIDesk(t, nil)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	first := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`)
+	actor := store.ChannelActor{AgentID: d.agentID}
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, first, intake.Decision{Action: intake.Review, ReviewReason: "ai_unsure"}, store.DecidedByAI, store.ChannelActor{}); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "and the printer"})
+	d.flush(t)
+	d.send(t, channeltest.LoopbackEvent{ID: "a-3", From: "a", Group: "g1", Text: "and the scale"})
+	d.flush(t)
+	if got := d.one(t, `SELECT string_agg(state||':'||COALESCE(review_reason,'-'),',' ORDER BY closed_at) FROM intake_gatherings WHERE workspace_id=$1`); got != "review:ai_unsure,review:lane_blocked,review:lane_blocked" {
+		t.Fatalf("gatherings = %s", got)
+	}
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, first, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, actor); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT string_agg(g.state||':'||COALESCE(t.state,'-'),',' ORDER BY g.closed_at) FROM intake_gatherings g
+		LEFT JOIN ai_tasks t ON t.workspace_id=g.workspace_id AND t.gathering_id=g.id WHERE g.workspace_id=$1`); got != "ignored:queued,deciding:queued,review:-" {
+		t.Fatalf("gatherings and tasks = %s", got)
+	}
+}
+
+// A customer whose batch is held is the same person in the prompt as in the conversation they opened before.
+func TestAHeldCustomerIsTheSamePersonAsInTheirConversation(t *testing.T) {
+	d := newAIDesk(t, nil)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.9})
+	d.runAI(t)
+	// Without the thread's key the rules no longer know the next batch continues it: it is held for AI.
+	if _, err := d.pool.Exec(context.Background(), `DELETE FROM conversation_thread_keys WHERE workspace_id=$1`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Name: "Lan", Group: "g1", Text: "still failing"})
+	d.flush(t)
+	if got := d.tasks(t); got != "done,queued" {
+		t.Fatalf("tasks = %s", got)
+	}
+	d.answers(map[string]any{"action": "attach", "target": "C1", "confidence": 0.9})
+	d.runAI(t)
+	requests := d.fake.Requests()
+	prompt := requests[len(requests)-1].Messages[0].Text
+	if !strings.Contains(prompt, "C1 · reported by Customer A") || strings.Contains(prompt, "Customer B") || !strings.Contains(prompt, ">> ") {
+		t.Fatalf("prompt:\n%s", prompt)
+	}
+}
+
 // An answer naming a conversation it was not offered is asked once more; twice is an error, and the
 // rules decide.
 func TestAnUnknownConversationTwiceIsAnErrorAndTheRulesDecide(t *testing.T) {
@@ -255,6 +309,11 @@ func TestAnUnknownConversationTwiceIsAnErrorAndTheRulesDecide(t *testing.T) {
 	}
 	if got := d.one(t, `SELECT state||'/'||decided_by||'/'||fallback::text FROM intake_gatherings WHERE workspace_id=$1`); got != "created/rules/true" {
 		t.Fatalf("gathering = %s", got)
+	}
+	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1`)
+	detail, err := d.store.IntakeGatheringByID(context.Background(), d.workspaceID, card, *d.clock)
+	if err != nil || len(detail.Decisions) != 1 || detail.Decisions[0].ErrorCode == nil || *detail.Decisions[0].ErrorCode != "target_invalid" {
+		t.Fatalf("decisions = %+v, %v", detail.Decisions, err)
 	}
 	if n := len(d.fake.Requests()); n != 2 {
 		t.Fatalf("requests = %d", n)
@@ -400,5 +459,19 @@ func TestAThankYouKeepsAResolvedConversationResolved(t *testing.T) {
 	}
 	if got := drafts(); got == before {
 		t.Fatalf("no automatic draft for what reopened it (%s)", got)
+	}
+	// A thank-you joined to a conversation closed meanwhile (a person following AI late) opens it: a person sees it.
+	if _, err := d.pool.Exec(context.Background(), `UPDATE conversations SET status='closed' WHERE id=$1`, conversation); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "e-1", From: "e", Group: "g1", Text: "thank you all"})
+	d.flush(t)
+	card := d.one(t, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND state='deciding'`)
+	if _, err := d.intake().Decide(context.Background(), d.workspaceID, card, intake.Decision{Action: intake.Attach, ConversationID: conversation,
+		ReplyKind: "acknowledgement"}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2`, conversation); got != "open" {
+		t.Fatalf("after a thank-you to a closed conversation it is %s", got)
 	}
 }

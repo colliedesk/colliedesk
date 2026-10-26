@@ -242,7 +242,7 @@ type IntakeApply struct {
 	// and priority, and its subject.
 	Command, Subject string
 	// ReplyKind is what the batch adds to the conversation it joins: an acknowledgement keeps a resolved
-	// (or closed) conversation as it is and asks for no automatic draft.
+	// conversation resolved (a closed one still opens, so the message is seen) and asks for no automatic draft.
 	ReplyKind string
 	// Decision is the row intake_decisions keeps of an AI's or a person's decision; nil for the rules.
 	Decision *IntakeDecisionInput

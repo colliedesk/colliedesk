@@ -170,7 +170,7 @@ Email and web forms declare none, so their path gains no row and no query beyond
    follows it (`follows_decision_id`, taking its `reply_kind`), anything else corrects it
    (`corrects_decision_id`). These are the labels intake's evaluation reads.
 7. **A thank-you keeps resolved.** A decision's `reply_kind` travels with an attach (`IntakeApply.ReplyKind`):
-   `acknowledgement` joins without reopening a resolved or closed conversation, and the message is stored
+   `acknowledgement` joins without reopening a resolved conversation (a closed one opens, so the message is seen), and the message is stored
    with `messages.intake_reply_kind` at insert, which `ai_draft_on_customer_message` reads to queue no
    automatic draft. The rules never set it, so email keeps reopening on a thank-you as it always did.
 8. **A failing model is left alone.** Five failed calls in a row (provider errors or answers that are not

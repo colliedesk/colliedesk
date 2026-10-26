@@ -4929,7 +4929,7 @@ export interface components {
             } | null;
             /** @description The beginning of what the customer wrote first. */
             preview: string;
-            /** @description What AI suggested and did not do, the newest, unless a person decided since. Follow it with follows_decision_id. */
+            /** @description What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done. */
             suggestion: components["schemas"]["IntakeSuggestion"] | null;
         };
         IntakeSuggestion: {
@@ -4943,7 +4943,7 @@ export interface components {
              */
             target_conversation_id: string | null;
             target_subject: string | null;
-            /** @description resolved or closed: following it reopens the conversation, unless reply_kind is acknowledgement. */
+            /** @description resolved or closed: following it reopens the conversation, except a resolved one when reply_kind is acknowledgement. */
             target_status: components["schemas"]["ConversationStatus"] | null;
             /**
              * Format: uuid
@@ -5048,6 +5048,8 @@ export interface components {
              * @description The AI suggestion a person decided as.
              */
             follows_decision_id: string | null;
+            /** @description What failed when AI's answer was not a decision: target_invalid (it named a conversation it was not offered), invalid_answer, no_subject. */
+            error_code: string | null;
             model: string | null;
             /** Format: uuid */
             agent_id: string | null;

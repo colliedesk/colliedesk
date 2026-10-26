@@ -113,7 +113,9 @@ type IntakeDecisionView struct {
 	Fallback               bool      `json:"fallback"`
 	CorrectsDecisionID     *string   `json:"corrects_decision_id"`
 	FollowsDecisionID      *string   `json:"follows_decision_id"`
-	Model                  *string   `json:"model"`
+	// ErrorCode says what failed when AI's answer was not a decision (target_invalid, invalid_answer).
+	ErrorCode *string `json:"error_code"`
+	Model     *string `json:"model"`
 	AgentID                *string   `json:"agent_id"`
 	ViaToken               bool      `json:"via_token"`
 	CreatedAt              time.Time `json:"created_at"`
@@ -428,7 +430,7 @@ func gatheringItems(ctx context.Context, tx pgx.Tx, workspaceID, id string) ([]C
 
 func gatheringDecisions(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string) ([]IntakeDecisionView, error) {
 	rows, err := tx.Query(ctx, `SELECT id::text,decider,basis,action,target_conversation_id::text,runner_up_conversation_id::text,runner_up_confidence::float8,
-			command,subject,reply_kind,confidence::float8,reason,applied,ignore_reason,not_applied_reason,fallback,corrects_decision_id::text,follows_decision_id::text,model,agent_id::text,
+			command,subject,reply_kind,confidence::float8,reason,applied,ignore_reason,not_applied_reason,fallback,corrects_decision_id::text,follows_decision_id::text,error_code,model,agent_id::text,
 			token_id IS NOT NULL,created_at
 		FROM intake_decisions WHERE workspace_id=$1 AND gathering_id=ANY($2::uuid[]) ORDER BY created_at DESC,id DESC`, workspaceID, ids)
 	if err != nil {
@@ -437,7 +439,7 @@ func gatheringDecisions(ctx context.Context, tx pgx.Tx, workspaceID string, ids 
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (IntakeDecisionView, error) {
 		var d IntakeDecisionView
 		err := row.Scan(&d.ID, &d.Decider, &d.Basis, &d.Action, &d.TargetConversationID, &d.RunnerUpConversationID, &d.RunnerUpConfidence, &d.Command,
-			&d.Subject, &d.ReplyKind, &d.Confidence, &d.Reason, &d.Applied, &d.IgnoreReason, &d.NotAppliedReason, &d.Fallback, &d.CorrectsDecisionID, &d.FollowsDecisionID, &d.Model, &d.AgentID,
+			&d.Subject, &d.ReplyKind, &d.Confidence, &d.Reason, &d.Applied, &d.IgnoreReason, &d.NotAppliedReason, &d.Fallback, &d.CorrectsDecisionID, &d.FollowsDecisionID, &d.ErrorCode, &d.Model, &d.AgentID,
 			&d.ViaToken, &d.CreatedAt)
 		d.CreatedAt = domain.UTC(d.CreatedAt)
 		return d, err

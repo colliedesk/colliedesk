@@ -140,17 +140,19 @@ func enqueueIntake(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID stri
 }
 
 // enqueueLaneTurn gives the lane of a gathering its next turn with AI: one card of a lane is with AI at
-// a time, in the order they closed, and none while a card of the lane waits for a person. A card is
-// given to AI once; one whose task ended without deciding waits for the rules.
+// a time, in the order they closed, and none while a card of the lane waits for a person (the cards
+// that wait only behind it do not count). A card is given to AI once; one whose task ended without
+// deciding waits for the rules.
 func enqueueLaneTurn(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID string, now time.Time) error {
 	if _, err := tx.Exec(ctx, `WITH lane AS (SELECT lane_key FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid)
 		INSERT INTO ai_tasks(workspace_id,kind,gathering_id,automatic,state,next_run_at,created_at)
 		SELECT g.workspace_id,'intake',g.id,true,'queued',$3,$3 FROM intake_gatherings g, lane
 		WHERE g.workspace_id=$1 AND g.lane_key=lane.lane_key AND g.state='deciding'
 			AND NOT EXISTS(SELECT 1 FROM ai_tasks t WHERE t.workspace_id=g.workspace_id AND t.gathering_id=g.id AND t.kind='intake')
-			AND NOT EXISTS(SELECT 1 FROM intake_gatherings o WHERE o.workspace_id=g.workspace_id AND o.lane_key=g.lane_key AND o.state='review')
+			AND NOT EXISTS(SELECT 1 FROM intake_gatherings o WHERE o.workspace_id=g.workspace_id AND o.lane_key=g.lane_key AND o.state='review'
+				AND o.review_reason<>'lane_blocked')
 			AND NOT EXISTS(SELECT 1 FROM ai_tasks t JOIN intake_gatherings o ON o.workspace_id=t.workspace_id AND o.id=t.gathering_id
-				WHERE t.workspace_id=g.workspace_id AND t.kind='intake' AND t.state IN ('queued','running') AND o.lane_key=g.lane_key)
+				WHERE t.workspace_id=g.workspace_id AND t.kind='intake' AND t.state IN ('queued','running') AND o.lane_key=g.lane_key AND o.state='deciding')
 		ORDER BY g.closed_at,g.id LIMIT 1
 		ON CONFLICT (workspace_id,gathering_id) WHERE kind='intake' AND state IN ('queued','running') DO NOTHING`, workspaceID, gatheringID, now); err != nil {
 		return fmt.Errorf("queue intake lane turn: %w", err)

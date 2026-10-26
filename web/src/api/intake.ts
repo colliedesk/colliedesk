@@ -55,7 +55,7 @@ export const intakeDecisionSchema = z.object({
   command: z.string().nullable(), subject: z.string().nullable(), reply_kind: replyKindSchema.nullable(),
   confidence: z.number().nullable(), reason: z.string().nullable(), applied: z.boolean(), not_applied_reason: z.string().nullable(),
   ignore_reason: ignoreReasonSchema.nullable(), fallback: z.boolean(), corrects_decision_id: uuid.nullable(),
-  follows_decision_id: uuid.nullable(), model: z.string().nullable(), agent_id: uuid.nullable(), via_token: z.boolean(), created_at: date,
+  follows_decision_id: uuid.nullable(), error_code: z.string().nullable(), model: z.string().nullable(), agent_id: uuid.nullable(), via_token: z.boolean(), created_at: date,
 }) satisfies z.ZodType<Generated<'IntakeDecision'>>;
 
 export const intakeCandidateSchema = z.object({

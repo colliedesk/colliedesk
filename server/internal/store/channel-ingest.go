@@ -517,7 +517,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if err := setStatusActor(ctx, tx, ""); err != nil {
 			return result, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') AND NOT $3 THEN 'open' ELSE status END,
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status='closed' OR status='resolved' AND NOT $3 THEN 'open' ELSE status END,
 			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID, replyKind == ReplyAcknowledgement); err != nil {
 			return result, fmt.Errorf("reopen conversation: %w", err)
 		}
@@ -676,6 +676,16 @@ func linkChannelFiles(ctx context.Context, tx pgx.Tx, storage attachments.Storag
 	return original, linkFiles(ctx, tx, storage, workspaceID, messageID, linked)
 }
 
+// knownContact is the contact a sender's identity on a channel already belongs to (the one it was merged
+// into); pgx.ErrNoRows when the identity is new. It creates nothing.
+func knownContact(ctx context.Context, tx pgx.Tx, workspaceID, channelID, kind, value string) (string, error) {
+	var contactID string
+	err := tx.QueryRow(ctx, `SELECT COALESCE(c.merged_into_id,c.id)::text FROM contact_identities i
+		JOIN contacts c ON c.workspace_id=i.workspace_id AND c.id=i.contact_id
+		WHERE i.workspace_id=$1 AND i.channel_id=$2 AND i.kind=$3 AND i.value=$4`, workspaceID, channelID, kind, value).Scan(&contactID)
+	return contactID, err
+}
+
 // contactForIdentity finds or creates the contact a sender is: by email address, or by the sender's
 // identity on the channel, which a new contact without an email address gets.
 func (s *Store) contactForIdentity(ctx context.Context, tx pgx.Tx, channel channels.Channel, sender channels.Sender) (string, error) {
@@ -687,11 +697,7 @@ func (s *Store) contactForIdentity(ctx context.Context, tx pgx.Tx, channel chann
 		}
 		return contactForEmail(ctx, tx, channel.WorkspaceID, name, identity.Value)
 	}
-	var contactID string
-	err := tx.QueryRow(ctx, `SELECT COALESCE(c.merged_into_id,c.id)::text FROM contact_identities i
-		JOIN contacts c ON c.workspace_id=i.workspace_id AND c.id=i.contact_id
-		WHERE i.workspace_id=$1 AND i.channel_id=$2 AND i.kind=$3 AND i.value=$4`,
-		channel.WorkspaceID, channel.ID, identity.Kind, identity.Value).Scan(&contactID)
+	contactID, err := knownContact(ctx, tx, channel.WorkspaceID, channel.ID, string(identity.Kind), identity.Value)
 	if err == nil {
 		if _, err := tx.Exec(ctx, `UPDATE contact_identities SET display_name=NULLIF($5,''),updated_at=now()
 			WHERE workspace_id=$1 AND channel_id=$2 AND kind=$3 AND value=$4 AND display_name IS DISTINCT FROM NULLIF($5,'')`,

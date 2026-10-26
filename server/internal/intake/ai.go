@@ -88,7 +88,11 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	code := ""
 	for attempt := 0; attempt < 2; attempt++ {
 		if response, err = run.Metered(ctx, request); err != nil {
-			s.breaker.fail(workspaceID, s.now())
+			// Only the provider's own failures count: not a held allowance, not a stopping process.
+			var providerErr *aiprovider.Error
+			if errors.As(err, &providerErr) && ctx.Err() == nil {
+				s.breaker.fail(workspaceID, s.now())
+			}
 			return err
 		}
 		answer, err = built.Parse(response.JSON)

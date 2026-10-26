@@ -8238,7 +8238,7 @@ components:
         preview: {type: string, maxLength: 280, description: 'The beginning of what the customer wrote first.'}
         suggestion:
           anyOf: [{$ref: '#/components/schemas/IntakeSuggestion'}, {type: 'null'}]
-          description: 'What AI suggested and did not do, the newest, unless a person decided since. Follow it with follows_decision_id.'
+          description: 'What AI suggested and did not do, the newest, unless a person decided since. While the card waits (deciding or review), follow it with follows_decision_id; once the rules applied it (applied), it only says what AI would have done.'
     IntakeSuggestion:
       type: object
       required: [decision_id, action, target_conversation_id, target_subject, target_status, runner_up_conversation_id, runner_up_subject, runner_up_confidence,
@@ -8248,7 +8248,7 @@ components:
         action: {type: string, enum: [create, attach, ignore]}
         target_conversation_id: {type: [string, 'null'], format: uuid, description: With attach.}
         target_subject: {type: [string, 'null']}
-        target_status: {anyOf: [{$ref: '#/components/schemas/ConversationStatus'}, {type: 'null'}], description: 'resolved or closed: following it reopens the conversation, unless reply_kind is acknowledgement.'}
+        target_status: {anyOf: [{$ref: '#/components/schemas/ConversationStatus'}, {type: 'null'}], description: 'resolved or closed: following it reopens the conversation, except a resolved one when reply_kind is acknowledgement.'}
         runner_up_conversation_id: {type: [string, 'null'], format: uuid, description: The second most likely conversation.}
         runner_up_subject: {type: [string, 'null']}
         runner_up_confidence: {type: [number, 'null']}
@@ -8302,7 +8302,7 @@ components:
     IntakeDecision:
       type: object
       required: [id, decider, basis, action, target_conversation_id, runner_up_conversation_id, runner_up_confidence, command, subject, reply_kind, confidence, reason,
-        applied, ignore_reason, not_applied_reason, fallback, corrects_decision_id, follows_decision_id, model, agent_id, via_token, created_at]
+        applied, ignore_reason, not_applied_reason, fallback, corrects_decision_id, follows_decision_id, error_code, model, agent_id, via_token, created_at]
       properties:
         id: {type: string, format: uuid}
         decider: {type: string, enum: [ai, agent]}
@@ -8322,6 +8322,7 @@ components:
         fallback: {type: boolean}
         corrects_decision_id: {type: [string, 'null'], format: uuid, description: 'The AI decision a person undid or decided otherwise than.'}
         follows_decision_id: {type: [string, 'null'], format: uuid, description: 'The AI suggestion a person decided as.'}
+        error_code: {type: [string, 'null'], description: 'What failed when AI''s answer was not a decision: target_invalid (it named a conversation it was not offered), invalid_answer, no_subject.'}
         model: {type: [string, 'null']}
         agent_id: {type: [string, 'null'], format: uuid}
         via_token: {type: boolean}
