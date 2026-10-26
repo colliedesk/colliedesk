@@ -48,9 +48,9 @@ async function connectSupportAddress(page: Page, address: string): Promise<strin
 }
 
 // signInAtMicrosoft plays the person on the stand-in's sign-in page.
-async function signInAtMicrosoft(page: Page, account: string, kind: 'work' | 'personal' = 'work') {
+async function signInAtMicrosoft(page: Page, mailbox: string, kind: 'work' | 'personal' = 'work') {
   await expect(page.getByRole('heading', { name: 'Microsoft stand-in' })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Account' }).fill(account);
+  await page.getByRole('textbox', { name: 'Account' }).fill(mailbox);
   await page.getByRole('radio', { name: kind === 'work' ? 'Work or school account' : 'Personal account' }).check();
   await page.getByRole('button', { name: 'Accept' }).click();
 }
@@ -82,7 +82,7 @@ test('an admin connects Microsoft 365, replies leave from the mailbox with threa
   await expect.poll(async () => (await sentThroughMicrosoft()).filter((sent) => sent.raw.includes('It ships today.')).length, { timeout: 30_000 }).toBe(1);
   const sent = (await sentThroughMicrosoft()).find((item) => item.raw.includes('It ships today.'))!;
   expect(sent.account).toBe(support);
-  expect(sent.raw).toMatch(new RegExp(`^From: .*<${support.replace(/[.+]/g, '\\$&')}>`, 'm'));
+  expect(sent.raw).toMatch(new RegExp(`^From: .*<${support.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}>`, 'm'));
   expect(sent.raw).toContain(`In-Reply-To: <e2e-ms-${suffix}@customer.example>`);
   await expect(page.getByText('Delivery failed', { exact: true })).toHaveCount(0);
 
