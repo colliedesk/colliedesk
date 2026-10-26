@@ -29,7 +29,9 @@ type Decision struct {
 	// ConversationID is the conversation an Attach adds the batch to.
 	ConversationID string
 	// ReviewReason says why a Review puts it in the queue.
-	ReviewReason                        string
+	ReviewReason string
+	// IgnoreReason says why an Ignore sets it aside, when the decider said.
+	IgnoreReason                        string
 	Command, Subject, ReplyKind, Reason string
 	Confidence                          *float64
 	CorrectsDecisionID                  string
@@ -65,7 +67,8 @@ func New(st *store.Store, p *pipeline.Pipeline, now func() time.Time) *Service {
 // another one once the gathering is decided is a ConflictError.
 func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d Decision, decider string, actor store.ChannelActor) (store.GatheringOutcome, error) {
 	apply := store.IntakeApply{Decider: decider, Actor: actor, Decision: &store.IntakeDecisionInput{Action: d.Action, TargetConversationID: d.ConversationID,
-		Command: d.Command, Subject: d.Subject, ReplyKind: d.ReplyKind, Reason: d.Reason, Confidence: d.Confidence, CorrectsDecisionID: d.CorrectsDecisionID}}
+		Command: d.Command, Subject: d.Subject, ReplyKind: d.ReplyKind, Reason: d.Reason, IgnoreReason: d.IgnoreReason, Confidence: d.Confidence,
+		CorrectsDecisionID: d.CorrectsDecisionID}}
 	var err error
 	switch d.Action {
 	case Create:

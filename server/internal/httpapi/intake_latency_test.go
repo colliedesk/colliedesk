@@ -44,6 +44,19 @@ func TestIntakeQueueLatencyBudget(t *testing.T) {
 	if err := d.pool.QueryRow(ctx, `SELECT id::text FROM intake_gatherings WHERE workspace_id=$1 AND state='review' ORDER BY closed_at DESC LIMIT 1`, d.workspaceA).Scan(&card); err != nil {
 		t.Fatal(err)
 	}
+	// The card's group has a conversation for each of its 300 items, the candidates it offers.
+	if _, err := d.pool.Exec(ctx, `WITH p AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Minh','minh@example.com') RETURNING id),
+			i AS (SELECT i.id,row_number() OVER (ORDER BY i.id) n FROM channel_thread_items i JOIN intake_gatherings g ON g.workspace_id=i.workspace_id AND g.id=$2::uuid
+				WHERE i.workspace_id=$1 AND i.thread_id=g.thread_id),
+			c AS (INSERT INTO conversations(workspace_id,contact_id,subject,status,updated_at,channel_id)
+				SELECT $1,p.id,'Report '||n,CASE WHEN n%3=0 THEN 'resolved' ELSE 'open' END,now()-n*interval '1 minute',$3 FROM p, i RETURNING id,subject)
+		INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason) SELECT $1,c.id,i.id,'opened' FROM c JOIN i ON c.subject='Report '||i.n`,
+		d.workspaceA, card, d.chatA); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.pool.Exec(ctx, `ANALYZE conversations; ANALYZE conversation_thread_items`); err != nil {
+		t.Fatal(err)
+	}
 	measure := func(name string, budget time.Duration, read func() error) {
 		for range 5 {
 			if err := read(); err != nil {
@@ -67,7 +80,7 @@ func TestIntakeQueueLatencyBudget(t *testing.T) {
 	}
 	page := func(list, channel, scope string) func() error {
 		return func() error {
-			got, err := st.IntakeGatherings(ctx, d.workspaceA, list, channel, scope, "", store.MaxIntakePage)
+			got, err := st.IntakeGatherings(ctx, d.workspaceA, list, channel, scope, "", "", store.MaxIntakePage)
 			if err == nil && len(got.Items) != store.MaxIntakePage {
 				t.Fatalf("%s page has %d cards", list, len(got.Items))
 			}
@@ -77,8 +90,22 @@ func TestIntakeQueueLatencyBudget(t *testing.T) {
 	measure("review page", intakeQueueBudget, page(store.IntakeListReview, "", ""))
 	measure("decided page", intakeQueueBudget, page(store.IntakeListDecided, "", ""))
 	measure("review page of a channel and scope", intakeQueueBudget, page(store.IntakeListReview, d.chatA, "group"))
+	measure("decided page of the rules", intakeQueueBudget, func() error {
+		got, err := st.IntakeGatherings(ctx, d.workspaceA, store.IntakeListDecided, "", "", store.DecidedByRules, "", store.MaxIntakePage)
+		if err == nil && len(got.Items) != store.MaxIntakePage {
+			t.Fatalf("decided page of the rules has %d cards", len(got.Items))
+		}
+		return err
+	})
 	measure("card", intakeCardBudget, func() error {
-		_, err := st.IntakeGatheringByID(ctx, d.workspaceA, card)
+		got, err := st.IntakeGatheringByID(ctx, d.workspaceA, card, time.Now())
+		if err == nil && len(got.Candidates) != 30 {
+			t.Fatalf("card has %d candidates", len(got.Candidates))
+		}
+		return err
+	})
+	measure("summary", intakeCardBudget, func() error {
+		_, err := st.IntakeSummaryOf(ctx, d.workspaceA)
 		return err
 	})
 }

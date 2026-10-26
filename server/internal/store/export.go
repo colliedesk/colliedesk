@@ -1218,8 +1218,8 @@ func exportChatThreads(ctx context.Context, tx pgx.Tx, workspaceID string, sink 
 
 // exportIntake writes the gatherings of the chat channels' intake and every decision made on them.
 func exportIntake(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	gatherings, err := tx.Query(ctx, `SELECT id::text,channel_id::text,scope,lane_key,thread_id::text,contact_id::text,state,review_reason,rules_action,rules_rule,
-			rules_target::text,conversation_id::text,decided_by,decided_at,decided_by_agent_id::text,decided_by_token_id::text,fallback,opened_at,closed_at,decide_by,
+	gatherings, err := tx.Query(ctx, `SELECT id::text,channel_id::text,scope,lane_key,thread_id::text,contact_id::text,state,review_reason,rules_action,rules_basis,rules_rule,
+			rules_target::text,conversation_id::text,decided_by,decided_at,decided_by_agent_id::text,decided_by_token_id::text,fallback,ignore_reason,opened_at,closed_at,decide_by,
 			requeued_at,requeued_by_agent_id::text,created_at,updated_at
 		FROM intake_gatherings WHERE workspace_id=$1 ORDER BY closed_at,id`, workspaceID)
 	if err != nil {
@@ -1227,8 +1227,8 @@ func exportIntake(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 	}
 	for gatherings.Next() {
 		var r export.IntakeGathering
-		if err := gatherings.Scan(&r.ID, &r.ChannelID, &r.Scope, &r.LaneKey, &r.ThreadID, &r.ContactID, &r.State, &r.ReviewReason, &r.RulesAction, &r.RulesRule,
-			&r.RulesTarget, &r.ConversationID, &r.DecidedBy, &r.DecidedAt, &r.DecidedByAgentID, &r.DecidedByTokenID, &r.Fallback, &r.OpenedAt, &r.ClosedAt,
+		if err := gatherings.Scan(&r.ID, &r.ChannelID, &r.Scope, &r.LaneKey, &r.ThreadID, &r.ContactID, &r.State, &r.ReviewReason, &r.RulesAction, &r.RulesBasis, &r.RulesRule,
+			&r.RulesTarget, &r.ConversationID, &r.DecidedBy, &r.DecidedAt, &r.DecidedByAgentID, &r.DecidedByTokenID, &r.Fallback, &r.IgnoreReason, &r.OpenedAt, &r.ClosedAt,
 			&r.DecideBy, &r.RequeuedAt, &r.RequeuedByAgentID, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			gatherings.Close()
 			return fmt.Errorf("export intake gatherings: %w", err)
@@ -1244,7 +1244,7 @@ func exportIntake(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 		return err
 	}
 	decisions, err := tx.Query(ctx, `SELECT id::text,gathering_id::text,decider,basis,action,target_conversation_id::text,runner_up_conversation_id::text,
-			runner_up_confidence::float8,command,subject,reply_kind,related_conversation_id::text,confidence::float8,reason,applied,not_applied_reason,
+			runner_up_confidence::float8,command,subject,reply_kind,related_conversation_id::text,confidence::float8,reason,applied,ignore_reason,not_applied_reason,
 			items_seen::text[],fallback,corrects_decision_id::text,manifest,task_id::text,model,prompt_version,latency_ms,error_code,agent_id::text,token_id::text,created_at
 		FROM intake_decisions WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
@@ -1253,7 +1253,7 @@ func exportIntake(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 	for decisions.Next() {
 		var r export.IntakeDecision
 		if err := decisions.Scan(&r.ID, &r.GatheringID, &r.Decider, &r.Basis, &r.Action, &r.TargetConversationID, &r.RunnerUpConversationID,
-			&r.RunnerUpConfidence, &r.Command, &r.Subject, &r.ReplyKind, &r.RelatedConversationID, &r.Confidence, &r.Reason, &r.Applied, &r.NotAppliedReason,
+			&r.RunnerUpConfidence, &r.Command, &r.Subject, &r.ReplyKind, &r.RelatedConversationID, &r.Confidence, &r.Reason, &r.Applied, &r.IgnoreReason, &r.NotAppliedReason,
 			&r.ItemsSeen, &r.Fallback, &r.CorrectsDecisionID, &r.Manifest, &r.TaskID, &r.Model, &r.PromptVersion, &r.LatencyMS, &r.ErrorCode, &r.AgentID,
 			&r.TokenID, &r.CreatedAt); err != nil {
 			decisions.Close()

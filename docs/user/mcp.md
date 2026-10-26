@@ -212,6 +212,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_intake_get` | Reads an intake card with what its customer said and every decision made on it | `read` |
 | `colliedesk_intake_decide` | Opens a conversation from an intake card, adds it to one, or sets it aside | `draft` |
 | `colliedesk_intake_requeue` | Puts an intake card that was set aside back in the queue | `draft` |
+| `colliedesk_intake_summary` | Says how many intake cards wait for a person and for AI, and the chat channels they come from | `read` |
 | `colliedesk_intake_stats` | Counts a period of intake: by state, by who decided, and AI's decisions a person changed | `read` |
 | `colliedesk_conversation_intake_get` | Reads why each message from a channel is in a conversation | `read` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |

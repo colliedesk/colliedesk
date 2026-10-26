@@ -116,13 +116,18 @@ func laneKey(ctx context.Context, tx pgx.Tx, channel channels.Channel, in channe
 	return clip("thread:"+threadID+":"+sender, 500), threadID, nil
 }
 
+// batchEvents are the journal events of the batch: those collected, or the one message.
+func (j *journalWriter) batchEvents() []string {
+	if len(j.request.EventIDs) == 0 {
+		return []string{j.eventID}
+	}
+	return j.request.EventIDs
+}
+
 // recordGathering writes the gathering of the journal's events and points them and their items at it.
 func recordGathering(ctx context.Context, tx pgx.Tx, journal *journalWriter, in channels.Inbound, g gathering) (string, error) {
 	channel := journal.channel
-	eventIDs := journal.request.EventIDs
-	if len(eventIDs) == 0 {
-		eventIDs = []string{journal.eventID}
-	}
+	eventIDs := journal.batchEvents()
 	lane, threadID, err := laneKey(ctx, tx, channel, in)
 	if err != nil {
 		return "", err
@@ -133,13 +138,17 @@ func recordGathering(ctx context.Context, tx pgx.Tx, journal *journalWriter, in 
 		decidedBy, decidedAt = "rules", &journal.now
 	}
 	var id string
+	basis := rules.Default
+	if g.decision.Basis == rules.Match {
+		basis = rules.Match
+	}
 	err = tx.QueryRow(ctx, `INSERT INTO intake_gatherings(workspace_id,channel_id,scope,lane_key,thread_id,contact_id,state,review_reason,rules_action,rules_rule,
-			rules_target,conversation_id,decided_by,decided_at,opened_at,closed_at,decide_by)
+			rules_target,conversation_id,decided_by,decided_at,opened_at,closed_at,decide_by,rules_basis)
 		SELECT $1,$2,$3,$4,NULLIF($5,'')::uuid,NULLIF($6,'')::uuid,$7,NULLIF($8,''),$9,$10,NULLIF($11,'')::uuid,NULLIF($12,'')::uuid,NULLIF($13,''),$14,
-			LEAST(min(e.received_at),$15),$15,$16
+			LEAST(min(e.received_at),$15),$15,$16,$18
 		FROM channel_inbound_events e WHERE e.workspace_id=$1 AND e.id::text=ANY($17)
 		RETURNING id::text`, channel.WorkspaceID, channel.ID, in.Scope, lane, threadID, g.contactID, g.state, g.reviewReason, rulesAction(g.decision),
-		g.decision.Rule, g.decision.ConversationID, g.conversationID, decidedBy, decidedAt, journal.now, g.decideBy, eventIDs).Scan(&id)
+		g.decision.Rule, g.decision.ConversationID, g.conversationID, decidedBy, decidedAt, journal.now, g.decideBy, eventIDs, basis).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("record gathering: %w", err)
 	}
@@ -177,6 +186,11 @@ func (s *Store) holdForIntake(ctx context.Context, tx pgx.Tx, journal *journalWr
 	g := gathering{state: GatheringDeciding, decision: decision}
 	if blocked {
 		g.state, g.reviewReason = GatheringReview, ReviewLaneBlocked
+		// Waiting for a person like the card before it.
+		if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='pending_review',disposition_reason=$3
+			WHERE workspace_id=$1 AND inbound_event_id::text=ANY($2)`, journal.channel.WorkspaceID, journal.batchEvents(), ReviewLaneBlocked); err != nil {
+			return result, fmt.Errorf("queue gathering items: %w", err)
+		}
 	} else {
 		due := journal.now.Add(DecideWithin)
 		g.decideBy = &due
@@ -226,8 +240,10 @@ type IntakeApply struct {
 // IntakeDecisionInput is what intake_decisions keeps of one decision.
 type IntakeDecisionInput struct {
 	Action, TargetConversationID, Command, Subject, ReplyKind, Reason string
-	Confidence                                                        *float64
-	CorrectsDecisionID                                                string
+	// IgnoreReason says why a person set a batch aside: chat, handled_in_chat, duplicate, other.
+	IgnoreReason       string
+	Confidence         *float64
+	CorrectsDecisionID string
 }
 
 // pendingGathering is an undecided gathering, locked, with its events.
@@ -301,11 +317,11 @@ func recordIntakeDecision(ctx context.Context, tx pgx.Tx, workspaceID string, ap
 		basis = "model"
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO intake_decisions(workspace_id,gathering_id,decider,basis,action,target_conversation_id,command,subject,reply_kind,confidence,reason,
-			applied,items_seen,fallback,corrects_decision_id,agent_id,token_id,created_at)
+			applied,items_seen,fallback,corrects_decision_id,agent_id,token_id,created_at,ignore_reason)
 		VALUES($1,$2::uuid,$3,$4,$5,NULLIF($6,'')::uuid,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''),true,$12::uuid[],$13,NULLIF($14,'')::uuid,
-			NULLIF($15,'')::uuid,NULLIF($16,'')::uuid,$17)`,
+			NULLIF($15,'')::uuid,NULLIF($16,'')::uuid,$17,NULLIF($18,''))`,
 		workspaceID, g.id, apply.Decider, basis, d.Action, d.TargetConversationID, d.Command, clip(d.Subject, 200), d.ReplyKind, d.Confidence, clip(d.Reason, 2000),
-		g.events, apply.Fallback, d.CorrectsDecisionID, apply.Actor.AgentID, apply.Actor.TokenID, now); err != nil {
+		g.events, apply.Fallback, d.CorrectsDecisionID, apply.Actor.AgentID, apply.Actor.TokenID, now, d.IgnoreReason); err != nil {
 		return fmt.Errorf("record intake decision: %w", err)
 	}
 	return nil
@@ -322,7 +338,7 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 		if action == rules.Review && reviewReason == ReviewRequeued {
 			// Requeue: an ignored gathering goes back to the queue; the decision stays in its history.
 			tag, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='review',review_reason='requeued',requeued_at=$3,requeued_by_agent_id=NULLIF($4,'')::uuid,
-					decided_by=NULL,decided_at=NULL,decided_by_agent_id=NULL,decided_by_token_id=NULL,updated_at=$3
+					decided_by=NULL,decided_at=NULL,decided_by_agent_id=NULL,decided_by_token_id=NULL,ignore_reason=NULL,updated_at=$3
 				WHERE workspace_id=$1 AND id=$2::uuid AND state='ignored'`, workspaceID, id, now, apply.Actor.AgentID)
 			if err != nil {
 				return struct{}{}, fmt.Errorf("requeue gathering: %w", err)
@@ -340,9 +356,13 @@ func (s *Store) SetGatheringState(ctx context.Context, workspaceID, id string, a
 		}
 		switch action {
 		case rules.Ignore:
+			ignoreReason := ""
+			if apply.Decision != nil {
+				ignoreReason = apply.Decision.IgnoreReason
+			}
 			if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='ignored',review_reason=NULL,decide_by=NULL,decided_by=$3,decided_at=$4,
-					decided_by_agent_id=NULLIF($5,'')::uuid,decided_by_token_id=NULLIF($6,'')::uuid,fallback=$7,updated_at=$4
-				WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, id, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback); err != nil {
+					decided_by_agent_id=NULLIF($5,'')::uuid,decided_by_token_id=NULLIF($6,'')::uuid,fallback=$7,ignore_reason=NULLIF($8,''),updated_at=$4
+				WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, id, apply.Decider, now, apply.Actor.AgentID, apply.Actor.TokenID, apply.Fallback, ignoreReason); err != nil {
 				return struct{}{}, fmt.Errorf("ignore gathering: %w", err)
 			}
 			if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET disposition='not_request',disposition_reason='ignored'
@@ -408,9 +428,9 @@ func (s *Store) DueGatherings(ctx context.Context, now time.Time, limit int) ([]
 }
 
 // GatheringOutcome is how a gathering stands: its state, the conversation it opened or joined, and who
-// decided it.
+// decided it (the person, for an agent).
 type GatheringOutcome struct {
-	State, ConversationID, DecidedBy string
+	State, ConversationID, DecidedBy, DecidedByAgentID string
 }
 
 // GatheringOutcomeOf reads how a gathering stands.
@@ -420,8 +440,8 @@ func (s *Store) GatheringOutcomeOf(ctx context.Context, workspaceID, id string) 
 	}
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (GatheringOutcome, error) {
 		var o GatheringOutcome
-		err := tx.QueryRow(ctx, `SELECT state,COALESCE(conversation_id::text,''),COALESCE(decided_by,'') FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`,
-			workspaceID, id).Scan(&o.State, &o.ConversationID, &o.DecidedBy)
+		err := tx.QueryRow(ctx, `SELECT state,COALESCE(conversation_id::text,''),COALESCE(decided_by,''),COALESCE(decided_by_agent_id::text,'')
+			FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, id).Scan(&o.State, &o.ConversationID, &o.DecidedBy, &o.DecidedByAgentID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return o, ErrGatheringNotFound
 		}

@@ -339,6 +339,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/intake/gatherings/{id}":                      {path: "/api/v1/intake/gatherings/" + f.intakeCardID, token: admin, status: 200},
 		"POST /api/v1/intake/gatherings/{id}/decide":              {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/decide", body: map[string]any{"action": "ignore"}, token: admin, status: 200},
 		"POST /api/v1/intake/gatherings/{id}/requeue":             {path: "/api/v1/intake/gatherings/" + f.intakeCardID + "/requeue", token: admin, status: 200},
+		"GET /api/v1/intake/summary":                              {path: "/api/v1/intake/summary", token: admin, status: 200},
 		"GET /api/v1/intake/stats":                                {path: "/api/v1/intake/stats?days=7", token: admin, status: 200},
 		"GET /api/v1/conversations/{id}/intake":                   {path: "/api/v1/conversations/" + f.conversationID + "/intake", token: admin, status: 200},
 		"DELETE /api/v1/ai/source-consents/{class}":               {path: "/api/v1/ai/source-consents/images", token: admin, status: 200},

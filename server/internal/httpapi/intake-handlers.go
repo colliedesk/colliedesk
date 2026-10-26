@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -30,9 +31,12 @@ func writeIntakeError(response http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &conflict):
 		body := map[string]any{"code": "gathering_decided", "message": "This card was decided otherwise meanwhile; nothing changed.",
-			"state": conflict.Outcome.State, "decided_by": nil, "conversation_id": nil}
+			"state": conflict.Outcome.State, "decided_by": nil, "decided_by_agent_id": nil, "conversation_id": nil}
 		if conflict.Outcome.DecidedBy != "" {
 			body["decided_by"] = conflict.Outcome.DecidedBy
+		}
+		if conflict.Outcome.DecidedByAgentID != "" {
+			body["decided_by_agent_id"] = conflict.Outcome.DecidedByAgentID
 		}
 		if conflict.Outcome.ConversationID != "" {
 			body["conversation_id"] = conflict.Outcome.ConversationID
@@ -75,6 +79,13 @@ func (a *API) listIntakeGatherings(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusBadRequest, "invalid_request", "scope is a scope of the channel's type.")
 		return
 	}
+	decidedBy := query.Get("decided_by")
+	switch decidedBy {
+	case "", store.DecidedByRules, store.DecidedByAI, store.DecidedByAgent:
+	default:
+		writeError(response, http.StatusBadRequest, "invalid_request", "decided_by is rules, ai or agent.")
+		return
+	}
 	limit := 0
 	if raw := query.Get("limit"); raw != "" {
 		value, err := strconv.Atoi(raw)
@@ -84,7 +95,7 @@ func (a *API) listIntakeGatherings(response http.ResponseWriter, request *http.R
 		}
 		limit = value
 	}
-	page, err := a.store.IntakeGatherings(request.Context(), principal(request).Workspace.ID, list, channel, scope, query.Get("cursor"), limit)
+	page, err := a.store.IntakeGatherings(request.Context(), principal(request).Workspace.ID, list, channel, scope, decidedBy, query.Get("cursor"), limit)
 	if err != nil {
 		writeIntakeError(response, err)
 		return
@@ -98,7 +109,7 @@ func (a *API) getIntakeGathering(response http.ResponseWriter, request *http.Req
 		writeIntakeError(response, store.ErrGatheringNotFound)
 		return
 	}
-	detail, err := a.store.IntakeGatheringByID(request.Context(), principal(request).Workspace.ID, id)
+	detail, err := a.store.IntakeGatheringByID(request.Context(), principal(request).Workspace.ID, id, a.now())
 	if err != nil {
 		writeIntakeError(response, err)
 		return
@@ -123,7 +134,7 @@ func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.
 		needs = auth.PermMessagesSend
 	}
 	if who.IsToken() && !who.Allows(needs) {
-		card, err := a.store.IntakeGatheringByID(request.Context(), who.Workspace.ID, id)
+		card, err := a.store.IntakeGatheringByID(request.Context(), who.Workspace.ID, id, a.now())
 		if err != nil {
 			writeIntakeError(response, err)
 			return
@@ -136,9 +147,9 @@ func (a *API) decideIntakeGathering(response http.ResponseWriter, request *http.
 	if who.IsToken() {
 		actor.TokenID = who.SessionID
 	}
-	a.decideOnce(response, request, decideIntakeOperation, []string{input.Action, input.ConversationID, input.Command, input.Subject}, func(ctx context.Context) error {
+	a.decideOnce(response, request, decideIntakeOperation, []string{input.Action, input.ConversationID, input.Command, input.Subject, input.IgnoreReason}, func(ctx context.Context) error {
 		_, err := a.intakeService().Decide(ctx, who.Workspace.ID, id, intake.Decision{Action: input.Action, ConversationID: input.ConversationID,
-			Command: input.Command, Subject: input.Subject}, store.DecidedByAgent, actor)
+			Command: input.Command, Subject: input.Subject, IgnoreReason: input.IgnoreReason}, store.DecidedByAgent, actor)
 		return err
 	})
 }
@@ -151,7 +162,7 @@ func (a *API) decideOnce(response http.ResponseWriter, request *http.Request, op
 			writeIntakeError(response, err)
 			return nil, errAnswered
 		}
-		card, err := a.store.IntakeGatheringByID(ctx, principal(request).Workspace.ID, request.PathValue("id"))
+		card, err := a.store.IntakeGatheringByID(ctx, principal(request).Workspace.ID, request.PathValue("id"), a.now())
 		if err != nil {
 			writeIntakeError(response, err)
 			return nil, errAnswered
@@ -165,7 +176,11 @@ type intakeDecisionInput struct {
 	ConversationID string `json:"conversation_id"`
 	Command        string `json:"command"`
 	Subject        string `json:"subject"`
+	IgnoreReason   string `json:"ignore_reason"`
 }
+
+// ignoreReasons are why a person may say a card is set aside.
+var ignoreReasons = []string{"chat", "handled_in_chat", "duplicate", "other"}
 
 func readIntakeDecision(response http.ResponseWriter, request *http.Request) ([]byte, intakeDecisionInput, bool) {
 	var input intakeDecisionInput
@@ -176,11 +191,13 @@ func readIntakeDecision(response http.ResponseWriter, request *http.Request) ([]
 	case input.Action == intake.Attach && !uuidShape.MatchString(input.ConversationID):
 	case input.Action != intake.Attach && input.ConversationID != "":
 	case input.Action != intake.Create && (input.Command != "" || input.Subject != ""):
+	case input.IgnoreReason != "" && (input.Action != intake.Ignore || !slices.Contains(ignoreReasons, input.IgnoreReason)):
 	case len([]rune(input.Subject)) > 200 || len(input.Command) > 40:
 	default:
 		return body, input, true
 	}
-	writeError(response, http.StatusBadRequest, "invalid_request", "Send action: create (with an optional command and subject), attach with conversation_id, or ignore.")
+	writeError(response, http.StatusBadRequest, "invalid_request",
+		"Send action: create (with an optional command and subject), attach with conversation_id, or ignore (with an optional ignore_reason: chat, handled_in_chat, duplicate or other).")
 	return nil, input, false
 }
 
@@ -199,6 +216,15 @@ func (a *API) requeueIntakeGathering(response http.ResponseWriter, request *http
 		_, err := a.intakeService().Requeue(ctx, who.Workspace.ID, id, actor)
 		return err
 	})
+}
+
+func (a *API) getIntakeSummary(response http.ResponseWriter, request *http.Request) {
+	summary, err := a.store.IntakeSummaryOf(request.Context(), principal(request).Workspace.ID)
+	if err != nil {
+		writeIntakeError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, summary)
 }
 
 func (a *API) getIntakeStats(response http.ResponseWriter, request *http.Request) {

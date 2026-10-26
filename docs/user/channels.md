@@ -143,21 +143,33 @@ decide in time, the rules' decision applies (the card says **fallback**), and no
 A card behind one of the same customer that waits for a person waits right after it, and goes back to
 be decided once that one is.
 
+A card names the chat place it was said in, what the rules decided and whether they had evidence (a
+command, a reply to a message of a conversation: **match**) or decided by default. While it waits, it lists
+the conversations it may join without the reply going to someone else: in a group, the open or pending
+conversations of that group active in the last 72 hours; in a one-to-one chat, that customer's on the same
+channel; then the ones resolved within the reopen window (7 days unless the channel's intake settings say
+otherwise), which reopen when a card joins them. A closed conversation is never offered.
+
 A person decides a card: **open a conversation** with what it said, as one message (never joining a
 conversation found since; optionally with one of the channel's commands, for its tags and priority, and a
-subject), **add it** to a conversation, or **set it aside** (it stays held and can be put back). Deciding
+subject), **add it** to a conversation, or **set it aside** (it stays held and can be put back), saying why
+if they like: not a request, answered in the chat, said already, or another reason. Deciding
 the same way twice changes nothing; once a card is decided, another decision is refused and says how it
 was decided. Messages of a card are decided in the queue, not one by one as held messages; only what was
 set aside can be discarded with the held messages. Email and web forms have no cards: every message is
 decided by the channel's rules, as before.
 
 For AI agents and the API: `GET /api/v1/intake/gatherings` (`state=review`, `deciding`, `ignored` or
-`decided`, `channel_id`, `scope`), `GET /api/v1/intake/gatherings/{id}`, `POST
-/api/v1/intake/gatherings/{id}/decide` (`action` `create`, `attach` with `conversation_id`, or `ignore`),
-`POST /api/v1/intake/gatherings/{id}/requeue`, `GET /api/v1/intake/stats` and `GET
+`decided`, `channel_id`, `scope`, `decided_by` `rules`, `ai` or `agent`), `GET
+/api/v1/intake/gatherings/{id}` (with `candidates` and `commands`), `POST
+/api/v1/intake/gatherings/{id}/decide` (`action` `create`, `attach` with `conversation_id`, or `ignore`
+with an optional `ignore_reason` `chat`, `handled_in_chat`, `duplicate` or `other`), `POST
+/api/v1/intake/gatherings/{id}/requeue`, `GET /api/v1/intake/summary` (how many cards wait for a person
+and for AI, and the channels and scopes they come from), `GET /api/v1/intake/stats` and `GET
 /api/v1/conversations/{id}/intake` (why each message is in a conversation), and the MCP tools
 `colliedesk_intake_list`, `colliedesk_intake_get`, `colliedesk_intake_decide`, `colliedesk_intake_requeue`,
-`colliedesk_intake_stats` and `colliedesk_conversation_intake_get`. Reading cards needs `messages:read`;
+`colliedesk_intake_summary`, `colliedesk_intake_stats` and `colliedesk_conversation_intake_get`. Reading
+cards needs `messages:read`, the summary and counts `conversations:read`;
 opening a conversation from one needs the send tier (the channel may tell the customer it was received),
 the other decisions the draft tier; below it, a decision becomes a [request a person
 approves](agent-requests.md). Through the API, send the same `Idempotency-Key` header on every retry of one

@@ -183,6 +183,7 @@ var toolDocs = map[string]string{
 	"colliedesk_intake_get":                         "Reads an intake card with what its customer said and every decision made on it",
 	"colliedesk_intake_decide":                      "Opens a conversation from an intake card, adds it to one, or sets it aside",
 	"colliedesk_intake_requeue":                     "Puts an intake card that was set aside back in the queue",
+	"colliedesk_intake_summary":                     "Says how many intake cards wait for a person and for AI, and the chat channels they come from",
 	"colliedesk_intake_stats":                       "Counts a period of intake: by state, by who decided, and AI's decisions a person changed",
 	"colliedesk_conversation_intake_get":            "Reads why each message from a channel is in a conversation",
 	"colliedesk_channel_threads_list":               "Lists a chat channel's one-to-one chats and groups",

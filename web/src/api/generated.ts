@@ -1171,6 +1171,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/intake/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What the queue holds at a glance, for a badge: whether the workspace has a chat channel with intake (available), how many cards wait for a person (waiting) and for AI (deciding), and every channel and scope a card can come from. Names and counts only, never what a customer wrote. */
+        get: operations["getIntakeSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/intake/stats": {
         parameters: {
             query?: never;
@@ -4804,6 +4821,11 @@ export interface components {
                 /** @enum {string} */
                 action: "create" | "attach" | "review" | "archive";
                 rule: string;
+                /**
+                 * @description match: the batch carried evidence (a command, a reply to a message of a conversation); default: what the scope does without.
+                 * @enum {string}
+                 */
+                basis: "match" | "default";
                 /** Format: uuid */
                 target_conversation_id: string | null;
             };
@@ -4818,6 +4840,8 @@ export interface components {
             decided_at: string | null;
             /** Format: uuid */
             decided_by_agent_id: string | null;
+            /** @description Why a person set it aside, when they said. */
+            ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             /** @description The rules decided because AI did not in time or failed. */
             fallback: boolean;
             /** Format: date-time */
@@ -4835,8 +4859,49 @@ export interface components {
             requeued_by_agent_id: string | null;
             item_count: number;
             sender: components["schemas"]["ChatSender"];
+            /** @description The chat place it was said in: a one-to-one chat or a group, with its name on the channel. */
+            place: {
+                /** @enum {string} */
+                kind: "direct" | "group";
+                name: string | null;
+            } | null;
             /** @description The beginning of what the customer wrote first. */
             preview: string;
+        };
+        /**
+         * @description chat: not a request; handled_in_chat: the team answered it in the chat; duplicate: said in another card or conversation already.
+         * @enum {string}
+         */
+        IntakeIgnoreReason: "chat" | "handled_in_chat" | "duplicate" | "other";
+        /** @description A conversation a card may join without the reply going to someone else: in a group, an open or pending conversation of the same place active in the last 72 hours; in a one-to-one chat, the same customer's on the same channel; then the ones resolved within the reopen window (7 days unless the channel says otherwise). */
+        IntakeCandidate: {
+            /** Format: uuid */
+            conversation_id: string;
+            subject: string;
+            status: components["schemas"]["ConversationStatus"];
+            /** Format: uuid */
+            contact_id: string;
+            contact_name: string;
+            /** Format: uuid */
+            channel_id: string | null;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description Joining it reopens it. */
+            resolved: boolean;
+        };
+        IntakeSummary: {
+            /** @description The workspace has a chat channel whose type collects messages for intake. */
+            available: boolean;
+            /** @description Cards that wait for a person. */
+            waiting: number;
+            /** @description Cards that wait for AI until their time to be decided. */
+            deciding: number;
+            scopes: {
+                /** Format: uuid */
+                channel_id: string;
+                channel_name: string;
+                scope: string;
+            }[];
         };
         ChatSender: {
             kind: string | null;
@@ -4865,6 +4930,8 @@ export interface components {
             /** @description AI's reason; erased 90 days after. */
             reason: string | null;
             applied: boolean;
+            /** @description With ignore: why it was set aside, when the decider said. */
+            ignore_reason: components["schemas"]["IntakeIgnoreReason"] | null;
             not_applied_reason: string | null;
             fallback: boolean;
             /** Format: uuid */
@@ -4879,6 +4946,10 @@ export interface components {
         IntakeGatheringDetail: components["schemas"]["IntakeGathering"] & {
             items: components["schemas"]["ChatItem"][];
             decisions: components["schemas"]["IntakeDecision"][];
+            /** @description Where it may be added, the rules' target first, then the newest; empty once it is decided. */
+            candidates: components["schemas"]["IntakeCandidate"][];
+            /** @description The channel's commands that open a request, for create. */
+            commands: string[];
         };
         IntakeGatheringPage: {
             items: components["schemas"]["IntakeGathering"][];
@@ -4896,6 +4967,7 @@ export interface components {
             command?: string;
             /** @description With create. */
             subject?: string;
+            ignore_reason?: components["schemas"]["IntakeIgnoreReason"];
         };
         IntakeStats: {
             days: number;
@@ -7997,6 +8069,8 @@ export interface components {
                 offset?: number;
                 /** @description Only on channel_has_held: how many messages the channel holds; open or discard them before removing it. */
                 held_count?: number;
+                /** @description Only on channel_has_held: how many of them belong to cards of the intake queue still to be decided; decide those in the queue. */
+                queued_count?: number;
                 /** @description Only on intake_not_supported: the AI features the scope has. */
                 available_slots?: components["schemas"]["AISlotName"][];
                 /** @description Only on channel_name_taken and support_address_taken: the channel of this workspace that has the value. */
@@ -8410,6 +8484,11 @@ export interface components {
                         state: string;
                         /** @enum {string|null} */
                         decided_by: "rules" | "ai" | "agent" | null;
+                        /**
+                         * Format: uuid
+                         * @description The person who decided it.
+                         */
+                        decided_by_agent_id: string | null;
                         /** Format: uuid */
                         conversation_id: string | null;
                     };
@@ -11222,6 +11301,8 @@ export interface operations {
                 state?: "review" | "deciding" | "ignored" | "decided";
                 channel_id?: string;
                 scope?: string;
+                /** @description Only cards decided by the rules, AI or a person (agent); with ignored, decided by ai is what AI set aside. */
+                decided_by?: "rules" | "ai" | "agent";
                 cursor?: string;
                 limit?: number;
             };
@@ -11337,6 +11418,29 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["IntakeGatheringDecided"];
             422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    getIntakeSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntakeSummary"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getIntakeStats: {

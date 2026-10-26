@@ -86,6 +86,7 @@ type IntakeGathering struct {
 	State             string     `json:"state"`
 	ReviewReason      *string    `json:"review_reason"`
 	RulesAction       string     `json:"rules_action"`
+	RulesBasis        string     `json:"rules_basis"`
 	RulesRule         string     `json:"rules_rule"`
 	RulesTarget       *string    `json:"rules_target"`
 	ConversationID    *string    `json:"conversation_id"`
@@ -94,6 +95,7 @@ type IntakeGathering struct {
 	DecidedByAgentID  *string    `json:"decided_by_agent_id"`
 	DecidedByTokenID  *string    `json:"decided_by_token_id"`
 	Fallback          bool       `json:"fallback"`
+	IgnoreReason      *string    `json:"ignore_reason"`
 	OpenedAt          time.Time  `json:"opened_at"`
 	ClosedAt          time.Time  `json:"closed_at"`
 	DecideBy          *time.Time `json:"decide_by"`
@@ -120,6 +122,7 @@ type IntakeDecision struct {
 	Confidence             *float64        `json:"confidence"`
 	Reason                 *string         `json:"reason"`
 	Applied                bool            `json:"applied"`
+	IgnoreReason           *string         `json:"ignore_reason"`
 	NotAppliedReason       *string         `json:"not_applied_reason"`
 	ItemsSeen              []string        `json:"items_seen"`
 	Fallback               bool            `json:"fallback"`

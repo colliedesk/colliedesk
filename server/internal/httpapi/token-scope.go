@@ -345,6 +345,7 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/intake/gatherings/{id}":          grant(auth.PermMessagesRead),
 	"POST " + intakeDecideRoute:                   byHandler(auth.PermConversationsUpdate),
 	"POST /api/v1/intake/gatherings/{id}/requeue": grant(auth.PermConversationsUpdate),
+	"GET /api/v1/intake/summary":                  grant(auth.PermConversationsRead),
 	"GET /api/v1/intake/stats":                    grant(auth.PermConversationsRead),
 	"GET /api/v1/conversations/{id}/intake":       grant(auth.PermMessagesRead),
 	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or

@@ -102,7 +102,13 @@ Email and web forms declare none, so their path gains no row and no query beyond
    back to `deciding` while it is younger than two hours.
 6. **Held readers.** `HeldEvents` and the held replay leave out a gathering's events while it is
    deciding, in review or set aside; `DiscardHeld` may throw away what was set aside, and a gathering
-   whose events are all discarded is `cancelled`. Removing a channel still counts every held event.
+   whose events are all discarded is `cancelled`. Removing a channel still counts every held event, and
+   its refusal says how many are cards still to be decided (`queued_count`).
+7. **Candidates are safe for the reply.** A card offers to join only what a reply would reach the same
+   people through: a group's open or pending conversations active in 72 hours, a one-to-one customer's on
+   the same channel, then resolved ones within `reopen_window_days`; never a closed one. They are built
+   when the card is read, so they include what the card before it just opened. A person may still attach
+   anywhere in the workspace through the API.
 
 ## Chat threads
 

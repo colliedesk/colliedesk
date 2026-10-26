@@ -250,3 +250,140 @@ func TestARepeatedKeyDecidesAnIntakeCardOnce(t *testing.T) {
 		t.Fatalf("a key with a space: %d %s", bad.Code, bad.Body.String())
 	}
 }
+
+// groupConversation writes a conversation of the desk's group g1 (one of its items is linked to it), with
+// a status and its last change hours ago; it returns its id.
+func (d levelDesk) groupConversation(t *testing.T, workspace, channel, subject, status string, hours int) string {
+	t.Helper()
+	return queryString(t, d.pool, `WITH p AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Minh',$3||'@example.com') RETURNING id),
+			c AS (INSERT INTO conversations(workspace_id,contact_id,subject,status,channel_id,updated_at)
+				SELECT $1,p.id,$3,$4,$2,now()-make_interval(hours=>$5) FROM p RETURNING id),
+			i AS (INSERT INTO channel_thread_items(workspace_id,channel_id,thread_id,direction,role,body,disposition,occurred_at)
+				SELECT $1,$2,t.id,'in','customer',$3,'conversation',now() FROM channel_threads t WHERE t.workspace_id=$1 AND t.channel_id=$2 AND t.external_id='group:g1'
+				RETURNING id)
+		INSERT INTO conversation_thread_items(workspace_id,conversation_id,item_id,reason) SELECT $1,c.id,i.id,'opened' FROM c, i RETURNING conversation_id::text`,
+		workspace, channel, subject, status, hours)
+}
+
+// A card shows what a person needs to decide it: the place, what the rules decided and on what basis, the
+// conversations it may join without the reply going to someone else, and the channel's commands. Set
+// aside, it keeps why; the lists narrow by who decided; the summary counts the queue of its workspace only.
+func TestAnIntakeCardSaysWhatAPersonNeedsToDecideIt(t *testing.T) {
+	d := newLevelDesk(t)
+	card := d.heldCard(t, d.workspaceA, d.chatA, "u1", "the stock export fails")
+	if _, err := d.pool.Exec(context.Background(), `UPDATE channel_threads SET name='Kho HD' WHERE workspace_id=$1`, d.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	open := d.groupConversation(t, d.workspaceA, d.chatA, "Printer", "open", 1)
+	resolved := d.groupConversation(t, d.workspaceA, d.chatA, "Invoice", "resolved", 48)
+	closed := d.groupConversation(t, d.workspaceA, d.chatA, "Closed", "closed", 1)
+	quiet := d.groupConversation(t, d.workspaceA, d.chatA, "Quiet", "open", 100)
+	old := d.groupConversation(t, d.workspaceA, d.chatA, "Old", "resolved", 24*8)
+	var got struct {
+		Rules struct {
+			Basis string `json:"basis"`
+		} `json:"rules"`
+		Place *struct {
+			Kind string  `json:"kind"`
+			Name *string `json:"name"`
+		} `json:"place"`
+		IgnoreReason *string `json:"ignore_reason"`
+		Candidates   []struct {
+			ConversationID string `json:"conversation_id"`
+			ContactName    string `json:"contact_name"`
+			Resolved       bool   `json:"resolved"`
+		} `json:"candidates"`
+		Commands  []string `json:"commands"`
+		Decisions []struct {
+			IgnoreReason *string `json:"ignore_reason"`
+		} `json:"decisions"`
+	}
+	read := func() {
+		t.Helper()
+		response := request(t, d.api, http.MethodGet, "/api/v1/intake/gatherings/"+card, nil, d.adminA, nil)
+		got.Candidates, got.Commands = nil, nil
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &got) != nil {
+			t.Fatalf("card: %d %s", response.Code, response.Body.String())
+		}
+	}
+	read()
+	if got.Rules.Basis != "default" || got.Place == nil || got.Place.Kind != "group" || got.Place.Name == nil || *got.Place.Name != "Kho HD" || got.IgnoreReason != nil {
+		t.Fatalf("card = %+v", got)
+	}
+	if len(got.Candidates) != 2 || got.Candidates[0].ConversationID != open || got.Candidates[1].ConversationID != resolved || !got.Candidates[1].Resolved ||
+		got.Candidates[0].ContactName != "Minh" {
+		t.Fatalf("candidates = %+v (closed %s, quiet %s, old %s)", got.Candidates, closed, quiet, old)
+	}
+	if strings.Join(got.Commands, ",") != "bug" {
+		t.Fatalf("commands = %v", got.Commands)
+	}
+	decide := func(body map[string]any) *httptestResponse {
+		response := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+"/decide", body, d.adminA, nil)
+		return &httptestResponse{Code: response.Code, Body: response.Body.String()}
+	}
+	for _, bad := range []map[string]any{{"action": "create", "ignore_reason": "chat"}, {"action": "ignore", "ignore_reason": "spam"}} {
+		if response := decide(bad); response.Code != http.StatusBadRequest {
+			t.Fatalf("%v: %+v", bad, response)
+		}
+	}
+	if response := decide(map[string]any{"action": "ignore", "ignore_reason": "handled_in_chat"}); response.Code != http.StatusOK {
+		t.Fatalf("ignore: %+v", response)
+	}
+	read()
+	if got.IgnoreReason == nil || *got.IgnoreReason != "handled_in_chat" || len(got.Decisions) != 1 || got.Decisions[0].IgnoreReason == nil ||
+		*got.Decisions[0].IgnoreReason != "handled_in_chat" || len(got.Candidates) != 0 {
+		t.Fatalf("set aside = %+v", got)
+	}
+	conflict := decide(map[string]any{"action": "create"})
+	if conflict.Code != http.StatusConflict || !strings.Contains(conflict.Body, `"decided_by_agent_id":"`+agentIDOf(t, d.api, d.adminA)+`"`) {
+		t.Fatalf("another decision: %+v", conflict)
+	}
+	for path, want := range map[string]bool{"state=ignored&decided_by=agent": true, "state=ignored&decided_by=ai": false, "state=decided&decided_by=agent": true} {
+		response := request(t, d.api, http.MethodGet, "/api/v1/intake/gatherings?"+path, nil, d.adminA, nil)
+		if response.Code != http.StatusOK || strings.Contains(response.Body.String(), card) != want {
+			t.Fatalf("%s: %d %s", path, response.Code, response.Body.String())
+		}
+	}
+	if response := request(t, d.api, http.MethodGet, "/api/v1/intake/gatherings?decided_by=person", nil, d.adminA, nil); response.Code != http.StatusBadRequest {
+		t.Fatalf("decided_by=person: %d", response.Code)
+	}
+	d.heldCard(t, d.workspaceA, d.chatA, "u2", "the printer is down")
+	var summary struct {
+		Available bool `json:"available"`
+		Waiting   int  `json:"waiting"`
+		Deciding  int  `json:"deciding"`
+		Scopes    []struct {
+			ChannelID string `json:"channel_id"`
+			Scope     string `json:"scope"`
+		} `json:"scopes"`
+	}
+	response := request(t, d.api, http.MethodGet, "/api/v1/intake/summary", nil, d.adminA, nil)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &summary) != nil || !summary.Available || summary.Waiting != 1 || summary.Deciding != 0 ||
+		len(summary.Scopes) != 1 || summary.Scopes[0].ChannelID != d.chatA || summary.Scopes[0].Scope != "group" {
+		t.Fatalf("A's summary: %d %s", response.Code, response.Body.String())
+	}
+	response = request(t, d.api, http.MethodGet, "/api/v1/intake/summary", nil, d.adminB, nil)
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), d.chatA) || !strings.Contains(response.Body.String(), `"waiting":0`) {
+		t.Fatalf("B's summary: %d %s", response.Code, response.Body.String())
+	}
+}
+
+// A channel with cards of the intake queue still to be decided is not removed, and the refusal says how
+// many of its held messages are decided in the queue rather than opened or discarded one by one.
+func TestRemovingAChannelSaysWhichHeldMessagesAreCardsOfTheQueue(t *testing.T) {
+	d := newLevelDesk(t)
+	d.heldCard(t, d.workspaceA, d.chatA, "u1", "the stock export fails")
+	response := request(t, d.api, http.MethodDelete, "/api/v1/channels/"+d.chatA, nil, d.adminA, nil)
+	var refused struct {
+		Error struct {
+			Code        string `json:"code"`
+			HeldCount   int    `json:"held_count"`
+			QueuedCount int    `json:"queued_count"`
+			Message     string `json:"message"`
+		} `json:"error"`
+	}
+	if response.Code != http.StatusConflict || json.Unmarshal(response.Body.Bytes(), &refused) != nil || refused.Error.Code != "channel_has_held" ||
+		refused.Error.HeldCount != 1 || refused.Error.QueuedCount != 1 || !strings.Contains(refused.Error.Message, "queue") {
+		t.Fatalf("remove: %d %s", response.Code, response.Body.String())
+	}
+}

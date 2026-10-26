@@ -80,9 +80,12 @@ window was cut twice instead of raising the budget: 20,000 conversations took 16
 ## Intake queue budget
 
 `TestIntakeQueueLatencyBudget` holds the store calls behind the intake queue to 100 ms p95 for a page
-of 50 cards (`IntakeGatherings`: review, decided, and review of one channel and scope) and 20 ms p95 for
-one card with its items and decisions (`IntakeGatheringByID`). The fixture is two workspaces with
-20,000 gatherings of three chat items each (a quarter waiting) in 200 groups. Five warm-up calls, then 40
+of 50 cards (`IntakeGatherings`: review, decided, review of one channel and scope, decided by the
+rules) and 20 ms p95 for one card with its items, decisions and the 30 conversations it may join
+(`IntakeGatheringByID`) and for the queue's summary (`IntakeSummaryOf`). The fixture is two workspaces
+with 20,000 gatherings of three chat items each (a quarter waiting) in 200 groups, and the card's group
+has 300 conversations. The candidates start from the group's items (`channel_thread_items_thread`), never
+from the workspace's conversations. Five warm-up calls, then 40
 timed. A card and its items are found by uuid: comparing `id::text` to a parameter skips the index and
 took 17 ms on the dev host; the uuid compare takes 2 ms. Do not widen either budget.
 

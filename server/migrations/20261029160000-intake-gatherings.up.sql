@@ -15,6 +15,8 @@ CREATE TABLE intake_gatherings (
         'lane_blocked', 'requeued', 'gate_closed')),
     -- What the rules decided when it closed: what a gathering falls back on when AI does not decide.
     rules_action text NOT NULL CHECK (rules_action IN ('create', 'attach', 'review', 'archive')),
+    -- match: the batch carried evidence (a command, a reference); default: what the scope does without.
+    rules_basis text NOT NULL DEFAULT 'default' CHECK (rules_basis IN ('match', 'default')),
     rules_rule text NOT NULL CHECK (rules_rule ~ '^[a-z_]{1,40}$'),
     rules_target uuid,
     -- The conversation it opened or joined.
@@ -25,6 +27,8 @@ CREATE TABLE intake_gatherings (
     decided_by_token_id uuid,
     -- The rules decided because AI did not in time, failed or was out of its limit.
     fallback boolean NOT NULL DEFAULT false,
+    -- Why a person set it aside.
+    ignore_reason text CHECK (ignore_reason IN ('chat', 'handled_in_chat', 'duplicate', 'other')),
     opened_at timestamptz NOT NULL,
     closed_at timestamptz NOT NULL,
     -- Until when AI may decide; past it the rules' decision applies.
@@ -76,6 +80,7 @@ CREATE TABLE intake_decisions (
     -- The model's reason, erased 90 days after.
     reason text CHECK (char_length(reason) <= 2000),
     applied boolean NOT NULL,
+    ignore_reason text CHECK (ignore_reason IN ('chat', 'handled_in_chat', 'duplicate', 'other')),
     not_applied_reason text CHECK (not_applied_reason IN ('level_suggest', 'below_threshold', 'too_old', 'credential', 'person_first',
         'target_changed', 'lane_blocked', 'gate_closed', 'limit', 'error')),
     -- The journal events it was decided on: it applies only while the gathering still has exactly these.
