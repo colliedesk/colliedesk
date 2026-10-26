@@ -574,6 +574,34 @@ func TestBrokenPicturesNeitherReachTheModelNorPauseIntake(t *testing.T) {
 	}
 }
 
+// Each customer's message in a group conversation says who wrote it, as the chat named them.
+func TestAGroupConversationNamesWhoWroteEachMessage(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Name: "Lan Nguyen", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.95})
+	d.runAI(t)
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Name: "Minh Tran", Group: "g1", Text: "same here"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "attach", "target": "C1", "confidence": 0.95})
+	d.runAI(t)
+	conversation := d.one(t, `SELECT conversation_id::text FROM intake_gatherings WHERE workspace_id=$1 AND state='created'`)
+	messages, err := d.store.ListMessages(context.Background(), d.workspaceID, conversation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, message := range messages {
+		if message.Kind == "incoming" && message.AuthorName != nil {
+			names = append(names, *message.AuthorName)
+		}
+	}
+	if strings.Join(names, ",") != "Lan Nguyen,Minh Tran" {
+		t.Fatalf("authors = %v", names)
+	}
+}
+
 // A thank-you AI joins to a resolved conversation keeps it resolved and asks for no automatic draft; what
 // adds something to it reopens it.
 func TestAThankYouKeepsAResolvedConversationResolved(t *testing.T) {
