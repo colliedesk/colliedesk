@@ -64,7 +64,7 @@ type redactor struct {
 	hintPattern  *regexp.Regexp
 	otpWords     []string
 	// labelOnly is a line that is a credential label and nothing after it ("password:", a label and a
-	// few words); beforeLabel is a value a few plain words before a label near the end of the sentence.
+	// few words); beforeLabel is a password opening the line, a few plain words before a label near its end.
 	labelOnly   *regexp.Regexp
 	beforeLabel *regexp.Regexp
 }
@@ -84,7 +84,7 @@ func newRedactor(keywords []string) *redactor {
 		hintPattern:  regexp.MustCompile(`(?i)(?:^|[^\p{L}\p{N}])(?:` + quoteAll(hints) + `)(?:[^\p{L}\p{N}]|$)`),
 		otpWords:     otp,
 		labelOnly:    regexp.MustCompile(`(?i)^\s*(?:\p{L}+\s+){0,2}(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[:=]?\s*$`),
-		beforeLabel:  regexp.MustCompile(`(?i)(^|\s)(\S+)((?:\s+\p{L}+){0,3}\s+(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[.!?]?\s*)$`),
+		beforeLabel:  regexp.MustCompile(`(?i)^(\s*)(\S+)((?:\s+\p{L}+){0,3}\s+(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[.!?]?\s*)$`),
 	}
 }
 
@@ -347,14 +347,16 @@ func secretAfter(line string, from int) (int, int, bool) {
 	return 0, 0, false
 }
 
-// hideBeforeLabel hides a password written before its label: "Abc@12345 is my password (of the shop)".
+// hideBeforeLabel hides a password that opens the line before its label: "Abc@12345 is my password (of the shop)". Only
+// a word shaped like a password (a symbol, or nine or more mixed-case letters and digits) counts, so an order code,
+// a model or a file name near a label stays.
 func (r *redactor) hideBeforeLabel(line string, kind *lineKind) string {
 	m := r.beforeLabel.FindStringSubmatchIndex(line)
 	if m == nil {
 		return line
 	}
 	value := strings.Trim(line[m[4]:m[5]], quoteEdges)
-	if !passwordShaped(value) || emailPattern.MatchString(value) || urlPattern.MatchString(value) {
+	if !mixedSecret(value, 9) || urlPattern.MatchString(value) {
 		return line
 	}
 	*kind = labelledPassword
@@ -398,12 +400,13 @@ func (r *redactor) hideCodes(line string, kind *lineKind) string {
 	return out.String()
 }
 
-// standsAlone is false for digits that belong to a longer figure: a decimal, a date, a range.
+// standsAlone is false for digits that belong to a longer figure (a decimal, a date, a range) or to a
+// word (an order code SO2026001, a file name report2026.pdf).
 func standsAlone(runes []rune, start, end int) bool {
-	if start > 0 && strings.ContainsRune(".,/-", runes[start-1]) {
+	if start > 0 && (strings.ContainsRune(".,/-", runes[start-1]) || unicode.IsLetter(runes[start-1])) {
 		return false
 	}
-	if end < len(runes) && strings.ContainsRune("/-", runes[end]) {
+	if end < len(runes) && (strings.ContainsRune("/-", runes[end]) || unicode.IsLetter(runes[end])) {
 		return false
 	}
 	return end+1 >= len(runes) || !strings.ContainsRune(".,", runes[end]) || !unicode.IsDigit(runes[end+1])

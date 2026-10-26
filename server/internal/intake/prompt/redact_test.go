@@ -154,6 +154,12 @@ func TestRedactHidesAPasswordNextToALabelOnItsOwn(t *testing.T) {
 		"order SO2026001 is late":                  "order SO2026001 is late",
 		"my password is wrong":                     "my password is wrong",
 		"call me at 0912345678 please":             "call me at 0912345678 please",
+		// A code, a model or a file name near a label is no password.
+		"Đơn SO2026001 cần đổi mật khẩu gấp":        "Đơn SO2026001 cần đổi mật khẩu gấp",
+		"SO2026001 cần đổi mật khẩu":                "SO2026001 cần đổi mật khẩu",
+		"iPhone15 quên mật khẩu rồi giúp tôi":       "iPhone15 quên mật khẩu rồi giúp tôi",
+		"Máy iPhone15 bị quên mã pin của tôi":       "Máy iPhone15 bị quên mã pin của tôi",
+		"file report2026.pdf chứa mật khẩu của tôi": "file report2026.pdf chứa mật khẩu của tôi",
 	} {
 		if got, _ := redactOne(viKeywords, in); got != want {
 			t.Errorf("redact(%q) = %q, want %q", in, got, want)
