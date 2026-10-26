@@ -114,6 +114,14 @@ type ChannelAISlot struct {
 	OffReason      *string `json:"off_reason"`
 	// Options are intake's settings on this scope, with the defaults filled in; null for other features.
 	Options *IntakeOptions `json:"options"`
+	// Lowered is the server's last lowering of this scope's level, while no person changed it since.
+	Lowered *Lowered `json:"lowered"`
+}
+
+// Lowered says when and why the server lowered a level: model_changed or recipient_changed.
+type Lowered struct {
+	At     time.Time `json:"at"`
+	Reason string    `json:"reason"`
 }
 
 // ChannelLevelInput sets one feature's level on a scope of a channel. A nil Level removes the
@@ -534,6 +542,10 @@ func (s *Service) channelAI(ctx context.Context, tx pgx.Tx, workspaceID string, 
 	if err != nil {
 		return result, err
 	}
+	lowered, err := lastLowerings(ctx, tx, workspaceID, channel.ID)
+	if err != nil {
+		return result, err
+	}
 	for _, scope := range channel.ScopesShown() {
 		entry := ChannelAIScope{Scope: scope, Slots: []ChannelAISlot{}}
 		for _, slot := range channel.SlotsOf(scope) {
@@ -552,6 +564,7 @@ func (s *Service) channelAI(ctx context.Context, tx pgx.Tx, workspaceID string, 
 				options := intakeOptionsOf(levels, scope).Effective()
 				item.Options = &options
 			}
+			item.Lowered = lowered[[2]string{scope, slot}]
 			entry.Slots = append(entry.Slots, item)
 		}
 		result.Scopes = append(result.Scopes, entry)
@@ -714,7 +727,7 @@ func normalJSON(raw json.RawMessage) []byte {
 }
 
 // recordChannelLevel writes a level change to the AI history and to the channel's. reason is empty
-// for a person's change, else why the server changed it (recipient_changed).
+// for a person's change, else why the server changed it (recipient_changed, model_changed).
 func recordChannelLevel(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, channel ChannelRef, scope, slot string, before, after any,
 	optionsChanged bool, reason string, now time.Time) error {
 	detail := map[string]any{"channel_id": channel.ID, "channel_name": channel.Name, "scope": scope, "slot": slot,
@@ -768,6 +781,31 @@ func lowerChannelLevels(ctx context.Context, tx pgx.Tx, workspaceID string, acto
 		}
 	}
 	return nil
+}
+
+// lastLowerings is, per scope and feature of a channel, the server's lowering of its level when it is
+// the last change of it (a person's change since clears it).
+func lastLowerings(ctx context.Context, tx pgx.Tx, workspaceID, channelID string) (map[[2]string]*Lowered, error) {
+	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (detail->>'scope',detail->>'slot') detail->>'scope',detail->>'slot',detail->>'reason',created_at
+		FROM channel_events WHERE workspace_id=$1 AND channel_id=$2::uuid AND kind='ai_changed'
+		ORDER BY detail->>'scope',detail->>'slot',created_at DESC,id DESC`, workspaceID, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	lowered := map[[2]string]*Lowered{}
+	for rows.Next() {
+		var scope, slot string
+		var reason *string
+		var at time.Time
+		if err := rows.Scan(&scope, &slot, &reason, &at); err != nil {
+			return nil, err
+		}
+		if reason != nil && *reason != "" {
+			lowered[[2]string{scope, slot}] = &Lowered{At: at.UTC(), Reason: *reason}
+		}
+	}
+	return lowered, rows.Err()
 }
 
 // channelLevels lists the levels channels set, for Settings → Built-in AI.

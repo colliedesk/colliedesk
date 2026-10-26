@@ -4830,6 +4830,13 @@ export interface components {
                     off_reason: "workspace_off" | null;
                     /** @description Intake only, with the defaults filled in. */
                     options: components["schemas"]["IntakeOptions"] | null;
+                    /** @description The server's last lowering of this level, while no person changed it since: model_changed (the feature moved to another model) or recipient_changed (to another provider). */
+                    lowered?: {
+                        /** Format: date-time */
+                        at: string;
+                        /** @enum {string} */
+                        reason: "model_changed" | "recipient_changed";
+                    } | null;
                 }[];
             }[];
         };

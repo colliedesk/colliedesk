@@ -8226,6 +8226,13 @@ components:
                     source: {type: string, enum: [scope, channel, workspace], description: Where the level that runs is set.}
                     off_reason: {type: [string, 'null'], enum: [workspace_off, null]}
                     options: {anyOf: [{$ref: '#/components/schemas/IntakeOptions'}, {type: 'null'}], description: 'Intake only, with the defaults filled in.'}
+                    lowered:
+                      type: [object, 'null']
+                      required: [at, reason]
+                      description: 'The server''s last lowering of this level, while no person changed it since: model_changed (the feature moved to another model) or recipient_changed (to another provider).'
+                      properties:
+                        at: {type: string, format: date-time}
+                        reason: {type: string, enum: [model_changed, recipient_changed]}
     ChatItem:
       type: object
       required: [id, thread_id, direction, role, sender, contact_id, agent_id, is_other_customer, body, external_id, quote_external_id, message_id, disposition, disposition_reason, occurred_at, files, linked, link_reason]

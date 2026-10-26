@@ -273,7 +273,8 @@ decided like any other.
 ## When AI acts on its own
 
 At **Auto**, intake's AI opens, joins or sets aside a card by itself only for an action its labels show it
-gets right on that channel's scope; any other action stays a suggestion on the card and the rules decide
+gets right on that channel's scope (it never writes to the customer: a conversation it opens sends the
+channel's own received notice, if it has one, as when the rules open one); any other action stays a suggestion on the card and the rules decide
 at once. Labels are only explicit ones: a person who decides a card as AI suggested (it was right), decides
 otherwise or moves the messages AI placed (it was wrong), and offline evaluations an operator recorded for
 the model intake runs and this server's prompt version (`collie intake-eval`). A decision nobody looked at counts for nothing: silence

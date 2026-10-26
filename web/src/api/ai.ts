@@ -80,6 +80,8 @@ const channelAISchema = z.object({
     slots: z.array(z.object({
       slot: aiSlotNameSchema, level: aiLevelSchema.nullable(), effective_level: aiLevelSchema, source: z.enum(['scope', 'channel', 'workspace']),
       off_reason: z.enum(['workspace_off']).nullable(), options: intakeOptionsSchema.nullable(),
+      // The server's last lowering of the level; an older server sends nothing.
+      lowered: z.object({ at: z.string().datetime(), reason: z.enum(['model_changed', 'recipient_changed']) }).nullable().optional(),
     })),
   })),
 }) satisfies z.ZodType<JsonResponse<'getChannelAI', 200>>;

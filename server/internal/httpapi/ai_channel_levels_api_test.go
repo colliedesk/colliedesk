@@ -587,6 +587,19 @@ func TestAnotherModelLowersIntakeOnly(t *testing.T) {
 	if got := queryString(t, d.pool, `SELECT count(*)::text FROM channel_events WHERE workspace_id=$1 AND kind='ai_changed' AND detail->>'reason'='model_changed'`, d.workspaceA); got != "1" {
 		t.Fatalf("channel model_changed events = %s", got)
 	}
+	// The channel says when and why the server lowered it, until a person changes the level again.
+	if item, _ := effective(levels, "group", "intake"); item.Lowered == nil || item.Lowered.Reason != "model_changed" {
+		t.Fatalf("intake lowered = %+v", item.Lowered)
+	}
+	if item, _ := effective(levels, "group", "triage"); item.Lowered != nil {
+		t.Fatalf("triage lowered = %+v", item.Lowered)
+	}
+	if response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "off"}); response.Code != http.StatusOK {
+		t.Fatalf("a person turns intake off: %+v", response)
+	}
+	if item, _ := effective(d.levels(t, d.adminA, d.chatA), "group", "intake"); item.Lowered != nil {
+		t.Fatalf("lowered after a person's change = %+v", item.Lowered)
+	}
 }
 
 // Right at 16 KiB, options are either kept or refused with the limit named, never refused by the
