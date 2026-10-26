@@ -17,7 +17,7 @@ import (
 )
 
 // Version names the frame's instructions and layout; every decision records it.
-const Version = "intake-2026-10-26.2"
+const Version = "intake-2026-10-26.3"
 
 // The sources the frame builds (docs/internals/intake.md "What AI reads").
 const (

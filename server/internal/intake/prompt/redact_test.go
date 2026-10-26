@@ -120,6 +120,45 @@ func TestRedactHidesALoginAndPasswordSentAsTwoMessages(t *testing.T) {
 	}
 }
 
+// A label on its own (a message, or a line, that is nothing but "password:" or "mật khẩu là") opens the
+// next message or line of the same sender, and a password written before its label is hidden too.
+func TestRedactHidesAPasswordNextToALabelOnItsOwn(t *testing.T) {
+	tests := []struct {
+		name    string
+		in      []string
+		want    []string
+		changed []bool
+	}{
+		{"a keyword, then the password", []string{"mật khẩu", "Matkhau123"}, []string{"mật khẩu", hidden}, []bool{false, true}},
+		{"a keyword and a colon, then the password", []string{"Mật khẩu:", "Matkhau@123"}, []string{"Mật khẩu:", hidden}, []bool{false, true}},
+		{"a keyword with a word after it", []string{"mật khẩu là", "Hunter2024"}, []string{"mật khẩu là", hidden}, []bool{false, true}},
+		{"an English label and a colon", []string{"password:", "Hunter2024"}, []string{"password:", hidden}, []bool{false, true}},
+		{"a PIN after its label", []string{"PIN:", "4821"}, []string{"PIN:", hidden}, []bool{false, true}},
+		{"a label on its own line in one message", []string{"password:\nHunter2024"}, []string{"password:\n" + hidden}, []bool{true}},
+		{"talk after a label stays", []string{"password:", "it does not work"}, []string{"password:", "it does not work"}, []bool{false, false}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, changed := newRedactor(viKeywords).sequence(tc.in)
+			if !slices.Equal(got, tc.want) || !slices.Equal(changed, tc.changed) {
+				t.Errorf("sequence(%q) = (%q, %v), want (%q, %v)", tc.in, got, changed, tc.want, tc.changed)
+			}
+		})
+	}
+	for in, want := range map[string]string{
+		"Abc@12345 is my password":     hidden + " is my password",
+		"Abc@12345 là mật khẩu":        hidden + " là mật khẩu",
+		"Hunter2024 is the password.":  hidden + " is the password.",
+		"order SO2026001 is late":      "order SO2026001 is late",
+		"my password is wrong":         "my password is wrong",
+		"call me at 0912345678 please": "call me at 0912345678 please",
+	} {
+		if got, _ := redactOne(viKeywords, in); got != want {
+			t.Errorf("redact(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestRedactNeverLeavesANulByte(t *testing.T) {
 	for _, in := range []string{"error \x001\x00 at https://x.test/a", "\x000\x00", "https://x.test/\x00" + "7\x00", "\x00"} {
 		if got, _ := redactOne(nil, in); strings.Contains(got, "\x00") {

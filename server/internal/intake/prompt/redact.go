@@ -63,6 +63,10 @@ type redactor struct {
 	labelWord    *regexp.Regexp
 	hintPattern  *regexp.Regexp
 	otpWords     []string
+	// labelOnly is a line that is a credential label and nothing after it ("password:", a label and a
+	// few words); beforeLabel is a value a few plain words before a label that ends the sentence.
+	labelOnly   *regexp.Regexp
+	beforeLabel *regexp.Regexp
 }
 
 // newRedactor builds the patterns from the frame's words and the channel's keywords (words of its
@@ -79,6 +83,8 @@ func newRedactor(keywords []string) *redactor {
 		labelWord:    regexp.MustCompile(`(?i)^(?:` + alternatives + `)$`),
 		hintPattern:  regexp.MustCompile(`(?i)(?:^|[^\p{L}\p{N}])(?:` + quoteAll(hints) + `)(?:[^\p{L}\p{N}]|$)`),
 		otpWords:     otp,
+		labelOnly:    regexp.MustCompile(`(?i)^\s*(?:\p{L}+\s+){0,2}(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[:=]?\s*$`),
+		beforeLabel:  regexp.MustCompile(`(?i)(^|\s)(\S+)((?:\s+\p{L}+){0,3}\s+(?:` + alternatives + `)\s*[.!?]?\s*)$`),
 	}
 }
 
@@ -154,7 +160,9 @@ func (r *redactor) lines(lines []string) []bool {
 	whole := make([]bool, len(lines))
 	login := make([]bool, len(lines))
 	changed := make([]bool, len(lines))
+	opened := make([]bool, len(lines))
 	for i, line := range lines {
+		opened[i] = r.labelOnly.MatchString(line)
 		out, kind := r.line(line)
 		if out != line {
 			changed[i] = true
@@ -172,6 +180,14 @@ func (r *redactor) lines(lines []string) []bool {
 		next := nextContentLine(lines, i)
 		if next < 0 {
 			break
+		}
+		// A label on its own opens the next line: "password:", then the password.
+		if opened[i] && !whole[next] {
+			if rest := strings.TrimSpace(lines[next]); bareSecret(rest) || allDigits(rest) && len(rest) >= 4 && len(rest) <= 12 {
+				lines[next], whole[next], changed[next] = hidden, true, true
+				hideMorePasswords(lines, whole, changed, next)
+				continue
+			}
 		}
 		if whole[i] || whole[next] {
 			continue
@@ -224,6 +240,7 @@ func (r *redactor) line(line string) (string, lineKind) {
 		return hidden, loginLine
 	}
 	kind := plainLine
+	masked = r.hideBeforeLabel(masked, &kind)
 	masked = r.hideLabelled(masked, &kind)
 	masked = r.hideCodes(masked, &kind)
 	for _, pattern := range tokenPatterns {
@@ -328,6 +345,20 @@ func secretAfter(line string, from int) (int, int, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// hideBeforeLabel hides a password written before its label: "Abc@12345 is my password".
+func (r *redactor) hideBeforeLabel(line string, kind *lineKind) string {
+	m := r.beforeLabel.FindStringSubmatchIndex(line)
+	if m == nil {
+		return line
+	}
+	value := strings.Trim(line[m[4]:m[5]], quoteEdges)
+	if !passwordShaped(value) || emailPattern.MatchString(value) || urlPattern.MatchString(value) {
+		return line
+	}
+	*kind = labelledPassword
+	return line[:m[4]] + hidden + line[m[5]:]
 }
 
 // hideCodes hides a one-time code: a 4 to 8 digit number on a line that names a code, or a line that

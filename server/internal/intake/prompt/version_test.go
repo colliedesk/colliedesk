@@ -12,7 +12,7 @@ import (
 // evaluation run counts only for the Version it ran, so a change of what the model reads without a new
 // Version would credit a run of the old prompt to the new one.
 var promptPrints = map[string]string{
-	"intake-2026-10-26.2": "63835f30370b6aebf36fa490bb7f013a82ae70d1e750c33ce0631e442b957fbb 26f7e29b24ed43ce999a16750fe5e1d19d342708fa8df46e8f2fe45820e3a69e",
+	"intake-2026-10-26.3": "63835f30370b6aebf36fa490bb7f013a82ae70d1e750c33ce0631e442b957fbb 26f7e29b24ed43ce999a16750fe5e1d19d342708fa8df46e8f2fe45820e3a69e",
 }
 
 // When the prompt changes, bump Version and pin the new print here; never change a print in place.
