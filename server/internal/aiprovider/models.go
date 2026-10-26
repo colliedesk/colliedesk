@@ -19,6 +19,34 @@ import (
 // MaxListedModels bounds a model list: OpenRouter offers a few hundred, and a person picks a few.
 const MaxListedModels = 1000
 
+// ImageTaker is an adapter that can say whether a model reads pictures, so a feature sends them only
+// to one that does.
+type ImageTaker interface {
+	TakesImages(ctx context.Context, model string) bool
+}
+
+// TakesImages: every Claude model Colliedesk lists (structured outputs and efforts) reads pictures.
+func (p *anthropicProvider) TakesImages(context.Context, string) bool { return true }
+
+// TakesImages reports whether the server lists the model as reading images (OpenRouter's
+// architecture.input_modalities). A server that does not say, or a list that cannot be read, says no:
+// pictures are then not sent.
+func (p *openAIProvider) TakesImages(ctx context.Context, model string) bool {
+	list := p.modelList(ctx)
+	if list.images[model] {
+		return true
+	}
+	base, _, cut := strings.Cut(model, ":")
+	return cut && list.images[base]
+}
+
+// TakesImages is ImageModels's say; the fake has no list to ask.
+func (f *Fake) TakesImages(_ context.Context, model string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Contains(f.ImageModels, model)
+}
+
 // ModelLister is an adapter that can say which models its key may use, so a person picks a model
 // instead of typing its id. Listing is free at every provider: it is not metered.
 type ModelLister interface {
@@ -115,6 +143,10 @@ type listedModel struct {
 	Reasoning *struct {
 		SupportedEfforts []string `json:"supported_efforts"`
 	} `json:"reasoning"`
+	// Architecture is OpenRouter's: what the model reads ("text", "image", "file"…).
+	Architecture *struct {
+		InputModalities []string `json:"input_modalities"`
+	} `json:"architecture"`
 }
 
 func (p *openAIProvider) listModels(ctx context.Context) ([]listedModel, error) {
@@ -148,15 +180,15 @@ func (p *openAIProvider) listModels(ctx context.Context) ([]listedModel, error) 
 	return parsed.Data, nil
 }
 
-// How long what OpenRouter says of its models' reasoning is kept, and how long a failed ask is.
+// How long what OpenRouter says of its models (reasoning, pictures) is kept, and how long a failed ask is.
 const (
 	reasoningListFor     = time.Hour
 	reasoningListRetryIn = 5 * time.Minute
 	reasoningListTimeout = 5 * time.Second
 )
 
-// reasoningLists keeps, per OpenRouter endpoint, which models reason and at which efforts, so a
-// request asks GET /models at most once an hour (it is public and free).
+// reasoningLists keeps, per OpenRouter endpoint, which models reason and at which efforts and which
+// read pictures, so a request asks GET /models at most once an hour (it is public and free).
 var reasoningLists = struct {
 	sync.Mutex
 	byEndpoint map[string]*reasoningList
@@ -167,11 +199,26 @@ type reasoningList struct {
 	until time.Time
 	// efforts maps a model that reasons to the efforts it takes; nil takes every one.
 	efforts map[string][]string
+	// images holds the models that read pictures.
+	images map[string]bool
 }
 
 // reasonsAt reports whether OpenRouter lists the model as one that reasons at the effort. When the
 // list cannot be read it says no: the request then goes without an effort, as it did before.
 func (p *openAIProvider) reasonsAt(ctx context.Context, model string, effort Effort) bool {
+	list := p.modelList(ctx)
+	efforts, ok := list.efforts[model]
+	if !ok {
+		// A variant (model:nitro, model:floor) reasons as its model does.
+		if base, _, cut := strings.Cut(model, ":"); cut {
+			efforts, ok = list.efforts[base]
+		}
+	}
+	return ok && (efforts == nil || slices.Contains(efforts, string(effort)))
+}
+
+// modelList is what the endpoint says of its models, read at most once an hour; a copy, safe to read.
+func (p *openAIProvider) modelList(ctx context.Context) reasoningList {
 	reasoningLists.Lock()
 	list := reasoningLists.byEndpoint[p.endpoint]
 	if list == nil {
@@ -186,9 +233,9 @@ func (p *openAIProvider) reasonsAt(ctx context.Context, model string, effort Eff
 		listed, err := p.listModels(lookup)
 		cancel()
 		if err != nil {
-			list.efforts, list.until = nil, now.Add(reasoningListRetryIn)
+			list.efforts, list.images, list.until = nil, nil, now.Add(reasoningListRetryIn)
 		} else {
-			list.efforts, list.until = map[string][]string{}, now.Add(reasoningListFor)
+			list.efforts, list.images, list.until = map[string][]string{}, map[string]bool{}, now.Add(reasoningListFor)
 			for _, listed := range listed {
 				if listed.SupportedParameters != nil && slices.Contains(*listed.SupportedParameters, "reasoning") {
 					var efforts []string
@@ -197,17 +244,13 @@ func (p *openAIProvider) reasonsAt(ctx context.Context, model string, effort Eff
 					}
 					list.efforts[listed.ID] = efforts
 				}
+				if listed.Architecture != nil && slices.Contains(listed.Architecture.InputModalities, "image") {
+					list.images[listed.ID] = true
+				}
 			}
 		}
 	}
-	efforts, ok := list.efforts[model]
-	if !ok {
-		// A variant (model:nitro, model:floor) reasons as its model does.
-		if base, _, cut := strings.Cut(model, ":"); cut {
-			efforts, ok = list.efforts[base]
-		}
-	}
-	return ok && (efforts == nil || slices.Contains(efforts, string(effort)))
+	return reasoningList{until: list.until, efforts: list.efforts, images: list.images}
 }
 
 // Models lists FakeModels; the fake has no network to ask.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -79,7 +80,11 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 		return fmt.Errorf("read intake options: %w", err)
 	}
 	options = options.Effective()
-	built := prompt.Build(snapshotFor(snap, options))
+	images, skipped, err := s.cardImages(ctx, run, snap, options)
+	if err != nil {
+		return err
+	}
+	built := prompt.Build(snapshotFor(snap, options, images, skipped))
 	request := aiprovider.Request{System: built.System, Messages: []aiprovider.Message{{Role: aiprovider.RoleUser, Text: built.User, Images: built.Images}},
 		MaxOutput: prompt.MaxOutput, Schema: prompt.Schema}
 
@@ -119,8 +124,9 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	}
 	latency := int(s.now().Sub(started).Milliseconds())
 	manifest, _ := json.Marshal(map[string]any{"sources": built.Manifest, "images_sent": len(built.Images), "images_withheld": built.ImagesWithheld})
+	// The model asked for, as readiness matches it with evaluations (a provider may answer under another id).
 	detail := store.AIDecisionDetail{RunnerUpConversationID: answer.RunnerUpID, ErrorCode: code, Manifest: manifest, TaskID: run.Task.ID,
-		Model: response.Model, PromptVersion: prompt.Version, LatencyMS: &latency, ItemsSeen: snap.EventIDs}
+		Model: run.Binding.Model, PromptVersion: prompt.Version, LatencyMS: &latency, ItemsSeen: snap.EventIDs}
 	if detail.ItemsSeen == nil {
 		detail.ItemsSeen = []string{}
 	}
@@ -264,7 +270,7 @@ func deref(value *string) string {
 
 // snapshotFor turns what the store read into what the prompt builder reads: people by their identity on
 // the channel, the channel's options, what the workspace agreed to send.
-func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions) prompt.Snapshot {
+func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions, images []aiprovider.Image, imagesSkipped string) prompt.Snapshot {
 	location, err := time.LoadLocation(snap.Timezone)
 	if err != nil {
 		location = time.UTC
@@ -278,7 +284,8 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions) prompt.Sna
 		return false
 	}
 	out := prompt.Snapshot{Location: location, Sources: options.Sources, Skipped: map[string]string{}, RedactKeywords: options.RedactKeywords,
-		ContactLabels: prompt.ContactLabels{Account: options.ContactLabels.Account, ID: options.ContactLabels.ID}, Instructions: *options.Instructions}
+		ContactLabels: prompt.ContactLabels{Account: options.ContactLabels.Account, ID: options.ContactLabels.ID, Patterns: maskPatterns(options.RedactPatterns)},
+		Instructions:  *options.Instructions}
 	g := snap.Gathering
 	if g.Place != nil {
 		out.Place = prompt.Place{OneToOne: g.Place.Kind != "group"}
@@ -319,15 +326,46 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions) prompt.Sna
 			out.Skipped[prompt.SourceContact] = "consent"
 		}
 	}
-	// Pictures are not sent yet: no model's input is known to take them.
-	out.Skipped[prompt.SourceImages] = "not_supported"
-	if !consented("images") {
-		out.Skipped[prompt.SourceImages] = "consent"
+	out.Images = images
+	if imagesSkipped != "" {
+		out.Skipped[prompt.SourceImages] = imagesSkipped
 	}
 	for _, command := range snap.Commands {
 		out.Commands = append(out.Commands, prompt.Command{Key: command})
 	}
 	return out
+}
+
+func maskPatterns(patterns []ai.IntakeRedactPattern) []prompt.MaskPattern {
+	out := make([]prompt.MaskPattern, len(patterns))
+	for i, p := range patterns {
+		out[i] = prompt.MaskPattern{Pattern: p.Pattern, Mask: p.Mask}
+	}
+	return out
+}
+
+// cardImages reads the card's pictures when AI may see them: the images source on, the workspace agreed
+// to send pictures, and the model (and its fallback) reads them. Otherwise it says why not.
+func (s *Service) cardImages(ctx context.Context, run *ai.Run, snap store.IntakeSnapshot, options ai.IntakeOptions) ([]aiprovider.Image, string, error) {
+	if !options.Sources[prompt.SourceImages] {
+		return nil, "", nil
+	}
+	if !slices.Contains(snap.Consents, "images") {
+		return nil, "consent", nil
+	}
+	taker, ok := run.Binding.Provider.(aiprovider.ImageTaker)
+	if !ok || !taker.TakesImages(ctx, run.Binding.Model) || run.Binding.FallbackModel != "" && !taker.TakesImages(ctx, run.Binding.FallbackModel) {
+		return nil, "model_text_only", nil
+	}
+	stored, err := s.store.IntakeImagesOf(ctx, run.Task.WorkspaceID, run.Task.GatheringID, aiprovider.MaxImages, aiprovider.MaxImageBytes)
+	if err != nil {
+		return nil, "", err
+	}
+	images := make([]aiprovider.Image, len(stored))
+	for i, image := range stored {
+		images[i] = aiprovider.Image{MediaType: image.ContentType, Data: image.Data}
+	}
+	return images, "", nil
 }
 
 // personOf is who wrote an item: a customer by their contact (so they are one person across the place)

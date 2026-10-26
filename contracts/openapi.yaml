@@ -8095,6 +8095,17 @@ components:
           properties:
             account: {type: array, maxItems: 50, items: {type: string, minLength: 1, maxLength: 80}}
             id: {type: array, maxItems: 50, items: {type: string, minLength: 1, maxLength: 80}}
+        redact_patterns:
+          type: array
+          maxItems: 20
+          description: 'The channel''s own shapes of an identifier no word names (a national ID number, a phone number written without its prefix), in RE2 syntax, each masked as its kind before AI reads a message. A pattern that matches the empty string, is too large or does not compile is refused. Removing one needs the approval raising AI needs.'
+          items:
+            type: object
+            additionalProperties: false
+            required: [pattern, mask]
+            properties:
+              pattern: {type: string, minLength: 1, maxLength: 200}
+              mask: {type: string, enum: [phone, id_number, account_number, hidden]}
     AIChannelLevel:
       type: object
       required: [channel_id, channel_name, scope, slot, level, effective_level, off_reason, options, updated_by, updated_at]

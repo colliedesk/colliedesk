@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"time"
@@ -159,6 +160,52 @@ type IntakeOptions struct {
 	// ContactLabels are words of the channel's language that name a bank account or an identity
 	// document before its number, which is masked like the ones the frame's English words name.
 	ContactLabels *IntakeContactLabels `json:"contact_labels,omitempty"`
+	// RedactPatterns are the channel's own shapes of an identifier no label names (RE2 syntax), each
+	// masked as its kind before AI reads a message.
+	RedactPatterns []IntakeRedactPattern `json:"redact_patterns,omitempty"`
+}
+
+// IntakeRedactPattern is one of a channel's patterns and what it masks: phone, id_number,
+// account_number or hidden.
+type IntakeRedactPattern struct {
+	Pattern string `json:"pattern"`
+	Mask    string `json:"mask"`
+}
+
+// Bounds of a channel's redact patterns: they run on every message intake reads.
+const (
+	maxRedactPatterns       = 20
+	maxRedactPatternRunes   = 200
+	maxRedactPatternProgram = 2000
+)
+
+var redactMasks = []string{"phone", "id_number", "account_number", "hidden"}
+
+// checkRedactPattern refuses a pattern that does not compile, is too long or too large once compiled,
+// or matches the empty string (it would mask between every character).
+func checkRedactPattern(p IntakeRedactPattern) error {
+	if !slices.Contains(redactMasks, p.Mask) {
+		return invalid("Each of redact_patterns has a mask: phone, id_number, account_number or hidden.")
+	}
+	if n := utf8.RuneCountInString(p.Pattern); n == 0 || n > maxRedactPatternRunes {
+		return invalid("Each of redact_patterns is 1 to %d characters.", maxRedactPatternRunes)
+	}
+	parsed, err := syntax.Parse(p.Pattern, syntax.Perl)
+	if err != nil {
+		return invalid("A pattern of redact_patterns is not a valid RE2 expression: %s", p.Pattern)
+	}
+	program, err := syntax.Compile(parsed.Simplify())
+	if err != nil || len(program.Inst) > maxRedactPatternProgram {
+		return invalid("A pattern of redact_patterns is too large: %s", p.Pattern)
+	}
+	compiled, err := regexp.Compile(p.Pattern)
+	if err != nil {
+		return invalid("A pattern of redact_patterns is not a valid RE2 expression: %s", p.Pattern)
+	}
+	if compiled.MatchString("") {
+		return invalid("A pattern of redact_patterns matches nothing at all, so it would mask everywhere: %s", p.Pattern)
+	}
+	return nil
 }
 
 // IntakeContactLabels are the words that name a bank account (Account) or an identity document (ID).
@@ -219,6 +266,10 @@ func (o IntakeOptions) Effective() IntakeOptions {
 	if keywords == nil {
 		keywords = []string{}
 	}
+	patterns := o.RedactPatterns
+	if patterns == nil {
+		patterns = []IntakeRedactPattern{}
+	}
 	labels := IntakeContactLabels{Account: []string{}, ID: []string{}}
 	if o.ContactLabels != nil {
 		labels.Account = append(labels.Account, o.ContactLabels.Account...)
@@ -227,7 +278,7 @@ func (o IntakeOptions) Effective() IntakeOptions {
 	return IntakeOptions{CreateThreshold: number(o.CreateThreshold, defaultCreateThreshold), AttachThreshold: number(o.AttachThreshold, defaultAttachThreshold),
 		IgnoreThreshold: number(o.IgnoreThreshold, defaultIgnoreThreshold), AttachRequiresSingleCandidate: &single,
 		AutoMaxAgeSeconds: whole(o.AutoMaxAgeSeconds, defaultAutoMaxAgeSeconds), ReopenWindowDays: whole(o.ReopenWindowDays, defaultReopenWindowDays),
-		Sources: sources, Instructions: &instructions, RedactKeywords: keywords, ContactLabels: &labels}
+		Sources: sources, Instructions: &instructions, RedactKeywords: keywords, ContactLabels: &labels, RedactPatterns: patterns}
 }
 
 var keywordPattern = regexp.MustCompile(`^\S(.{0,78}\S)?$`)
@@ -241,7 +292,7 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&options); err != nil {
-		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions, redact_keywords and contact_labels.")
+		return options, invalid("options are intake's settings: create_threshold, attach_threshold, ignore_threshold, attach_requires_single_candidate, auto_max_age_seconds, reopen_window_days, sources, instructions, redact_keywords, contact_labels and redact_patterns.")
 	}
 	for name, value := range map[string]*float64{"create_threshold": options.CreateThreshold, "attach_threshold": options.AttachThreshold, "ignore_threshold": options.IgnoreThreshold} {
 		if value != nil && (*value < 0.5 || *value > 0.99) {
@@ -274,6 +325,14 @@ func parseIntakeOptions(raw json.RawMessage) (IntakeOptions, error) {
 	for _, word := range options.RedactKeywords {
 		if !keywordPattern.MatchString(word) {
 			return options, invalid("Each of redact_keywords is 1 to 80 characters without spaces at its ends.")
+		}
+	}
+	if len(options.RedactPatterns) > maxRedactPatterns {
+		return options, invalid("redact_patterns holds at most %d patterns.", maxRedactPatterns)
+	}
+	for _, pattern := range options.RedactPatterns {
+		if err := checkRedactPattern(pattern); err != nil {
+			return options, err
 		}
 	}
 	if labels := options.ContactLabels; labels != nil {
@@ -348,6 +407,11 @@ func optionsLoosen(before, after IntakeOptions) bool {
 	}
 	for _, word := range b.ContactLabels.ID {
 		if !slices.Contains(a.ContactLabels.ID, word) {
+			return true
+		}
+	}
+	for _, pattern := range b.RedactPatterns {
+		if !slices.Contains(a.RedactPatterns, pattern) {
 			return true
 		}
 	}

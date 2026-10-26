@@ -13,6 +13,7 @@ const intakeOptionsSchema = z.object({
   attach_requires_single_candidate: z.boolean().optional(), auto_max_age_seconds: z.number().int().optional(), reopen_window_days: z.number().int().optional(),
   sources: z.record(z.string(), z.boolean()).optional(), instructions: z.string().optional(), redact_keywords: z.array(z.string()).optional(),
   contact_labels: z.object({ account: z.array(z.string()).optional(), id: z.array(z.string()).optional() }).optional(),
+  redact_patterns: z.array(z.object({ pattern: z.string(), mask: z.enum(['phone', 'id_number', 'account_number', 'hidden']) })).optional(),
 }) satisfies z.ZodType<Generated<'IntakeOptions'>>;
 const aiChannelLevelSchema = z.object({
   channel_id: z.string().uuid(), channel_name: z.string(), scope: z.string(), slot: aiSlotNameSchema, level: aiLevelSchema, effective_level: aiLevelSchema,

@@ -20,6 +20,8 @@ type Fake struct {
 	ModelsErr  error
 	// FakeKind is what Kind reports; empty is KindOpenAICompatible.
 	FakeKind Kind
+	// ImageModels are the models TakesImages says read pictures.
+	ImageModels []string
 }
 
 // FakeReply is one scripted answer: a response or an error.

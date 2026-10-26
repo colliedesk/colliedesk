@@ -314,6 +314,23 @@ func TestARaiseFromAnAgentTokenWaitsForAPersonAndALowerDoesNot(t *testing.T) {
 	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": fewer}); response.Code != http.StatusAccepted {
 		t.Fatalf("mask less: %+v", response)
 	}
+	// A channel's own patterns: adding one tightens, taking one out is a raise, a pattern that would mask
+	// everywhere, does not compile or is too large is refused.
+	patterns := []map[string]any{{"pattern": `\b\d{12}\b`, "mask": "id_number"}, {"pattern": `\b84\d{9}\b`, "mask": "phone"}}
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest",
+		"options": map[string]any{"attach_threshold": 0.95, "contact_labels": labels["contact_labels"], "redact_patterns": patterns}}); response.Code != http.StatusOK {
+		t.Fatalf("add patterns: %+v", response)
+	}
+	if response := d.setLevel(t, admin, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest",
+		"options": map[string]any{"attach_threshold": 0.95, "contact_labels": labels["contact_labels"], "redact_patterns": patterns[:1]}}); response.Code != http.StatusAccepted {
+		t.Fatalf("take a pattern out: %+v", response)
+	}
+	for _, pattern := range []string{`\d*`, `(`, `[a-z]{999}[a-z]{999}[a-z]{999}`, strings.Repeat("a", 201)} {
+		body := map[string]any{"scope": "group", "level": "suggest", "options": map[string]any{"redact_patterns": []map[string]any{{"pattern": pattern, "mask": "phone"}}}}
+		if response := d.setLevel(t, d.adminA, d.chatA, "intake", body); response.Code != http.StatusBadRequest {
+			t.Fatalf("pattern %q: %+v", pattern[:min(len(pattern), 20)], response)
+		}
+	}
 	bad := map[string]any{"contact_labels": map[string]any{"account": []string{" stk "}}}
 	if response := d.setLevel(t, d.adminA, d.chatA, "intake", map[string]any{"scope": "group", "level": "suggest", "options": bad}); response.Code != http.StatusBadRequest {
 		t.Fatalf("a label with spaces at its ends: %+v", response)

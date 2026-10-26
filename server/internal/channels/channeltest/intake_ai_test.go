@@ -12,6 +12,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
+	"github.com/colliedesk/colliedesk/server/internal/intake/prompt"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -90,7 +91,7 @@ func TestAtAutoWithTheGateClosedAISuggestsAndTheRulesApplyAtOnce(t *testing.T) {
 	if got := d.decisions(t); got != "create/gate_closed" {
 		t.Fatalf("decisions = %s", got)
 	}
-	if got := d.one(t, `SELECT model||' '||prompt_version||' '||(manifest->'sources'->0->>'source') FROM intake_decisions WHERE workspace_id=$1`); got != "claude-haiku-5-5 intake-2026-10-26.1 incoming" {
+	if got := d.one(t, `SELECT model||' '||prompt_version||' '||(manifest->'sources'->0->>'source') FROM intake_decisions WHERE workspace_id=$1`); got != "claude-haiku-5-5 "+prompt.Version+" incoming" {
 		t.Fatalf("how it was made = %s", got)
 	}
 	// The prompt holds labels, not names.
@@ -430,6 +431,59 @@ func TestAScopeTurnedOffSendsNothingToTheModel(t *testing.T) {
 	}
 	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 1 {
 		t.Fatalf("sweep = %d, %v", n, err)
+	}
+}
+
+// A customer's picture reaches the model only when the workspace agreed to send pictures and the model
+// reads them; a card that is only pictures is then something AI can decide on, and one that talks about
+// a password keeps its pictures.
+func TestACardsPicturesReachAModelThatReadsThem(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	// A chat type serves pictures by link; the frame fetches them before the batch is held.
+	server, _ := mediaServer(t)
+	d.pipeline = guardedPipeline(d.loopDesk, server)
+	picture := []channeltest.LoopbackLink{{URL: server.URL + "/ok.txt", Name: "screen.png", Type: "image/png"}}
+	imagesOf := func() (int, string) {
+		requests := d.fake.Requests()
+		last := requests[len(requests)-1]
+		return len(last.Messages[0].Images), d.one(t, `SELECT COALESCE(manifest->'sources'->4->>'skipped','')||'/'||(manifest->'sources'->4->>'items')
+			FROM intake_decisions WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 1`)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Links: picture})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Screen", "confidence": 0.5})
+	d.runAI(t)
+	if n, manifest := imagesOf(); n != 0 || manifest != "consent/0" {
+		t.Fatalf("without consent: %d pictures, manifest %s", n, manifest)
+	}
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_source_consents(workspace_id,source_class) VALUES($1,'images')`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Links: picture})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Screen", "confidence": 0.5})
+	d.runAI(t)
+	if n, manifest := imagesOf(); n != 0 || manifest != "model_text_only/0" {
+		t.Fatalf("a model that reads no pictures: %d pictures, manifest %s", n, manifest)
+	}
+	d.fake.ImageModels = []string{"claude-haiku-5-5"}
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Group: "g1", Links: picture})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Screen", "confidence": 0.95})
+	d.runAI(t)
+	if n, manifest := imagesOf(); n != 1 || manifest != "/1" {
+		t.Fatalf("with consent and a model that reads them: %d pictures, manifest %s", n, manifest)
+	}
+	if got := d.decisions(t); !strings.HasSuffix(got, ",create/applied") {
+		t.Fatalf("a card of pictures only = %s, want it decided", got)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "e-1", From: "e", Group: "g1", Text: "my password does not work", Links: picture})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Login", "confidence": 0.95})
+	d.runAI(t)
+	if n, manifest := imagesOf(); n != 0 || manifest != "credential/0" {
+		t.Fatalf("pictures with talk of a password: %d pictures, manifest %s", n, manifest)
 	}
 }
 

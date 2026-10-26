@@ -37,19 +37,46 @@ var (
 // before its number.
 type ContactLabels struct {
 	Account, ID []string
+	// Patterns are the channel's own shapes of an identifier no label names (a national ID number, a
+	// phone number written without its prefix), each masked as its kind.
+	Patterns []MaskPattern
 }
+
+// MaskPattern is one of a channel's patterns (RE2 syntax, checked when it was saved) and what it masks:
+// phone, id_number, account_number or hidden.
+type MaskPattern struct {
+	Pattern, Mask string
+}
+
+// maskPlaceholders are what a channel's pattern puts in place of what it matches.
+var maskPlaceholders = map[string]string{"phone": phonePlaceholder, "id_number": idPlaceholder, "account_number": accountPlaceholder, "hidden": hidden}
 
 // contactMasker replaces a person's identifiers with typed placeholders.
 type contactMasker struct {
 	// A labelled bank account or ID: group 1 the label and filler, group 2 the number.
 	account, id *regexp.Regexp
+	patterns    []compiledPattern
+}
+
+type compiledPattern struct {
+	pattern     *regexp.Regexp
+	placeholder string
 }
 
 func newContactMasker(labels ContactLabels) contactMasker {
-	return contactMasker{
+	m := contactMasker{
 		account: labelled(accountWords, labels.Account, `\d(?: ?\d)*`),
 		id:      labelled(idWords, labels.ID, `[A-Z]?\d(?: ?\d)*`),
 	}
+	for _, p := range labels.Patterns {
+		placeholder, known := maskPlaceholders[p.Mask]
+		compiled, err := regexp.Compile(p.Pattern)
+		// The options were checked when saved; a pattern that no longer compiles masks nothing.
+		if known && err == nil {
+			m.patterns = append(m.patterns, compiledPattern{compiled, placeholder})
+		}
+	}
+	return m
 }
 
 // labelled matches one of the words, what may stand between it and a number, and the number.
@@ -66,6 +93,11 @@ func (m contactMasker) mask(text string) string {
 	text = maskLabelled(m.id, text, idPlaceholder, func(n int) bool { return n >= 6 && n <= 14 })
 	text = ibanPattern.ReplaceAllString(text, accountPlaceholder)
 	text = contactEmailPattern.ReplaceAllString(text, emailPlaceholder)
+	// The channel's own shapes go before the frame's phone numbers, so a number of its own shape is
+	// named as its kind.
+	for _, p := range m.patterns {
+		text = p.pattern.ReplaceAllLiteralString(text, p.placeholder)
+	}
 	return maskStandalone(phonePattern, text, phonePlaceholder, phoneShaped)
 }
 

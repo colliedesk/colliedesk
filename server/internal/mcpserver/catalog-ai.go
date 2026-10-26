@@ -397,7 +397,10 @@ const (
 		`"instructions":{"type":"string","maxLength":4000,"description":"The channel's own words added to the prompt."},` +
 		`"redact_keywords":{"type":"array","maxItems":100,"items":{"type":"string","minLength":1,"maxLength":80},"description":"Words that mark a secret in the channel's language."},` +
 		`"contact_labels":{"type":"object","additionalProperties":false,"description":"Words of the channel's language that name a bank account (account) or an identity document (id) before its number, which is masked.",` +
-		`"properties":{"account":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}},"id":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}}}}}}`
+		`"properties":{"account":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}},"id":{"type":"array","maxItems":50,"items":{"type":"string","minLength":1,"maxLength":80}}}},` +
+		`"redact_patterns":{"type":"array","maxItems":20,"description":"The channel's own shapes of an identifier no word names, in RE2 syntax, each masked as its kind.",` +
+		`"items":{"type":"object","additionalProperties":false,"required":["pattern","mask"],"properties":{"pattern":{"type":"string","minLength":1,"maxLength":200},` +
+		`"mask":{"type":"string","enum":["phone","id_number","account_number","hidden"]}}}}}}`
 	channelAISchema = `{"type":"object","required":["channel_id","scopes"],"properties":{"channel_id":{"type":"string"},"scopes":{"type":"array","items":{"type":"object","required":["scope","slots"],` +
 		`"properties":{"scope":{"type":"string"},"slots":{"type":"array","items":{"type":"object","required":["slot","level","effective_level","source","off_reason"],"properties":{` +
 		`"slot":` + aiSlotName + `,"level":{"anyOf":[` + aiLevelName + `,{"type":"null"}],"description":"This scope's own level; null follows the channel, then the workspace."},` +

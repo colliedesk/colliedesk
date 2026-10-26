@@ -64,3 +64,26 @@ func TestMaskContactsTakesTheChannelsLabelsAsData(t *testing.T) {
 		t.Errorf("without the channel's labels = %q, want it unchanged", got)
 	}
 }
+
+func TestMaskContactsTakesTheChannelsPatternsAsData(t *testing.T) {
+	// A channel whose ID numbers are 12 digits with no label, and whose customers write their phone
+	// number with the country code but no plus.
+	patterns := []MaskPattern{{Pattern: `\b\d{12}\b`, Mask: "id_number"}, {Pattern: `\b84\d{9}\b`, Mask: "phone"}, {Pattern: `(`, Mask: "hidden"},
+		{Pattern: `x`, Mask: "unknown"}}
+	masker := newContactMasker(ContactLabels{Patterns: patterns})
+	for in, want := range map[string]string{
+		"my id 079300012345 please":          "my id [id number] please",
+		"call 84912345678":                   "call [phone]",
+		"call +84 912 345 678 or 0912345678": "call [phone] or [phone]",
+		"barcode 8934567890123":              "barcode 8934567890123",
+		"order x1":                           "order x1",
+	} {
+		if got := masker.mask(in); got != want {
+			t.Errorf("mask(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// Without them the frame still masks what is shaped like a phone number, and leaves the rest.
+	if got := newContactMasker(ContactLabels{}).mask("my id 079300012345, call 84912345678"); got != "my id [phone], call 84912345678" {
+		t.Errorf("without the channel's patterns = %q", got)
+	}
+}

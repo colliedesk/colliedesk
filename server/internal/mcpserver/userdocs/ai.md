@@ -255,12 +255,20 @@ Before intake's AI reads a chat, names become "Customer A" or "Team 1", password
 and phone numbers, email addresses, IBANs and the numbers after an English account or ID word ("account
 number", "passport") are masked. A channel in another language adds its own words in intake's settings:
 `redact_keywords` for the words that come before a password or a code, `contact_labels` (`account`, `id`)
-for those before a bank account or an identity document number. Taking a word out masks less, so it
-needs the approval raising AI needs.
+for those before a bank account or an identity document number, and `redact_patterns` for the shapes of
+an identifier no word names (a national ID number, a phone number written without its prefix): each a
+pattern in RE2 syntax with what it masks (`phone`, `id_number`, `account_number` or `hidden`), at most 20
+of 200 characters; a pattern that would match nothing at all, is too large or does not compile is refused.
+Taking a word or a pattern out masks less, so it needs the approval raising AI needs.
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
 once an admin agreed to each (`colliedesk_ai_source_consent_request`, taken back with
 `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
+Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
+on, and its model (and its fallback model) reads pictures, as the provider says: every Claude model does;
+on OpenRouter, a model that lists images among its inputs. At most four of a card's pictures go, each at
+most 5 MB, never with messages that talk about a password or a code. A card that is only pictures is then
+decided like any other.
 
 ## When intake's model fails
 
