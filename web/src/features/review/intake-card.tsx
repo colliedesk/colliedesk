@@ -87,10 +87,11 @@ export function IntakeCard({ item, detail, detailFailed, onRetryDetail, open, on
       {(item.review_reason === 'credential' || item.suggestion?.not_applied_reason === 'credential') && waiting
         && <p className="notice notice-danger" role="note"><span>{m.credentialWarning}</span></p>}
       {item.review_reason === 'lane_blocked' && waiting && <p className="muted-copy">{m.laneBlocked}</p>}
-      {!open && <p className="intake-preview">{item.preview}</p>}
+      {/* A decided card whose messages a person took back out of their conversation keeps nothing to show. */}
+      {!open && (item.item_count === 0 ? <p className="intake-preview muted-copy">{m.movedOut}</p> : <p className="intake-preview">{item.preview}</p>)}
       <p className="intake-meta muted-copy">
         <time dateTime={item.opened_at}>{formatDate(item.opened_at, timezone)}</time>
-        <span>{m.messagesCount(item.item_count)}</span>
+        {item.item_count > 0 && <span>{m.messagesCount(item.item_count)}</span>}
         <button type="button" className="intake-toggle" aria-expanded={open} onClick={onToggle}>{open ? m.hideMessages : waiting ? m.decide : m.showMessages}</button>
       </p>
       {/* Filed by the rules while AI only suggests: the suggestion shows, but the card is decided (move messages to change it). */}

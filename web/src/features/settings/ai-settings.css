@@ -268,3 +268,6 @@
 .ai-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (pointer: coarse) { .ai-chip { min-height: var(--touch); } }
 @media (max-width: 44rem) { .ai-differ { padding: 0 var(--space-2); } }
+.ai-sources-consent { display: grid; gap: var(--space-1); grid-column: 1 / -1; min-width: 0; margin: 0; border: 0; padding: 0; }
+.ai-sources-consent legend { padding: 0; font-size: var(--fs-small); font-weight: 600; }
+.ai-sources-consent .ai-pick { display: flex; align-items: center; gap: var(--space-2); }

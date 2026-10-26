@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { InvalidRequestError } from '../../../api/client';
 import type { AISettings, ChannelAIInput } from '../../../api/ai';
@@ -32,6 +32,14 @@ const edited = ['create_threshold', 'attach_threshold', 'ignore_threshold', 'att
 type Mask = NonNullable<IntakeOptions['redact_patterns']>[number]['mask'];
 const masks: Mask[] = ['phone', 'id_number', 'account_number', 'hidden'];
 
+// The server names a setting by its field; the person knows it by the form's label.
+const fieldLabels: [string, string][] = [
+  ['create_threshold', m.intakeCreateThreshold], ['attach_threshold', m.intakeAttachThreshold], ['ignore_threshold', m.intakeIgnoreThreshold],
+  ['reopen_window_days', m.intakeReopenWindow], ['auto_max_age_seconds', m.intakeMaxAge], ['redact_patterns', m.intakePatterns],
+  ['redact_keywords', m.intakeKeywords], ['contact_labels', m.intakeAccountLabels], ['instructions', m.intakeInstructions],
+];
+const inWords = (text: string) => fieldLabels.reduce((out, [field, label]) => out.replaceAll(field, `“${label}”`), text);
+
 const lines = (text: string) => text.split('\n').map((line) => line.trim()).filter(Boolean);
 const number = (text: string) => (text.trim() === '' ? undefined : Number(text));
 
@@ -63,6 +71,9 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [ageTouched, setAgeTouched] = useState(false);
   const [problem, setProblem] = useState<string>();
+  // A refusal takes the focus, so it is read where the person is.
+  const problemRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (problem) problemRef.current?.focus(); }, [problem]);
   const consents = new Set(settings?.source_consents.map((consent) => consent.source_class));
   const set = <K extends keyof typeof values>(key: K, value: (typeof values)[K]) => { setValues((current) => ({ ...current, [key]: value })); setState('idle'); };
   const submit = async (event: FormEvent) => {
@@ -88,7 +99,7 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
       await onSave({ scope, level, options: next });
       setState('saved');
     } catch (error) {
-      setProblem(error instanceof InvalidRequestError ? error.message : m.actionFailed);
+      setProblem(error instanceof InvalidRequestError ? m.intakeNotSaved(inWords(error.message)) : m.actionFailed);
       setState('idle');
     }
   };
@@ -168,6 +179,6 @@ export function IntakeSettings({ scope, level, options, settings, isAdmin, onSav
       <button type="submit" className="primary-action" disabled={locked}>{m.intakeSave}</button>
       {state === 'saved' && <span role="status" className="muted-copy">{m.intakeSaved}</span>}
     </div>}
-    {problem && <p role="alert" className="error-copy">{problem}</p>}
+    {problem && <p role="alert" className="error-copy" tabIndex={-1} ref={problemRef}>{problem}</p>}
   </form>;
 }

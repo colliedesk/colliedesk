@@ -46,7 +46,11 @@ export function IntakeAutoDialog({ channelID, scope, options, settings, onClose,
   const [problem, setProblem] = useState<string>();
   const data = readiness.data;
   const submit = () => {
-    if (override.length > 0 && reason.trim() === '') return setProblem(m.intakeOverrideNeedsReason);
+    if (override.length > 0 && reason.trim() === '') {
+      setProblem(m.intakeOverrideNeedsReason);
+      document.getElementById(`${id}-why`)?.focus();
+      return;
+    }
     const { gate_override: _gate, gate_override_reason: _why, ...rest } = options ?? {};
     onTurnOn({ scope, level: 'auto', options: { ...rest, ...(override.length > 0 ? { gate_override: override, gate_override_reason: reason.trim() } : {}) } });
   };
@@ -65,7 +69,8 @@ export function IntakeAutoDialog({ channelID, scope, options, settings, onClose,
   };
   return <Dialog title={m.intakeAutoTitle(scopeName(scope))} help={m.intakeAutoLead} onClose={onClose} closeLabel={m.close} className="ai-dialog"
     onSubmit={submit} footer={<>
-      <button type="button" className="ghost" onClick={onClose}>{m.cancel}</button>
+      {/* Cancel takes the focus: Turn on Auto waits for readiness, and a dialog keeps its keys inside. */}
+      <button type="button" className="ghost" autoFocus onClick={onClose}>{m.cancel}</button>
       <button type="submit" className="primary-action" disabled={!data}>{m.intakeAutoOn}</button>
     </>}>
     {readiness.isPending && <p role="status" className="muted-copy">{m.loading}</p>}
@@ -79,11 +84,11 @@ export function IntakeAutoDialog({ channelID, scope, options, settings, onClose,
           <input type="checkbox" checked={override.includes(action.action)} onChange={(event) => toggle(action.action, event.target.checked)} />
           <span>{m.intakeOverrideAction(m.intakeActionLower[action.action])}</span></label>)}
         {override.length > 0 && <div className="field"><label htmlFor={`${id}-why`}>{m.intakeOverrideReason}</label>
-          <textarea id={`${id}-why`} rows={2} maxLength={500} value={reason} onChange={(event) => { setReason(event.target.value); setProblem(undefined); }} /></div>}
+          <textarea id={`${id}-why`} rows={2} maxLength={500} value={reason} aria-invalid={problem ? true : undefined} aria-describedby={problem ? `${id}-problem` : undefined} onChange={(event) => { setReason(event.target.value); setProblem(undefined); }} /></div>}
       </fieldset>}
       <p className="ch-intake-estimate">{data.estimate.ai_calls === 0 ? m.intakeEstimateNone
         : m.intakeEstimate(data.estimate.ai_calls, data.estimate.days, estimateCost())}</p>
     </>}
-    {problem && <p role="alert" className="error-copy">{problem}</p>}
+    {problem && <p role="alert" className="error-copy" id={`${id}-problem`}>{problem}</p>}
   </Dialog>;
 }

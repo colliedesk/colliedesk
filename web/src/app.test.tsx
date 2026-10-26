@@ -547,3 +547,21 @@ test('Review is on the rail only where a chat channel collects messages, with th
   expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: /^Review/ })).not.toBeInTheDocument();
 });
+
+test('Review opened with a channel and no scope lists that channel\'s cards only', async () => {
+  const trial = meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false });
+  const channel = '44444444-4444-4444-8444-444444444444';
+  serve({
+    '/api/v1/auth/me': () => json(200, trial),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/intake/summary': () => json(200, { available: true, waiting: 0, deciding: 0, scopes: [] }),
+    '/api/v1/intake/gatherings': () => json(200, { items: [], next_cursor: null }),
+    '/api/v1/intake/stats': () => json(200, { days: 7, gatherings: 0, by_state: {}, decided_by: {}, fallback: 0, ai_decisions: 0, ai_corrected: 0 }),
+    '/api/v1/agents': () => json(200, { items: [] }),
+  });
+  open(`/review?channel=${channel}`);
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/intake/gatherings?'))).toBe(true));
+  const list = fetchMock.mock.calls.map(([url]) => String(url)).find((url) => url.startsWith('/api/v1/intake/gatherings?'));
+  expect(list).toContain(`channel_id=${channel}`);
+  expect(list).not.toContain('scope=');
+});

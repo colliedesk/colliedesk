@@ -74,7 +74,7 @@ test('a source that needs a consent says so and links Built-in AI; with the cons
   const { unmount } = view();
   const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
   expect(within(form).getByRole('checkbox', { name: /Images the customer sent/ })).toBeDisabled();
-  expect(within(form).getAllByText('Needs consent in Built-in AI')).toHaveLength(2);
+  expect(within(form).getAllByText('Needs consent: Built-in AI → Chat intake')).toHaveLength(2);
   unmount();
   aiApi.settings.mockResolvedValue(settings(['images']));
   view();
@@ -156,6 +156,7 @@ test('an admin may let a closed action decide alone with a reason, sent with the
   fireEvent.click(await within(dialog).findByRole('checkbox', { name: /Let it add to a conversation alone anyway/ }));
   fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on Auto' }));
   expect(within(dialog).getByRole('alert')).toHaveTextContent('Say why');
+  expect(document.activeElement).toBe(within(dialog).getByLabelText('Why AI may do this before it is ready'));
   expect(aiApi.setChannel).not.toHaveBeenCalled();
   fireEvent.change(within(dialog).getByLabelText('Why AI may do this before it is ready'), { target: { value: 'We checked 50 by hand' } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on Auto' }));
@@ -267,4 +268,25 @@ test('an age set to seconds that are not whole minutes is kept when other fields
   fireEvent.change(within(form).getByLabelText('Reopen a resolved conversation within (days)'), { target: { value: '3' } });
   fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(CHAT, 'intake', { scope: 'group', level: 'suggest', options: { auto_max_age_seconds: 90, reopen_window_days: 3 } }));
+});
+
+test('the Auto dialog takes the focus when it opens, and Escape closes it', async () => {
+  aiApi.readiness.mockResolvedValue(readiness());
+  view();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Intake · Groups' }), { target: { value: 'auto' } });
+  const dialog = await screen.findByRole('dialog', { name: 'Let AI decide on its own · Groups' });
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  fireEvent.keyDown(document.activeElement as Element, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+test('a refusal names the field as the form does, and takes the focus', async () => {
+  const { InvalidRequestError } = await import('../../../api/client');
+  aiApi.setChannel.mockRejectedValue(new InvalidRequestError('create_threshold is between 0.5 and 0.99.'));
+  view();
+  const form = await screen.findByRole('form', { name: 'Intake settings · Groups' });
+  fireEvent.click(within(form).getByRole('button', { name: 'Save intake settings' }));
+  const alert = await within(form).findByRole('alert');
+  expect(alert).toHaveTextContent('Not saved: “Open a conversation” is between 0.5 and 0.99.');
+  expect(document.activeElement).toBe(alert);
 });

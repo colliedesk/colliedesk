@@ -175,3 +175,13 @@ test('a thank-you after a conversation was resolved says it kept it resolved, wi
   expect(screen.getByText(/^Written after it was resolved · kept Resolved/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument();
 });
+
+test('the move dialog takes the focus when it opens, and Escape closes it', async () => {
+  view(<MessageMoveMenu conversation={conversation()} message={timeline[1]} timeline={timeline} timezone="UTC" />);
+  fireEvent.click(screen.getByLabelText('Move this message', { selector: 'summary' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Split into a new conversation…' }));
+  const dialog = screen.getByRole('dialog', { name: 'Split into a new conversation' });
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  fireEvent.keyDown(document.activeElement as Element, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});

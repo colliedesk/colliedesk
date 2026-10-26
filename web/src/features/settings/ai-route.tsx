@@ -130,6 +130,7 @@ function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: s
     onSetKey={(id, key) => run(() => aiApi.setKey(id, key))}
     onRemove={(id) => run(() => aiApi.remove(id))}
     onSetAutomatic={(perDay, perMinute, draftPerDay) => run(() => aiApi.setAutomatic(perDay, perMinute, draftPerDay))}
+    onSourceConsent={async (source, on) => { await (on ? aiApi.setSourceConsent(source) : aiApi.removeSourceConsent(source)); await refresh(); }}
     usage={usage.data} usageFailed={usage.isError} onUsageMonth={setUsageMonth} initialTab={tab} onOpenChat={onOpenChat}
     onSetChatCap={async (cap) => {
       const chat = settings.data?.slots.find((item) => item.slot === 'chat');

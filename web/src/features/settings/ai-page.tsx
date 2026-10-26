@@ -66,6 +66,8 @@ export interface AIPageProps {
   onSetChatCap?: (cap: number | null) => Promise<unknown>;
   // chatChannels: the workspace has a chat channel that collects messages, so intake has a row.
   chatChannels?: boolean;
+  // Gives (true) or takes back (false) the consent that intake may send a kind of context.
+  onSourceConsent?: (source: string, on: boolean) => Promise<unknown>;
 }
 
 const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
@@ -214,7 +216,7 @@ function slotInput(slot: AISlot): AISlotInput {
 }
 
 
-function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
+function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic, onConfirmAuto, onSetAuto, onSourceConsent }: AIPageProps & FeatureActions & { slot: AISlot; settings: AISettings }) {
   const name = slotLabel(slot.slot);
   const serverModels = settings.server?.models[slot.slot] ?? [];
   const choices = [
@@ -275,6 +277,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
         onTurnOn={() => onConfirmAuto(slot)} onSet={(input) => onSetAuto('triage', { ...slotInput(slot), ...input })} />}
       {slot.slot === 'intake' && <IntakeDefault slot={slot} locked={locked} hasProvider={choices.length > 0}
         onSet={(level) => onSetAuto('intake', { ...slotInput(slot), default_level: level })} />}
+      {slot.slot === 'intake' && <IntakeSources settings={settings} isAdmin={isAdmin} onSourceConsent={onSourceConsent} />}
       {/* The help center's chat has no level per channel. */}
       {slot.slot !== 'chat' && <ChannelsThatDiffer slot={slot} settings={settings} />}
     </div>
@@ -338,6 +341,38 @@ function IntakeDefault({ slot, locked, hasProvider, onSet }: { slot: AISlot; loc
       </div>
     </div>
   );
+}
+
+const intakeSources = ['images', 'contact_profile'] as const;
+
+// IntakeSources is the consent that chat intake may send more than the conversation's text: the pictures
+// customers sent and the customer's profile, each given and taken back here (docs/user/ai.md). A channel
+// then turns each on for its scopes.
+function IntakeSources({ settings, isAdmin, onSourceConsent }: { settings: AISettings; isAdmin: boolean; onSourceConsent?: (source: string, on: boolean) => Promise<unknown> }) {
+  const given = new Set(settings.source_consents.map((consent) => consent.source_class));
+  const [busy, setBusy] = useState<string>();
+  const [problem, setProblem] = useState<string>();
+  const toggle = async (source: string, on: boolean) => {
+    if (!onSourceConsent) return;
+    setBusy(source);
+    setProblem(undefined);
+    try {
+      await onSourceConsent(source, on);
+    } catch {
+      setProblem(m.actionFailed);
+    } finally {
+      setBusy(undefined);
+    }
+  };
+  return <fieldset className="ai-sources-consent">
+    <legend>{m.intakeSourcesLegend}</legend>
+    <p className="muted-copy">{m.intakeSourcesHelp}</p>
+    {intakeSources.map((source) => <label key={source} className="ai-pick">
+      <span className="switch"><input type="checkbox" role="switch" aria-label={m.intakeSource[source]} checked={given.has(source)} disabled={!isAdmin || busy !== undefined}
+        onChange={(event) => void toggle(source, event.target.checked)} /></span>
+      <span>{m.intakeSource[source]}</span></label>)}
+    {problem && <p role="alert" className="error-copy">{problem}</p>}
+  </fieldset>;
 }
 
 // AutoDraft is what reply drafts do by themselves where no channel says otherwise: only when asked, or a

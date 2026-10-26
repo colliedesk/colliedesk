@@ -88,6 +88,8 @@ a.ch-type:hover, button.ch-type:hover { border-color: var(--line-strong); backgr
 .ch-ai-table thead th { color: var(--text-2); font-size: var(--fs-label); font-weight: 500; border-bottom: 1px solid var(--line); }
 .ch-ai-table tbody tr + tr > * { border-top: 1px solid var(--line); }
 .ch-ai-feature { font-size: 14px; font-weight: 600; }
+/* The feature names are short; the scope columns get the room their choices need ("Same as the channel (Off)"). */
+.ch-ai-table thead th:first-child { width: 9rem; }
 .ch-ai-table select { width: 100%; max-width: 18rem; }
 .ch-ai-why { display: block; margin-top: var(--space-1); font-size: var(--fs-label); overflow-wrap: anywhere; }
 @media (max-width: 40rem) {

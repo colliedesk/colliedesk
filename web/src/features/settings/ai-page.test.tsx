@@ -507,3 +507,22 @@ test('chat intake has a row only where a chat channel collects messages; its def
   fireEvent.click(within(level).getByRole('radio', { name: 'Suggest' }));
   expect(handlers.onSetSlot).toHaveBeenCalledWith('intake', expect.objectContaining({ source: 'provider', provider_id: providerID, default_level: 'suggest' }));
 });
+
+test('an admin agrees that chat intake may send pictures or the customer\'s profile, and takes it back', async () => {
+  const intake = slot({ slot: 'intake', source: 'provider', provider_id: providerID, model: 'claude-haiku-5-5', enabled: true, active: true });
+  const onSourceConsent = vi.fn().mockResolvedValue(undefined);
+  page({ chatChannels: true, onSourceConsent, settings: settings({ providers: [provider({ used_by: ['intake'] })], slots: [slot(), slot({ slot: 'draft' }), intake],
+    source_consents: [{ source_class: 'images', consented_by: null, consented_at: '2026-10-25T08:00:00Z' }] }) });
+  const group = screen.getByRole('group', { name: 'What chat intake may send besides the messages' });
+  const images = within(group).getByRole('switch', { name: 'Images customers sent' });
+  const profile = within(group).getByRole('switch', { name: 'The customer’s profile' });
+  expect(images).toBeChecked();
+  expect(profile).not.toBeChecked();
+  fireEvent.click(profile);
+  expect(onSourceConsent).toHaveBeenCalledWith('contact_profile', true);
+  fireEvent.click(images);
+  expect(onSourceConsent).toHaveBeenCalledWith('images', false);
+  cleanup();
+  page({ isAdmin: false, chatChannels: true, onSourceConsent, settings: settings({ providers: [provider({ used_by: ['intake'] })], slots: [slot(), slot({ slot: 'draft' }), intake] }) });
+  expect(within(screen.getByRole('group', { name: 'What chat intake may send besides the messages' })).getByRole('switch', { name: 'Images customers sent' })).toBeDisabled();
+});

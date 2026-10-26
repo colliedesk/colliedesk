@@ -273,8 +273,9 @@ of 200 characters; a pattern that can match no character at all (an empty string
 Taking a word or a pattern out masks less, so it needs the approval raising AI needs.
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
-once an admin agreed to each (`colliedesk_ai_source_consent_request`, taken back with
-`colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
+once an admin agreed to each: in **Settings → Built-in AI** under Chat intake (**Images customers sent**,
+**The customer's profile**, each a switch that gives or takes back the consent), or with
+`colliedesk_ai_source_consent_request` (taken back with `colliedesk_ai_source_consent_remove`). The conversation's own text is covered by turning the feature on.
 Pictures go to intake's AI only when the workspace agreed to send them, the channel's images source is
 on, and its model (and its fallback model) reads pictures, as the provider says: every Claude model does;
 on OpenRouter, a model that lists images among its inputs. At most four of a card's pictures go, each at

@@ -36,7 +36,7 @@ export const channelsMessages = {
     thread_window: 'Earlier messages of the chat', open_conversations: 'The customer’s open conversations', corrections: 'Past corrections by people',
     kb: 'Knowledge base articles', contact: 'The customer’s profile', images: 'Images the customer sent',
   } as Record<string, string>,
-  intakeNeedsConsent: 'Needs consent in Built-in AI',
+  intakeNeedsConsent: 'Needs consent: Built-in AI → Chat intake',
   intakePrivacy: 'What AI never reads',
   intakeKeywords: 'Words that mark a secret',
   intakeKeywordsHelp: 'One per line, in the channel’s language (for example "mật khẩu", "OTP"). What follows them is hidden before AI reads it.',
@@ -54,6 +54,7 @@ export const channelsMessages = {
   intakeInstructions: 'Instructions for this channel',
   intakeInstructionsCount: (used: number) => `${used} of 4,000 characters, added to what AI is told.`,
   intakeSave: 'Save intake settings',
+  intakeNotSaved: (why: string) => `Not saved: ${why}`,
   intakeSaved: 'Saved',
   intakeWeek: 'Last 7 days',
   intakeWeekLine: (cards: number, ai: number, changed: number, decisions: number, waiting: number) =>

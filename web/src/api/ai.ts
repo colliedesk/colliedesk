@@ -85,6 +85,7 @@ const channelAISchema = z.object({
     })),
   })),
 }) satisfies z.ZodType<JsonResponse<'getChannelAI', 200>>;
+const removedConsentSchema = z.object({ removed: z.boolean() }) satisfies z.ZodType<JsonResponse<'removeAISourceConsent', 200>>;
 const removedSchema = z.object({ turned_off: z.array(aiSlotNameSchema) }) satisfies z.ZodType<JsonResponse<'removeAIProvider', 200>>;
 const aiModelListSchema = z.object({ models: z.array(z.string()) }) satisfies z.ZodType<JsonResponse<'listAIModels', 200>>;
 
@@ -166,6 +167,9 @@ export const aiApi = {
   setKey: (id: string, apiKey: string) => request(`/api/v1/ai/providers/${id}/key`, aiProviderSchema, { method: 'PUT', body: json<'setAIProviderKey'>({ api_key: apiKey }) }),
   check: (id: string) => request(`/api/v1/ai/providers/${id}/check`, aiProviderSchema, { method: 'POST' }),
   remove: (id: string) => request(`/api/v1/ai/providers/${id}`, removedSchema, { method: 'DELETE' }),
+  // What intake may send besides the conversation's text: images customers sent, the customer's profile.
+  setSourceConsent: (source: string) => request(`/api/v1/ai/source-consents/${encodeURIComponent(source)}`, aiSourceConsentSchema, { method: 'PUT' }),
+  removeSourceConsent: (source: string) => request(`/api/v1/ai/source-consents/${encodeURIComponent(source)}`, removedConsentSchema, { method: 'DELETE' }),
   setSlot: (slot: AISlotName, input: AISlotInput) => request(`/api/v1/ai/slots/${slot}`, aiSlotSchema, { method: 'PUT', body: json<'setAISlot'>(input) }),
   // A channel's levels on each of its scopes; setting one answers the levels after the change.
   channel: (id: string) => request(`/api/v1/channels/${id}/ai`, channelAISchema),
