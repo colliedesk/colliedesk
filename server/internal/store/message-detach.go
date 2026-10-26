@@ -6,8 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/jackc/pgx/v5"
 )
+
+// ErrNotAnOpenCommand means a decision named a command of the channel that does not open a request.
+var ErrNotAnOpenCommand = errors.New("not a command of the channel that opens a request")
 
 // Taking chat messages back to the intake queue (docs/internals/message-moves.md "Back to the queue"):
 // the messages leave the conversation's timeline (detached_at) without being deleted, and their chat items
@@ -100,7 +104,8 @@ func undoDetach(ctx context.Context, tx pgx.Tx, workspaceID, fromID, gatheringID
 	if _, err := lockMoveConversations(ctx, tx, workspaceID, fromID); err != nil {
 		return err
 	}
-	if err := attachDetached(ctx, tx, workspaceID, ids, fromID, actor, now); err != nil {
+	// Back where they were: the conversation keeps its status, as taking them out kept it.
+	if err := attachDetached(ctx, tx, workspaceID, ids, fromID, false, actor, now); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE intake_gatherings SET state='cancelled',review_reason=NULL,decided_by='agent',decided_at=$3,
@@ -117,9 +122,9 @@ func undoDetach(ctx context.Context, tx pgx.Tx, workspaceID, fromID, gatheringID
 }
 
 // attachDetached puts messages taken back to the queue in conversation toID: back in its timeline, their
-// writer kept when it is not toID's contact, their items linked there, and toID reopened when it was
-// resolved or closed.
-func attachDetached(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string, toID string, actor Actor, now time.Time) error {
+// writer kept when it is not toID's contact, their items linked there, and with reopen toID reopened
+// when it was resolved or closed (a decision adds them as new; an undo only gives them back).
+func attachDetached(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string, toID string, reopen bool, actor Actor, now time.Time) error {
 	if _, err := tx.Exec(ctx, `UPDATE messages m SET detached_at=NULL,detached_by_agent_id=NULL,
 			other_contact_id=NULLIF(COALESCE(m.other_contact_id,f.contact_id),t.contact_id),conversation_id=t.id
 		FROM conversations f, conversations t
@@ -137,8 +142,8 @@ func attachDetached(ctx context.Context, tx pgx.Tx, workspaceID string, ids []st
 	if err := setStatusActor(ctx, tx, actor.AgentID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') THEN 'open' ELSE status END,updated_at=$3
-		WHERE workspace_id=$1 AND id=$2`, workspaceID, toID, now); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN $4 AND status IN ('resolved','closed') THEN 'open' ELSE status END,updated_at=$3
+		WHERE workspace_id=$1 AND id=$2`, workspaceID, toID, now, reopen); err != nil {
 		return fmt.Errorf("reopen conversation: %w", err)
 	}
 	return nil
@@ -174,8 +179,9 @@ func (s *Store) DetachedCardOf(ctx context.Context, workspaceID, gatheringID str
 }
 
 // DecideDetachedCard adds the messages of a card taken back to the queue to conversation toID, or to a new
-// conversation with subject when toID is empty: the messages move, nothing is replayed. A card decided
-// meanwhile is ErrGatheringDecided.
+// conversation with subject (and apply.Command's tags and priority, a command of the channel that opens a
+// request) when toID is empty: the messages move, nothing is replayed. A card decided meanwhile is
+// ErrGatheringDecided.
 func (s *Store) DecideDetachedCard(ctx context.Context, workspaceID, gatheringID, toID, subject string, apply IntakeApply, now time.Time) (GatheringOutcome, error) {
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
 		g, err := lockGathering(ctx, tx, workspaceID, gatheringID, nil)
@@ -206,6 +212,21 @@ func (s *Store) DecideDetachedCard(ctx context.Context, workspaceID, gatheringID
 				return struct{}{}, ErrNotACandidate
 			}
 		}
+		var command channels.Command
+		if apply.Command != "" {
+			var channelID string
+			if err := tx.QueryRow(ctx, `SELECT channel_id::text FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, workspaceID, gatheringID).Scan(&channelID); err != nil {
+				return struct{}{}, fmt.Errorf("read the card's channel: %w", err)
+			}
+			channel, err := s.channelByID(ctx, tx, workspaceID, channelID)
+			if err != nil {
+				return struct{}{}, err
+			}
+			var ok bool
+			if command, ok = channel.Settings.Commands[apply.Command]; !ok || (command.Action != "" && command.Action != channels.ActionOpen) {
+				return struct{}{}, ErrNotAnOpenCommand
+			}
+		}
 		state := GatheringAttached
 		if toID == "" && subject == "" {
 			// Like a chat's new request: the first line of what the customer wrote first.
@@ -221,10 +242,20 @@ func (s *Store) DecideDetachedCard(ctx context.Context, workspaceID, gatheringID
 				return struct{}{}, err
 			}
 			toID, state = created.id, GatheringCreated
+			if apply.Command != "" {
+				if command.Priority != "" {
+					if _, err := tx.Exec(ctx, `UPDATE conversations SET priority=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, toID, command.Priority); err != nil {
+						return struct{}{}, fmt.Errorf("set the command's priority: %w", err)
+					}
+				}
+				if err := tagConversation(ctx, tx, workspaceID, toID, command.Tags); err != nil {
+					return struct{}{}, err
+				}
+			}
 		} else if _, ok := locked[toID]; !ok {
 			return struct{}{}, pgx.ErrNoRows
 		}
-		if err := attachDetached(ctx, tx, workspaceID, ids, toID, apply.Actor.asActor(), now); err != nil {
+		if err := attachDetached(ctx, tx, workspaceID, ids, toID, true, apply.Actor.asActor(), now); err != nil {
 			return struct{}{}, err
 		}
 		if apply.Decision != nil {

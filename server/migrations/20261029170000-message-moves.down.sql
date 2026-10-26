@@ -1,3 +1,5 @@
+DROP TRIGGER ai_retrieval_messages_moved ON messages;
+DROP FUNCTION ai_retrieval_messages_moved();
 CREATE OR REPLACE FUNCTION messages_last_public_updated() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM conversations_refresh_last_public(array_agg(x.workspace_id), array_agg(x.conversation_id))

@@ -99,7 +99,7 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 		return fmt.Errorf("iterate thread references: %w", err)
 	}
 	if len(item.References) == 0 {
-		if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming')`,
+		if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming' AND detached_at IS NULL)`,
 			item.WorkspaceID, conversationID).Scan(&item.Opening); err != nil {
 			return fmt.Errorf("check thread start: %w", err)
 		}

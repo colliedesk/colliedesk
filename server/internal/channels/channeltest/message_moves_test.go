@@ -3,13 +3,123 @@ package channeltest_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channeltest"
+	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/intake"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
+
+// A reply sent on a chat channel names only its own customer's messages: one moved in from another
+// customer, or taken back to the queue, is never what it answers.
+func TestAChatReplyNeverAnswersAnotherCustomersMovedMessage(t *testing.T) {
+	loop := channeltest.NewLoopback("loopback", channels.Async)
+	d := newLoopDesk(t, loop)
+	ctx := context.Background()
+	actor := store.Actor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "u1-1", From: "u1", Text: "the printer is down"})
+	d.send(t, channeltest.LoopbackEvent{ID: "u2-1", From: "u2", Text: "mine too"})
+	conversationOf := `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND external_id LIKE '%'||$2`
+	first, second := d.one(t, conversationOf, "u1-1"), d.one(t, conversationOf, "u2-1")
+	moved := d.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND external_id LIKE '%u2-1'`)
+	if _, err := d.store.MoveMessages(ctx, d.workspaceID, second, store.MoveInput{MessageIDs: []string{moved}, To: store.MoveTarget{ConversationID: first}}, actor, *d.clock); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.CreateMessage(ctx, d.workspaceID, first, actor, "outgoing", "we are on it"); err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Now().UTC().Add(time.Minute)
+	if _, err := outbox.New(d.store, outbox.Options{Now: func() time.Time { return clock }}).ProcessDue(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sent := loop.Endpoint.Sent()
+	if len(sent) != 1 || sent[0].To != "u1" || slices.ContainsFunc(sent[0].References, func(id string) bool { return id == "u2-1" || id == "loopback:u2-1" }) {
+		t.Fatalf("sent = %+v", sent)
+	}
+}
+
+// A card of messages taken back to the queue and set aside stays set aside, whatever held messages of
+// the channel are thrown away, and can be put back.
+func TestDiscardingHeldMessagesLeavesASetAsideCardOfTakenBackMessages(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	ctx := context.Background()
+	actor := store.Actor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	message := d.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`)
+	source := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2::uuid`, message)
+	back, err := d.store.MoveMessages(ctx, d.workspaceID, source, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{Queue: true}}, actor, *d.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := *back.Move.GatheringID
+	if _, err := d.intake().Decide(ctx, d.workspaceID, card, intake.Decision{Action: intake.Ignore}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.DiscardHeld(ctx, d.workspaceID, d.channel.ID, nil, store.ChannelActor{AgentID: d.agentID}); err != nil {
+		t.Fatal(err)
+	}
+	if outcome, err := d.intake().Requeue(ctx, d.workspaceID, card, store.ChannelActor{AgentID: d.agentID}); err != nil || outcome.State != store.GatheringReview {
+		t.Fatalf("put back = %+v, %v", outcome, err)
+	}
+}
+
+// Undoing a move to the queue puts the message back without reopening a conversation it did not open.
+func TestUndoingAMoveToTheQueueKeepsTheConversationsStatus(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	ctx := context.Background()
+	actor := store.Actor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	message := d.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`)
+	source := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2::uuid`, message)
+	if _, err := d.pool.Exec(ctx, `UPDATE conversations SET status='resolved' WHERE id=$1`, source); err != nil {
+		t.Fatal(err)
+	}
+	back, err := d.store.MoveMessages(ctx, d.workspaceID, source, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{Queue: true}}, actor, *d.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.UndoMessageMove(ctx, d.workspaceID, back.Move.ID, actor, *d.clock); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2::uuid`, source); got != "resolved" {
+		t.Fatalf("status after undo = %s", got)
+	}
+}
+
+// A card of messages taken back to the queue opened as a new request with a command gets the command's
+// tags, as any card does; a command that opens no request is refused.
+func TestOpeningATakenBackCardWithACommandTagsIt(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	ctx := context.Background()
+	actor := store.Actor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	message := d.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`)
+	source := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2::uuid`, message)
+	back, err := d.store.MoveMessages(ctx, d.workspaceID, source, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{Queue: true}}, actor, *d.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := *back.Move.GatheringID
+	person := store.ChannelActor{AgentID: d.agentID}
+	if _, err := d.intake().Decide(ctx, d.workspaceID, card, intake.Decision{Action: intake.Create, Command: "cancel"}, store.DecidedByAgent, person); err == nil {
+		t.Fatal("a command that opens no request was taken")
+	}
+	opened, err := d.intake().Decide(ctx, d.workspaceID, card, intake.Decision{Action: intake.Create, Command: "bug"}, store.DecidedByAgent, person)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT string_agg(t.name,',')||'/'||c.priority FROM conversations c JOIN conversation_tags ct ON ct.conversation_id=c.id JOIN tags t ON t.id=ct.tag_id
+		WHERE c.workspace_id=$1 AND c.id=$2::uuid GROUP BY c.priority`, opened.ConversationID); got != "bug/high" {
+		t.Fatalf("tags/priority = %s", got)
+	}
+}
 
 // A chat message moved to another conversation takes the thread key it recorded and its chat item: the
 // customer's next message follows it, the conversations' chats show the item where it is, and undo
@@ -149,6 +259,28 @@ func TestMovingWhatAIAppliedRecordsACorrection(t *testing.T) {
 		To: store.MoveTarget{ConversationID: opened.ConversationID}}, actor, *d.clock)
 	if err != nil || again.Move.DecisionID != nil {
 		t.Fatalf("a person's own placement corrected again: %+v, %v", again, err)
+	}
+}
+
+// A resolved conversation a message left is built again for AI retrieval, as is one it joins.
+func TestMovingAMessageRebuildsTheRetrievalOfResolvedConversations(t *testing.T) {
+	d := newLoopDesk(t, channeltest.NewLoopback("loopback", channels.Async))
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "u", Text: "the printer is down"})
+	message := d.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`)
+	source := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2::uuid`, message)
+	if _, err := d.pool.Exec(ctx, `UPDATE conversations SET status='resolved' WHERE id=$1`, source); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.pool.Exec(ctx, `DELETE FROM ai_retrieval_pending WHERE workspace_id=$1`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.MoveMessages(ctx, d.workspaceID, source, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{NewSubject: "Printer"}},
+		store.Actor{AgentID: d.agentID}, *d.clock); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM ai_retrieval_pending WHERE workspace_id=$1 AND conversation_id=$2::uuid`, source); got == "0" {
+		t.Fatal("the resolved source was not queued for retrieval")
 	}
 }
 

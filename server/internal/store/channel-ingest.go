@@ -770,18 +770,26 @@ func (s *Store) createChannelConversation(ctx context.Context, tx pgx.Tx, channe
 		channel.WorkspaceID, contactID, in.Subject, now, string(channel.Type), channel.ID, scope, priority, settings.DefaultAssigneeID).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
+	if err := tagConversation(ctx, tx, channel.WorkspaceID, conversationID, tags); err != nil {
+		return "", err
+	}
+	return conversationID, nil
+}
+
+// tagConversation gives a conversation tags by name, creating the ones the workspace lacks.
+func tagConversation(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, tags []string) error {
 	for _, name := range tags {
 		var tagID string
 		if err := tx.QueryRow(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,$2)
-			ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, channel.WorkspaceID, name).Scan(&tagID); err != nil {
-			return "", fmt.Errorf("find or create tag: %w", err)
+			ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, workspaceID, name).Scan(&tagID); err != nil {
+			return fmt.Errorf("find or create tag: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-			channel.WorkspaceID, conversationID, tagID); err != nil {
-			return "", fmt.Errorf("tag conversation: %w", err)
+			workspaceID, conversationID, tagID); err != nil {
+			return fmt.Errorf("tag conversation: %w", err)
 		}
 	}
-	return conversationID, nil
+	return nil
 }
 
 func insertChannelMessage(ctx context.Context, tx pgx.Tx, channel channels.Channel, conversationID, externalID string, in channels.Inbound) (string, error) {

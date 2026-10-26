@@ -107,6 +107,23 @@ BEGIN
 END
 $$;
 
+-- A message moved between conversations, taken back to the queue or put in again changes what a resolved
+-- or closed conversation's AI retrieval document holds: both are built again.
+CREATE FUNCTION ai_retrieval_messages_moved() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO ai_retrieval_pending(workspace_id, conversation_id)
+        SELECT DISTINCT c.workspace_id, c.id
+        FROM old_messages o JOIN new_messages n ON n.id = o.id
+        CROSS JOIN LATERAL (VALUES (o.conversation_id), (n.conversation_id)) AS x(conversation_id)
+        JOIN conversations c ON c.workspace_id = n.workspace_id AND c.id = x.conversation_id
+        WHERE (o.conversation_id, o.detached_at IS NULL) IS DISTINCT FROM (n.conversation_id, n.detached_at IS NULL)
+            AND c.status IN ('resolved', 'closed');
+    RETURN NULL;
+END
+$$;
+CREATE TRIGGER ai_retrieval_messages_moved AFTER UPDATE ON messages
+    REFERENCING OLD TABLE AS old_messages NEW TABLE AS new_messages FOR EACH STATEMENT EXECUTE FUNCTION ai_retrieval_messages_moved();
+
 CREATE OR REPLACE FUNCTION messages_last_public_updated() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM conversations_refresh_last_public(array_agg(x.workspace_id), array_agg(x.conversation_id))
