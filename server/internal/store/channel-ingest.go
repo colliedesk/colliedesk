@@ -481,6 +481,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		}
 	}
 	conversationID := decision.ConversationID
+	// What intake said the batch adds to a conversation it joins; the rules never say.
+	replyKind := ""
+	if request.Intake != nil && conversationID != "" {
+		replyKind = request.Intake.ReplyKind
+	}
 	var files []EmailFile
 	if files, err = s.putInboundFiles(ctx, workspaceID, in.Files); err != nil {
 		return result, err
@@ -512,12 +517,12 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if err := setStatusActor(ctx, tx, ""); err != nil {
 			return result, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') THEN 'open' ELSE status END,
-			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') AND NOT $3 THEN 'open' ELSE status END,
+			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID, replyKind == ReplyAcknowledgement); err != nil {
 			return result, fmt.Errorf("reopen conversation: %w", err)
 		}
 	}
-	messageID, err := insertChannelMessage(ctx, tx, channel, conversationID, externalID, in)
+	messageID, err := insertChannelMessage(ctx, tx, channel, conversationID, externalID, replyKind, in)
 	if err != nil {
 		return result, err
 	}
@@ -854,7 +859,7 @@ func tagConversation(ctx context.Context, tx pgx.Tx, workspaceID, conversationID
 	return nil
 }
 
-func insertChannelMessage(ctx context.Context, tx pgx.Tx, channel channels.Channel, conversationID, externalID string, in channels.Inbound) (string, error) {
+func insertChannelMessage(ctx context.Context, tx pgx.Tx, channel channels.Channel, conversationID, externalID, replyKind string, in channels.Inbound) (string, error) {
 	var envelope []byte
 	if in.EmailMeta != nil {
 		var err error
@@ -871,9 +876,9 @@ func insertChannelMessage(ctx context.Context, tx pgx.Tx, channel channels.Chann
 		sentAt = &in.SentAt
 	}
 	var messageID string
-	if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,body_html,external_id,channel_id,channel_meta,email_meta,created_at)
-		VALUES($1,$2,'incoming',$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$8,COALESCE($9,now())) RETURNING id::text`,
-		channel.WorkspaceID, conversationID, in.Text, in.HTML, externalID, channel.ID, meta, envelope, sentAt).Scan(&messageID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,body_html,external_id,channel_id,channel_meta,email_meta,created_at,intake_reply_kind)
+		VALUES($1,$2,'incoming',$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$8,COALESCE($9,now()),NULLIF($10,'')) RETURNING id::text`,
+		channel.WorkspaceID, conversationID, in.Text, in.HTML, externalID, channel.ID, meta, envelope, sentAt, replyKind).Scan(&messageID); err != nil {
 		return "", fmt.Errorf("store inbound message: %w", err)
 	}
 	return messageID, nil

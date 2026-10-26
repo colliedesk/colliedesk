@@ -221,7 +221,7 @@ Each feature has a level: what it does without anyone asking.
 |---|---|---|---|
 | Triage | Only when someone presses **Suggest** | Suggests for every new conversation | Applies the picked parts by itself (above), with **Undo** |
 | Reply drafts | Only **Draft with AI** | Writes a draft when a customer writes | Never: AI never sends |
-| Intake (chat channels only) | The channel's rules decide | The rules decide; AI leaves a suggestion for review | AI decides what is clear enough; otherwise the rules decide |
+| Intake (chat channels only) | The channel's rules decide | The rules decide; AI leaves a suggestion for review | AI decides what is clear enough; otherwise the rules decide. Until a channel's own decisions show AI is ready, AI only suggests here too, and the rules decide at once |
 
 The workspace's level is **Default for channels** under each feature in **Settings → Built-in AI**. A
 channel can set its own level for a feature, and a chat channel for each of its scopes (one-to-one
@@ -250,6 +250,13 @@ the default. The same is `PUT /api/v1/channels/{id}/ai/{slot}` and the MCP tools
 `colliedesk_channel_ai_set` and `colliedesk_channel_ai_get`. Every change is in the AI history and in
 the channel's history. An AI agent lowers a level with an admin token; raising one (or loosening intake's
 settings) always becomes a [request a person approves](agent-requests.md).
+
+Before intake's AI reads a chat, names become "Customer A" or "Team 1", passwords and codes are hidden,
+and phone numbers, email addresses, IBANs and the numbers after an English account or ID word ("account
+number", "passport") are masked. A channel in another language adds its own words in intake's settings:
+`redact_keywords` for the words that come before a password or a code, `contact_labels` (`account`, `id`)
+for those before a bank account or an identity document number. Taking a word out masks less, so it
+needs the approval raising AI needs.
 
 Intake may also send pictures customers sent, the customer's profile, or an integration's data, only
 once an admin agreed to each (`colliedesk_ai_source_consent_request`, taken back with

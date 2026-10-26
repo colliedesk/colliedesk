@@ -125,7 +125,9 @@ channel is in this conversation: what the channel's rules decided, such as `defa
 collected batch named, or `null`), `gathering_id` (the chat intake card it
 came in, or `null`), `other_contact_id` (the customer whose conversation it was moved from, while it sits in
 another customer's, or `null`), `detached_at` and `detached_by_agent_id` (a chat message taken back to the
-intake queue: out of the timeline, never deleted), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
+intake queue: out of the timeline, never deleted), `intake_reply_kind` (`acknowledgement` when intake said a
+chat message only thanked or acknowledged and kept a resolved conversation resolved, `substantive`, or `null`),
+`created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
 `size`, `sha256`, `created_at` and `path`, the file's location in the ZIP.
 
 Each time entry has `id`, `conversation_id`, `agent_id`, `agent_name`, `minutes`, `note`,

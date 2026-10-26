@@ -4733,6 +4733,11 @@ export interface components {
             instructions?: string;
             /** @description Words that mark a secret in the channel's language (a password, a code). */
             redact_keywords?: string[];
+            /** @description Words of the channel's language that name a bank account (account) or an identity document (id) before its number; the number is masked before AI reads it. Removing one needs the approval raising AI needs. */
+            contact_labels?: {
+                account?: string[];
+                id?: string[];
+            };
         };
         AIChannelLevel: {
             /** Format: uuid */
@@ -7285,6 +7290,11 @@ export interface components {
              * @description A customer message moved into a conversation of another contact: the contact whose conversation it came from. A reply suggests no copy to them, and replies never go to them.
              */
             other_contact_id?: string | null;
+            /**
+             * @description What intake said a chat customer's message added to the conversation it joined: acknowledgement (a thank-you, an "ok") kept a resolved conversation resolved and asked for no automatic draft. Null when intake did not say.
+             * @enum {string|null}
+             */
+            intake_reply_kind?: "substantive" | "acknowledgement" | null;
             /** @description The message's id on its channel, prefixed by the type ("email:<Message-ID>"). */
             external_id?: string | null;
             /** @description What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed). */

@@ -24,6 +24,8 @@ func system(locale, instructions string) string {
 	text := frameSystem
 	if locale = strings.TrimSpace(locale); locale != "" {
 		text += "\nWrite subject and reason in the language of the locale " + locale + "."
+	} else {
+		text += "\nWrite subject and reason in the language the customer wrote in."
 	}
 	if instructions = strings.TrimSpace(instructions); instructions != "" {
 		text += "\n\nThe team's instructions for this channel:\n" + instructions

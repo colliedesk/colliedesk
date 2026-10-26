@@ -6,3 +6,5 @@ INSERT INTO intake_decisions (id, workspace_id, gathering_id, decider, basis, ac
         '2026-10-25 12:30:30+00'
     FROM intake_gatherings WHERE id = md5('gathering-beta-4')::uuid;
 UPDATE intake_decisions SET follows_decision_id = md5('decision-beta-4')::uuid WHERE id = md5('decision-beta-3')::uuid;
+-- beta: the message of Minh's card joined its conversation as substantive.
+UPDATE messages SET intake_reply_kind = 'substantive' WHERE id = (SELECT message_id FROM channel_inbound_events WHERE id = md5('chin-beta-1')::uuid);

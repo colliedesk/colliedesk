@@ -29,7 +29,7 @@ func newAIDesk(t *testing.T, gate intake.Gate) aiDesk {
 		Server: &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Colliedesk AI", APIKey: "server-key", Models: map[string][]string{ai.SlotIntake: {"claude-haiku-5-5"}}},
 		Build:  func(ai.Spec) (aiprovider.Provider, error) { return d.fake, nil }})
 	service.SetClock(func() time.Time { return *d.clock })
-	d.worker = ai.NewWorker(service, database.New(d.pool), ai.WorkerOptions{})
+	d.worker = ai.NewWorker(service, database.New(d.pool), ai.WorkerOptions{MaxRunning: 1, PerWorkspace: 1})
 	d.worker.Handle(ai.SlotIntake, d.intake().WithGate(gate).AIHandler())
 	return d
 }
@@ -66,7 +66,7 @@ func (d aiDesk) decisions(t *testing.T) string {
 
 func (d aiDesk) tasks(t *testing.T) string {
 	t.Helper()
-	return d.one(t, `SELECT COALESCE(string_agg(state||COALESCE(':'||error_code,''),',' ORDER BY state,created_at,id),'') FROM ai_tasks WHERE workspace_id=$1 AND kind='intake'`)
+	return d.one(t, `SELECT COALESCE(string_agg(state||COALESCE(':'||error_code,''),',' ORDER BY state||COALESCE(':'||error_code,'')),'') FROM ai_tasks WHERE workspace_id=$1 AND kind='intake'`)
 }
 
 // At auto with every gate closed, AI says what it would do and the rules decide at once, without waiting
@@ -229,8 +229,15 @@ func TestOneCardOfALaneIsWithAIAtATime(t *testing.T) {
 	}
 	d.answers(map[string]any{"action": "create", "subject": "Export", "confidence": 0.9}, map[string]any{"action": "create", "subject": "Scale", "confidence": 0.9})
 	d.runAI(t)
-	if got := d.tasks(t); got != "done,done,queued" {
-		t.Fatalf("tasks after the first turn = %s", got)
+	// The first card decided, its sender's next card has its turn; the other lane still waits for the worker.
+	if got := d.tasks(t); got != "done,queued,queued" {
+		t.Fatalf("tasks after the first card = %s", got)
+	}
+	d.answers(map[string]any{"action": "create", "subject": "Printer", "confidence": 0.9})
+	d.runAI(t)
+	d.runAI(t)
+	if got := d.tasks(t); got != "done,done,done" {
+		t.Fatalf("tasks at the end = %s", got)
 	}
 }
 
@@ -311,5 +318,87 @@ func TestACardAIWillNotReadIsTheRulesAtOnce(t *testing.T) {
 	}
 	if got := d.gatherings(t); got != "created/create/new_thread/rules:1" {
 		t.Fatalf("gatherings = %s", got)
+	}
+}
+
+// After five failed calls in a row a workspace's intake stops calling the model for ten minutes: its
+// cards go to the rules at once.
+func TestIntakeStopsCallingAFailingModelForAWhile(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	for i := 0; i < 5; i++ {
+		d.fake.Script(aiprovider.FakeReply{Err: &aiprovider.Error{Code: aiprovider.ErrorQuotaExhausted}})
+	}
+	for _, sender := range []string{"a", "b", "c", "e", "f", "g"} {
+		d.send(t, channeltest.LoopbackEvent{ID: sender + "-1", From: sender, Group: "g1", Text: "the stock export fails for " + sender})
+	}
+	d.flush(t)
+	for i := 0; i < 6; i++ {
+		d.runAI(t)
+	}
+	if got := d.tasks(t); got != "failed:intake_paused,failed:quota_exhausted,failed:quota_exhausted,failed:quota_exhausted,failed:quota_exhausted,failed:quota_exhausted" {
+		t.Fatalf("tasks = %s", got)
+	}
+	if n := len(d.fake.Requests()); n != 5 {
+		t.Fatalf("calls = %d", n)
+	}
+	if got := d.one(t, `SELECT count(*)::text FROM intake_gatherings WHERE workspace_id=$1 AND state='deciding' AND decide_by<=$2`, *d.clock); got != "6" {
+		t.Fatalf("cards handed to the rules = %s", got)
+	}
+	*d.clock = d.clock.Add(11 * time.Minute)
+	d.send(t, channeltest.LoopbackEvent{ID: "h-1", From: "h", Group: "g1", Text: "the printer is off"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Printer", "confidence": 0.9})
+	d.runAI(t)
+	if n := len(d.fake.Requests()); n != 6 {
+		t.Fatalf("calls after the pause = %d", n)
+	}
+}
+
+// A thank-you AI joins to a resolved conversation keeps it resolved and asks for no automatic draft; what
+// adds something to it reopens it.
+func TestAThankYouKeepsAResolvedConversationResolved(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO ai_slots(workspace_id,slot,uses_server,model,enabled,default_level,consented_by,consented_at,updated_by,updated_at)
+		VALUES($1,'draft',true,'claude-haiku-5-5',true,'suggest',$2,now(),$2,now()) ON CONFLICT (workspace_id,slot) DO UPDATE SET default_level='suggest',enabled=true`,
+		d.workspaceID, d.agentID); err != nil {
+		t.Fatal(err)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "create", "subject": "Stock export fails", "confidence": 0.97})
+	d.runAI(t)
+	conversation := d.one(t, `SELECT conversation_id::text FROM intake_gatherings WHERE workspace_id=$1`)
+	if _, err := d.pool.Exec(context.Background(), `UPDATE conversations SET status='resolved' WHERE id=$1`, conversation); err != nil {
+		t.Fatal(err)
+	}
+	drafts := func() string {
+		return d.one(t, `SELECT count(*)::text FROM ai_tasks WHERE workspace_id=$1 AND kind='draft' AND conversation_id=$2`, conversation)
+	}
+	before := drafts()
+	d.send(t, channeltest.LoopbackEvent{ID: "b-1", From: "b", Group: "g1", Text: "thanks, it works now"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "attach", "target": "C1", "reply_kind": "acknowledgement", "confidence": 0.96})
+	d.runAI(t)
+	if got := d.one(t, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2`, conversation); got != "resolved" {
+		t.Fatalf("after a thank-you the conversation is %s", got)
+	}
+	if got := d.one(t, `SELECT COALESCE(string_agg(COALESCE(intake_reply_kind,'-'),',' ORDER BY created_at),'') FROM messages
+		WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming'`, conversation); got != "-,acknowledgement" {
+		t.Fatalf("reply kinds = %s", got)
+	}
+	if got := drafts(); got != before {
+		t.Fatalf("automatic drafts %s → %s after a thank-you", before, got)
+	}
+	d.send(t, channeltest.LoopbackEvent{ID: "c-1", From: "c", Group: "g1", Text: "it fails again for me"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "attach", "target": "C1", "confidence": 0.96})
+	d.runAI(t)
+	if got := d.one(t, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2`, conversation); got != "open" {
+		t.Fatalf("after more to do the conversation is %s", got)
+	}
+	if got := drafts(); got == before {
+		t.Fatalf("no automatic draft for what reopened it (%s)", got)
 	}
 }

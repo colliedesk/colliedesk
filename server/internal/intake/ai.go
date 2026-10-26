@@ -79,18 +79,27 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	request := aiprovider.Request{System: built.System, Messages: []aiprovider.Message{{Role: aiprovider.RoleUser, Text: built.User, Images: built.Images}},
 		MaxOutput: prompt.MaxOutput, Schema: prompt.Schema}
 
+	if s.breaker.open(workspaceID, s.now()) {
+		return &ai.TaskError{Code: CodePaused}
+	}
 	started := s.now()
 	var answer prompt.Answer
 	var response aiprovider.Response
 	code := ""
 	for attempt := 0; attempt < 2; attempt++ {
 		if response, err = run.Metered(ctx, request); err != nil {
+			s.breaker.fail(workspaceID, s.now())
 			return err
 		}
 		answer, err = built.Parse(response.JSON)
 		if !errors.Is(err, prompt.ErrUnknownLabel) {
 			break
 		}
+	}
+	if err != nil {
+		s.breaker.fail(workspaceID, s.now())
+	} else {
+		s.breaker.succeed(workspaceID)
 	}
 	switch {
 	case errors.Is(err, prompt.ErrUnknownLabel):
@@ -258,7 +267,7 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions) prompt.Sna
 		return false
 	}
 	out := prompt.Snapshot{Location: location, Sources: options.Sources, Skipped: map[string]string{}, RedactKeywords: options.RedactKeywords,
-		Instructions: *options.Instructions}
+		ContactLabels: prompt.ContactLabels{Account: options.ContactLabels.Account, ID: options.ContactLabels.ID}, Instructions: *options.Instructions}
 	g := snap.Gathering
 	if g.Place != nil {
 		out.Place = prompt.Place{OneToOne: g.Place.Kind != "group"}
@@ -299,6 +308,8 @@ func snapshotFor(snap store.IntakeSnapshot, options ai.IntakeOptions) prompt.Sna
 			out.Skipped[prompt.SourceContact] = "consent"
 		}
 	}
+	// Pictures are not sent yet: no model's input is known to take them.
+	out.Skipped[prompt.SourceImages] = "not_supported"
 	if !consented("images") {
 		out.Skipped[prompt.SourceImages] = "consent"
 	}

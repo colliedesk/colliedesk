@@ -62,6 +62,7 @@ type Service struct {
 	now      func() time.Time
 	logger   *slog.Logger
 	gate     Gate
+	breaker  *breaker
 }
 
 // New returns a Service.
@@ -69,7 +70,7 @@ func New(st *store.Store, p *pipeline.Pipeline, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: st, pipeline: p, now: now, logger: slog.Default(), gate: closedGate{}}
+	return &Service{store: st, pipeline: p, now: now, logger: slog.Default(), gate: closedGate{}, breaker: newBreaker()}
 }
 
 // Decide applies a person's (decider agent) or AI's decision. The same decision again changes nothing;
@@ -112,6 +113,7 @@ func (s *Service) Decide(ctx context.Context, workspaceID, gatheringID string, d
 		if d.ConversationID == "" {
 			return store.GatheringOutcome{}, ErrInvalid
 		}
+		apply.ReplyKind = d.ReplyKind
 		if detached != nil {
 			_, err = s.store.DecideDetachedCard(ctx, workspaceID, gatheringID, d.ConversationID, "", apply, s.now().UTC())
 		} else {

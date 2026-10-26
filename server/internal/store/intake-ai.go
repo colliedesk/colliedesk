@@ -6,7 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
+)
+
+// What intake says a batch adds to the conversation it joins (messages.intake_reply_kind).
+const (
+	ReplySubstantive     = "substantive"
+	ReplyAcknowledgement = "acknowledgement"
 )
 
 // ErrNotASuggestion means a decision named as AI's suggestion of a card is not one: another card's, a
@@ -66,6 +73,38 @@ func RecordAIDecision(ctx context.Context, tx pgx.Tx, workspaceID, gatheringID s
 		return false, errors.New("an AI decision recorded without being applied says why")
 	}
 	return state == GatheringDeciding, insertIntakeDecision(ctx, tx, workspaceID, gatheringID, DecidedByAI, "model", d, d.ItemsSeen, false, ChannelActor{}, now)
+}
+
+// IntakeReasonRetention is how long the reason AI gave for an intake decision is kept: written from what
+// customers said, it goes before the decision does.
+const IntakeReasonRetention = 90 * 24 * time.Hour
+
+// PruneIntakeReasons erases, in every workspace, the reasons of AI's intake decisions older than
+// IntakeReasonRetention. serve runs it at start and daily.
+func (s *Store) PruneIntakeReasons(ctx context.Context) (int64, error) {
+	var pruned int64
+	err := s.db.Privileged(ctx, database.PrivilegeIntakeReasonPrune, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE intake_decisions SET reason=NULL WHERE decider='ai' AND reason IS NOT NULL AND created_at<$1`,
+			s.now().Add(-IntakeReasonRetention))
+		if err != nil {
+			return fmt.Errorf("prune intake reasons: %w", err)
+		}
+		pruned = tag.RowsAffected()
+		return nil
+	})
+	return pruned, err
+}
+
+// relatedConversation is the newest other conversation of the contact, for a new request of a customer
+// who had one before.
+func relatedConversation(ctx context.Context, tx pgx.Tx, workspaceID, contactID, conversationID string) (string, error) {
+	var related string
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT id::text FROM conversations WHERE workspace_id=$1 AND contact_id=$2::uuid AND id<>$3::uuid
+		ORDER BY created_at DESC,id DESC LIMIT 1),'')`, workspaceID, contactID, conversationID).Scan(&related)
+	if err != nil {
+		return "", fmt.Errorf("read related conversation: %w", err)
+	}
+	return related, nil
 }
 
 // mergeDepth bounds how far a conversation merged into one merged in turn is followed.

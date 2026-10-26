@@ -241,6 +241,9 @@ type IntakeApply struct {
 	// Command and Subject are a person's for the conversation a new request opens: the command's tags
 	// and priority, and its subject.
 	Command, Subject string
+	// ReplyKind is what the batch adds to the conversation it joins: an acknowledgement keeps a resolved
+	// (or closed) conversation as it is and asks for no automatic draft.
+	ReplyKind string
 	// Decision is the row intake_decisions keeps of an AI's or a person's decision; nil for the rules.
 	Decision *IntakeDecisionInput
 }
@@ -254,6 +257,8 @@ type IntakeDecisionInput struct {
 	CorrectsDecisionID string
 	// FollowsDecisionID is the AI suggestion a person decided as.
 	FollowsDecisionID string
+	// RelatedConversationID is, for a new request, the customer's newest conversation before it.
+	RelatedConversationID string
 	AIDecisionDetail
 }
 
@@ -347,6 +352,14 @@ func concludeGathering(ctx context.Context, tx pgx.Tx, workspaceID string, apply
 	if err := unblockLane(ctx, tx, workspaceID, g.id, now); err != nil {
 		return err
 	}
+	if apply.Decision != nil && state == GatheringCreated && contactID != "" {
+		decision := *apply.Decision
+		var err error
+		if decision.RelatedConversationID, err = relatedConversation(ctx, tx, workspaceID, contactID, conversationID); err != nil {
+			return err
+		}
+		apply.Decision = &decision
+	}
 	return recordIntakeDecision(ctx, tx, workspaceID, apply, g, now)
 }
 
@@ -375,13 +388,14 @@ func insertIntakeDecision(ctx context.Context, tx pgx.Tx, workspaceID, gathering
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO intake_decisions(workspace_id,gathering_id,decider,basis,action,target_conversation_id,command,subject,reply_kind,confidence,reason,
 			applied,items_seen,fallback,corrects_decision_id,agent_id,token_id,created_at,ignore_reason,follows_decision_id,
-			runner_up_conversation_id,runner_up_confidence,not_applied_reason,error_code,manifest,task_id,model,prompt_version,latency_ms)
+			runner_up_conversation_id,runner_up_confidence,not_applied_reason,error_code,manifest,task_id,model,prompt_version,latency_ms,related_conversation_id)
 		VALUES($1,$2::uuid,$3,$4,$5,NULLIF($6,'')::uuid,NULLIF($7,''),NULLIF($8,''),NULLIF($9,''),$10,NULLIF($11,''),$12,$13::uuid[],$14,NULLIF($15,'')::uuid,
 			NULLIF($16,'')::uuid,NULLIF($17,'')::uuid,$18,NULLIF($19,''),NULLIF($20,'')::uuid,
-			NULLIF($21,'')::uuid,$22,NULLIF($23,''),NULLIF($24,''),$25,NULLIF($26,'')::uuid,NULLIF($27,''),NULLIF($28,''),$29)`,
+			NULLIF($21,'')::uuid,$22,NULLIF($23,''),NULLIF($24,''),$25,NULLIF($26,'')::uuid,NULLIF($27,''),NULLIF($28,''),$29,NULLIF($30,'')::uuid)`,
 		workspaceID, gatheringID, decider, basis, d.Action, d.TargetConversationID, d.Command, clip(d.Subject, 200), d.ReplyKind, d.Confidence, clip(d.Reason, 2000),
 		d.NotAppliedReason == "", seen, fallback, d.CorrectsDecisionID, actor.AgentID, actor.TokenID, now, d.IgnoreReason, d.FollowsDecisionID,
-		d.RunnerUpConversationID, d.RunnerUpConfidence, d.NotAppliedReason, d.ErrorCode, manifest, d.TaskID, clip(d.Model, 200), d.PromptVersion, d.LatencyMS); err != nil {
+		d.RunnerUpConversationID, d.RunnerUpConfidence, d.NotAppliedReason, d.ErrorCode, manifest, d.TaskID, clip(d.Model, 200), d.PromptVersion, d.LatencyMS,
+		d.RelatedConversationID); err != nil {
 		return fmt.Errorf("record intake decision: %w", err)
 	}
 	return nil

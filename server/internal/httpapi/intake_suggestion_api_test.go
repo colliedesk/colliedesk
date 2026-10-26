@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 // aiSuggestion writes what AI suggested of a card and did not do, as the AI decider records it, seconds
@@ -108,6 +110,14 @@ func TestADecisionSaysWhetherItFollowedOrCorrectedAI(t *testing.T) {
 		person.ReplyKind == nil || *person.ReplyKind != "acknowledgement" {
 		t.Fatalf("followed: %+v", person)
 	}
+	// Following a thank-you keeps the conversation resolved, and its message says why.
+	if got := queryString(t, d.pool, `SELECT status FROM conversations WHERE id=$1`, resolved); got != "resolved" {
+		t.Fatalf("after following a thank-you the conversation is %s", got)
+	}
+	messages := request(t, d.api, http.MethodGet, "/api/v1/conversations/"+resolved+"/messages", nil, d.adminA, nil)
+	if messages.Code != http.StatusOK || !strings.Contains(messages.Body.String(), `"intake_reply_kind":"acknowledgement"`) {
+		t.Fatalf("messages: %d %s", messages.Code, messages.Body.String())
+	}
 
 	other := d.heldCard(t, d.workspaceA, d.chatA, "u2", "a new printer for the back room")
 	wrong := d.aiSuggestion(t, d.workspaceA, other, "attach", resolved, "", "substantive", -1)
@@ -185,5 +195,48 @@ func TestASuggestionWithoutMessagesReadHasNoText(t *testing.T) {
 	body := response.Body.String()
 	if response.Code != http.StatusOK || !strings.Contains(body, `"suggestion":{`) || strings.Contains(body, "CANDSUBJECT") || strings.Contains(body, "AIREASON") {
 		t.Fatalf("requeue: %d %s", response.Code, body)
+	}
+}
+
+// A new request of a customer who had a conversation before names it in its decision.
+func TestANewRequestNamesTheCustomersConversationBefore(t *testing.T) {
+	d := newLevelDesk(t)
+	first := d.heldCard(t, d.workspaceA, d.chatA, "u1", "the stock export fails")
+	decide := func(card, subject string) string {
+		t.Helper()
+		response := request(t, d.api, http.MethodPost, "/api/v1/intake/gatherings/"+card+"/decide", map[string]any{"action": "create", "subject": subject}, d.adminA, nil)
+		var decided struct {
+			ConversationID *string `json:"conversation_id"`
+		}
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &decided) != nil || decided.ConversationID == nil {
+			t.Fatalf("create %s: %d %s", subject, response.Code, response.Body.String())
+		}
+		return *decided.ConversationID
+	}
+	before := decide(first, "Stock export")
+	second := d.heldCard(t, d.workspaceA, d.chatA, "u1", "printer prints blank labels")
+	decide(second, "Blank labels")
+	if got := queryString(t, d.pool, `SELECT COALESCE(related_conversation_id::text,'-') FROM intake_decisions WHERE gathering_id=$1`, first); got != "-" {
+		t.Fatalf("the first request names %s", got)
+	}
+	if got := queryString(t, d.pool, `SELECT COALESCE(related_conversation_id::text,'-') FROM intake_decisions WHERE gathering_id=$1`, second); got != before {
+		t.Fatalf("the second request names %s, want %s", got, before)
+	}
+}
+
+// The reason AI gave is erased 90 days after; the decision stays.
+func TestAIReasonsAreErasedAfterNinetyDays(t *testing.T) {
+	d := newLevelDesk(t)
+	card := d.heldCard(t, d.workspaceA, d.chatA, "u1", "the stock export fails")
+	old := d.aiSuggestion(t, d.workspaceA, card, "create", "", "", "substantive", -91*24*3600)
+	recent := d.aiSuggestion(t, d.workspaceA, card, "create", "", "", "substantive", -89*24*3600)
+	if _, err := store.New(d.pool).PruneIntakeReasons(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := queryString(t, d.pool, `SELECT COALESCE(reason,'-') FROM intake_decisions WHERE id=$1`, old); got != "-" {
+		t.Fatalf("a reason of 91 days = %s", got)
+	}
+	if got := queryString(t, d.pool, `SELECT COALESCE(reason,'-') FROM intake_decisions WHERE id=$1`, recent); got == "-" {
+		t.Fatal("a reason of 89 days was erased")
 	}
 }
