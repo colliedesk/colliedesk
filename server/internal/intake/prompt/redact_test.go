@@ -154,6 +154,9 @@ func TestRedactHidesAPasswordNextToALabelOnItsOwn(t *testing.T) {
 		"order SO2026001 is late":                  "order SO2026001 is late",
 		"my password is wrong":                     "my password is wrong",
 		"call me at 0912345678 please":             "call me at 0912345678 please",
+		"xin chào Matkhau123 là mật khẩu của tôi":  "xin chào " + hidden + " là mật khẩu của tôi",
+		"otp482913":           "otp" + hidden,
+		"my OTP482913 thanks": "my OTP" + hidden + " thanks",
 		// A code, a model or a file name near a label is no password.
 		"Đơn SO2026001 cần đổi mật khẩu gấp":        "Đơn SO2026001 cần đổi mật khẩu gấp",
 		"SO2026001 cần đổi mật khẩu":                "SO2026001 cần đổi mật khẩu",

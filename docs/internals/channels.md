@@ -303,3 +303,8 @@ a database with two channels of a type, naming them.
   says `string` breaks the whole list, which typecheck does not catch (`api/schemas.test.ts`).
 - `channel_inbound_events` with an empty `EventIDs` array: compare with `COALESCE($n::text[],'{}')`;
   `ANY(NULL)` filters every row out.
+- Intake's redactor (`intake/prompt/redact.go`) hides what follows a secret's label only when it looks like
+  a secret: letters alone on the line after a label on its own (`mật khẩu`, then `abcdef`) stay, and after
+  `mật khẩu: abc def` only the first word goes. The trade-off keeps a sentence about a password readable.
+  A channel without `redact_keywords` in its language hides only after the English labels, so a
+  Vietnamese password there reaches the model (docs/user/ai.md says to add them).

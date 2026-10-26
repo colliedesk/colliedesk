@@ -64,7 +64,7 @@ type redactor struct {
 	hintPattern  *regexp.Regexp
 	otpWords     []string
 	// labelOnly is a line that is a credential label and nothing after it ("password:", a label and a
-	// few words); beforeLabel is a password opening the line, a few plain words before a label near its end.
+	// few words); beforeLabel is a password a few plain words before a label near the end of the line.
 	labelOnly   *regexp.Regexp
 	beforeLabel *regexp.Regexp
 }
@@ -84,7 +84,7 @@ func newRedactor(keywords []string) *redactor {
 		hintPattern:  regexp.MustCompile(`(?i)(?:^|[^\p{L}\p{N}])(?:` + quoteAll(hints) + `)(?:[^\p{L}\p{N}]|$)`),
 		otpWords:     otp,
 		labelOnly:    regexp.MustCompile(`(?i)^\s*(?:\p{L}+\s+){0,2}(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[:=]?\s*$`),
-		beforeLabel:  regexp.MustCompile(`(?i)^(\s*)(\S+)((?:\s+\p{L}+){0,3}\s+(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[.!?]?\s*)$`),
+		beforeLabel:  regexp.MustCompile(`(?i)(^|\s)(\S+)((?:\s+\p{L}+){0,3}\s+(?:` + alternatives + `)(?:\s+\p{L}+){0,3}\s*[.!?]?\s*)$`),
 	}
 }
 
@@ -347,7 +347,7 @@ func secretAfter(line string, from int) (int, int, bool) {
 	return 0, 0, false
 }
 
-// hideBeforeLabel hides a password that opens the line before its label: "Abc@12345 is my password (of the shop)". Only
+// hideBeforeLabel hides a password written before its label: "Abc@12345 is my password (of the shop)". Only
 // a word shaped like a password (a symbol, or nine or more mixed-case letters and digits) counts, so an order code,
 // a model or a file name near a label stays.
 func (r *redactor) hideBeforeLabel(line string, kind *lineKind) string {
@@ -387,7 +387,7 @@ func (r *redactor) hideCodes(line string, kind *lineKind) string {
 		for j < len(runes) && unicode.IsDigit(runes[j]) {
 			j++
 		}
-		if length := j - i; length >= 4 && length <= 8 && standsAlone(runes, i, j) {
+		if length := j - i; length >= 4 && length <= 8 && (standsAlone(runes, i, j) || r.codeAfterWord(runes, i, j)) {
 			out.WriteString(hidden)
 			if !named {
 				*kind = wholeLine
@@ -398,6 +398,19 @@ func (r *redactor) hideCodes(line string, kind *lineKind) string {
 		i = j
 	}
 	return out.String()
+}
+
+// codeAfterWord says digits glued to the word before them are a code that word names ("otp482913").
+func (r *redactor) codeAfterWord(runes []rune, start, end int) bool {
+	if end < len(runes) && (unicode.IsLetter(runes[end]) || unicode.IsDigit(runes[end])) {
+		return false
+	}
+	from := start
+	for from > 0 && unicode.IsLetter(runes[from-1]) {
+		from--
+	}
+	word := strings.ToLower(string(runes[from:start]))
+	return word != "" && slices.Contains(r.otpWords, word)
 }
 
 // standsAlone is false for digits that belong to a longer figure (a decimal, a date, a range) or to a
