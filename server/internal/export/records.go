@@ -241,6 +241,8 @@ type ChannelInboundEvent struct {
 	// the rule's name); null for what the frame handled before them or what is still being collected.
 	DecisionBasis *string `json:"decision_basis"`
 	DecisionRule  *string `json:"decision_rule"`
+	// Command is the channel command a collected message named.
+	Command *string `json:"command"`
 	// GatheringID is the batch of intake it belongs to.
 	GatheringID *string              `json:"gathering_id"`
 	ReceivedAt  time.Time            `json:"received_at"`
@@ -931,6 +933,8 @@ type Message struct {
 	// channel's rules decided (match, default, person; new_thread, thread_key…). Null for the others.
 	DecisionBasis *string `json:"decision_basis"`
 	DecisionRule  *string `json:"decision_rule"`
+	// Command is the channel command its collected batch named (a chat's "report a bug").
+	Command *string `json:"command"`
 	// GatheringID is the batch of a chat's intake it came from.
 	GatheringID *string `json:"gathering_id"`
 	// OtherContactID is the contact whose conversation a customer message was moved from; DetachedAt when a

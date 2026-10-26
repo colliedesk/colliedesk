@@ -107,6 +107,14 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".mode": "Use all or commands."},
 				Message: "Check the channel settings."}
 		}
+		if scope.Unmatched != "" && scope.Unmatched != channels.UnmatchedJoinOpen {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".unmatched": "Use join_open, or leave it out."},
+				Message: "Check the channel settings."}
+		}
+		if scope.Gather != nil && (scope.Gather.PreCommandSeconds < 0 || scope.Gather.PreCommandSeconds > 3600) {
+			return nil, &channels.FieldError{Fields: map[string]string{"settings.scopes." + key + ".gather.pre_command_seconds": "Use 0 to 3600 seconds."},
+				Message: "Check the channel settings."}
+		}
 	}
 	return settings, nil
 }

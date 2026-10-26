@@ -241,7 +241,21 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return finish(result)
 	}
 	if commanded && command.Action == channels.ActionCancel {
-		in.Intent.Kind = channels.IntentCancel
+		// Where messages are collected, a cancel command cancels only what its sender is collecting with a
+		// command in it; without one it is an ordinary message. Where they are not, it is dropped.
+		batch := true
+		if in.Aggregate != nil {
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='pending'
+				AND aggregate_key=$3 AND command IS NOT NULL AND NOT (id::text=ANY(COALESCE($4::text[],'{}'))))`,
+				workspaceID, channel.ID, in.Aggregate.Key, request.EventIDs).Scan(&batch); err != nil {
+				return result, fmt.Errorf("find a commanded batch: %w", err)
+			}
+		}
+		if batch {
+			in.Intent.Kind = channels.IntentCancel
+		} else {
+			in.Intent, commanded, command = channels.Intent{}, false, channels.Command{}
+		}
 	}
 	if in.Intent.Kind == channels.IntentCancel {
 		decision := rules.Decide(rules.Facts{Cancel: true})
@@ -291,12 +305,20 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		return result, err
 	}
 	if in.Aggregate != nil && len(request.EventIDs) > 0 && !request.Replay && !request.Flushing {
-		if commanded && command.Action != channels.ActionReopen {
+		if commanded && command.Action != channels.ActionReopen && scope.Cuts() {
 			// A command starts a new request: what was collected before it is sent on its own (or kept
-			// for review), and collecting starts again with this message.
+			// for review), and collecting starts again with this message. What the sender said just before
+			// it stays with it, unless what was collected named a command of its own.
+			var keepSince *time.Time
+			if scope.Gather != nil && scope.Gather.PreCommandSeconds > 0 {
+				since := now.Add(-time.Duration(scope.Gather.PreCommandSeconds) * time.Second)
+				keepSince = &since
+			}
 			if _, err := tx.Exec(ctx, `UPDATE channel_inbound_events SET aggregate_key=left($3||'#'||$5,500),flush_at=$4
-				WHERE workspace_id=$1 AND channel_id=$2 AND state='pending' AND aggregate_key=$3`,
-				workspaceID, channel.ID, in.Aggregate.Key, now, request.EventIDs[0]); err != nil {
+				WHERE workspace_id=$1 AND channel_id=$2 AND state='pending' AND aggregate_key=$3
+					AND ($6::timestamptz IS NULL OR received_at<$6 OR EXISTS(SELECT 1 FROM channel_inbound_events c WHERE c.workspace_id=$1 AND c.channel_id=$2 AND c.state='pending'
+						AND c.aggregate_key=$3 AND c.command IS NOT NULL))`,
+				workspaceID, channel.ID, in.Aggregate.Key, now, request.EventIDs[0], keepSince); err != nil {
 				return result, fmt.Errorf("close collected messages: %w", err)
 			}
 		}
@@ -317,7 +339,11 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			workspaceID, channel.ID, in.Aggregate.Key, flush); err != nil {
 			return result, fmt.Errorf("collect message: %w", err)
 		}
-		if err := journal.write(ctx, "pending", journalDetail{senderKey: senderKey, aggregateKey: in.Aggregate.Key, flushAt: &flush}); err != nil {
+		named := ""
+		if commanded {
+			named = in.Intent.Command
+		}
+		if err := journal.write(ctx, "pending", journalDetail{senderKey: senderKey, aggregateKey: in.Aggregate.Key, flushAt: &flush, command: named}); err != nil {
 			return result, err
 		}
 		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemGathering}); err != nil {
@@ -330,15 +356,21 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	// The channel's rules decide what the message is (intake/rules). Facts are read in the order the
 	// rules use them, so chatter the scope keeps without a conversation never creates a contact.
 	facts := rules.Facts{Commanded: commanded, CommandAction: command.Action, IntoConversation: request.IntoConversation, Replay: request.Replay,
-		CommandsOnly: scope.Mode == channels.ModeCommands, Flushing: request.Flushing, Review: channel.Settings.Review}
+		CommandsOnly: scope.Mode == channels.ModeCommands, Flushing: request.Flushing, Review: channel.Settings.Review,
+		JoinOpen: scope.Unmatched == channels.UnmatchedJoinOpen}
 	// A batch of a chat's intake scope: AI may decide where the rules only have a default (auto).
 	level, err := intakeLevel(ctx, tx, channel, definition, in, request)
 	if err != nil {
 		return result, err
 	}
 	if facts.CommandsOnly && !commanded && !request.Replay && request.IntoConversation == "" {
-		if facts.Joins, err = s.joinsWithoutCommand(ctx, tx, channel, in, request, shared, senderKey, now); err != nil {
+		if facts.Joins, err = s.joinsWithoutCommand(ctx, tx, channel, in, request, shared, senderKey, facts.JoinOpen, now); err != nil {
 			return result, err
+		}
+		if facts.JoinOpen && !facts.Joins {
+			if facts.OpenConversation, err = onlyOpenConversation(ctx, tx, channel, in.Sender); err != nil {
+				return result, err
+			}
 		}
 	}
 	// What the rules decide before the thread is read: only keeping it or holding it for a person.
@@ -347,11 +379,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if level == intakeAuto {
 			return s.holdForIntake(ctx, tx, &journal, in, decision, finish)
 		}
-		// Chatter of a scope that opens conversations only on a command is kept, not opened.
+		// Chatter of a scope that opens conversations only on a command is kept, not opened. A message a
+		// join-open scope could join nowhere stays unresolved in its chat, where it is seen and counted.
 		if err := journal.write(ctx, "processed", journalDetail{senderKey: senderKey, basis: decision.Basis, rule: decision.Rule}); err != nil {
 			return result, err
 		}
-		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemArchived, reason: "chat"}); err != nil {
+		kept := itemOutcome{disposition: ItemArchived, reason: "chat"}
+		if decision.Rule == rules.UnmatchedKept {
+			kept = itemOutcome{disposition: ItemUnresolved, reason: "unmatched"}
+		}
+		if err := recordThreadItems(ctx, tx, &journal, in, kept); err != nil {
 			return result, err
 		}
 		if level == intakeSuggest {
@@ -864,7 +901,10 @@ type journalDetail struct {
 	senderKey, holdReason, dropReason, aggregateKey string
 	// basis and rule are what the channel's rules decided (intake/rules); empty for what the frame
 	// handled before them (a duplicate, an echo, a channel off) and for a message being collected.
-	basis, rule                          string
+	basis, rule string
+	// command is the command a message being collected names, so a cancel and a later command know
+	// whether the batch named one.
+	command                              string
 	conversationID, messageID, objectKey string
 	objectBytes                          int64
 	flushAt                              *time.Time
@@ -895,10 +935,10 @@ func (j *journalWriter) write(ctx context.Context, state string, d journalDetail
 			conversation_id=NULLIF($9,'')::uuid,message_id=NULLIF($10,'')::uuid,processed_at=$11,error=NULL,
 			raw_object_key=COALESCE(raw_object_key,NULLIF($12,'')),raw_bytes=COALESCE(raw_bytes,$13),
 			decided_by_agent_id=COALESCE(NULLIF($14,'')::uuid,decided_by_agent_id),attempts=attempts+1,
-			decision_basis=NULLIF($15,''),decision_rule=NULLIF($16,'')
+			decision_basis=NULLIF($15,''),decision_rule=NULLIF($16,''),command=COALESCE(NULLIF($17,''),command)
 			WHERE workspace_id=$1 AND id::text=ANY($2)`,
 			j.channel.WorkspaceID, j.request.EventIDs, state, d.holdReason, d.dropReason, d.aggregateKey, d.flushAt, d.senderKey,
-			d.conversationID, d.messageID, processedAt, d.objectKey, objectBytes, j.request.DecidedBy, d.basis, d.rule)
+			d.conversationID, d.messageID, processedAt, d.objectKey, objectBytes, j.request.DecidedBy, d.basis, d.rule, d.command)
 		if err != nil {
 			return fmt.Errorf("update channel journal: %w", err)
 		}
@@ -913,12 +953,12 @@ func (j *journalWriter) write(ctx context.Context, state string, d journalDetail
 		raw = json.RawMessage(`{}`)
 	}
 	err := j.tx.QueryRow(ctx, `INSERT INTO channel_inbound_events(workspace_id,channel_id,external_event_id,state,raw,raw_object_key,raw_bytes,sender_key,
-			hold_reason,drop_reason,aggregate_key,flush_at,conversation_id,message_id,attempts,received_at,processed_at,decision_basis,decision_rule)
+			hold_reason,drop_reason,aggregate_key,flush_at,conversation_id,message_id,attempts,received_at,processed_at,decision_basis,decision_rule,command)
 		VALUES($1,$2,NULLIF($3,''),$4,$5,NULLIF($6,''),$7,NULLIF($8,''),NULLIF($9,''),NULLIF($10,''),NULLIF($11,''),$12,NULLIF($13,'')::uuid,NULLIF($14,'')::uuid,1,$15,$16,
-			NULLIF($17,''),NULLIF($18,''))
+			NULLIF($17,''),NULLIF($18,''),NULLIF($19,''))
 		RETURNING id::text`,
 		j.channel.WorkspaceID, j.channel.ID, j.request.Raw.ExternalEventID, state, raw, d.objectKey, objectBytes, d.senderKey,
-		d.holdReason, d.dropReason, d.aggregateKey, d.flushAt, d.conversationID, d.messageID, j.now, processedAt, d.basis, d.rule).Scan(&j.eventID)
+		d.holdReason, d.dropReason, d.aggregateKey, d.flushAt, d.conversationID, d.messageID, j.now, processedAt, d.basis, d.rule, d.command).Scan(&j.eventID)
 	if err != nil {
 		return fmt.Errorf("write channel journal: %w", err)
 	}
@@ -927,7 +967,7 @@ func (j *journalWriter) write(ctx context.Context, state string, d journalDetail
 
 // joinsWithoutCommand reports whether a message that names no command still belongs to a request:
 // what is being collected for its key, or an open conversation its thread finds.
-func (s *Store) joinsWithoutCommand(ctx context.Context, tx pgx.Tx, channel channels.Channel, in channels.Inbound, request IngestRequest, shared bool, senderKey string, now time.Time) (bool, error) {
+func (s *Store) joinsWithoutCommand(ctx context.Context, tx pgx.Tx, channel channels.Channel, in channels.Inbound, request IngestRequest, shared bool, senderKey string, joinOpen bool, now time.Time) (bool, error) {
 	if request.Flushing {
 		return false, nil
 	}
@@ -941,6 +981,10 @@ func (s *Store) joinsWithoutCommand(ctx context.Context, tx pgx.Tx, channel chan
 			return true, nil
 		}
 	}
+	// A join-open scope joins by the sender's open conversations, not by the thread (onlyOpenConversation).
+	if joinOpen {
+		return false, nil
+	}
 	found, err := findChannelThread(ctx, tx, channel, in.Thread, shared, senderKey, now)
 	if err != nil || found.ConversationID == "" {
 		return false, err
@@ -949,4 +993,19 @@ func (s *Store) joinsWithoutCommand(ctx context.Context, tx pgx.Tx, channel chan
 	var open bool
 	err = tx.QueryRow(ctx, `SELECT status IN ('open','pending') FROM conversations WHERE workspace_id=$1 AND id=$2`, channel.WorkspaceID, conversationID).Scan(&open)
 	return open, err
+}
+
+// onlyOpenConversation is the sender's open or pending conversation on the channel when they have exactly
+// one, empty otherwise (none, several, or a sender the channel never stored).
+func onlyOpenConversation(ctx context.Context, tx pgx.Tx, channel channels.Channel, sender channels.Sender) (string, error) {
+	var conversationID string
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT CASE WHEN count(*)=1 THEN min(c.id::text) END FROM conversations c
+			WHERE c.workspace_id=$1 AND c.channel_id=$2 AND c.status IN ('open','pending') AND c.contact_id=(
+				SELECT COALESCE(k.merged_into_id,k.id) FROM contact_identities i JOIN contacts k ON k.workspace_id=i.workspace_id AND k.id=i.contact_id
+				WHERE i.workspace_id=$1 AND i.channel_id=$2 AND i.kind=$3 AND i.value=$4)),'')`,
+		channel.WorkspaceID, channel.ID, sender.Identity.Kind, sender.Identity.Value).Scan(&conversationID)
+	if err != nil {
+		return "", fmt.Errorf("find the sender's open conversation: %w", err)
+	}
+	return conversationID, nil
 }
