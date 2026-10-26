@@ -7956,6 +7956,8 @@ export interface components {
             replies_via: null | {
                 /** Format: uuid */
                 id: string;
+                /** @description The type of the channel the replies leave through (email for a web form's). */
+                type: string;
                 name: string;
                 enabled: boolean;
                 /** @description The channel the replies would leave from, removed: the default stands in for it. Null otherwise. */

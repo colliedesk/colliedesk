@@ -11414,9 +11414,10 @@ components:
           oneOf:
             - {type: 'null'}
             - type: object
-              required: [id, name, enabled]
+              required: [id, type, name, enabled]
               properties:
                 id: {type: string, format: uuid}
+                type: {type: string, description: 'The type of the channel the replies leave through (email for a web form''s).'}
                 name: {type: string}
                 enabled: {type: boolean}
                 instead_of:

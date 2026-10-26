@@ -245,7 +245,7 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 			continue
 		}
 		if route.Channel != nil {
-			via := &domain.ChannelRepliesVia{ID: route.Channel.ID, Name: route.Channel.Name, Enabled: route.Channel.Enabled}
+			via := &domain.ChannelRepliesVia{ID: route.Channel.ID, Type: string(route.Channel.Type), Name: route.Channel.Name, Enabled: route.Channel.Enabled}
 			if route.InsteadOf != nil {
 				via.InsteadOf = &domain.ChannelName{ID: route.InsteadOf.ID, Name: route.InsteadOf.Name}
 			}
