@@ -15,6 +15,10 @@ const msURL = withDatabase(databaseURL, database);
 let server: ChildProcess | undefined;
 let fake: ChildProcess | undefined;
 
+// One worker runs this file: the server and the stand-in each listen on one fixed port, so a second worker
+// (CI runs --fully-parallel) would reach the first worker's server with a workspace in its own database.
+test.describe.configure({ mode: 'default' });
+
 test.beforeAll(async () => {
   psql(`DROP DATABASE IF EXISTS ${database}`, withDatabase(databaseURL, 'postgres'));
   psql(`CREATE DATABASE ${database}`, withDatabase(databaseURL, 'postgres'));
