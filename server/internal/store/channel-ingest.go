@@ -228,6 +228,18 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	}
 	command, commanded := channel.Settings.Commands[in.Intent.Command]
 	commanded = commanded && in.Intent.Kind == channels.IntentCommand
+	// A team member writing in a chat place on the channel's own app is context of the place: kept, never
+	// a batch of a customer's, unless they name a command that opens a request.
+	if in.Role == channels.RoleStaff && !(commanded && (command.Action == "" || command.Action == channels.ActionOpen)) {
+		if err := journal.write(ctx, "processed", journalDetail{senderKey: senderKey}); err != nil {
+			return result, err
+		}
+		if err := recordThreadItems(ctx, tx, &journal, in, itemOutcome{disposition: ItemStaff}); err != nil {
+			return result, err
+		}
+		result.Status = channels.ResultArchived
+		return finish(result)
+	}
 	if commanded && command.Action == channels.ActionCancel {
 		in.Intent.Kind = channels.IntentCancel
 	}
