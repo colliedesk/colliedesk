@@ -463,7 +463,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 	}
 	decision := rules.Decide(facts)
 	if request.Intake != nil {
-		decision = request.Intake.basisOf(decision)
+		decision = request.Intake.basisOf(decision, pending)
 	}
 	if level == intakeAuto && decision.Basis == rules.Default {
 		return s.holdForIntake(ctx, tx, &journal, in, decision, finish)

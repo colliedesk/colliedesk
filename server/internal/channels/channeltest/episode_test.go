@@ -161,3 +161,43 @@ func TestChatRulesOutOfRangeAreRefused(t *testing.T) {
 		}
 	}
 }
+
+// At auto, a message a join-open scope would join waits for AI like any default; past its time the rules
+// join it to the only open conversation, as they would without AI, or queue it when that one closed.
+func TestPastItsTimeAJoinOpenMessageJoinsTheOnlyOpenConversation(t *testing.T) {
+	loop := intakeLoop()
+	loop.Defaults.Scopes = map[string]channels.Scope{"group": {Mode: channels.ModeCommands, JoinPolicy: never, Unmatched: channels.UnmatchedJoinOpen,
+		Gather: &channels.Gather{QuietSeconds: 300, MaxSeconds: 1200}}}
+	d := newLoopDesk(t, loop)
+	d.intakeAt(t, "auto")
+	ctx := context.Background()
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "report bug: the printer"})
+	d.flush(t)
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "any news"})
+	d.flush(t)
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if _, err := d.intake().Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ofEvent := `SELECT g.state||'/'||COALESCE(g.decided_by,g.review_reason)||'/'||COALESCE(e.decision_basis,'-')||':'||COALESCE(e.decision_rule,'-') FROM intake_gatherings g
+		JOIN channel_inbound_events e ON e.workspace_id=g.workspace_id AND e.gathering_id=g.id WHERE g.workspace_id=$1 AND e.external_event_id=$2`
+	if got := d.one(t, ofEvent, "a-2"); got != "attached/rules/default:unmatched_join_open" {
+		t.Fatalf("past its time = %s", got)
+	}
+	if got := d.one(t, `SELECT count(DISTINCT conversation_id)::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`); got != "1" {
+		t.Fatalf("conversations = %s", got)
+	}
+	// The conversation closed meanwhile: the next waits in the queue instead.
+	d.send(t, channeltest.LoopbackEvent{ID: "a-3", From: "a", Group: "g1", Text: "still?"})
+	d.flush(t)
+	if _, err := d.pool.Exec(ctx, `UPDATE conversations SET status='closed' WHERE workspace_id=$1`, d.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	*d.clock = d.clock.Add(3 * time.Minute)
+	if _, err := d.intake().Sweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, ofEvent, "a-3"); got != "review/target_changed/default:unmatched_join_open" {
+		t.Fatalf("target closed meanwhile = %s", got)
+	}
+}
