@@ -7829,8 +7829,10 @@ export interface components {
             /** @description Exact origins (scheme://host[:port]) whose pages may embed the chat. */
             widget_origins: string[];
         };
-        /** @description A channel's configuration, by its type. */
-        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"] | components["schemas"]["HelpChatChannelConfig"];
+        /** @description A channel's configuration, by its type. A type this document does not describe yet (a test build's loopback chat stand-in, a chat type before its schema is written here) answers its own object, which a client shows nothing of. */
+        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"] | components["schemas"]["HelpChatChannelConfig"] | {
+            [key: string]: unknown;
+        };
         ChannelDetail: components["schemas"]["Channel"] & {
             config: components["schemas"]["ChannelConfig"];
         };

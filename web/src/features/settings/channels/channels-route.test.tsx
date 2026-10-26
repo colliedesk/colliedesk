@@ -838,3 +838,14 @@ test('following a workspace default that applies by itself asks first, as pickin
   fireEvent.click(within(dialog).getByRole('button', { name: 'Turn on' }));
   await waitFor(() => expect(aiApi.setChannel).toHaveBeenCalledWith(FORM, 'triage', { scope: '', level: null }));
 });
+
+test('a channel of a type the web app has no screens for still opens: its name and state, AI and History, and Remove', async () => {
+  const CHAT = '66666666-6666-4666-8666-666666666666';
+  channelsApi.get.mockResolvedValue({ ...channel('email', { id: CHAT, type: 'zalo', name: 'Zalo HC Labs', summary: '', capabilities: [] }), config: { account: 'hclabs' } });
+  show(CHAT, {});
+  expect(await screen.findByRole('heading', { name: 'Zalo HC Labs' })).toBeInTheDocument();
+  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['AI', 'History']);
+  expect(screen.getByRole('tab', { name: 'AI' })).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('button', { name: 'Remove channel' })).toBeInTheDocument();
+  expect(screen.queryByText(/not supported|unknown/i)).not.toBeInTheDocument();
+});
