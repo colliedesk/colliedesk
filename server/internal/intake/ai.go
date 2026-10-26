@@ -70,6 +70,10 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	if g.State != store.GatheringDeciding && g.State != store.GatheringReview && g.State != store.GatheringApplied {
 		return run.Record(ctx, func(pgx.Tx) error { return nil })
 	}
+	// Turned off since the card was queued: nothing reaches the model, and the card is the rules' now.
+	if snap.Level != levelAuto && snap.Level != levelSuggest {
+		return &ai.TaskError{Code: ai.CodeAutomationOff, Cancelled: true}
+	}
 	var options ai.IntakeOptions
 	if err := json.Unmarshal(snap.Options, &options); err != nil {
 		return fmt.Errorf("read intake options: %w", err)
@@ -172,7 +176,10 @@ func (s *Service) runAI(ctx context.Context, run *ai.Run) error {
 	return err
 }
 
-const levelAuto = "auto"
+const (
+	levelAuto    = "auto"
+	levelSuggest = "suggest"
+)
 
 // notApplied is why AI's decision is not applied on its own, "" when it is: only at auto, on a card that
 // waits for it, through an open gate, sure enough, about what it could read without a credential, soon

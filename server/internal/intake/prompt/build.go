@@ -438,6 +438,13 @@ func redactBySender(r *redactor, items []Item, scrub func(string) string) (bodie
 			texts = append(texts, item.Text)
 		}
 		redacted, changed := r.sequence(texts)
+		// Asked for a password or a login by someone else ("and the password?"), a customer's next message
+		// may be nothing but the secret.
+		if start > 0 && r.hints(items[start-1].Text) {
+			if shaped := r.secretShapes(redacted[0]); shaped != redacted[0] {
+				redacted[0], changed[0] = shaped, true
+			}
+		}
 		for i, item := range items[start:end] {
 			// A reply may hold the password to the login it quotes.
 			if item.Quote == nil {

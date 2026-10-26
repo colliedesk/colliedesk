@@ -95,30 +95,30 @@ type IntakeCandidate struct {
 
 // IntakeDecisionView is one decision of a gathering as the API shows it.
 type IntakeDecisionView struct {
-	ID                     string    `json:"id"`
-	Decider                string    `json:"decider"`
-	Basis                  string    `json:"basis"`
-	Action                 string    `json:"action"`
-	TargetConversationID   *string   `json:"target_conversation_id"`
-	RunnerUpConversationID *string   `json:"runner_up_conversation_id"`
-	RunnerUpConfidence     *float64  `json:"runner_up_confidence"`
-	Command                *string   `json:"command"`
-	Subject                *string   `json:"subject"`
-	ReplyKind              *string   `json:"reply_kind"`
-	Confidence             *float64  `json:"confidence"`
-	Reason                 *string   `json:"reason"`
-	Applied                bool      `json:"applied"`
-	IgnoreReason           *string   `json:"ignore_reason"`
-	NotAppliedReason       *string   `json:"not_applied_reason"`
-	Fallback               bool      `json:"fallback"`
-	CorrectsDecisionID     *string   `json:"corrects_decision_id"`
-	FollowsDecisionID      *string   `json:"follows_decision_id"`
+	ID                     string   `json:"id"`
+	Decider                string   `json:"decider"`
+	Basis                  string   `json:"basis"`
+	Action                 string   `json:"action"`
+	TargetConversationID   *string  `json:"target_conversation_id"`
+	RunnerUpConversationID *string  `json:"runner_up_conversation_id"`
+	RunnerUpConfidence     *float64 `json:"runner_up_confidence"`
+	Command                *string  `json:"command"`
+	Subject                *string  `json:"subject"`
+	ReplyKind              *string  `json:"reply_kind"`
+	Confidence             *float64 `json:"confidence"`
+	Reason                 *string  `json:"reason"`
+	Applied                bool     `json:"applied"`
+	IgnoreReason           *string  `json:"ignore_reason"`
+	NotAppliedReason       *string  `json:"not_applied_reason"`
+	Fallback               bool     `json:"fallback"`
+	CorrectsDecisionID     *string  `json:"corrects_decision_id"`
+	FollowsDecisionID      *string  `json:"follows_decision_id"`
 	// ErrorCode says what failed when AI's answer was not a decision (target_invalid, invalid_answer).
-	ErrorCode *string `json:"error_code"`
-	Model     *string `json:"model"`
-	AgentID                *string   `json:"agent_id"`
-	ViaToken               bool      `json:"via_token"`
-	CreatedAt              time.Time `json:"created_at"`
+	ErrorCode *string   `json:"error_code"`
+	Model     *string   `json:"model"`
+	AgentID   *string   `json:"agent_id"`
+	ViaToken  bool      `json:"via_token"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // IntakeGatheringDetail is a card with everything its customer said and every decision made on it.

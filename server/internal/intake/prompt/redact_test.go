@@ -38,6 +38,8 @@ func TestRedactHidesCredentialsAndLeavesOrdinaryText(t *testing.T) {
 		{"a user and a password on one line with a space", "tranthib Matkhau@2024", hidden, true},
 		{"a ticket reference after a login and password stays", "tranthib\nAbc@12345\nABC-2026-0090", hidden + "\n" + hidden + "\nABC-2026-0090", true},
 		{"a link after a login and password stays", "tranthib\nAbc@12345\nhttps://pos.example.test/login", hidden + "\n" + hidden + "\nhttps://pos.example.test/login", true},
+		{"a password four plain words after its label", "my password for my account is Hunter2024", "my password for my account is " + hidden, true},
+		{"a password a sentence after its label stays a sentence", "the password is wrong. order SO2026001 failed", "the password is wrong. order SO2026001 failed", false},
 
 		{"an amount is not a code", "short 450k yesterday", "short 450k yesterday", false},
 		{"an order number in a sentence", "order 123456 failed to print", "order 123456 failed to print", false},

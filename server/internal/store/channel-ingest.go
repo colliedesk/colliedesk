@@ -517,7 +517,16 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 		if err := setStatusActor(ctx, tx, ""); err != nil {
 			return result, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status='closed' OR status='resolved' AND NOT $3 THEN 'open' ELSE status END,
+		// An acknowledgement keeps a resolved conversation resolved, and only then is the message marked as
+		// one: joined to an open conversation it kept nothing, and a closed one opens so it is seen.
+		var status string
+		if err := tx.QueryRow(ctx, `SELECT status FROM conversations WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, workspaceID, conversationID).Scan(&status); err != nil {
+			return result, fmt.Errorf("read conversation status: %w", err)
+		}
+		if replyKind == ReplyAcknowledgement && status != "resolved" {
+			replyKind = ReplySubstantive
+		}
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') AND NOT $3 THEN 'open' ELSE status END,
 			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID, replyKind == ReplyAcknowledgement); err != nil {
 			return result, fmt.Errorf("reopen conversation: %w", err)
 		}

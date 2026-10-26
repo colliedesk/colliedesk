@@ -294,7 +294,11 @@ func (r *redactor) hideLabelled(line string, kind *lineKind) string {
 		case allDigits(strings.NewReplacer(" ", "", "-", "").Replace(value)) && digitCount(value) >= 4 && digitCount(value) <= 12:
 		case len(value) >= 4 && hasLetter(value) && hasDigitOrSymbol(value):
 		default:
-			continue
+			// "my password for my account is Hunter2024": the secret may come a few plain words later.
+			var found bool
+			if start, end, found = secretAfter(line, start); !found {
+				continue
+			}
 		}
 		out.WriteString(line[last:start])
 		out.WriteString(hidden)
@@ -303,6 +307,27 @@ func (r *redactor) hideLabelled(line string, kind *lineKind) string {
 	}
 	out.WriteString(line[last:])
 	return out.String()
+}
+
+// labelReach is how many words after a credential label's first value a secret is still looked for.
+const labelReach = 4
+
+// secretAfter finds, from from on, the first word shaped like a secret among the next labelReach words
+// of the sentence; plain words may stand before it, anything else ends the search.
+func secretAfter(line string, from int) (int, int, bool) {
+	for _, span := range wordPattern.FindAllStringIndex(line[from:], labelReach+1) {
+		start, end := from+span[0], from+span[1]
+		word := strings.Trim(line[start:end], quoteEdges)
+		switch {
+		case passwordShaped(word) || allDigits(word) && len(word) >= 4 && len(word) <= 12:
+			offset := strings.Index(line[start:end], word)
+			return start + offset, start + offset + len(word), true
+		case strings.IndexFunc(word, func(r rune) bool { return !unicode.IsLetter(r) }) >= 0,
+			strings.ContainsAny(line[start:end], ".!?;"):
+			return 0, 0, false
+		}
+	}
+	return 0, 0, false
 }
 
 // hideCodes hides a one-time code: a 4 to 8 digit number on a line that names a code, or a line that

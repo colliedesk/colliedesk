@@ -414,6 +414,25 @@ func TestIntakeStopsCallingAFailingModelForAWhile(t *testing.T) {
 	}
 }
 
+// A scope turned off after its card was queued sends nothing to the model; the card is the rules' at once.
+func TestAScopeTurnedOffSendsNothingToTheModel(t *testing.T) {
+	d := newAIDesk(t, intake.OpenGate)
+	d.intakeAt(t, "auto")
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	d.intakeAt(t, "off")
+	d.runAI(t)
+	if n := len(d.fake.Requests()); n != 0 {
+		t.Fatalf("requests to the model after intake went off = %d", n)
+	}
+	if got := d.tasks(t); got != "cancelled:automation_off" {
+		t.Fatalf("tasks = %s", got)
+	}
+	if n, err := d.intake().Sweep(context.Background()); err != nil || n != 1 {
+		t.Fatalf("sweep = %d, %v", n, err)
+	}
+}
+
 // A thank-you AI joins to a resolved conversation keeps it resolved and asks for no automatic draft; what
 // adds something to it reopens it.
 func TestAThankYouKeepsAResolvedConversationResolved(t *testing.T) {
@@ -459,6 +478,15 @@ func TestAThankYouKeepsAResolvedConversationResolved(t *testing.T) {
 	}
 	if got := drafts(); got == before {
 		t.Fatalf("no automatic draft for what reopened it (%s)", got)
+	}
+	// A thank-you to a conversation that is open kept nothing resolved: its message does not say it did.
+	d.send(t, channeltest.LoopbackEvent{ID: "f-1", From: "f", Group: "g1", Text: "thanks for looking"})
+	d.flush(t)
+	d.answers(map[string]any{"action": "attach", "target": "C1", "reply_kind": "acknowledgement", "confidence": 0.96})
+	d.runAI(t)
+	if got := d.one(t, `SELECT COALESCE(m.intake_reply_kind,'-') FROM messages m WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.body='thanks for looking'`,
+		conversation); got != "substantive" {
+		t.Fatalf("a thank-you to an open conversation is marked %s", got)
 	}
 	// A thank-you joined to a conversation closed meanwhile (a person following AI late) opens it: a person sees it.
 	if _, err := d.pool.Exec(context.Background(), `UPDATE conversations SET status='closed' WHERE id=$1`, conversation); err != nil {

@@ -15,7 +15,11 @@ import (
 )
 
 // TaskError fails a task with its own code (a refused or cut-off answer), which the worker records.
-type TaskError struct{ Code string }
+type TaskError struct {
+	Code string
+	// Cancelled says the task was not wanted any more rather than failed.
+	Cancelled bool
+}
 
 func (e *TaskError) Error() string { return "AI task failed: " + e.Code }
 

@@ -135,6 +135,22 @@ func TestBuildHidesAPasswordWhoseLoginIsOlderThanTheWindow(t *testing.T) {
 	}
 }
 
+func TestBuildHidesAPasswordSentAloneAfterSomeoneAskedForIt(t *testing.T) {
+	s := groupSnapshot()
+	s.Before = []Item{{ID: "m1", At: at(0), From: lan, Text: "bob@example.com"}, {ID: "m2", At: at(1), From: support, Text: "ok, and the password?"}}
+	s.Incoming = []Item{{ID: "m3", At: at(2), From: lan, Text: "Hunter2024x"}}
+	c := Build(s)
+	if strings.Contains(c.User, "Hunter2024x") || !c.Credential {
+		t.Errorf("credential=%v, prompt:\n%s", c.Credential, c.User)
+	}
+	// Without a question about credentials before it, a word is a word.
+	s.Before = []Item{{ID: "m2", At: at(1), From: support, Text: "which model is it?"}}
+	s.Incoming = []Item{{ID: "m3", At: at(2), From: lan, Text: "Scale2024x"}}
+	if c := Build(s); c.Credential || !strings.Contains(c.User, "Scale2024x") {
+		t.Errorf("credential=%v, prompt:\n%s", c.Credential, c.User)
+	}
+}
+
 func TestBuildHidesThePasswordAReplyGivesToTheLoginItQuotes(t *testing.T) {
 	s := groupSnapshot()
 	s.Before = nil

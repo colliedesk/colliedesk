@@ -320,7 +320,11 @@ func (w *Worker) run(ctx context.Context, item claimedTask) {
 	case errors.As(err, new(*TaskError)):
 		var taskErr *TaskError
 		errors.As(err, &taskErr)
-		stop(TaskFailed, taskErr.Code)
+		if taskErr.Cancelled {
+			stop(TaskCancelled, taskErr.Code)
+		} else {
+			stop(TaskFailed, taskErr.Code)
+		}
 	case errors.As(err, &providerErr) && providerErr.Retryable() && task.Attempts < w.options.MaxAttempts && ctx.Err() == nil:
 		w.retry(ctx, item, task, providerErr)
 	case errors.As(err, &providerErr):

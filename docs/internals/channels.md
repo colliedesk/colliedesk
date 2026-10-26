@@ -170,9 +170,10 @@ Email and web forms declare none, so their path gains no row and no query beyond
    follows it (`follows_decision_id`, taking its `reply_kind`), anything else corrects it
    (`corrects_decision_id`). These are the labels intake's evaluation reads.
 7. **A thank-you keeps resolved.** A decision's `reply_kind` travels with an attach (`IntakeApply.ReplyKind`):
-   `acknowledgement` joins without reopening a resolved conversation (a closed one opens, so the message is seen), and the message is stored
-   with `messages.intake_reply_kind` at insert, which `ai_draft_on_customer_message` reads to queue no
-   automatic draft. The rules never set it, so email keeps reopening on a thank-you as it always did.
+   `acknowledgement` joins without reopening a resolved conversation (a closed one opens, so the message is seen), and only
+   then is the message stored with `messages.intake_reply_kind = 'acknowledgement'` (joined to an open or closed one it is
+   `substantive`: it kept nothing), at insert, which `ai_draft_on_customer_message` reads to queue no
+   automatic draft. The AI's own label stays in `intake_decisions.reply_kind`. The rules never set it, so email keeps reopening on a thank-you as it always did.
 8. **A failing model is left alone.** Five failed calls in a row (provider errors or answers that are not
    a decision) pause a workspace's intake for ten minutes in the process (`intake_paused`): its cards go to
    the rules at once. Pictures are not sent yet (`images` is `not_supported` in the manifest).
