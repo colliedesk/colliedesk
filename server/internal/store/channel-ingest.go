@@ -680,7 +680,7 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 				m.kind='incoming' AND $3 AND COALESCE((SELECT e.sender_key FROM channel_inbound_events e
 					WHERE e.workspace_id=m.workspace_id AND e.message_id=m.id LIMIT 1) <> $4,false)
 			FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
-			WHERE m.workspace_id=$1 AND m.external_id=ANY($2)`, channel.WorkspaceID, candidates, shared, senderKey)
+			WHERE m.workspace_id=$1 AND m.external_id=ANY($2) AND m.detached_at IS NULL`, channel.WorkspaceID, candidates, shared, senderKey)
 		if err != nil {
 			return found, fmt.Errorf("match thread references: %w", err)
 		}
@@ -725,7 +725,7 @@ func findChannelThread(ctx context.Context, tx pgx.Tx, channel channels.Channel,
 			JOIN conversations c ON c.workspace_id=k.workspace_id AND c.id=k.conversation_id
 			WHERE k.workspace_id=$1 AND k.channel_type=$2 AND k.key=$3 AND (NOT $4 OR EXISTS(SELECT 1 FROM messages m
 				JOIN channel_inbound_events e ON e.workspace_id=m.workspace_id AND e.message_id=m.id
-				WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' AND e.sender_key=$5))
+				WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' AND m.detached_at IS NULL AND e.sender_key=$5))
 			ORDER BY k.created_at DESC LIMIT 1`,
 			channel.WorkspaceID, string(channel.Type), key, shared, senderKey).Scan(&conversationID, &status, &updatedAt)
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -83,7 +83,8 @@ func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID st
 }
 
 func listMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Message, error) {
-	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 ORDER BY m.created_at,m.id`, workspaceID, conversationID)
+	// A chat message taken back to the intake queue is out of the timeline until it is decided again.
+	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.detached_at IS NULL ORDER BY m.created_at,m.id`, workspaceID, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
 	}

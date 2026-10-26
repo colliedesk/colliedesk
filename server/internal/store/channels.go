@@ -149,6 +149,9 @@ type ChannelActor struct {
 	AgentID, TokenID string
 }
 
+// asActor is the same person and token as the actor of a message.
+func (a ChannelActor) asActor() Actor { return Actor{AgentID: a.AgentID, TokenID: a.TokenID} }
+
 // insertChannelEvent records a change in the channel's history.
 func insertChannelEvent(ctx context.Context, tx pgx.Tx, channel channels.Channel, kind string, actor ChannelActor, detail map[string]any) error {
 	if detail == nil {

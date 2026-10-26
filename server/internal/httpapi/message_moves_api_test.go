@@ -1,10 +1,31 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
 )
+
+// A chat message taken back to the intake queue is out of its conversation for AI as for people: a draft
+// never reads it.
+func TestADraftLeavesOutAMessageTakenBackToTheQueue(t *testing.T) {
+	d := newDraftDesk(t)
+	if _, err := d.pool.Exec(context.Background(), `INSERT INTO messages(workspace_id,conversation_id,kind,body,detached_at) VALUES($1,$2,'incoming','DETACHED-CANARY other matter',now())`,
+		d.workspaceA, d.conversationA); err != nil {
+		t.Fatal(err)
+	}
+	d.fake.Script(draftAnswer("Hi Ada.", nil, ""))
+	d.ask(t, d.adminA, d.conversationA, "")
+	d.run(t)
+	requests := d.draftRequests()
+	if len(requests) != 1 {
+		t.Fatalf("provider calls = %d", len(requests))
+	}
+	if prompt := requests[0].System + requests[0].Messages[0].Text; strings.Contains(prompt, "DETACHED-CANARY") || !strings.Contains(prompt, "My printer jams") {
+		t.Fatalf("prompt:\n%s", prompt)
+	}
+}
 
 // moveDesk is a workspace with email whose customers wrote in, for moving their messages.
 type moveDesk struct {

@@ -31,3 +31,21 @@ conversation, into a new one (a split), or, for a chat message, back to the inta
    count. Moving what a person placed records nothing.
 8. **Chat items.** A move ends the item's live `conversation_thread_items` link and starts a new one; a
    link is never rewritten, so a conversation's chat keeps what it once held.
+
+## Back to the queue
+
+A chat message (one that came through a gathering of a type's intake scope) can be taken back to the
+intake queue. Code: `store/message-detach.go`.
+
+1. **Detached, never deleted.** `messages.detached_at` keeps the message in its conversation row but out
+   of it everywhere a person, AI or the customer would meet it: the timeline, search, the inbox's
+   activity and last public message, the triage, draft and retrieval context, reply threading and the
+   addresses a reply may copy, and thread matching (a reply quoting it, or the sender's thread key, no
+   longer finds that conversation). Export, retention, storage counts and the Freshdesk undo still see it.
+   A new reader of `messages` decides which side it is on.
+2. **A card of its own.** The items of the messages join a new gathering (`rules_rule=detached`,
+   `review_reason=requeued`, lane `detached:<message>`, so it blocks no lane of the customer). The journal
+   keeps naming the gathering the message first came in; undo gives the items back to it.
+3. **Deciding moves, never replays.** The events of a detached message are processed already, so
+   `intake.Service.Decide` sends a detached card to `DecideDetachedCard`, which moves the messages to the
+   conversation chosen or a new one; ignoring keeps them detached. Undo works only while the card waits.

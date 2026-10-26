@@ -2,6 +2,7 @@ package channeltest_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/channels"
@@ -47,6 +48,78 @@ func TestAMovedChatMessageTakesItsThreadKeyAndItem(t *testing.T) {
 	}
 }
 
+// A chat message taken back to the intake queue leaves the conversation, never deleted, as a card of
+// its own (T-8): a reply quoting it no longer finds the conversation, undo puts it back while the card
+// waits, and a person deciding the card moves the message where they say instead of storing it again.
+func TestAChatMessageTakenBackToTheQueueIsDecidedAgain(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	ctx := context.Background()
+	actor := store.Actor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	message := d.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`)
+	source := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2::uuid`, message)
+	back, err := d.store.MoveMessages(ctx, d.workspaceID, source, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{Queue: true}}, actor, *d.clock)
+	if err != nil || back.Move.ToConversationID != nil || back.Move.GatheringID == nil {
+		t.Fatalf("back to the queue = %+v, %v", back, err)
+	}
+	card := *back.Move.GatheringID
+	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||rules_rule FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, card); got != "review/requeued/detached" {
+		t.Fatalf("card = %s", got)
+	}
+	if listed, err := d.store.ListMessages(ctx, d.workspaceID, source); err != nil || len(listed) != 0 {
+		t.Fatalf("timeline = %d, %v", len(listed), err)
+	}
+	if got := d.one(t, `SELECT (detached_at IS NOT NULL)::text||'/'||conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2::uuid`, message); got != "true/"+source {
+		t.Fatalf("message = %s", got)
+	}
+	// The customer's next words quoting it are no reply to that conversation any more.
+	d.send(t, channeltest.LoopbackEvent{ID: "a-2", From: "a", Group: "g1", Text: "any news?", Reference: "a-1"})
+	d.flush(t)
+	if got := d.one(t, `SELECT decision_rule FROM channel_inbound_events WHERE workspace_id=$1 AND external_event_id='a-2'`); got == "thread_reference" || got == "thread_key" {
+		t.Fatalf("a quote of a taken back message still matched: %s", got)
+	}
+	// Undo while the card waits: back in the timeline, the card cancelled.
+	if _, err := d.store.UndoMessageMove(ctx, d.workspaceID, back.Move.ID, actor, *d.clock); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.one(t, `SELECT state FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, card); got != "cancelled" {
+		t.Fatalf("card after undo = %s", got)
+	}
+	if listed, _ := d.store.ListMessages(ctx, d.workspaceID, source); len(listed) != 1 {
+		t.Fatalf("timeline after undo = %d", len(listed))
+	}
+	// Taken back again and decided: the message moves to the conversation the person chose, once.
+	again, err := d.store.MoveMessages(ctx, d.workspaceID, source, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{Queue: true}}, actor, *d.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND body='any news?'`)
+	outcome, err := d.intake().Decide(ctx, d.workspaceID, *again.Move.GatheringID, intake.Decision{Action: intake.Attach, ConversationID: target}, store.DecidedByAgent,
+		store.ChannelActor{AgentID: d.agentID})
+	if err != nil || outcome.State != store.GatheringAttached || outcome.ConversationID != target {
+		t.Fatalf("decide = %+v, %v", outcome, err)
+	}
+	if got := d.one(t, `SELECT count(*)::text||'/'||min(conversation_id::text)||'/'||bool_and(detached_at IS NULL)::text FROM messages WHERE workspace_id=$1 AND body='the stock export fails'`); got != "1/"+target+"/true" {
+		t.Fatalf("messages after the decision = %s", got)
+	}
+	if _, err := d.store.UndoMessageMove(ctx, d.workspaceID, again.Move.ID, actor, *d.clock); !errors.Is(err, store.ErrMoveDecided) && !errors.Is(err, store.ErrMoveSuperseded) {
+		t.Fatalf("undo a decided card's move = %v", err)
+	}
+	// Taken back from there and opened as a new request.
+	third, err := d.store.MoveMessages(ctx, d.workspaceID, target, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{Queue: true}}, actor, *d.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := d.intake().Decide(ctx, d.workspaceID, *third.Move.GatheringID, intake.Decision{Action: intake.Create}, store.DecidedByAgent, store.ChannelActor{AgentID: d.agentID})
+	if err != nil || opened.State != store.GatheringCreated || opened.ConversationID == target || opened.ConversationID == source {
+		t.Fatalf("create = %+v, %v", opened, err)
+	}
+	if got := d.one(t, `SELECT subject FROM conversations WHERE workspace_id=$1 AND id=$2::uuid`, opened.ConversationID); got != "the stock export fails" {
+		t.Fatalf("subject = %q", got)
+	}
+}
+
 // Moving messages AI added to a conversation records a person's decision that corrects AI's, for the
 // "AI corrected" count and evaluation; moving messages a person added records none.
 func TestMovingWhatAIAppliedRecordsACorrection(t *testing.T) {
@@ -76,5 +149,34 @@ func TestMovingWhatAIAppliedRecordsACorrection(t *testing.T) {
 		To: store.MoveTarget{ConversationID: opened.ConversationID}}, actor, *d.clock)
 	if err != nil || again.Move.DecisionID != nil {
 		t.Fatalf("a person's own placement corrected again: %+v, %v", again, err)
+	}
+}
+
+// A card of messages taken back to the queue joins only a conversation of its place: another customer's
+// email thread is refused and the messages stay in the queue; their own conversation takes them back.
+func TestATakenBackCardJoinsOnlyAConversationOfItsPlace(t *testing.T) {
+	d := newLoopDesk(t, intakeLoop())
+	ctx := context.Background()
+	actor := store.Actor{AgentID: d.agentID}
+	d.send(t, channeltest.LoopbackEvent{ID: "a-1", From: "a", Group: "g1", Text: "the stock export fails"})
+	d.flush(t)
+	message := d.one(t, `SELECT id::text FROM messages WHERE workspace_id=$1 AND kind='incoming'`)
+	source := d.one(t, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2::uuid`, message)
+	back, err := d.store.MoveMessages(ctx, d.workspaceID, source, store.MoveInput{MessageIDs: []string{message}, To: store.MoveTarget{Queue: true}}, actor, *d.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := *back.Move.GatheringID
+	other := d.one(t, `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Other','other@example.com') RETURNING id)
+		INSERT INTO conversations(workspace_id,contact_id,subject,status) SELECT $1,c.id,'Invoice','resolved' FROM c RETURNING id::text`)
+	who := store.ChannelActor{AgentID: d.agentID}
+	if _, err := d.intake().Decide(ctx, d.workspaceID, card, intake.Decision{Action: intake.Attach, ConversationID: other}, store.DecidedByAgent, who); !errors.Is(err, store.ErrNotACandidate) {
+		t.Fatalf("join another customer's email thread: %v", err)
+	}
+	if got := d.one(t, `SELECT state||':'||(SELECT count(*) FROM messages WHERE workspace_id=$1 AND conversation_id='`+other+`')::text FROM intake_gatherings WHERE workspace_id=$1 AND id='`+card+`'`); got != "review:0" {
+		t.Fatalf("after the refusal: %s", got)
+	}
+	if _, err := d.intake().Decide(ctx, d.workspaceID, card, intake.Decision{Action: intake.Attach, ConversationID: source}, store.DecidedByAgent, who); err != nil {
+		t.Fatalf("join its own conversation: %v", err)
 	}
 }

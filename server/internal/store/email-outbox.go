@@ -78,7 +78,7 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	}
 	// Mail moved in from another contact's conversation is not this thread: its contact never saw it.
 	rows, err := tx.Query(ctx, `SELECT substr(external_id,7),kind FROM messages
-		WHERE workspace_id=$1 AND conversation_id=$2 AND starts_with(external_id,'email:') AND id<>$3 AND created_at<=$4 AND other_contact_id IS NULL
+		WHERE workspace_id=$1 AND conversation_id=$2 AND starts_with(external_id,'email:') AND id<>$3 AND created_at<=$4 AND other_contact_id IS NULL AND detached_at IS NULL
 		ORDER BY created_at,id`, item.WorkspaceID, conversationID, item.MessageID, createdAt)
 	if err != nil {
 		return fmt.Errorf("load thread references: %w", err)

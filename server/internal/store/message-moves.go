@@ -199,7 +199,11 @@ func (s *Store) MoveMessages(ctx context.Context, workspaceID, fromID string, in
 			}
 			move.closed, move.sourceStatus = true, source.status
 		}
-		if move.decisionID, err = recordMoveCorrections(ctx, tx, workspaceID, ids, target.id, move.created, actor, now); err != nil {
+		action := "attach"
+		if move.created {
+			action = "create"
+		}
+		if move.decisionID, err = recordMoveCorrectionsAs(ctx, tx, workspaceID, ids, target.id, action, actor, now); err != nil {
 			return MoveResult{}, err
 		}
 		recorded, err := move.insert(ctx, tx, workspaceID)
@@ -295,10 +299,12 @@ func checkCloseSource(ctx context.Context, tx pgx.Tx, workspaceID, fromID string
 // customer who wrote them when they are all one other contact's, else the source's.
 func splitConversation(ctx context.Context, tx pgx.Tx, workspaceID string, source moveConversation, messages []movedMessage, subject string, now time.Time) (moveConversation, error) {
 	contactID := source.contactID
-	if writer := messages[0].otherContactID; writer != nil && slices.IndexFunc(messages, func(m movedMessage) bool {
-		return m.otherContactID == nil || *m.otherContactID != *writer
-	}) < 0 {
-		contactID = *writer
+	if len(messages) > 0 {
+		if writer := messages[0].otherContactID; writer != nil && slices.IndexFunc(messages, func(m movedMessage) bool {
+			return m.otherContactID == nil || *m.otherContactID != *writer
+		}) < 0 {
+			contactID = *writer
+		}
 	}
 	created := moveConversation{contactID: contactID, status: "open", channel: source.channel, channelID: source.channelID, scope: source.scope,
 		replyChannelID: source.replyChannelID}
@@ -389,10 +395,10 @@ func moveIntoConversation(ctx context.Context, tx pgx.Tx, workspaceID string, so
 // relinkItems moves the chat items of messages from one conversation to another: the old links end, new
 // live links start (a link is never rewritten, so a conversation's chat keeps what it once held).
 func relinkItems(ctx context.Context, tx pgx.Tx, workspaceID string, messageIDs []string, fromID, toID, reason, agentID string, now time.Time) error {
-	if _, err := tx.Exec(ctx, `UPDATE conversation_thread_items l SET unlinked_at=$4,unlinked_by_agent_id=NULLIF($5,'')::uuid
-		FROM channel_thread_items i WHERE l.workspace_id=$1 AND i.workspace_id=l.workspace_id AND i.id=l.item_id AND i.message_id=ANY($2::uuid[])
-			AND l.conversation_id=$3 AND l.unlinked_at IS NULL`, workspaceID, messageIDs, fromID, now, agentID); err != nil {
-		return fmt.Errorf("unlink moved chat items: %w", err)
+	if fromID != "" {
+		if err := unlinkItems(ctx, tx, workspaceID, messageIDs, fromID, agentID, now); err != nil {
+			return err
+		}
 	}
 	if toID == "" {
 		return nil
@@ -405,13 +411,21 @@ func relinkItems(ctx context.Context, tx pgx.Tx, workspaceID string, messageIDs 
 	return nil
 }
 
-// recordMoveCorrections records, for each intake card whose messages AI applied, a person's decision
-// that corrects it: the label evaluation and the "AI corrected" count read. It returns the first.
-func recordMoveCorrections(ctx context.Context, tx pgx.Tx, workspaceID string, messageIDs []string, toID string, created bool, actor Actor, now time.Time) (string, error) {
-	action := "attach"
-	if created {
-		action = "create"
+// unlinkItems ends the live links of messages' chat items to a conversation.
+func unlinkItems(ctx context.Context, tx pgx.Tx, workspaceID string, messageIDs []string, fromID, agentID string, now time.Time) error {
+	if _, err := tx.Exec(ctx, `UPDATE conversation_thread_items l SET unlinked_at=$4,unlinked_by_agent_id=NULLIF($5,'')::uuid
+		FROM channel_thread_items i WHERE l.workspace_id=$1 AND i.workspace_id=l.workspace_id AND i.id=l.item_id AND i.message_id=ANY($2::uuid[])
+			AND l.conversation_id=$3 AND l.unlinked_at IS NULL`, workspaceID, messageIDs, fromID, now, agentID); err != nil {
+		return fmt.Errorf("unlink moved chat items: %w", err)
 	}
+	return nil
+}
+
+// recordMoveCorrectionsAs records, for each intake card whose messages AI applied and nobody corrected
+// yet, a person's decision that corrects it with action (attach, create, or review for back to the
+// queue): the label evaluation and the "AI corrected" count read. A later move of the same messages
+// corrects nothing more: it moves a person's placement. It returns the first.
+func recordMoveCorrectionsAs(ctx context.Context, tx pgx.Tx, workspaceID string, messageIDs []string, toID, action string, actor Actor, now time.Time) (string, error) {
 	rows, err := tx.Query(ctx, `INSERT INTO intake_decisions(workspace_id,gathering_id,decider,basis,action,target_conversation_id,applied,items_seen,
 			corrects_decision_id,agent_id,token_id,created_at)
 		SELECT $1,d.gathering_id,'agent','person',$3,NULLIF($4,'')::uuid,true,
@@ -419,8 +433,10 @@ func recordMoveCorrections(ctx context.Context, tx pgx.Tx, workspaceID string, m
 			d.id,NULLIF($5,'')::uuid,NULLIF($6,'')::uuid,$7
 		FROM (SELECT DISTINCT ON (d.gathering_id) d.id,d.gathering_id,d.decider,d.applied FROM intake_decisions d
 			WHERE d.workspace_id=$1 AND d.gathering_id IN (SELECT e.gathering_id FROM channel_inbound_events e WHERE e.workspace_id=$1 AND e.message_id=ANY($2::uuid[]))
+				AND d.corrects_decision_id IS NULL
 			ORDER BY d.gathering_id,d.created_at DESC,d.id DESC) d
 		WHERE d.decider='ai' AND d.applied
+			AND NOT EXISTS(SELECT 1 FROM intake_decisions c WHERE c.workspace_id=$1 AND c.corrects_decision_id=d.id)
 		ORDER BY d.gathering_id RETURNING id::text`, workspaceID, messageIDs, action, toID, actor.AgentID, actor.TokenID, now)
 	if err != nil {
 		return "", fmt.Errorf("record corrections of AI: %w", err)
