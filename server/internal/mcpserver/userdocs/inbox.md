@@ -267,8 +267,8 @@ In the timeline, the menu beside a customer message's time offers **Move to anot
 **Split into a new conversation…** and, for a chat message, **Take back to Review**. Moving shows the
 customer's other conversations first, or finds one by subject, customer or text; tick the other customer
 messages to move with it. When every customer message goes, the move can close this conversation as no new
-request. A chat conversation nobody replied in, wrote a note in or assigned yet also offers **Not a new
-request? Move it…** above its messages. The moves out of and into a conversation are listed above its
+request. A chat conversation nobody replied in or wrote a note in yet also offers **Not a new request?
+Move it…** above its messages (closing is still refused once a person assigned it). The moves out of and into a conversation are listed above its
 messages, newest first, with who moved what and where, and **Undo** while the move can be undone; a chat
 message says why it is in the conversation (a reply to a message here, a command, a person in
 [Review](review.md)). A message taken back waits in Review as a card that says who took it back.

@@ -155,7 +155,11 @@ test('a chat conversation nobody worked on offers to move all of it as no new re
   expect(within(dialog).getByRole('checkbox', { name: /Also the invoice is wrong/ })).toBeChecked();
   expect(within(dialog).getByRole('checkbox', { name: /Close this conversation/ })).toBeChecked();
   unmount();
+  // The channel's default assignee is no person's work: the server still lets it close.
+  const assigned = view(<MessageMovesLog conversation={conversation({ channel: 'loopback', assignee_id: ME })} timeline={customerOnly} timezone="UTC" />);
+  expect(await screen.findByRole('button', { name: 'Not a new request? Move it…' })).toBeInTheDocument();
+  assigned.unmount();
   view(<MessageMovesLog conversation={conversation({ channel: 'loopback' })} timeline={timeline} timezone="UTC" />);
-  await waitFor(() => expect(moves.intake).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(moves.intake).toHaveBeenCalledTimes(3));
   expect(screen.queryByRole('button', { name: 'Not a new request? Move it…' })).not.toBeInTheDocument();
 });
