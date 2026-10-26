@@ -56,12 +56,12 @@ func (s *Store) detachMessages(ctx context.Context, workspaceID, fromID string, 
 			return MoveResult{}, err
 		}
 		if err := tx.QueryRow(ctx, `INSERT INTO intake_gatherings(workspace_id,channel_id,scope,lane_key,thread_id,contact_id,state,review_reason,rules_action,
-				rules_basis,rules_rule,opened_at,closed_at)
+				rules_basis,rules_rule,opened_at,closed_at,requeued_at,requeued_by_agent_id)
 			SELECT g.workspace_id,g.channel_id,g.scope,'detached:'||$3,g.thread_id,g.contact_id,'review','requeued','review','default',$4,
-				(SELECT min(e.received_at) FROM channel_inbound_events e WHERE e.workspace_id=$1 AND e.message_id=ANY($2::uuid[])),$5
+				(SELECT min(e.received_at) FROM channel_inbound_events e WHERE e.workspace_id=$1 AND e.message_id=ANY($2::uuid[])),$5,$5,NULLIF($6,'')::uuid
 			FROM channel_inbound_events e JOIN intake_gatherings g ON g.workspace_id=e.workspace_id AND g.id=e.gathering_id
 			WHERE e.workspace_id=$1 AND e.message_id=ANY($2::uuid[]) ORDER BY g.closed_at DESC LIMIT 1
-			RETURNING id::text`, workspaceID, ids, ids[0], RuleDetached, now).Scan(&move.gatheringID); err != nil {
+			RETURNING id::text`, workspaceID, ids, ids[0], RuleDetached, now, actor.AgentID).Scan(&move.gatheringID); err != nil {
 			return MoveResult{}, fmt.Errorf("open the card of taken back messages: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `UPDATE channel_thread_items SET gathering_id=$3,disposition='pending_review',disposition_reason=$4

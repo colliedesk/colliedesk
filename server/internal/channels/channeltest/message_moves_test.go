@@ -174,7 +174,8 @@ func TestAChatMessageTakenBackToTheQueueIsDecidedAgain(t *testing.T) {
 		t.Fatalf("back to the queue = %+v, %v", back, err)
 	}
 	card := *back.Move.GatheringID
-	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||rules_rule FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, card); got != "review/requeued/detached" {
+	if got := d.one(t, `SELECT state||'/'||review_reason||'/'||rules_rule||'/'||(requeued_by_agent_id=$3::uuid AND requeued_at IS NOT NULL)::text
+		FROM intake_gatherings WHERE workspace_id=$1 AND id=$2::uuid`, card, d.agentID); got != "review/requeued/detached/true" {
 		t.Fatalf("card = %s", got)
 	}
 	if listed, err := d.store.ListMessages(ctx, d.workspaceID, source); err != nil || len(listed) != 0 {
