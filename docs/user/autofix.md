@@ -39,9 +39,9 @@ It cannot read or write your code.
   repositories** on GitHub (**Change repositories on GitHub**); Colliedesk unblocks it by itself.
 - **Requested.** In an organization where you are not an owner, GitHub asks the owners to install
   the App. Once they did, press **Connect GitHub** again.
-- **Disconnect** uninstalls the App from that account on GitHub. The repositories stay in the list,
-  paused, so their fixes still show where they went; fixes in progress on them are cancelled. Connect
-  GitHub again to bring them back.
+- **Disconnect** uninstalls the App from that account on GitHub. The repositories are kept, paused, so
+  their fixes still show where they went (the list itself returns with GitHub); fixes in progress on them
+  are cancelled. Connect GitHub again to bring them back with their settings.
 - A GitHub installation belongs to one Colliedesk workspace.
 
 ### 2. Connect repositories

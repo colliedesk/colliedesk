@@ -335,9 +335,9 @@ export const autofixMessages = {
     leavingNote: 'GitHub then asks you to authorize Colliedesk once, so it can check the installation is yours.',
     continueToGitHub: 'Continue to GitHub',
     disconnectTitle: 'Disconnect GitHub?',
-    disconnectHelp: (login: string, repos: number) => `Colliedesk uninstalls its app from ${login} and disconnects ${repos === 1 ? '1 repository' : `${repos} repositories`}.`,
+    disconnectHelp: (login: string, repos: number) => `Colliedesk uninstalls its app from ${login} and pauses ${repos === 1 ? '1 repository' : `${repos} repositories`}.`,
     disconnectNote: 'Fixes in progress on them are cancelled. Their issues and pull requests stay on GitHub. Released fixes and their history stay in Colliedesk.',
-    disconnectAgain: 'You can connect again later; repositories need to be picked again.',
+    disconnectAgain: 'Connect GitHub again later and they come back, with their settings.',
     keepConnected: 'Keep connected',
     githubReturn: {
       connected: 'GitHub is connected. Pick the repositories below.',
