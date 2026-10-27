@@ -31,4 +31,11 @@ describe('autofix.css', () => {
   it('gives the three Fixes tables the same columns', () => {
     expect(rule('.af-table { table-layout: fixed; }')).toBeDefined();
   });
+
+  it('gives the buttons, links and menus of the Autofix cards and dialogs a 44px tap on a phone', () => {
+    const phone = css.slice(css.indexOf('@media (max-width: 44rem)'));
+    for (const selector of ['.af-dialog :is(button, select)', '.af-stepcard :is(button, .af-btn, select)', '.af-kv dd > a', '.af-evts-head .link-button', '.af-bar-row select']) {
+      expect(phone, selector).toContain(selector);
+    }
+  });
 });

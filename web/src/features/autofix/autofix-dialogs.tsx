@@ -7,7 +7,7 @@ import { autofixMessages as m } from './autofix-messages';
 // a pull request stays open.
 export function CancelDialog({ fix, busy, problem, onCancel, onClose }: { fix: Fix; busy: boolean; problem?: string; onCancel: () => void; onClose: () => void }) {
   const help = fix.state === 'sending' ? m.cancelSendingHelp : fix.connector === 'cursor_api' ? m.cancelCursorHelp : m.cancelIssueHelp(fix.issue_number, fix.connector);
-  return <Dialog alert title={m.cancelTitle} help={fix.pr_number !== null ? `${help} ${m.cancelPRHelp}` : help} closeLabel={m.close} onClose={onClose} onSubmit={onCancel}
+  return <Dialog alert className="af-dialog" title={m.cancelTitle} help={fix.pr_number !== null ? `${help} ${m.cancelPRHelp}` : help} closeLabel={m.close} onClose={onClose} onSubmit={onCancel}
     footer={<><button type="button" className="af-ghost" onClick={onClose}>{m.keepIt}</button>
       <button type="submit" className="af-danger-solid" disabled={busy}>{m.cancelFix}</button></>}>
     <p className="af-help">{m.cancelKeep}</p>
@@ -34,7 +34,7 @@ export function LinkDialog({ fix, busy, problem, onLink, onClose }: { fix: Fix; 
     setError(undefined);
     onLink(url.trim());
   };
-  return <Dialog title={m.linkTitle} help={m.linkHelp(fix.repo_full_name)} closeLabel={m.close} onClose={onClose} onSubmit={submit}
+  return <Dialog className="af-dialog" title={m.linkTitle} help={m.linkHelp(fix.repo_full_name)} closeLabel={m.close} onClose={onClose} onSubmit={submit}
     footer={<><button type="button" className="af-ghost" onClick={onClose}>{m.cancel}</button>
       <button type="submit" className="primary-action" disabled={busy}>{m.linkPRSubmit}</button></>}>
     <Field id="af-link-url" label={m.prURL} error={error ?? problem}>{(props) => <input {...props} type="url" value={url} autoFocus inputMode="url"

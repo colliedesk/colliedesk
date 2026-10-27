@@ -220,7 +220,7 @@
 .af-stepcard > p { margin: 0; color: var(--text-2); font-size: var(--fs-small); max-width: 46rem; }
 .af-stepcard details summary { cursor: pointer; }
 .af-stepcard details[open] summary { margin-bottom: var(--space-2); }
-.af-acct { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.af-acct { display: flex; align-items: center; gap: var(--space-3); }
 .af-av { width: 32px; height: 32px; border-radius: var(--radius); background: var(--surface-3); display: grid; place-items: center; font: 600 12px/1 var(--font-mono); color: var(--text-2); flex: none; }
 .af-who { display: grid; gap: 2px; min-width: 0; }
 .af-who b { font-weight: 600; }
@@ -303,6 +303,11 @@
   /* Links in the block and the cards reach 44px tall without moving the text: the padding only widens where a tap lands. */
   .af-kv dd > a, .af-c-pr a, .af-c-subj a { padding-block: 0.875rem; margin-block: -0.875rem; }
   .af-bar-row select, .af-page-head .af-btn { min-height: var(--touch); }
+  .af-stepcard :is(button, .af-btn, select) { min-height: var(--touch); }
+  .af-dialog :is(button, select) { min-height: var(--touch); }
+  .af-dialog .icon-button { min-width: var(--touch); }
+  .af-dialog .form-dialog-footer > button { flex: 1; }
+  .af-stepcard summary { display: flex; align-items: center; min-height: var(--touch); }
   .af-evts-head .link-button { min-height: var(--touch); }
   /* Rows become cards: subject first, then state and age, repository and agent, the PR. */
   .af-table thead { display: none; }

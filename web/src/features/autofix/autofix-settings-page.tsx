@@ -51,7 +51,7 @@ export interface AutofixSettingsPageProps {
 type Busy = (run: () => Promise<unknown>) => void;
 
 function Confirm({ title, help, children, confirm, danger, onConfirm, onClose, busy }: { title: string; help: string; children?: ReactNode; confirm: string; danger?: boolean; onConfirm: () => void; onClose: () => void; busy: boolean }) {
-  return <Dialog alert title={title} help={help} closeLabel={autofixMessages.close} onClose={onClose} onSubmit={onConfirm}
+  return <Dialog alert className="af-dialog" title={title} help={help} closeLabel={autofixMessages.close} onClose={onClose} onSubmit={onConfirm}
     footer={<><button type="button" className="af-ghost" onClick={onClose}>{autofixMessages.cancel}</button>
       <button type="submit" className={danger ? 'af-danger-solid' : 'primary-action'} disabled={busy}>{confirm}</button></>}>{children}</Dialog>;
 }
@@ -63,7 +63,7 @@ function Perms() {
 
 function GitHubStep({ installation, isAdmin, at, busy, run, actions, repos }: { installation?: Installation; isAdmin: boolean; at: (value: string) => string; busy: boolean; run: Busy; actions: SettingsActions; repos: number }) {
   const [dialog, setDialog] = useState<'leaving' | 'disconnect'>();
-  const leaving = dialog === 'leaving' && <Dialog title={m.leavingTitle} help={m.leavingHelp} closeLabel={autofixMessages.close} onClose={() => setDialog(undefined)}
+  const leaving = dialog === 'leaving' && <Dialog className="af-dialog" title={m.leavingTitle} help={m.leavingHelp} closeLabel={autofixMessages.close} onClose={() => setDialog(undefined)}
     onSubmit={() => run(actions.connectGitHub)}
     footer={<><button type="button" className="af-ghost" onClick={() => setDialog(undefined)}>{autofixMessages.cancel}</button>
       <button type="submit" className="primary-action" disabled={busy}><ExternalIcon />{m.continueToGitHub}</button></>}>
