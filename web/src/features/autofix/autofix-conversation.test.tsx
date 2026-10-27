@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { json, me, serve } from '../kb/kb.test.fixture';
 import type { Fix } from './autofix-api';
-import { AutofixConversation, targetOf } from './autofix-conversation';
+import { AutofixConversation, AutofixStrip, targetOf } from './autofix-conversation';
 import { connectorOf, conversationId, detailOf, fixOf, previewOf, repoOf, settingsOf, withPR } from './autofix.test.fixture';
 
 afterEach(() => {
@@ -111,6 +111,17 @@ describe('targetOf', () => {
     });
     expect(targetOf(settings)).toMatchObject({ repo: { id: repoOf().id }, connector: 'copilot_issue' });
     expect(targetOf(settingsOf({ connectors: [connectorOf({ kind: 'cursor_api', credential: null })] })).connector).toBeUndefined();
+  });
+  it('keeps the strip on a phone when the fix did not load, so the way to Try again stays one tap away', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    serve({
+      [`GET /api/v1/conversations/${conversationId}/fixes`]: () => json(500, { error: { code: 'internal', message: 'boom' } }),
+      'GET /api/v1/autofix/settings': () => json(200, settingsOf()),
+    });
+    const open = vi.fn();
+    render(<QueryClientProvider client={client}><AutofixStrip conversationId={conversationId} timezone="UTC" onOpenDetails={open} /></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: /Autofix.*Did not load/ }));
+    expect(open).toHaveBeenCalled();
   });
 });
 

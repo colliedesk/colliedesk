@@ -173,13 +173,16 @@ const stripTone: Record<Tone, string> = { off: 'af-st-off', running: 'af-st-open
 export function AutofixStrip({ conversationId, timezone, customerName, onOpenDetails }: { conversationId: string; timezone: string; customerName?: string; onOpenDetails: () => void }) {
   const { latest } = useConversationFix(conversationId);
   const settings = useAutofixSettings();
+  const strip = (text: string, tone: Tone) => <button type="button" className="af-strip" onClick={onOpenDetails} aria-controls="conversation-details" aria-label={`${m.openDetails}: ${text}`}>
+    <b>{m.heading}</b><span className="af-strip-text">{text}</span><span className={`status ${stripTone[tone]}`}>{m.stripTone[tone]}</span>
+  </button>;
+  // A load that failed keeps the strip: the details behind it say so and offer Try again.
+  if (latest.isError) return strip(m.strip.failed, 'attention');
   if (latest.data === undefined || (latest.data === null && !targetOf(settings.data).repo)) return null;
   const fix = latest.data;
   const now = Date.now();
   const view = fix && fixView(fix, now);
   const tone: Tone = view?.tone ?? 'off';
   const text = fix ? stripText(fix, now, (value) => formatShortDate(value, timezone, new Date(now)), customerName) : m.strip.none(targetOf(settings.data).repo?.full_name);
-  return <button type="button" className="af-strip" onClick={onOpenDetails} aria-controls="conversation-details" aria-label={`${m.openDetails}: ${text}`}>
-    <b>{m.heading}</b><span className="af-strip-text">{text}</span><span className={`status ${stripTone[tone]}`}>{m.stripTone[tone]}</span>
-  </button>;
+  return strip(text, tone);
 }

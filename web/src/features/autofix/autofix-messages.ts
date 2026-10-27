@@ -30,6 +30,7 @@ export const autofixMessages = {
   stripTone: { off: 'Off', running: 'Running', attention: 'Attention', done: 'Released', stopped: 'Failed' },
   strip: {
     none: (repo: string | undefined) => (repo ? `Not sent · ${repo}` : 'Not sent'),
+    failed: 'Did not load',
     sending: (connector: FixConnector) => (connector === 'cursor_api' ? 'Sending to Cursor…' : 'Creating the GitHub issue…'),
     sent: (issue: number | null, connector: FixConnector) => (issue === null ? `Waiting for ${vendor(connector)}` : `Issue #${issue} · waiting for ${vendor(connector)}`),
     noWord: (connector: FixConnector, minutes: number) => `No word from ${vendor(connector)} for ${minutes} min`,

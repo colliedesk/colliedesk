@@ -306,7 +306,7 @@
   .af-consent, .af-notes li, .af-checklist li, .af-pv-title { min-height: var(--touch); }
   /* Links in the block and the cards reach 44px tall without moving the text: the padding only widens where a tap lands. */
   .af-kv dd > a, .af-c-pr a, .af-c-subj a { padding-block: 0.875rem; margin-block: -0.875rem; }
-  .af-bar-row select, .af-page-head .af-btn { min-height: var(--touch); }
+  .af-bar-row select, .af-page-head .af-btn, .af-empty :is(button, .af-btn) { min-height: var(--touch); }
   .af-stepcard :is(button, .af-btn, select) { min-height: var(--touch); }
   .af-dialog :is(button, select) { min-height: var(--touch); }
   .af-dialog .icon-button { min-width: var(--touch); }
