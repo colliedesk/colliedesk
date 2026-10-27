@@ -8298,11 +8298,12 @@ components:
           description: The internal notes the sender may include (never one an agent token wrote), and whether each is in the body.
           items:
             type: object
-            required: [message_id, author_name, created_at, included]
+            required: [message_id, author_name, created_at, excerpt, included]
             properties:
               message_id: {type: string, format: uuid}
               author_name: {type: [string, 'null']}
               created_at: {type: string, format: date-time}
+              excerpt: {type: string, maxLength: 300, description: 'The note''s start, masked the same way as the body (at most 300 characters), so the sender can pick it; only in this preview.'}
               included: {type: boolean}
         notes_allowed: {type: boolean, description: The repository lets notes go with a fix.}
         attachments_left_out: {type: integer, minimum: 0, description: Files are never sent.}

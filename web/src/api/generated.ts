@@ -5692,6 +5692,8 @@ export interface components {
                 author_name: string | null;
                 /** Format: date-time */
                 created_at: string;
+                /** @description The note's start, masked the same way as the body (at most 300 characters), so the sender can pick it; only in this preview. */
+                excerpt: string;
                 included: boolean;
             }[];
             /** @description The repository lets notes go with a fix. */
