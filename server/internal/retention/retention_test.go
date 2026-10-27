@@ -162,6 +162,19 @@ func (e *env) workspace(t *testing.T, name string, trialEnd string, admins ...st
 		}
 		result.Keys = append(result.Keys, object.Key)
 	}
+	// Autofix: an installation, a repository, a coding agent with a sealed key, a fix with its timeline and
+	// an authorization in flight all go with the workspace.
+	e.exec(t, `WITH i AS (INSERT INTO autofix_github_installations (workspace_id, installation_id, account_login, account_type, repository_selection, status, connected_by_name)
+			VALUES ($1, 90000 + (SELECT count(*) FROM autofix_github_installations), 'acme', 'Organization', 'selected', 'active', 'Ada') RETURNING installation_id),
+		r AS (INSERT INTO autofix_repos (workspace_id, installation_id, github_repo_id, full_name, visibility, default_branch, connected_by_name)
+			SELECT $1, installation_id, 1, 'acme/shop', 'private', 'main', 'Ada' FROM i RETURNING id),
+		f AS (INSERT INTO fix_attempts (workspace_id, conversation_id, attempt_no, repo_id, repo_full_name, connector, state, sent_title, sent_body, created_by_kind, created_by_name)
+			SELECT $1, $2, 1, id, 'acme/shop', 'claude_issue', 'sending', 'Checkout', 'Broken', 'person', 'Ada' FROM r RETURNING id),
+		e AS (INSERT INTO fix_attempt_events (workspace_id, fix_attempt_id, kind, actor_kind) SELECT $1, id, 'created', 'person' FROM f)
+		INSERT INTO autofix_oauth_states (state_hash, workspace_id, agent_id, purpose, fix_attempt_id, code_verifier, expires_at)
+			SELECT sha256(convert_to($1::text, 'UTF8')), $1, $3, 'dispatch', id, repeat('v', 43), now() + interval '10 minutes' FROM f`, created.ID, conversation.ID, agentID)
+	e.exec(t, `INSERT INTO autofix_connectors (workspace_id, kind, enabled, consent_name, consent_at, consent_version, credential_key_id, credential_sealed, credential_set_by_name, credential_set_at)
+		VALUES ($1, 'cursor_api', true, 'Ada', now(), '1', 'k1', '\x00', 'Ada', now())`, created.ID)
 	return result
 }
 
@@ -260,6 +273,11 @@ func TestNoticeThirtyDaysBeforeThenDeletionAfterTwelveMonths(t *testing.T) {
 	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example", "bob@alpha.example")
 	b := e.workspace(t, "Beta", "2027-03-01T00:00:00Z", "carl@beta.example")
 	beforeB := e.rows(t, b.ID)
+	for _, table := range []string{"autofix_github_installations", "autofix_repos", "autofix_connectors", "fix_attempts", "fix_attempt_events", "autofix_oauth_states"} {
+		if beforeB[table] != 1 {
+			t.Fatalf("the fixture lacks %s: %v", table, beforeB)
+		}
+	}
 
 	if got := e.run(t, "2027-10-01T23:59:59Z"); got.Noticed != 0 || got.Deleted != 0 || e.mailer.count() != 0 {
 		t.Fatalf("one second before the notice date: %+v, mails %d; want nothing", got, e.mailer.count())

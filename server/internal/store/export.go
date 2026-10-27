@@ -99,6 +99,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportResultsBaseline(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportAutofix(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	if err := s.exportChannels(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}

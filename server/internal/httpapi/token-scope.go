@@ -292,6 +292,12 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  grant(auth.PermAIAssistCreate),
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": grant(auth.PermAIAssistCreate),
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    grant(auth.PermAIAssistCreate),
+	// Autofix: reading fixes and their timelines changes nothing (what was sent is the team's masked
+	// text, never a key).
+	"GET /api/v1/autofix/status":           grant(auth.PermAutofixRead),
+	"GET /api/v1/autofix/fixes":            grant(auth.PermAutofixRead),
+	"GET /api/v1/autofix/fixes/{id}":       grant(auth.PermAutofixRead),
+	"GET /api/v1/conversations/{id}/fixes": grant(auth.PermAutofixRead),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.

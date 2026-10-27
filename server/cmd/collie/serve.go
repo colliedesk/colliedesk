@@ -26,6 +26,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/colliedesk/colliedesk/server/internal/github"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -218,7 +219,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
 	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1", PlanLimits: billing.Enabled()}
-	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: github.ConfigFromEnv(os.Getenv), Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.

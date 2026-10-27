@@ -25,6 +25,8 @@ export const publicConfigSchema = z.object({
   limits: z.object({ outgoing_attachments_bytes: z.number().int(), outgoing_attachments_files: z.number().int() }),
   product_analytics: z.object({ enabled: z.boolean(), key: z.string().nullable(), host: z.string().nullable(), realm: z.enum(['cloud', 'self-hosted']).nullable() }),
   ai: z.object({ server_provider: z.boolean() }),
+  // Autofix needs the server's GitHub App; a server from before Autofix reads as without it.
+  autofix: z.object({ available: z.boolean(), missing_settings: z.array(z.string()) }).default({ available: false, missing_settings: [] }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const checkoutPlanSchema = z.enum(['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
 export const planSchema = z.enum(['trial', 'solo', 'small', 'team', 'team25', 'founding', 'none']);

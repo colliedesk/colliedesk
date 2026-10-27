@@ -58,6 +58,8 @@ type contractFixture struct {
 	aiTriageAutoID, aiTriageAutoConversation string
 	// webFormChannelID is changed and checked by the channel cases; emailChannelID is removed by one.
 	webFormChannelID, emailChannelID string
+	// fixID is an Autofix fix of conversationID, merged, so every nullable field the contract allows is read.
+	fixID string
 	// secondEmailChannelID is a second email channel of the admin's workspace.
 	secondEmailChannelID string
 }
@@ -98,6 +100,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	})
 	attachmentID := seedAttachment(t, pool, storage, adminToken, api, noteID, "contract.txt", "contract bytes")
 	seedImportDetails(t, pool, workspaceID(t, api, adminToken), conversationID, noteID)
+	fixID := seedContractFix(t, api, pool, adminToken, conversationID)
 	updateTagID := create(t, api, adminToken, "/api/v1/tags", map[string]any{"name": "Update contract tag"})
 	deleteTagID := create(t, api, adminToken, "/api/v1/tags", map[string]any{"name": "Delete contract tag"})
 	updateReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Update contract reply", "body": "Hello {{customer.name}}"})
@@ -257,7 +260,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
-	return contractFixture{webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }

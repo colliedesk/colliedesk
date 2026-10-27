@@ -21,6 +21,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/github"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
@@ -57,6 +58,9 @@ type Config struct {
 	// Microsoft is the operator's app registration for connecting Microsoft 365; with a setting missing,
 	// Microsoft 365 cannot be connected and the settings name what is missing. It seals with Google.Keys.
 	Microsoft microsoft.Config
+	// GitHub is the operator's GitHub App that Autofix works through; with a setting missing, Autofix is
+	// off and GET /api/v1/config names what is missing.
+	GitHub github.Config
 	// ImportKeys holds the Freshdesk keys of in-app imports; the worker of the process shares it. Nil
 	// makes one from Google.Keys (tests).
 	ImportKeys *importjobs.Keys
@@ -509,6 +513,11 @@ func Routes() []Route {
 		{http.MethodGet, microsoftAdminConsentPath, auth.PermissionPublic},
 		{http.MethodPost, channelMicrosoftPath, auth.PermissionAccessWrite},
 		{http.MethodDelete, channelMicrosoftPath, auth.PermissionAccessWrite},
+		// Autofix: what was sent to coding agents and where each fix is.
+		{http.MethodGet, "/api/v1/autofix/status", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/autofix/fixes", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/autofix/fixes/{id}", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/conversations/{id}/fixes", auth.PermissionConversationsRead},
 	}
 }
 

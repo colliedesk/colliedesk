@@ -98,6 +98,8 @@ const (
 	PermAISettingsRead              = "ai_settings:read"
 	PermAISettingsUpdate            = "ai_settings:update"
 	PermAISettingsManageCredentials = "ai_settings:manage_credentials"
+
+	PermAutofixRead = "autofix:read"
 )
 
 // TokenPermission describes one permission: its preset, and whether it reaches outside the workspace
@@ -175,6 +177,7 @@ var tokenPermissions = []TokenPermission{
 	permission(PermAISettingsRead, ScopeRead, false),
 	permission(PermAISettingsUpdate, ScopeAdmin, false),
 	permission(PermAISettingsManageCredentials, ScopeAdmin, true),
+	permission(PermAutofixRead, ScopeRead, false),
 }
 
 var permissionPreset = func() map[string]string {

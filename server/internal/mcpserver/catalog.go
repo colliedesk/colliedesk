@@ -56,6 +56,7 @@ func Catalog() []Spec {
 		resultsGetSpec(), resultsShareLinkGetSpec(), resultsShareLinkCreateSpec(), resultsShareLinkRevokeSpec(), resultsEmailSetSpec(),
 		channelsListSpec(), channelsGetSpec(), channelsEventsSpec(), channelsCreateSpec(), channelsUpdateSpec(), channelsCheckSpec(), channelsHeldReplaySpec(),
 		channelsCredentialsSetSpec(), channelsDeleteRequestSpec(), channelsHeldDiscardRequestSpec(),
+		autofixStatusSpec(), fixesListSpec(), fixGetSpec(), conversationFixesListSpec(),
 	}
 	for i := range specs {
 		specs[i].Doc = toolDocs[specs[i].Name]

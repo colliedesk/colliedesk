@@ -4,6 +4,10 @@ package mcpserver
 // written for the model. The tool table in docs/user/mcp.md is generated from it (make docs-mcp),
 // with the tier from Tier and "Cannot be undone" from Destructive, so neither belongs here.
 var toolDocs = map[string]string{
+	"colliedesk_autofix_status":                   "Shows whether Autofix is set up and how many fixes wait for a person or are running",
+	"colliedesk_fixes_list":                       "Lists the fixes sent to coding agents, by group (needs a person, running, done)",
+	"colliedesk_fix_get":                          "Shows one fix: where it is, its issue and pull request, what was sent and its timeline",
+	"colliedesk_conversation_fixes_list":          "Lists a conversation's fixes, the latest attempt first",
 	"colliedesk_channels_list":                    "Lists the channels with their state and the channel types the server runs",
 	"colliedesk_channels_get":                     "Shows one channel and its configuration",
 	"colliedesk_channels_events":                  "Shows the history of the channels",

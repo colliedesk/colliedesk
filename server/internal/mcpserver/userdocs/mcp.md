@@ -206,6 +206,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channels_credentials_set` | Stores a channel's secret (admin token only) | `admin` |
 | `colliedesk_channels_delete_request` | Asks a person to remove a channel | `read` |
 | `colliedesk_channels_held_discard_request` | Asks a person to discard the messages a channel held | `read` |
+| `colliedesk_autofix_status` | Shows whether Autofix is set up and how many fixes wait for a person or are running | `read` |
+| `colliedesk_fixes_list` | Lists the fixes sent to coding agents, by group (needs a person, running, done) | `read` |
+| `colliedesk_fix_get` | Shows one fix: where it is, its issue and pull request, what was sent and its timeline | `read` |
+| `colliedesk_conversation_fixes_list` | Lists a conversation's fixes, the latest attempt first | `read` |
 <!-- /generated -->
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

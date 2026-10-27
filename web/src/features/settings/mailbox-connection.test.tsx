@@ -27,6 +27,7 @@ const selfHosted: PublicConfig = {
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null },
   ai: { server_provider: false },
+  autofix: { available: false, missing_settings: [] },
 };
 const cloud: PublicConfig = { ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true }, signup: { enabled: true } };
 

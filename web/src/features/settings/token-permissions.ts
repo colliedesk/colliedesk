@@ -38,6 +38,7 @@ export const tokenResources: ResourceInfo[] = [
   { resource: 'billing', label: 'Billing', permissions: [p('billing:read', 'admin'), p('billing:manage', 'admin', { asks: true })] },
   { resource: 'imports', label: 'Imports', permissions: [p('imports:read', 'admin'), p('imports:run', 'admin'), p('imports:manage_credentials', 'admin', { outside: true }), p('imports:undo', 'admin', { asks: true })] },
   { resource: 'ai_settings', label: 'AI settings', permissions: [p('ai_settings:read', 'read'), p('ai_settings:update', 'admin'), p('ai_settings:manage_credentials', 'admin', { outside: true })] },
+  { resource: 'autofix', label: 'Autofix', permissions: [p('autofix:read', 'read')] },
 ];
 
 export const actionLabels: Record<string, string> = {
