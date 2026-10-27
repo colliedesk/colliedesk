@@ -36,6 +36,13 @@ describe('AutofixRequestDetail', () => {
     expect(screen.getByText(/Fixes in progress on them are cancelled/)).toBeInTheDocument();
   });
 
+  it('does not say what approving would do once the request is decided', () => {
+    show(request({ status: 'approved', body: { repo_id: repoOf().id, connector: 'claude_issue', title: 't', body: 'b', client_key: 'k' } }));
+    expect(screen.queryByText(/You become the sender/)).not.toBeInTheDocument();
+    show(request({ status: 'rejected', route: '/api/v1/autofix/github/installations', path: '/api/v1/autofix/github/installations' }));
+    expect(screen.queryByText(/Approve opens GitHub to install/)).not.toBeInTheDocument();
+  });
+
   it('says Cursor gets it at once and keeps it', () => {
     show(request({ body: { repo_id: repoOf().id, connector: 'cursor_api', title: 't', body: 'b', client_key: 'k' } }));
     expect(screen.getByText(/Approve sends it to Cursor at once/)).toBeInTheDocument();

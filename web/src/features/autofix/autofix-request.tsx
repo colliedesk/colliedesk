@@ -34,6 +34,8 @@ export function AutofixRequestDetail({ item, result, onApprove, busy = false }: 
   }, [url]);
   const refusal = refused && <p role="alert" className="error-copy">{refused}</p>;
   const body = item.edited_body ?? item.body;
+  // What approving would do is said while it is still to be decided; a decided request is past that.
+  const pending = item.status === 'pending';
   if (sendRoutes.has(item.route)) {
     const connector = connectorOf(field(body, 'connector'));
     const repo = settings.data?.repos.find((candidate) => candidate.id === field(body, 'repo_id'));
@@ -47,12 +49,12 @@ export function AutofixRequestDetail({ item, result, onApprove, busy = false }: 
         {sentText && <div><dt>{m.text}</dt><dd><BodyView body={sentText} /></dd></div>}
         <div><dt>{m.notes}</dt><dd>{Array.isArray(notes) && notes.length > 0 ? m.notesN(notes.length) : m.none}</dd></div>
       </dl>
-      {connector === 'cursor_api' ? <div className="af-oc af-note"><span>{m.cursorNow}</span></div>
-        : <div className="af-oc"><span><b>{m.becomeSender}</b> {m.becomeSenderHelp}</span></div>}
+      {pending && (connector === 'cursor_api' ? <div className="af-oc af-note"><span>{m.cursorNow}</span></div>
+        : <div className="af-oc"><span><b>{m.becomeSender}</b> {m.becomeSenderHelp}</span></div>)}
       {refusal}
     </>;
   }
-  if (item.route === '/api/v1/autofix/github/installations') return <><div className="af-oc"><span>{m.installHelp}</span></div>{refusal}</>;
+  if (item.route === '/api/v1/autofix/github/installations') return <>{pending && <div className="af-oc"><span>{m.installHelp}</span></div>}{refusal}</>;
   if (item.route === '/api/v1/autofix/github/installations/{id}' && item.method === 'DELETE') {
     const installation = settings.data?.installations.find((candidate) => candidate.id === item.path.split('/').pop());
     const repos = settings.data?.repos.filter((repo) => repo.installation_id === installation?.installation_id).length ?? 0;
