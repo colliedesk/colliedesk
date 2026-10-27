@@ -23,6 +23,7 @@ func TestMaskRemovesWhatMustNotLeaveAndCountsIt(t *testing.T) {
 		{"mention", "@claude fix this, cc @someone", "@​claude fix this, cc @​someone", Removed{Mentions: 2}},
 		{"references", "see #123 and GH-45 and acme/web#9", "see #​123 and GH-​45 and acme/web#​9", Removed{References: 3}},
 		{"dates and versions stay", "2026-10-28 12:30 v1.2.3 build 42 at 10.0.0.12", "2026-10-28 12:30 v1.2.3 build 42 at 10.0.0.12", Removed{}},
+		{"an ampersand before a reference", "fix &#12 now", "fix &#\u200b12 now", Removed{References: 1}},
 		{"uuid stays", "conversation 0b6f6f3e-1c2d-4e5f-8a9b-0c1d2e3f4a5b", "conversation 0b6f6f3e-1c2d-4e5f-8a9b-0c1d2e3f4a5b", Removed{}},
 	}
 	for _, c := range cases {

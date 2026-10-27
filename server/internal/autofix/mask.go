@@ -63,7 +63,9 @@ var (
 	ipv4Pattern    = regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$`)
 	mentionPattern = regexp.MustCompile(`@([A-Za-z0-9])`)
 	hashPattern    = regexp.MustCompile(`#([0-9])`)
-	ghPattern      = regexp.MustCompile(`(?i)\b(GH-)([0-9])`)
+	// characterReference is the rest of an HTML character reference after its & (#39;).
+	characterReference = regexp.MustCompile(`^#[0-9]{1,7};`)
+	ghPattern          = regexp.MustCompile(`(?i)\b(GH-)([0-9])`)
 	// Our own block tags written inside a customer's text, so a block can never be closed early.
 	blockTagPattern = regexp.MustCompile(`(?i)<(/?)(customer-message|team-note)`)
 )
@@ -120,7 +122,7 @@ func inertReferences(text string, count *int) string {
 	var out strings.Builder
 	last := 0
 	for _, at := range hashPattern.FindAllStringIndex(text, -1) {
-		if at[0] > 0 && text[at[0]-1] == '&' {
+		if at[0] > 0 && text[at[0]-1] == '&' && characterReference.MatchString(text[at[0]:]) {
 			continue
 		}
 		out.WriteString(text[last : at[0]+1])
