@@ -441,7 +441,9 @@ export const messages = {
     source: {
       legend: 'Where did you hear about Colliedesk?',
       options: {
-        x: 'X (Twitter)', email: 'An email from us', search: 'Search engine', reddit: 'Reddit', github: 'GitHub',
+        x: 'X (Twitter)', email: 'An email from us', search: 'Search engine',
+        ai_chatgpt: 'ChatGPT', ai_claude: 'Claude', ai_gemini: 'Gemini', ai_perplexity: 'Perplexity', ai_other: 'Another AI assistant',
+        tiktok: 'TikTok', youtube: 'YouTube', reddit: 'Reddit', github: 'GitHub',
         referral: 'A friend or colleague', other: 'Other',
       },
     },

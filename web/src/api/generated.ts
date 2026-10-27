@@ -3760,7 +3760,7 @@ export interface components {
          * @description Where the person heard of Colliedesk.
          * @enum {string}
          */
-        OnboardingSource: "x" | "email" | "search" | "reddit" | "github" | "referral" | "other";
+        OnboardingSource: "x" | "email" | "search" | "ai_chatgpt" | "ai_claude" | "ai_gemini" | "ai_perplexity" | "ai_other" | "tiktok" | "youtube" | "reddit" | "github" | "referral" | "other";
         Me: {
             /** @description Which AI features can run now in the workspace (on, with a working provider); the web app offers only those. */
             ai_features: {

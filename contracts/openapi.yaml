@@ -5946,7 +5946,7 @@ components:
       description: The role of the person who signed up.
     OnboardingSource:
       type: string
-      enum: [x, email, search, reddit, github, referral, other]
+      enum: [x, email, search, ai_chatgpt, ai_claude, ai_gemini, ai_perplexity, ai_other, tiktok, youtube, reddit, github, referral, other]
       description: Where the person heard of Colliedesk.
     Me:
       type: object
