@@ -75,7 +75,7 @@ var (
 	}
 	CancelledReasons = []string{
 		"cancelled_by_person", "authorization_abandoned", "authorization_denied", "repo_disconnected",
-		"conversation_deleted", "issue_closed",
+		"conversation_deleted", "issue_closed", "connector_disabled",
 	}
 )
 
@@ -215,14 +215,14 @@ func Decide(current Current, obs Observation, actor Actor) (Result, error) {
 		return Note, nil
 	case from == PROpen && to == Cancelled:
 		// An issue closed while a pull request is open is not a cancellation: the pull request decides.
-		if obs.Reason == "issue_closed" || obs.Reason == "authorization_abandoned" || obs.Reason == "authorization_denied" {
+		if obs.Reason == "issue_closed" || beforeSending(obs.Reason) {
 			return Note, nil
 		}
 		return Move, nil
 	case from.InProgress() && to == Failed:
 		return Move, nil
 	case from.InProgress() && to == Cancelled:
-		if (obs.Reason == "authorization_abandoned" || obs.Reason == "authorization_denied") && from != Sending {
+		if beforeSending(obs.Reason) && from != Sending {
 			return Note, nil
 		}
 		return Move, nil
@@ -236,6 +236,13 @@ func Decide(current Current, obs Observation, actor Actor) (Result, error) {
 	}
 	// Merged, released, failed and cancelled stay; a person's cancel is never undone by a signal.
 	return Note, nil
+}
+
+// beforeSending reasons only end a fix whose content has not left Colliedesk yet: the person's GitHub
+// authorization was abandoned or denied, or an admin turned the agent off (withdrawing the consent). Once
+// sent, they are only noted.
+func beforeSending(reason string) bool {
+	return reason == "authorization_abandoned" || reason == "authorization_denied" || reason == "connector_disabled"
 }
 
 // Action is something a person (or an agent token, within its permissions) does to an attempt.

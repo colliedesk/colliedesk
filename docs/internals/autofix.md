@@ -21,6 +21,9 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
 - One fix in progress per conversation (`fix_attempts_one_in_progress`). A reopened issue or pull
   request brings an ended fix back only while the conversation has no newer one in progress;
   otherwise it is only noted.
+- `authorization_abandoned`, `authorization_denied` and `connector_disabled` (an admin turned the agent
+  off, withdrawing the consent) end only a fix still `sending`, whose content has not left Colliedesk;
+  once sent they are only noted, because the vendor already has it.
 - A person's cancel is never undone by a signal; an issue closed while a pull request is open is not a
   cancellation (the pull request decides); an issue closed by a merged pull request whose own webhook
   was missed is a merge.

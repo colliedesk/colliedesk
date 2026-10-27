@@ -5558,10 +5558,10 @@ export interface components {
          */
         FixConnector: "claude_issue" | "copilot_issue" | "cursor_api";
         /**
-         * @description Why a fix failed (`vendor_auth` … `interrupted`) or was cancelled (`cancelled_by_person` … `issue_closed`); docs/user/autofix.md says what each means and what to do.
+         * @description Why a fix failed (`vendor_auth` … `interrupted`) or was cancelled (`cancelled_by_person` … `connector_disabled`: an admin turned the agent off before the fix left Colliedesk, withdrawing the consent); docs/user/autofix.md says what each means and what to do.
          * @enum {string}
          */
-        FixOutcomeReason: "vendor_auth" | "vendor_repo_access" | "vendor_rejected" | "provider_unavailable" | "no_repo_access" | "copilot_unavailable" | "repo_public" | "pr_closed" | "agent_error" | "timed_out" | "interrupted" | "cancelled_by_person" | "authorization_abandoned" | "authorization_denied" | "repo_disconnected" | "conversation_deleted" | "issue_closed";
+        FixOutcomeReason: "vendor_auth" | "vendor_repo_access" | "vendor_rejected" | "provider_unavailable" | "no_repo_access" | "copilot_unavailable" | "repo_public" | "pr_closed" | "agent_error" | "timed_out" | "interrupted" | "cancelled_by_person" | "authorization_abandoned" | "authorization_denied" | "repo_disconnected" | "conversation_deleted" | "issue_closed" | "connector_disabled";
         /** @enum {string} */
         FixGroup: "needs_person" | "running" | "done";
         AutofixStatus: {

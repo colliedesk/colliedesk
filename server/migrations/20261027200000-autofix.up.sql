@@ -164,7 +164,7 @@ CREATE TABLE fix_attempts (
         WHEN 'failed' THEN outcome_reason IN ('vendor_auth', 'vendor_repo_access', 'vendor_rejected', 'provider_unavailable',
             'no_repo_access', 'copilot_unavailable', 'repo_public', 'pr_closed', 'agent_error', 'timed_out', 'interrupted')
         WHEN 'cancelled' THEN outcome_reason IN ('cancelled_by_person', 'authorization_abandoned', 'authorization_denied',
-            'repo_disconnected', 'conversation_deleted', 'issue_closed')
+            'repo_disconnected', 'conversation_deleted', 'issue_closed', 'connector_disabled')
         ELSE outcome_reason IS NULL END),
     CHECK (state NOT IN ('merged', 'deployed') OR merged_at IS NOT NULL),
     CHECK ((state = 'deployed') = (deployed_at IS NOT NULL)),

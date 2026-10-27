@@ -8178,10 +8178,11 @@ components:
         workspace's key.
     FixOutcomeReason:
       type: string
-      enum: [vendor_auth, vendor_repo_access, vendor_rejected, provider_unavailable, no_repo_access, copilot_unavailable, repo_public, pr_closed, agent_error, timed_out, interrupted, cancelled_by_person, authorization_abandoned, authorization_denied, repo_disconnected, conversation_deleted, issue_closed]
+      enum: [vendor_auth, vendor_repo_access, vendor_rejected, provider_unavailable, no_repo_access, copilot_unavailable, repo_public, pr_closed, agent_error, timed_out, interrupted, cancelled_by_person, authorization_abandoned, authorization_denied, repo_disconnected, conversation_deleted, issue_closed, connector_disabled]
       description: >
         Why a fix failed (`vendor_auth` … `interrupted`) or was cancelled (`cancelled_by_person` …
-        `issue_closed`); docs/user/autofix.md says what each means and what to do.
+        `connector_disabled`: an admin turned the agent off before the fix left Colliedesk, withdrawing the
+        consent); docs/user/autofix.md says what each means and what to do.
     FixGroup:
       type: string
       enum: [needs_person, running, done]
