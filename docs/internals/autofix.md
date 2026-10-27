@@ -129,7 +129,8 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
   (`cursor_key_missing`), `store.CreateFix`, then `store.ScheduleFixCheck(now)`; `authorize_url` is null and
   the worker sends it. The same `client_key` answers the same fix without scheduling it again.
 - `POST …/cancel`: `store.ActOnFix`, then, after it committed, `autofixworker.Cursor.Cancel`; a run that
-  could not be stopped (`ErrStopOnCursor`) is logged, and the fix's `vendor_url` is where to stop it.
+  could not be stopped (`ErrStopOnCursor`) leaves a `cursor_cancel_failed` event with the fix's `vendor_url`,
+  where the person stops it.
 - The worker handles only `cursor_api` fixes; the issue connectors' `sending` expiry runs in the reconcile
   pass (`githubsync`).
 

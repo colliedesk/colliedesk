@@ -476,3 +476,21 @@ func TestSendingTheSameKeyAgainPutsBackACursorFixWhoseScheduleWasLost(t *testing
 		t.Fatalf("after the same key: %s, %d creates", fix.State, len(c.cursor.Creates()))
 	}
 }
+
+func TestACancelCursorDidNotStopSaysSoOnTheTimeline(t *testing.T) {
+	c := newCursorDesk(t, "Cursor Left", 61004, 62004)
+	s := sendDesk{fixDesk: c.fixDesk}.withConversation(t)
+	sent := s.send(t, c.w.admin, autofix.CursorAPI, "cursor-left-1", http.StatusCreated)
+	if _, err := c.worker.Tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	c.cursor.Fail("cancel", cursortest.Failure{Status: 503, Message: "busy"})
+	if response := request(t, c.api, http.MethodPost, "/api/v1/autofix/fixes/"+sent.Fix.ID+"/cancel", nil, c.w.admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("cancel: %d %s", response.Code, response.Body)
+	}
+	fix := c.fix(t, sent.Fix.ID)
+	last := fix.Events[len(fix.Events)-1]
+	if fix.State != autofix.Cancelled || last.Kind != "cursor_cancel_failed" || last.Data["vendor_url"] != "https://cursor.com/agents/bc-"+sent.Fix.ID {
+		t.Fatalf("after a cancel Cursor refused: %s, last event %+v", fix.State, last)
+	}
+}
