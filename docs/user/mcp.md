@@ -219,6 +219,14 @@ with `billing` and leave a note with a summary."
 | `colliedesk_autofix_repo_disconnect` | Disconnects a repository; its fixes in progress are cancelled (admin token). Cannot be undone | `admin` |
 | `colliedesk_autofix_repo_notes_include_request` | Asks a person to let fixes on a repository carry internal notes | `read` |
 | `colliedesk_autofix_repo_notes_exclude` | Stops internal notes going with fixes on a repository (admin token) | `admin` |
+| `colliedesk_fix_preview` | Builds what sending a conversation to a coding agent would send, masked, without sending | `read` |
+| `colliedesk_fix_send_request` | Asks a person to send a conversation to a coding agent; they confirm on GitHub and the issue is theirs | `read` |
+| `colliedesk_fix_retry_request` | Asks a person to send a failed or cancelled fix again | `read` |
+| `colliedesk_fix_cancel` | Cancels a fix in progress and closes its issue | `draft` |
+| `colliedesk_fix_mark_deployed` | Marks a merged fix released | `draft` |
+| `colliedesk_fix_unmark_deployed` | Takes back a fix's release | `draft` |
+| `colliedesk_fix_pr_link` | Links a pull request Colliedesk did not find to a fix | `draft` |
+| `colliedesk_fix_pr_unlink` | Unlinks a pull request a person linked | `draft` |
 <!-- /generated -->
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

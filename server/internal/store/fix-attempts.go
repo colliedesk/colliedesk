@@ -394,75 +394,81 @@ func (s *Store) ApplyFixObservation(ctx context.Context, workspaceID, id string,
 	if !savedReplyID.MatchString(id) {
 		return autofix.Fix{}, autofix.Ignore, autofix.ErrFixNotFound
 	}
-	type applied struct {
-		fix    autofix.Fix
-		result autofix.Result
-	}
 	out, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (applied, error) {
-		fix, err := getFix(ctx, tx, workspaceID, id, true)
-		if err != nil {
-			return applied{}, err
-		}
-		result, err := autofix.Decide(fixCurrent(fix), obs, actor)
-		if err != nil {
-			return applied{}, err
-		}
-		if result == autofix.Move && obs.State.InProgress() && !fix.State.InProgress() {
-			// Back in progress (an issue or a pull request reopened) only while the conversation has no
-			// newer fix in progress; otherwise the signal is only recorded.
-			busy, err := newerFixInProgress(ctx, tx, workspaceID, fix)
-			if err != nil {
-				return applied{}, err
-			}
-			if busy {
-				result = autofix.Note
-			}
-		}
-		data := observationData(obs)
-		switch result {
-		case autofix.Ignore:
-			return applied{fix, result}, nil
-		case autofix.Note:
-			kind := obs.Kind
-			if kind == "" {
-				kind = "signal_noted"
-			}
-			data["state"] = obs.State
-			if err := insertFixEvent(ctx, tx, workspaceID, id, kind, "", "", actor, data, obs.DeliveryID); err != nil {
-				return applied{}, err
-			}
-			return applied{fix, result}, nil
-		}
-		prLinkedBy := ""
-		if obs.PRURL != "" && fix.PRURL == nil {
-			prLinkedBy = "auto"
-		}
-		if _, err := tx.Exec(ctx, `UPDATE fix_attempts SET state = $3, outcome_reason = $4, state_changed_at = now(), row_version = row_version + 1,
-				issue_number = COALESCE($5, issue_number), issue_node_id = COALESCE($6, issue_node_id), vendor_ref = COALESCE($7, vendor_ref),
-				vendor_run_id = COALESCE($8, vendor_run_id), vendor_url = COALESCE($9, vendor_url), branch = COALESCE($10, branch),
-				pr_number = COALESCE($11, pr_number), pr_url = COALESCE($12, pr_url), pr_linked_by = COALESCE(pr_linked_by, $13),
-				merge_sha = COALESCE($14, merge_sha), merged_by_login = COALESCE($15, merged_by_login),
-				merged_at = CASE WHEN $3 = 'merged' THEN COALESCE(merged_at, now()) ELSE merged_at END
-			WHERE workspace_id = $1 AND id = $2`,
-			workspaceID, id, string(obs.State), optionalText(obs.Reason), optionalNumber(obs.IssueNumber), optionalText(obs.IssueNodeID),
-			optionalText(obs.VendorRef), optionalText(obs.VendorRunID), optionalText(obs.VendorURL), optionalText(obs.Branch),
-			optionalNumber(obs.PRNumber), optionalText(obs.PRURL), optionalText(prLinkedBy), optionalText(obs.MergeSHA), optionalText(obs.MergedBy)); err != nil {
-			return applied{}, fmt.Errorf("move the fix: %w", err)
-		}
-		kind := obs.Kind
-		if kind == "" {
-			kind = "state_changed"
-		}
-		if err := insertFixEvent(ctx, tx, workspaceID, id, kind, fix.State, obs.State, actor, data, obs.DeliveryID); err != nil {
-			return applied{}, err
-		}
-		moved, err := getFix(ctx, tx, workspaceID, id, false)
-		return applied{moved, result}, err
+		return applyFixObservation(ctx, tx, workspaceID, id, obs, actor)
 	})
 	if err != nil {
 		return autofix.Fix{}, autofix.Ignore, err
 	}
 	return out.fix, out.result, nil
+}
+
+type applied struct {
+	fix    autofix.Fix
+	result autofix.Result
+}
+
+// applyFixObservation is ApplyFixObservation inside a transaction of the workspace.
+func applyFixObservation(ctx context.Context, tx pgx.Tx, workspaceID, id string, obs autofix.Observation, actor autofix.Actor) (applied, error) {
+	fix, err := getFix(ctx, tx, workspaceID, id, true)
+	if err != nil {
+		return applied{}, err
+	}
+	result, err := autofix.Decide(fixCurrent(fix), obs, actor)
+	if err != nil {
+		return applied{}, err
+	}
+	if result == autofix.Move && obs.State.InProgress() && !fix.State.InProgress() {
+		// Back in progress (an issue or a pull request reopened) only while the conversation has no
+		// newer fix in progress; otherwise the signal is only recorded.
+		busy, err := newerFixInProgress(ctx, tx, workspaceID, fix)
+		if err != nil {
+			return applied{}, err
+		}
+		if busy {
+			result = autofix.Note
+		}
+	}
+	data := observationData(obs)
+	switch result {
+	case autofix.Ignore:
+		return applied{fix, result}, nil
+	case autofix.Note:
+		kind := obs.Kind
+		if kind == "" {
+			kind = "signal_noted"
+		}
+		data["state"] = obs.State
+		if err := insertFixEvent(ctx, tx, workspaceID, id, kind, "", "", actor, data, obs.DeliveryID); err != nil {
+			return applied{}, err
+		}
+		return applied{fix, result}, nil
+	}
+	prLinkedBy := ""
+	if obs.PRURL != "" && fix.PRURL == nil {
+		prLinkedBy = "auto"
+	}
+	if _, err := tx.Exec(ctx, `UPDATE fix_attempts SET state = $3, outcome_reason = $4, state_changed_at = now(), row_version = row_version + 1,
+			issue_number = COALESCE($5, issue_number), issue_node_id = COALESCE($6, issue_node_id), vendor_ref = COALESCE($7, vendor_ref),
+			vendor_run_id = COALESCE($8, vendor_run_id), vendor_url = COALESCE($9, vendor_url), branch = COALESCE($10, branch),
+			pr_number = COALESCE($11, pr_number), pr_url = COALESCE($12, pr_url), pr_linked_by = COALESCE(pr_linked_by, $13),
+			merge_sha = COALESCE($14, merge_sha), merged_by_login = COALESCE($15, merged_by_login),
+			merged_at = CASE WHEN $3 = 'merged' THEN COALESCE(merged_at, now()) ELSE merged_at END
+		WHERE workspace_id = $1 AND id = $2`,
+		workspaceID, id, string(obs.State), optionalText(obs.Reason), optionalNumber(obs.IssueNumber), optionalText(obs.IssueNodeID),
+		optionalText(obs.VendorRef), optionalText(obs.VendorRunID), optionalText(obs.VendorURL), optionalText(obs.Branch),
+		optionalNumber(obs.PRNumber), optionalText(obs.PRURL), optionalText(prLinkedBy), optionalText(obs.MergeSHA), optionalText(obs.MergedBy)); err != nil {
+		return applied{}, fmt.Errorf("move the fix: %w", err)
+	}
+	kind := obs.Kind
+	if kind == "" {
+		kind = "state_changed"
+	}
+	if err := insertFixEvent(ctx, tx, workspaceID, id, kind, fix.State, obs.State, actor, data, obs.DeliveryID); err != nil {
+		return applied{}, err
+	}
+	moved, err := getFix(ctx, tx, workspaceID, id, false)
+	return applied{moved, result}, err
 }
 
 func observationData(obs autofix.Observation) map[string]any {

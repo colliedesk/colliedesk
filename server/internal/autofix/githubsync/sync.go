@@ -541,7 +541,8 @@ func (s *Service) Run(ctx context.Context, every time.Duration) {
 
 // Reconcile reads GitHub for every connected installation: whether it is still there, suspended or
 // narrowed; whether each connected repository is still reachable and private; and the issue or pull
-// request of every fix in progress. A failure of one installation is logged and the pass goes on.
+// request of every fix in progress. It also ends the issue connectors' fixes left sending
+// (SendingExpiresAfter). A failure of one installation is logged and the pass goes on.
 func (s *Service) Reconcile(ctx context.Context) error {
 	refs, err := s.store.GitHubInstallationsToReconcile(ctx, s.now())
 	if err != nil {
@@ -557,6 +558,9 @@ func (s *Service) Reconcile(ctx context.Context) error {
 	for workspaceID := range workspaces {
 		if err := s.reconcileFixes(ctx, workspaceID); err != nil {
 			slog.Warn("autofix: reconcile fixes", "error", err, "workspace", workspaceID)
+		}
+		if err := s.expireSending(ctx, workspaceID); err != nil {
+			slog.Warn("autofix: end fixes left sending", "error", err, "workspace", workspaceID)
 		}
 	}
 	return nil

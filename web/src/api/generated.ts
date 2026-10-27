@@ -2797,10 +2797,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Says a merged fix is released (`deployed`). 409 `state_conflict` unless it is merged. */
+        /** @description Says a merged fix is released (`deployed`); one released already is answered as it is. 409 `state_conflict` otherwise. */
         put: operations["markFixDeployed"];
         post?: never;
-        /** @description Takes the release back (`merged` again), for a release that was rolled back or marked by mistake. */
+        /** @description Takes the release back (`merged` again), for a release that was rolled back or marked by mistake; a merged fix is answered as it is. 409 `state_conflict` otherwise. */
         delete: operations["unmarkFixDeployed"];
         options?: never;
         head?: never;
@@ -2839,7 +2839,7 @@ export interface paths {
         /** @description Every fix of the conversation, the latest attempt first. */
         get: operations["listConversationFixes"];
         put?: never;
-        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`. Every agent token's call becomes an agent request; the person who approves it gets `authorize_url` (never the token) and sends as themselves. */
+        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `connector_unavailable` (an agent this server cannot send to). Every agent token's call becomes an agent request; the person who approves it gets `authorize_url` (never the token) and sends as themselves. */
         post: operations["sendFix"];
         delete?: never;
         options?: never;
@@ -2858,7 +2858,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Builds what a fix would send, without sending: a title and a body masked on the server (email addresses, phone and card numbers, strings that look like keys or tokens, secrets in query strings; `@mentions` and `#123` references made inert), the customer's words wrapped as untrusted data, the internal notes that may go (off by default, never one an agent token wrote) and how many files stay behind. The person edits it and sends it with `POST …/fixes`. */
+        /** @description Builds what a fix would send, without sending: a title and a body masked on the server (email addresses, phone and card numbers, strings that look like keys or tokens, secrets in query strings; `@mentions` and `#123` references made inert), the customer's words wrapped as untrusted data, the internal notes that may go (off by default, never one an agent token wrote) and how many files stay behind. The person edits it and sends it with `POST …/fixes`. 409 `repo_paused`, `notes_not_allowed`. */
         post: operations["previewFix"];
         delete?: never;
         options?: never;
@@ -4199,7 +4199,7 @@ export interface components {
          * @description A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it; the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
          * @enum {string}
          */
-        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix_settings:read" | "autofix_settings:update";
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update";
         /**
          * @description Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
          * @enum {string}
@@ -5730,7 +5730,7 @@ export interface components {
             repo_id: string;
             connector: components["schemas"]["FixConnector"];
             title: string;
-            /** @description Masked again on the server: what you send is what leaves, minus anything that looks like a secret. */
+            /** @description Masked again on the server: what you send is what leaves, minus anything that looks like a secret; the masked body must also fit 65000 characters (400 otherwise). */
             body: string;
             message_ids?: string[];
             note_ids?: string[];

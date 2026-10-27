@@ -48,6 +48,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getAutofixStatus, a.listFixes, a.getFix, a.listConversationFixes,
 		a.getAutofixSettings, a.connectGitHub, a.disconnectGitHub, a.listGitHubRepositories, a.finishGitHubAuthorization,
 		a.connectRepo, a.updateRepo, a.disconnectRepo, a.includeNotesInFixes, a.excludeNotesFromFixes, a.receiveGitHubWebhook,
+		a.previewFix, a.sendFix, a.retryFix, a.cancelFix, a.markFixDeployed, a.unmarkFixDeployed, a.linkFixPullRequest, a.unlinkFixPullRequest,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

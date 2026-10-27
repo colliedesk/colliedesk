@@ -155,6 +155,8 @@ type API struct {
 	// githubSync is Autofix's GitHub App (nil while its settings are missing): the calls, the webhook and
 	// the reconcile pass.
 	githubSync *githubsync.Service
+	// dispatches counts the fixes being sent to GitHub by goroutines of this process.
+	dispatches sync.WaitGroup
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
@@ -547,6 +549,15 @@ func Routes() []Route {
 		{http.MethodPut, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionAccessWrite},
 		{http.MethodDelete, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionAccessWrite},
 		{http.MethodPost, githubWebhookPath, auth.PermissionPublic},
+		// Autofix: sending a conversation to a coding agent and a person's changes to its fix.
+		{http.MethodPost, "/api/v1/conversations/{id}/fixes/preview", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/conversations/{id}/fixes", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/autofix/fixes/{id}/retry", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/autofix/fixes/{id}/cancel", auth.PermissionConversationsWrite},
+		{http.MethodPut, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionConversationsWrite},
+		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionConversationsWrite},
+		{http.MethodPut, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionConversationsWrite},
+		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionConversationsWrite},
 	}
 }
 

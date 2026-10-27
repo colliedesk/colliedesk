@@ -100,6 +100,8 @@ const (
 	PermAISettingsManageCredentials = "ai_settings:manage_credentials"
 
 	PermAutofixRead           = "autofix:read"
+	PermAutofixUpdate         = "autofix:update"
+	PermAutofixSend           = "autofix:send"
 	PermAutofixSettingsRead   = "autofix_settings:read"
 	PermAutofixSettingsUpdate = "autofix_settings:update"
 )
@@ -180,6 +182,8 @@ var tokenPermissions = []TokenPermission{
 	permission(PermAISettingsUpdate, ScopeAdmin, false),
 	permission(PermAISettingsManageCredentials, ScopeAdmin, true),
 	permission(PermAutofixRead, ScopeRead, false),
+	permission(PermAutofixUpdate, ScopeDraft, false),
+	permission(PermAutofixSend, ScopeSend, true),
 	permission(PermAutofixSettingsRead, ScopeRead, false),
 	permission(PermAutofixSettingsUpdate, ScopeAdmin, false),
 }

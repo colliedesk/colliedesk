@@ -310,6 +310,18 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/autofix/repos/{id}":                          grant(auth.PermAutofixSettingsUpdate),
 	"PUT /api/v1/autofix/repos/{id}/include-notes":               alwaysAsk(auth.PermAutofixSettingsUpdate),
 	"DELETE /api/v1/autofix/repos/{id}/include-notes":            grant(auth.PermAutofixSettingsUpdate),
+	// Autofix fixes: a preview changes nothing. Sending (and retrying) takes ticket data out to a coding
+	// agent as the person who approves, after their GitHub confirmation, so every token's call waits for
+	// a person, who gets the confirmation address. A person's changes to a fix stay in Colliedesk, except
+	// that a cancel closes the fix's issue.
+	"POST /api/v1/conversations/{id}/fixes/preview":  grant(auth.PermAutofixRead),
+	"POST /api/v1/conversations/{id}/fixes":          alwaysAsk(auth.PermAutofixSend),
+	"POST /api/v1/autofix/fixes/{id}/retry":          alwaysAsk(auth.PermAutofixSend),
+	"POST /api/v1/autofix/fixes/{id}/cancel":         grant(auth.PermAutofixUpdate),
+	"PUT /api/v1/autofix/fixes/{id}/deployed":        grant(auth.PermAutofixUpdate),
+	"DELETE /api/v1/autofix/fixes/{id}/deployed":     grant(auth.PermAutofixUpdate),
+	"PUT /api/v1/autofix/fixes/{id}/pull-request":    grant(auth.PermAutofixUpdate),
+	"DELETE /api/v1/autofix/fixes/{id}/pull-request": grant(auth.PermAutofixUpdate),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.

@@ -4898,7 +4898,7 @@ paths:
     put:
       operationId: markFixDeployed
       x-permission: conversations:write
-      description: Says a merged fix is released (`deployed`). 409 `state_conflict` unless it is merged.
+      description: Says a merged fix is released (`deployed`); one released already is answered as it is. 409 `state_conflict` otherwise.
       requestBody:
         required: false
         content: {application/json: {schema: {$ref: '#/components/schemas/FixChangeInput'}}}
@@ -4914,7 +4914,7 @@ paths:
     delete:
       operationId: unmarkFixDeployed
       x-permission: conversations:write
-      description: Takes the release back (`merged` again), for a release that was rolled back or marked by mistake.
+      description: Takes the release back (`merged` again), for a release that was rolled back or marked by mistake; a merged fix is answered as it is. 409 `state_conflict` otherwise.
       responses:
         '200':
           description: The fix
@@ -4994,7 +4994,8 @@ paths:
         the person's browser goes to GitHub to confirm, and the issue is created as that person on the way
         back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same
         `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has
-        one, `connector_off`, `repo_paused`. Every agent token's call becomes an agent request; the person
+        one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in),
+        `connector_unavailable` (an agent this server cannot send to). Every agent token's call becomes an agent request; the person
         who approves it gets `authorize_url` (never the token) and sends as themselves.
       requestBody:
         required: true
@@ -5022,7 +5023,7 @@ paths:
         addresses, phone and card numbers, strings that look like keys or tokens, secrets in query strings;
         `@mentions` and `#123` references made inert), the customer's words wrapped as untrusted data, the
         internal notes that may go (off by default, never one an agent token wrote) and how many files stay
-        behind. The person edits it and sends it with `POST …/fixes`.
+        behind. The person edits it and sends it with `POST …/fixes`. 409 `repo_paused`, `notes_not_allowed`.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/FixPreviewInput'}}}
@@ -6654,6 +6655,8 @@ components:
         - ai_settings:update
         - ai_settings:manage_credentials
         - autofix:read
+        - autofix:update
+        - autofix:send
         - autofix_settings:read
         - autofix_settings:update
     TokenScope:
@@ -8345,7 +8348,7 @@ components:
         repo_id: {type: string, format: uuid}
         connector: {$ref: '#/components/schemas/FixConnector'}
         title: {type: string, minLength: 1, maxLength: 256}
-        body: {type: string, minLength: 1, maxLength: 65536, description: 'Masked again on the server: what you send is what leaves, minus anything that looks like a secret.'}
+        body: {type: string, minLength: 1, maxLength: 65000, description: 'Masked again on the server: what you send is what leaves, minus anything that looks like a secret; the masked body must also fit 65000 characters (400 otherwise).'}
         message_ids: {type: array, maxItems: 500, items: {type: string, format: uuid}}
         note_ids: {type: array, maxItems: 50, items: {type: string, format: uuid}}
         client_key: {type: string, minLength: 1, maxLength: 100, description: A new random key per send; the same key sends once.}

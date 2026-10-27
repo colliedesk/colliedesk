@@ -272,6 +272,13 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		if err := server.Shutdown(shutdown); err != nil {
 			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
+		// Fixes being sent to GitHub finish (or time out) and revoke the person's token before the process ends.
+		sent := make(chan struct{})
+		go func() { api.WaitForAutofixSends(); close(sent) }()
+		select {
+		case <-sent:
+		case <-time.After(githubsync.DispatchTimeout):
+		}
 		return nil
 	}
 }

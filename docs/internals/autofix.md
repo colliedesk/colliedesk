@@ -81,6 +81,52 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
 - `githubsync.Service.CheckRepo` (`autofix.RepoChecker`) reads a repository from GitHub now, before a
   fix leaves; it pauses a repository no longer private on the way.
 
+## Sending as the person (issue connectors)
+
+- The send stores the fix `sending` with exactly the reviewed title and body, masked again on the server
+  (`autofix.Mask`, the same code as the preview; masking twice is masking once). It answers an
+  authorization address with a one-use state and a PKCE S256 verifier (`autofix_oauth_states`, purpose
+  `dispatch`). The same `client_key` while the fix still waits answers a new address: the person may
+  come back from GitHub.
+- The callback takes the state first (one use, the same person in the same workspace; another person of
+  the workspace gets `wrong_person` and the fix waits), trades the code for the person's user token and
+  answers the redirect at once: GitHub calls in a row would break the 200 ms budget. A goroutine of the
+  process, detached from the request, with a 60 s timeout, holds the token in memory only and revokes it
+  when it ends, whatever happened (`defer`). Nothing of it reaches the database, a log or a job row; the
+  API tests scan every row for `ghu_` after each path.
+- `githubsync.Service.Dispatch`, in order, before anything is written on GitHub: the person's
+  `permissions.push` on the repository read with their token (Claude's workflow and Copilot both need a
+  writer to start them); for Copilot in `assign_api` mode, `suggestedActors` with their token holds
+  `copilot-swe-agent` [CK S8]; the repository private now (`CheckRepo`, installation token); then
+  `store.StartFixDispatch` re-reads, under the row lock, that the fix still waits and that its agent is
+  on with the current consent (else `cancelled/connector_disabled`), and records `dispatch_started_at`.
+  Only then the issue is created, its body ending with the marker `<!-- colliedesk-fix:<id> -->`.
+- Claude: one `@claude` comment as the person starts the workflow (`githubsync.ClaudeTrigger`). It is
+  the only live mention a fix carries; a workflow that listens to `issues.opened` or `issue_comment`
+  runs once [CK S1]. Copilot: assigned as the person (`copilot-swe-agent[bot]`) [CK S2]; refused or
+  left out by GitHub, the issue stays and the fix says `copilot_assignment = on_github`, never failed:
+  the issue exists.
+- `store.RecordFixIssue` stores the issue and the GitHub login with the move to `sent`. A person who
+  cancelled meanwhile keeps the cancel (the move is only noted) and the new issue is closed.
+- A failed create: 404, 403 or 410 is `no_repo_access`, 422 `vendor_rejected`; any other answer may have
+  created it, so the fix waits for the expiry, which looks for the marker.
+- Expiry: the reconcile pass (every ten minutes, scoped per workspace, no privileged lookup of its own)
+  ends a fix of an issue connector still `sending` 15 minutes after it was stored, so 15 to 25 minutes;
+  a person cancels at once. Never confirmed: `cancelled/authorization_abandoned`. Started
+  (`dispatch_started_at`): the repository's issues since then are read as the installation for the
+  marker; found, the fix is recorded `sent`; not found, `failed/interrupted`. An issue is never created
+  twice.
+- A cancel closes the fix's issue as the installation (`issues:write`) with a comment, after the cancel
+  committed; the agent may still run, the fix links the issue. The App cannot write pull requests, so an
+  open one stays.
+- Marking a release again, or taking back one already taken back, answers the fix as it is (idempotent).
+- `[CK]` (no smoke test with real accounts yet, the stand-in follows GitHub's documentation): S1 the
+  issue and comment created with a user token pass `claude-code-action`'s human actor check; S2 Copilot
+  assignment with a user token of an App with these three permissions; S3 GitHub skips its confirmation
+  for a person who authorized before; S4 revoking the token at once leaves the issue and the agent
+  running; S5 Claude's pull request names the issue (`closingIssuesReferences`) or its branch
+  `claude/issue-<N>-`; S8 `suggestedActors` with a user token.
+
 ## How the work was split
 
 The first branch shipped the schema, the rules, the store, the read routes and their MCP tools, the

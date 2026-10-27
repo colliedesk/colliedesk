@@ -200,6 +200,13 @@ var requestTitles = map[string]string{
 	"DELETE /api/v1/autofix/repos/{id}":                          "Disconnect a repository from Autofix",
 	"PUT /api/v1/autofix/repos/{id}/include-notes":               "Let fixes on a repository carry internal notes",
 	"DELETE /api/v1/autofix/repos/{id}/include-notes":            "Stop internal notes going with fixes on a repository",
+	"POST /api/v1/conversations/{id}/fixes":                      "Send a conversation to a coding agent",
+	"POST /api/v1/autofix/fixes/{id}/retry":                      "Send a fix to a coding agent again",
+	"POST /api/v1/autofix/fixes/{id}/cancel":                     "Cancel a fix",
+	"PUT /api/v1/autofix/fixes/{id}/deployed":                    "Mark a fix released",
+	"DELETE /api/v1/autofix/fixes/{id}/deployed":                 "Take back a fix's release",
+	"PUT /api/v1/autofix/fixes/{id}/pull-request":                "Link a pull request to a fix",
+	"DELETE /api/v1/autofix/fixes/{id}/pull-request":             "Unlink a fix's pull request",
 }
 
 const summaryDetail = 300

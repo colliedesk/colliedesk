@@ -114,6 +114,8 @@ type Server struct {
 	down bool
 	// calls counts the requests per "METHOD path".
 	calls map[string]int
+	// bridge is what the issue connectors create and read (issues.go).
+	bridge bridgeState
 }
 
 // New makes a stand-in with its own App key.
@@ -352,6 +354,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := r.URL.Path
+	if s.serveBridge(w, r) {
+		return
+	}
 	switch {
 	case r.Method == http.MethodGet && path == "/apps/"+s.Slug+"/installations/new":
 		s.installPage(w, r)

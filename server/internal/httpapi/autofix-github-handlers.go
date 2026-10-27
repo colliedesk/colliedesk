@@ -122,71 +122,75 @@ func (a *API) connectGitHub(response http.ResponseWriter, request *http.Request)
 // attaches an installation to the sender's workspace. Every outcome is a redirect the page explains;
 // GitHub's own error text is never echoed.
 func (a *API) finishGitHubAuthorization(response http.ResponseWriter, request *http.Request) {
-	page, outcome := autofixSettingsPage, a.finishGitHubInstall(request)
-	key := "github"
-	if outcome != "connected" && outcome != "requested" {
-		key = "github_error"
+	outcome, location := a.finishGitHubInstall(request)
+	if location == "" {
+		key := "github"
+		if outcome != "connected" && outcome != "requested" {
+			key = "github_error"
+		}
+		location = autofixSettingsPage + "?" + key + "=" + outcome
 	}
-	http.Redirect(response, request, page+"?"+key+"="+outcome, http.StatusSeeOther)
+	http.Redirect(response, request, location, http.StatusSeeOther)
 }
 
-func (a *API) finishGitHubInstall(request *http.Request) string {
+// finishGitHubInstall finishes an installation and answers its outcome; a fix's authorization answers
+// where the browser goes instead (location).
+func (a *API) finishGitHubInstall(request *http.Request) (outcome, location string) {
 	if a.githubSync == nil {
-		return "github_unavailable"
+		return "github_unavailable", ""
 	}
 	cookie, err := request.Cookie(sessionCookie)
 	if err != nil || cookie.Value == "" {
-		return "signed_out"
+		return "signed_out", ""
 	}
 	who, err := a.auth.Authenticate(request.Context(), cookie.Value, true)
 	if err != nil || who.IsToken() {
-		return "signed_out"
+		return "signed_out", ""
 	}
 	query := request.URL.Query()
 	state := query.Get("state")
 	if state == "" {
 		if query.Get("setup_action") == "request" {
 			// An organization member asked its owners to install the App: nothing to attach yet.
-			return "requested"
+			return "requested", ""
 		}
-		return "expired"
+		return "expired", ""
 	}
 	// The state is spent before anything else, so a refused or failed authorization cannot be replayed.
 	started, err := a.store.TakeAutofixOAuthState(request.Context(), who.Workspace.ID, state, a.now())
 	if errors.Is(err, store.ErrOAuthStateNotFound) {
-		return "expired"
+		return "expired", ""
 	}
 	if err != nil {
 		slog.Error("autofix: GitHub authorization state", "error", err, "workspace", who.Workspace.ID)
-		return "github_unavailable"
+		return "github_unavailable", ""
+	}
+	if started.Purpose == "dispatch" {
+		return "", a.finishFixAuthorization(request, who, started)
 	}
 	if started.AgentID != who.Agent.ID {
-		return "wrong_person"
-	}
-	if started.Purpose != "install" {
-		// Sending a fix as the person comes with the issue connectors.
-		return "expired"
+		return "wrong_person", ""
 	}
 	if !auth.HasPermission(who.Agent.Role, auth.PermissionAccessWrite) || (a.limits && who.Access.Locked) {
-		return "forbidden"
+		return "forbidden", ""
 	}
 	if query.Get("setup_action") == "request" {
-		return "requested"
+		return "requested", ""
 	}
 	installationID, err := strconv.ParseInt(query.Get("installation_id"), 10, 64)
 	if query.Get("error") != "" || query.Get("code") == "" || err != nil || installationID <= 0 {
-		return "denied"
+		return "denied", ""
 	}
 	ctx, cancel := context.WithTimeout(request.Context(), githubCallTimeout)
 	defer cancel()
 	app := a.githubSync.App()
 	token, err := app.Exchange(ctx, query.Get("code"), "", a.config.Origin+autofixCallbackPath)
 	if errors.Is(err, github.ErrCodeRefused) {
-		return "denied"
+		return "denied", ""
 	}
 	if err != nil {
 		slog.Warn("autofix: GitHub code exchange failed", "error", err, "workspace", who.Workspace.ID)
-		return "github_unavailable"
+		return "github_unavailable", ""
 	}
 	// The person's token proves the installation is theirs, then it is revoked at once: it is never
 	// stored, and the redirect's installation_id alone could be forged.
@@ -194,24 +198,24 @@ func (a *API) finishGitHubInstall(request *http.Request) string {
 	a.revokeGitHubToken(token, who.Workspace.ID)
 	if err != nil {
 		slog.Warn("autofix: check the person's GitHub installation", "error", err, "workspace", who.Workspace.ID)
-		return "github_unavailable"
+		return "github_unavailable", ""
 	}
 	if !theirs {
-		return "installation_not_yours"
+		return "installation_not_yours", ""
 	}
 	actor := actorOf(who)
 	if _, err := a.store.SaveGitHubInstallation(request.Context(), who.Workspace.ID, store.NewGitHubInstallation{InstallationID: mine.ID,
 		AccountLogin: mine.Account.Login, AccountType: mine.Account.Type, RepositorySelection: mine.RepositorySelection, Suspended: mine.SuspendedAt != nil,
 		AgentID: actor.ID, AgentName: actor.Name}); errors.Is(err, autofix.ErrInstallationInUse) {
-		return "installation_in_use"
+		return "installation_in_use", ""
 	} else if err != nil {
 		slog.Error("autofix: save the GitHub installation", "error", err, "workspace", who.Workspace.ID)
-		return "github_unavailable"
+		return "github_unavailable", ""
 	}
 	// Repositories connected before the App was removed come back with it; best effort (logged), the
 	// reconcile pass does it too.
 	a.githubSync.ResumeRepos(ctx, who.Workspace.ID, mine.ID)
-	return "connected"
+	return "connected", ""
 }
 
 // installationOfPerson reports whether the person behind userToken may connect the installation. GitHub
