@@ -457,6 +457,20 @@ func TestAnAgentTokensSendWaitsForAPersonWhoConfirmsAsThemselves(t *testing.T) {
 	accepted(t, s.api, http.MethodPut, "/api/v1/autofix/fixes/"+answer.Result.Fix.ID+"/deployed", nil, read)
 }
 
+// The line a person reads before approving a send says what approving starts, in words: not the JSON of the
+// request and not what the customer wrote (the preview below it shows the text).
+func TestAnAgentTokensSendRequestIsSummarisedWithoutTheCustomersWords(t *testing.T) {
+	s := newSendDesk(t, "Send Summary", 215, 2015)
+	s.turnOn(t, autofix.ClaudeIssue, "")
+	token := issueToken(t, s.api, s.w.admin, "Triage agent", "send").Token
+	asked := accepted(t, s.api, http.MethodPost, "/api/v1/conversations/"+s.conversation+"/fixes", s.sendBody(autofix.ClaudeIssue, "summary-1"), token)
+	summary := getRequest(t, s.api, token, asked.RequestID).Summary
+	if !strings.HasPrefix(summary, "Send a conversation to a coding agent") || strings.Contains(summary, "The checkout button") || strings.Contains(summary, "customer-message") ||
+		strings.Contains(summary, `\u003c`) || strings.Contains(summary, "client_key") || !strings.Contains(summary, "Claude") {
+		t.Fatalf("summary = %q", summary)
+	}
+}
+
 func TestAPersonsFixChangesReleaseAndPullRequests(t *testing.T) {
 	s := newSendDesk(t, "Send Changes", 206, 2006)
 	fix := s.sent(t, 7)

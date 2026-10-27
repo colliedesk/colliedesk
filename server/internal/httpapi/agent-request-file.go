@@ -271,6 +271,14 @@ func summarizeRequest(route Route, kind string, body json.RawMessage) string {
 	if text, ok := fields["body"].(string); ok && route.Pattern == conversationRoutePrefix+"/messages" {
 		return clip(title + ": " + strings.Join(strings.Fields(text), " "))
 	}
+	// A send names the agent only: its title and text come from the customer and sit in the request's body,
+	// under the summary, for the person to read and edit.
+	if route.Pattern == conversationRoutePrefix+"/fixes" || route.Pattern == "/api/v1/autofix/fixes/{id}/retry" {
+		if agent, ok := fixAgentNames[fmt.Sprint(fields["connector"])]; ok {
+			return title + " (" + agent + ")"
+		}
+		return title
+	}
 	var details []string
 	for _, key := range slices.Sorted(maps.Keys(fields)) {
 		encoded, err := json.Marshal(fields[key])
@@ -284,6 +292,8 @@ func summarizeRequest(route Route, kind string, body json.RawMessage) string {
 	}
 	return clip(title + ": " + strings.Join(details, ", "))
 }
+
+var fixAgentNames = map[string]string{"claude_issue": "Claude", "copilot_issue": "Copilot", "cursor_api": "Cursor"}
 
 func clip(text string) string {
 	runes := []rune(text)
