@@ -5,7 +5,7 @@ import { WrenchIcon } from '../../ui/icons';
 import type { FixConnector, FixDetail, FixEvent, Repo } from './autofix-api';
 import { ExternalIcon, ReleaseIcon, RetryIcon } from './autofix-icons';
 import { autofixMessages as m } from './autofix-messages';
-import { fixView, minutesIn, reachedVendor, safeHref, shortId, waitsForAssignment } from './fix-view';
+import { fixView, minutesIn, reachedVendor, safeHref, shortId, waitsForAssignment, waitsOnGitHub } from './fix-view';
 import type { FixAction, Stop, Tone } from './fix-view';
 
 // What a new fix of this conversation would use: the repository and agent it starts with.
@@ -102,6 +102,7 @@ function Outcome({ fix, now, at, customerName }: { fix: FixDetail; now: number; 
   const last = [...fix.events].reverse().find((event) => event.to_state === fix.state);
   switch (fix.state) {
     case 'sending':
+      if (waitsOnGitHub(fix, now)) return <Box tone="note" role="status"><span><b>{m.stuckSending(minutesIn(fix, now))}</b> {m.stuckSendingHelp}</span></Box>;
       return <Box role="status"><span className="af-row"><span className="af-spinner" aria-hidden="true" />
         {fix.connector === 'cursor_api' ? <span><b>{m.sendingCursor}</b> {m.sendingCursorHelp}</span>
           : <span><b>{m.sendingIssue(fix.github_login)}</b> {m.sendingIssueHelp}</span>}</span></Box>;

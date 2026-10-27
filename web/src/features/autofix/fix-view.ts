@@ -28,6 +28,9 @@ export const minutesIn = (fix: Fix, now: number) => Math.max(1, Math.floor((now 
 export const reachedVendor = (fix: Fix) => fix.issue_number !== null || fix.vendor_url !== null;
 // waitsForAssignment: Copilot in the workspace's fallback mode, waiting for a person to assign it on GitHub.
 export const waitsForAssignment = (fix: Fix) => fix.state === 'sent' && fix.copilot_assignment === 'on_github';
+// waitsOnGitHub: an issue fix still waiting for the GitHub confirmation after minutes. The person confirming may have
+// closed GitHub (an approver of an AI agent's request cannot get the address again), so it offers to send again.
+export const waitsOnGitHub = (fix: Fix, now: number) => fix.state === 'sending' && fix.connector !== 'cursor_api' && minutesIn(fix, now) >= 2;
 // agentRan: a sign the agent ran came before the pull request. Without the timeline (a list row) it counts as ran.
 const agentRan = (fix: Fix, events?: FixEvent[]) => events === undefined || fix.connector === 'cursor_api' && fix.vendor_url !== null
   || events.some((event) => event.to_state === 'working');
@@ -77,9 +80,9 @@ function tone(fix: Fix): Tone {
 }
 
 // actions: every way in has a way out (plan §2.5), in the order the block shows them.
-function actions(fix: Fix): { actions: FixAction[]; primary?: FixAction } {
+function actions(fix: Fix, now: number): { actions: FixAction[]; primary?: FixAction } {
   switch (fix.state) {
-    case 'sending': return { actions: ['cancel'] };
+    case 'sending': return { actions: waitsOnGitHub(fix, now) ? ['retry', 'cancel'] : ['cancel'] };
     case 'sent':
       if (waitsForAssignment(fix)) return { actions: ['assign_on_github', 'cancel'], primary: 'assign_on_github' };
       return { actions: fix.stale ? ['link_pr', 'cancel'] : ['cancel'] };
@@ -103,7 +106,7 @@ function actions(fix: Fix): { actions: FixAction[]; primary?: FixAction } {
 
 export function fixView(fix: Fix, now: number, events?: FixEvent[]): FixView {
   const shown = track(fix, events);
-  return { badge: badge(fix, now), tone: tone(fix), track: shown.stops, skipped: shown.skipped, ...actions(fix) };
+  return { badge: badge(fix, now), tone: tone(fix), track: shown.stops, skipped: shown.skipped, ...actions(fix, now) };
 }
 
 // stripText is the one line under the thread header on narrow screens.

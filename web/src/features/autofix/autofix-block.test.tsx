@@ -43,6 +43,13 @@ describe('AutofixBlockView', () => {
     expect(onAction).toHaveBeenCalledWith('cancel');
   });
 
+  it('explains a fix stuck waiting for GitHub and offers to send it again', () => {
+    const { onAction } = show(detailOf({ state: 'sending', issue_number: null, issue_url: null, vendor_url: null, state_changed_at: '2026-10-27T11:55:00Z' }));
+    expect(screen.getByText(/If the GitHub page was closed/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry (attempt 2)' }));
+    expect(onAction).toHaveBeenCalledWith('retry');
+  });
+
   it('turns a silent fix to attention with the checklist of what to look at', () => {
     show(detailOf({ state: 'sent', stale: true, state_changed_at: '2026-10-27T11:26:00Z' }));
     expect(screen.getByText('No word 34 min')).toBeInTheDocument();

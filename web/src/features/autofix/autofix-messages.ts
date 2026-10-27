@@ -58,6 +58,8 @@ export const autofixMessages = {
   // The block's sentence per state.
   sendingIssue: (login: string | null) => `Creating the issue${login ? ` as @${login}` : ''}.`,
   sendingIssueHelp: 'GitHub gave Colliedesk your permission for this one issue; it is revoked as soon as the issue exists.',
+  stuckSending: (minutes: number) => `Waiting for the GitHub confirmation for ${minutes} minutes.`,
+  stuckSendingHelp: 'If the GitHub page was closed, nothing was sent: Retry sends it again with your own GitHub account, or Cancel.',
   sendingCursor: 'Sending to Cursor',
   sendingCursorHelp: 'with the workspace key. This usually takes a few seconds.',
   sent: (issue: number | null, connector: FixConnector) => (connector === 'cursor_api'

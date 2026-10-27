@@ -45,7 +45,10 @@ describe('fixView', () => {
   });
 
   it('has a way out of every state', () => {
-    expect(fixView(fixOf({ state: 'sending' }), now).actions).toEqual(['cancel']);
+    expect(fixView(fixOf({ state: 'sending', state_changed_at: '2026-10-27T11:59:30Z' }), now).actions).toEqual(['cancel']);
+    // Waiting on GitHub for minutes: the person who confirms may have closed it, so there is a way to send again.
+    expect(fixView(fixOf({ state: 'sending', state_changed_at: '2026-10-27T11:57:00Z' }), now).actions).toEqual(['retry', 'cancel']);
+    expect(fixView(fixOf({ state: 'sending', connector: 'cursor_api', state_changed_at: '2026-10-27T11:57:00Z' }), now).actions).toEqual(['cancel']);
     expect(fixView(fixOf({ state: 'working' }), now).actions).toEqual(['link_pr', 'cancel']);
     expect(fixView(fixOf({ state: 'pr_open', ...withPR }), now).actions).toEqual(['cancel']);
     expect(fixView(fixOf({ state: 'pr_open', ...withPR, pr_linked_by: 'person' }), now).actions).toEqual(['unlink_pr', 'cancel']);

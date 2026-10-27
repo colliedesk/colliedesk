@@ -131,7 +131,10 @@ export function AutofixConversation({ conversationId, customerName, timezone }: 
     switch (action) {
       case 'cancel': setProblem(undefined); return setOpen({ dialog: 'cancel' });
       case 'link_pr': setProblem(undefined); return setOpen({ dialog: 'link' });
-      case 'retry': case 'send_again': setProblem(undefined); return setOpen({ dialog: 'send', retry: fix });
+      // A fix still waiting for GitHub ends first (retry takes an ended fix), then goes again with this person's GitHub.
+      case 'retry': if (fix.state === 'sending') return act.mutate(() => autofixApi.cancel(fix), { onSuccess: (ended) => setOpen({ dialog: 'send', retry: ended as Fix }) });
+      // falls through
+      case 'send_again': setProblem(undefined); return setOpen({ dialog: 'send', retry: fix });
       case 'unlink_pr': return act.mutate(() => autofixApi.unlinkPR(fix));
       case 'mark_released': return act.mutate(() => autofixApi.markDeployed(fix));
       case 'unmark_released': return act.mutate(() => autofixApi.unmarkDeployed(fix));

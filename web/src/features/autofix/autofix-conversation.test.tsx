@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { json, me, serve } from '../kb/kb.test.fixture';
 import type { Fix } from './autofix-api';
 import { AutofixConversation, targetOf } from './autofix-conversation';
-import { connectorOf, conversationId, detailOf, fixOf, repoOf, settingsOf, withPR } from './autofix.test.fixture';
+import { connectorOf, conversationId, detailOf, fixOf, previewOf, repoOf, settingsOf, withPR } from './autofix.test.fixture';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -67,6 +67,17 @@ describe('AutofixConversation', () => {
     expect(await screen.findByText('You declined on GitHub, so nothing was sent.')).toBeInTheDocument();
     expect(window.location.search).toBe('');
   });
+});
+
+it('sends a fix stuck waiting for GitHub again: it ends it, then opens the send dialog as the next attempt', async () => {
+  const stuck = fixOf({ state: 'sending', issue_number: null, issue_url: null, vendor_url: null, state_changed_at: new Date(Date.now() - 5 * 60_000).toISOString() });
+  const calls = mount(stuck, false, {
+    [`POST /api/v1/autofix/fixes/${stuck.id}/cancel`]: () => json(200, { ...stuck, state: 'cancelled', outcome_reason: 'cancelled_by_person' }),
+    [`POST /api/v1/conversations/${conversationId}/fixes/preview`]: () => json(200, previewOf()),
+  });
+  fireEvent.click(await screen.findByRole('button', { name: 'Retry (attempt 2)' }));
+  expect(await screen.findByRole('heading', { name: 'Retry · attempt 2' })).toBeInTheDocument();
+  expect(calls.find((call) => call.path.endsWith('/cancel'))?.body).toEqual({ row_version: 3 });
 });
 
 it('drops the “being written” line when the AI draft fails', async () => {
