@@ -190,10 +190,12 @@
 .af-table tbody tr:hover { background: var(--surface-0); }
 .af-num { text-align: right; white-space: nowrap; }
 .af-subj { display: grid; gap: 2px; min-width: 0; }
-/* Three tables stack on this page: fixed columns keep State, Repository and the rest under one another. */
-.af-table { table-layout: fixed; }
-.af-table th:nth-child(1) { width: 30%; } .af-table th:nth-child(2) { width: 20%; } .af-table th:nth-child(3) { width: 18%; } .af-table th:nth-child(4) { width: 8%; }
-.af-table th:nth-child(5) { width: 7%; } .af-table th:nth-child(6) { width: 8%; } .af-table th:nth-child(7) { width: 9%; }
+/* Three tables stack on this page: where the screen is wide enough, fixed columns keep State, Repository and the rest under one another. */
+@media (min-width: 64rem) {
+  .af-table { table-layout: fixed; }
+  .af-table th:nth-child(1) { width: 27%; } .af-table th:nth-child(2) { width: 20%; } .af-table th:nth-child(3) { width: 18%; } .af-table th:nth-child(4) { width: 11%; }
+  .af-table th:nth-child(5) { width: 7%; } .af-table th:nth-child(6) { width: 8%; } .af-table th:nth-child(7) { width: 9%; }
+}
 .af-c-subj a { font-weight: 600; color: var(--text-1); text-decoration: none; }
 .af-c-subj a:hover { text-decoration: underline; }
 .af-c-subj span { color: var(--text-3); font-size: var(--fs-label); }
@@ -314,7 +316,6 @@
   /* Rows become cards: subject first, then state and age, repository and agent, the PR. */
   .af-table thead { display: none; }
   .af-table, .af-table tbody, .af-table tr, .af-table td { display: block; width: 100%; }
-  .af-table { table-layout: auto; }
   .af-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "subj subj" "state age" "repo agent" "pr pr";
     gap: var(--space-1) var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
   .af-table td { padding: 0; border: 0; width: auto; }

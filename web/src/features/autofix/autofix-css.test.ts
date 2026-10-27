@@ -34,7 +34,11 @@ describe('autofix.css', () => {
   });
 
   it('gives the three Fixes tables the same columns', () => {
-    expect(rule('.af-table { table-layout: fixed; }')).toBeDefined();
+    const wide = css.slice(css.indexOf('@media (min-width: 64rem)'), css.indexOf('@media (min-width: 64rem)') + 700);
+    expect(wide).toContain('.af-table { table-layout: fixed; }');
+    // The "Pull request" heading (nowrap) needs about 100px: 11% of the narrowest table that is still fixed.
+    expect(wide).toContain('.af-table th:nth-child(4) { width: 11%; }');
+    expect(rule('.af-table { table-layout')).toBeUndefined();
   });
 
   it('gives the buttons, links and menus of the Autofix cards and dialogs a 44px tap on a phone', () => {
