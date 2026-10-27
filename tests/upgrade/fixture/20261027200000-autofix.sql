@@ -13,10 +13,10 @@ INSERT INTO autofix_repos (id, workspace_id, installation_id, github_repo_id, fu
     (md5('afr-acme-2')::uuid, md5('ws-acme')::uuid, 41001, 51002, 'acme-co/docs', 'public', now() - interval '3 days', 'trunk', false, NULL, 'became_public', now() - interval '3 days', md5('agent-acme-admin')::uuid, 'Acme Admin', now() - interval '19 days'),
     (md5('afr-beta-1')::uuid, md5('ws-beta')::uuid, NULL, 52001, 'beta-dev/app', 'private', now() - interval '2 days', 'main', false, 'copilot_issue', 'removed_from_app', now() - interval '1 day', md5('agent-beta-admin')::uuid, 'Beta Admin', now() - interval '2 days');
 
-INSERT INTO autofix_connectors (workspace_id, kind, enabled, consent_agent_id, consent_name, consent_at, consent_version, credential_key_id, credential_sealed, credential_set_by_agent_id, credential_set_by_name, credential_set_at, last_check_at, last_check_result, last_check_message, updated_at) VALUES
-    (md5('ws-acme')::uuid, 'claude_issue', true, md5('agent-acme-admin')::uuid, 'Acme Admin', now() - interval '19 days', '2026-10-27', NULL, NULL, NULL, NULL, NULL, now() - interval '1 day', 'ok', NULL, now() - interval '1 day'),
-    (md5('ws-acme')::uuid, 'cursor_api', true, md5('agent-acme-admin')::uuid, 'Acme Admin', now() - interval '18 days', '2026-10-27', 'k1', decode('00112233445566778899aabbccddeeff', 'hex'), md5('agent-acme-admin')::uuid, 'Acme Admin', now() - interval '18 days', now() - interval '2 hours', 'key_invalid', 'Cursor answered 401: the key was revoked.', now() - interval '2 hours'),
-    (md5('ws-beta')::uuid, 'copilot_issue', false, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, now() - interval '2 days');
+INSERT INTO autofix_connectors (workspace_id, kind, enabled, mode, consent_agent_id, consent_name, consent_at, consent_version, credential_key_id, credential_sealed, credential_set_by_agent_id, credential_set_by_name, credential_set_at, last_check_at, last_check_result, last_check_message, updated_at) VALUES
+    (md5('ws-acme')::uuid, 'claude_issue', true, NULL, md5('agent-acme-admin')::uuid, 'Acme Admin', now() - interval '19 days', '2026-10-27', NULL, NULL, NULL, NULL, NULL, now() - interval '1 day', 'ok', NULL, now() - interval '1 day'),
+    (md5('ws-acme')::uuid, 'cursor_api', true, NULL, md5('agent-acme-admin')::uuid, 'Acme Admin', now() - interval '18 days', '2026-10-27', 'k1', decode('00112233445566778899aabbccddeeff', 'hex'), md5('agent-acme-admin')::uuid, 'Acme Admin', now() - interval '18 days', now() - interval '2 hours', 'key_invalid', 'Cursor answered 401: the key was revoked.', now() - interval '2 hours'),
+    (md5('ws-beta')::uuid, 'copilot_issue', false, 'assign_on_github', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, now() - interval '2 days');
 
 INSERT INTO fix_attempts (id, workspace_id, conversation_id, attempt_no, previous_attempt_id, repo_id, repo_full_name, connector, state, outcome_reason, state_changed_at, row_version,
         sent_title, sent_body, sent_message_ids, sent_notes, client_key, created_by_kind, created_by_agent_id, created_by_name, created_by_token_id, approved_request_id,
@@ -45,3 +45,4 @@ INSERT INTO autofix_oauth_states (state_hash, workspace_id, agent_id, purpose, f
 
 INSERT INTO autofix_webhook_deliveries (source, delivery_id, received_at) VALUES
     ('github', 'delivery-acme-1', now() - interval '2 days');
+UPDATE fix_attempts SET copilot_assignment = 'on_github' WHERE id = md5('fix-beta-1')::uuid;

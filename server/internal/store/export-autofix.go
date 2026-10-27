@@ -38,11 +38,11 @@ func exportAutofix(ctx context.Context, tx pgx.Tx, workspaceID string, sink expo
 	}); err != nil {
 		return err
 	}
-	if err := exportRows(ctx, tx, "export Autofix connectors", `SELECT kind, enabled, consent_agent_id::text, consent_name, consent_at, consent_version,
+	if err := exportRows(ctx, tx, "export Autofix connectors", `SELECT kind, enabled, mode, consent_agent_id::text, consent_name, consent_at, consent_version,
 			credential_sealed IS NOT NULL, credential_set_by_agent_id::text, credential_set_by_name, credential_set_at, last_check_at, last_check_result, last_check_message
 		FROM autofix_connectors WHERE workspace_id = $1 ORDER BY kind`, workspaceID, func(rows pgx.Rows) error {
 		var r export.AutofixConnector
-		if err := rows.Scan(&r.Kind, &r.Enabled, &r.ConsentAgentID, &r.ConsentName, &r.ConsentAt, &r.ConsentVersion, &r.CredentialSet, &r.CredentialSetByAgent,
+		if err := rows.Scan(&r.Kind, &r.Enabled, &r.Mode, &r.ConsentAgentID, &r.ConsentName, &r.ConsentAt, &r.ConsentVersion, &r.CredentialSet, &r.CredentialSetByAgent,
 			&r.CredentialSetByName, &r.CredentialSetAt, &r.LastCheckAt, &r.LastCheckResult, &r.LastCheckMessage); err != nil {
 			return err
 		}
@@ -53,13 +53,13 @@ func exportAutofix(ctx context.Context, tx pgx.Tx, workspaceID string, sink expo
 	}
 	if err := exportRows(ctx, tx, "export fixes", `SELECT id::text, conversation_id::text, attempt_no, previous_attempt_id::text, repo_id::text, repo_full_name, connector,
 			state, outcome_reason, state_changed_at, sent_title, sent_body, sent_message_ids::text[], sent_notes, created_by_kind, created_by_agent_id::text,
-			created_by_name, created_by_token_id::text, approved_request_id::text, github_login, issue_number, vendor_ref, vendor_url, branch, pr_number,
+			created_by_name, created_by_token_id::text, approved_request_id::text, github_login, copilot_assignment, issue_number, vendor_ref, vendor_url, branch, pr_number,
 			pr_url, pr_linked_by, merge_sha, merged_at, merged_by_login, deployed_at, deployed_by_agent_id::text, deployed_by_name, created_at
 		FROM fix_attempts WHERE workspace_id = $1 ORDER BY created_at, id`, workspaceID, func(rows pgx.Rows) error {
 		var r export.Fix
 		if err := rows.Scan(&r.ID, &r.ConversationID, &r.AttemptNo, &r.PreviousAttemptID, &r.RepoID, &r.RepoFullName, &r.Connector, &r.State, &r.OutcomeReason,
 			&r.StateChangedAt, &r.SentTitle, &r.SentBody, &r.SentMessageIDs, &r.SentNotes, &r.CreatedByKind, &r.CreatedByAgentID, &r.CreatedByName,
-			&r.CreatedByTokenID, &r.ApprovedRequestID, &r.GitHubLogin, &r.IssueNumber, &r.VendorRef, &r.VendorURL, &r.Branch, &r.PRNumber, &r.PRURL,
+			&r.CreatedByTokenID, &r.ApprovedRequestID, &r.GitHubLogin, &r.CopilotAssignment, &r.IssueNumber, &r.VendorRef, &r.VendorURL, &r.Branch, &r.PRNumber, &r.PRURL,
 			&r.PRLinkedBy, &r.MergeSHA, &r.MergedAt, &r.MergedByLogin, &r.DeployedAt, &r.DeployedByAgentID, &r.DeployedByName, &r.CreatedAt); err != nil {
 			return err
 		}

@@ -62,6 +62,9 @@ CREATE TABLE autofix_connectors (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     kind text NOT NULL CHECK (kind IN ('claude_issue', 'copilot_issue', 'cursor_api')),
     enabled boolean NOT NULL DEFAULT false,
+    -- Copilot only: assigned through the API, or assigned by a person on GitHub (when the API refuses the
+    -- App's permissions).
+    mode text CHECK (mode IN ('assign_api', 'assign_on_github')),
     consent_agent_id uuid,
     consent_name text CHECK (char_length(consent_name) <= 200),
     consent_at timestamptz,
@@ -85,6 +88,7 @@ CREATE TABLE autofix_connectors (
     CHECK ((credential_sealed IS NULL) = (credential_key_id IS NULL)),
     CHECK ((credential_sealed IS NULL) = (credential_set_at IS NULL)),
     CHECK (kind = 'cursor_api' OR credential_sealed IS NULL),
+    CHECK (mode IS NULL OR kind = 'copilot_issue'),
     CHECK ((last_check_at IS NULL) = (last_check_result IS NULL))
 );
 
@@ -123,6 +127,8 @@ CREATE TABLE fix_attempts (
     -- The GitHub account that created the issue (no secret); empty for Cursor.
     github_user_id bigint,
     github_login text CHECK (char_length(github_login) BETWEEN 1 AND 100),
+    -- Copilot only: assigned to Copilot through the API, or left for a person to assign on GitHub.
+    copilot_assignment text CHECK (copilot_assignment IN ('assigned', 'on_github')),
 
     issue_number integer CHECK (issue_number > 0),
     issue_node_id text CHECK (char_length(issue_node_id) <= 100),
@@ -165,7 +171,8 @@ CREATE TABLE fix_attempts (
     CHECK (state <> 'pr_open' OR pr_url IS NOT NULL),
     CHECK ((pr_url IS NULL) = (pr_linked_by IS NULL)),
     CHECK ((created_by_kind = 'token') = (created_by_token_id IS NOT NULL)),
-    CHECK ((github_user_id IS NULL) = (github_login IS NULL))
+    CHECK ((github_user_id IS NULL) = (github_login IS NULL)),
+    CHECK (copilot_assignment IS NULL OR connector = 'copilot_issue')
 );
 -- One attempt still in progress per conversation: a new one waits until it ends.
 CREATE UNIQUE INDEX fix_attempts_one_in_progress ON fix_attempts(workspace_id, conversation_id)

@@ -4812,9 +4812,12 @@ paths:
         The workspace's fixes, newest first, in pages, optionally one group of the Fixes screen:
         `needs_person` (the conversation's latest fix failed, was merged and waits for its release, or was
         sent and stayed silent for 30 minutes), `running` (in progress) or `done` (released, cancelled, or
-        followed by a newer attempt). Without what was sent and the timeline: read one fix for those.
+        followed by a newer attempt), and optionally one repository and one coding agent. Without what was
+        sent and the timeline: read one fix for those.
       parameters:
         - {name: group, in: query, schema: {$ref: '#/components/schemas/FixGroup'}}
+        - {name: repo_id, in: query, description: Only fixes sent to this connected repository., schema: {type: string, format: uuid}}
+        - {name: connector, in: query, description: Only fixes sent to this coding agent., schema: {$ref: '#/components/schemas/FixConnector'}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
       responses:
@@ -8191,10 +8194,12 @@ components:
         running: {type: integer, minimum: 0}
     Fix:
       type: object
-      required: [id, conversation_id, attempt_no, previous_attempt_id, repo_id, repo_full_name, connector, state, outcome_reason, state_changed_at, row_version, stale, group, sent_title, sent_message_ids, sent_notes, created_by_kind, created_by_agent_id, created_by_name, approved_request_id, github_login, issue_number, issue_url, vendor_url, branch, pr_number, pr_url, pr_linked_by, merge_sha, merged_at, merged_by_login, deployed_at, deployed_by_name, created_at]
+      required: [id, conversation_id, conversation_subject, contact_name, attempt_no, previous_attempt_id, repo_id, repo_full_name, connector, state, outcome_reason, state_changed_at, row_version, stale, group, sent_title, sent_message_ids, sent_notes, created_by_kind, created_by_agent_id, created_by_name, approved_request_id, github_login, copilot_assignment, issue_number, issue_url, vendor_url, branch, pr_number, pr_url, pr_linked_by, merge_sha, merged_at, merged_by_login, deployed_at, deployed_by_name, created_at]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
+        conversation_subject: {type: string, description: 'The conversation''s subject now (written by the customer).'}
+        contact_name: {type: [string, 'null'], description: 'The customer''s name now.'}
         attempt_no: {type: integer, minimum: 1}
         previous_attempt_id: {type: [string, 'null'], format: uuid, description: The failed or cancelled attempt this one retries.}
         repo_id: {type: [string, 'null'], format: uuid, description: Null once the repository was disconnected.}
@@ -8217,6 +8222,7 @@ components:
         created_by_name: {type: string, description: 'Who sent it; for an agent token, the person who approved the request.'}
         approved_request_id: {type: [string, 'null'], format: uuid}
         github_login: {type: [string, 'null'], description: The GitHub account that created the issue.}
+        copilot_assignment: {type: [string, 'null'], enum: [assigned, on_github, null], description: 'Copilot only: assigned to Copilot through the API, or waiting for a person to assign it on GitHub (Assign to Copilot on GitHub); null for the other agents and before the issue exists.'}
         issue_number: {type: [integer, 'null']}
         issue_url: {type: [string, 'null'], format: uri}
         vendor_url: {type: [string, 'null'], format: uri, description: 'The vendor''s page of the run (Cursor), or the issue.'}
@@ -8271,10 +8277,19 @@ components:
         note_ids: {type: array, maxItems: 50, items: {type: string, format: uuid}, description: Internal notes to include; only when the repository allows notes.}
     FixPreview:
       type: object
-      required: [title, body, message_ids, notes, attachments_left_out, destination]
+      required: [title, body, message_ids, notes, attachments_left_out, removed, destination]
       properties:
         title: {type: string, maxLength: 256}
-        body: {type: string, description: Masked; the customer's words sit inside a block marked as untrusted data.}
+        body:
+          type: string
+          description: >-
+            Markdown, masked. Each message the customer wrote sits between a line
+            `<customer-message untrusted="true" from="<name>" at="<UTC time>">` and a line
+            `</customer-message>` (attribute values HTML-escaped; the same tags inside the customer's text are
+            escaped, so a block can never be closed early). A masked part reads `[email removed]`,
+            `[phone removed]`, `[card removed]` or `[secret removed]`; mentions and `#123` references are made
+            inert with an invisible character, so they read as written. Internal notes the sender picked sit
+            between `<team-note from="<name>" at="<UTC time>">` and `</team-note>`.
         message_ids: {type: array, items: {type: string, format: uuid}}
         notes:
           type: array
@@ -8289,6 +8304,17 @@ components:
               included: {type: boolean}
         notes_allowed: {type: boolean, description: The repository lets notes go with a fix.}
         attachments_left_out: {type: integer, minimum: 0, description: Files are never sent.}
+        removed:
+          type: object
+          description: What masking took out of the title and body before you see them, by kind.
+          required: [emails, phones, cards, secrets, mentions, references]
+          properties:
+            emails: {type: integer, minimum: 0}
+            phones: {type: integer, minimum: 0}
+            cards: {type: integer, minimum: 0, description: Numbers that look like payment cards.}
+            secrets: {type: integer, minimum: 0, description: 'Strings that look like keys or tokens, and secrets in query strings.'}
+            mentions: {type: integer, minimum: 0, description: '@mentions made inert.'}
+            references: {type: integer, minimum: 0, description: '#123 and GH-123 references made inert.'}
         destination:
           type: object
           required: [repo_full_name, connector, sends_as, vendor_retention]
@@ -8368,10 +8394,11 @@ components:
         connected_at: {type: string, format: date-time}
     AutofixConnector:
       type: object
-      required: [kind, enabled, consent, credential, last_check]
+      required: [kind, enabled, mode, consent, credential, last_check]
       properties:
         kind: {$ref: '#/components/schemas/FixConnector'}
         enabled: {type: boolean}
+        mode: {type: [string, 'null'], enum: [assign_api, assign_on_github, null], description: 'Copilot only: assign_api assigns Copilot through the API; assign_on_github leaves the assignment to a person on GitHub (when the API refuses the App''s permissions). Null for the other agents.'}
         consent:
           oneOf:
             - {type: 'null'}

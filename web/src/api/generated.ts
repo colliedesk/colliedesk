@@ -2720,7 +2720,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The workspace's fixes, newest first, in pages, optionally one group of the Fixes screen: `needs_person` (the conversation's latest fix failed, was merged and waits for its release, or was sent and stayed silent for 30 minutes), `running` (in progress) or `done` (released, cancelled, or followed by a newer attempt). Without what was sent and the timeline: read one fix for those. */
+        /** @description The workspace's fixes, newest first, in pages, optionally one group of the Fixes screen: `needs_person` (the conversation's latest fix failed, was merged and waits for its release, or was sent and stayed silent for 30 minutes), `running` (in progress) or `done` (released, cancelled, or followed by a newer attempt), and optionally one repository and one coding agent. Without what was sent and the timeline: read one fix for those. */
         get: operations["listFixes"];
         put?: never;
         post?: never;
@@ -5575,6 +5575,10 @@ export interface components {
             id: string;
             /** Format: uuid */
             conversation_id: string;
+            /** @description The conversation's subject now (written by the customer). */
+            conversation_subject: string;
+            /** @description The customer's name now. */
+            contact_name: string | null;
             attempt_no: number;
             /**
              * Format: uuid
@@ -5614,6 +5618,11 @@ export interface components {
             approved_request_id: string | null;
             /** @description The GitHub account that created the issue. */
             github_login: string | null;
+            /**
+             * @description Copilot only: assigned to Copilot through the API, or waiting for a person to assign it on GitHub (Assign to Copilot on GitHub); null for the other agents and before the issue exists.
+             * @enum {string|null}
+             */
+            copilot_assignment: "assigned" | "on_github" | null;
             issue_number: number | null;
             /** Format: uri */
             issue_url: string | null;
@@ -5673,7 +5682,7 @@ export interface components {
         };
         FixPreview: {
             title: string;
-            /** @description Masked; the customer's words sit inside a block marked as untrusted data. */
+            /** @description Markdown, masked. Each message the customer wrote sits between a line `<customer-message untrusted="true" from="<name>" at="<UTC time>">` and a line `</customer-message>` (attribute values HTML-escaped; the same tags inside the customer's text are escaped, so a block can never be closed early). A masked part reads `[email removed]`, `[phone removed]`, `[card removed]` or `[secret removed]`; mentions and `#123` references are made inert with an invisible character, so they read as written. Internal notes the sender picked sit between `<team-note from="<name>" at="<UTC time>">` and `</team-note>`. */
             body: string;
             message_ids: string[];
             /** @description The internal notes the sender may include (never one an agent token wrote), and whether each is in the body. */
@@ -5689,6 +5698,19 @@ export interface components {
             notes_allowed?: boolean;
             /** @description Files are never sent. */
             attachments_left_out: number;
+            /** @description What masking took out of the title and body before you see them, by kind. */
+            removed: {
+                emails: number;
+                phones: number;
+                /** @description Numbers that look like payment cards. */
+                cards: number;
+                /** @description Strings that look like keys or tokens, and secrets in query strings. */
+                secrets: number;
+                /** @description @mentions made inert. */
+                mentions: number;
+                /** @description #123 and GH-123 references made inert. */
+                references: number;
+            };
             destination: {
                 repo_full_name: string;
                 connector: components["schemas"]["FixConnector"];
@@ -5797,6 +5819,11 @@ export interface components {
         AutofixConnector: {
             kind: components["schemas"]["FixConnector"];
             enabled: boolean;
+            /**
+             * @description Copilot only: assign_api assigns Copilot through the API; assign_on_github leaves the assignment to a person on GitHub (when the API refuses the App's permissions). Null for the other agents.
+             * @enum {string|null}
+             */
+            mode: "assign_api" | "assign_on_github" | null;
             consent: null | {
                 version: string;
                 name: string;
@@ -12018,6 +12045,10 @@ export interface operations {
         parameters: {
             query?: {
                 group?: components["schemas"]["FixGroup"];
+                /** @description Only fixes sent to this connected repository. */
+                repo_id?: string;
+                /** @description Only fixes sent to this coding agent. */
+                connector?: components["schemas"]["FixConnector"];
                 limit?: number;
                 /** @description The next_cursor of the previous page. */
                 cursor?: string;

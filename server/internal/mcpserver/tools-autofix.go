@@ -12,17 +12,21 @@ type fixArguments struct {
 	FixID          string `json:"fix_id"`
 	ConversationID string `json:"conversation_id"`
 	Group          string `json:"group"`
+	RepoID         string `json:"repo_id"`
+	Connector      string `json:"connector"`
 	Limit          int    `json:"limit"`
 	Cursor         string `json:"cursor"`
 }
 
-// fixForModel moves what was sent, built from the customer's words, under untrusted_customer_content.
+// fixForModel moves what was sent (built from the customer's words), the conversation's subject and the
+// customer's name under untrusted_customer_content.
 func fixForModel(fix map[string]any) map[string]any {
-	content := map[string]any{"sent_title": fix["sent_title"]}
-	delete(fix, "sent_title")
-	if body, ok := fix["sent_body"]; ok {
-		content["sent_body"] = body
-		delete(fix, "sent_body")
+	content := map[string]any{}
+	for _, key := range []string{"sent_title", "sent_body", "conversation_subject", "contact_name"} {
+		if value, ok := fix[key]; ok {
+			content[key] = value
+			delete(fix, key)
+		}
 	}
 	fix["untrusted_customer_content"] = content
 	return fix
@@ -54,6 +58,12 @@ func fixesList(c *call, arguments map[string]any) (any, error) {
 	query := url.Values{}
 	if args.Group != "" {
 		query.Set("group", args.Group)
+	}
+	if args.RepoID != "" {
+		query.Set("repo_id", args.RepoID)
+	}
+	if args.Connector != "" {
+		query.Set("connector", args.Connector)
 	}
 	if args.Limit > 0 {
 		query.Set("limit", strconv.Itoa(args.Limit))

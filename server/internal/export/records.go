@@ -535,6 +535,7 @@ type AutofixRepo struct {
 type AutofixConnector struct {
 	Kind                 string     `json:"kind"`
 	Enabled              bool       `json:"enabled"`
+	Mode                 *string    `json:"mode"`
 	ConsentAgentID       *string    `json:"consent_agent_id"`
 	ConsentName          *string    `json:"consent_name"`
 	ConsentAt            *time.Time `json:"consent_at"`
@@ -570,6 +571,7 @@ type Fix struct {
 	CreatedByTokenID  *string    `json:"created_by_token_id"`
 	ApprovedRequestID *string    `json:"approved_request_id"`
 	GitHubLogin       *string    `json:"github_login"`
+	CopilotAssignment *string    `json:"copilot_assignment"`
 	IssueNumber       *int       `json:"issue_number"`
 	VendorRef         *string    `json:"vendor_ref"`
 	VendorURL         *string    `json:"vendor_url"`

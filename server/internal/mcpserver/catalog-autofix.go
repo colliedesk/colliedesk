@@ -3,8 +3,8 @@ package mcpserver
 const (
 	fixIDProperty = `"fix_id":{"type":"string",` + uuid + `,"description":"From colliedesk_fixes_list or colliedesk_conversation_fixes_list."}`
 
-	// fixSchema is one fix as the tools return it: what was sent (built from the customer's words) sits
-	// in untrusted_customer_content.
+	// fixSchema is one fix as the tools return it: what was sent (built from the customer's words), the
+	// conversation's subject and the customer's name sit in untrusted_customer_content.
 	fixSchema = `{"type":"object","required":["id","conversation_id","attempt_no","repo_full_name","connector","state","outcome_reason","stale","group","untrusted_customer_content"],"properties":{` +
 		`"id":{"type":"string"},"conversation_id":{"type":"string"},"attempt_no":{"type":"integer"},"previous_attempt_id":{"type":["string","null"]},` +
 		`"repo_full_name":{"type":"string"},"connector":{"type":"string","enum":["claude_issue","copilot_issue","cursor_api"]},` +
@@ -13,7 +13,10 @@ const (
 		`"stale":{"type":"boolean","description":"Sent 30 minutes ago with no sign of the agent."},"group":{"type":"string","enum":["needs_person","running","done"]},` +
 		`"row_version":{"type":"integer"},"issue_url":{"type":["string","null"]},"vendor_url":{"type":["string","null"]},"pr_url":{"type":["string","null"]},` +
 		`"merged_at":{"type":["string","null"]},"deployed_at":{"type":["string","null"]},"created_by_name":{"type":"string"},"created_at":{"type":"string"},` +
-		`"untrusted_customer_content":{"type":"object","required":["sent_title"],"properties":{"sent_title":{"type":"string"},"sent_body":{"type":"string"}}},` +
+		`"copilot_assignment":{"type":["string","null"],"enum":["assigned","on_github",null],"description":"Copilot: assigned through the API, or waiting for a person to assign it on GitHub."},` +
+		`"untrusted_customer_content":{"type":"object","required":["sent_title","conversation_subject","contact_name"],"properties":{"sent_title":{"type":"string"},"sent_body":{"type":"string"},` +
+		`"conversation_subject":{"type":"string"},"contact_name":{"type":["string","null"]}}},` +
+		`` +
 		`"events":{"type":"array","items":{"type":"object"}}}}`
 
 	fixesDescriptionStates = `States: sending (waiting for the person's GitHub confirmation or the worker), sent (the issue or the Cursor agent exists), ` +
@@ -39,11 +42,12 @@ func fixesListSpec() Spec {
 		Name:  "colliedesk_fixes_list",
 		Title: "List Autofix fixes",
 		Description: `List the workspace's fixes (conversations sent to a coding agent: Claude or Copilot through a GitHub issue, Cursor through its API), newest first, in pages, ` +
-			`optionally one group: needs_person, running or done. ` + fixesDescriptionStates +
+			`optionally one group (needs_person, running or done), one repository (repo_id, from colliedesk_fix_get or the settings) and one agent (connector). ` + fixesDescriptionStates +
 			`Read one with colliedesk_fix_get for what was sent and its timeline. ` + untrustedNotice + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST: []string{"GET /api/v1/autofix/fixes"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"group":{"type":"string","enum":["needs_person","running","done"]},` +
+			`"repo_id":{"type":"string",` + uuid + `},"connector":{"type":"string","enum":["claude_issue","copilot_issue","cursor_api"]},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":100,"default":50},"cursor":{"type":"string","maxLength":200,"description":"next_cursor of the page before."}}}`,
 		Output: `{"type":"object","required":["fixes","next_cursor"],"properties":{"fixes":{"type":"array","items":` + fixSchema + `},"next_cursor":{"type":["string","null"]}}}`,
 		run:    fixesList,

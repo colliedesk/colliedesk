@@ -43,9 +43,13 @@ func (a *API) getAutofixStatus(response http.ResponseWriter, request *http.Reque
 
 func (a *API) listFixes(response http.ResponseWriter, request *http.Request) {
 	query := request.URL.Query()
-	filter := store.FixFilter{Group: query.Get("group"), Limit: 50, Cursor: query.Get("cursor")}
+	filter := store.FixFilter{Group: query.Get("group"), RepoID: query.Get("repo_id"), Connector: autofix.Connector(query.Get("connector")), Limit: 50, Cursor: query.Get("cursor")}
 	if filter.Group != "" && !slices.Contains(autofix.Groups, filter.Group) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "group is needs_person, running or done.")
+		return
+	}
+	if filter.Connector != "" && !filter.Connector.Valid() {
+		writeError(response, http.StatusBadRequest, "invalid_request", "connector is claude_issue, copilot_issue or cursor_api.")
 		return
 	}
 	if raw := query.Get("limit"); raw != "" {

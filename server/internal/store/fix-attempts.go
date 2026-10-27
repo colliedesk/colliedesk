@@ -23,19 +23,22 @@ const (
 		WHEN (f.state IN ('failed','merged') OR ` + fixStale + `) AND NOT EXISTS (SELECT 1 FROM fix_attempts n
 			WHERE n.workspace_id = f.workspace_id AND n.conversation_id = f.conversation_id AND n.attempt_no > f.attempt_no) THEN 'needs_person'
 		ELSE 'done' END)`
-	fixColumns = `f.id::text, f.conversation_id::text, f.attempt_no, f.previous_attempt_id::text, f.repo_id::text, f.repo_full_name,
+	// fixFrom joins the conversation and its customer for the subject and the name the list shows.
+	fixFrom = ` FROM fix_attempts f JOIN conversations c ON c.workspace_id = f.workspace_id AND c.id = f.conversation_id
+		LEFT JOIN contacts k ON k.workspace_id = c.workspace_id AND k.id = c.contact_id`
+	fixColumns = `f.id::text, f.conversation_id::text, c.subject, k.name, f.attempt_no, f.previous_attempt_id::text, f.repo_id::text, f.repo_full_name,
 		f.connector, f.state, f.outcome_reason, f.state_changed_at, f.row_version, ` + fixStale + `, ` + fixGroup + `,
 		f.sent_title, f.sent_message_ids::text[], f.sent_notes, f.created_by_kind, f.created_by_agent_id::text, f.created_by_name,
-		f.approved_request_id::text, f.github_login, f.issue_number, f.vendor_url, f.branch, f.pr_number, f.pr_url, f.pr_linked_by,
+		f.approved_request_id::text, f.github_login, f.copilot_assignment, f.issue_number, f.vendor_url, f.branch, f.pr_number, f.pr_url, f.pr_linked_by,
 		f.merge_sha, f.merged_at, f.merged_by_login, f.deployed_at, f.deployed_by_name, f.created_at`
 )
 
 func scanFix(row pgx.Row) (autofix.Fix, error) {
 	var fix autofix.Fix
-	err := row.Scan(&fix.ID, &fix.ConversationID, &fix.AttemptNo, &fix.PreviousAttemptID, &fix.RepoID, &fix.RepoFullName,
+	err := row.Scan(&fix.ID, &fix.ConversationID, &fix.ConversationSubject, &fix.ContactName, &fix.AttemptNo, &fix.PreviousAttemptID, &fix.RepoID, &fix.RepoFullName,
 		&fix.Connector, &fix.State, &fix.OutcomeReason, &fix.StateChangedAt, &fix.RowVersion, &fix.Stale, &fix.Group,
 		&fix.SentTitle, &fix.SentMessageIDs, &fix.SentNotes, &fix.CreatedByKind, &fix.CreatedByAgentID, &fix.CreatedByName,
-		&fix.ApprovedRequestID, &fix.GitHubLogin, &fix.IssueNumber, &fix.VendorURL, &fix.Branch, &fix.PRNumber, &fix.PRURL, &fix.PRLinkedBy,
+		&fix.ApprovedRequestID, &fix.GitHubLogin, &fix.CopilotAssignment, &fix.IssueNumber, &fix.VendorURL, &fix.Branch, &fix.PRNumber, &fix.PRURL, &fix.PRLinkedBy,
 		&fix.MergeSHA, &fix.MergedAt, &fix.MergedByLogin, &fix.DeployedAt, &fix.DeployedByName, &fix.CreatedAt)
 	if err != nil {
 		return autofix.Fix{}, err
@@ -57,21 +60,35 @@ func scanFix(row pgx.Row) (autofix.Fix, error) {
 	return fix, nil
 }
 
-// FixFilter narrows the workspace's fixes: one group of the Fixes screen, one page.
+// FixFilter narrows the workspace's fixes: one group of the Fixes screen, one repository, one coding
+// agent, one page.
 type FixFilter struct {
-	Group  string
-	Limit  int
-	Cursor string
+	Group     string
+	RepoID    string
+	Connector autofix.Connector
+	Limit     int
+	Cursor    string
 }
 
 // ListFixes returns one page of the workspace's fixes, newest first, and the cursor of the next page
 // ("" on the last one).
 func (s *Store) ListFixes(ctx context.Context, workspaceID string, filter FixFilter) ([]autofix.Fix, string, error) {
-	query := `SELECT ` + fixColumns + ` FROM fix_attempts f WHERE f.workspace_id = $1`
+	query := `SELECT ` + fixColumns + fixFrom + ` WHERE f.workspace_id = $1`
 	args := []any{workspaceID, filter.Limit + 1}
 	if filter.Group != "" {
 		args = append(args, filter.Group)
 		query += fmt.Sprintf(` AND %s = $%d`, fixGroup, len(args))
+	}
+	if filter.RepoID != "" {
+		if !savedReplyID.MatchString(filter.RepoID) {
+			return []autofix.Fix{}, "", nil
+		}
+		args = append(args, filter.RepoID)
+		query += fmt.Sprintf(` AND f.repo_id = $%d`, len(args))
+	}
+	if filter.Connector != "" {
+		args = append(args, string(filter.Connector))
+		query += fmt.Sprintf(` AND f.connector = $%d`, len(args))
 	}
 	if filter.Cursor != "" {
 		at, id, err := decodeTrashCursor(filter.Cursor)
@@ -109,7 +126,7 @@ func (s *Store) ListConversationFixes(ctx context.Context, workspaceID, conversa
 		if _, err := getConversation(ctx, tx, workspaceID, conversationID); err != nil {
 			return nil, err
 		}
-		rows, err := tx.Query(ctx, `SELECT `+fixColumns+` FROM fix_attempts f WHERE f.workspace_id = $1 AND f.conversation_id = $2
+		rows, err := tx.Query(ctx, `SELECT `+fixColumns+fixFrom+` WHERE f.workspace_id = $1 AND f.conversation_id = $2
 			ORDER BY f.attempt_no DESC`, workspaceID, conversationID)
 		if err != nil {
 			return nil, err
@@ -127,9 +144,9 @@ func (s *Store) GetFix(ctx context.Context, workspaceID, id string) (autofix.Fix
 }
 
 func getFix(ctx context.Context, tx pgx.Tx, workspaceID, id string, lock bool) (autofix.Fix, error) {
-	query := `SELECT ` + fixColumns + ` FROM fix_attempts f WHERE f.workspace_id = $1 AND f.id = $2`
+	query := `SELECT ` + fixColumns + fixFrom + ` WHERE f.workspace_id = $1 AND f.id = $2`
 	if lock {
-		query += ` FOR UPDATE`
+		query += ` FOR UPDATE OF f`
 	}
 	fix, err := scanFix(tx.QueryRow(ctx, query, workspaceID, id))
 	if errors.Is(err, pgx.ErrNoRows) {

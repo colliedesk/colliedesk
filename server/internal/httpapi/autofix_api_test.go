@@ -256,7 +256,21 @@ func TestFixesListByGroupWithStaleSendsNeedingAPerson(t *testing.T) {
 	if len(second.Items) != 1 || second.Items[0].ID != running.ID || second.NextCursor != nil {
 		t.Errorf("second page = %+v", second)
 	}
-	for _, query := range []string{"group=stuck", "limit=0", "limit=101", "cursor=nope"} {
+	var cursor, claude page
+	decode(t, request(t, api, http.MethodGet, "/api/v1/autofix/fixes?connector=cursor_api", nil, d.token, nil), &cursor)
+	decode(t, request(t, api, http.MethodGet, "/api/v1/autofix/fixes?group=needs_person&connector=claude_issue&repo_id="+d.repoID, nil, d.token, nil), &claude)
+	if len(cursor.Items) != 0 || len(claude.Items) != 2 {
+		t.Fatalf("by agent and repository: %d cursor, %d claude", len(cursor.Items), len(claude.Items))
+	}
+	var otherRepo page
+	decode(t, request(t, api, http.MethodGet, "/api/v1/autofix/fixes?repo_id=00000000-0000-0000-0000-000000000001", nil, d.token, nil), &otherRepo)
+	if len(otherRepo.Items) != 0 {
+		t.Errorf("another repository lists %d fixes", len(otherRepo.Items))
+	}
+	if first := claude.Items[0]; first.ConversationSubject != "Checkout broken" || first.ContactName == nil || *first.ContactName != "Pat" || first.CopilotAssignment != nil {
+		t.Errorf("subject and customer: %+v", first)
+	}
+	for _, query := range []string{"group=stuck", "limit=0", "limit=101", "cursor=nope", "connector=devin"} {
 		if response := request(t, api, http.MethodGet, "/api/v1/autofix/fixes?"+query, nil, d.token, nil); response.Code != http.StatusBadRequest {
 			t.Errorf("%s: status=%d", query, response.Code)
 		}
