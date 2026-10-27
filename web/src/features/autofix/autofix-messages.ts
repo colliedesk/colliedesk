@@ -167,6 +167,7 @@ export const autofixMessages = {
   draftPrompt: (at: string) => `The fix for this conversation was released at ${at}. Write a short reply telling the customer it is fixed and asking them to try again and reply if anything still looks wrong. Do not mention internal tools, pull requests or coding agents.`,
   draftPlain: (customer: string | undefined) => `Hi${customer ? ` ${customer.split(' ')[0]}` : ''},\n\nThe fix for this is now released. Please try again, and reply here if anything still looks wrong.\n`,
   draftStarted: 'A reply draft is being written in the reply box.',
+  draftReady: 'The reply draft is in the reply box.',
   draftInserted: 'A plain reply was put in the reply box to edit.',
 
   // Return from GitHub.

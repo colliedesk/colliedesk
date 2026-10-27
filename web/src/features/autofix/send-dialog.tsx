@@ -90,7 +90,8 @@ export function SendDialog({ conversationId, repos, connectors, initialRepo, ini
   const preview = useQuery({
     queryKey: ['autofix-preview', conversationId, repo?.id, connector, noteIds],
     queryFn: () => autofixApi.preview(conversationId, { repo_id: repo!.id, connector: connector!, ...(noteIds.length ? { note_ids: noteIds } : {}) }),
-    enabled: Boolean(repo && connector), staleTime: Infinity, retry: false,
+    // Built once while the dialog is open, and again the next time it opens: new messages go in.
+    enabled: Boolean(repo && connector), staleTime: Infinity, gcTime: 0, refetchOnMount: 'always', retry: false,
   });
   // The person's edits, over the preview the server built; a new preview (another repository, agent or note) starts again.
   const [edited, setEdited] = useState<{ for: unknown; title: string; body: string }>();
@@ -103,7 +104,7 @@ export function SendDialog({ conversationId, repos, connectors, initialRepo, ini
   const change = (next: () => void) => { next(); setClientKey(newKey()); setProblem(undefined); setEditing(false); };
   const edit = (value: Partial<{ title: string; body: string }>) => setEdited({ for: preview.data, title, body, ...value });
   const submit = async () => {
-    if (!repo || !connector || !preview.data) return;
+    if (!repo || !connector || !preview.data || preview.isFetching) return;
     if (!title.trim()) return setProblem(m.emptyTitle);
     if (!body.trim()) return setProblem(m.emptyBody);
     setSending(true);
@@ -122,7 +123,7 @@ export function SendDialog({ conversationId, repos, connectors, initialRepo, ini
   const footer = <>
     {data && <span className="af-dest">{issue ? <ExternalIcon /> : <KeyIcon />}<span>{issue ? m.destIssue(data.destination.repo_full_name) : m.destCursor(data.destination.vendor_retention)}</span></span>}
     <button type="button" className="af-ghost" onClick={onClose}>{m.cancel}</button>
-    <button type="submit" className="primary-action" disabled={!data || sending}>{issue ? <><ExternalIcon />{m.continueOnGitHub}</> : m.sendToCursor}</button>
+    <button type="submit" className="primary-action" disabled={!data || sending || preview.isFetching}>{issue ? <><ExternalIcon />{m.continueOnGitHub}</> : m.sendToCursor}</button>
   </>;
   let content: ReactNode;
   if (!repo || !connector) content = <p>{repos.length === 0 ? m.noRepo : m.noAgent}</p>;

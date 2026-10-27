@@ -136,3 +136,13 @@ describe('turning Cursor on', () => {
     expect(actions.enable).not.toHaveBeenCalled();
   });
 });
+
+describe('the Cursor key while Cursor is off', () => {
+  it('can still be replaced or removed, since it stays until removed', async () => {
+    const actions = show(settingsOf({ connectors: [connectorOf({ kind: 'cursor_api', enabled: false, credential: { set_by_name: 'Mai Tran', set_at: '2026-10-14T10:00:00Z' } })] }));
+    const card = screen.getByRole('article', { name: 'Cursor' });
+    fireEvent.click(within(card).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(actions.removeKey).toHaveBeenCalled());
+    expect(within(card).getByRole('button', { name: 'Replace' })).toBeInTheDocument();
+  });
+});

@@ -56,6 +56,8 @@ describe('AutofixConversation', () => {
     await waitFor(() => expect(put).toHaveBeenCalled());
     expect((calls.find((call) => call.path.endsWith('/ai-drafts'))?.body as { prompt: string }).prompt).toMatch(/released at/);
     expect((put.mock.calls[0][0] as CustomEvent<{ aiDraftId?: string }>).detail.aiDraftId).toBe(draft.id);
+    expect(await screen.findByText('The reply draft is in the reply box.')).toBeInTheDocument();
+    expect(screen.queryByText(/is being written/)).not.toBeInTheDocument();
     window.removeEventListener('colliedesk:insert-reply', put);
   });
 
@@ -65,6 +67,16 @@ describe('AutofixConversation', () => {
     expect(await screen.findByText('You declined on GitHub, so nothing was sent.')).toBeInTheDocument();
     expect(window.location.search).toBe('');
   });
+});
+
+it('drops the “being written” line when the AI draft fails', async () => {
+  const calls = mount(fixOf({ state: 'deployed', ...withPR, deployed_at: '2026-10-27T11:05:00Z' }), true, {
+    [`POST /api/v1/conversations/${conversationId}/ai-drafts`]: () => json(500, { error: { code: 'internal', message: 'x' } }),
+  });
+  fireEvent.click(await screen.findByRole('button', { name: 'Draft reply' }));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  expect(screen.queryByText(/is being written/)).not.toBeInTheDocument();
+  expect(calls.some((call) => call.path.endsWith('/ai-drafts'))).toBe(true);
 });
 
 describe('targetOf', () => {

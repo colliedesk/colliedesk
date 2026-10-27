@@ -107,7 +107,7 @@ export function AutofixConversation({ conversationId, customerName, timezone }: 
     mutationFn: async (run: () => Promise<unknown>) => run(),
     onMutate: () => { setProblem(undefined); setNotice(undefined); },
     onSuccess: () => { setOpen(undefined); return refresh(); },
-    onError: (error) => { setProblem(problemOf(error)); return refresh(); },
+    onError: (error) => { setNotice(undefined); setProblem(problemOf(error)); return refresh(); },
   });
   const draftReply = async (current: Fix) => {
     const released = formatShortDate(current.deployed_at ?? current.state_changed_at, timezone);
@@ -121,8 +121,9 @@ export function AutofixConversation({ conversationId, customerName, timezone }: 
     setNotice(m.draftStarted);
     let draft = await aiDraftApi.create(conversationId, m.draftPrompt(released));
     for (let tries = 0; writing(draft) && tries < 6; tries++) draft = await aiDraftApi.get(conversationId, draft.id, 20);
-    if (draft.status === 'ready' && draft.text) put(draft.text, draft.id);
-    else throw new Error('no draft');
+    if (draft.status !== 'ready' || !draft.text) throw new Error('no draft');
+    put(draft.text, draft.id);
+    setNotice(m.draftReady);
     void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
   };
   const onAction = (action: FixAction) => {

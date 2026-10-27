@@ -110,4 +110,17 @@ describe('SendDialog', () => {
     const agents = screen.getByRole('group', { name: 'Agent' });
     expect(within(agents).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value)).toEqual(['claude_issue', 'copilot_issue']);
   });
+
+  it('builds the preview again each time the dialog opens, so new messages are in it', async () => {
+    const calls = serve({ [previewPath]: () => json(200, previewOf()) });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const dialog = () => <QueryClientProvider client={client}><SendDialog conversationId={conversationId} repos={[repoOf()]} connectors={settingsOf().connectors}
+      initialRepo={repoOf().id} initialConnector="claude_issue" timezone="UTC" onClose={vi.fn()} onSent={vi.fn()} /></QueryClientProvider>;
+    const first = render(dialog());
+    await screen.findByDisplayValue('CSV export stops at 500 rows');
+    first.unmount();
+    render(dialog());
+    await screen.findByDisplayValue('CSV export stops at 500 rows');
+    await waitFor(() => expect(calls.filter((call) => call.path.endsWith('/preview'))).toHaveLength(2));
+  });
 });

@@ -194,8 +194,12 @@ function VendorCard({ state, kind, isAdmin, at, busy, run, actions, ticks, onTic
       <span className="af-how">{m.how[kind]}</span>
       {isAdmin && <div className="af-cols">
         {cursor ? <div className="af-col"><h4>{m.cursorKey}</h4>
-          {state?.credential && !keyless ? <p className="af-keyset"><KeyIcon /><span><b>{m.keySet}</b>{m.keySetBy(at(state.credential.set_at), state.credential.set_by_name)}</span></p>
+          {state?.credential && !keyless ? <div className="af-keyset"><KeyIcon /><span><b>{m.keySet}</b>{m.keySetBy(at(state.credential.set_at), state.credential.set_by_name)}</span>
+            <div className="af-acts"><button type="button" disabled={busy} onClick={() => setReplacing(!replacing)} aria-expanded={replacing}>{m.replace}</button>
+              <button type="button" className="af-ghost" disabled={busy} onClick={() => run(actions.removeKey)}>{m.remove}</button></div></div>
             : <label className="af-keyrow"><span className="sr-only">{m.cursorKey}</span><input type="password" value={key} placeholder={m.pasteKey} autoComplete="off" spellCheck={false} onChange={(event) => setKey(event.target.value)} /></label>}
+          {state?.credential && replacing && <KeyField label={m.newKey} placeholder={m.pasteNewKey} busy={busy}
+            onSave={(value) => { setReplacing(false); run(() => actions.setKey(value)); }} />}
           <span className="af-help">{m.keyAdvice}</span></div>
           : <Checklist kind={kind} ticks={ticks} onTicks={onTicks} disabled={false} />}
         <div className="af-col"><h4>{m.whatLeaves}</h4>
