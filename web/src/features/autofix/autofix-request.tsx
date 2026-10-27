@@ -53,6 +53,12 @@ export function AutofixRequestDetail({ item, result, onApprove, busy = false }: 
     </>;
   }
   if (item.route === '/api/v1/autofix/github/installations') return <><div className="af-oc"><span>{m.installHelp}</span></div>{refusal}</>;
+  if (item.route === '/api/v1/autofix/github/installations/{id}' && item.method === 'DELETE') {
+    const installation = settings.data?.installations.find((candidate) => candidate.id === item.path.split('/').pop());
+    const repos = settings.data?.repos.filter((repo) => repo.installation_id === installation?.installation_id).length ?? 0;
+    const set = autofixMessages.set;
+    return <div className="af-oc af-danger"><span><b>{set.disconnectTitle}</b> {installation && `${set.disconnectHelp(installation.account_login, repos)} `}{set.disconnectNote} {set.disconnectAgain}</span></div>;
+  }
   if (item.route === '/api/v1/autofix/repos/{id}/include-notes') return <p className="af-help">{autofixMessages.set.notesHelp}</p>;
   if (item.route === '/api/v1/autofix/connectors/{kind}' && item.method === 'PUT') {
     const kind = connectorOf(item.path.split('/').pop());

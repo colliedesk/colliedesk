@@ -30,6 +30,12 @@ describe('AutofixRequestDetail', () => {
     expect(screen.getByText(/You become the sender/)).toBeInTheDocument();
   });
 
+  it('says what disconnecting GitHub does when an AI agent asks for it', async () => {
+    show(request({ method: 'DELETE', route: '/api/v1/autofix/github/installations/{id}', path: '/api/v1/autofix/github/installations/44444444-4444-4444-8444-444444444444', summary: 'Disconnect GitHub' }));
+    expect(await screen.findByText(/uninstalls its app from northwind and disconnects 1 repository/)).toBeInTheDocument();
+    expect(screen.getByText(/Fixes in progress on them are cancelled/)).toBeInTheDocument();
+  });
+
   it('says Cursor gets it at once and keeps it', () => {
     show(request({ body: { repo_id: repoOf().id, connector: 'cursor_api', title: 't', body: 'b', client_key: 'k' } }));
     expect(screen.getByText(/Approve sends it to Cursor at once/)).toBeInTheDocument();
