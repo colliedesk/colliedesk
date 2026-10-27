@@ -323,7 +323,8 @@ func fixOfClientKey(ctx context.Context, tx pgx.Tx, workspaceID string, input Ne
 	if err != nil {
 		return autofix.Fix{}, false, err
 	}
-	if fix.ConversationID != input.ConversationID || fix.RepoID == nil || *fix.RepoID != input.RepoID || fix.Connector != input.Connector {
+	// A repository disconnected since leaves the fix without repo_id: the key is still that send.
+	if fix.ConversationID != input.ConversationID || (fix.RepoID != nil && *fix.RepoID != input.RepoID) || fix.Connector != input.Connector {
 		return autofix.Fix{}, false, autofix.ErrClientKeyReused
 	}
 	return fix, true, nil

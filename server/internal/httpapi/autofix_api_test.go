@@ -388,6 +388,16 @@ func TestFixSendsAndLinksStayConsistentUnderRetriesAndRaces(t *testing.T) {
 		t.Errorf("six sends of one key made %d fixes (%d created), want one", len(ids), made)
 	}
 
+	// The repository disconnected since: the same key still answers its fix.
+	if _, err := pool.Exec(ctx, `UPDATE fix_attempts SET repo_id = NULL WHERE client_key = 'race'`); err != nil {
+		t.Fatal(err)
+	}
+	if again, created, err := data.CreateFix(ctx, d.workspaceID, input); err != nil || created || !ids[again.ID] {
+		t.Errorf("the same key after the repository was disconnected: %v %v %v", again.ID, created, err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE fix_attempts SET repo_id = $1 WHERE client_key = 'race'`, d.repoID); err != nil {
+		t.Fatal(err)
+	}
 	other := input
 	other.ConversationID = d.conversation(t, api)
 	if _, _, err := data.CreateFix(ctx, d.workspaceID, other); !errors.Is(err, autofix.ErrClientKeyReused) {
