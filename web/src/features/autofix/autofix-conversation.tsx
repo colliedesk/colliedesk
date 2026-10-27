@@ -10,7 +10,7 @@ import { AutofixBlockView } from './autofix-block';
 import type { SendTarget } from './autofix-block';
 import { CancelDialog, LinkDialog } from './autofix-dialogs';
 import { autofixMessages as m } from './autofix-messages';
-import { fixView, safeHref, stripText } from './fix-view';
+import { fixView, redirectHref, RedirectRefused, stripText } from './fix-view';
 import type { FixAction, Tone } from './fix-view';
 import { SendDialog } from './send-dialog';
 
@@ -65,9 +65,11 @@ export function fixReturn(): { error?: string } | undefined {
 }
 
 // goTo leaves for GitHub in this window (never a popup): the person confirms there and comes back to the conversation.
+// An address it may not open (redirectHref) throws RedirectRefused, whose message the caller shows.
 export function goTo(url: string | null | undefined) {
-  const safe = safeHref(url);
-  if (safe) window.location.assign(safe);
+  const safe = redirectHref(url);
+  if (!safe) throw new RedirectRefused();
+  window.location.assign(safe);
 }
 
 const settingsLink = (label: string, primary = false) => <Link to="/settings/autofix" className={primary ? 'af-btn primary-action' : 'af-btn'}>{label}</Link>;

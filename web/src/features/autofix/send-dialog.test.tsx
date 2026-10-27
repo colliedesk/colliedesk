@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { json, refusal, serve } from '../kb/kb.test.fixture';
 import { conversationId, fixOf, previewOf, repoOf, settingsOf } from './autofix.test.fixture';
+import { RedirectRefused } from './fix-view';
 import { segmentsOf, SendDialog } from './send-dialog';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -83,6 +84,15 @@ describe('SendDialog', () => {
     await screen.findByDisplayValue('CSV export stops at 500 rows');
     fireEvent.click(screen.getByRole('button', { name: 'Continue on GitHub' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already has a fix in progress');
+  });
+
+  it('says so and keeps the dialog when the address to GitHub cannot be opened', async () => {
+    serve({ [previewPath]: () => json(200, previewOf()), [sendPath]: () => json(201, { fix: fixOf({ state: 'sending' }), authorize_url: 'http://github.com/login/oauth/authorize' }) });
+    open({ onSent: () => { throw new RedirectRefused(); } });
+    await screen.findByDisplayValue('CSV export stops at 500 rows');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue on GitHub' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('not secure');
+    expect(screen.getByRole('button', { name: 'Continue on GitHub' })).toBeEnabled();
   });
 
   it('sends to Cursor with the workspace key and says Cursor keeps it', async () => {

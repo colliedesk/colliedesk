@@ -43,6 +43,15 @@ describe('AutofixRequestDetail', () => {
     expect(assign).toHaveBeenCalledWith('https://github.com/login/oauth/authorize?state=s');
   });
 
+  it('says so, and stays, when the address to GitHub is not https', () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    show(request({ status: 'approved', body: { repo_id: repoOf().id, connector: 'claude_issue', title: 't', body: 'b', client_key: 'k' } }),
+      { fix: {}, authorize_url: 'http://github.com/login/oauth/authorize?state=s' });
+    expect(assign).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('not secure');
+  });
+
   it('records consent in words when turning an agent on', () => {
     show(request({ method: 'PUT', route: '/api/v1/autofix/connectors/{kind}', path: '/api/v1/autofix/connectors/cursor_api', body: { consent_version: 'v1' } }));
     expect(screen.getByText(/Cursor keeps them with no end date/)).toBeInTheDocument();

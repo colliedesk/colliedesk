@@ -8,6 +8,7 @@ import { autofixApi } from './autofix-api';
 import type { ConnectorState, Fix, FixConnector, FixPreview, FixSent, Repo } from './autofix-api';
 import { ExternalIcon, KeyIcon, ShieldIcon } from './autofix-icons';
 import { autofixMessages as m } from './autofix-messages';
+import { RedirectRefused } from './fix-view';
 
 // The send dialog: pick the repository and agent, read exactly what leaves Colliedesk (masked on the server),
 // edit it, and go. An issue goes through GitHub in this window; Cursor is sent by the server.
@@ -113,7 +114,7 @@ export function SendDialog({ conversationId, repos, connectors, initialRepo, ini
     try {
       onSent(await (retryOf ? autofixApi.retry(retryOf.id, input) : autofixApi.send(conversationId, input)));
     } catch (error) {
-      setProblem(error instanceof InvalidRequestError ? error.message : m.actionFailed);
+      setProblem(error instanceof InvalidRequestError || error instanceof RedirectRefused ? error.message : m.actionFailed);
       setSending(false);
     }
   };

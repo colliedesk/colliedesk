@@ -130,6 +130,28 @@ export function stripText(fix: Fix, now: number, formatTime: (value: string) => 
 export const shortId = (id: string) => id.replace(/[^0-9a-z]/gi, '').slice(0, 4).toLowerCase();
 
 // safeHref keeps a link only when it is https: an address a vendor reported never opens anything else.
+const loopback = new Set(['127.0.0.1', '[::1]', 'localhost']);
+
+// redirectHref is where the browser may leave for when the server answers an address to confirm on GitHub: https, or
+// http only to this machine (the local GitHub stand-in of tests and development).
+export function redirectHref(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || (parsed.protocol === 'http:' && loopback.has(parsed.hostname)) ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// RedirectRefused: the server's address to GitHub was not one redirectHref follows; nothing was opened.
+export class RedirectRefused extends Error {
+  constructor() {
+    super(m.redirectRefused);
+    this.name = 'RedirectRefused';
+  }
+}
+
 export function safeHref(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
   try {

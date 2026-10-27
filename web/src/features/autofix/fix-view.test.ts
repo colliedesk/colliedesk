@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { eventOf, fixOf, now, withPR } from './autofix.test.fixture';
-import { fixView, safeHref, stripText } from './fix-view';
+import { fixView, redirectHref, safeHref, stripText } from './fix-view';
 
 const marks = (view: ReturnType<typeof fixView>) => view.track.map((stop) => `${stop.label}:${stop.mark}`).join(' ');
 const time = (value: string) => value.slice(11, 16);
@@ -90,5 +90,18 @@ describe('safeHref', () => {
     expect(safeHref('javascript:alert(1)')).toBeUndefined();
     expect(safeHref('http://github.com')).toBeUndefined();
     expect(safeHref(null)).toBeUndefined();
+  });
+});
+
+describe('redirectHref', () => {
+  it('follows the server’s GitHub address over https, and over http only to this machine (a local stand-in)', () => {
+    expect(redirectHref('https://github.com/login/oauth/authorize?state=s')).toBe('https://github.com/login/oauth/authorize?state=s');
+    expect(redirectHref('http://127.0.0.1:8097/apps/x/installations/new')).toBe('http://127.0.0.1:8097/apps/x/installations/new');
+    expect(redirectHref('http://localhost:8097/login/oauth/authorize')).toBe('http://localhost:8097/login/oauth/authorize');
+    expect(redirectHref('http://[::1]:8097/login/oauth/authorize')).toBe('http://[::1]:8097/login/oauth/authorize');
+    expect(redirectHref('http://github.com/login/oauth/authorize')).toBeUndefined();
+    expect(redirectHref('http://127.0.0.1.example.com/x')).toBeUndefined();
+    expect(redirectHref('javascript:alert(1)')).toBeUndefined();
+    expect(redirectHref(null)).toBeUndefined();
   });
 });

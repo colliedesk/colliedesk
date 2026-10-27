@@ -21,12 +21,18 @@ export function AutofixRequestDetail({ item, result, onApprove, busy = false }: 
   const settings = useAutofixSettings();
   const [agreed, setAgreed] = useState(false);
   const left = useRef(false);
+  const [refused, setRefused] = useState<string>();
   const url = text(result, 'authorize_url');
   useEffect(() => {
     if (!url || left.current) return;
     left.current = true;
-    goTo(url);
+    try {
+      goTo(url);
+    } catch (error) {
+      if (error instanceof Error) setRefused(error.message);
+    }
   }, [url]);
+  const refusal = refused && <p role="alert" className="error-copy">{refused}</p>;
   const body = item.edited_body ?? item.body;
   if (sendRoutes.has(item.route)) {
     const connector = connectorOf(field(body, 'connector'));
@@ -43,9 +49,10 @@ export function AutofixRequestDetail({ item, result, onApprove, busy = false }: 
       </dl>
       {connector === 'cursor_api' ? <div className="af-oc af-note"><span>{m.cursorNow}</span></div>
         : <div className="af-oc"><span><b>{m.becomeSender}</b> {m.becomeSenderHelp}</span></div>}
+      {refusal}
     </>;
   }
-  if (item.route === '/api/v1/autofix/github/installations') return <div className="af-oc"><span>{m.installHelp}</span></div>;
+  if (item.route === '/api/v1/autofix/github/installations') return <><div className="af-oc"><span>{m.installHelp}</span></div>{refusal}</>;
   if (item.route === '/api/v1/autofix/repos/{id}/include-notes') return <p className="af-help">{autofixMessages.set.notesHelp}</p>;
   if (item.route === '/api/v1/autofix/connectors/{kind}' && item.method === 'PUT') {
     const kind = connectorOf(item.path.split('/').pop());

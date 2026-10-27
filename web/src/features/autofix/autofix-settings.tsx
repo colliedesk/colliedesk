@@ -6,6 +6,7 @@ import { autofixApi, keys } from './autofix-api';
 import type { FixConnector } from './autofix-api';
 import { goTo, useAutofixSettings } from './autofix-conversation';
 import { autofixMessages } from './autofix-messages';
+import { RedirectRefused } from './fix-view';
 import { AutofixSettingsPage } from './autofix-settings-page';
 import type { SettingsActions } from './autofix-settings-page';
 
@@ -70,7 +71,7 @@ export function AutofixSettingsRoute() {
       await task();
     } catch (error) {
       done = false;
-      setProblem(error instanceof InvalidRequestError ? error.message : autofixMessages.actionFailed);
+      setProblem(error instanceof InvalidRequestError || error instanceof RedirectRefused ? error.message : autofixMessages.actionFailed);
     }
     await Promise.all([client.invalidateQueries({ queryKey: keys.settings }), client.invalidateQueries({ queryKey: ['autofix-github-repos'] }),
       client.invalidateQueries({ queryKey: keys.status })]);

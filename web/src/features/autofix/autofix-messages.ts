@@ -186,6 +186,7 @@ export const autofixMessages = {
     github_unavailable: 'GitHub did not answer. Nothing changed; try again.',
   } as Record<string, string>,
   returnUnknown: 'GitHub sent you back without finishing. Nothing changed; try again.',
+  redirectRefused: 'The server gave an address to GitHub that is not secure (https), so it was not opened. Nothing was sent. Ask whoever runs the server to check its GitHub settings.',
 
   // Cancel and link dialogs.
   cancelTitle: 'Cancel this fix?',
