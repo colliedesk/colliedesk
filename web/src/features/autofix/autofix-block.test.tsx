@@ -27,7 +27,7 @@ describe('AutofixBlockView', () => {
 
   it('sends people to Settings when no repository or agent is ready', () => {
     show(null, { target: {} });
-    expect(screen.getByText(/No repository is connected yet/)).toBeInTheDocument();
+    expect(screen.getByText(/No repository is ready: none is connected, or all are paused/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Autofix settings' })).toHaveAttribute('href', '/settings/autofix');
     expect(screen.queryByRole('button', { name: 'Send to agent' })).not.toBeInTheDocument();
   });

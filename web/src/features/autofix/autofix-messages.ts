@@ -51,7 +51,7 @@ export const autofixMessages = {
   agent: 'Agent',
   workspaceDefault: 'repository default',
   sendToAgent: 'Send to agent',
-  noRepo: 'No repository is connected yet. An admin connects GitHub and picks repositories in Settings → Autofix.',
+  noRepo: 'No repository is ready: none is connected, or all are paused. An admin checks GitHub and the repositories in Settings → Autofix.',
   noAgent: 'No coding agent is turned on yet. An admin turns one on in Settings → Autofix.',
   openSettings: 'Open Autofix settings',
   settings: 'Autofix settings',
