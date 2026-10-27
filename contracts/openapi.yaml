@@ -5134,8 +5134,10 @@ paths:
         `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners
         to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`:
         only an admin connects GitHub), or to the conversation with
-        `?fix=<id>` or `?fix_error=<reason>` (`signed_out`, `expired`, `wrong_person`, `denied`,
-        `installation_not_yours`, `installation_in_use`, `github_unavailable`). GitHub's own error text is
+        `?fix=<id>` or `?fix_error=<reason>` (also `forbidden`: the person may no longer send a fix, by
+        their role or a locked workspace; `expired` there also when the fix no longer waits for GitHub).
+        The reasons: `signed_out`, `expired`, `wrong_person`, `denied`,
+        `installation_not_yours`, `installation_in_use`, `github_unavailable`. GitHub's own error text is
         never echoed.
       parameters:
         - {name: code, in: query, required: false, schema: {type: string}}

@@ -67,6 +67,19 @@ describe('AutofixConversation', () => {
     expect(await screen.findByText('You declined on GitHub, so nothing was sent.')).toBeInTheDocument();
     expect(window.location.search).toBe('');
   });
+
+  it('says why a fix was not sent in the words of sending, not of connecting GitHub', async () => {
+    window.history.replaceState(null, '', `/conversations/${conversationId}?fix_error=forbidden`);
+    mount(fixOf({ state: 'sending', issue_number: null, issue_url: null, vendor_url: null }));
+    expect(await screen.findByText(/You can’t send fixes in this workspace now/)).toBeInTheDocument();
+    expect(screen.queryByText(/connect GitHub/)).not.toBeInTheDocument();
+  });
+
+  it('says a fix no longer waiting for GitHub was not sent by this confirmation', async () => {
+    window.history.replaceState(null, '', `/conversations/${conversationId}?fix_error=expired`);
+    mount(fixOf({ state: 'cancelled', outcome_reason: 'authorization_abandoned', issue_number: null, issue_url: null, vendor_url: null }));
+    expect(await screen.findByText(/This fix was no longer waiting for GitHub/)).toBeInTheDocument();
+  });
 });
 
 it('sends a fix stuck waiting for GitHub again: it ends it, then opens the send dialog as the next attempt', async () => {

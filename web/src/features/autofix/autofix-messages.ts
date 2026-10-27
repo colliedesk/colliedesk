@@ -186,6 +186,11 @@ export const autofixMessages = {
     github_unavailable: 'GitHub did not answer. Nothing changed; try again.',
   } as Record<string, string>,
   returnUnknown: 'GitHub sent you back without finishing. Nothing changed; try again.',
+  // Coming back from GitHub to a conversation: the same reasons, in the words of sending a fix.
+  fixReturnErrors: {
+    forbidden: 'You can’t send fixes in this workspace now (your role or the workspace’s plan changed), so nothing was sent.',
+    expired: 'This fix was no longer waiting for GitHub (it took longer than 10 minutes, or it was cancelled), so nothing was sent. Send again.',
+  } as Record<string, string>,
   redirectRefused: 'The server gave an address to GitHub that is not secure (https), so it was not opened. Nothing was sent. Ask whoever runs the server to check its GitHub settings.',
 
   // Cancel and link dialogs.

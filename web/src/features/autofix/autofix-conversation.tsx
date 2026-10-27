@@ -61,7 +61,7 @@ export function fixReturn(): { error?: string } | undefined {
   params.delete('fix_error');
   const rest = params.toString();
   window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
-  return error === null ? {} : { error: m.returnErrors[error] ?? m.returnUnknown };
+  return error === null ? {} : { error: m.fixReturnErrors[error] ?? m.returnErrors[error] ?? m.returnUnknown };
 }
 
 // goTo leaves for GitHub in this window (never a popup): the person confirms there and comes back to the conversation.
