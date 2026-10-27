@@ -2,7 +2,7 @@
 // Autofix calls (create an agent, read its run, cancel it, the key and its repositories), so Autofix can
 // be tried and tested without a Cursor account or key. Point an end-to-end build of collie at it with
 // COLLIEDESK_E2E_CURSOR_URL. A test scripts the runs of the next agents with POST /stand-in/script and
-// reads what Cursor received with GET /stand-in/state.
+// reads what Cursor received with GET /stand-in/state; POST /stand-in/fail makes its next calls fail.
 //
 //	go run ./cmd/cursor-stand-in -listen 127.0.0.1:8098 -key cursor-e2e-key
 package main
@@ -39,6 +39,25 @@ func main() {
 			steps = append(steps, cursortest.Step{Status: step.Status, Result: step.Result, Branch: step.Branch, PRURL: step.PRURL})
 		}
 		fake.Script(steps...)
+	}))
+	// Makes the next calls of one endpoint ("create", "run", "cancel", "me", "repositories") answer a status:
+	// {"endpoint": "create", "status": 429, "retry_after": 30, "times": 2}.
+	mux.HandleFunc("POST /stand-in/fail", decoded(func(in struct {
+		Endpoint   string `json:"endpoint"`
+		Status     int    `json:"status"`
+		Code       string `json:"code"`
+		Message    string `json:"message"`
+		RetryAfter int    `json:"retry_after"`
+		Times      int    `json:"times"`
+	}) {
+		if in.Times < 1 {
+			in.Times = 1
+		}
+		failures := make([]cursortest.Failure, in.Times)
+		for i := range failures {
+			failures[i] = cursortest.Failure{Status: in.Status, Code: in.Code, Message: in.Message, RetryAfter: in.RetryAfter}
+		}
+		fake.Fail(in.Endpoint, failures...)
 	}))
 	// What Cursor received: each create's agent id, repository and prompt (never the key), and the runs cancelled.
 	mux.HandleFunc("GET /stand-in/state", func(response http.ResponseWriter, _ *http.Request) {
