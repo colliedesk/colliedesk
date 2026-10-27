@@ -509,6 +509,25 @@ func TestAPersonsFixChangesReleaseAndPullRequests(t *testing.T) {
 	change(http.MethodPost, "/cancel", nil, http.StatusConflict)
 }
 
+// Taking back a pull request linked by hand goes back to the stop the fix had reached: an agent seen working
+// stays working; one never seen is back to sent.
+func TestUnlinkingAPullRequestKeepsAnAgentSeenWorking(t *testing.T) {
+	s := newSendDesk(t, "Send Unlink", 216, 2016)
+	fix := s.sent(t, 8)
+	observe(t, s.pool, s.w.id, fix.ID, autofix.Observation{State: autofix.Working})
+	path := "/api/v1/autofix/fixes/" + fix.ID + "/pull-request"
+	link := checked(t, s.api, http.MethodPut, path, map[string]any{"url": "https://github.com/" + s.repo.FullName + "/pull/3"}, s.w.admin, nil)
+	if link.Code != http.StatusOK {
+		t.Fatalf("link: %d %s", link.Code, link.Body.String())
+	}
+	unlink := checked(t, s.api, http.MethodDelete, path, nil, s.w.admin, nil)
+	var got autofix.Fix
+	decode(t, unlink, &got)
+	if unlink.Code != http.StatusOK || got.State != autofix.Working || got.PRURL != nil {
+		t.Fatalf("unlinked: %d %+v", unlink.Code, got)
+	}
+}
+
 func TestNoWorkspaceSendsOrChangesAnotherWorkspacesFix(t *testing.T) {
 	a := newSendDesk(t, "Send Iso A", 207, 2007)
 	a.turnOn(t, autofix.ClaudeIssue, "")

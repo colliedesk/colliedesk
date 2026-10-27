@@ -136,6 +136,9 @@ type Current struct {
 	Reason     string
 	HasPR      bool
 	PRLinkedBy string // auto or person, with a pull request
+	// AgentRan is true when a signal already showed the agent working; unlinking a pull request goes back
+	// to that stop, not to the one before it.
+	AgentRan bool
 }
 
 // Observation is a signal about an attempt from any source (a GitHub webhook, a Cursor poll, the
@@ -270,6 +273,9 @@ func Act(action Action, current Current) (State, string, error) {
 		}
 	case ActionUnlinkPR:
 		if from == PROpen && current.PRLinkedBy == "person" {
+			if current.AgentRan {
+				return Working, "", nil
+			}
 			return Sent, "", nil
 		}
 	case ActionDeployed:

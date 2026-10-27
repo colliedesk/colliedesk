@@ -520,7 +520,15 @@ func (s *Store) ActOnFix(ctx context.Context, workspaceID, id string, change Fix
 		if change.RowVersion != 0 && change.RowVersion != fix.RowVersion {
 			return autofix.Fix{}, autofix.ErrFixChanged
 		}
-		to, reason, err := autofix.Act(change.Action, fixCurrent(fix))
+		current := fixCurrent(fix)
+		if change.Action == autofix.ActionUnlinkPR {
+			// An agent already seen working stays working once the pull request linked by hand is taken back.
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM fix_attempt_events WHERE workspace_id = $1 AND fix_attempt_id = $2 AND to_state = 'working')`,
+				workspaceID, id).Scan(&current.AgentRan); err != nil {
+				return autofix.Fix{}, fmt.Errorf("read whether the agent ran: %w", err)
+			}
+		}
+		to, reason, err := autofix.Act(change.Action, current)
 		if err != nil {
 			return autofix.Fix{}, err
 		}

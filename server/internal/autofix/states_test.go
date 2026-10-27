@@ -95,6 +95,7 @@ func TestEveryWayInHasAWayOut(t *testing.T) {
 		{ActionLinkPR, Current{State: Working}, PROpen, ""},
 		{ActionLinkPR, Current{State: Failed, Reason: "pr_closed", HasPR: true}, PROpen, ""},
 		{ActionUnlinkPR, Current{State: PROpen, HasPR: true, PRLinkedBy: "person"}, Sent, ""},
+		{ActionUnlinkPR, Current{State: PROpen, HasPR: true, PRLinkedBy: "person", AgentRan: true}, Working, ""},
 		{ActionDeployed, Current{State: Merged}, Deployed, ""},
 		{ActionUndeployed, Current{State: Deployed}, Merged, ""},
 	} {
