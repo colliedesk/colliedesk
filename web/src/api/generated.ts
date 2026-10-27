@@ -2820,7 +2820,7 @@ export interface paths {
         /** @description Links a pull request by hand when Colliedesk did not find it (`pr_open`, `pr_linked_by` person), from `sent`, `working` or `failed` with reason `pr_closed`. The address must be a pull request of the fix's repository (400 `pull_request_not_in_repo`). */
         put: operations["linkFixPullRequest"];
         post?: never;
-        /** @description Unlinks a pull request a person linked (back to `sent`); one Colliedesk found itself stays. */
+        /** @description Unlinks a pull request a person linked (back to `working` if the agent was seen working before it was linked, else to `sent`); one Colliedesk found itself stays. */
         delete: operations["unlinkFixPullRequest"];
         options?: never;
         head?: never;

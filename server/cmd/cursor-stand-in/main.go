@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/cursor/cursortest"
@@ -42,23 +43,33 @@ func main() {
 	}))
 	// Makes the next calls of one endpoint ("create", "run", "cancel", "me", "repositories") answer a status:
 	// {"endpoint": "create", "status": 429, "retry_after": 30, "times": 2}.
-	mux.HandleFunc("POST /stand-in/fail", decoded(func(in struct {
-		Endpoint   string `json:"endpoint"`
-		Status     int    `json:"status"`
-		Code       string `json:"code"`
-		Message    string `json:"message"`
-		RetryAfter int    `json:"retry_after"`
-		Times      int    `json:"times"`
-	}) {
+	mux.HandleFunc("POST /stand-in/fail", func(response http.ResponseWriter, request *http.Request) {
+		var in struct {
+			Endpoint   string `json:"endpoint"`
+			Status     int    `json:"status"`
+			Code       string `json:"code"`
+			Message    string `json:"message"`
+			RetryAfter int    `json:"retry_after"`
+			Times      int    `json:"times"`
+		}
+		if err := json.NewDecoder(io.LimitReader(request.Body, 1<<20)).Decode(&in); err != nil {
+			http.Error(response, "bad JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
 		if in.Times < 1 {
 			in.Times = 1
+		}
+		if !slices.Contains([]string{"create", "run", "cancel", "me", "repositories"}, in.Endpoint) || in.Status < 400 || in.Status > 599 || in.Times > 20 {
+			http.Error(response, `want endpoint create|run|cancel|me|repositories, status 400..599, times 1..20`, http.StatusBadRequest)
+			return
 		}
 		failures := make([]cursortest.Failure, in.Times)
 		for i := range failures {
 			failures[i] = cursortest.Failure{Status: in.Status, Code: in.Code, Message: in.Message, RetryAfter: in.RetryAfter}
 		}
 		fake.Fail(in.Endpoint, failures...)
-	}))
+		response.WriteHeader(http.StatusNoContent)
+	})
 	// What Cursor received: each create's agent id, repository and prompt (never the key), and the runs cancelled.
 	mux.HandleFunc("GET /stand-in/state", func(response http.ResponseWriter, _ *http.Request) {
 		type created struct {

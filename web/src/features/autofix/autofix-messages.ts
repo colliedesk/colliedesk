@@ -360,7 +360,7 @@ export const autofixMessages = {
     cantInternal: 'Can’t connect: everyone in your GitHub enterprise could read the tickets.',
     paused: 'Paused',
     pausedWhy: {
-      became_public: 'Became public. Make it private on GitHub to resume. A fix not yet sent was cancelled; an issue already created stays on GitHub.',
+      became_public: 'Became public. Make it private on GitHub to resume. A fix not yet sent was stopped; an issue already created stays on GitHub.',
       removed_from_app: 'Removed from the app on GitHub. Add it back there to resume.',
       installation_suspended: 'Paused: the app is suspended on GitHub.',
     } as Record<string, string>,

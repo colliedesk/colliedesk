@@ -528,6 +528,25 @@ func TestUnlinkingAPullRequestKeepsAnAgentSeenWorking(t *testing.T) {
 	}
 }
 
+// A pull request linked by hand after the agent's run ended with its pull request closed goes back to sent, not to
+// working: nothing would move a working fix on again.
+func TestUnlinkingAPullRequestAfterAClosedOneDoesNotRestartTheAgent(t *testing.T) {
+	s := newSendDesk(t, "Send Unlink Closed", 217, 2017)
+	fix := s.sent(t, 9)
+	observe(t, s.pool, s.w.id, fix.ID, autofix.Observation{State: autofix.Working})
+	observe(t, s.pool, s.w.id, fix.ID, autofix.Observation{State: autofix.Failed, Reason: "pr_closed", PRNumber: 4, PRURL: "https://github.com/" + s.repo.FullName + "/pull/4"})
+	path := "/api/v1/autofix/fixes/" + fix.ID + "/pull-request"
+	if link := checked(t, s.api, http.MethodPut, path, map[string]any{"url": "https://github.com/" + s.repo.FullName + "/pull/5"}, s.w.admin, nil); link.Code != http.StatusOK {
+		t.Fatalf("link: %d %s", link.Code, link.Body.String())
+	}
+	unlink := checked(t, s.api, http.MethodDelete, path, nil, s.w.admin, nil)
+	var got autofix.Fix
+	decode(t, unlink, &got)
+	if unlink.Code != http.StatusOK || got.State != autofix.Sent {
+		t.Fatalf("unlinked: %d %s", unlink.Code, got.State)
+	}
+}
+
 func TestNoWorkspaceSendsOrChangesAnotherWorkspacesFix(t *testing.T) {
 	a := newSendDesk(t, "Send Iso A", 207, 2007)
 	a.turnOn(t, autofix.ClaudeIssue, "")

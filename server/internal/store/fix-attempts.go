@@ -522,11 +522,13 @@ func (s *Store) ActOnFix(ctx context.Context, workspaceID, id string, change Fix
 		}
 		current := fixCurrent(fix)
 		if change.Action == autofix.ActionUnlinkPR {
-			// An agent already seen working stays working once the pull request linked by hand is taken back.
-			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM fix_attempt_events WHERE workspace_id = $1 AND fix_attempt_id = $2 AND to_state = 'working')`,
-				workspaceID, id).Scan(&current.AgentRan); err != nil {
-				return autofix.Fix{}, fmt.Errorf("read whether the agent ran: %w", err)
+			// Taking the link back returns to the stop the fix was at when the person linked it.
+			var before *string
+			if err := tx.QueryRow(ctx, `SELECT from_state FROM fix_attempt_events WHERE workspace_id = $1 AND fix_attempt_id = $2 AND kind = 'link_pr' ORDER BY id DESC LIMIT 1`,
+				workspaceID, id).Scan(&before); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return autofix.Fix{}, fmt.Errorf("read the stop before the link: %w", err)
 			}
+			current.AgentRan = before != nil && *before == string(autofix.Working)
 		}
 		to, reason, err := autofix.Act(change.Action, current)
 		if err != nil {

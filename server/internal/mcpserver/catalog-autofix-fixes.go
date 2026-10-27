@@ -115,7 +115,7 @@ func fixPRUnlinkSpec() Spec {
 	return Spec{
 		Name:        "colliedesk_fix_pr_unlink",
 		Title:       "Unlink an Autofix fix's pull request",
-		Description: `Unlink a pull request a person linked (back to sent); one Colliedesk found by itself stays. ` + untrustedNotice + "\n\nTier: draft.",
+		Description: `Unlink a pull request a person linked (back to where it was: working if the agent was seen working, else sent); one Colliedesk found by itself stays. ` + untrustedNotice + "\n\nTier: draft.",
 		Tier:        "draft",
 		REST:        []string{"DELETE /api/v1/autofix/fixes/{id}/pull-request"},
 		Input:       `{"type":"object","additionalProperties":false,"required":["fix_id"],"properties":{` + fixIDProperty + `}}`,

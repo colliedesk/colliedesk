@@ -67,7 +67,7 @@ describe('AutofixSettingsPage', () => {
 
   it('shows a paused repository with why', () => {
     show(settingsOf({ repos: [repoOf({ paused_reason: 'became_public', visibility: 'public' })] }));
-    expect(screen.getByText(/Became public. Make it private on GitHub to resume. A fix not yet sent was cancelled; an issue already created stays/)).toBeInTheDocument();
+    expect(screen.getByText(/Became public. Make it private on GitHub to resume. A fix not yet sent was stopped; an issue already created stays/)).toBeInTheDocument();
   });
 
   it('turns an agent on only after the admin agrees to what leaves', async () => {

@@ -4957,7 +4957,7 @@ paths:
     delete:
       operationId: unlinkFixPullRequest
       x-permission: conversations:write
-      description: Unlinks a pull request a person linked (back to `sent`); one Colliedesk found itself stays.
+      description: Unlinks a pull request a person linked (back to `working` if the agent was seen working before it was linked, else to `sent`); one Colliedesk found itself stays.
       responses:
         '200':
           description: The fix
