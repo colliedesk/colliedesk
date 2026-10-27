@@ -221,21 +221,17 @@ func (s *Store) CreateFix(ctx context.Context, workspaceID string, input NewFix)
 		created bool
 	}
 	result, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (made, error) {
-		if input.ClientKey != "" {
-			var id string
-			err := tx.QueryRow(ctx, `SELECT id::text FROM fix_attempts WHERE workspace_id = $1 AND client_key = $2`, workspaceID, input.ClientKey).Scan(&id)
-			if err == nil {
-				fix, err := getFix(ctx, tx, workspaceID, id, false)
-				return made{fix, false}, err
-			}
-			if !errors.Is(err, pgx.ErrNoRows) {
-				return made{}, fmt.Errorf("read the fix of this key: %w", err)
-			}
-		}
-		// The conversation row is locked so two sends of one conversation number their attempts in turn.
+		// The conversation row is locked first, so two sends of one conversation (the same key sent twice at
+		// once among them) take turns: the second finds the fix of the first.
 		var locked int
 		if err := tx.QueryRow(ctx, `SELECT 1 FROM conversations WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, workspaceID, input.ConversationID).Scan(&locked); err != nil {
 			return made{}, fmt.Errorf("read the conversation: %w", err)
+		}
+		if input.ClientKey != "" {
+			fix, found, err := fixOfClientKey(ctx, tx, workspaceID, input)
+			if err != nil || found {
+				return made{fix, false}, err
+			}
 		}
 		var repoName string
 		if err := tx.QueryRow(ctx, `SELECT full_name FROM autofix_repos WHERE workspace_id = $1 AND id = $2`, workspaceID, input.RepoID).Scan(&repoName); err != nil {
@@ -268,8 +264,7 @@ func (s *Store) CreateFix(ctx context.Context, workspaceID string, input NewFix)
 			workspaceID, input.ConversationID, optionalID(input.PreviousAttemptID), input.RepoID, repoName, string(input.Connector),
 			input.SentTitle, input.SentBody, messageIDs, input.SentNotes, optionalID(input.ClientKey), kind, optionalID(input.CreatedByAgentID),
 			input.CreatedByName, optionalID(input.TokenID), optionalID(input.RequestID)).Scan(&id)
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "fix_attempts_one_in_progress" {
+		if inProgressConflict(err) {
 			return made{}, autofix.ErrFixInProgress
 		}
 		if err != nil {
@@ -294,6 +289,44 @@ func (s *Store) CreateFix(ctx context.Context, workspaceID string, input NewFix)
 		return autofix.Fix{}, false, err
 	}
 	return result.fix, result.created, nil
+}
+
+// fixOfClientKey returns the fix a client key already made. The key names one send: used again for
+// another conversation, repository or agent it is refused (ErrClientKeyReused).
+func fixOfClientKey(ctx context.Context, tx pgx.Tx, workspaceID string, input NewFix) (autofix.Fix, bool, error) {
+	var id string
+	err := tx.QueryRow(ctx, `SELECT id::text FROM fix_attempts WHERE workspace_id = $1 AND client_key = $2`, workspaceID, input.ClientKey).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return autofix.Fix{}, false, nil
+	}
+	if err != nil {
+		return autofix.Fix{}, false, fmt.Errorf("read the fix of this key: %w", err)
+	}
+	fix, err := getFix(ctx, tx, workspaceID, id, false)
+	if err != nil {
+		return autofix.Fix{}, false, err
+	}
+	if fix.ConversationID != input.ConversationID || fix.RepoID == nil || *fix.RepoID != input.RepoID || fix.Connector != input.Connector {
+		return autofix.Fix{}, false, autofix.ErrClientKeyReused
+	}
+	return fix, true, nil
+}
+
+// inProgressConflict reports the unique index that keeps one fix in progress per conversation.
+func inProgressConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "fix_attempts_one_in_progress"
+}
+
+// newerFixInProgress reports whether the conversation has another fix in progress, so an ended fix may
+// not come back into progress.
+func newerFixInProgress(ctx context.Context, tx pgx.Tx, workspaceID string, fix autofix.Fix) (bool, error) {
+	var busy bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM fix_attempts WHERE workspace_id = $1 AND conversation_id = $2 AND id <> $3
+		AND state IN ('sending','sent','working','pr_open'))`, workspaceID, fix.ConversationID, fix.ID).Scan(&busy); err != nil {
+		return false, fmt.Errorf("look for a newer fix: %w", err)
+	}
+	return busy, nil
 }
 
 func insertFixEvent(ctx context.Context, tx pgx.Tx, workspaceID, fixID, kind string, from, to autofix.State, actor autofix.Actor, data map[string]any, deliveryID string) error {
@@ -359,10 +392,9 @@ func (s *Store) ApplyFixObservation(ctx context.Context, workspaceID, id string,
 		if result == autofix.Move && obs.State.InProgress() && !fix.State.InProgress() {
 			// Back in progress (an issue or a pull request reopened) only while the conversation has no
 			// newer fix in progress; otherwise the signal is only recorded.
-			var busy bool
-			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM fix_attempts WHERE workspace_id = $1 AND conversation_id = $2 AND id <> $3
-				AND state IN ('sending','sent','working','pr_open'))`, workspaceID, fix.ConversationID, id).Scan(&busy); err != nil {
-				return applied{}, fmt.Errorf("look for a newer fix: %w", err)
+			busy, err := newerFixInProgress(ctx, tx, workspaceID, fix)
+			if err != nil {
+				return applied{}, err
 			}
 			if busy {
 				result = autofix.Note
@@ -465,6 +497,15 @@ func (s *Store) ActOnFix(ctx context.Context, workspaceID, id string, change Fix
 		if err != nil {
 			return autofix.Fix{}, err
 		}
+		if to.InProgress() && !fix.State.InProgress() {
+			busy, err := newerFixInProgress(ctx, tx, workspaceID, fix)
+			if err != nil {
+				return autofix.Fix{}, err
+			}
+			if busy {
+				return autofix.Fix{}, autofix.ErrFixInProgress
+			}
+		}
 		data := map[string]any{}
 		set := `state = $3, outcome_reason = $4, state_changed_at = now(), row_version = row_version + 1`
 		args := []any{workspaceID, id, string(to), optionalText(reason)}
@@ -489,7 +530,9 @@ func (s *Store) ActOnFix(ctx context.Context, workspaceID, id string, change Fix
 		if reason != "" {
 			data["reason"] = reason
 		}
-		if _, err := tx.Exec(ctx, `UPDATE fix_attempts SET `+set+` WHERE workspace_id = $1 AND id = $2`, args...); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE fix_attempts SET `+set+` WHERE workspace_id = $1 AND id = $2`, args...); inProgressConflict(err) {
+			return autofix.Fix{}, autofix.ErrFixInProgress
+		} else if err != nil {
 			return autofix.Fix{}, fmt.Errorf("change the fix: %w", err)
 		}
 		if err := insertFixEvent(ctx, tx, workspaceID, id, string(change.Action), fix.State, to, actor, data, ""); err != nil {

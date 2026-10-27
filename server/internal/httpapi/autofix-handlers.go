@@ -17,6 +17,8 @@ func writeAutofixError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "fix_not_found", "No fix of this workspace has that id.")
 	case errors.Is(err, autofix.ErrFixInProgress):
 		writeError(response, http.StatusConflict, "fix_in_progress", autofix.ErrFixInProgress.Error()+".")
+	case errors.Is(err, autofix.ErrClientKeyReused):
+		writeError(response, http.StatusConflict, "client_key_reused", autofix.ErrClientKeyReused.Error()+".")
 	case errors.Is(err, autofix.ErrFixChanged):
 		writeError(response, http.StatusConflict, "fix_changed", "This fix changed since you read it. Nothing was changed; read it again.")
 	case errors.Is(err, autofix.ErrMove):

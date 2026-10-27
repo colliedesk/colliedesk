@@ -123,7 +123,7 @@ func TestFixMovesFollowTheRulesAndLeaveATimeline(t *testing.T) {
 	// One fix in progress per conversation; the same client key answers the same fix.
 	conversation := d.conversation(t, api)
 	first := d.send(t, pool, conversation, "key-1")
-	again, created, err := data.CreateFix(ctx, d.workspaceID, store.NewFix{ConversationID: conversation, RepoID: d.repoID, Connector: autofix.CursorAPI,
+	again, created, err := data.CreateFix(ctx, d.workspaceID, store.NewFix{ConversationID: conversation, RepoID: d.repoID, Connector: autofix.ClaudeIssue,
 		SentTitle: "other", SentBody: "other", ClientKey: "key-1", CreatedByName: "Ada"})
 	if err != nil || created || again.ID != first.ID {
 		t.Fatalf("same key: %v %v %v", again.ID, created, err)
@@ -334,5 +334,85 @@ func TestExportCarriesFixesAndTheirTimelinesButNoKey(t *testing.T) {
 		if strings.Contains(string(data), string(secret)) || strings.Contains(string(data), "SEALED") {
 			t.Errorf("%s carries the sealed key", name)
 		}
+	}
+}
+
+// Review round 1: a key sent twice at once, a key reused for another conversation, and a pull request
+// linked to an old fix while its retry runs.
+func TestFixSendsAndLinksStayConsistentUnderRetriesAndRaces(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	d := newAutofixDesk(t, api, pool, createSession(t, api, service, "Fix Races", "admin@fix-races.example.com"))
+	ctx := context.Background()
+	data := store.New(pool)
+	conversation := d.conversation(t, api)
+	input := store.NewFix{ConversationID: conversation, RepoID: d.repoID, Connector: autofix.ClaudeIssue, SentTitle: "x", SentBody: "x", ClientKey: "race", CreatedByName: "Ada"}
+	type outcome struct {
+		id      string
+		created bool
+		err     error
+	}
+	results := make(chan outcome, 6)
+	for range 6 {
+		go func() {
+			fix, created, err := data.CreateFix(ctx, d.workspaceID, input)
+			results <- outcome{fix.ID, created, err}
+		}()
+	}
+	ids, made := map[string]bool{}, 0
+	for range 6 {
+		got := <-results
+		if got.err != nil {
+			t.Errorf("a send of the same key failed: %v", got.err)
+			continue
+		}
+		ids[got.id] = true
+		if got.created {
+			made++
+		}
+	}
+	if len(ids) != 1 || made != 1 {
+		t.Errorf("six sends of one key made %d fixes (%d created), want one", len(ids), made)
+	}
+
+	other := input
+	other.ConversationID = d.conversation(t, api)
+	if _, _, err := data.CreateFix(ctx, d.workspaceID, other); !errors.Is(err, autofix.ErrClientKeyReused) {
+		t.Errorf("a key reused for another conversation: %v", err)
+	}
+
+	// A pull request closed, a retry runs, then a person links a pull request to the old fix.
+	var first string
+	for id := range ids {
+		first = id
+	}
+	observe(t, pool, d.workspaceID, first, autofix.Observation{State: autofix.PROpen, PRURL: "https://github.com/acme/shop-web/pull/2", PRNumber: 2})
+	observe(t, pool, d.workspaceID, first, autofix.Observation{State: autofix.Failed, Reason: "pr_closed"})
+	if _, _, err := data.CreateFix(ctx, d.workspaceID, store.NewFix{ConversationID: conversation, RepoID: d.repoID, Connector: autofix.ClaudeIssue,
+		SentTitle: "x", SentBody: "x", PreviousAttemptID: first, CreatedByName: "Ada"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := data.ActOnFix(ctx, d.workspaceID, first, store.FixAction{Action: autofix.ActionLinkPR, PRURL: "https://github.com/acme/shop-web/pull/3"},
+		autofix.Actor{Kind: autofix.ActorPerson, ID: d.agentID, Name: "Ada"}); !errors.Is(err, autofix.ErrFixInProgress) {
+		t.Errorf("a pull request linked to an old fix while its retry runs: %v", err)
+	}
+
+	// An issue closed by hand, then the agent's pull request: it comes back, unless a retry runs.
+	alone := d.conversation(t, api)
+	closed := d.send(t, pool, alone, "closed-by-hand")
+	observe(t, pool, d.workspaceID, closed.ID, autofix.Observation{State: autofix.Sent, IssueNumber: 40})
+	observe(t, pool, d.workspaceID, closed.ID, autofix.Observation{State: autofix.Cancelled, Reason: "issue_closed"})
+	if fix, result := observe(t, pool, d.workspaceID, closed.ID, autofix.Observation{State: autofix.PROpen, PRURL: "https://github.com/acme/shop-web/pull/41", PRNumber: 41}); result != autofix.Move || fix.State != autofix.PROpen {
+		t.Errorf("the pull request after the issue was closed: %v %+v", result, fix)
+	}
+	busy := d.conversation(t, api)
+	old := d.send(t, pool, busy, "closed-then-retried")
+	observe(t, pool, d.workspaceID, old.ID, autofix.Observation{State: autofix.Sent, IssueNumber: 50})
+	observe(t, pool, d.workspaceID, old.ID, autofix.Observation{State: autofix.Cancelled, Reason: "issue_closed"})
+	if _, _, err := data.CreateFix(ctx, d.workspaceID, store.NewFix{ConversationID: busy, RepoID: d.repoID, Connector: autofix.ClaudeIssue,
+		SentTitle: "x", SentBody: "x", PreviousAttemptID: old.ID, CreatedByName: "Ada"}); err != nil {
+		t.Fatal(err)
+	}
+	if fix, result := observe(t, pool, d.workspaceID, old.ID, autofix.Observation{State: autofix.PROpen, PRURL: "https://github.com/acme/shop-web/pull/51", PRNumber: 51}); result != autofix.Note || fix.State != autofix.Cancelled {
+		t.Errorf("the pull request of an old fix while its retry runs: %v %+v", result, fix)
 	}
 }

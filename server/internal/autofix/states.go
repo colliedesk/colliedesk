@@ -229,8 +229,9 @@ func Decide(current Current, obs Observation, actor Actor) (Result, error) {
 	case from == Failed && current.Reason == "pr_closed" && (to == PROpen || to == Merged):
 		// The pull request was reopened (and perhaps merged before its reopening reached us).
 		return Move, nil
-	case from == Cancelled && current.Reason == "issue_closed" && to == Sent:
-		// The issue was reopened; the store keeps it noted when the conversation has a newer attempt.
+	case from == Cancelled && current.Reason == "issue_closed" && (to == Sent || to == PROpen || to == Merged):
+		// The issue was reopened, or the agent's pull request came after someone closed the issue by hand.
+		// The store keeps it noted when the conversation has a newer fix in progress.
 		return Move, nil
 	}
 	// Merged, released, failed and cancelled stay; a person's cancel is never undone by a signal.

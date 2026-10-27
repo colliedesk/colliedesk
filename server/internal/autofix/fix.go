@@ -20,6 +20,8 @@ var (
 	ErrFixInProgress = errors.New("this conversation already has a fix in progress; cancel it or wait for it to end")
 	ErrFixChanged    = errors.New("this fix changed since you read it")
 	ErrBadPRURL      = errors.New("the pull request address is not a pull request of the fix's repository")
+	// ErrClientKeyReused: a client key already made a fix of another conversation, repository or agent.
+	ErrClientKeyReused = errors.New("this client_key already sent another fix; use a new key for each send")
 )
 
 // Fix is one fix attempt as the API shows it. SentBody and Events are only on one fix (FixDetail).
