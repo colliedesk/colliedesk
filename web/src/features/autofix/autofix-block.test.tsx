@@ -94,6 +94,13 @@ describe('AutofixBlockView', () => {
     expect(screen.getByText(/stays open: Colliedesk can’t close pull requests/)).toBeInTheDocument();
   });
 
+  it('says when Cursor did not stop a cancelled run, with where to stop it', () => {
+    show(detailOf({ state: 'cancelled', outcome_reason: 'cancelled_by_person', connector: 'cursor_api', issue_number: null, issue_url: null, vendor_url: 'https://cursor.com/agents?id=bc-1' },
+      [eventOf({ kind: 'cancel', actor_kind: 'person', actor_name: 'Mai Tran' }), eventOf({ id: 2, kind: 'cursor_cancel_failed', actor_kind: 'system', to_state: null, data: { summary: 'Cursor did not stop the run.', vendor_url: 'https://cursor.com/agents?id=bc-1' } })]));
+    expect(screen.getByRole('link', { name: 'stop it on Cursor' })).toHaveAttribute('href', 'https://cursor.com/agents?id=bc-1');
+    expect(screen.queryByText('The Cursor run was stopped.')).not.toBeInTheDocument();
+  });
+
   it('offers to send again when nothing left Colliedesk', () => {
     const { onAction } = show(detailOf({ state: 'cancelled', outcome_reason: 'authorization_abandoned', issue_number: null, issue_url: null, vendor_url: null, github_login: null }));
     expect(screen.getByText(/not finished within 15 minutes/)).toBeInTheDocument();

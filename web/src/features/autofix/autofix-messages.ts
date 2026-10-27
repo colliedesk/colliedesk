@@ -110,6 +110,8 @@ export const autofixMessages = {
   cancelledIssue: 'Colliedesk commented on the issue and closed it. If the agent had already started, it may still be running:',
   stopOnGitHub: 'stop it on GitHub',
   cancelledCursor: 'The Cursor run was stopped.',
+  cursorNotStopped: 'Cursor did not stop the run, so it may still finish:',
+  stopOnCursor: 'stop it on Cursor',
   cancelledPR: (pr: number | null) => `PR${pr === null ? '' : ` #${pr}`} stays open: Colliedesk can’t close pull requests, so close it on GitHub if you don’t want it.`,
   vendorSaid: (summary: string) => ` “${summary}”`,
 

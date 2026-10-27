@@ -128,8 +128,10 @@ function Outcome({ fix, now, at, customerName }: { fix: FixDetail; now: number; 
       const reason = fix.outcome_reason ?? 'cancelled_by_person';
       if (reason !== 'cancelled_by_person') return <Box><span>{m.reasons[reason]}</span></Box>;
       const cancel = [...fix.events].reverse().find((event) => event.kind === 'cancel');
+      // Cursor did not stop the run when asked: it may still open a pull request.
+      const stuck = fix.events.find((event) => event.kind === 'cursor_cancel_failed');
       return <Box><span><b>{m.cancelledBy(cancel?.actor_name ?? null, at(fix.state_changed_at))}</b>{' '}
-        {fix.connector === 'cursor_api' ? m.cancelledCursor : <>{m.cancelledIssue} <OutLink href={fix.issue_url}>{m.stopOnGitHub}</OutLink>.</>}
+        {fix.connector === 'cursor_api' ? (stuck ? <>{m.cursorNotStopped} <OutLink href={typeof stuck.data.vendor_url === 'string' ? stuck.data.vendor_url : fix.vendor_url}>{m.stopOnCursor}</OutLink>.</> : m.cancelledCursor) : <>{m.cancelledIssue} <OutLink href={fix.issue_url}>{m.stopOnGitHub}</OutLink>.</>}
         {fix.pr_number !== null && <> <b>{m.cancelledPR(fix.pr_number)}</b></>}</span></Box>;
     }
   }
