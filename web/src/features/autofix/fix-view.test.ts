@@ -56,7 +56,8 @@ describe('fixView', () => {
     expect(fixView(fixOf({ state: 'deployed', ...withPR }), now).actions).toEqual(['draft_reply', 'unmark_released']);
     expect(fixView(fixOf({ state: 'failed', outcome_reason: 'agent_error' }), now).actions).toEqual(['retry']);
     expect(fixView(fixOf({ state: 'failed', outcome_reason: 'pr_closed', ...withPR }), now).actions).toEqual(['retry', 'link_pr']);
-    expect(fixView(fixOf({ state: 'failed', outcome_reason: 'repo_public', issue_number: null, vendor_url: null }), now).actions).toEqual(['settings']);
+    expect(fixView(fixOf({ state: 'failed', outcome_reason: 'repo_public', issue_number: null, vendor_url: null }), now).actions).toEqual(['retry', 'settings']);
+    expect(fixView(fixOf({ state: 'failed', outcome_reason: 'repo_public', issue_number: null, vendor_url: null }), now).primary).toBe('retry');
     expect(fixView(fixOf({ state: 'failed', outcome_reason: 'vendor_auth', connector: 'cursor_api', issue_number: null, vendor_url: null }), now).actions).toEqual(['retry', 'replace_key']);
     expect(fixView(fixOf({ state: 'cancelled', outcome_reason: 'cancelled_by_person' }), now).actions).toEqual(['retry']);
     expect(fixView(fixOf({ state: 'cancelled', outcome_reason: 'authorization_abandoned', issue_number: null, vendor_url: null }), now).actions).toEqual(['send_again']);

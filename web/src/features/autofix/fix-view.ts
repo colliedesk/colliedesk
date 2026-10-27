@@ -93,7 +93,8 @@ function actions(fix: Fix, now: number): { actions: FixAction[]; primary?: FixAc
     case 'failed':
       switch (fix.outcome_reason) {
         case 'pr_closed': return { actions: ['retry', 'link_pr'], primary: 'retry' };
-        case 'repo_public': return { actions: ['settings'] };
+        // Nothing left Colliedesk; made private again, the repository resumes and the fix goes again.
+        case 'repo_public': return { actions: ['retry', 'settings'], primary: 'retry' };
         case 'vendor_auth': return { actions: ['retry', 'replace_key'] };
         default: return { actions: ['retry'], primary: 'retry' };
       }

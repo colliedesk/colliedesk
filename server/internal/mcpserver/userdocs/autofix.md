@@ -206,7 +206,7 @@ server restarts while sending.
 | Cursor stopped with an error (`agent_error`) | Cursor's run failed or finished without a pull request | Read Cursor's reply on the timeline, then retry |
 | Cursor stopped the run before it finished (`timed_out`) | Cursor's run expired | Retry |
 | Not sent: an admin turned this agent off (`connector_disabled`) | Cursor was turned off (or its consent is to an older text) before the fix left | Nothing was sent; turn Cursor on again, then retry |
-| Not sent: the repository is no longer private (`repo_public`), or can’t be reached (`no_repo_access`) | The repository is not private any more, or the App no longer reaches it | Nothing was sent; fix the repository on GitHub |
+| Not sent: the repository is no longer private (`repo_public`), or can’t be reached (`no_repo_access`) | The repository is not private any more, or the App no longer reaches it | Nothing was sent; fix the repository on GitHub, then **Retry** |
 
 **Cancel** stops the Cursor run. Removing the key while a run goes on does not stop it: Colliedesk
 follows it again once a key is set.
