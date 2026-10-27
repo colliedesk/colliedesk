@@ -8289,7 +8289,7 @@ components:
       required: [id, kind, from_state, to_state, actor_kind, actor_name, data, created_at]
       properties:
         id: {type: integer}
-        kind: {type: string, description: 'created, state_changed, signal_noted, cancel, link_pr, unlink_pr, mark_deployed, unmark_deployed, issue_created, issue_close_failed (a cancel whose issue GitHub did not close: close it there), or a vendor signal (agent_comment …).'}
+        kind: {type: string, description: 'created, state_changed, signal_noted, cancel, link_pr, unlink_pr, mark_deployed, unmark_deployed, issue_created, issue_close_failed (a cancel whose issue GitHub did not close: close it there), dispatched (the Cursor agent was created), cursor_cancel_failed (a cancel Cursor did not stop: stop the run on Cursor, data.vendor_url), or a vendor signal (agent_comment …).'}
         from_state:
           oneOf:
             - {type: 'null'}
