@@ -70,8 +70,9 @@ agree to the data it receives.
 Claude and Copilot cards list what to do on GitHub first (Claude: install Anthropic's GitHub App, add
 the `ANTHROPIC_API_KEY` secret and the workflow; Copilot: a plan with the coding agent, turned on for the
 repositories). Colliedesk cannot see those from its App, so you tick them yourself; the ticks are kept in
-this browser only. **Check** tests what Colliedesk can see: the installation is active, the repositories
-are private and the App has its permissions.
+this browser only. **Check** reads what Colliedesk already knows, without asking GitHub: an installation
+is active, and the repositories taking fixes were private when last read (Colliedesk reads each one again
+on GitHub just before it sends a fix).
 
 ## Send a conversation to a coding agent
 
