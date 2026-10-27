@@ -47,12 +47,19 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
 
 - One GitHub App per server (`server/internal/github`, plain `net/http`, no SDK). Its private key stays
   in the environment; installation tokens live in memory for under an hour. `githubtest` is the
-  stand-in every test and the e2e build use (`COLLIEDESK_E2E_GITHUB_URL`).
+  stand-in every test and the e2e build use (`COLLIEDESK_E2E_GITHUB_URL`); `cmd/github-stand-in` serves it
+  for a browser, with `POST /stand-in/*` to arrange GitHub's side and deliver signed webhooks.
 - Installing: GitHub's redirect names `installation_id`, and anyone can type another one. The callback
   takes the state first (one use, the same person in the same workspace), trades the code for the
   person's user token, keeps the installation only if `GET /user/installations` of that token lists it,
   and revokes the token before anything else happens. `installation_id` is unique on the server, so
   one installation never joins a second workspace (`installation_in_use`).
+- Unchecked against real GitHub (smoke P0): the flow relies on GitHub handing the `state` of
+  `/apps/<slug>/installations/new?state=` back to the callback when the App requests user authorization
+  during installation. If it does not, every install answers `expired`. The fallback keeps every check:
+  the callback, finding no state, sends the admin through `/login/oauth/authorize` with a fresh state
+  and PKCE (purpose `install`, the `installation_id` carried in that state), and the same
+  `GET /user/installations` check runs on the token that comes back.
 - `repository_selection = all` is stored `blocked_all_repositories`: GitHub cannot make an admin pick
   selected repositories, so Colliedesk refuses to connect any until the installation is narrowed, and
   unblocks it when the webhook or the reconcile pass sees `selected`.

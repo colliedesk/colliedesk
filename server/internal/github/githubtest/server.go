@@ -116,6 +116,11 @@ func New() *Server {
 	if err != nil {
 		panic(err)
 	}
+	return NewWithKey(key)
+}
+
+// NewWithKey makes a stand-in whose App signs with key (the e2e server is configured with the same one).
+func NewWithKey(key *rsa.PrivateKey) *Server {
 	return &Server{AppID: "4242", Slug: "colliedesk-test", ClientID: "Iv1.test", ClientSecret: "not-a-secret", WebhookSecret: "webhook-secret",
 		key: key, installations: map[int64]*Installation{}, repos: map[int64]*Repo{}, issues: map[int64]map[int]*Issue{}, pulls: map[int64]map[int]*Pull{},
 		codes: map[string]pendingCode{}, userTokens: map[string]string{}, revoked: map[string]bool{}, appTokens: map[string]int64{},
@@ -294,6 +299,13 @@ func (s *Server) issueCode(code pendingCode) string {
 	value := random(10)
 	s.codes[value] = code
 	return value
+}
+
+// RevokedTokens counts the user tokens revoked so far.
+func (s *Server) RevokedTokens() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.revoked)
 }
 
 // Webhook is a delivery as GitHub would send it: the body and its headers, signed with WebhookSecret.
