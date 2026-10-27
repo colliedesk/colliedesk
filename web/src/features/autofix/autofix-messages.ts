@@ -386,7 +386,7 @@ export const autofixMessages = {
     } as Record<FixConnector, string>,
     copilotMode: { assign_api: 'Colliedesk assigns Copilot to the issue.', assign_on_github: 'Copilot can’t be assigned from Colliedesk here: after sending, a person assigns the issue to Copilot on GitHub.' } as Record<string, string>,
     checked: (at: string) => `Checked ${at}:`,
-    checkOk: 'app active, repositories private, permissions in place.',
+    checkOk: 'app active, repositories private when last read.',
     checkOkIssue: 'Your workflow and secret can’t be checked from here.',
     checkResults: {
       key_invalid: 'Cursor refused the key.',
