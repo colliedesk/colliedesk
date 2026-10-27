@@ -66,7 +66,7 @@
 .af-track { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; margin: 0; padding: 0; list-style: none; }
 .af-track li { display: grid; gap: 5px; min-width: 0; }
 .af-bar { height: 4px; border-radius: 999px; background: var(--surface-3); }
-.af-lbl { font: 500 10.5px/1.1 var(--font-sans); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.af-lbl { font: 500 10.5px/1.15 var(--font-sans); color: var(--text-3); overflow-wrap: anywhere; text-wrap: balance; }
 .af-track .af-done .af-bar { background: var(--text-1); }
 .af-track .af-done .af-lbl { color: var(--text-2); }
 .af-track .af-now .af-bar { background: linear-gradient(90deg, var(--text-1) 0 40%, var(--surface-3) 40%); background-size: 200% 100%; }
@@ -89,7 +89,7 @@
 .af-kv > div { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: var(--space-2); }
 .af-kv dt { color: var(--text-3); }
 .af-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
-.af-kv svg { vertical-align: -1px; margin-left: 3px; }
+.af-kv svg { display: inline-block; vertical-align: -1px; margin-left: 3px; }
 .af-kv dd > a { white-space: normal; }
 
 /* The timeline from fix_attempt_events. */
@@ -133,7 +133,9 @@
 .af-cardopt > span { grid-column: 2; color: var(--text-2); font-size: var(--fs-small); line-height: 1.5; }
 .af-cardopt.af-static { cursor: default; }
 .af-cardopt.af-off { background: var(--surface-0); }
-.af-ok-mark { color: var(--ok); font-weight: 700; } .af-no-mark { color: var(--danger); font-weight: 700; }
+.af-cardopt > .af-ok-mark, .af-cardopt > .af-no-mark { grid-column: 1; grid-row: 1 / span 2; font-size: var(--fs-ui); line-height: 1.4; font-weight: 700; }
+.af-cardopt > .af-ok-mark { color: var(--ok); } .af-cardopt > .af-no-mark { color: var(--danger); }
+.af-cardopt > b { grid-column: 2; }
 /* The ledger: what the server took out before anything leaves. */
 .af-ledger { display: grid; gap: var(--space-2); border-radius: var(--radius); background: var(--surface-2); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); color: var(--text-2); }
 .af-ledger > b { color: var(--text-1); font-weight: 600; }
@@ -187,7 +189,11 @@
 .af-table tr:last-child td { border-bottom: 0; }
 .af-table tbody tr:hover { background: var(--surface-0); }
 .af-num { text-align: right; white-space: nowrap; }
-.af-c-subj { display: grid; gap: 2px; min-width: 0; }
+.af-subj { display: grid; gap: 2px; min-width: 0; }
+/* Three tables stack on this page: fixed columns keep State, Repository and the rest under one another. */
+.af-table { table-layout: fixed; }
+.af-table th:nth-child(1) { width: 30%; } .af-table th:nth-child(2) { width: 20%; } .af-table th:nth-child(3) { width: 18%; } .af-table th:nth-child(4) { width: 8%; }
+.af-table th:nth-child(5) { width: 7%; } .af-table th:nth-child(6) { width: 8%; } .af-table th:nth-child(7) { width: 9%; }
 .af-c-subj a { font-weight: 600; color: var(--text-1); text-decoration: none; }
 .af-c-subj a:hover { text-decoration: underline; }
 .af-c-subj span { color: var(--text-3); font-size: var(--fs-label); }
@@ -294,13 +300,18 @@
   .af-agentpick { grid-template-columns: minmax(0, 1fr); }
   .af-dest { flex-basis: 100%; }
   .af-consent, .af-notes li, .af-checklist li, .af-pv-title { min-height: var(--touch); }
+  /* Links in the block and the cards reach 44px tall without moving the text: the padding only widens where a tap lands. */
+  .af-kv dd > a, .af-c-pr a, .af-c-subj a { padding-block: 0.875rem; margin-block: -0.875rem; }
+  .af-bar-row select, .af-page-head .af-btn { min-height: var(--touch); }
+  .af-evts-head .link-button { min-height: var(--touch); }
   /* Rows become cards: subject first, then state and age, repository and agent, the PR. */
   .af-table thead { display: none; }
   .af-table, .af-table tbody, .af-table tr, .af-table td { display: block; width: 100%; }
+  .af-table { table-layout: auto; }
   .af-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "subj subj" "state age" "repo agent" "pr pr";
     gap: var(--space-1) var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
   .af-table td { padding: 0; border: 0; width: auto; }
-  .af-table td.af-c-subj { display: grid; grid-area: subj; } .af-c-state { grid-area: state; } .af-c-repo { grid-area: repo; color: var(--text-3); }
+  .af-table td.af-c-subj { grid-area: subj; } .af-c-state { grid-area: state; } .af-c-repo { grid-area: repo; color: var(--text-3); }
   .af-c-age { grid-area: age; } .af-c-agent { grid-area: agent; text-align: right; } .af-c-pr { grid-area: pr; color: var(--text-3); font-size: var(--fs-label); }
   .af-c-by { display: none; }
   .af-table tr[data-tone] td:first-child { box-shadow: none; }

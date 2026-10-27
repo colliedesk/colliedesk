@@ -61,8 +61,8 @@ function Rows({ items, timezone, now, conversationLink }: { items: Fix[]; timezo
       const view = fixView(fix, now);
       const href = safeHref(fix.pr_url);
       return <tr key={fix.id} data-tone={view.tone}>
-        <td className="af-c-subj">{conversationLink(fix.conversation_id, fix.conversation_subject || t.unknownConversation)}
-          <span>{fix.contact_name ? `${fix.contact_name} · ` : ''}{t.fixRef(shortId(fix.id))}</span></td>
+        <td className="af-c-subj"><div className="af-subj">{conversationLink(fix.conversation_id, fix.conversation_subject || t.unknownConversation)}
+          <span>{fix.contact_name ? `${fix.contact_name} · ` : ''}{t.fixRef(shortId(fix.id))}</span></div></td>
         <td className="af-c-state"><StateLabel tone={view.tone}>{view.badge}</StateLabel><span className="af-why">{whyOf(fix, timezone, now)}</span></td>
         <td className="af-c-repo af-mono">{fix.repo_full_name}</td>
         <td className="af-c-pr">{fix.pr_number === null ? '—' : href ? <a href={href} target="_blank" rel="noopener noreferrer">#{fix.pr_number}</a> : `#${fix.pr_number}`}</td>
