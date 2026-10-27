@@ -101,6 +101,12 @@ func (s *Store) ScheduleFixCheck(ctx context.Context, workspaceID, id string, at
 	return s.setFixCheck(ctx, workspaceID, id, `next_check_at = $3, check_failures = 0`, at)
 }
 
+// EnsureFixCheck asks the worker to look at a fix at the given time unless a check is already set: a
+// send answered again by its key puts back a fix whose first schedule was lost.
+func (s *Store) EnsureFixCheck(ctx context.Context, workspaceID, id string, at time.Time) error {
+	return s.setFixCheck(ctx, workspaceID, id, `next_check_at = COALESCE(next_check_at, $3)`, at)
+}
+
 // PostponeFixCheck moves a fix's next check without touching its failures in a row (waiting for the
 // call budget, for Cursor's Retry-After or for a key).
 func (s *Store) PostponeFixCheck(ctx context.Context, workspaceID, id string, at time.Time) error {

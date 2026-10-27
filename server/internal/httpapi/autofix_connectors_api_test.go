@@ -456,3 +456,23 @@ func TestCursorTakesNoFixWithoutItsKey(t *testing.T) {
 		t.Fatalf("send without a key: %d %s", response.Code, response.Body)
 	}
 }
+
+func TestSendingTheSameKeyAgainPutsBackACursorFixWhoseScheduleWasLost(t *testing.T) {
+	c := newCursorDesk(t, "Cursor Lost", 61003, 62003)
+	s := sendDesk{fixDesk: c.fixDesk}.withConversation(t)
+	sent := s.send(t, c.w.admin, autofix.CursorAPI, "cursor-lost-1", http.StatusCreated)
+	// The process died between storing the fix and scheduling it.
+	if _, err := c.pool.Exec(t.Context(), `UPDATE fix_attempts SET next_check_at = NULL WHERE id = $1`, sent.Fix.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := c.worker.Tick(t.Context()); n != 0 {
+		t.Fatal("an unscheduled fix was leased")
+	}
+	s.send(t, c.w.admin, autofix.CursorAPI, "cursor-lost-1", http.StatusOK)
+	if _, err := c.worker.Tick(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if fix := c.fix(t, sent.Fix.ID); fix.State != autofix.Sent || len(c.cursor.Creates()) != 1 {
+		t.Fatalf("after the same key: %s, %d creates", fix.State, len(c.cursor.Creates()))
+	}
+}

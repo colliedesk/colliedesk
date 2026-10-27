@@ -282,8 +282,10 @@ func (a *API) sendFixOf(response http.ResponseWriter, request *http.Request, con
 	var authorizeURL *string
 	if fix.Connector == autofix.CursorAPI {
 		// Cursor needs no person's authorization: the worker sends it with the workspace's key.
-		if made {
-			if err := a.store.ScheduleFixCheck(ctx, who.Workspace.ID, fix.ID, a.now()); err != nil {
+		// Also for the same key sent again: a fix whose schedule was lost (the process died between the
+		// two) is put back, and one already scheduled keeps its time.
+		if fix.State == autofix.Sending {
+			if err := a.store.EnsureFixCheck(ctx, who.Workspace.ID, fix.ID, a.now()); err != nil {
 				writeInternalError(response, err)
 				return
 			}
