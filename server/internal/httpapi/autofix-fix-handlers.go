@@ -413,6 +413,14 @@ func (a *API) changeFix(response http.ResponseWriter, request *http.Request, act
 		defer cancel()
 		if err := a.githubSync.CloseFixIssue(closing, who.Workspace.ID, fix); err != nil {
 			slog.Warn("autofix: close the issue of a cancelled fix", "error", err, "workspace", who.Workspace.ID, "fix", fix.ID)
+			// The cancel stands; the timeline says the issue is still open, so the person closes it on GitHub.
+			data := map[string]any{"summary": "GitHub did not close the issue: close it there to stop the agent."}
+			if fix.IssueURL != nil {
+				data["issue_url"] = *fix.IssueURL
+			}
+			if err := a.store.NoteFixEvent(ctx, who.Workspace.ID, fix.ID, "issue_close_failed", data, autofix.Actor{Kind: autofix.ActorSystem, Name: "Colliedesk"}); err != nil {
+				slog.Error("autofix: note an issue left open", "error", err, "workspace", who.Workspace.ID, "fix", fix.ID)
+			}
 		}
 	}
 	writeJSON(response, http.StatusOK, fix)

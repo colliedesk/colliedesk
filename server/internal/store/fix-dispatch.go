@@ -185,3 +185,18 @@ func (s *Store) SendingIssueFixes(ctx context.Context, workspaceID string, befor
 		})
 	})
 }
+
+// NoteFixEvent records a line on a fix's timeline that moves nothing (a cancel whose issue GitHub would
+// not close).
+func (s *Store) NoteFixEvent(ctx context.Context, workspaceID, id, kind string, data map[string]any, actor autofix.Actor) error {
+	if !savedReplyID.MatchString(id) {
+		return autofix.ErrFixNotFound
+	}
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		if _, err := getFix(ctx, tx, workspaceID, id, false); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, insertFixEvent(ctx, tx, workspaceID, id, kind, "", "", actor, data, "")
+	})
+	return err
+}

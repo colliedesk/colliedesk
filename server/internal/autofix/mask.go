@@ -105,15 +105,31 @@ func Mask(text string) (string, Removed) {
 		removed.Mentions++
 		return "@" + ZeroWidthSpace + match[1:]
 	})
-	text = hashPattern.ReplaceAllStringFunc(text, func(match string) string {
-		removed.References++
-		return "#" + ZeroWidthSpace + match[1:]
-	})
+	text = inertReferences(text, &removed.References)
 	text = ghPattern.ReplaceAllStringFunc(text, func(match string) string {
 		removed.References++
 		return match[:3] + ZeroWidthSpace + match[3:]
 	})
 	return text, removed
+}
+
+// inertReferences puts a zero-width space after each # followed by a digit, except in an HTML character
+// reference (&#39;, the escaped quote of a block's attribute), so masking a built body again changes
+// nothing.
+func inertReferences(text string, count *int) string {
+	var out strings.Builder
+	last := 0
+	for _, at := range hashPattern.FindAllStringIndex(text, -1) {
+		if at[0] > 0 && text[at[0]-1] == '&' {
+			continue
+		}
+		out.WriteString(text[last : at[0]+1])
+		out.WriteString(ZeroWidthSpace)
+		last = at[0] + 1
+		*count++
+	}
+	out.WriteString(text[last:])
+	return out.String()
 }
 
 // keepName replaces the value (third group) of each match, keeping its name and separator, unless it

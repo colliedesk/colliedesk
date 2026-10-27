@@ -83,3 +83,13 @@ func TestAFixBodyKeepsTheNewestMessagesWithinItsLimit(t *testing.T) {
 		t.Fatalf("no cut said, %d messages", len(draft.MessageIDs))
 	}
 }
+
+func TestAFixBodyIsMaskedOnceWhateverTheCustomersNameHolds(t *testing.T) {
+	draft := BuildFix(FixSource{Subject: "s", Customer: []SourceMessage{{ID: "m", Author: `Pat O'Brien "PJ" & co`, Body: "ticket #12 &#39; stays"}}})
+	if again, more := Mask(draft.Body); again != draft.Body || more != (Removed{}) {
+		t.Fatalf("masking the body again changed it:\n%s\n%s", draft.Body, again)
+	}
+	if !strings.Contains(draft.Body, "O&#39;Brien") {
+		t.Fatalf("name: %s", draft.Body)
+	}
+}

@@ -117,7 +117,8 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
   marker; found, the fix is recorded `sent`; not found, `failed/interrupted`. An issue is never created
   twice.
 - A cancel closes the fix's issue as the installation (`issues:write`) with a comment, after the cancel
-  committed; the agent may still run, the fix links the issue. The App cannot write pull requests, so an
+  committed; the agent may still run, the fix links the issue. GitHub refusing it leaves the cancel and
+  an `issue_close_failed` event on the timeline (the person closes it there); nothing retries it. The App cannot write pull requests, so an
   open one stays.
 - Marking a release again, or taking back one already taken back, answers the fix as it is (idempotent).
 - `[CK]` (no smoke test with real accounts yet, the stand-in follows GitHub's documentation): S1 the

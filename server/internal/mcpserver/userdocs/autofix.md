@@ -115,6 +115,7 @@ cannot reach): **Sent → Agent running → Pull request → Merged**. Then:
   the fix's repository); **Unlink** one you linked.
 - **Cancel** a fix in progress: its issue is closed with a comment. An agent already running may still
   finish on GitHub, so stop it there (the fix links the issue); a pull request already open stays open.
+  If GitHub did not close the issue, the fix's timeline says so: close it on GitHub.
 - **Try again** after a fix failed or was cancelled: a new attempt, with the preview filled in again.
 
 Why a fix ended:

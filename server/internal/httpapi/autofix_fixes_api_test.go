@@ -561,3 +561,18 @@ func TestAnIssueCreatedAfterACancelKeepsTheCancel(t *testing.T) {
 		t.Fatalf("issues = %+v", issues)
 	}
 }
+
+// An issue GitHub would not close leaves the cancel standing and says so on the fix's timeline.
+func TestACancelWhoseIssueStaysOpenSaysSo(t *testing.T) {
+	s := newSendDesk(t, "Send Close", 209, 2009)
+	fix := s.sent(t, 4)
+	s.fake.Fail("POST /repos/"+s.repo.FullName+"/issues/4/comments", http.StatusServiceUnavailable)
+	if response := checked(t, s.api, http.MethodPost, "/api/v1/autofix/fixes/"+fix.ID+"/cancel", nil, s.w.admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("cancel: %d %s", response.Code, response.Body.String())
+	}
+	detail := s.fix(t, fix.ID)
+	last := detail.Events[len(detail.Events)-1]
+	if detail.State != autofix.Cancelled || last.Kind != "issue_close_failed" || last.Data["issue_url"] != "https://github.com/"+s.repo.FullName+"/issues/4" {
+		t.Fatalf("timeline: %s %+v", detail.State, last)
+	}
+}

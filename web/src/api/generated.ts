@@ -5654,7 +5654,7 @@ export interface components {
         };
         FixEvent: {
             id: number;
-            /** @description created, state_changed, signal_noted, cancel, link_pr, unlink_pr, mark_deployed, unmark_deployed, or a vendor signal (agent_comment …). */
+            /** @description created, state_changed, signal_noted, cancel, link_pr, unlink_pr, mark_deployed, unmark_deployed, issue_created, issue_close_failed (a cancel whose issue GitHub did not close: close it there), or a vendor signal (agent_comment …). */
             kind: string;
             from_state: null | components["schemas"]["FixState"];
             to_state: null | components["schemas"]["FixState"];
