@@ -413,16 +413,9 @@ func (a *API) changeFix(response http.ResponseWriter, request *http.Request, act
 		// stops whatever it was creating.
 		stopping, cancel := context.WithTimeout(ctx, cursorCallTimeout)
 		defer cancel()
-		if err := a.cursor.Cancel(stopping, who.Workspace.ID, fix.ID); err != nil {
+		// The cancel stands; when the run is not stopped, the timeline says so and where to stop it.
+		if err := a.cursor.Stop(stopping, who.Workspace.ID, fix.ID); err != nil {
 			slog.Warn("autofix: cancel the Cursor run of a cancelled fix", "error", err, "workspace", who.Workspace.ID, "fix", fix.ID)
-			// The cancel stands; the timeline says the run may go on, so the person stops it on Cursor.
-			data := map[string]any{"summary": "Cursor did not stop the run: stop it there."}
-			if fix.VendorURL != nil {
-				data["vendor_url"] = *fix.VendorURL
-			}
-			if err := a.store.NoteFixEvent(ctx, who.Workspace.ID, fix.ID, "cursor_cancel_failed", data, autofix.Actor{Kind: autofix.ActorSystem, Name: "Colliedesk"}); err != nil {
-				slog.Error("autofix: note a Cursor run left going", "error", err, "workspace", who.Workspace.ID, "fix", fix.ID)
-			}
 		}
 	}
 	if action == autofix.ActionCancel && fix.IssueNumber != nil && a.githubSync != nil {

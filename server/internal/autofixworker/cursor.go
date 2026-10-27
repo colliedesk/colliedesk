@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -211,4 +212,22 @@ func (c *Cursor) Cancel(ctx context.Context, workspaceID, fixID string) error {
 		return fmt.Errorf("%w: %v", ErrStopOnCursor, err)
 	}
 	return nil
+}
+
+// Stop is Cancel for a fix that already ended in Colliedesk (a person's cancel, a repository
+// disconnected): when the run cannot be stopped, the fix's timeline says so with where to stop it
+// (cursor_cancel_failed). It returns Cancel's error, for the log.
+func (c *Cursor) Stop(ctx context.Context, workspaceID, fixID string) error {
+	err := c.Cancel(ctx, workspaceID, fixID)
+	if err == nil || errors.Is(err, autofix.ErrFixNotFound) {
+		return err
+	}
+	data := map[string]any{"summary": "Cursor did not stop the run: stop it there."}
+	if work, readErr := c.Store.GetFixWork(ctx, workspaceID, fixID); readErr == nil && work.VendorURL != nil {
+		data["vendor_url"] = *work.VendorURL
+	}
+	if noteErr := c.Store.NoteFixEvent(ctx, workspaceID, fixID, "cursor_cancel_failed", data, autofix.Actor{Kind: autofix.ActorSystem, Name: "Colliedesk"}); noteErr != nil {
+		slog.Error("autofix: note a Cursor run left going", "error", noteErr, "workspace", workspaceID, "fix", fixID)
+	}
+	return err
 }

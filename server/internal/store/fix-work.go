@@ -17,7 +17,8 @@ type DueFix struct {
 	Connector   autofix.Connector
 }
 
-// ClaimDueFixes leases up to limit fixes in progress of every workspace whose next check is due, for
+// ClaimDueFixes leases up to limit fixes in progress of every workspace whose next check is due (and
+// fixes cancelled with their repository disconnected, whose Cursor run the worker stops), for
 // the given connectors, fixes still to send first (a run already sent can wait for the call budget; a
 // fix not sent yet should not wait behind them). The lease is next_check_at moved lease ahead, so another process skips them and a
 // process that dies mid-check leaves them due again after the lease. Only ids leave the privileged
@@ -31,7 +32,8 @@ func (s *Store) ClaimDueFixes(ctx context.Context, now time.Time, connectors []a
 	err := s.db.Privileged(ctx, database.PrivilegeAutofixClaim, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `WITH due AS (
 				SELECT id FROM fix_attempts
-				WHERE next_check_at IS NOT NULL AND next_check_at <= $1 AND state IN ('sending','sent','working','pr_open') AND connector = ANY($2)
+				WHERE next_check_at IS NOT NULL AND next_check_at <= $1 AND connector = ANY($2)
+					AND (state IN ('sending','sent','working','pr_open') OR (state = 'cancelled' AND outcome_reason = 'repo_disconnected'))
 				ORDER BY state <> 'sending', next_check_at LIMIT $3 FOR UPDATE SKIP LOCKED)
 			UPDATE fix_attempts f SET next_check_at = $1 + $4::interval FROM due WHERE f.id = due.id
 			RETURNING f.workspace_id::text, f.id::text, f.connector`, now, kinds, limit, lease.String())

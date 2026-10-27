@@ -109,6 +109,8 @@ export const autofixMessages = {
   cancelledBy: (name: string | null, at: string) => `Cancelled${name ? ` by ${name}` : ''} at ${at}.`,
   cancelledIssue: 'Colliedesk commented on the issue and closed it. If the agent had already started, it may still be running:',
   stopOnGitHub: 'stop it on GitHub',
+  disconnectedIssue: 'Its issue stays open on GitHub. If the agent had already started, it may still be running:',
+  disconnectedCursor: 'Colliedesk stops the Cursor run; if Cursor does not stop it, this says so here.',
   cancelledCursor: 'The Cursor run was stopped.',
   cursorNotStopped: 'Cursor did not stop the run, so it may still finish:',
   stopOnCursor: 'stop it on Cursor',

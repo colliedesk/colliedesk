@@ -80,6 +80,13 @@ func (w *Worker) handle(ctx context.Context, item store.DueFix) error {
 	if err != nil {
 		return err
 	}
+	if work.State == autofix.Cancelled && reasonOf(work) == "repo_disconnected" {
+		// Its repository was disconnected while the run went on: stop it, as a person's cancel does.
+		if err := w.Cursor.Stop(ctx, item.WorkspaceID, item.ID); err != nil {
+			slog.Warn("Autofix could not stop the Cursor run of a fix whose repository was disconnected", "workspace", item.WorkspaceID, "fix", item.ID, "error", err)
+		}
+		return w.Cursor.Store.StopFixChecks(ctx, item.WorkspaceID, item.ID)
+	}
 	if !work.State.InProgress() {
 		return w.Cursor.Store.StopFixChecks(ctx, item.WorkspaceID, item.ID)
 	}
@@ -382,4 +389,11 @@ func orDefault(text, fallback string) string {
 		return fallback
 	}
 	return text
+}
+
+func reasonOf(work store.FixWork) string {
+	if work.OutcomeReason == nil {
+		return ""
+	}
+	return *work.OutcomeReason
 }

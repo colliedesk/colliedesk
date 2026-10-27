@@ -109,6 +109,31 @@ describe('AutofixBlockView', () => {
     expect(screen.queryByText('The Cursor run was stopped.')).not.toBeInTheDocument();
   });
 
+  it('says a fix whose repository was disconnected may still run, with where to stop it', () => {
+    show(detailOf({ state: 'cancelled', outcome_reason: 'repo_disconnected' }));
+    expect(screen.getByText(/The repository was disconnected from Autofix/)).toBeInTheDocument();
+    expect(screen.getByText(/may still be running/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'stop it on GitHub' })).toBeInTheDocument();
+  });
+
+  it('says what happens to the Cursor run of a fix whose repository was disconnected', () => {
+    const cursorFix = { state: 'cancelled', outcome_reason: 'repo_disconnected', connector: 'cursor_api', issue_number: null, issue_url: null, vendor_url: 'https://cursor.com/agents?id=bc-1' } as const;
+    show(detailOf(cursorFix));
+    expect(screen.getByText(/Colliedesk stops the Cursor run/)).toBeInTheDocument();
+  });
+
+  it('says when the Cursor run of a disconnected repository’s fix was not stopped', () => {
+    show(detailOf({ state: 'cancelled', outcome_reason: 'repo_disconnected', connector: 'cursor_api', issue_number: null, issue_url: null, vendor_url: 'https://cursor.com/agents?id=bc-1' },
+      [eventOf({ kind: 'cursor_cancel_failed', actor_kind: 'system', to_state: null, data: { vendor_url: 'https://cursor.com/agents?id=bc-1' } })]));
+    expect(screen.getByRole('link', { name: 'stop it on Cursor' })).toHaveAttribute('href', 'https://cursor.com/agents?id=bc-1');
+  });
+
+  it('says nothing of stopping a disconnected repository’s fix that never reached the agent', () => {
+    show(detailOf({ state: 'cancelled', outcome_reason: 'repo_disconnected', issue_number: null, issue_url: null, vendor_url: null, github_login: null }));
+    expect(screen.queryByText(/may still be running/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'stop it on GitHub' })).not.toBeInTheDocument();
+  });
+
   it('offers to send again when nothing left Colliedesk', () => {
     const { onAction } = show(detailOf({ state: 'cancelled', outcome_reason: 'authorization_abandoned', issue_number: null, issue_url: null, vendor_url: null, github_login: null }));
     expect(screen.getByText(/not finished within 15 minutes/)).toBeInTheDocument();

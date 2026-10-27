@@ -13,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/autofix"
+	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/cursor"
 	"github.com/colliedesk/colliedesk/server/internal/cursor/cursortest"
@@ -588,5 +589,60 @@ func TestAFixWaitsWhileItsInstallationIsSuspendedAndLeavesOnceUnsuspended(t *tes
 	e.tick(t)
 	if work := e.work(t, e.a, fix.ID); work.State != autofix.Sent {
 		t.Fatalf("unsuspended: %s %s", work.State, reasonOf(work))
+	}
+}
+
+// A repository disconnected in Colliedesk (by a person, or by GitHub's webhook or the reconcile pass)
+// cancels its fixes; a Cursor run they started is stopped too, and one that cannot be stopped says so.
+func TestARepositoryDisconnectedStopsTheCursorRunsOfItsFixes(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	byPerson := e.send(t, e.a)
+	e.tick(t)
+	ids, err := e.store.DisconnectAutofixRepo(ctx, e.a.id, e.a.repoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	githubsync.EndFixes(ctx, e.store, e.a.id, ids, autofix.Cancelled, "repo_disconnected", autofix.Actor{Kind: autofix.ActorPerson, ID: e.a.agentID, Name: "Ada"})
+	e.clock.Add(time.Minute)
+	e.tick(t)
+	if cancels := e.cursor.Cancels(); len(cancels) != 1 || cancels[0] != "run-"+byPerson.ID {
+		t.Fatalf("the run of a fix whose repository was disconnected goes on: cancels %v", cancels)
+	}
+	if work := e.work(t, e.a, byPerson.ID); work.State != autofix.Cancelled || reasonOf(work) != "repo_disconnected" {
+		t.Fatalf("the cancel changed: %s %s", work.State, reasonOf(work))
+	}
+	if next := e.nextCheck(t, byPerson.ID); next != nil {
+		t.Fatalf("still checked after the run was stopped: %v", next)
+	}
+
+	// Removed from the App on GitHub, with the key removed meanwhile: the run cannot be stopped, and the fix says so.
+	byGitHub := e.send(t, e.b)
+	e.tick(t)
+	if _, err := e.store.RemoveCursorKey(ctx, e.b.id); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.store.ApplyFixObservation(ctx, e.b.id, byGitHub.ID, autofix.Observation{State: autofix.Cancelled, Reason: "repo_disconnected", Kind: "repo_disconnected"},
+		autofix.Actor{Kind: autofix.ActorGitHub, Name: "octocat"}); err != nil {
+		t.Fatal(err)
+	}
+	e.clock.Add(time.Minute)
+	e.tick(t)
+	detail, err := e.store.GetFix(ctx, e.b.id, byGitHub.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noted := false
+	for _, event := range detail.Events {
+		noted = noted || event.Kind == "cursor_cancel_failed"
+	}
+	if !noted {
+		t.Fatal("a run left going is not on the fix's timeline")
+	}
+	if next := e.nextCheck(t, byGitHub.ID); next != nil {
+		t.Fatalf("a run that cannot be stopped is checked forever: %v", next)
+	}
+	if e.clock.Add(time.Hour); e.tick(t) != 0 {
+		t.Fatal("ended fixes are still leased")
 	}
 }

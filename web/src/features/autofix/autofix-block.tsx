@@ -127,12 +127,16 @@ function Outcome({ fix, now, at, customerName }: { fix: FixDetail; now: number; 
     }
     case 'cancelled': {
       const reason = fix.outcome_reason ?? 'cancelled_by_person';
-      if (reason !== 'cancelled_by_person') return <Box><span>{m.reasons[reason]}</span></Box>;
+      // A disconnected repository cancels a fix the agent may have started, like a person's cancel.
+      const disconnected = reason === 'repo_disconnected' && reachedVendor(fix);
+      if (reason !== 'cancelled_by_person' && !disconnected) return <Box><span>{m.reasons[reason]}</span></Box>;
       const cancel = [...fix.events].reverse().find((event) => event.kind === 'cancel');
       // Cursor did not stop the run when asked: it may still open a pull request.
       const stuck = fix.events.find((event) => event.kind === 'cursor_cancel_failed');
-      return <Box><span><b>{m.cancelledBy(cancel?.actor_name ?? null, at(fix.state_changed_at))}</b>{' '}
-        {fix.connector === 'cursor_api' ? (stuck ? <>{m.cursorNotStopped} <OutLink href={typeof stuck.data.vendor_url === 'string' ? stuck.data.vendor_url : fix.vendor_url}>{m.stopOnCursor}</OutLink>.</> : m.cancelledCursor) : <>{m.cancelledIssue} <OutLink href={fix.issue_url}>{m.stopOnGitHub}</OutLink>.</>}
+      const issueLeft = disconnected ? (fix.issue_url ? <>{m.disconnectedIssue} <OutLink href={fix.issue_url}>{m.stopOnGitHub}</OutLink>.</> : null)
+        : <>{m.cancelledIssue} <OutLink href={fix.issue_url}>{m.stopOnGitHub}</OutLink>.</>;
+      return <Box><span><b>{disconnected ? m.reasons.repo_disconnected : m.cancelledBy(cancel?.actor_name ?? null, at(fix.state_changed_at))}</b>{' '}
+        {fix.connector === 'cursor_api' ? (stuck ? <>{m.cursorNotStopped} <OutLink href={typeof stuck.data.vendor_url === 'string' ? stuck.data.vendor_url : fix.vendor_url}>{m.stopOnCursor}</OutLink>.</> : disconnected ? m.disconnectedCursor : m.cancelledCursor) : issueLeft}
         {fix.pr_number !== null && <> <b>{m.cancelledPR(fix.pr_number)}</b></>}</span></Box>;
     }
   }

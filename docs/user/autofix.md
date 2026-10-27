@@ -57,6 +57,9 @@ For each connected repository you can:
 - turn on **Private notes may be sent** (off by default; Colliedesk asks you to confirm): the person
   sending a fix may then pick internal notes to include. A note an AI agent wrote is never sent;
 - **Disconnect** it: fixes in progress on it are cancelled; its fixes keep the repository's name.
+  Colliedesk stops their Cursor runs (a run it cannot stop is shown, with where to stop it). The
+  issues of Claude and Copilot fixes stay open, and an agent that started may still run: each fix links
+  its issue to stop it on GitHub.
 
 A repository is **paused** (it takes no new fix) when it turned public, when it was removed from the
 installation on GitHub, or while the installation is suspended. It resumes by itself when the cause

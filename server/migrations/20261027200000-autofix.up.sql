@@ -183,9 +183,11 @@ CREATE INDEX fix_attempts_conversation ON fix_attempts(workspace_id, conversatio
 CREATE INDEX fix_attempts_repo ON fix_attempts(workspace_id, repo_id) WHERE repo_id IS NOT NULL;
 CREATE INDEX fix_attempts_issue ON fix_attempts(workspace_id, repo_id, issue_number) WHERE issue_number IS NOT NULL;
 CREATE INDEX fix_attempts_pr ON fix_attempts(workspace_id, repo_id, pr_number) WHERE pr_number IS NOT NULL;
--- The worker's sweep: attempts in progress whose next check is due, over every workspace.
+-- The worker's sweep: attempts in progress whose next check is due, over every workspace, and attempts
+-- cancelled because their repository was disconnected whose Cursor run is still to stop.
 CREATE INDEX fix_attempts_due ON fix_attempts(next_check_at)
-    WHERE next_check_at IS NOT NULL AND state IN ('sending', 'sent', 'working', 'pr_open');
+    WHERE next_check_at IS NOT NULL AND (state IN ('sending', 'sent', 'working', 'pr_open')
+        OR (state = 'cancelled' AND outcome_reason = 'repo_disconnected'));
 
 -- Every move of an attempt and every signal about it, in order: the timeline on the conversation.
 -- Append-only; it goes only with its attempt (the conversation or the workspace deleted).

@@ -453,7 +453,10 @@ func applyFixObservation(ctx context.Context, tx pgx.Tx, workspaceID, id string,
 			vendor_run_id = COALESCE($8, vendor_run_id), vendor_url = COALESCE($9, vendor_url), branch = COALESCE($10, branch),
 			pr_number = COALESCE($11, pr_number), pr_url = COALESCE($12, pr_url), pr_linked_by = COALESCE(pr_linked_by, $13),
 			merge_sha = COALESCE($14, merge_sha), merged_by_login = COALESCE($15, merged_by_login),
-			merged_at = CASE WHEN $3 = 'merged' THEN COALESCE(merged_at, now()) ELSE merged_at END
+			merged_at = CASE WHEN $3 = 'merged' THEN COALESCE(merged_at, now()) ELSE merged_at END,
+			-- A Cursor run still followed whose repository was disconnected: the worker stops it at once.
+			next_check_at = CASE WHEN $3 = 'cancelled' AND $4 = 'repo_disconnected' AND connector = 'cursor_api'
+				AND vendor_run_id IS NOT NULL AND next_check_at IS NOT NULL THEN now() ELSE next_check_at END
 		WHERE workspace_id = $1 AND id = $2`,
 		workspaceID, id, string(obs.State), optionalText(obs.Reason), optionalNumber(obs.IssueNumber), optionalText(obs.IssueNodeID),
 		optionalText(obs.VendorRef), optionalText(obs.VendorRunID), optionalText(obs.VendorURL), optionalText(obs.Branch),

@@ -97,6 +97,12 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
   ahead, fixes still to send first; each is then handled in its own workspace with no transaction
   across the vendor call. A fix leaves Cursor's list (`next_check_at` null) once its run ends; GitHub's
   webhooks and the reconcile pass follow the pull request from there.
+- A repository disconnected (by a person, GitHub's webhook or the reconcile pass) cancels its fixes
+  `repo_disconnected` wherever the cancel comes from; a Cursor fix whose run is still followed is made
+  due at once in the same move, and the worker stops its run (`Cursor.Stop`, as a person's cancel). A
+  run it cannot stop (no key, Cursor down) is noted `cursor_cancel_failed`, never checked again. Issue
+  connectors' issues stay open: the App may have lost the repository, and closing an issue does not
+  stop a workflow already running; the fix links the issue to stop it on GitHub.
 - Sending: the repository is read on GitHub right before (`autofix.RepoChecker`, implemented by the
   GitHub connection: private, still reached; a repository turned public is paused by the checker). The
   agent id is `bc-<fix id>`, so a second create (a process that died after it, a lease that ran out)
