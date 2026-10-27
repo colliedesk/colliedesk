@@ -161,6 +161,10 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
   runs once [CK S1]. Copilot: assigned as the person (`copilot-swe-agent[bot]`) [CK S2]; refused or
   left out by GitHub, the issue stays and the fix says `copilot_assignment = on_github`, never failed:
   the issue exists.
+- `autofix_connectors.mode` (`assign_api`, `assign_on_github`) is set by no route yet: it stays null, which
+  Dispatch reads as `assign_api`. Copilot's fallback is decided per fix at run time (`copilot_assignment =
+  on_github` when GitHub refuses the assignment), so the Copilot card never says the workspace assigns on
+  GitHub. Whether one is needed waits for smoke S2.
 - `store.RecordFixIssue` stores the issue and the GitHub login with the move to `sent`. A person who
   cancelled meanwhile keeps the cancel (the move is only noted) and the new issue is closed.
 - A failed create: 404, 403 or 410 is `no_repo_access`, 422 `vendor_rejected`; any other answer may have

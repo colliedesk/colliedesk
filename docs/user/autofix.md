@@ -109,9 +109,9 @@ without confirming, the fix ends by itself after 15 to 25 minutes (*authorizatio
 minutes the fix offers **Retry**, which ends it and sends it again with the GitHub account of whoever
 presses it (an approver of an AI agent's request cannot reopen the confirmation), or **Cancel**. One fix of a conversation is in progress at a time.
 
-**Copilot** is assigned from Colliedesk when GitHub allows it. When it does not (the Copilot card in
-Settings says so), the issue is created and the fix says **Assign to Copilot on GitHub**: assign it there
-and the fix moves to *Agent running* once GitHub reports it.
+**Copilot** is assigned from Colliedesk when GitHub allows it. When GitHub refuses the assignment, the
+issue is still created and the fix says **Assign to Copilot on GitHub**: assign it there and the fix moves
+to *Agent running* once GitHub reports it.
 
 ### Follow a fix
 
@@ -179,7 +179,7 @@ each fix leaves, and follows the pull request Cursor opens to its merge.
 
 1. Create a Cursor API key. A [service account key](https://cursor.com/docs/account/enterprise/service-accounts)
    is advised: a user key acts with all of its owner's rights on every repository they reach.
-2. Paste it in **Cursor key**. Colliedesk tries it with Cursor before keeping it; a key Cursor refuses
+2. Paste it in **Cursor API key**. Colliedesk tries it with Cursor before keeping it; a key Cursor refuses
    is not kept. The key is sealed on the server and never shown again, not one character: the card only
    says who set it and when. **Replace** sets another, **Remove** erases it.
 3. Read what Cursor receives and agree to it, then turn Cursor on. Cursor keeps what it receives (the
@@ -199,14 +199,14 @@ server restarts while sending.
 
 | The fix says | Why | What to do |
 | --- | --- | --- |
-| Failed: `vendor_auth` | Cursor refused the key, or no key is set | Set a working key, then retry |
-| Failed: `vendor_repo_access` | Cursor cannot reach the repository | Give Cursor's GitHub integration access to it, then retry |
-| Failed: `vendor_rejected` | Cursor refused the fix (the timeline says what it said) | Edit the text, then retry |
-| Failed: `provider_unavailable` | Cursor did not answer after 5 tries | Retry later |
-| Failed: `agent_error` | Cursor's run failed or finished without a pull request | Read Cursor's reply on the timeline, then retry |
-| Failed: `timed_out` | Cursor's run expired | Retry |
-| Cancelled: `connector_disabled` | Cursor was turned off (or its consent is to an older text) before the fix left | Nothing was sent; turn Cursor on again, then retry |
-| Failed: `repo_public` / `no_repo_access` | The repository is not private any more, or the App no longer reaches it | Nothing was sent; fix the repository on GitHub |
+| Cursor refused the workspace key (`vendor_auth`) | Cursor refused the key, or no key is set | Set a working key, then retry |
+| Cursor can’t reach this repository (`vendor_repo_access`) | Cursor cannot reach the repository | Give Cursor's GitHub integration access to it, then retry |
+| The coding agent rejected the request (`vendor_rejected`) | Cursor refused the fix (the timeline says what it said) | Edit the text, then retry |
+| GitHub or Cursor did not answer after 5 tries (`provider_unavailable`) | Cursor did not answer after 5 tries | Retry later |
+| Cursor stopped with an error (`agent_error`) | Cursor's run failed or finished without a pull request | Read Cursor's reply on the timeline, then retry |
+| Cursor stopped the run before it finished (`timed_out`) | Cursor's run expired | Retry |
+| Not sent: an admin turned this agent off (`connector_disabled`) | Cursor was turned off (or its consent is to an older text) before the fix left | Nothing was sent; turn Cursor on again, then retry |
+| Not sent: the repository is no longer private (`repo_public`), or can’t be reached (`no_repo_access`) | The repository is not private any more, or the App no longer reaches it | Nothing was sent; fix the repository on GitHub |
 
 **Cancel** stops the Cursor run. Removing the key while a run goes on does not stop it: Colliedesk
 follows it again once a key is set.

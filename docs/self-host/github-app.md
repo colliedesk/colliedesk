@@ -64,5 +64,8 @@ ten minutes late.
 - **Coming back from GitHub says the installation is not yours**: the person who started in Colliedesk
   must administer every repository the installation reaches on GitHub (an organization owner does; a
   member with access to some repositories does not), and finish in the same browser.
+- **Connect GitHub or Continue on GitHub says the address is not secure**: the web app opens GitHub only
+  over https (http only to the same machine, for a local stand-in). Nothing was sent; check that the server
+  talks to `https://github.com`.
 - **Fixes never move**: check the App's **Advanced** tab on GitHub for failed webhook deliveries (a
   wrong secret answers 401); fixes still move with the ten-minute check.
