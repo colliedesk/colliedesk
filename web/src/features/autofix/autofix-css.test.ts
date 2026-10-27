@@ -28,6 +28,11 @@ describe('autofix.css', () => {
     expect(rule('.af-subj')).toContain('display: grid');
   });
 
+  it('keeps the key icon on the line of its text when the key box is narrow', () => {
+    expect(rule('.af-keyset > svg')).toContain('flex: none');
+    expect(rule('.af-keyset > span')).toContain('flex: 1 1');
+  });
+
   it('gives the three Fixes tables the same columns', () => {
     expect(rule('.af-table { table-layout: fixed; }')).toBeDefined();
   });

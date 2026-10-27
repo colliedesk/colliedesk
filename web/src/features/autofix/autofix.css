@@ -271,6 +271,8 @@
 .af-keyset { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; margin: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2) var(--space-3);
   font-size: var(--fs-small); color: var(--text-2); }
 .af-keyset b { color: var(--text-1); font-weight: 600; }
+.af-keyset > svg { flex: none; }
+.af-keyset > span { flex: 1 1 8rem; min-width: 0; }
 .af-keyset .af-acts { margin-left: auto; }
 .af-checkres { margin: 0; font-size: var(--fs-small); color: var(--text-2); }
 .af-checkres.af-good { color: var(--ok); }
