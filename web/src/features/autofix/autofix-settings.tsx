@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, InvalidRequestError } from '../../api/client';
 import { SettingsNav } from '../settings/settings-nav';
 import { autofixApi, keys } from './autofix-api';
-import type { FixConnector } from './autofix-api';
+import type { AutofixSettings, FixConnector } from './autofix-api';
 import { goTo, useAutofixSettings } from './autofix-conversation';
 import { autofixMessages } from './autofix-messages';
 import { RedirectRefused } from './fix-view';
@@ -73,8 +73,11 @@ export function AutofixSettingsRoute() {
       done = false;
       setProblem(error instanceof InvalidRequestError || error instanceof RedirectRefused ? error.message : autofixMessages.actionFailed);
     }
-    await Promise.all([client.invalidateQueries({ queryKey: keys.settings }), client.invalidateQueries({ queryKey: ['autofix-github-repos'] }),
-      client.invalidateQueries({ queryKey: keys.status })]);
+    // The settings first, then the repositories of the installation they still name: a removed installation's list answers 404.
+    await client.invalidateQueries({ queryKey: keys.settings });
+    const current = client.getQueryData<AutofixSettings>(keys.settings)?.installations[0];
+    client.removeQueries({ queryKey: ['autofix-github-repos'], predicate: (query) => query.queryKey[1] !== current?.id });
+    await Promise.all([current ? client.invalidateQueries({ queryKey: ['autofix-github-repos', current.id] }) : undefined, client.invalidateQueries({ queryKey: keys.status })]);
     return done;
   };
   const actions: SettingsActions = {
