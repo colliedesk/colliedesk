@@ -53,6 +53,8 @@ interface ReplyComposerProps {
   // Sets the conversation Resolved. With it a reply offers Send and resolve (Ctrl/Cmd+Shift+Enter), which
   // calls it only after the reply was accepted. A private note never resolves.
   onResolve?: () => Promise<unknown>;
+  // The conversation the box writes to: a reply put in for it from elsewhere (colliedesk:insert-reply) lands here.
+  conversationId?: string;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -72,7 +74,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, conversationId }: ReplyComposerProps) {
   // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
   const [kind, setKind] = useState<Kind>(noReplies ? 'note' : 'outgoing');
   const [body, setBody] = useState('');
@@ -139,6 +141,18 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     caret.current = null;
   }, [body, picking]);
   useEffect(() => { if (disabled) { setPicking(null); setAssist(false); } }, [disabled]);
+  // Another part of the app (Autofix's Draft reply) puts a reply in this conversation's box, below what is there.
+  useEffect(() => {
+    const put = (event: Event) => {
+      const detail = (event as CustomEvent<{ conversationId: string; text: string; aiDraftId?: string }>).detail;
+      if (!conversationId || detail?.conversationId !== conversationId || disabled) return;
+      if (detail.aiDraftId) return applyDraft(detail.text, 'below', detail.aiDraftId);
+      setKind('outgoing');
+      insertText(detail.text);
+    };
+    window.addEventListener('colliedesk:insert-reply', put);
+    return () => window.removeEventListener('colliedesk:insert-reply', put);
+  });
   const applyDraft = (text: string, how: 'replace' | 'below', id: string, warnings: string[] = []) => {
     setAssist(false);
     setKind('outgoing');

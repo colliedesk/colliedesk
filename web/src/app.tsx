@@ -15,7 +15,9 @@ import { AppShell } from './features/shell/app-shell';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { BookIcon, ChartIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
+import { BookIcon, ChartIcon, InboxIcon, RequestsIcon, SettingsIcon, WrenchIcon } from './ui/icons';
+import { autofixPart } from './features/autofix/autofix-part';
+import { useAutofixStatus } from './features/autofix/autofix-slot';
 import { kbPart } from './features/kb/kb-part';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
@@ -60,6 +62,8 @@ function AppLayout() {
   useProductAnalytics(config.data?.product_analytics, me.data);
   // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
+  // Fixes shows once a repository is connected to Autofix; its badge counts the fixes that need a person.
+  const fixes = useAutofixStatus(config.data?.autofix?.available === true && Boolean(me.data) && !signedOut && !locked);
   // Sign-in pages have nowhere to navigate to yet.
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
@@ -79,6 +83,7 @@ function AppLayout() {
   const inRequests = path.startsWith('/requests');
   const inKnowledge = path.startsWith('/knowledge');
   const inResults = path.startsWith('/results');
+  const inFixes = path.startsWith('/fixes');
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
@@ -87,10 +92,13 @@ function AppLayout() {
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || inResults || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
+      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
       <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
         aria-current={inRequests ? 'page' : undefined}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
+      {fixes && fixes.connected_repos > 0 && <Link to="/fixes" className="rail-link" data-tip={messages.fixes} aria-label={fixes.needs_person > 0 ? messages.fixesWaiting(fixes.needs_person) : messages.fixes}
+        aria-current={inFixes ? 'page' : undefined} onPointerEnter={autofixPart.preload} onFocus={autofixPart.preload}><WrenchIcon /><span className="rail-label" aria-hidden="true">{messages.fixes}</span>
+        {fixes.needs_person > 0 && <span className="rail-badge" aria-hidden="true">{fixes.needs_person > 99 ? '99+' : fixes.needs_person}</span>}</Link>}
       <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
       <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
@@ -265,6 +273,27 @@ const resultsRoute = createRoute({
       onWindow={(value) => void navigate({ to: '/results', search: value === '7d' ? { window: '7d' } : {}, replace: true })} />} />;
   },
 });
+// Fixes and Settings → Autofix are in the Autofix chunk (features/autofix/autofix-chunk.ts); the filters are in the address.
+const fixAgents = ['claude_issue', 'copilot_issue', 'cursor_api'] as const;
+const fixesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/fixes',
+  validateSearch: (search: Record<string, unknown>): { repo?: string; agent?: typeof fixAgents[number] } => ({
+    ...(typeof search.repo === 'string' && /^[0-9a-f-]{36}$/.test(search.repo) ? { repo: search.repo } : {}),
+    ...(fixAgents.includes(search.agent as typeof fixAgents[number]) ? { agent: search.agent as typeof fixAgents[number] } : {}),
+  }),
+  component: function Fixes() {
+    const { repo, agent } = fixesRoute.useSearch();
+    const navigate = useNavigate();
+    return <Part part={autofixPart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ FixesRoute }) => <FixesRoute repoId={repo} connector={agent}
+      onFilter={(repoId, connector) => void navigate({ to: '/fixes', search: { ...(repoId ? { repo: repoId } : {}), ...(connector ? { agent: connector } : {}) }, replace: true })} />} />;
+  },
+});
+const autofixSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/autofix',
+  component: () => <Part part={autofixPart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AutofixSettingsRoute }) => <AutofixSettingsRoute />} />,
+});
 const resultsShareRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/r',
@@ -290,7 +319,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, channelRoute, resultsRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

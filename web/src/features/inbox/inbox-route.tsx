@@ -274,7 +274,7 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc, seen, aiDraft) => message.mutateAsync({ kind, body, files, cc, seen, aiDraft })} aiDrafts={me.data?.ai_features?.draft}
-    aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
+    autofix={config?.autofix?.available} aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.

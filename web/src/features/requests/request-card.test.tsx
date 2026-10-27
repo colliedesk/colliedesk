@@ -205,3 +205,10 @@ test('approving Microsoft 365 for a channel says a work account may need its adm
   renderWithConfig(<RequestCard item={gmailForChannel} timezone="UTC" {...actions()} />, cloud);
   expect(await screen.findByText(/including the Limited Use requirements/)).toBeInTheDocument();
 });
+
+test('turning a coding agent on has no Approve on the card: it is in the request’s detail, after the consent', () => {
+  render(<RequestCard item={agentRequest({ method: 'PUT', route: '/api/v1/autofix/connectors/{kind}', path: '/api/v1/autofix/connectors/claude_issue', body: { consent_version: 'v1' } })}
+    timezone="UTC" {...actions()} />);
+  expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+});

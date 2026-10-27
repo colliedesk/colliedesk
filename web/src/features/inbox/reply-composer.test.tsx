@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
@@ -824,4 +824,16 @@ test('with no channel to carry replies the box opens on a private note, and a re
   fireEvent.click(screen.getByRole('button', { name: /Private note/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
   expect(onSubmit.mock.calls[0]?.slice(0, 2)).toEqual(['note', 'Hello']);
+});
+
+test('a reply another part of the app puts in goes into this conversation’s box only, as a reply', () => {
+  render(<ReplyComposer conversationId="c1" />);
+  fireEvent.keyDown(document.body, { key: 'n' });
+  const put = (conversationId: string, text: string) =>
+    act(() => { window.dispatchEvent(new CustomEvent('colliedesk:insert-reply', { detail: { conversationId, text } })); });
+  put('c2', 'Not for this one');
+  expect(screen.getByLabelText('Message body')).toHaveValue('');
+  put('c1', 'The fix is out.');
+  expect(screen.getByLabelText('Message body')).toHaveValue('The fix is out.');
+  expect(screen.getByRole('button', { name: 'Reply', pressed: true })).toBeInTheDocument();
 });

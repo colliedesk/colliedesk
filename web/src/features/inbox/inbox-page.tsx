@@ -43,6 +43,8 @@ interface InboxPageProps {
   aiDrafts?: boolean;
   // Triage suggestions are on in the workspace.
   aiTriage?: boolean;
+  // The server runs Autofix (/api/v1/config).
+  autofix?: boolean;
   onTriageApplied?: () => void;
   attachmentLimits?: AttachmentLimits;
   savedReplies?: SavedReply[];
@@ -118,7 +120,7 @@ function ShownCount({ count, page, pageSize, more }: { count: number; page: numb
   return <span><span aria-hidden="true">{`${first}–${last}`}</span><span className="sr-only">{messages.inboxShown(first, last)}</span></span>;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied, autofix = false }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const latestCustomerMessage = useMemo(() => [...timeline].reverse().find((item) => item.kind === 'incoming')?.id, [timeline]);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -226,7 +228,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, thread
         <TimelinePanel conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
           afterFirstCustomerMessage={aiTriage && selected ? <AITriageSlot placement="timeline" conversationId={selected.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
             currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} /> : undefined} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
-          viewers={openViewers} onSetStatus={selected && onSetStatus ? (status) => onSetStatus(selected.id, status) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
+          viewers={openViewers} onSetStatus={selected && onSetStatus ? (status) => onSetStatus(selected.id, status) : undefined} detailsOpen={detailsOpen} suggestionWaiting={aiTriage && triageWaiting} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} autofix={autofix} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={() => onOpenSettings(outboundLink)}>{messages.openSettings}</button></>}</p>}
         {sendsFrom && <p className="composer-from">{sendsFrom}</p>}
@@ -234,7 +236,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, thread
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
-        <ReplyComposer key={selected?.id} disabled={!selected} noReplies={noReplies} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
+        <ReplyComposer key={selected?.id} conversationId={selected?.id} disabled={!selected} noReplies={noReplies} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
           latestCustomerMessage={latestCustomerMessage}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
@@ -243,7 +245,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, thread
           onResolve={selected && onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}
           aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId} />
       </div>
-      <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied} currentAgentId={currentAgentId} canManage={canManage} onTriageWaiting={setTriageWaiting}
+      <DetailsPanel autofix={autofix} conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied} currentAgentId={currentAgentId} canManage={canManage} onTriageWaiting={setTriageWaiting}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}
         onShowContactConversations={onQuery ? (contact) => onQuery({ contact, status: 'all' }) : undefined} />
     </main>

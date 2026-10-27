@@ -4,6 +4,7 @@ import type { TeamMember, Conversation, ConversationOrigin, Tag } from '../../ap
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { AITriageSlot } from './ai-triage-slot';
+import { AutofixDetails } from '../autofix/autofix-slot';
 
 interface DetailsPanelProps {
   conversation?: Conversation;
@@ -25,9 +26,11 @@ interface DetailsPanelProps {
   canManage?: boolean;
   // Told whether the suggestion has a part nobody accepted, for the toggle that hides the panel.
   onTriageWaiting?: (waiting: boolean) => void;
+  // The server runs Autofix: the details open with its block.
+  autofix?: boolean;
 }
 
-export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations, aiTriage = false, onTriageApplied, currentAgentId, canManage = false, onTriageWaiting }: DetailsPanelProps) {
+export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations, aiTriage = false, onTriageApplied, currentAgentId, canManage = false, onTriageWaiting, autofix = false }: DetailsPanelProps) {
   const [tagName, setTagName] = useState('');
   const createTag = () => {
     if (!conversation || !tagName.trim()) return;
@@ -38,6 +41,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
     <aside id="conversation-details" className="details-panel panel" aria-label={messages.conversationDetails}
       onKeyDown={(event) => { if (event.key === 'Escape' && onClose && !(event.target instanceof HTMLSelectElement)) onClose(); }}>
       {onClose && <button type="button" className="drawer-close" onClick={onClose} autoFocus>{messages.hideDetails}</button>}
+      {autofix && conversation && <AutofixDetails conversationId={conversation.id} customerName={conversation.contact_name} timezone={timezone} />}
       {aiTriage && conversation && <AITriageSlot conversationId={conversation.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
         currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />}
       <section className="details-section">

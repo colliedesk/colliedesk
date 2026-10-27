@@ -4,7 +4,7 @@ import { track } from '../../lib/product-analytics';
 import type { SettingsSection } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 
-export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai' | '/settings/channels';
+export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai' | '/settings/autofix' | '/settings/channels';
 export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean }
 interface NavGroup { label: string; items: NavItem[] }
 
@@ -28,7 +28,7 @@ const plainLink: RenderLink = (item, page) =>
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
 
-export interface Shown { general: boolean; team: boolean; channels: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean; agents?: boolean }
+export interface Shown { general: boolean; team: boolean; channels: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean; ai?: boolean; agents?: boolean; autofix?: boolean }
 
 // settingsNavGroups lists what this person can see: their own account, then the shared workspace.
 export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] {
@@ -40,6 +40,8 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...section(messages.team, 'team-heading', shown.team),
       ...section(messages.invites, 'invites-heading'),
       ...(shown.ai ? [{ label: messages.aiSettings, to: '/settings/ai' as const, current: page === '/settings/ai' }] : []),
+      // Autofix shows even on a server without its GitHub App: the page names the settings the operator still needs.
+      ...(shown.autofix !== false ? [{ label: messages.autofix, to: '/settings/autofix' as const, current: page === '/settings/autofix' }] : []),
       ...section(messages.aiAgents, 'agents-heading', shown.agents),
       ...section(messages.sessions, 'sessions-heading'),
       ...(shown.channels ? [{ label: messages.channels, to: '/settings/channels' as const, current: page === '/settings/channels' }] : []),
