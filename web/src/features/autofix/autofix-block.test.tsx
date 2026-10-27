@@ -43,6 +43,14 @@ describe('AutofixBlockView', () => {
     expect(onAction).toHaveBeenCalledWith('cancel');
   });
 
+  it('names the GitHub account that created the issue on the timeline, never the system that recorded it', () => {
+    show(detailOf({ state: 'sent', github_login: 'octocat' }, [eventOf({ kind: 'issue_created', actor_kind: 'system', actor_name: 'Colliedesk', to_state: 'sent', from_state: 'sending',
+      data: { issue_number: 87 } })]));
+    const activity = screen.getByRole('list', { name: 'Activity, newest first' });
+    expect(activity).toHaveTextContent('Issue #87 created by @octocat · GitHub permission revoked');
+    expect(activity).not.toHaveTextContent('@Colliedesk');
+  });
+
   it('explains a fix stuck waiting for GitHub and offers to send it again', () => {
     const { onAction } = show(detailOf({ state: 'sending', issue_number: null, issue_url: null, vendor_url: null, state_changed_at: '2026-10-27T11:55:00Z' }));
     expect(screen.getByText(/If the GitHub page was closed/)).toBeInTheDocument();

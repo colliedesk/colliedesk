@@ -51,8 +51,9 @@ export function OutLink({ href, children, className }: { href: string | null | u
 
 const summaryOf = (event: FixEvent | undefined) => (typeof event?.data.summary === 'string' && event.data.summary ? event.data.summary : undefined);
 
-// eventLine says one entry of the timeline in words; the source chip names GitHub or Cursor when they reported it.
-function eventLine(event: FixEvent): { text: ReactNode; error: boolean } {
+// eventLine says one entry of the timeline in words; the source chip names GitHub or Cursor when they reported it. login is
+// the GitHub account that created the fix's issue (the event's actor is whoever recorded it, not a GitHub login).
+function eventLine(event: FixEvent, login: string | null): { text: ReactNode; error: boolean } {
   const e = m.event;
   const name = event.actor_name;
   const said = summaryOf(event);
@@ -66,14 +67,14 @@ function eventLine(event: FixEvent): { text: ReactNode; error: boolean } {
     case 'unmark_deployed': return { text: e.unmark_deployed(name), error };
     default:
       if (event.kind === 'issue_created' || event.data.issue_number !== undefined && event.to_state === 'sent') {
-        return { text: e.issue_created(event.data.issue_number, event.data.github_login ?? name), error };
+        return { text: e.issue_created(event.data.issue_number, event.data.github_login ?? login), error };
       }
       if (said) return { text: name ? `${name}: ${said}` : said, error };
       return { text: event.to_state ? e.toState[event.to_state] : event.kind.replace(/_/g, ' '), error };
   }
 }
 
-function Activity({ events, timezone, now }: { events: FixEvent[]; timezone: string; now: number }) {
+function Activity({ events, login, timezone, now }: { events: FixEvent[]; login: string | null; timezone: string; now: number }) {
   const [all, setAll] = useState(false);
   const newest = [...events].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id);
   const shown = all ? newest : newest.slice(0, 5);
@@ -81,7 +82,7 @@ function Activity({ events, timezone, now }: { events: FixEvent[]; timezone: str
     <div className="af-evts-head"><span>{m.activity}</span>
       {newest.length > 5 && <button type="button" className="link-button" aria-expanded={all} onClick={() => setAll(!all)}>{all ? m.fewerEvents : m.allEvents(newest.length)}</button>}</div>
     <ol className="af-evts" aria-label={m.activityLabel}>{shown.map((event) => {
-      const line = eventLine(event);
+      const line = eventLine(event, login);
       const source = m.sources[event.actor_kind];
       return <li key={event.id}><time dateTime={event.created_at}>{formatShortDate(event.created_at, timezone, new Date(now))}</time>
         <span className={line.error ? 'af-err' : undefined}>{line.text}{source && <span className="af-src">{source}</span>}</span></li>;
@@ -215,7 +216,7 @@ export function AutofixBlockView({ load, fix, target, customerName, timezone, no
         [m.mergedLabel, fix.merge_sha && <><span className="af-mono">{fix.merge_sha.slice(0, 7)}</span>{fix.merged_by_login && <span className="af-muted"> · {fix.merged_by_login}{fix.merged_at ? `, ${at(fix.merged_at)}` : ''}</span>}</>],
         [m.sentBy, <>{fix.created_by_name} <span className="af-muted">· {fix.created_by_kind === 'token' ? m.approvedRequest : at(fix.created_at)}</span></>],
       ]} />
-      {fix.state !== 'sending' && fix.events.length > 0 && <Activity events={fix.events} timezone={timezone} now={now} />}
+      {fix.state !== 'sending' && fix.events.length > 0 && <Activity events={fix.events} login={fix.github_login} timezone={timezone} now={now} />}
       <div className="af-acts">{leading}{open}{rest}{actions.has('cancel') && button('cancel', m.cancel, 'danger')}</div>
       {help && <p className="af-help">{help}</p>}
     </section>
