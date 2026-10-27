@@ -2839,7 +2839,7 @@ export interface paths {
         /** @description Every fix of the conversation, the latest attempt first. */
         get: operations["listConversationFixes"];
         put?: never;
-        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `connector_unavailable` (an agent this server cannot send to). Every agent token's call becomes an agent request; the person who approves it gets `authorize_url` (never the token) and sends as themselves. */
+        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `cursor_key_missing` (Cursor without its key). Every agent token's call becomes an agent request; the person who approves it gets `authorize_url` (never the token) and sends as themselves. */
         post: operations["sendFix"];
         delete?: never;
         options?: never;
@@ -3025,10 +3025,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Every agent token's call becomes an agent request. Cursor also needs its key. */
+        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Every agent token's call becomes an agent request. Cursor also needs its key. 409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it is missing. An approved request records the consent in the approver's name: the approver agrees to the text the request names. */
         put: operations["enableFixConnector"];
         post?: never;
-        /** @description Turns a coding agent off; fixes already sent go on. Cursor's key stays until removed. */
+        /** @description Turns a coding agent off: fixes not sent yet (`sending`) are cancelled `connector_disabled`, fixes already sent go on. The consent on record and Cursor's key stay until removed. */
         delete: operations["disableFixConnector"];
         options?: never;
         head?: never;
@@ -3046,7 +3046,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Checks what Colliedesk can check: the installation is active, the repositories are private and the App has its permissions; for Cursor also that the key works and reaches the repositories. The setup on the vendor's side (the Claude workflow and its secret, Copilot turned on for the repository) is a checklist the admin ticks. The result is kept in `last_check`. */
+        /** @description Checks what Colliedesk can check: the installation is active, the repositories are private and the App has its permissions; for Cursor also that the key works and reaches the repositories. The setup on the vendor's side (the Claude workflow and its secret, Copilot turned on for the repository) is a checklist the admin ticks. The result is kept in `last_check`. 409 `cursor_key_missing` for Cursor without a key. Cursor lists repositories once a minute, so a check within a minute of the last one only tries the key. */
         post: operations["checkFixConnector"];
         delete?: never;
         options?: never;
@@ -3062,7 +3062,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service account key is advised (a user key acts with all of its owner's rights). A token without `autofix_settings:manage_credentials` is refused (403 `credentials_need_admin_token`), never filed as an agent request, because a request keeps its body. */
+        /** @description Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service account key is advised (a user key acts with all of its owner's rights). A token without `autofix_settings:manage_credentials` is refused (403 `credentials_need_admin_token`), never filed as an agent request, because a request keeps its body. Cursor tries the key first (`GET /v1/me`): 400 `cursor_key_invalid` when it refuses it and 503 `cursor_unavailable` when it does not answer, with nothing changed; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS. */
         put: operations["setCursorKey"];
         post?: never;
         /** @description Removes the Cursor key; Cursor cannot take new fixes until a key is set again. */
@@ -4199,7 +4199,7 @@ export interface components {
          * @description A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it; the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
          * @enum {string}
          */
-        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update";
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update" | "autofix_settings:manage_credentials";
         /**
          * @description Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
          * @enum {string}
@@ -12704,6 +12704,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            /** @description Error code `consent_required`. consent_version is missing or empty, also in an approved agent request; nothing changed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     disableFixConnector: {
@@ -12727,6 +12736,7 @@ export interface operations {
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -12751,9 +12761,20 @@ export interface operations {
                     "application/json": components["schemas"]["AutofixConnector"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            /** @description Error code `rate_limited`. The workspace called Cursor from the settings 5 times this minute (Retry-After says when to try again). */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["AutofixUnavailable"];
         };
     };
@@ -12784,6 +12805,17 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Error code `rate_limited`. The workspace called Cursor from the settings 5 times this minute (Retry-After says when to try again). */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["AutofixUnavailable"];
         };
     };

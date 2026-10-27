@@ -322,6 +322,16 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/autofix/fixes/{id}/deployed":     grant(auth.PermAutofixUpdate),
 	"PUT /api/v1/autofix/fixes/{id}/pull-request":    grant(auth.PermAutofixUpdate),
 	"DELETE /api/v1/autofix/fixes/{id}/pull-request": grant(auth.PermAutofixUpdate),
+	// Turning a coding agent on decides that ticket data leaves for that vendor, with the admin's
+	// consent on record, so every token's call waits for a person (like PUT /api/v1/ai/slots/{slot}).
+	// Turning it off and removing Cursor's key only stop new fixes: admin. A check reads what the
+	// settings show and tries the key, changing nothing but its result. Setting Cursor's key carries
+	// the key, a credential route.
+	"PUT /api/v1/autofix/connectors/{kind}":            alwaysAsk(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/connectors/{kind}":         grant(auth.PermAutofixSettingsUpdate),
+	"POST /api/v1/autofix/connectors/{kind}/check":     grant(auth.PermAutofixSettingsRead),
+	"PUT /api/v1/autofix/connectors/cursor_api/key":    grant(auth.PermAutofixSettingsManageCredentials),
+	"DELETE /api/v1/autofix/connectors/cursor_api/key": grant(auth.PermAutofixSettingsManageCredentials),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
@@ -391,12 +401,13 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 // below their tier is refused, never filed, because an agent request stores the call's body (and the
 // export carries it).
 var credentialRoutes = map[string]bool{
-	"POST /api/v1/imports":                  true,
-	"PUT /api/v1/imports/{id}/key":          true,
-	"POST /api/v1/ai/providers":             true,
-	"POST /api/v1/ai/models":                true,
-	"PUT /api/v1/ai/providers/{id}/key":     true,
-	"PUT /api/v1/channels/{id}/credentials": true,
+	"POST /api/v1/imports":                          true,
+	"PUT /api/v1/imports/{id}/key":                  true,
+	"POST /api/v1/ai/providers":                     true,
+	"POST /api/v1/ai/models":                        true,
+	"PUT /api/v1/ai/providers/{id}/key":             true,
+	"PUT /api/v1/channels/{id}/credentials":         true,
+	"PUT /api/v1/autofix/connectors/cursor_api/key": true,
 }
 
 // kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits

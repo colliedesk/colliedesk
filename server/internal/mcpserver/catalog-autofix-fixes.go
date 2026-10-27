@@ -1,7 +1,7 @@
 package mcpserver
 
 const (
-	fixConnectorProperty  = `"connector":{"type":"string","enum":["claude_issue","copilot_issue"],"description":"claude_issue: an issue and an @claude comment for the repository's Claude Code workflow; copilot_issue: an issue assigned to Copilot. Only agents turned on in colliedesk_autofix_settings_get."}`
+	fixConnectorProperty  = `"connector":{"type":"string","enum":["claude_issue","copilot_issue","cursor_api"],"description":"claude_issue: an issue and an @claude comment for the repository's Claude Code workflow; copilot_issue: an issue assigned to Copilot; cursor_api: a Cursor cloud agent created with the workspace's key (no GitHub confirmation; it leaves within seconds of the approval). Only agents turned on in colliedesk_autofix_settings_get."}`
 	fixRowVersionProperty = `"row_version":{"type":"integer","minimum":1,"description":"The row_version you read; a fix that moved since is refused."}`
 
 	fixPreviewSchema = `{"type":"object","required":["untrusted_customer_content","message_ids","notes_allowed","attachments_left_out","removed","destination"],"properties":{` +

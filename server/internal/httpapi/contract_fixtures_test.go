@@ -2,6 +2,8 @@ package httpapi_test
 
 import (
 	"context"
+	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
+	"github.com/colliedesk/colliedesk/server/internal/cursor/cursortest"
 	"html"
 	"net/http"
 	"testing"
@@ -74,6 +76,8 @@ func newContractFixture(t *testing.T) contractFixture {
 	}
 	fakePolar := newFakePolarAPI(t)
 	fakeGitHub := startContractGitHub(t)
+	cursorStandIn := cursortest.New(cursorCanaryKey)
+	t.Cleanup(cursorStandIn.Close)
 	imageHost := newImageHost(t, serveBytes("image/png", tinyPNG))
 	api, service, pool, dns := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Attachments = storage
@@ -87,6 +91,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		config.Microsoft = microsoft.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Tenant: "common", Keys: keys, Base: "http://127.0.0.1:1"}
 		config.AI = fakeAIConfig(&aiprovider.Fake{})
 		config.GitHub = fakeGitHub.Config()
+		config.Cursor = &autofixworker.Cursor{Base: cursorStandIn.URL()}
 	})
 	createSession(t, api, service, "Contract Support", "support@contract-support.example.com")
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")

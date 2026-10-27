@@ -4995,7 +4995,7 @@ paths:
         back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same
         `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has
         one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in),
-        `connector_unavailable` (an agent this server cannot send to). Every agent token's call becomes an agent request; the person
+        `cursor_key_missing` (Cursor without its key). Every agent token's call becomes an agent request; the person
         who approves it gets `authorize_url` (never the token) and sends as themselves.
       requestBody:
         required: true
@@ -5257,6 +5257,9 @@ paths:
       description: >
         Turns a coding agent on and records the admin's consent to the data it receives (which version of
         the text, who, when). Every agent token's call becomes an agent request. Cursor also needs its key.
+        409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it
+        is missing. An approved request records the consent in the approver's name: the approver agrees
+        to the text the request names.
       requestBody:
         required: true
         content:
@@ -5276,15 +5279,21 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: Error code `consent_required`. consent_version is missing or empty, also in an approved agent request; nothing changed.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     delete:
       operationId: disableFixConnector
       x-permission: access:write
-      description: Turns a coding agent off; fixes already sent go on. Cursor's key stays until removed.
+      description: >
+        Turns a coding agent off: fixes not sent yet (`sending`) are cancelled `connector_disabled`, fixes
+        already sent go on. The consent on record and Cursor's key stay until removed.
       responses:
         '200':
           description: The connector
           content: {application/json: {schema: {$ref: '#/components/schemas/AutofixConnector'}}}
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/autofix/connectors/{kind}/check:
@@ -5297,14 +5306,22 @@ paths:
         Checks what Colliedesk can check: the installation is active, the repositories are private and the
         App has its permissions; for Cursor also that the key works and reaches the repositories. The setup
         on the vendor's side (the Claude workflow and its secret, Copilot turned on for the repository) is a
-        checklist the admin ticks. The result is kept in `last_check`.
+        checklist the admin ticks. The result is kept in `last_check`. 409 `cursor_key_missing` for Cursor
+        without a key. Cursor lists repositories once a minute, so a check within a minute of the last one
+        only tries the key.
       responses:
         '200':
           description: The connector
           content: {application/json: {schema: {$ref: '#/components/schemas/AutofixConnector'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: Error code `rate_limited`. The workspace called Cursor from the settings 5 times this minute (Retry-After says when to try again).
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '503': {$ref: '#/components/responses/AutofixUnavailable'}
   /api/v1/autofix/connectors/cursor_api/key:
     put:
@@ -5314,7 +5331,9 @@ paths:
         Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service
         account key is advised (a user key acts with all of its owner's rights). A token without
         `autofix_settings:manage_credentials` is refused (403 `credentials_need_admin_token`), never filed
-        as an agent request, because a request keeps its body.
+        as an agent request, because a request keeps its body. Cursor tries the key first (`GET /v1/me`):
+        400 `cursor_key_invalid` when it refuses it and 503 `cursor_unavailable` when it does not answer,
+        with nothing changed; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS.
       requestBody:
         required: true
         content:
@@ -5332,6 +5351,12 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: Error code `rate_limited`. The workspace called Cursor from the settings 5 times this minute (Retry-After says when to try again).
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '503': {$ref: '#/components/responses/AutofixUnavailable'}
     delete:
       operationId: removeCursorKey
@@ -6659,6 +6684,7 @@ components:
         - autofix:send
         - autofix_settings:read
         - autofix_settings:update
+        - autofix_settings:manage_credentials
     TokenScope:
       type: string
       enum: [read, draft, send, admin, custom]

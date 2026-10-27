@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/url"
 	"strconv"
 )
@@ -107,4 +108,38 @@ func conversationFixesList(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	return map[string]any{"fixes": fixesForModel(list.Items)}, nil
+}
+
+func codingAgentPath(arguments map[string]any, rest string) string {
+	kind, _ := arguments["kind"].(string)
+	return "/api/v1/autofix/connectors/" + url.PathEscape(kind) + rest
+}
+
+// codingAgentAnswer runs a change of a coding agent and returns the agent it answers.
+func codingAgentAnswer(c *call, method, path string, body any) (any, error) {
+	var agent json.RawMessage
+	if err := c.send(method, path, body, &agent); err != nil {
+		return nil, err
+	}
+	return map[string]any{"coding_agent": agent}, nil
+}
+
+func codingAgentEnableRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodPut, codingAgentPath(arguments, ""), map[string]any{"consent_version": arguments["consent_version"]})
+}
+
+func codingAgentDisable(c *call, arguments map[string]any) (any, error) {
+	return codingAgentAnswer(c, http.MethodDelete, codingAgentPath(arguments, ""), nil)
+}
+
+func codingAgentCheck(c *call, arguments map[string]any) (any, error) {
+	return codingAgentAnswer(c, http.MethodPost, codingAgentPath(arguments, "/check"), nil)
+}
+
+func cursorKeySet(c *call, arguments map[string]any) (any, error) {
+	return codingAgentAnswer(c, http.MethodPut, "/api/v1/autofix/connectors/cursor_api/key", map[string]any{"key": arguments["key"]})
+}
+
+func cursorKeyRemove(c *call, _ map[string]any) (any, error) {
+	return codingAgentAnswer(c, http.MethodDelete, "/api/v1/autofix/connectors/cursor_api/key", nil)
 }

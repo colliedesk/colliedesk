@@ -60,6 +60,7 @@ func Catalog() []Spec {
 		autofixSettingsGetSpec(), githubRepositoriesListSpec(), githubConnectRequestSpec(), githubDisconnectRequestSpec(),
 		autofixRepoConnectSpec(), autofixRepoUpdateSpec(), autofixRepoDisconnectSpec(), autofixRepoNotesIncludeRequestSpec(), autofixRepoNotesExcludeSpec(),
 		fixPreviewSpec(), fixSendRequestSpec(), fixRetryRequestSpec(), fixCancelSpec(), fixDeployedSpec(), fixUndeployedSpec(), fixPRLinkSpec(), fixPRUnlinkSpec(),
+		codingAgentEnableRequestSpec(), codingAgentDisableSpec(), codingAgentCheckSpec(), cursorKeySetSpec(), cursorKeyRemoveSpec(),
 	}
 	for i := range specs {
 		specs[i].Doc = toolDocs[specs[i].Name]

@@ -336,9 +336,9 @@ func TestAFixIsCheckedBeforeAnythingIsWrittenOnGitHub(t *testing.T) {
 		t.Fatalf("another person moved it: %s", fix.State)
 	}
 
-	// Cursor is not sent from this server yet.
+	// Cursor is not turned on in this workspace.
 	if response := checked(t, s.api, http.MethodPost, "/api/v1/conversations/"+s.conversation+"/fixes", s.sendBody(autofix.CursorAPI, "cursor"), s.w.admin, nil); response.Code != http.StatusConflict ||
-		!strings.Contains(response.Body.String(), "connector_unavailable") {
+		!strings.Contains(response.Body.String(), "connector_off") {
 		t.Fatalf("cursor: %d %s", response.Code, response.Body.String())
 	}
 }

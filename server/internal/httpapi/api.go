@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
@@ -63,6 +64,9 @@ type Config struct {
 	// GitHub is the operator's GitHub App that Autofix works through; with a setting missing, Autofix is
 	// off and GET /api/v1/config names what is missing.
 	GitHub github.Config
+	// Cursor is Cursor's API for Autofix, shared with the worker of the process so they keep one call
+	// budget. Nil uses Cursor itself; a Cursor without a Store gets the API's.
+	Cursor *autofixworker.Cursor
 	// ImportKeys holds the Freshdesk keys of in-app imports; the worker of the process shares it. Nil
 	// makes one from Google.Keys (tests).
 	ImportKeys *importjobs.Keys
@@ -185,6 +189,9 @@ type API struct {
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
 	providerChecks *webFormLimiter
+	// cursorCalls limits the calls of one workspace a person makes reach Cursor (check, set the key),
+	// so they cannot spend the call budget Cursor gives the key.
+	cursorCalls *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
 	polar          *polar.Client
@@ -201,6 +208,8 @@ type API struct {
 	imports *importjobs.Service
 	// ai reads and changes the workspace's AI providers and features.
 	ai *ai.Service
+	// cursor is config.Cursor, filled in.
+	cursor *autofixworker.Cursor
 	// mux serves every route; an approved agent request is replayed through it as the approver.
 	mux *http.ServeMux
 }
@@ -273,6 +282,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
+		cursorCalls:     newWindowLimiter(cursorCallsPerMinute, webFormMaxKeys, time.Minute),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
@@ -287,6 +297,16 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	api.imports = importjobs.NewService(db, importKeys)
 	api.imports.SetClock(clock)
+	api.cursor = config.Cursor
+	if api.cursor == nil {
+		api.cursor = &autofixworker.Cursor{}
+	}
+	if api.cursor.Store == nil {
+		api.cursor.Store = api.store
+	}
+	if api.cursor.Now == nil {
+		api.cursor.Now = clock
+	}
 	aiConfig := config.AI
 	if !aiConfig.Keys.Configured() {
 		aiConfig.Keys = config.Google.Keys
@@ -558,6 +578,12 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionConversationsWrite},
 		{http.MethodPut, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionConversationsWrite},
 		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionConversationsWrite},
+		// Autofix's coding agents: turned on with the admin's data consent, checked, and Cursor's key.
+		{http.MethodPut, "/api/v1/autofix/connectors/{kind}", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/connectors/{kind}", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/autofix/connectors/{kind}/check", auth.PermissionAccessRead},
+		{http.MethodPut, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionAccessWrite},
 	}
 }
 

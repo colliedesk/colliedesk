@@ -122,6 +122,10 @@ func (a *API) fixTarget(response http.ResponseWriter, ctx context.Context, works
 		writeError(response, http.StatusConflict, "connector_off", "This coding agent is not turned on for the workspace (or its data consent is to an older text). An admin turns it on in Settings → Autofix.")
 		return autofix.Repo{}, false
 	}
+	if connector == autofix.CursorAPI && setting.Credential == nil {
+		writeConnectorError(response, autofix.ErrCursorKeyMissing)
+		return autofix.Repo{}, false
+	}
 	return repo, true
 }
 
@@ -218,10 +222,6 @@ func (a *API) sendFixOf(response http.ResponseWriter, request *http.Request, con
 		writeError(response, http.StatusBadRequest, "invalid_request", "repo_id, connector, title, body and client_key are required (build title and body with the preview).")
 		return
 	}
-	if input.Connector == autofix.CursorAPI {
-		writeError(response, http.StatusConflict, "connector_unavailable", "Sending to Cursor is not available on this server yet.")
-		return
-	}
 	if !a.requireGitHub(response) {
 		return
 	}
@@ -280,6 +280,17 @@ func (a *API) sendFixOf(response http.ResponseWriter, request *http.Request, con
 		status = http.StatusCreated
 	}
 	var authorizeURL *string
+	if fix.Connector == autofix.CursorAPI {
+		// Cursor needs no person's authorization: the worker sends it with the workspace's key.
+		if made {
+			if err := a.store.ScheduleFixCheck(ctx, who.Workspace.ID, fix.ID, a.now()); err != nil {
+				writeInternalError(response, err)
+				return
+			}
+		}
+		writeJSON(response, status, map[string]any{"fix": fix, "authorize_url": authorizeURL})
+		return
+	}
 	if work, err := a.store.GetFixDispatch(ctx, who.Workspace.ID, fix.ID); err != nil {
 		writeAutofixError(response, err)
 		return
@@ -382,17 +393,6 @@ func (a *API) changeFix(response http.ResponseWriter, request *http.Request, act
 		return
 	}
 	ctx, who := request.Context(), principal(request)
-	if action == autofix.ActionCancel {
-		current, err := a.store.GetFix(ctx, who.Workspace.ID, request.PathValue("id"))
-		if err != nil {
-			writeAutofixError(response, err)
-			return
-		}
-		if current.Connector == autofix.CursorAPI {
-			writeError(response, http.StatusConflict, "connector_unavailable", "Cancelling a Cursor fix is not available on this server yet.")
-			return
-		}
-	}
 	fix, err := a.store.ActOnFix(ctx, who.Workspace.ID, request.PathValue("id"), store.FixAction{Action: action, PRURL: input.URL, RowVersion: input.RowVersion}, actorOf(who))
 	if errors.Is(err, autofix.ErrMove) && (action == autofix.ActionDeployed || action == autofix.ActionUndeployed) {
 		// Saying a release again, or taking back one already taken back, is the state asked for.
@@ -405,6 +405,15 @@ func (a *API) changeFix(response http.ResponseWriter, request *http.Request, act
 	if err != nil {
 		writeAutofixError(response, err)
 		return
+	}
+	if action == autofix.ActionCancel && fix.Connector == autofix.CursorAPI {
+		// After the cancel committed: Cursor's run is cancelled. A fix not sent yet has none; the worker
+		// stops whatever it was creating.
+		stopping, cancel := context.WithTimeout(ctx, cursorCallTimeout)
+		defer cancel()
+		if err := a.cursor.Cancel(stopping, who.Workspace.ID, fix.ID); err != nil {
+			slog.Warn("autofix: cancel the Cursor run of a cancelled fix", "error", err, "workspace", who.Workspace.ID, "fix", fix.ID)
+		}
 	}
 	if action == autofix.ActionCancel && fix.IssueNumber != nil && a.githubSync != nil {
 		// After the cancel committed: the issue is closed with a comment. The agent may still run; the

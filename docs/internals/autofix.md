@@ -80,6 +80,58 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
   whose issue exists already keeps going (the issue was created while it was private).
 - `githubsync.Service.CheckRepo` (`autofix.RepoChecker`) reads a repository from GitHub now, before a
   fix leaves; it pauses a repository no longer private on the way.
+## Cursor and the worker
+
+- Everything Colliedesk knows of Cursor's Cloud Agents API v1 (public beta) is in
+  `server/internal/cursor/client.go`; `cursor/cursortest` stands in for it in tests (and e2e). Cursor
+  v1 has no webhook yet, so fixes sent to Cursor are polled.
+- The key is sealed with `MAILBOX_TOKEN_KEYS` under the context `autofix:cursor:<workspace id>`: a
+  sealed key copied into another workspace's row does not open. It is tried (`GET /v1/me`) before it
+  is kept, so a wrong key never replaces a working one; nothing of it is shown again, not the last
+  characters. `PUT …/cursor_api/key` is a credential route: a token below admin is refused, never filed,
+  because an agent request keeps its body.
+- `server/internal/autofixworker` runs the fixes that wait on Colliedesk. `store.ClaimDueFixes`
+  (`PrivilegeAutofixClaim`) leases due fixes in progress by moving `next_check_at` a lease (2 minutes)
+  ahead, fixes still to send first; each is then handled in its own workspace with no transaction
+  across the vendor call. A fix leaves Cursor's list (`next_check_at` null) once its run ends; GitHub's
+  webhooks and the reconcile pass follow the pull request from there.
+- Sending: the repository is read on GitHub right before (`autofix.RepoChecker`, implemented by the
+  GitHub connection: private, still reached; a repository turned public is paused by the checker). The
+  agent id is `bc-<fix id>`, so a second create (a process that died after it, a lease that ran out)
+  answers 409 `agent_id_conflict` and is read back: a fix is never sent twice. No `envVars` (Cursor
+  refuses them with a client id). The repository address always comes from `autofix_repos`, never from
+  the prompt. A repository unreachable only because its installation is suspended makes the fix wait
+  (it resumes when unsuspended); any other unreachable repository fails it `no_repo_access`.
+- Reading: every 15 seconds for 5 minutes, every minute until 30, then every 5 minutes. A pull request
+  counts only when it is one of the fix's repository (`autofix.ParsePRURL`). Cursor finished without a
+  pull request, or failed, is `failed/agent_error` with Cursor's reply cut for the timeline.
+- Refusals: 401 fails the fix `vendor_auth` and marks the key `key_invalid`; 403/404 or
+  `repository_access` on the create `vendor_repo_access`; another 4xx `vendor_rejected`; 429 waits what
+  Cursor asks without counting; 5xx and the network are tried 5 times with a growing wait, then
+  `provider_unavailable`. A key removed while a run goes on is waited for (every 5 minutes); the run
+  goes on at Cursor.
+- Budget: Cursor allows a key 20 calls a minute by default; the worker keeps to 10 per workspace, so a
+  person's check or cancel always has room. The budget is per process (`autofixworker.Cursor`, shared
+  by the API and the worker of one process through `httpapi.Config.Cursor`).
+- `collie serve` builds one `autofixworker.Cursor` for the API and the worker. The worker runs only with
+  the GitHub connection's `RepoChecker`: without one nothing is sent to Cursor (the repository cannot be
+  checked private), the fix waits. A person's calls from the settings (check, set the key) are limited to
+  5 a minute per workspace (429).
+- Turning a coding agent off withdraws its consent: a fix still `sending` (nothing left yet) ends
+  `cancelled/connector_disabled` and is not sent, also when its consent is to an older text. Fixes already
+  sent go on. The issue connectors apply the same rule before they create the issue.
+- A person cancelling while the fix is being sent: the worker's `sent` signal is only noted (a person's
+  cancel stands) and the worker cancels the run it just got.
+
+### Sending and cancelling a Cursor fix
+
+- `POST …/fixes` and `…/retry` for `cursor_api`: the agent on with the current consent and a key set
+  (`cursor_key_missing`), `store.CreateFix`, then `store.ScheduleFixCheck(now)`; `authorize_url` is null and
+  the worker sends it. The same `client_key` answers the same fix without scheduling it again.
+- `POST …/cancel`: `store.ActOnFix`, then, after it committed, `autofixworker.Cursor.Cancel`; a run that
+  could not be stopped (`ErrStopOnCursor`) is logged, and the fix's `vendor_url` is where to stop it.
+- The worker handles only `cursor_api` fixes; the issue connectors' `sending` expiry runs in the reconcile
+  pass (`githubsync`).
 
 ## Sending as the person (issue connectors)
 

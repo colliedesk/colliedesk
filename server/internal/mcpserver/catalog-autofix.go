@@ -80,3 +80,82 @@ func conversationFixesListSpec() Spec {
 		run:    conversationFixesList,
 	}
 }
+
+// The coding agents' settings. The names say coding_agent, not fix: they carry no customer text.
+const (
+	codingAgentKindProperty = `"kind":{"type":"string","enum":["claude_issue","copilot_issue","cursor_api"],` +
+		`"description":"claude_issue: Claude through a GitHub issue; copilot_issue: Copilot through a GitHub issue; cursor_api: Cursor through its API with the workspace's key."}`
+	codingAgentSchema = `{"type":"object","required":["kind","enabled","mode","consent","credential","last_check"],"properties":{` +
+		`"kind":{"type":"string"},"enabled":{"type":"boolean"},"mode":{"type":["string","null"]},` +
+		`"consent":{"type":["object","null"],"description":"The data consent on record: version, name, at."},` +
+		`"credential":{"type":["object","null"],"description":"Cursor's key: who set it and when, never a character of it."},` +
+		`"last_check":{"type":["object","null"],"description":"at, result (ok, key_invalid, no_repo_access, installation_inactive, repo_not_private, provider_unavailable) and message."}}}`
+	codingAgentOutput = `{"type":"object","required":["coding_agent"],"properties":{"coding_agent":` + codingAgentSchema + `}}`
+	cursorKeyNotice   = `The key is tried with Cursor before it is kept, sealed on the server and never shown again, not one character. ` +
+		`It passes through this conversation, so use a key you can revoke at Cursor; a service account key is advised, as a user key acts with all of its owner's rights.`
+)
+
+func codingAgentEnableRequestSpec() Spec {
+	return approvalSpec("colliedesk_coding_agent_enable_request", "Ask to turn on a coding agent for Autofix",
+		`Ask to turn on one coding agent fixes can be sent to (Claude or Copilot through a GitHub issue, Cursor through its API), with the admin's consent to the data it receives. `+
+			`consent_version is the version of the consent text (consent_version in the Autofix settings). Turning an agent on lets ticket text leave for that vendor, so a person always decides.`,
+		[]string{"PUT /api/v1/autofix/connectors/{kind}"},
+		`{"type":"object","additionalProperties":false,"required":["kind","consent_version"],"properties":{`+codingAgentKindProperty+`,`+
+			`"consent_version":{"type":"string","minLength":1,"maxLength":40}}}`, codingAgentEnableRequest)
+}
+
+func codingAgentDisableSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_coding_agent_disable",
+		Title: "Turn off a coding agent for Autofix",
+		Description: `Turn off one coding agent: no new fix goes to it and fixes not sent yet are cancelled (connector_disabled); fixes already sent go on, the consent on record and Cursor's key stay. ` +
+			`Turn it on again with colliedesk_coding_agent_enable_request.` + "\n\nTier: admin.",
+		Tier:   "admin",
+		REST:   []string{"DELETE /api/v1/autofix/connectors/{kind}"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["kind"],"properties":{` + codingAgentKindProperty + `}}`,
+		Output: codingAgentOutput,
+		run:    codingAgentDisable,
+	}
+}
+
+func codingAgentCheckSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_coding_agent_check",
+		Title: "Check a coding agent for Autofix",
+		Description: `Check what Colliedesk can check of one coding agent and keep the result in last_check: for Claude and Copilot, that the GitHub App is installed and the connected repositories are private ` +
+			`(the setup on the vendor's side is a checklist a person ticks); for Cursor, that Cursor accepts the key and reaches the connected repositories when it can say.` + "\n\nTier: read.",
+		Tier:   "read",
+		REST:   []string{"POST /api/v1/autofix/connectors/{kind}/check"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["kind"],"properties":{` + codingAgentKindProperty + `}}`,
+		Output: codingAgentOutput,
+		run:    codingAgentCheck,
+	}
+}
+
+func cursorKeySetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_cursor_key_set",
+		Title: "Set the Cursor key for Autofix",
+		Description: `Set the workspace's Cursor API key, which fixes sent to Cursor use. ` + cursorKeyNotice +
+			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
+		Tier:   "admin",
+		REST:   []string{"PUT /api/v1/autofix/connectors/cursor_api/key"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["key"],"properties":{"key":{"type":"string","minLength":8,"maxLength":500}}}`,
+		Output: codingAgentOutput,
+		run:    cursorKeySet,
+	}
+}
+
+func cursorKeyRemoveSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_cursor_key_remove",
+		Title: "Remove the Cursor key of Autofix",
+		Description: `Erase the workspace's Cursor key now: Cursor takes no new fix until a key is set again with colliedesk_cursor_key_set; runs already sent go on at Cursor ` +
+			`and are followed again once a key is set.` + "\n\nTier: admin.",
+		Tier:   "admin",
+		REST:   []string{"DELETE /api/v1/autofix/connectors/cursor_api/key"},
+		Input:  noArguments,
+		Output: codingAgentOutput,
+		run:    cursorKeyRemove,
+	}
+}

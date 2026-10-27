@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"github.com/colliedesk/colliedesk/server/internal/autofix"
 	"maps"
 	"net/http"
 	"net/url"
@@ -194,6 +195,11 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/autofix/fixes":                                  {"/api/v1/autofix/fixes", nil, admin, 200, ""},
 		"GET /api/v1/autofix/fixes/{id}":                             {"/api/v1/autofix/fixes/" + f.fixID, nil, admin, 200, ""},
 		"GET /api/v1/conversations/{id}/fixes":                       {"/api/v1/conversations/" + f.conversationID + "/fixes", nil, admin, 200, ""},
+		"PUT /api/v1/autofix/connectors/{kind}":                      {"/api/v1/autofix/connectors/claude_issue", map[string]any{"consent_version": autofix.ConsentVersion}, admin, 200, ""},
+		"DELETE /api/v1/autofix/connectors/{kind}":                   {"/api/v1/autofix/connectors/claude_issue", nil, admin, 200, ""},
+		"POST /api/v1/autofix/connectors/{kind}/check":               {"/api/v1/autofix/connectors/claude_issue/check", nil, admin, 200, ""},
+		"PUT /api/v1/autofix/connectors/cursor_api/key":              {"/api/v1/autofix/connectors/cursor_api/key", map[string]any{"key": cursorCanaryKey}, admin, 200, ""},
+		"DELETE /api/v1/autofix/connectors/cursor_api/key":           {"/api/v1/autofix/connectors/cursor_api/key", nil, admin, 200, ""},
 		"GET /api/v1/results/share-link":                             {"/api/v1/results/share-link", nil, admin, 200, ""},
 		"POST /api/v1/results/share-link":                            {"/api/v1/results/share-link", nil, admin, 201, ""},
 		"DELETE /api/v1/results/share-link":                          {"/api/v1/results/share-link", nil, admin, 200, ""},

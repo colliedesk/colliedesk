@@ -49,6 +49,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getAutofixSettings, a.connectGitHub, a.disconnectGitHub, a.listGitHubRepositories, a.finishGitHubAuthorization,
 		a.connectRepo, a.updateRepo, a.disconnectRepo, a.includeNotesInFixes, a.excludeNotesFromFixes, a.receiveGitHubWebhook,
 		a.previewFix, a.sendFix, a.retryFix, a.cancelFix, a.markFixDeployed, a.unmarkFixDeployed, a.linkFixPullRequest, a.unlinkFixPullRequest,
+		a.enableFixConnector, a.disableFixConnector, a.checkFixConnector, a.setCursorKey, a.removeCursorKey,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

@@ -131,6 +131,11 @@ var routeTiers = map[string]string{
 	"DELETE /api/v1/autofix/fixes/{id}/deployed":                       "draft",
 	"PUT /api/v1/autofix/fixes/{id}/pull-request":                      "draft",
 	"DELETE /api/v1/autofix/fixes/{id}/pull-request":                   "draft",
+	"PUT /api/v1/autofix/connectors/{kind}":                            "approval",
+	"DELETE /api/v1/autofix/connectors/{kind}":                         "admin",
+	"POST /api/v1/autofix/connectors/{kind}/check":                     "read",
+	"PUT /api/v1/autofix/connectors/cursor_api/key":                    "admin",
+	"DELETE /api/v1/autofix/connectors/cursor_api/key":                 "admin",
 	"GET /api/v1/results/share-link":                                   "admin",
 	"POST /api/v1/results/share-link":                                  "approval",
 	"DELETE /api/v1/results/share-link":                                "admin",
@@ -217,7 +222,7 @@ var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PU
 // credentialRouteKeys carry another service's API key; a lower tier is refused, not filed.
 var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true,
 	"POST /api/v1/ai/providers": true, "POST /api/v1/ai/models": true, "PUT /api/v1/ai/providers/{id}/key": true,
-	"PUT /api/v1/channels/{id}/credentials": true}
+	"PUT /api/v1/channels/{id}/credentials": true, "PUT /api/v1/autofix/connectors/cursor_api/key": true}
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)

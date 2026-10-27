@@ -227,6 +227,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_fix_unmark_deployed` | Takes back a fix's release | `draft` |
 | `colliedesk_fix_pr_link` | Links a pull request Colliedesk did not find to a fix | `draft` |
 | `colliedesk_fix_pr_unlink` | Unlinks a pull request a person linked | `draft` |
+| `colliedesk_coding_agent_enable_request` | Asks a person to turn on a coding agent for Autofix, with their consent to the data it receives | `read` |
+| `colliedesk_coding_agent_disable` | Turns off a coding agent for Autofix; fixes not sent yet are cancelled, fixes already sent go on | `admin` |
+| `colliedesk_coding_agent_check` | Checks a coding agent: the GitHub App and private repositories, or Cursor's key and its repositories | `read` |
+| `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation: refused below `admin` so it never waits in a request | `admin` |
+| `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again | `admin` |
 <!-- /generated -->
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the
