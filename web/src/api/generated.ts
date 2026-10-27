@@ -5682,7 +5682,7 @@ export interface components {
         };
         FixPreview: {
             title: string;
-            /** @description Markdown, masked. Each message the customer wrote sits between a line `<customer-message untrusted="true" from="<name>" at="<UTC time>">` and a line `</customer-message>` (attribute values HTML-escaped; the same tags inside the customer's text are escaped, so a block can never be closed early). A masked part reads `[email removed]`, `[phone removed]`, `[card removed]` or `[secret removed]`; mentions and `#123` references are made inert with an invisible character, so they read as written. Internal notes the sender picked sit between `<team-note from="<name>" at="<UTC time>">` and `</team-note>`. */
+            /** @description Markdown, masked. Each message the customer wrote sits between a line `<customer-message untrusted="true" from="<name>" at="<UTC time>">` and a line `</customer-message>` (attribute values HTML-escaped; the same tags inside the customer's text are escaped, so a block can never be closed early). A masked part reads `[email removed]`, `[phone removed]`, `[card removed]` or `[secret removed]`. Mentions and references are made inert with one U+200B (zero-width space) right after the `@` of an `@name`, the `#` of a `#123` and the `GH-` of a `GH-123`, so they read as written but GitHub neither pings nor links them (match them with `(?:@|#|GH-)\u200B`). Internal notes the sender picked sit between `<team-note from="<name>" at="<UTC time>">` and `</team-note>`. */
             body: string;
             message_ids: string[];
             /** @description The internal notes the sender may include (never one an agent token wrote), and whether each is in the body. */
