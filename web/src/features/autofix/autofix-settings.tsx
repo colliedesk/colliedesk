@@ -28,9 +28,10 @@ function writeChecklist(workspace: string, kind: FixConnector, ticks: boolean[])
   }
 }
 
-// githubReturn reads the outcome of installing the App (`?github=connected` or `?github_error=<reason>`) and cleans
+// githubReturn reads the outcome of installing the App (`?github=connected`, `?github=requested` when an organization
+// member asked an owner to install it, or `?github_error=<reason>`) and cleans
 // the address, so a reload does not repeat it.
-function githubReturn(): { notice?: string; problem?: string } | undefined {
+export function githubReturn(): { notice?: string; problem?: string } | undefined {
   const params = new URLSearchParams(window.location.search);
   const done = params.get('github');
   const error = params.get('github_error');
@@ -39,7 +40,8 @@ function githubReturn(): { notice?: string; problem?: string } | undefined {
   params.delete('github_error');
   const rest = params.toString();
   window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}${window.location.hash}`);
-  return error === null ? { notice: autofixMessages.set.githubReturn.connected } : { problem: autofixMessages.returnErrors[error] ?? autofixMessages.returnUnknown };
+  if (error === null) return { notice: done === 'requested' ? autofixMessages.set.githubReturn.requested : autofixMessages.set.githubReturn.connected };
+  return { problem: autofixMessages.returnErrors[error] ?? autofixMessages.returnUnknown };
 }
 
 export function AutofixSettingsRoute() {

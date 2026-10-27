@@ -54,8 +54,8 @@ connect, before every fix, and whenever GitHub reports a change.
 For each connected repository you can:
 
 - choose the **coding agent** a new fix on it suggests;
-- turn on **Send internal notes with fixes** (off by default): the person sending a fix may then pick
-  internal notes to include. A note an AI agent wrote is never sent;
+- turn on **Private notes may be sent** (off by default; Colliedesk asks you to confirm): the person
+  sending a fix may then pick internal notes to include. A note an AI agent wrote is never sent;
 - **Disconnect** it: fixes in progress on it are cancelled; its fixes keep the repository's name.
 
 A repository is **paused** (it takes no new fix) when it turned public, when it was removed from the
@@ -67,9 +67,16 @@ goes away: private again, added back, unsuspended.
 Turn on the agents your team uses; each card says what to set up on the vendor's side and asks you to
 agree to the data it receives.
 
+Claude and Copilot cards list what to do on GitHub first (Claude: install Anthropic's GitHub App, add
+the `ANTHROPIC_API_KEY` secret and the workflow; Copilot: a plan with the coding agent, turned on for the
+repositories). Colliedesk cannot see those from its App, so you tick them yourself; the ticks are kept in
+this browser only. **Check** tests what Colliedesk can see: the installation is active, the repositories
+are private and the App has its permissions.
+
 ## Send a conversation to a coding agent
 
-On a conversation, **Send to a coding agent** opens a preview. Pick the repository and the agent (only
+Autofix sits at the top of a conversation's details (on a narrow screen, a line under the conversation's
+title opens them). **Send to agent** opens a preview. Pick the repository and the agent (only
 agents an admin turned on are offered). Colliedesk builds what will be sent, on the server, and you can
 edit it before sending:
 
@@ -86,7 +93,7 @@ edit it before sending:
   AI agent wrote is never offered.
 - **Files are never sent**; the preview says how many stay behind.
 
-The bottom of the preview says where it goes. For **Claude** and **Copilot**: *an issue in
+The bottom of the preview says where it goes, and **Continue on GitHub** or **Send to Cursor** sends it. For **Claude** and **Copilot**: *an issue in
 `owner/repo` created with your GitHub account; GitHub opens to confirm*. Sending takes your browser to
 GitHub, which asks you to authorize the Colliedesk App (it may skip the question once you did), then
 back to the conversation, where the fix shows **Sending** and then **Sent**. In between, Colliedesk:
@@ -98,25 +105,31 @@ back to the conversation, where the fix shows **Sending** and then **Sent**. In 
 4. revokes your authorization. It is never stored; it lives a minute at most in the server's memory.
 
 If a check fails, nothing is created on GitHub and the fix says why (see below). If you close GitHub
-without confirming, the fix ends by itself after 15 to 25 minutes (*authorization abandoned*); you can
-also cancel it at once. One fix of a conversation is in progress at a time.
+without confirming, the fix ends by itself after 15 to 25 minutes (*authorization abandoned*). After two
+minutes the fix offers **Retry**, which ends it and sends it again with the GitHub account of whoever
+presses it (an approver of an AI agent's request cannot reopen the confirmation), or **Cancel**. One fix of a conversation is in progress at a time.
 
-**Copilot** is assigned from Colliedesk when GitHub allows it. When it does not (or an admin chose
-*Assign on GitHub* for Copilot), the issue is created and the fix says **Assign to Copilot on GitHub**:
-assign it there and the fix moves to *Agent running* once GitHub reports it.
+**Copilot** is assigned from Colliedesk when GitHub allows it. When it does not (the Copilot card in
+Settings says so), the issue is created and the fix says **Assign to Copilot on GitHub**: assign it there
+and the fix moves to *Agent running* once GitHub reports it.
 
 ### Follow a fix
 
 The fix moves on by itself from GitHub's events (and a check every ten minutes for a server GitHub
-cannot reach): **Sent → Agent running → Pull request → Merged**. Then:
+cannot reach). Its track shows **sent → agent → PR → merged → released**; a stop the fix went past
+without a sign (a pull request with no sign the agent ran) is striped. A fix sent 30 minutes ago with no
+word from the agent turns amber with a list of what to check on GitHub. Then:
 
-- **Mark released** when the merge is deployed (*Released*); **Take back** if it was rolled back.
-- **Link a pull request** when Colliedesk did not find the agent's one (it must be a pull request of
-  the fix's repository); **Unlink** one you linked.
+- **Mark as released** when the merge is deployed (*Released*); **Unmark released** if it was rolled back.
+  Once released, **Draft reply** puts a reply in the reply box: an AI draft written from the outcome
+  (nothing the agent wrote is used), or a plain sentence when AI drafts are off.
+- **Link a PR** when Colliedesk did not find the agent's one (it must be a pull request of
+  the fix's repository); **Unlink PR** undoes one you linked.
 - **Cancel** a fix in progress: its issue is closed with a comment. An agent already running may still
   finish on GitHub, so stop it there (the fix links the issue); a pull request already open stays open.
   If GitHub did not close the issue, the fix's timeline says so: close it on GitHub.
-- **Try again** after a fix failed or was cancelled: a new attempt, with the preview filled in again.
+- **Retry** after a fix failed or was cancelled: a new attempt, with the preview filled in again (**Send
+  again** when nothing had left Colliedesk).
 
 Why a fix ended:
 
@@ -125,9 +138,24 @@ Why a fix ended:
 | No repository access | Your GitHub account cannot write to the repository, or the App no longer reaches it | Ask a repository admin for write access, or check the installation |
 | Copilot unavailable | Copilot's coding agent cannot be assigned on that repository by your account | Turn Copilot's coding agent on for the repository on GitHub |
 | Repository public | The repository is no longer private | Make it private; it resumes by itself |
-| Interrupted | The server stopped while sending and found no issue | Try again |
-| Authorization abandoned / denied | You did not confirm on GitHub, or said no | Try again |
-| Agent turned off | An admin turned the agent off before the fix left | Ask an admin, then try again |
+| Interrupted | The server stopped while sending and found no issue | Send again |
+| Authorization abandoned / denied | You did not confirm on GitHub, or said no | Send again |
+| Agent turned off | An admin turned the agent off before the fix left | Ask an admin, then send again |
+
+## Fixes
+
+**Fixes** in the navigation (shown once a repository is connected) lists every fix in three groups:
+**Needs a person** (failed, merged but not released, or no word from the agent), **Running** and **Done**.
+Filter by repository and agent. The badge counts the fixes that need a person.
+
+## Requests from AI agents
+
+An AI agent's token cannot send a fix, install the app, allow notes or turn an agent on by itself: it files
+a request. The request says in words what approving starts. Approving a fix that goes through GitHub takes
+you to GitHub and you become the sender. Turning an agent on is approved in the request itself, after you
+tick the consent; if the consent text changed since the agent asked, reject it and turn the agent on in
+Settings → Autofix.
+
 
 ## AI agents
 
