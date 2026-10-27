@@ -62,9 +62,9 @@ becomes an [agent request](agent-requests.md) a person approves in **Requests**.
 
 | Tier | Tools it calls directly |
 |---|---|
-| `read` | 73 of 167 |
-| `draft` | 89 of 167 |
-| `send` | 126 of 167 |
+| `read` | 74 of 167 |
+| `draft` | 90 of 167 |
+| `send` | 127 of 167 |
 | `admin` | 167 of 167 |
 
 Every tool and its tier: [Connect an AI agent (MCP)](mcp.md#tools).

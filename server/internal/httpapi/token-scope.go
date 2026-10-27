@@ -299,11 +299,12 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/autofix/fixes/{id}":       grant(auth.PermAutofixRead),
 	"GET /api/v1/conversations/{id}/fixes": grant(auth.PermAutofixRead),
 	// Autofix settings: reading them shows no key. Changing them is admin; installing the App answers a
-	// one-time address and letting notes go with fixes sends internal notes out, so a person approves both.
+	// one-time address, removing it uninstalls the App on the customer's GitHub, and letting notes go
+	// with fixes sends internal notes out, so a person approves those three.
 	"GET /api/v1/autofix/settings":                               grant(auth.PermAutofixSettingsRead),
 	"GET /api/v1/autofix/github/installations/{id}/repositories": grant(auth.PermAutofixSettingsRead),
 	"POST /api/v1/autofix/github/installations":                  alwaysAsk(auth.PermAutofixSettingsUpdate),
-	"DELETE /api/v1/autofix/github/installations/{id}":           grant(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/github/installations/{id}":           alwaysAsk(auth.PermAutofixSettingsUpdate),
 	"POST /api/v1/autofix/repos":                                 grant(auth.PermAutofixSettingsUpdate),
 	"PATCH /api/v1/autofix/repos/{id}":                           grant(auth.PermAutofixSettingsUpdate),
 	"DELETE /api/v1/autofix/repos/{id}":                          grant(auth.PermAutofixSettingsUpdate),

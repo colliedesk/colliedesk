@@ -188,21 +188,15 @@ func (a *API) finishGitHubInstall(request *http.Request) string {
 		slog.Warn("autofix: GitHub code exchange failed", "error", err, "workspace", who.Workspace.ID)
 		return "github_unavailable"
 	}
-	// The person's token proves which installations are theirs, then it is revoked at once: it is never
+	// The person's token proves the installation is theirs, then it is revoked at once: it is never
 	// stored, and the redirect's installation_id alone could be forged.
-	installations, err := app.UserInstallations(ctx, token)
+	mine, theirs, err := a.installationOfPerson(ctx, token, installationID)
 	a.revokeGitHubToken(token, who.Workspace.ID)
 	if err != nil {
-		slog.Warn("autofix: read the person's GitHub installations", "error", err, "workspace", who.Workspace.ID)
+		slog.Warn("autofix: check the person's GitHub installation", "error", err, "workspace", who.Workspace.ID)
 		return "github_unavailable"
 	}
-	var mine *github.Installation
-	for i := range installations {
-		if installations[i].ID == installationID {
-			mine = &installations[i]
-		}
-	}
-	if mine == nil {
+	if !theirs {
 		return "installation_not_yours"
 	}
 	actor := actorOf(who)
@@ -218,6 +212,59 @@ func (a *API) finishGitHubInstall(request *http.Request) string {
 	// reconcile pass does it too.
 	a.githubSync.ResumeRepos(ctx, who.Workspace.ID, mine.ID)
 	return "connected"
+}
+
+// installationOfPerson reports whether the person behind userToken may connect the installation. GitHub
+// lists an organization's installation to every member who reaches one of its repositories, so the list
+// alone is not enough: the person must administer every repository the installation reaches (as the App
+// sees them, compared with what the person sees). An organization owner does; an installation with no
+// repository proves nothing. A list too long to read refuses too.
+func (a *API) installationOfPerson(ctx context.Context, userToken string, installationID int64) (*github.Installation, bool, error) {
+	app := a.githubSync.App()
+	installations, err := app.UserInstallations(ctx, userToken)
+	if errors.Is(err, github.ErrTooMany) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	var mine *github.Installation
+	for i := range installations {
+		if installations[i].ID == installationID {
+			mine = &installations[i]
+		}
+	}
+	if mine == nil {
+		return nil, false, nil
+	}
+	administered, err := app.UserInstallationRepositories(ctx, userToken, installationID)
+	if errors.Is(err, github.ErrTooMany) || errors.Is(err, github.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	admin := map[int64]bool{}
+	for _, repo := range administered {
+		admin[repo.ID] = repo.Permissions.Admin
+	}
+	reached, err := app.Repositories(ctx, installationID)
+	if errors.Is(err, github.ErrTooMany) {
+		return nil, false, nil
+	}
+	if err != nil {
+		// A suspended installation reads nothing as the App, so it cannot be checked: unsuspend it first.
+		return nil, false, err
+	}
+	if len(reached) == 0 {
+		return nil, false, nil
+	}
+	for _, repo := range reached {
+		if !admin[repo.ID] {
+			return nil, false, nil
+		}
+	}
+	return mine, true, nil
 }
 
 // revokeGitHubToken deletes a person's GitHub token; best effort, logged without the token (it expires

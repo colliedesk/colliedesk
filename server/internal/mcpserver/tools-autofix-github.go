@@ -52,17 +52,13 @@ func githubConnectRequest(c *call, _ map[string]any) (any, error) {
 	return ask(c, http.MethodPost, "/api/v1/autofix/github/installations", nil)
 }
 
-func githubDisconnect(c *call, arguments map[string]any) (any, error) {
+func githubDisconnectRequest(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[autofixGitHubArguments](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = installationNotFound
-	var settings json.RawMessage
-	if err := c.send(http.MethodDelete, "/api/v1/autofix/github/installations/"+url.PathEscape(args.InstallationID), nil, &settings); err != nil {
-		return nil, err
-	}
-	return settings, nil
+	return ask(c, http.MethodDelete, "/api/v1/autofix/github/installations/"+url.PathEscape(args.InstallationID), nil)
 }
 
 func autofixRepoConnect(c *call, arguments map[string]any) (any, error) {

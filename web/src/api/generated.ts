@@ -2912,7 +2912,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Uninstalls the App from that account on GitHub and removes the installation. Its repositories stay, paused (`removed_from_app`), so their fixes still show where they went; fixes in progress on them are cancelled (`repo_disconnected`). Connect again to resume. */
+        /** @description Uninstalls the App from that account on GitHub and removes the installation. Its repositories stay, paused (`removed_from_app`), so their fixes still show where they went; fixes in progress on them are cancelled (`repo_disconnected`). Connect again to resume. 503 `github_unavailable` when GitHub did not uninstall it: nothing changed. It uninstalls the App on the customer's GitHub, so every agent token's call becomes an agent request. */
         delete: operations["disconnectGitHub"];
         options?: never;
         head?: never;
@@ -2947,7 +2947,7 @@ export interface paths {
         };
         /**
          * GitHub's redirect after installing the App or authorizing a fix
-         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`: only an admin connects GitHub), or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (`signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`). GitHub's own error text is never echoed.
+         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization, and they must administer every repository the installation reaches (an organization owner does; a member does not), else `installation_not_yours`. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`: only an admin connects GitHub), or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (`signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`). GitHub's own error text is never echoed.
          */
         get: operations["finishGitHubAuthorization"];
         put?: never;

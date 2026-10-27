@@ -111,6 +111,8 @@ func (d githubDesk) settings(t *testing.T, session string) autofix.Settings {
 func (d githubDesk) connected(t *testing.T, w githubWorkspace, installationID int64, selection string) string {
 	t.Helper()
 	d.fake.AddInstallation(githubtest.Installation{ID: installationID, Account: account(installationID), AccountType: "Organization", Selection: selection, Users: []string{"ada"}})
+	// Connecting proves the person administers every repository the installation reaches: it has one.
+	d.fake.AddRepo(installationID, githubtest.Repo{ID: seedRepo(installationID), FullName: account(installationID) + "/seed", Visibility: "private"})
 	if location := d.install(t, d.startInstall(t, w.admin), "ada", installationID, sessionCookieOf(w.admin)); location != "/settings/autofix?github=connected" {
 		t.Fatalf("install: Location = %s", location)
 	}
@@ -122,6 +124,9 @@ func (d githubDesk) connected(t *testing.T, w githubWorkspace, installationID in
 	t.Fatal("the installation is not in the settings")
 	return ""
 }
+
+// seedRepo is the repository every installation of the tests starts with.
+func seedRepo(installationID int64) int64 { return 900000 + installationID }
 
 func account(installationID int64) string { return "acme-" + itoa(installationID) }
 
@@ -222,7 +227,7 @@ func TestAnAdminInstallsTheAppAndConnectsOnlyAPrivateRepository(t *testing.T) {
 		Items []autofix.GitHubRepository `json:"items"`
 	}
 	decode(t, listed, &repos)
-	if len(repos.Items) != 3 {
+	if len(repos.Items) != 4 {
 		t.Fatalf("repositories = %+v", repos.Items)
 	}
 	for _, id := range []int64{502, 503} {
@@ -291,6 +296,8 @@ func TestOnlyThePersonsOwnInstallationJoinsTheWorkspaceItStartedIn(t *testing.T)
 	b := d.workspace(t, "Install B")
 	d.fake.AddInstallation(githubtest.Installation{ID: 21, Account: "acme", AccountType: "Organization", Selection: "selected", Users: []string{"ada"}})
 	d.fake.AddInstallation(githubtest.Installation{ID: 22, Account: "victim", AccountType: "Organization", Selection: "selected", Users: []string{"vic"}})
+	d.fake.AddRepo(21, githubtest.Repo{ID: 2101, FullName: "acme/app", Visibility: "private"})
+	d.fake.AddRepo(22, githubtest.Repo{ID: 2201, FullName: "victim/app", Visibility: "private"})
 
 	if location := d.install(t, d.startInstall(t, a.admin), "ada", 22, sessionCookieOf(a.admin)); location != "/settings/autofix?github_error=installation_not_yours" {
 		t.Fatalf("a forged installation_id: Location = %s", location)
@@ -884,4 +891,42 @@ func signedGitHubRequest(body []byte) *http.Request {
 	req.Header.Set("X-GitHub-Delivery", "contract-"+strconv.FormatInt(time.Now().UnixNano(), 10))
 	req.Header.Set(githubsig.Header, githubsig.Sign(contractWebhookSecret, body))
 	return req
+}
+
+// /user/installations also lists an organization's installation to a member who reaches one of its
+// repositories: only a person who administers every repository the installation reaches connects it.
+func TestOnlyAnAdministratorOfEveryRepositoryConnectsTheInstallation(t *testing.T) {
+	d := newGitHubDesk(t)
+	w := d.workspace(t, "Repo Admins")
+	d.fake.AddInstallation(githubtest.Installation{ID: 23, Account: "org23", AccountType: "Organization", Selection: "selected", Users: []string{"olga", "mem", "half"}})
+	d.fake.AddRepo(23, githubtest.Repo{ID: 2301, FullName: "org23/app", Visibility: "private", Access: map[string]string{"mem": "write", "half": "admin"}})
+	d.fake.AddRepo(23, githubtest.Repo{ID: 2302, FullName: "org23/secret", Visibility: "private", Access: map[string]string{"mem": "none", "half": "none"}})
+	for _, login := range []string{"mem", "half"} {
+		before := len(d.fake.UserTokens())
+		if location := d.install(t, d.startInstall(t, w.admin), login, 23, sessionCookieOf(w.admin)); location != "/settings/autofix?github_error=installation_not_yours" {
+			t.Fatalf("%s: Location = %s", login, location)
+		}
+		tokens := d.fake.UserTokens()
+		if len(tokens) != before+1 || d.fake.RevokedTokens() != len(tokens) {
+			t.Fatalf("%s: tokens %d, revoked %d", login, len(tokens), d.fake.RevokedTokens())
+		}
+		if len(d.settings(t, w.admin).Installations) != 0 {
+			t.Fatalf("%s connected the organization's installation", login)
+		}
+	}
+	// An installation with no repository to administer proves nothing either.
+	d.fake.AddInstallation(githubtest.Installation{ID: 24, Account: "empty24", AccountType: "Organization", Selection: "selected", Users: []string{"olga"}})
+	if location := d.install(t, d.startInstall(t, w.admin), "olga", 24, sessionCookieOf(w.admin)); location != "/settings/autofix?github_error=installation_not_yours" {
+		t.Fatalf("an installation with no repository: Location = %s", location)
+	}
+	if location := d.install(t, d.startInstall(t, w.admin), "olga", 23, sessionCookieOf(w.admin)); location != "/settings/autofix?github=connected" {
+		t.Fatalf("the owner: Location = %s", location)
+	}
+	// Removing it uninstalls the App on the customer's GitHub: an agent token asks a person.
+	installation := d.settings(t, w.admin).Installations[0].ID
+	admin := issueToken(t, d.api, w.admin, "Ops agent", "admin").Token
+	accepted(t, d.api, http.MethodDelete, "/api/v1/autofix/github/installations/"+installation, nil, admin)
+	if d.fake.Uninstalled(23) {
+		t.Fatal("an agent token uninstalled the App")
+	}
 }

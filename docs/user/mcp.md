@@ -213,7 +213,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_autofix_settings_get` | Shows Autofix's GitHub installations, connected repositories and coding agents (never a key) | `read` |
 | `colliedesk_github_repositories_list` | Lists the repositories a GitHub installation reaches, read from GitHub now, and which are connected | `read` |
 | `colliedesk_github_connect_request` | Asks a person to install the Colliedesk GitHub App | `read` |
-| `colliedesk_github_disconnect` | Uninstalls the GitHub App from an account; its repositories stay, paused (admin token). Cannot be undone | `admin` |
+| `colliedesk_github_disconnect_request` | Asks a person to uninstall the GitHub App from an account; its repositories stay, paused | `read` |
 | `colliedesk_autofix_repo_connect` | Connects a private repository for fixes (admin token) | `admin` |
 | `colliedesk_autofix_repo_update` | Sets the coding agent a repository suggests (admin token) | `admin` |
 | `colliedesk_autofix_repo_disconnect` | Disconnects a repository; its fixes in progress are cancelled (admin token). Cannot be undone | `admin` |

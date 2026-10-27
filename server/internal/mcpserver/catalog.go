@@ -57,7 +57,7 @@ func Catalog() []Spec {
 		channelsListSpec(), channelsGetSpec(), channelsEventsSpec(), channelsCreateSpec(), channelsUpdateSpec(), channelsCheckSpec(), channelsHeldReplaySpec(),
 		channelsCredentialsSetSpec(), channelsDeleteRequestSpec(), channelsHeldDiscardRequestSpec(),
 		autofixStatusSpec(), fixesListSpec(), fixGetSpec(), conversationFixesListSpec(),
-		autofixSettingsGetSpec(), githubRepositoriesListSpec(), githubConnectRequestSpec(), githubDisconnectSpec(),
+		autofixSettingsGetSpec(), githubRepositoriesListSpec(), githubConnectRequestSpec(), githubDisconnectRequestSpec(),
 		autofixRepoConnectSpec(), autofixRepoUpdateSpec(), autofixRepoDisconnectSpec(), autofixRepoNotesIncludeRequestSpec(), autofixRepoNotesExcludeSpec(),
 	}
 	for i := range specs {

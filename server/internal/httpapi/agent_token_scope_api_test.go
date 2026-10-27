@@ -117,7 +117,7 @@ var routeTiers = map[string]string{
 	"GET /api/v1/autofix/settings":                                     "read",
 	"GET /api/v1/autofix/github/installations/{id}/repositories":       "read",
 	"POST /api/v1/autofix/github/installations":                        "approval",
-	"DELETE /api/v1/autofix/github/installations/{id}":                 "admin",
+	"DELETE /api/v1/autofix/github/installations/{id}":                 "approval",
 	"POST /api/v1/autofix/repos":                                       "admin",
 	"PATCH /api/v1/autofix/repos/{id}":                                 "admin",
 	"DELETE /api/v1/autofix/repos/{id}":                                "admin",

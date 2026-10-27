@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -196,5 +197,25 @@ func TestTheStandInServesTheInstallPageToABrowser(t *testing.T) {
 	authorized.Body.Close()
 	if back, _ := url.Parse(authorized.Header.Get("Location")); authorized.StatusCode != http.StatusFound || back.Query().Get("state") != "s-2" {
 		t.Fatalf("authorize redirect = %d %s", authorized.StatusCode, back)
+	}
+}
+
+// A list cut short is an error, never a shorter list: the reconcile pass would read the missing
+// repositories as removed from the App.
+func TestARepositoryListTooLongToReadIsAnError(t *testing.T) {
+	app, fake := newApp(t)
+	fake.AddInstallation(githubtest.Installation{ID: 41, Account: "big", AccountType: "Organization", Selection: "selected"})
+	for id := int64(1); id <= 2001; id++ {
+		fake.AddRepo(41, githubtest.Repo{ID: id, FullName: "big/r" + strconv.FormatInt(id, 10), Visibility: "private"})
+	}
+	if repos, err := app.Repositories(context.Background(), 41); err == nil {
+		t.Fatalf("read %d of 2001 repositories without an error", len(repos))
+	}
+	fake.AddInstallation(githubtest.Installation{ID: 42, Account: "small", AccountType: "Organization", Selection: "selected"})
+	for id := int64(5001); id <= 5150; id++ {
+		fake.AddRepo(42, githubtest.Repo{ID: id, FullName: "small/r" + strconv.FormatInt(id, 10), Visibility: "private"})
+	}
+	if repos, err := app.Repositories(context.Background(), 42); err != nil || len(repos) != 150 {
+		t.Fatalf("150 repositories over two pages = %d, %v", len(repos), err)
 	}
 }

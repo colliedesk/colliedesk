@@ -7,6 +7,7 @@
 package githubtest
 
 import (
+	"cmp"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -20,9 +21,11 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,6 +46,9 @@ type Repo struct {
 	DefaultBranch string
 	// Owner is the account (installation account login) it belongs to.
 	Owner string
+	// Access is each person's permission on it (admin, write, read, or none: not listed to them). A user
+	// of its installation not named here administers it (an organization owner).
+	Access map[string]string
 }
 
 // Installation is an installation of the App.
@@ -167,6 +173,7 @@ func (s *Server) AddRepo(installationID int64, repo Repo) {
 		repo.Owner, _, _ = strings.Cut(repo.FullName, "/")
 	}
 	copied := repo
+	copied.Access = maps.Clone(repo.Access)
 	s.repos[repo.ID] = &copied
 	if installation := s.installations[installationID]; installation != nil {
 		installation.Repos = append(installation.Repos, repo.ID)
@@ -356,6 +363,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.revoke(w, r)
 	case r.Method == http.MethodGet && path == "/user/installations":
 		s.userInstallations(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/user/installations/") && strings.HasSuffix(path, "/repositories"):
+		s.userRepositories(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/user/installations/"), "/repositories"))
 	case strings.HasPrefix(path, "/app/installations/"):
 		s.app(w, r, strings.TrimPrefix(path, "/app/installations/"))
 	case r.Method == http.MethodGet && path == "/installation/repositories":
@@ -492,6 +501,39 @@ func (s *Server) userInstallations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"total_count": len(items), "installations": items})
 }
 
+// userRepositories lists the repositories of an installation the person reaches, with their permissions.
+func (s *Server) userRepositories(w http.ResponseWriter, r *http.Request, idText string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	login := s.userOf(r)
+	if login == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Bad credentials"})
+		return
+	}
+	id, _ := strconv.ParseInt(idText, 10, 64)
+	installation := s.installations[id]
+	if installation == nil || !slices.ContainsFunc(installation.Users, func(user string) bool { return strings.EqualFold(user, login) }) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+		return
+	}
+	var reached []*Repo
+	for _, repo := range s.repos {
+		access, named := repo.Access[login]
+		if s.reaches(installation, repo) && (!named || access != "none") {
+			reached = append(reached, repo)
+		}
+	}
+	slices.SortFunc(reached, func(a, b *Repo) int { return cmp.Compare(a.ID, b.ID) })
+	items := []map[string]any{}
+	for _, repo := range page(r, reached) {
+		access, named := repo.Access[login]
+		item := repoJSON(repo)
+		item["permissions"] = map[string]bool{"admin": !named || access == "admin", "push": !named || access == "admin" || access == "write", "pull": true}
+		items = append(items, item)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"total_count": len(reached), "repository_selection": installation.Selection, "repositories": items})
+}
+
 // verifyJWT checks the App's JWT: RS256 with the App's key, issued by the App, not expired.
 func (s *Server) verifyJWT(r *http.Request) bool {
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -604,13 +646,18 @@ func (s *Server) installationRepositories(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Bad credentials"})
 		return
 	}
-	items := []map[string]any{}
+	var reached []*Repo
 	for _, repo := range s.repos {
 		if s.reaches(installation, repo) {
-			items = append(items, repoJSON(repo))
+			reached = append(reached, repo)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"total_count": len(items), "repositories": items})
+	slices.SortFunc(reached, func(a, b *Repo) int { return cmp.Compare(a.ID, b.ID) })
+	items := []map[string]any{}
+	for _, repo := range page(r, reached) {
+		items = append(items, repoJSON(repo))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"total_count": len(reached), "repositories": items})
 }
 
 func (s *Server) repository(w http.ResponseWriter, r *http.Request, idText string) {
@@ -793,6 +840,23 @@ func (s *Server) graphql(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusOK, map[string]any{"errors": []map[string]any{{"message": "the stand-in does not know this query"}}})
 	}
+}
+
+// page is the slice of items GitHub's per_page and page parameters ask for (30 a page by default).
+func page[T any](r *http.Request, items []T) []T {
+	size, err := strconv.Atoi(r.URL.Query().Get("per_page"))
+	if err != nil || size < 1 || size > 100 {
+		size = 30
+	}
+	number, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || number < 1 {
+		number = 1
+	}
+	start := (number - 1) * size
+	if start >= len(items) {
+		return nil
+	}
+	return items[start:min(start+size, len(items))]
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

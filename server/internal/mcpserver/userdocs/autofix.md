@@ -20,7 +20,9 @@ An admin sets Autofix up in three steps; everyone else sees them. Every step can
 **Connect GitHub** opens GitHub to install the Colliedesk GitHub App on your account or organization.
 Choose **Only select repositories** and pick the repositories fixes may go to. GitHub then sends you
 back to Colliedesk, which checks with your own GitHub authorization that the installation is yours
-before it joins the workspace, and forgets that authorization at once.
+before it joins the workspace, and forgets that authorization at once. You must administer every
+repository the installation reaches: in an organization, an owner connects it (a member who only
+reaches some of its repositories is told the installation is not theirs).
 
 The App asks for three permissions on the repositories you pick, and nothing more:
 
@@ -68,7 +70,7 @@ agree to the data it receives.
 ## AI agents
 
 An agent token can read the settings (`autofix_settings:read`, `read` tier) and, at the `admin` tier
-(`autofix_settings:update`), connect and disconnect repositories, set their coding agent, stop notes
-going with fixes and disconnect GitHub. Installing the App and letting notes go with fixes always wait
+(`autofix_settings:update`), connect and disconnect repositories, set their coding agent and stop notes
+going with fixes. Installing the App, disconnecting GitHub and letting notes go with fixes always wait
 for a person's approval: the person who approves installs the App as themselves. See the tools in
 [Connect an AI agent (MCP)](mcp.md).

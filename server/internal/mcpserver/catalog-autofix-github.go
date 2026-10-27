@@ -58,19 +58,13 @@ func githubConnectRequestSpec() Spec {
 		[]string{"POST /api/v1/autofix/github/installations"}, noArguments, githubConnectRequest)
 }
 
-func githubDisconnectSpec() Spec {
-	return Spec{
-		Name:  "colliedesk_github_disconnect",
-		Title: "Disconnect a GitHub installation from Autofix",
-		Description: `Uninstall the Colliedesk GitHub App from that account on GitHub and remove the installation. Its repositories stay, paused (removed_from_app), so their fixes ` +
-			`still show where they went; fixes in progress on them are cancelled (repo_disconnected). To undo, an admin connects GitHub again (colliedesk_github_connect_request): ` +
-			`the repositories come back. The cancelled fixes cannot be undone (send them again). Answers the settings.` + "\n\nTier: admin.",
-		Tier: "admin", Destructive: true,
-		REST:   []string{"DELETE /api/v1/autofix/github/installations/{id}"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{` + installationIDProperty + `}}`,
-		Output: autofixSettingsSchema,
-		run:    githubDisconnect,
-	}
+func githubDisconnectRequestSpec() Spec {
+	return approvalSpec("colliedesk_github_disconnect_request", "Ask a person to disconnect GitHub from Autofix",
+		`Ask an admin to uninstall the Colliedesk GitHub App from an account on GitHub and remove the installation (installation_id from colliedesk_autofix_settings_get). `+
+			`Its repositories stay, paused (removed_from_app), so their fixes still show where they went; fixes in progress on them are cancelled (repo_disconnected) and are sent again by hand. `+
+			`Connecting GitHub again brings the repositories back.`,
+		[]string{"DELETE /api/v1/autofix/github/installations/{id}"},
+		`{"type":"object","additionalProperties":false,"required":["installation_id"],"properties":{`+installationIDProperty+`}}`, githubDisconnectRequest)
 }
 
 func autofixRepoConnectSpec() Spec {

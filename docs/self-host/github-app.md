@@ -61,7 +61,8 @@ ten minutes late.
 
 - **Settings → Autofix says GitHub is not set up**: one of the six settings is missing; the page and
   `GET /api/v1/config` (`autofix.missing_settings`) name it.
-- **Coming back from GitHub says the installation is not yours**: the admin who started in Colliedesk
-  must be an admin of the installation on GitHub, and finish in the same browser.
+- **Coming back from GitHub says the installation is not yours**: the person who started in Colliedesk
+  must administer every repository the installation reaches on GitHub (an organization owner does; a
+  member with access to some repositories does not), and finish in the same browser.
 - **Fixes never move**: check the App's **Advanced** tab on GitHub for failed webhook deliveries (a
   wrong secret answers 401); fixes still move with the ten-minute check.

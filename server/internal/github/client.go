@@ -42,6 +42,8 @@ var (
 	ErrCodeRefused = errors.New("github refused the authorization code")
 	// ErrSuspended: the installation is suspended; GitHub gives it no token.
 	ErrSuspended = errors.New("github: the installation is suspended")
+	// ErrTooMany: a list longer than Colliedesk reads (maxPages of 100); never read as a shorter list.
+	ErrTooMany = errors.New("github: the list is longer than Colliedesk reads")
 )
 
 // APIError is any other answer GitHub gave. The body is never kept: only the status and GitHub's
@@ -234,21 +236,55 @@ type Installation struct {
 // UserInstallations lists the installations of the App the person behind userToken can reach. It is
 // how Colliedesk knows an installation_id from a redirect is theirs: GitHub's redirect can be forged.
 func (a *App) UserInstallations(ctx context.Context, userToken string) ([]Installation, error) {
-	var all []Installation
-	for page := 1; page <= maxPages; page++ {
+	return paginate(func(page int) ([]Installation, int, error) {
 		var answer struct {
 			TotalCount    int            `json:"total_count"`
 			Installations []Installation `json:"installations"`
 		}
-		if err := a.get(ctx, "/user/installations?per_page=100&page="+strconv.Itoa(page), "Bearer "+userToken, &answer); err != nil {
+		err := a.get(ctx, "/user/installations?per_page=100&page="+strconv.Itoa(page), "Bearer "+userToken, &answer)
+		return answer.Installations, answer.TotalCount, err
+	})
+}
+
+// UserRepository is a repository of an installation the person reaches, and whether they administer it.
+type UserRepository struct {
+	ID          int64 `json:"id"`
+	Permissions struct {
+		Admin bool `json:"admin"`
+	} `json:"permissions"`
+}
+
+// UserInstallationRepositories lists the repositories of an installation the person behind userToken
+// reaches, with their permissions on each (only the ones they reach: compare with Repositories).
+func (a *App) UserInstallationRepositories(ctx context.Context, userToken string, installationID int64) ([]UserRepository, error) {
+	return paginate(func(page int) ([]UserRepository, int, error) {
+		var answer struct {
+			TotalCount   int              `json:"total_count"`
+			Repositories []UserRepository `json:"repositories"`
+		}
+		err := a.get(ctx, "/user/installations/"+strconv.FormatInt(installationID, 10)+"/repositories?per_page=100&page="+strconv.Itoa(page),
+			"Bearer "+userToken, &answer)
+		return answer.Repositories, answer.TotalCount, err
+	})
+}
+
+// paginate reads pages of 100 until total_count, up to maxPages: a longer list is ErrTooMany.
+func paginate[T any](read func(page int) ([]T, int, error)) ([]T, error) {
+	all := []T{}
+	for page := 1; page <= maxPages; page++ {
+		items, total, err := read(page)
+		if err != nil {
 			return nil, err
 		}
-		all = append(all, answer.Installations...)
-		if len(answer.Installations) < 100 || len(all) >= answer.TotalCount {
-			break
+		all = append(all, items...)
+		if len(all) >= total || len(items) == 0 {
+			if len(all) < total {
+				return nil, fmt.Errorf("%w: GitHub counted %d, answered %d", ErrTooMany, total, len(all))
+			}
+			return all, nil
 		}
 	}
-	return all, nil
+	return nil, ErrTooMany
 }
 
 // Installation reads one installation as the App; ErrNotFound when it was uninstalled.
@@ -361,21 +397,14 @@ func (r Repository) Kind() string {
 
 // Repositories lists every repository the installation can reach.
 func (a *App) Repositories(ctx context.Context, installationID int64) ([]Repository, error) {
-	var all []Repository
-	for page := 1; page <= maxPages; page++ {
+	return paginate(func(page int) ([]Repository, int, error) {
 		var answer struct {
 			TotalCount   int          `json:"total_count"`
 			Repositories []Repository `json:"repositories"`
 		}
-		if err := a.asInstallation(ctx, installationID, "/installation/repositories?per_page=100&page="+strconv.Itoa(page), &answer); err != nil {
-			return nil, err
-		}
-		all = append(all, answer.Repositories...)
-		if len(answer.Repositories) < 100 || len(all) >= answer.TotalCount {
-			break
-		}
-	}
-	return all, nil
+		err := a.asInstallation(ctx, installationID, "/installation/repositories?per_page=100&page="+strconv.Itoa(page), &answer)
+		return answer.Repositories, answer.TotalCount, err
+	})
 }
 
 // Repository reads one repository by its id as the installation, now (never cached): ErrNotFound when
