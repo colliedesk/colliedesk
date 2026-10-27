@@ -26,6 +26,9 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 	if item.path == webhookPath {
 		return signedWebhookRequest("msg_contract_"+method, []byte(item.raw))
 	}
+	if item.path == githubWebhookPath {
+		return signedGitHubRequest([]byte(item.raw))
+	}
 	if item.path == resendWebhookPath {
 		return signedResendRequest("msg_contract_"+method, []byte(item.raw))
 	}
@@ -222,6 +225,17 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/channels/email/gmail":                          {path: "/api/v1/channels/email/gmail", token: admin, status: 200},
 		"DELETE /api/v1/channels/email/gmail":                        {path: "/api/v1/channels/email/gmail", token: admin, status: 404},
 		"GET /api/v1/channels/email/gmail/callback":                  {path: "/api/v1/channels/email/gmail/callback?state=unknown&code=x", status: 303},
+		"GET /api/v1/autofix/settings":                               {path: "/api/v1/autofix/settings", token: admin, status: 200},
+		"POST /api/v1/autofix/github/installations":                  {path: "/api/v1/autofix/github/installations", token: admin, status: 201},
+		"DELETE /api/v1/autofix/github/installations/{id}":           {path: "/api/v1/autofix/github/installations/" + f.github.removableInstallation, token: admin, status: 200},
+		"GET /api/v1/autofix/github/installations/{id}/repositories": {path: "/api/v1/autofix/github/installations/" + f.github.installation + "/repositories", token: admin, status: 200},
+		"GET /api/v1/autofix/github/callback":                        {path: "/api/v1/autofix/github/callback?state=unknown&code=x&installation_id=1&setup_action=install", status: 303},
+		"POST /api/v1/autofix/repos":                                 {path: "/api/v1/autofix/repos", body: map[string]any{"installation_id": f.github.installation, "github_repo_id": contractNewRepo, "default_connector": "copilot_issue"}, token: admin, status: 201},
+		"PATCH /api/v1/autofix/repos/{id}":                           {path: "/api/v1/autofix/repos/" + f.github.repo, body: map[string]any{"default_connector": "cursor_api"}, token: admin, status: 200},
+		"DELETE /api/v1/autofix/repos/{id}":                          {path: "/api/v1/autofix/repos/" + f.github.removableRepo, token: admin, status: 204},
+		"PUT /api/v1/autofix/repos/{id}/include-notes":               {path: "/api/v1/autofix/repos/" + f.github.repo + "/include-notes", token: admin, status: 200},
+		"DELETE /api/v1/autofix/repos/{id}/include-notes":            {path: "/api/v1/autofix/repos/" + f.github.repo + "/include-notes", token: admin, status: 200},
+		"POST /api/v1/webhooks/github":                               {path: githubWebhookPath, raw: `{"zen":"Design for failure.","installation":{"id":` + contractInstallationText + `}}`, status: 200},
 		"POST /api/v1/channels/email/microsoft":                      {path: "/api/v1/channels/email/microsoft", token: admin, status: 200},
 		"DELETE /api/v1/channels/email/microsoft":                    {path: "/api/v1/channels/email/microsoft", token: admin, status: 404},
 		"GET /api/v1/channels/email/microsoft/callback":              {path: "/api/v1/channels/email/microsoft/callback?state=unknown&code=x", status: 303},

@@ -298,6 +298,17 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/autofix/fixes":            grant(auth.PermAutofixRead),
 	"GET /api/v1/autofix/fixes/{id}":       grant(auth.PermAutofixRead),
 	"GET /api/v1/conversations/{id}/fixes": grant(auth.PermAutofixRead),
+	// Autofix settings: reading them shows no key. Changing them is admin; installing the App answers a
+	// one-time address and letting notes go with fixes sends internal notes out, so a person approves both.
+	"GET /api/v1/autofix/settings":                               grant(auth.PermAutofixSettingsRead),
+	"GET /api/v1/autofix/github/installations/{id}/repositories": grant(auth.PermAutofixSettingsRead),
+	"POST /api/v1/autofix/github/installations":                  alwaysAsk(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/github/installations/{id}":           grant(auth.PermAutofixSettingsUpdate),
+	"POST /api/v1/autofix/repos":                                 grant(auth.PermAutofixSettingsUpdate),
+	"PATCH /api/v1/autofix/repos/{id}":                           grant(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/repos/{id}":                          grant(auth.PermAutofixSettingsUpdate),
+	"PUT /api/v1/autofix/repos/{id}/include-notes":               alwaysAsk(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/repos/{id}/include-notes":            grant(auth.PermAutofixSettingsUpdate),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
@@ -311,12 +322,16 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/channels/email/inbound":           notForPeople,
 	"POST /api/v1/channels/email/inbound/recipient": notForPeople,
 	"POST " + polarWebhookPath:                      notForPeople,
-	"POST " + resendWebhookPath:                     notForPeople,
-	"GET " + foundingPath:                           notForPeople,
-	"GET " + helpCenterTLSAskPath:                   notForPeople,
-	"POST " + webFormSubmitPattern:                  notForPeople,
-	"POST " + webFormChannelPattern:                 notForPeople,
-	"GET " + exportLinkPath + "{token}":             notForPeople,
+	// GitHub's redirect after installing the App: it finishes only with the session cookie of the person
+	// who started. The App's webhook is signed with its secret.
+	"GET " + autofixCallbackPath:        notForPeople,
+	"POST " + githubWebhookPath:         notForPeople,
+	"POST " + resendWebhookPath:         notForPeople,
+	"GET " + foundingPath:               notForPeople,
+	"GET " + helpCenterTLSAskPath:       notForPeople,
+	"POST " + webFormSubmitPattern:      notForPeople,
+	"POST " + webFormChannelPattern:     notForPeople,
+	"GET " + exportLinkPath + "{token}": notForPeople,
 }
 
 // TokenAccessTable returns a copy of the classification, for the tests that hold it to Routes() and

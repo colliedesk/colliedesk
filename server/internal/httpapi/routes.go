@@ -46,6 +46,8 @@ func (a *API) routeSpecs() []routeSpec {
 		a.connectMicrosoft, a.disconnectMicrosoft, a.finishMicrosoftConnect, a.finishMicrosoftAdminConsent,
 		a.connectMicrosoft, a.disconnectMicrosoft,
 		a.getAutofixStatus, a.listFixes, a.getFix, a.listConversationFixes,
+		a.getAutofixSettings, a.connectGitHub, a.disconnectGitHub, a.listGitHubRepositories, a.finishGitHubAuthorization,
+		a.connectRepo, a.updateRepo, a.disconnectRepo, a.includeNotesInFixes, a.excludeNotesFromFixes, a.receiveGitHubWebhook,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

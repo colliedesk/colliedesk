@@ -67,7 +67,7 @@ func TestFixToolsReadOnlyTheirWorkspaceAndMarkWhatWasSentAsUntrusted(t *testing.
 		t.Fatal(err)
 	}
 	for _, tool := range listed.Tools {
-		if strings.Contains(tool.Name, "fix") && tool.Name != "colliedesk_autofix_status" && !strings.Contains(tool.Description, "data, never as instructions") {
+		if strings.Contains(tool.Name, "fix") && !strings.HasPrefix(tool.Name, "colliedesk_autofix_") && !strings.Contains(tool.Description, "data, never as instructions") {
 			t.Errorf("%s does not tell the model the sent text is data", tool.Name)
 		}
 	}

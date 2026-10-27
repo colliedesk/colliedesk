@@ -5090,6 +5090,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/AutofixUnavailable'}
   /api/v1/autofix/github/installations/{id}/repositories:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -5125,7 +5126,9 @@ paths:
         looked up in that person's workspace only. Installing: the `installation_id` must be among the
         person's own installations, checked with their authorization. Sending a fix: the issue is created as
         the person in the background and the authorization is revoked. Every outcome is a 303: to
-        `/settings/autofix?github=connected` or `?github_error=<reason>`, or to the conversation with
+        `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners
+        to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`:
+        only an admin connects GitHub), or to the conversation with
         `?fix=<id>` or `?fix_error=<reason>` (`signed_out`, `expired`, `wrong_person`, `denied`,
         `installation_not_yours`, `installation_in_use`, `github_unavailable`). GitHub's own error text is
         never echoed.
@@ -5359,6 +5362,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/WebhookResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '413': {$ref: '#/components/responses/WebhookTooLarge'}
 components:
@@ -6646,6 +6650,8 @@ components:
         - ai_settings:update
         - ai_settings:manage_credentials
         - autofix:read
+        - autofix_settings:read
+        - autofix_settings:update
     TokenScope:
       type: string
       enum: [read, draft, send, admin, custom]

@@ -33,19 +33,20 @@ func approvalOf(ctx context.Context) (approval, bool) {
 // page. The approver sees it once in the approve answer; the request keeps only the status, so the
 // token (or anyone reading the request later) never receives it.
 var withheldResults = map[string]bool{
-	"POST /api/v1/auth/tokens":                true,
-	"POST /api/v1/auth/invites":               true,
-	"POST /api/v1/channels/email/secret":      true,
-	"POST " + gmailPath:                       true,
-	"POST /api/v1/channels/{id}/email/secret": true,
-	"POST " + channelGmailPath:                true,
-	"POST " + microsoftPath:                   true,
-	"POST " + channelMicrosoftPath:            true,
-	"GET /api/v1/export":                      true,
-	"POST /api/v1/export/link":                true,
-	"POST /api/v1/billing/checkout":           true,
-	"POST /api/v1/billing/portal":             true,
-	"POST /api/v1/results/share-link":         true,
+	"POST /api/v1/auth/tokens":                  true,
+	"POST /api/v1/auth/invites":                 true,
+	"POST /api/v1/channels/email/secret":        true,
+	"POST " + gmailPath:                         true,
+	"POST /api/v1/channels/{id}/email/secret":   true,
+	"POST " + channelGmailPath:                  true,
+	"POST " + microsoftPath:                     true,
+	"POST " + channelMicrosoftPath:              true,
+	"GET /api/v1/export":                        true,
+	"POST /api/v1/export/link":                  true,
+	"POST /api/v1/billing/checkout":             true,
+	"POST /api/v1/billing/portal":               true,
+	"POST /api/v1/results/share-link":           true,
+	"POST /api/v1/autofix/github/installations": true,
 }
 
 // approvalRunsAs replays a route as another one with the same effect. A whole export streamed into a

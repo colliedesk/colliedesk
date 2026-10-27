@@ -193,6 +193,13 @@ var requestTitles = map[string]string{
 	"DELETE /api/v1/saved-replies/{id}":                          "Delete a saved reply",
 	"POST /api/v1/saved-replies/{id}/restore":                    "Restore a saved reply from the trash",
 	"POST /api/v1/saved-replies/{id}/versions/{version}/restore": "Restore an earlier version of a saved reply",
+	"POST /api/v1/autofix/github/installations":                  "Connect GitHub for Autofix",
+	"DELETE /api/v1/autofix/github/installations/{id}":           "Disconnect GitHub from Autofix",
+	"POST /api/v1/autofix/repos":                                 "Connect a repository for Autofix",
+	"PATCH /api/v1/autofix/repos/{id}":                           "Change the coding agent a repository suggests",
+	"DELETE /api/v1/autofix/repos/{id}":                          "Disconnect a repository from Autofix",
+	"PUT /api/v1/autofix/repos/{id}/include-notes":               "Let fixes on a repository carry internal notes",
+	"DELETE /api/v1/autofix/repos/{id}/include-notes":            "Stop internal notes going with fixes on a repository",
 }
 
 const summaryDetail = 300

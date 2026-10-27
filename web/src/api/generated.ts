@@ -2947,7 +2947,7 @@ export interface paths {
         };
         /**
          * GitHub's redirect after installing the App or authorizing a fix
-         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected` or `?github_error=<reason>`, or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (`signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`). GitHub's own error text is never echoed.
+         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`: only an admin connects GitHub), or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (`signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`). GitHub's own error text is never echoed.
          */
         get: operations["finishGitHubAuthorization"];
         put?: never;
@@ -4199,7 +4199,7 @@ export interface components {
          * @description A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it; the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
          * @enum {string}
          */
-        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read";
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix_settings:read" | "autofix_settings:update";
         /**
          * @description Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
          * @enum {string}
@@ -12466,6 +12466,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["AutofixUnavailable"];
         };
     };
     listGitHubRepositories: {
@@ -12831,6 +12832,7 @@ export interface operations {
                     "application/json": components["schemas"]["WebhookResult"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             413: components["responses"]["WebhookTooLarge"];
         };

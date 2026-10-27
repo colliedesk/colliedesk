@@ -43,6 +43,37 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
 - The export carries installations, repositories, connectors (only whether Cursor's key is set) and
   every fix with exactly what it sent and its timeline.
 
+## GitHub
+
+- One GitHub App per server (`server/internal/github`, plain `net/http`, no SDK). Its private key stays
+  in the environment; installation tokens live in memory for under an hour. `githubtest` is the
+  stand-in every test and the e2e build use (`COLLIEDESK_E2E_GITHUB_URL`).
+- Installing: GitHub's redirect names `installation_id`, and anyone can type another one. The callback
+  takes the state first (one use, the same person in the same workspace), trades the code for the
+  person's user token, keeps the installation only if `GET /user/installations` of that token lists it,
+  and revokes the token before anything else happens. `installation_id` is unique on the server, so
+  one installation never joins a second workspace (`installation_in_use`).
+- `repository_selection = all` is stored `blocked_all_repositories`: GitHub cannot make an admin pick
+  selected repositories, so Colliedesk refuses to connect any until the installation is narrowed, and
+  unblocks it when the webhook or the reconcile pass sees `selected`.
+- The webhook has its own verifier (`github/githubsig`: hex HMAC-SHA256 of the raw body), not
+  `standardwebhooks`. GitHub signs no timestamp, so a replay is stopped by `X-GitHub-Delivery`, recorded
+  only after the event was applied (a failed delivery is applied again when redelivered; every move is
+  idempotent). An event acts in the workspace that owns its installation, and on a repository only when
+  it is connected there through that same installation.
+- A pull request finds its fix by its number (every connector), then by branch (Cursor), then by the
+  issues it closes (`closingIssuesReferences`), then by Claude's branch `claude/issue-<N>-`. An issue
+  closed while its fix waits asks GitHub which pull requests close it: a merged one is the merge whose
+  own webhook was missed.
+- `githubsync.Service.Reconcile` runs every ten minutes for a server GitHub cannot reach: installation
+  gone, suspended or narrowed; repositories left the App or turned public; the issue or pull request of
+  every fix past `sending` still in progress. `sending` belongs to the senders (the issue connectors'
+  expiry, the Cursor worker).
+- A repository that turns public is paused and its fixes still `sending` fail (`repo_public`); a fix
+  whose issue exists already keeps going (the issue was created while it was private).
+- `githubsync.Service.CheckRepo` (`autofix.RepoChecker`) reads a repository from GitHub now, before a
+  fix leaves; it pauses a repository no longer private on the way.
+
 ## How the work was split
 
 The first branch shipped the schema, the rules, the store, the read routes and their MCP tools, the

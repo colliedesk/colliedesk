@@ -7,6 +7,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -17,6 +18,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -150,6 +152,9 @@ type Route struct {
 }
 
 type API struct {
+	// githubSync is Autofix's GitHub App (nil while its settings are missing): the calls, the webhook and
+	// the reconcile pass.
+	githubSync *githubsync.Service
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
@@ -214,6 +219,10 @@ type Server struct {
 
 // AI is the service of the workspaces' AI settings and task queue, which the worker of the process shares.
 func (s *Server) AI() *ai.Service { return s.api.ai }
+
+// GitHubSync is Autofix's GitHub side (the reconcile pass, the repository check), nil while the server's
+// GitHub App is not set up.
+func (s *Server) GitHubSync() *githubsync.Service { return s.api.githubSync }
 
 // RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
 // does nothing when billing is off.
@@ -300,6 +309,14 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	if config.Billing.Enabled() {
 		api.polar = polar.NewClient(config.Billing)
+	}
+	if config.GitHub.Enabled() {
+		// serve checks the key first (github.Config.Check); a key that does not parse leaves Autofix off.
+		if app, err := github.NewApp(config.GitHub); err == nil {
+			api.githubSync = githubsync.New(api.store, app)
+		} else {
+			slog.Error("autofix: the GitHub App settings do not work", "error", err)
+		}
 	}
 	api.helpCenter = api.newHelpCenter()
 	mux := http.NewServeMux()
@@ -518,6 +535,18 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/autofix/fixes", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/autofix/fixes/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/conversations/{id}/fixes", auth.PermissionConversationsRead},
+		// Autofix settings: the GitHub App's installations and the connected repositories.
+		{http.MethodGet, "/api/v1/autofix/settings", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/autofix/github/installations", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/github/installations/{id}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/autofix/github/installations/{id}/repositories", auth.PermissionAccessRead},
+		{http.MethodGet, autofixCallbackPath, auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/autofix/repos", auth.PermissionAccessWrite},
+		{http.MethodPatch, "/api/v1/autofix/repos/{id}", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/repos/{id}", auth.PermissionAccessWrite},
+		{http.MethodPut, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionAccessWrite},
+		{http.MethodPost, githubWebhookPath, auth.PermissionPublic},
 	}
 }
 

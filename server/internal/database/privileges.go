@@ -104,4 +104,11 @@ const (
 	PrivilegeResultsClaim Privilege = "results-claim"
 	// PrivilegeResultsShareToken resolves the workspace of a results share link from its token hash.
 	PrivilegeResultsShareToken Privilege = "results-share-token"
+	// PrivilegeGitHubInstallation routes the Colliedesk GitHub App's webhook: it finds the one workspace
+	// that owns a GitHub installation id (unique on the server) and reads and records the delivery ids
+	// already applied (autofix_webhook_deliveries, a platform table like retention_deletions). The
+	// reconcile pass lists the workspaces with an installation, and old delivery ids are swept. Only
+	// workspace ids, installation ids and yes or no leave the transaction; each event is then applied in
+	// its own workspace.
+	PrivilegeGitHubInstallation Privilege = "github-installation"
 )

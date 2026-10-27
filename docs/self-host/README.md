@@ -103,6 +103,7 @@ Security fixes go to the latest release and to `edge` only.
 - [Environment variables](environment-variables.md)
 - [Running behind a proxy](running-behind-proxy.md)
 - [Configuring email](email.md)
+- [Autofix: the GitHub App](github-app.md)
 - [Backups and database](database.md)
 - [Upgrade, roll back and restore a workspace](upgrade.md)
 

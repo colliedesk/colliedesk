@@ -39,6 +39,7 @@ export const tokenResources: ResourceInfo[] = [
   { resource: 'imports', label: 'Imports', permissions: [p('imports:read', 'admin'), p('imports:run', 'admin'), p('imports:manage_credentials', 'admin', { outside: true }), p('imports:undo', 'admin', { asks: true })] },
   { resource: 'ai_settings', label: 'AI settings', permissions: [p('ai_settings:read', 'read'), p('ai_settings:update', 'admin'), p('ai_settings:manage_credentials', 'admin', { outside: true })] },
   { resource: 'autofix', label: 'Autofix', permissions: [p('autofix:read', 'read')] },
+  { resource: 'autofix_settings', label: 'Autofix settings', permissions: [p('autofix_settings:read', 'read'), p('autofix_settings:update', 'admin')] },
 ];
 
 export const actionLabels: Record<string, string> = {

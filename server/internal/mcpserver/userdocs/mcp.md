@@ -210,6 +210,15 @@ with `billing` and leave a note with a summary."
 | `colliedesk_fixes_list` | Lists the fixes sent to coding agents, by group (needs a person, running, done) | `read` |
 | `colliedesk_fix_get` | Shows one fix: where it is, its issue and pull request, what was sent and its timeline | `read` |
 | `colliedesk_conversation_fixes_list` | Lists a conversation's fixes, the latest attempt first | `read` |
+| `colliedesk_autofix_settings_get` | Shows Autofix's GitHub installations, connected repositories and coding agents (never a key) | `read` |
+| `colliedesk_github_repositories_list` | Lists the repositories a GitHub installation reaches, read from GitHub now, and which are connected | `read` |
+| `colliedesk_github_connect_request` | Asks a person to install the Colliedesk GitHub App | `read` |
+| `colliedesk_github_disconnect` | Uninstalls the GitHub App from an account; its repositories stay, paused (admin token). Cannot be undone | `admin` |
+| `colliedesk_autofix_repo_connect` | Connects a private repository for fixes (admin token) | `admin` |
+| `colliedesk_autofix_repo_update` | Sets the coding agent a repository suggests (admin token) | `admin` |
+| `colliedesk_autofix_repo_disconnect` | Disconnects a repository; its fixes in progress are cancelled (admin token). Cannot be undone | `admin` |
+| `colliedesk_autofix_repo_notes_include_request` | Asks a person to let fixes on a repository carry internal notes | `read` |
+| `colliedesk_autofix_repo_notes_exclude` | Stops internal notes going with fixes on a repository (admin token) | `admin` |
 <!-- /generated -->
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

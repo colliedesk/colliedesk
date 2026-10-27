@@ -24,6 +24,7 @@ service of `compose.yaml`.
 | `MICROSOFT_OAUTH_TENANT` | `common` | Which Microsoft accounts can connect: `common`, `organizations`, `consumers`, or one tenant's id or domain. |
 | `MAILBOX_TOKEN_KEYS` | set by the installer on new installs; empty on older ones | Key ring that encrypts the stored Gmail and Microsoft 365 access and the Freshdesk API key of an import running in the app: `k1:` followed by 32 random bytes in base64 (`k1:$(openssl rand -base64 32)`). Without it an import keeps its key in memory only, and after a restart someone enters the key again. Keep a copy; to change it, put the new key first (`k2:<new>,k1:<old>`), never replace it. It also encrypts the API keys of the AI providers a workspace adds; without it no workspace can add one. See [send replies through Gmail](email.md#send-replies-through-gmail). |
 | `AI_SERVER_PROVIDER`, `AI_SERVER_API_KEY`, `AI_SERVER_BASE_URL`, `AI_SERVER_MODELS`, `AI_SERVER_LABEL`, `AI_SERVER_PRICES`, `AI_SERVER_MONTHLY_ALLOWANCE` | empty | One AI provider for every workspace on this server. See [AI provider](#ai-provider). |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_WEBHOOK_SECRET` | empty | The GitHub App Autofix works through; without all six, Autofix is hidden. See [Autofix: the GitHub App](github-app.md). |
 | `AI_ALLOW_PRIVATE_BASE_URLS` | empty | `1` lets a workspace's own AI provider use a private or local address and plain `http`. See [AI provider](#ai-provider). |
 
 ## Usage report
