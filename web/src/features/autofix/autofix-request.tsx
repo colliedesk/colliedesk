@@ -56,6 +56,7 @@ export function AutofixRequestDetail({ item, result, onApprove, busy = false }: 
   }
   if (item.route === '/api/v1/autofix/github/installations') return <>{pending && <div className="af-oc"><span>{m.installHelp}</span></div>}{refusal}</>;
   if (item.route === '/api/v1/autofix/github/installations/{id}' && item.method === 'DELETE') {
+    if (!pending) return null;
     const installation = settings.data?.installations.find((candidate) => candidate.id === item.path.split('/').pop());
     const repos = settings.data?.repos.filter((repo) => repo.installation_id === installation?.installation_id).length ?? 0;
     const set = autofixMessages.set;

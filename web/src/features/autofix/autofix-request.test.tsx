@@ -41,6 +41,8 @@ describe('AutofixRequestDetail', () => {
     expect(screen.queryByText(/You become the sender/)).not.toBeInTheDocument();
     show(request({ status: 'rejected', route: '/api/v1/autofix/github/installations', path: '/api/v1/autofix/github/installations' }));
     expect(screen.queryByText(/Approve opens GitHub to install/)).not.toBeInTheDocument();
+    show(request({ status: 'approved', method: 'DELETE', route: '/api/v1/autofix/github/installations/{id}', path: '/api/v1/autofix/github/installations/44444444-4444-4444-8444-444444444444' }));
+    expect(screen.queryByText('Disconnect GitHub?')).not.toBeInTheDocument();
   });
 
   it('says Cursor gets it at once and keeps it', () => {
