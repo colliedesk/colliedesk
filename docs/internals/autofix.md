@@ -83,7 +83,9 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
 ## Cursor and the worker
 
 - Everything Colliedesk knows of Cursor's Cloud Agents API v1 (public beta) is in
-  `server/internal/cursor/client.go`; `cursor/cursortest` stands in for it in tests (and e2e). Cursor
+  `server/internal/cursor/client.go`; `cursor/cursortest` stands in for it in tests, and `cmd/cursor-stand-in`
+  serves it to the e2e server (`POST /stand-in/script` sets the next runs, `GET /stand-in/state` reads what
+  Cursor received, never the key). Cursor
   v1 has no webhook yet, so fixes sent to Cursor are polled.
 - The key is sealed with `MAILBOX_TOKEN_KEYS` under the context `autofix:cursor:<workspace id>`: a
   sealed key copied into another workspace's row does not open. It is tried (`GET /v1/me`) before it
@@ -180,6 +182,14 @@ sealed. This page records decisions and traps; what people see is in `docs/user/
   for a person who authorized before; S4 revoking the token at once leaves the issue and the agent
   running; S5 Claude's pull request names the issue (`closingIssuesReferences`) or its branch
   `claude/issue-<N>-`; S8 `suggestedActors` with a user token.
+
+## End to end
+
+`web/e2e/autofix-bridge.spec.ts` runs a server of its own (own database, `-tags e2e`) against
+`cmd/github-stand-in` and `cmd/cursor-stand-in`: connect GitHub, a public repository refused, Claude sent as
+the person to its merge, release and the reply draft; Cursor from the key to its merge; cancel, retry, and
+Copilot assigned on GitHub. It is not an onboarding journey. The address to confirm on GitHub is opened only
+over https, or over http to a loopback host (the stand-in): `redirectHref` in the web app.
 
 ## How the work was split
 

@@ -69,14 +69,24 @@ type Server struct {
 
 // New starts the stand-in with the keys it accepts; every other key answers 401.
 func New(keys ...string) *Server {
+	s := NewHandler(keys...)
+	s.server = httptest.NewServer(s)
+	return s
+}
+
+// NewHandler is the stand-in without a server of its own, for cmd/cursor-stand-in to serve on a fixed
+// address; URL and Close are for New's.
+func NewHandler(keys ...string) *Server {
 	s := &Server{keys: map[string]bool{}, agents: map[string]*agent{}, calls: map[string]int{}, failures: map[string][]Failure{},
 		script: []Step{{Status: "RUNNING"}}}
 	for _, key := range keys {
 		s.keys[key] = true
 	}
-	s.server = httptest.NewServer(http.HandlerFunc(s.serve))
 	return s
 }
+
+// ServeHTTP answers as Cursor's API.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.serve(w, r) }
 
 // URL is the base to point the client at.
 func (s *Server) URL() string { return s.server.URL }
