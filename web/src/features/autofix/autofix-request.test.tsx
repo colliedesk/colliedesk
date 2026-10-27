@@ -32,7 +32,7 @@ describe('AutofixRequestDetail', () => {
 
   it('says what disconnecting GitHub does when an AI agent asks for it', async () => {
     show(request({ method: 'DELETE', route: '/api/v1/autofix/github/installations/{id}', path: '/api/v1/autofix/github/installations/44444444-4444-4444-8444-444444444444', summary: 'Disconnect GitHub' }));
-    expect(await screen.findByText(/uninstalls its app from northwind and disconnects 1 repository/)).toBeInTheDocument();
+    expect(await screen.findByText(/uninstalls its app from northwind and pauses 1 repository/)).toBeInTheDocument();
     expect(screen.getByText(/Fixes in progress on them are cancelled/)).toBeInTheDocument();
   });
 
