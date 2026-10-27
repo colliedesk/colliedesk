@@ -93,8 +93,8 @@
 .af-kv dd > a { white-space: normal; }
 
 /* The timeline from fix_attempt_events. */
-.af-evts-head { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--fs-label); color: var(--text-3); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
-.af-evts-head .link-button { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.af-evts-head { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--fs-label); color: var(--text-3); font-weight: 600; }
+.af-evts-head .link-button { font-weight: 500; }
 .af-evts { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .af-evts li { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: var(--space-2); padding: 6px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-small); color: var(--text-2); }
 .af-evts li:last-child { border-bottom: 0; }
@@ -155,7 +155,7 @@
 .af-by { font-size: var(--fs-label); color: var(--text-3); }
 .af-red { display: inline-flex; align-items: center; font: 500 11px/1.4 var(--font-mono); background: var(--surface-3); color: var(--text-2); border-radius: var(--radius-sm); padding: 0 5px; white-space: nowrap; }
 .af-off-ref { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); text-decoration: line-through; text-decoration-color: var(--line-strong); }
-.af-off-ref::after { content: "off"; margin-left: 3px; font-size: 9.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); display: inline-block; text-decoration: none; }
+.af-off-ref::after { content: "off"; margin-left: 3px; font-size: 9.5px; color: var(--text-3); display: inline-block; text-decoration: none; }
 .af-notes-sec { display: grid; gap: var(--space-2); }
 .af-sec-head { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
 .af-sec-head b { font-size: var(--fs-small); font-weight: 600; }
