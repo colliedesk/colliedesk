@@ -70,6 +70,7 @@ paths:
                 label:
                   type: string
                   description: Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in".
+                timezone: {$ref: '#/components/schemas/SignInTimezone'}
       responses:
         '200': {$ref: '#/components/responses/Redeemed'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -110,6 +111,7 @@ paths:
                 goal: {$ref: '#/components/schemas/OnboardingGoal'}
                 role: {$ref: '#/components/schemas/OnboardingRole'}
                 source: {$ref: '#/components/schemas/OnboardingSource'}
+                timezone: {$ref: '#/components/schemas/SignInTimezone'}
       responses:
         '201': {$ref: '#/components/responses/Redeemed'}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -145,6 +147,7 @@ paths:
                 requested_role: {$ref: '#/components/schemas/Role'}
                 label: {type: string}
                 session_type: {type: string, enum: [cookie, bearer], default: bearer}
+                timezone: {$ref: '#/components/schemas/SignInTimezone'}
       responses:
         '200': {$ref: '#/components/responses/Redeemed'}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -4924,8 +4927,10 @@ components:
       required: false
       description: >-
         The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry
-        of it. A repeat within a day returns what the first request created (200) and creates nothing; the
-        same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace.
+        of it. A repeat within a day returns what the first request created (200) and creates nothing; a
+        repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409
+        `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong
+        to the workspace. An agent token below the route's tier files an agent request (202) without the key.
       schema: {type: string, minLength: 1, maxLength: 200}
   responses:
     IdempotencyKeyReused:
@@ -5072,6 +5077,13 @@ components:
       description: Resource not found in this workspace
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    SignInTimezone:
+      type: string
+      maxLength: 64
+      description: >-
+        The browser's IANA timezone. At the agent's first sign-in, while they never chose a timezone and the
+        workspace is still on its `UTC` default, it becomes the agent's own (`timezone_override`). A later
+        sign-in never changes it, and an unknown zone is ignored; it never fails the sign-in.
     ImportPerson:
       type: object
       required: [external_id, name, email, active, linked_agent_id, linked_by_email, pending, updated_at]

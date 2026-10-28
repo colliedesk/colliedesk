@@ -1,11 +1,18 @@
 package httpapi_test
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 )
 
 // postWithKey sends one create request the way the web app does, naming the submit with an
@@ -162,5 +169,35 @@ func TestCreateKeysBelongToOneWorkspace(t *testing.T) {
 	}
 	if workspace := queryString(t, f.pool, `SELECT workspace_id::text FROM saved_replies WHERE id=$1`, idOf(t, inB, "id")); workspace != f.workspaceB {
 		t.Fatalf("B's reply is in %s, want B", workspace)
+	}
+}
+
+// Keyed creates never hold a database connection while they wait for another one: more keyed requests at
+// once than the pool has connections still all finish, and no other request of any workspace waits on them.
+func TestKeyedCreatesAtOnceNeverExhaustThePool(t *testing.T) {
+	pool := databasetest.PoolWith(t, func(config *pgxpool.Config) { config.MaxConns = 2 })
+	api, service, _, _ := testAPIOnPool(t, pool, nil)
+	admin := createSession(t, api, service, "Small Pool", "admin@small-pool.example.com")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	codes := make([]int, 4)
+	var wait sync.WaitGroup
+	for index := range codes {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			req := newRequest(t, http.MethodPost, "/api/v1/saved-replies", map[string]any{"title": fmt.Sprintf("Reply %d", index), "body": "Hello."}, admin, nil).WithContext(ctx)
+			req.Header.Set("Idempotency-Key", fmt.Sprintf("key-%d", index))
+			codes[index] = serve(api, req).Code
+		}()
+	}
+	wait.Wait()
+	if ctx.Err() != nil {
+		t.Fatalf("keyed creates did not finish within 15 s on a pool of 2 connections (codes %v): they wait on each other", codes)
+	}
+	for index, code := range codes {
+		if code != http.StatusCreated {
+			t.Fatalf("request %d: status=%d, want 201 (codes %v)", index, code, codes)
+		}
 	}
 }

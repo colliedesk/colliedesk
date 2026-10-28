@@ -39,6 +39,10 @@ func (a *API) createOnce(response http.ResponseWriter, request *http.Request, op
 		writeError(response, http.StatusUnprocessableEntity, "idempotency_key_reused",
 			"This Idempotency-Key was already used for another request. Send a new key for a new one.")
 		return
+	case errors.Is(err, store.ErrRequestInProgress):
+		writeError(response, http.StatusConflict, "request_in_progress",
+			"A request with this Idempotency-Key is still running. Try again in a moment to get its answer.")
+		return
 	case err != nil:
 		writeInternalError(response, err)
 		return
