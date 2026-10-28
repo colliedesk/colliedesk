@@ -98,9 +98,16 @@ test('one copy message at a time: copying the code replaces what copying the URL
   expect(screen.queryByText('URL copied')).toBeNull();
 });
 
-test('the form with the workspace\'s older address also gives its own', () => {
-  render(<WebFormSection settings={{ ...on, channel_id: '55555555-5555-4555-8555-555555555555', legacy_slug: true }} canManage onSave={vi.fn()} />);
-  expect(screen.getByText(new RegExp(`also has its own, ${window.location.origin}/api/v1/public/web-forms/55555555-5555-4555-8555-555555555555`))).toBeInTheDocument();
+test('a form that also answers the workspace\'s older address shows one Submit URL, its own, and keeps the older one under a detail', () => {
+  render(<WebFormSection settings={{ ...on, channel_id: '55555555-5555-4555-8555-555555555555', legacy_slug: true }} canManage onSave={vi.fn()} part="embed" />);
+  const own = `${window.location.origin}/api/v1/public/web-forms/55555555-5555-4555-8555-555555555555`;
+  expect(screen.getByRole('textbox', { name: /^Submit URL/ })).toHaveValue(own);
+  expect(screen.getByRole('region', { name: 'Code for your page' })).toHaveTextContent(own);
+  const older = screen.getByText('Older address').closest('details') as HTMLElement;
+  expect(older).not.toHaveAttribute('open');
+  expect(older).toHaveTextContent(`${window.location.origin}${on.submit_path}`);
+  expect(older).toHaveTextContent(/only if your website already sends to it/);
+  expect(screen.queryByText(/older one, which this form keeps/)).toBeNull();
 });
 
 test('Allowed origins says in plain words which websites it means, with an example', () => {

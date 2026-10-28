@@ -34,6 +34,11 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   const feedback = useSaveFeedback(save);
   const state = settings?.enabled ? messages.webFormOn : messages.webFormOff;
   const embed = part === 'embed';
+  // A form that also answers the workspace's older address shows its own address, the one a new site uses;
+  // the older one stays under a detail for a site that already sends to it.
+  const ownPath = settings?.legacy_slug && settings.channel_id ? `/api/v1/public/web-forms/${settings.channel_id}` : settings?.submit_path;
+  const submitURL = `${window.location.origin}${ownPath ?? ''}`;
+  const older = ownPath !== settings?.submit_path && settings ? `${window.location.origin}${settings.submit_path}` : undefined;
   const body = <div className="settings-body">
         {!embed && <p role="status" className="saved-state" data-on={settings?.enabled ? 'true' : 'false'}>{state}</p>}
         {canManage
@@ -50,10 +55,10 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
         {settings && <p>{tryMessages.what}</p>}
         {settings && <TryForm path={settings.submit_path} />}
         {settings && <label className="invite-link"><span className="field-label">{messages.webFormSubmitUrl}</span>
-          <input readOnly value={`${window.location.origin}${settings.submit_path}`} /><small>{messages.webFormSubmitHelp}{' '}
+          <input readOnly value={submitURL} /><small>{messages.webFormSubmitHelp}{' '}
             <a href={tryMessages.guideURL} target="_blank" rel="noreferrer">{tryMessages.guide}</a></small></label>}
-        {settings && embed && <EmbedCode url={`${window.location.origin}${settings.submit_path}`} />}
-        {settings?.legacy_slug && settings.channel_id && <p className="muted-copy">{legacyNote(`${window.location.origin}/api/v1/public/web-forms/${settings.channel_id}`)}</p>}
+        {settings && embed && <EmbedCode url={submitURL} />}
+        {older && <details className="muted-copy"><summary>{olderMessages.summary}</summary><p>{olderMessages.body(older)}</p></details>}
       </div>;
   if (embed) return body;
   return (
@@ -133,5 +138,7 @@ function EmbedCode({ url }: { url: string }) {
   </>;
 }
 
-// legacyNote: the form with the workspace's older address also answers its own, which a new site may use.
-const legacyNote = (own: string) => `The address above is the workspace's older one, which this form keeps. It also has its own, ${own}, which a new site can use.`;
+const olderMessages = {
+  summary: 'Older address',
+  body: (address: string) => `This form also answers ${address}. Use it only if your website already sends to it; it keeps working. A new website uses the Submit URL above.`,
+};

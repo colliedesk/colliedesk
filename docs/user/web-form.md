@@ -49,9 +49,10 @@ test needs no allowed origin, because it comes from Colliedesk's own page.
 ## Send a submission
 
 The settings page shows the form's **Submit URL**: `<your Colliedesk address>/api/v1/public/web-forms/<form id>`.
-A workspace's first form also keeps the older address, `<your Colliedesk address>/api/v1/public/forms/<workspace slug>`,
-so sites that embed it keep working; its **Embed** tab shows that address and says the form also has
-its own. Post JSON from a page on an allowed origin:
+Give that address to whoever builds your website. A workspace's first form also keeps the older address,
+`<your Colliedesk address>/api/v1/public/forms/<workspace slug>`, so sites that already send to it keep
+working; its **Embed** tab lists it under **Older address**, to use only for such a site. Post JSON from
+a page on an allowed origin:
 
 ```js
 await fetch('https://desk.example.com/api/v1/public/forms/acme', {
