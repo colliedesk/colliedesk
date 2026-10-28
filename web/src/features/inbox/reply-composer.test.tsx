@@ -856,19 +856,6 @@ test('a draft is cleared once its reply is sent, and kept when the send is refus
   expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-3'))).toEqual([]);
 });
 
-test('a draft waits for its key: a composer that opened before the workspace was known shows the stored draft and keeps it', () => {
-  window.localStorage.clear();
-  const first = render(<ReplyComposer draftKey="ws-1:agent-1:conv-4" onSubmit={vi.fn()} />);
-  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Typed before the reload' } });
-  first.unmount();
-  const stored = Object.keys(window.localStorage).filter((key) => key.includes('conv-4'));
-  expect(stored).toHaveLength(1);
-  const reloaded = render(<ReplyComposer onSubmit={vi.fn()} />);
-  reloaded.rerender(<ReplyComposer draftKey="ws-1:agent-1:conv-4" onSubmit={vi.fn()} />);
-  expect(screen.getByLabelText('Message body')).toHaveValue('Typed before the reload');
-  expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-4'))).toEqual(stored);
-});
-
 test('a draft older than seven days is dropped when it is read, and a younger one comes back', () => {
   window.localStorage.clear();
   vi.useFakeTimers({ toFake: ['Date'] });

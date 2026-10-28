@@ -80,19 +80,10 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const [stored] = useState(() => readDraft(draftKey));
   const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
   const [body, setBody] = useState(stored?.body ?? '');
-  // The key can arrive after the box (the workspace loads after the conversation on a reload): the draft
-  // kept under the new key is read before anything is written under it, so it is shown, never wiped.
-  const [readKey, setReadKey] = useState(draftKey);
-  if (readKey !== draftKey) {
-    setReadKey(draftKey);
-    const kept = readDraft(draftKey);
-    if (kept && !body.trim()) {
-      setBody(kept.body);
-      if (!noReplies) setKind(kept.kind);
-    }
-  }
-  // The text is kept as it is typed, and forgotten once the box is empty again (after a send).
-  useEffect(() => { if (readKey === draftKey) writeDraft(draftKey, { kind, body }); }, [readKey, draftKey, kind, body]);
+  // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
+  // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
+  // remounts the box with it, so the draft kept there is read before anything is written over it.
+  useEffect(() => writeDraft(draftKey, { kind, body }), [draftKey, kind, body]);
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
   const [files, setFiles] = useState<File[]>([]);

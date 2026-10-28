@@ -423,3 +423,19 @@ test('an unsent reply belongs to the agent who wrote it: another agent signed in
   render(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
   expect(screen.getByLabelText('Message body')).toHaveValue('Private to agent A');
 });
+
+test('an unsent reply comes back after a reload in which the conversation loads before the workspace, and stays stored', () => {
+  window.localStorage.clear();
+  const workspace = '44444444-4444-4444-8444-444444444444';
+  const first = render(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Typed before the reload' } });
+  first.unmount();
+  const kept = () => Object.entries(window.localStorage).map(([key, value]) => [key, (JSON.parse(value) as { body: string }).body]);
+  const stored = kept();
+  expect(stored).toHaveLength(1);
+  const reloaded = render(<InboxPage selected={conversation} conversations={[conversation]} />);
+  expect(kept()).toEqual(stored);
+  reloaded.rerender(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Typed before the reload');
+  expect(kept()).toEqual(stored);
+});
