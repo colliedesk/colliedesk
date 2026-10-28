@@ -1,3 +1,4 @@
+import { browserTimeZone } from '../lib/format-date';
 import { redeemedSchema } from './schemas';
 import type { Generated } from './schemas';
 
@@ -55,7 +56,7 @@ export async function signUpCloud(token: string, workspaceName: string, answers?
   const response = await fetch('/api/v1/auth/cloud/signup', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ workspace_name: workspaceName, ...answers }),
+    body: JSON.stringify({ workspace_name: workspaceName, ...answers, timezone: browserTimeZone() }),
   });
   if (!response.ok) throw await signupFailure(response);
   return redeemedSchema.parse(await response.json());

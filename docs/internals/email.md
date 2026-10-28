@@ -424,6 +424,74 @@ stand-in tests and `cmd/google-stand-in` use), `internal/tokenseal`, `store/mail
   (withheld from the token, like an invite link). The callback is NotForPeople: no token can drive a
   browser through Google.
 
+## Sending through Microsoft 365 (issue #95, step 1)
+
+Code: `internal/microsoft` (OAuth with PKCE for a confidential client, Graph `/me` and `sendMail`, no SDK),
+`internal/microsoft/microsofttest` (the stand-in tests and `cmd/microsoft-stand-in` use),
+`httpapi/microsoft-handlers.go`, `emailoutbox/microsoft.go`. The provider-neutral parts are
+`httpapi/mailbox-handlers.go` and `emailoutbox/mailbox.go`: Gmail and Microsoft 365 are two
+`mailboxProvider`s, and an email channel has one mailbox connection (`mailbox_connections`, PK
+`channel_id`), so connecting the other provider replaces it. Microsoft sources are read 2026-10-25 and
+listed in the plan of issue #95; the ones a decision rests on are named below.
+
+- **Send only.** Scopes `openid offline_access User.Read Mail.Send` (Graph permissions reference: none needs
+  admin consent). `openid` is there for the ID token's `tid` (a personal account's is
+  `9188040d-6c67-4c5b-b112-36a304b66dad`). The address comes from Graph `GET /me` (`mail`), never from the
+  `email` claim, which "isn't guaranteed to be correct" (ID token claims reference). A work account whose
+  `/me` has no `mail` has no Exchange Online mailbox: `mailbox_unavailable`. A personal account's `/me` often
+  has `mail: null` (community sources only, no Microsoft page says it): its `userPrincipalName` is used.
+  **Check on a real Outlook.com account before Cloud offers it**; if it is wrong, set
+  `MICROSOFT_OAUTH_TENANT=organizations` on Cloud until fixed (no code change).
+- **MIME, not JSON.** `POST /me/sendMail` with `Content-Type: text/plain` and the base64 of the composed
+  message: the JSON form only takes custom `x-` headers, so In-Reply-To and References would be lost.
+  Graph keeps a copy in Sent Items and answers 202 (accepted, not delivered). Whether Exchange keeps our
+  Message-ID is not documented; threading back into Colliedesk rests on the Reply-To token as for Gmail.
+- **`response_mode=query`.** `form_post` would bring the code back in a cross-site POST without the
+  SameSite=Lax session cookie, and the callback would read `signed_out`.
+- **The refresh token rotates on every use** and slides its 90-day lifetime; the old one keeps working
+  ("doesn't revoke old refresh tokens", refresh-tokens). Every send stores the new one (`ReplaceMailboxGrant`,
+  compare-and-swap), and two sends at once cannot lose the grant. **Keep-alive:** `Worker.RunKeepAlive`
+  (hourly, only with Microsoft settings) refreshes every connected Microsoft grant nothing stored for a week
+  (`PrivilegeMailboxKeepAlive` lists them; each is renewed in its own workspace), so a quiet channel does not
+  die after 90 days unused (AADSTS700082) and a revoked grant shows before a customer waits.
+- **Token errors by `error`, never by `error_description`** (reference-error-codes). `invalid_grant`,
+  `interaction_required`, `consent_required` → `revoked` (removed, expired, password reset, a sign-in policy
+  such as MFA or Conditional Access), and so is `unauthorized_client`: the account's organization removed or
+  disabled the app in its tenant (AADSTS700016, 7000112; v2-oauth2-auth-code-flow: "isn't added to the
+  user's Microsoft Entra tenant"), which ends that grant only. `invalid_client` (a wrong or expired client
+  secret, AADSTS7000215/7000222) is **the server's fault**: the connection stays `connected`, the reply is
+  deferred every 15 minutes with `last_error_code=mailbox_server_config` and `MailboxServerConfigNote`
+  (spending no attempt), and the settings say `server_credentials_refused` so nobody reconnects in vain. At
+  consent the same refusal is `server_misconfigured`.
+- **Graph errors by `code`** (and the most specific `innererror` code we know), never by `message`, which is
+  for developers and is not stored (Graph errors reference). 401 refreshes once; 403/404 → `permission`;
+  `MailboxNotEnabledForRESTAPI` and the other mailbox codes → `mailbox_unavailable` (the exact codes are not
+  listed by Microsoft; confirm on a real account); 429/5xx with `Retry-After` → deferred to then (no attempt
+  spent), without it → the outbox's backoff; 413 or `ErrorMessageSizeExceeded` → the reply fails with
+  `MailboxTooLargeNote`, files kept, connection fine. Microsoft documents no size limit for a MIME
+  `sendMail` (outlook-large-attachments documents upload sessions, which need `Mail.ReadWrite`, from 3 MB);
+  the settings give `large_attachment_bytes` (3 MB) for the web app's warning. The real limit is measured on
+  a real mailbox before Cloud offers Microsoft 365.
+- **No revoke.** Microsoft has no API that revokes one app's grant for one user (`revokeSignInSessions` signs
+  the user out of every app, needs an admin permission and does not work for personal accounts). Disconnect,
+  replacement and channel removal delete the token; it is useless without the server's client secret. The
+  person removes the app at myapps.microsoft.com (work or school) or account.live.com/consent/Manage
+  (personal); the UI, docs and privacy page say so (Microsoft API Terms of Use §5(e)). Not a one-way door:
+  the state is visible and reconnecting works.
+- **Admin consent.** Before Microsoft verifies the publisher, a person in another organization is usually
+  stopped by risk-based step-up consent (AADSTS90094) until their admin approves. The settings give
+  `admin_consent_url` (`/organizations/v2.0/adminconsent`, or the configured tenant; never `common`, and none
+  for `consumers`), with the channel id as `state`. Microsoft returns `admin_consent=True` and a `tenant` and
+  no code; nothing is stored and the tenant is not trusted. Without a session the route answers a static page
+  (the approving admin is often not a Colliedesk user). Whether Microsoft sends a person who asked for
+  approval back to Colliedesk is not documented: check while dogfooding.
+- **Switching provider.** A reply queued with transport `gmail` whose channel now holds a Microsoft connection
+  (or the other way round) fails with the old provider's `MailboxDisconnectedNote`; a retry chooses the new
+  transport. No reply silently changes its From address. Replacing a Gmail grant with Microsoft revokes the
+  Gmail grant (provider differs), as replacing it with another Google account does.
+- **Duplicate sends** have the same risk as Gmail: a timeout after Exchange accepted the message is retried.
+  Graph has no idempotency key.
+
 ## Open
 
 - **Filtered mail is not stored.** Dropped automatic mail is reported only in the 200 response.

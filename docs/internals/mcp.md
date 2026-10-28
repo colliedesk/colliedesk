@@ -30,8 +30,34 @@
   runs both. The SDK lists tools sorted by name, which is what makes the order fixed.
 - **Mounting.** `mcpserver.Mount` wraps the web handler in `serve`; only the exact path `/mcp` goes
   to MCP, every other request takes the old path untouched.
+- **Stdio bridge.** `collie mcp` (package `internal/mcpbridge`, standard library only) is for hosts
+  that only start stdio servers (Claude Desktop). It reads one JSON-RPC line, POSTs it as it is to
+  `/mcp` and writes each answer as one line; it registers no tools, so it cannot drift from the
+  server it talks to. Two builds carry it: the server's `collie`, and `cmd/collie-client`, the
+  about 6 MB `collie` a person installs (only `mcp`, `version`, `help`;
+  `TestTheClientBuildLeavesTheServerOut` keeps the web app and pgx out of it). Decisions:
+  - The token comes from `COLLIEDESK_TOKEN` or `--token-file` (0600 checked on Unix only), never
+    argv, which `ps` and host config files show. `http://` is refused except on loopback.
+  - A failure (401, 404 or HTML, 5xx, network) answers the waiting id with a JSON-RPC error that
+    says what to do, and the bridge stays up: hosts otherwise show only "server disconnected". A
+    JSON-RPC error the server answers itself (400 for a version or header mismatch) passes as it is.
+  - stderr has one line per event (start: host and version; failure: the method and the HTTP
+    status), never a header or body. Claude Desktop keeps it in its MCP log.
 
 ## Traps
+
+- **The bridge sets the HTTP headers a stdio host cannot.** `MCP-Protocol-Version` comes from the
+  request's `_meta` (2026-07-28) or from the `initialize` answer the bridge saw; from 2026-07-28 the
+  server also refuses a POST without `Mcp-Method` and, for `tools/call`, `prompts/get` and
+  `resources/read`, `Mcp-Name`. Piping two go-sdk `Connection`s into each other loses these
+  headers: the SDK's HTTP client sets them only when an `mcp.Client` owns the connection
+  (`setMCPHeaders` after `initialize`). Hence the hand-written proxy. No tool uses `x-mcp-header`
+  (`Mcp-Param-*`); a tool that adds one needs the bridge to set it too.
+- **Bridge framing.** One message per stdout line: answers are `json.Compact`ed (the server may
+  indent), stdin is read with `ReadBytes` (an image upload is one line of megabytes; a default
+  `bufio.Scanner` stops at 64 KiB), and ids stay `json.RawMessage` so a large number or a string
+  comes back as sent. `TestBridge*` in `mcpserver` runs a real SDK client through the bridge to
+  the real server for `2025-06-18`, `2025-11-25` and `2026-07-28`.
 
 - **Loopback Host check.** The SDK refuses a request that arrives on a loopback listener with a
   non-loopback `Host`. A reverse proxy on the same machine forwards the public host name, so this
@@ -143,6 +169,27 @@
   `docs/user` in `server/internal/mcpserver/userdocs`. Run `make sync-user-docs` after editing a
   guide; `TestEmbeddedUserGuidesMatchTheDocsDirectory` fails on a stale copy. `README.md` is not
   indexed.
+- **Generated tool table.** The table under "Tools" in `docs/user/mcp.md` sits between
+  `<!-- generated:tools -->` and `<!-- /generated -->` and comes from the catalog (package
+  `mcpserver/docgen`): the sentence from `toolDocs` (`Spec.Doc`, written for people; `Description`
+  is written for the model), the tier from `Tier`, and "Cannot be undone" from `Destructive`. Run
+  `make docs-mcp` after changing a tool; `TestGeneratedDocsMatchTheCatalog` fails on a stale table,
+  `TestEveryToolHasADocSentence` on a tool without a sentence, and `TestUserGuidesNameOnlyRealTools`
+  on a guide naming a tool that does not exist. `docs_search` skips the marker lines.
+- **Generated host guides.** `docs/user/connect-<host>.md` (Claude Code, Codex, Cursor, VS Code,
+  Claude Desktop), the protocol versions and the host list of `mcp.md`, and
+  `web/src/features/settings/connect-snippets.generated.ts` come from `docgen/connect.go` and
+  `docgen/templates`. The commands and JSON a person copies are one map (`snippets`), so a guide and
+  the Connect panel of Settings never differ; the web app swaps `https://desk.example.com` for its
+  own origin. The token is never in a snippet, only its variable or the host's prompt. Release file
+  names come from `.github/scripts/client-assets.txt`; `TestHostGuidesHoldValidJSONAndRealFileNames`
+  parses every JSON block and checks every `releases/latest/download/` link against that list. The
+  plugin and skills live in `plugins/colliedesk` (`TestSkillsNameRealToolsAtTheirTier`).
+- **Host checks by hand.** `tests/host-connect/tools-list.sh` compares `tools/list` over HTTP with
+  the same call through `collie mcp` (no model needed). `tests/host-connect/hosts.sh` runs the
+  Claude Code and Codex commands of the guides in a clean `node:22` container and, given a model API
+  key, asks each to call `colliedesk_whoami`. Neither is in CI: CI has no model key, and the hosts
+  are downloaded at pinned versions that a person bumps when checking a guide.
 - **SDK dependency.** `github.com/modelcontextprotocol/go-sdk` v1.8.0 (Apache-2.0, compatible with
   AGPL-3.0-only). It pulls `golang.org/x/sys` v0.41.0, which carries an OSV advisory (Windows
   only); `go.mod` pins v0.44.0 so the PR gate stays clean. The SDK's stateless-session behaviour

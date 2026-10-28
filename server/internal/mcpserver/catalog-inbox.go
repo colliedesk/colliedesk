@@ -36,13 +36,15 @@ func inboxSearchSpec() Spec {
 			`"has_pending_draft":{"type":"boolean","description":"true: an AI agent's reply draft waits for a person's approval. false: none waits."},` +
 			`"delivery_failed":{"type":"boolean","description":"true: a reply could not be delivered by email and was not retried since."},` +
 			`"source":{"type":"string","enum":["imported","native"],"description":"imported from another helpdesk, or created in Colliedesk."},` +
-			`"channel":` + oneOrMany(`{"type":"string","enum":["email","web_form","imported","agent","problem_report"]}`, 5, `"How it started."`) + `,` +
+			`"channel":` + oneOrMany(`{"type":"string","enum":`+conversationChannelEnum+`}`, conversationChannelCount, `"How it started."`) + `,` +
+			`"channel_id":` + oneOrMany(`{"type":"string",`+uuid+`}`, 50, `"One channel or several (colliedesk_channels_list): conversations that came through it or whose replies leave from it."`) + `,` +
 			`"created_after":{"type":"string","format":"date-time","maxLength":40,"description":"RFC 3339 with an offset; included."},` +
 			`"created_before":{"type":"string","format":"date-time","maxLength":40,"description":"Excluded."},` +
 			`"updated_after":{"type":"string","format":"date-time","maxLength":40},"updated_before":{"type":"string","format":"date-time","maxLength":40},` +
 			`"sort":{"type":"string","enum":["updated_desc","updated_asc","created_desc","created_asc","priority","waiting_longest"],"default":"updated_desc",` +
 			`"description":"priority: urgent first. waiting_longest: conversations awaiting the team, the oldest customer message first, then the rest."},` +
 			`"q":{"type":"string","maxLength":200,"description":"Words to find in the subject, in any message text, or in the customer's name or email."},` +
+			`"result":{"type":"string","maxLength":120,"pattern":"^[0-9a-f-]{36}:(30d|7d)\\.[a-z_]+$","description":"Only the conversations one number of colliedesk_results_get counts: <snapshot id>:<window>.<metric>, for example <current id>:30d.first_response. Leave status out: a number counts any status."},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20,"description":"Rows per page."},` +
 			`"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page. Keep every other argument the same."},` +
 			detailProperty + `}}`,

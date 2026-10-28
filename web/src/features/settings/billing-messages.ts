@@ -54,7 +54,9 @@ export const billingMessages = {
   choosePlanPrice: (plan: string, price: string) => `Choose ${plan}, ${price}`,
   planAgents: (count: number) => (count === 1 ? '1 agent' : `Up to ${count} agents`),
   planStorage: (size: string) => `${size} attachment storage`,
-  foundingLimited: '10 workspaces only',
+  // Founding's two promises, worded as on colliedesk.com (MONEY_BACK, the done-for-you migration page).
+  foundingMigration: 'Free Freshdesk migration, done for you',
+  moneyBack: '30-day money-back guarantee',
   usageAgents: 'Agents',
   usageStorage: 'Attachment storage',
   usageReplies: 'People emailed in 24 hours',

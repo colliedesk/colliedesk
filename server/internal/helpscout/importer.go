@@ -14,6 +14,8 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/importkit"
+	"github.com/colliedesk/colliedesk/server/internal/results"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -83,6 +85,13 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	if options.DryRun {
 		return report, r.checkDryRunStorage(ctx, report)
 	}
+	// The results page measures its baseline from the first import to finish. Help Scout has no
+	// resolve times to read, so that baseline has first response, volume and handle time only.
+	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+		return results.MarkImportFinished(ctx, tx, r.workspaceID, r.ledger.source, report.Status, r.now())
+	}); err != nil {
+		log.Printf("helpscout import: results baseline not marked for workspace %s: %v", options.WorkspaceSlug, err)
+	}
 	// The import is already committed; a failed extension must not hide its report. A rerun retries.
 	extendedTo, err := importkit.ExtendTrial(ctx, r.db, r.workspaceID, r.now())
 	switch {
@@ -129,9 +138,17 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 }
 
 // begin starts a transaction scoped to the import workspace; the importer never reads or writes
-// another workspace.
+// another workspace. Its status changes are recorded as the import's, not Colliedesk work.
 func (r *run) begin(ctx context.Context) (pgx.Tx, error) {
-	return r.db.BeginWorkspace(ctx, r.workspaceID)
+	tx, err := r.db.BeginWorkspace(ctx, r.workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.MarkImportWrites(ctx, tx); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
 }
 
 func (r *run) now() time.Time {

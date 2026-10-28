@@ -35,8 +35,14 @@ func gmailStandIn(t *testing.T) (*googletest.Server, google.Config) {
 	return fake, google.Config{ClientID: "client-1", ClientSecret: "not-a-secret", Keys: keys, Base: server.URL}
 }
 
-// connectGmail runs the consent against the stand-in and stores the sealed grant for the workspace.
+// connectGmail runs the consent against the stand-in and stores the sealed grant for the workspace's email channel.
 func (f fixture) connectGmail(t *testing.T, fake *googletest.Server, config google.Config, account string) store.SealedGrant {
+	t.Helper()
+	return f.connectGmailTo(t, f.emailChannelID, fake, config, account)
+}
+
+// connectGmailTo connects Gmail to one email channel of the workspace.
+func (f fixture) connectGmailTo(t *testing.T, channelID string, fake *googletest.Server, config google.Config, account string) store.SealedGrant {
 	t.Helper()
 	target, err := fake.Consent(config.AuthorizationURL(gmailRedirect, "state", "verifier"), account)
 	if err != nil {
@@ -51,8 +57,8 @@ func (f fixture) connectGmail(t *testing.T, fake *googletest.Server, config goog
 	if err != nil {
 		t.Fatal(err)
 	}
-	stored := store.SealedGrant{KeyID: keyID, Sealed: sealed}
-	if _, _, err := f.store.SaveMailboxConnection(context.Background(), f.workspaceID, f.agentID, grant.Address, strings.Join(grant.Scopes, " "), stored, time.Now().UTC()); err != nil {
+	stored := store.SealedGrant{KeyID: keyID, Sealed: sealed, Provider: domain.MailboxGoogle}
+	if _, _, err := f.store.SaveMailboxConnection(context.Background(), f.workspaceID, channelID, f.agentID, grant.Address, strings.Join(grant.Scopes, " "), stored, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	return stored
@@ -67,7 +73,7 @@ func gmailWorker(f fixture, smtp *smtpServer, config google.Config, clock *time.
 
 func (f fixture) mailboxStatus(t *testing.T) *domain.MailboxConnection {
 	t.Helper()
-	connection, err := f.store.GetMailboxConnection(context.Background(), f.workspaceID)
+	connection, err := f.store.GetMailboxConnection(context.Background(), f.workspaceID, f.emailChannelID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +164,7 @@ func TestTheCustomersAnswerThreadsEvenWhenGmailRewritesTheMessageID(t *testing.T
 		t.Fatal(err)
 	}
 	answer.Platform = true
-	result, err := f.store.IngestEmail(context.Background(), f.workspaceID, answer, time.Now().UTC(), nil)
+	result, err := ingestEmail(t, context.Background(), f.store, f.workspaceID, answer)
 	if err != nil || result.ConversationID == nil || *result.ConversationID != f.conversationID {
 		t.Fatalf("answer went to %+v (err %v), want conversation %s", result, err, f.conversationID)
 	}
@@ -252,11 +258,11 @@ func TestAReplyAcceptedForGmailFailsWhenGmailIsDisconnectedFirst(t *testing.T) {
 	clock := time.Now().UTC().Add(time.Second)
 	worker := gmailWorker(f, smtp, config, &clock)
 	reply := f.write(t, "outgoing", "Hello")
-	if _, err := f.store.DeleteMailboxConnection(context.Background(), f.workspaceID); err != nil {
+	if _, err := f.store.DeleteMailboxConnection(context.Background(), f.workspaceID, f.emailChannelID, domain.MailboxGoogle); err != nil {
 		t.Fatal(err)
 	}
 	process(t, worker)
-	if delivery := f.delivery(t, reply.ID); delivery.Status != "failed" || *delivery.LastError != domain.MailboxDisconnectedNote {
+	if delivery := f.delivery(t, reply.ID); delivery.Status != "failed" || *delivery.LastError != domain.MailboxDisconnectedNote(domain.MailboxGoogle) {
 		t.Fatalf("delivery = %+v", delivery)
 	}
 	if len(smtp.mail()) != 0 || len(fake.Messages()) != 0 {
@@ -280,11 +286,11 @@ func TestAGmailOnlyServerQueuesAndSendsWithoutAnSMTPRelay(t *testing.T) {
 		t.Fatalf("delivery = %+v, gmail %d", delivery, len(fake.Messages()))
 	}
 	// Without Gmail and without a relay the reply fails with the reason, as before.
-	if _, err := f.store.DeleteMailboxConnection(context.Background(), f.workspaceID); err != nil {
+	if _, err := f.store.DeleteMailboxConnection(context.Background(), f.workspaceID, f.emailChannelID, domain.MailboxGoogle); err != nil {
 		t.Fatal(err)
 	}
 	other := f.write(t, "outgoing", "No way out")
-	if delivery := f.delivery(t, other.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "SMTP_HOST") {
+	if delivery := f.delivery(t, other.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "ask whoever runs it to set up outgoing email") || strings.Contains(*delivery.LastError, "SMTP_HOST") {
 		t.Fatalf("reply without any transport = %+v", delivery)
 	}
 }
@@ -295,7 +301,7 @@ func TestAGrantSealedForOneWorkspaceNeverSendsForAnother(t *testing.T) {
 	grantA := f.connectGmail(t, fake, config, "a@acme.example")
 	other := addWorkspace(t, f.pool, "Other Desk", "other.example.com")
 	// Workspace B gets a row holding A's sealed grant, as a bug or a copied backup row would.
-	if _, _, err := other.store.SaveMailboxConnection(context.Background(), other.workspaceID, other.agentID, "a@acme.example", google.ScopeGmailSend, grantA, time.Now().UTC()); err != nil {
+	if _, _, err := other.store.SaveMailboxConnection(context.Background(), other.workspaceID, other.emailChannelID, other.agentID, "a@acme.example", google.ScopeGmailSend, grantA, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	smtp := startSMTPServer(t)
@@ -306,7 +312,7 @@ func TestAGrantSealedForOneWorkspaceNeverSendsForAnother(t *testing.T) {
 		process(t, worker)
 		clock = clock.Add(2 * time.Hour)
 	}
-	if delivery := other.delivery(t, reply.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "MAILBOX_TOKEN_KEYS") {
+	if delivery := other.delivery(t, reply.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "ask whoever runs it") || strings.Contains(*delivery.LastError, "MAILBOX_TOKEN_KEYS") {
 		t.Fatalf("delivery = %+v", delivery)
 	}
 	if len(fake.Messages()) != 0 {
@@ -339,7 +345,7 @@ func TestAGrantThatDoesNotOpenWaitsForTheRightKeyInsteadOfBreakingTheConnection(
 	wrong := gmailWorker(f, startSMTPServer(t), config, &clock, func(options *emailoutbox.Options) { options.Google = withKeys(t, config, keyTwo) })
 	reply := f.write(t, "outgoing", "Hello")
 	process(t, wrong)
-	if delivery := f.delivery(t, reply.ID); delivery.Status != "queued" || !strings.Contains(*delivery.LastError, "MAILBOX_TOKEN_KEYS") {
+	if delivery := f.delivery(t, reply.ID); delivery.Status != "queued" || !strings.Contains(*delivery.LastError, "its key for stored connections") || strings.Contains(*delivery.LastError, "MAILBOX_TOKEN_KEYS") {
 		t.Fatalf("delivery = %+v, want queued for a retry with the reason", delivery)
 	}
 	if connection := f.mailboxStatus(t); connection.Status != "connected" {

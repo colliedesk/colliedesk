@@ -16,7 +16,7 @@ func (r *run) writeConversation(ctx context.Context, ref hsConversation, contact
 	key := strconv.FormatInt(ref.ID, 10)
 	status := r.mapStatus(ref.Status, key)
 	assignee, keepAssignee := r.assignee(ref, key)
-	origin := conversationOrigin(ref)
+	origin := conversationOrigin(ref, r.mailbox)
 	tx, err := r.begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin conversation import: %w", err)

@@ -158,3 +158,26 @@ func TestOnboardingAnswersStayInTheirWorkspace(t *testing.T) {
 		t.Fatalf("scoped to B, an update changed %d rows of A, want 0", tag.RowsAffected())
 	}
 }
+
+func TestSignupStoresAIAssistantSourceAndTracksTrialStarted(t *testing.T) {
+	funnel := &recordingFunnel{}
+	f := newSignupFixture(t, func(config *httpapi.Config) { config.Funnel = funnel })
+	created := f.signUpWith(t, "claude@onboarding.example.com", defaultPeer, map[string]any{
+		"workspace_name": "Assistant Signup", "source": "ai_claude",
+	})
+	wantResponse(t, created, http.StatusCreated, "")
+	me := f.meAfter(t, created)
+	if got := queryString(t, f.pool, `SELECT source FROM workspace_onboarding WHERE workspace_id=$1`, me.Workspace.ID); got != "ai_claude" {
+		t.Fatalf("stored source=%q, want ai_claude", got)
+	}
+	events := funnel.named("trial_started")
+	if len(events) != 1 || events[0].Properties["source"] != "ai_claude" {
+		t.Fatalf("trial_started=%+v, want one event with source ai_claude", events)
+	}
+	wantResponse(t, f.signUpWith(t, "unknown@onboarding.example.com", "198.51.100.12:1", map[string]any{
+		"workspace_name": "Unknown Assistant", "source": "ai_unknown",
+	}), http.StatusBadRequest, "invalid_request")
+	if got := f.count(t, "workspaces"); got != "1" {
+		t.Fatalf("workspaces=%s, want only the accepted signup", got)
+	}
+}

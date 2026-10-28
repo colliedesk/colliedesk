@@ -14,8 +14,8 @@ path compares raw secrets or low-entropy values in application memory.
 
 ## Agent tokens
 
-An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `send`); a null scope is
-a person's full session. It reuses the session machinery on purpose: `label`, `last_seen_at` (the
+An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `send`, `admin`, or
+`custom` with its own `permissions`); a null scope is a person's full session. It reuses the session machinery on purpose: `label`, `last_seen_at` (the
 "last used" time, written at most once a minute), revoke. Code: `auth/token.go`, `auth/scope.go`,
 `auth/tokens.go`, `httpapi/token-scope.go`.
 
@@ -52,8 +52,26 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   callable route, a stale `mcpToolPending` entry, and a tool that calls a closed route; its message
   names the file to edit. Ceilings: `maxClosedToTokens` and `maxMCPToolPending` are 0;
   `maxPersonOnly` is 2. Raising one needs the maintainer's written approval.
-- **Tiers are a route table.** `tokenTiers` gives each route the lowest tier allowed. `gateToken`
-  lets a token through at that tier or above; below it, and on every `Approval` route, the call
+- **Permissions, with the tiers as presets.** A token holds permissions, `resource:action`
+  (`auth/token-permissions.go`). Each permission names its preset, the lowest tier that holds it; a
+  tier holds every permission of its preset and below, worked out on every call (`Principal.Allows`),
+  so old tokens needed no data change and a later route of the send tier opens for every send token.
+  A custom token is stored as `scope='custom'` with its own `permissions text[]` (CHECK
+  `sessions_custom_permissions`); the list is validated in Go, not by the CHECK, so a new permission
+  needs no migration. A custom token with an admin-only permission (preset `admin`) gets the admin
+  ceiling and only an admin may create or approve one (`auth.NeedsAdmin`). Actions beyond CRUD name a
+  different risk: `send`, `publish`, `export`, `share`, `purge`, `manage_credentials`, `manage_roles`,
+  `revoke`, `invite`. The rule that keeps presets faithful: when routes of one resource had different
+  tiers, they are split into actions, and `TestEveryRoutePermissionIsHeldByTheTierTheRouteHad` holds
+  each route's permission to the tier it had. `kb_articles:publish` is checked in the handlers
+  (`askUnlessHeld`, `kb-handlers.go`) on every change to what the help center shows; accepting or
+  undoing an AI triage suggestion also needs `conversations:update`. A request keeps what its token
+  held (`agent_requests.token_permissions`). The contract's `TokenPermission` enum is the Go list in
+  its order (`TestTokenPermissionEnumOfTheContractIsTheServersList`), and the web form's copy is held
+  to the contract by `token-permissions.test.ts`.
+- **Permissions are a route table.** `tokenTiers` gives each route its permission (`grant`), a
+  permission decided by the handler (`byHandler`), `alwaysAsk`, or `anyToken`. `gateToken` lets a
+  token through when it holds the permission; without it, and on every `alwaysAsk` route, the call
   becomes an agent request (below). A route missing at runtime is still closed to every token.
   `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table, fails
   until both agree, and checks that an allowed tier gets the route's success status and a lower one

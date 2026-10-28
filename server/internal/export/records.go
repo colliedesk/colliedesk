@@ -24,14 +24,79 @@ type Agent struct {
 }
 
 type Contact struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Email        string  `json:"email"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Email is null for a customer known only on a channel (identities).
+	Email        *string `json:"email"`
 	Organization *string `json:"organization"`
 	// MergedIntoID is the contact this one was merged into; its conversations are there.
 	MergedIntoID *string   `json:"merged_into_id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Identities are who the customer is on a channel (channel_id, kind, value, display_name).
+	Identities []domain.ContactIdentity `json:"identities"`
+}
+
+// Channel is one channel of the workspace, removed ones included. Its secrets are never exported.
+type Channel struct {
+	ID              string          `json:"id"`
+	Type            string          `json:"type"`
+	Name            string          `json:"name"`
+	Enabled         bool            `json:"enabled"`
+	Settings        json.RawMessage `json:"settings"`
+	Config          any             `json:"config"`
+	ExternalAccount *string         `json:"external_account"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	DisabledAt      *time.Time      `json:"disabled_at"`
+	DeletedAt       *time.Time      `json:"deleted_at"`
+	// IsDefault marks its type's default channel.
+	IsDefault bool `json:"is_default"`
+}
+
+// ChannelEvent is one change to a channel (channel_events).
+type ChannelEvent struct {
+	ID           string          `json:"id"`
+	ChannelID    string          `json:"channel_id"`
+	ChannelType  string          `json:"channel_type"`
+	ChannelName  string          `json:"channel_name"`
+	Kind         string          `json:"kind"`
+	ActorAgentID *string         `json:"actor_agent_id"`
+	ActorTokenID *string         `json:"actor_token_id"`
+	Detail       json.RawMessage `json:"detail"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
+// ChannelInboundEvent is a raw event a channel received that is not a message: held, collected,
+// failed, dropped, or kept without a conversation (a group's chatter). Its raw payload is here, or in
+// the archive at raw_path; its fetched files are in the archive too.
+type ChannelInboundEvent struct {
+	ID              string               `json:"id"`
+	ChannelID       string               `json:"channel_id"`
+	ExternalEventID *string              `json:"external_event_id"`
+	State           string               `json:"state"`
+	Raw             json.RawMessage      `json:"raw"`
+	RawPath         *string              `json:"raw_path"`
+	HoldReason      *string              `json:"hold_reason"`
+	DropReason      *string              `json:"drop_reason"`
+	Error           *string              `json:"error"`
+	ReceivedAt      time.Time            `json:"received_at"`
+	ProcessedAt     *time.Time           `json:"processed_at"`
+	Files           []ChannelInboundFile `json:"files"`
+	RawKey          string               `json:"-"`
+	RawSize         int64                `json:"-"`
+}
+
+// ChannelInboundFile is a file fetched for an event, or why it could not be.
+type ChannelInboundFile struct {
+	Name        string  `json:"name"`
+	ContentType string  `json:"content_type"`
+	Status      string  `json:"status"`
+	Size        *int64  `json:"size"`
+	SHA256      *string `json:"sha256"`
+	Error       *string `json:"error"`
+	Path        *string `json:"path"`
+	StorageKey  string  `json:"-"`
 }
 
 // ContactMerge is one duplicate merged into a contact, undone or not, with the conversations it moved.
@@ -131,6 +196,9 @@ type KBArticle struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 	DeletedAt        *time.Time      `json:"deleted_at"`
 	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+	// AIExcludedAt is set while AI may not read the article (in any language), by AIExcludedByAgentID.
+	AIExcludedAt        *time.Time `json:"ai_excluded_at"`
+	AIExcludedByAgentID *string    `json:"ai_excluded_by_agent_id"`
 }
 
 // KBArticleVersion is one version of an article: what it said after a change and who made it.
@@ -263,27 +331,29 @@ type HelpCenter struct {
 // the records exported elsewhere. Body, EditedBody and SavedReplyBefore are null once 90 days passed
 // after the decision.
 type AgentRequest struct {
-	ID                 string          `json:"id"`
-	Kind               string          `json:"kind"`
-	Status             string          `json:"status"`
-	Method             string          `json:"method"`
-	Route              string          `json:"route"`
-	Path               string          `json:"path"`
-	Body               json.RawMessage `json:"body"`
-	EditedBody         json.RawMessage `json:"edited_body"`
-	Summary            string          `json:"summary"`
-	ConversationID     *string         `json:"conversation_id"`
-	TokenID            *string         `json:"token_id"`
-	TokenLabel         string          `json:"token_label"`
-	TokenScope         string          `json:"token_scope"`
-	RequestedByAgentID *string         `json:"requested_by_agent_id"`
-	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
-	DecidedAt          *time.Time      `json:"decided_at"`
-	Reason             *string         `json:"reason"`
-	ResultStatus       *int32          `json:"result_status"`
-	ResultNote         *string         `json:"result_note"`
-	CreatedAt          time.Time       `json:"created_at"`
-	ExpiresAt          time.Time       `json:"expires_at"`
+	ID             string          `json:"id"`
+	Kind           string          `json:"kind"`
+	Status         string          `json:"status"`
+	Method         string          `json:"method"`
+	Route          string          `json:"route"`
+	Path           string          `json:"path"`
+	Body           json.RawMessage `json:"body"`
+	EditedBody     json.RawMessage `json:"edited_body"`
+	Summary        string          `json:"summary"`
+	ConversationID *string         `json:"conversation_id"`
+	TokenID        *string         `json:"token_id"`
+	TokenLabel     string          `json:"token_label"`
+	TokenScope     string          `json:"token_scope"`
+	// TokenPermissions is what the token held when it asked (resource:action); empty before permissions.
+	TokenPermissions   []string   `json:"token_permissions"`
+	RequestedByAgentID *string    `json:"requested_by_agent_id"`
+	DecidedByAgentID   *string    `json:"decided_by_agent_id"`
+	DecidedAt          *time.Time `json:"decided_at"`
+	Reason             *string    `json:"reason"`
+	ResultStatus       *int32     `json:"result_status"`
+	ResultNote         *string    `json:"result_note"`
+	CreatedAt          time.Time  `json:"created_at"`
+	ExpiresAt          time.Time  `json:"expires_at"`
 	// SavedReplyID and SavedReplyBefore name the saved reply a request acts on and keep it as the token
 	// saw it (with the version a restore applies).
 	SavedReplyID     *string         `json:"saved_reply_id"`
@@ -329,6 +399,154 @@ type ImportPerson struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+// AIProvider is a provider the workspace added for its AI features. It never holds the key: a
+// restored workspace enters its keys again.
+type AIProvider struct {
+	ID             string    `json:"id"`
+	Kind           string    `json:"kind"`
+	Label          string    `json:"label"`
+	BaseURL        *string   `json:"base_url"`
+	AuthKind       string    `json:"auth_kind"`
+	KeyHint        *string   `json:"key_hint"`
+	Models         []string  `json:"models"`
+	CheckStatus    string    `json:"check_status"`
+	CheckErrorCode *string   `json:"check_error_code"`
+	CheckedAt      time.Time `json:"checked_at"`
+	CreatedBy      *string   `json:"created_by"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// AISlot is one AI feature's setting: where it runs, the model, on or off, and who consented.
+type AISlot struct {
+	Slot        string     `json:"slot"`
+	UsesServer  bool       `json:"uses_server"`
+	ProviderID  *string    `json:"provider_id"`
+	Model       *string    `json:"model"`
+	Effort      string     `json:"effort"`
+	Enabled     bool       `json:"enabled"`
+	Automatic   bool       `json:"automatic"`
+	AutoParts   []string   `json:"auto_parts"`
+	ConsentedBy *string    `json:"consented_by"`
+	ConsentedAt *time.Time `json:"consented_at"`
+	UpdatedBy   *string    `json:"updated_by"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+// AISettingsEvent is one change to the AI settings.
+type AISettingsEvent struct {
+	ID            string          `json:"id"`
+	Kind          string          `json:"kind"`
+	ActorAgentID  *string         `json:"actor_agent_id"`
+	ActorTokenID  *string         `json:"actor_token_id"`
+	ProviderID    *string         `json:"provider_id"`
+	ProviderLabel *string         `json:"provider_label"`
+	Slot          *string         `json:"slot"`
+	Detail        json.RawMessage `json:"detail"`
+	CreatedAt     time.Time       `json:"created_at"`
+}
+
+// AIUsage is one call to an AI provider. No prompt and no answer is ever stored.
+type AIUsage struct {
+	ID                string          `json:"id"`
+	Feature           string          `json:"feature"`
+	BilledTo          string          `json:"billed_to"`
+	ProviderID        *string         `json:"provider_id"`
+	ProviderKind      string          `json:"provider_kind"`
+	ProviderLabel     string          `json:"provider_label"`
+	Model             string          `json:"model"`
+	Status            string          `json:"status"`
+	ErrorCode         *string         `json:"error_code"`
+	StopReason        *string         `json:"stop_reason"`
+	ServedModel       *string         `json:"served_model"`
+	InputTokens       *int64          `json:"input_tokens"`
+	OutputTokens      *int64          `json:"output_tokens"`
+	CacheReadTokens   *int64          `json:"cache_read_tokens"`
+	CacheWriteTokens  *int64          `json:"cache_write_tokens"`
+	Hops              json.RawMessage `json:"hops"`
+	ProviderRequestID *string         `json:"provider_request_id"`
+	ActorAgentID      *string         `json:"actor_agent_id"`
+	ActorTokenID      *string         `json:"actor_token_id"`
+	StartedAt         time.Time       `json:"started_at"`
+	FinishedAt        *time.Time      `json:"finished_at"`
+	LatencyMS         *int            `json:"latency_ms"`
+	TaskID            *string         `json:"task_id"`
+	Automatic         bool            `json:"automatic"`
+	CostMicroUSD      *int64          `json:"cost_micro_usd"`
+	// ReservedMicroUSD is the most the call could cost, held against the allowance while it ran.
+	ReservedMicroUSD *int64 `json:"reserved_micro_usd"`
+}
+
+// AIDraft is one AI reply draft and how it ended. Its text and prompt are empty 90 days after it ended.
+type AIDraft struct {
+	ID                 string          `json:"id"`
+	ConversationID     string          `json:"conversation_id"`
+	TaskID             *string         `json:"task_id"`
+	RequestedByAgentID *string         `json:"requested_by_agent_id"`
+	RequestedByTokenID *string         `json:"requested_by_token_id"`
+	Prompt             string          `json:"prompt"`
+	Status             string          `json:"status"`
+	Text               *string         `json:"text"`
+	MissingInfo        *string         `json:"missing_info"`
+	Sources            json.RawMessage `json:"sources"`
+	Warnings           json.RawMessage `json:"warnings"`
+	Model              *string         `json:"model"`
+	Outcome            *string         `json:"outcome"`
+	Similarity         *float64        `json:"similarity"`
+	SentMessageID      *string         `json:"sent_message_id"`
+	Automatic          bool            `json:"automatic"`
+	AnswersMessageID   *string         `json:"answers_message_id"`
+	ReplyNeeded        *bool           `json:"reply_needed"`
+	CreatedAt          time.Time       `json:"created_at"`
+	ReadyAt            *time.Time      `json:"ready_at"`
+	DecidedAt          *time.Time      `json:"decided_at"`
+	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
+	TextClearedAt      *time.Time      `json:"text_cleared_at"`
+}
+
+// ResultsBaseline is the baseline the results page measures against (docs/user/results.md): the import
+// it comes from, when that import's first full run finished, its reconcile status (null for an import
+// made before results existed) and the numbers as stored.
+type ResultsBaseline struct {
+	Source       string          `json:"source"`
+	AnchorAt     time.Time       `json:"anchor_at"`
+	ImportStatus *string         `json:"import_status"`
+	ComputedAt   *time.Time      `json:"computed_at"`
+	Numbers      json.RawMessage `json:"numbers"`
+}
+
+// AITriage is one AI triage suggestion and what a person did with it.
+type AITriage struct {
+	ID                 string          `json:"id"`
+	ConversationID     string          `json:"conversation_id"`
+	TaskID             *string         `json:"task_id"`
+	Automatic          bool            `json:"automatic"`
+	RequestedByAgentID *string         `json:"requested_by_agent_id"`
+	RequestedByTokenID *string         `json:"requested_by_token_id"`
+	Status             string          `json:"status"`
+	TagIDs             []string        `json:"tag_ids"`
+	Priority           *string         `json:"priority"`
+	AssigneeAgentID    *string         `json:"assignee_agent_id"`
+	Reason             *string         `json:"reason"`
+	Sources            json.RawMessage `json:"sources"`
+	Base               json.RawMessage `json:"base"`
+	Stale              json.RawMessage `json:"stale"`
+	Model              *string         `json:"model"`
+	Outcome            *string         `json:"outcome"`
+	Applied            json.RawMessage `json:"applied"`
+	AutoAppliedAt      *time.Time      `json:"auto_applied_at"`
+	AutoApplied        json.RawMessage `json:"auto_applied"`
+	Skipped            json.RawMessage `json:"skipped"`
+	UndoneParts        json.RawMessage `json:"undone_parts"`
+	Kept               json.RawMessage `json:"kept"`
+	UndoneAt           *time.Time      `json:"undone_at"`
+	UndoneByAgentID    *string         `json:"undone_by_agent_id"`
+	CreatedAt          time.Time       `json:"created_at"`
+	ReadyAt            *time.Time      `json:"ready_at"`
+	DecidedAt          *time.Time      `json:"decided_at"`
+	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
+}
+
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
 // server reads the bytes from and never leaves the server.
 type Attachment struct {
@@ -355,36 +573,57 @@ type Message struct {
 	EmailMeta      json.RawMessage       `json:"email_meta"`
 	// AgentRequestID names the agent request a person approved to send this reply.
 	AgentRequestID *string `json:"agent_request_id"`
+	// AIDraftID names the AI draft the reply was written from.
+	AIDraftID *string `json:"ai_draft_id"`
 	// CC is the list a reply was copied to; null when it copied no one.
-	CC          []string     `json:"cc"`
-	CreatedAt   time.Time    `json:"created_at"`
-	Attachments []Attachment `json:"attachments"`
+	CC []string `json:"cc"`
+	// ChannelID is the channel that carried it, ExternalID its id there, ChannelMeta what the channel knows of it.
+	ChannelID   *string         `json:"channel_id"`
+	ExternalID  *string         `json:"external_id"`
+	ChannelMeta json.RawMessage `json:"channel_meta"`
+	CreatedAt   time.Time       `json:"created_at"`
+	Attachments []Attachment    `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
 type ConversationHead struct {
-	ID         string                     `json:"id"`
-	ContactID  string                     `json:"contact_id"`
-	Subject    string                     `json:"subject"`
-	Status     string                     `json:"status"`
-	Priority   string                     `json:"priority"`
-	AssigneeID *string                    `json:"assignee_id"`
-	Channel    string                     `json:"channel"`
-	Origin     *domain.ConversationOrigin `json:"origin"`
-	TagIDs     []string                   `json:"tag_ids"`
-	CreatedAt  time.Time                  `json:"created_at"`
-	UpdatedAt  time.Time                  `json:"updated_at"`
+	ID         string  `json:"id"`
+	ContactID  string  `json:"contact_id"`
+	Subject    string  `json:"subject"`
+	Status     string  `json:"status"`
+	Priority   string  `json:"priority"`
+	AssigneeID *string `json:"assignee_id"`
+	Channel    string  `json:"channel"`
+	ChannelID  *string `json:"channel_id"`
+	// ReplyChannelID is the channel its replies were pinned to when its own channel cannot send.
+	ReplyChannelID *string                    `json:"reply_channel_id"`
+	Origin         *domain.ConversationOrigin `json:"origin"`
+	TagIDs         []string                   `json:"tag_ids"`
+	CreatedAt      time.Time                  `json:"created_at"`
+	UpdatedAt      time.Time                  `json:"updated_at"`
+}
+
+// StatusChange is one change of a conversation's status (conversation_status_changes). Source is
+// colliedesk or import; ActorAgentID is the person who changed it, when known.
+type StatusChange struct {
+	ID           string    `json:"id"`
+	FromStatus   string    `json:"from_status"`
+	ToStatus     string    `json:"to_status"`
+	ChangedAt    time.Time `json:"changed_at"`
+	ActorAgentID *string   `json:"actor_agent_id"`
+	Source       string    `json:"source"`
 }
 
 // Conversation is one line of conversations.ndjson with everything that hangs off it.
 type Conversation struct {
 	ConversationHead
-	Messages    []Message          `json:"messages"`
-	TimeEntries []domain.TimeEntry `json:"time_entries"`
+	Messages      []Message          `json:"messages"`
+	TimeEntries   []domain.TimeEntry `json:"time_entries"`
+	StatusChanges []StatusChange     `json:"status_changes"`
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelInboundEvent*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -406,7 +645,17 @@ type Sink interface {
 	AgentRequest(AgentRequest) error
 	ImportJob(ImportJob) error
 	ImportPerson(ImportPerson) error
+	AIProvider(AIProvider) error
+	AISlot(AISlot) error
+	AISettingsEvent(AISettingsEvent) error
+	AIUsage(AIUsage) error
+	AIDraft(AIDraft) error
+	AITriage(AITriage) error
+	ResultsBaseline(ResultsBaseline) error
+	Channel(Channel) error
+	ChannelEvent(ChannelEvent) error
+	ChannelInboundEvent(ChannelInboundEvent) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
-	EndConversation(timeEntries []domain.TimeEntry) error
+	EndConversation(timeEntries []domain.TimeEntry, statusChanges []StatusChange) error
 }

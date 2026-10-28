@@ -3,10 +3,12 @@ import type { KeyboardEvent } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/client';
+import { SubmitKeys } from '../../api/submit-key';
 import { messages } from '../../messages';
 import { RouterLink } from '../../ui/router-link';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
+import { ArticleAIBox, ArticleAINote } from './article-ai';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
@@ -139,18 +141,25 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const [uploading, setUploading] = useState(0);
   const invalid = !draft.title.trim() || titleLength > maxTitle || tooLong || !draft.collection_id || uploading > 0;
 
+  // Set from the press until the answer: clicks that land before the button turns disabled save nothing.
+  const saving = useRef(false);
+  // A new article retried after a failure is sent under the same key, so the server stores it once.
+  const createKeys = useRef(new SubmitKeys());
   const save = async (status?: KBArticleStatus, over?: KBArticle) => {
     const body = bodyNow();
     const current = over ?? base;
     const sent = body === draft.body ? draft : { ...draft, body };
     // Typing not yet on the counter is now; a text over the limit shows there and is not sent.
     if (sent !== draft) setDraft(sent);
-    if (busy || invalid || characters(body) > maxBody) return;
+    if (busy || saving.current || invalid || characters(body) > maxBody) return;
+    saving.current = true;
     setBusy(true);
     setProblem(undefined);
     try {
       if (!current) {
-        const created = await kbApi.createArticle({ collection_id: sent.collection_id, title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft' });
+        const value = { collection_id: sent.collection_id, title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft' } as const;
+        const created = await kbApi.createArticle(value, createKeys.current.keyFor(JSON.stringify(value)));
+        createKeys.current.done();
         client.setQueryData(['kb-article', created.id], created);
         void refresh();
         leaving.current = true;
@@ -179,6 +188,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       if (error instanceof ChangedElsewhereError) setConflict(true);
       else setProblem(reason(error, kbMessages.articleActionFailed));
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   };
@@ -362,6 +372,19 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     void refresh();
   };
 
+  // Excluding from AI or including again changes neither the text nor updated_at, so an edit in progress stays.
+  const aiChanged = (changed: KBArticle, text: string) => {
+    setBase(changed);
+    client.setQueryData(['kb-article', changed.id], changed);
+    setNotice(text);
+    void refresh();
+  };
+  // The note goes with the exclusion; the keyboard focus moves to the box's button, which stays.
+  const aiChangedFromNote = (changed: KBArticle, text: string) => {
+    aiChanged(changed, text);
+    requestAnimationFrame(() => document.getElementById(`${id}-ai-button`)?.focus());
+  };
+
   const status = base?.status ?? 'draft';
   const heading = base ? kbMessages.editArticleHeading(base.title) : kbMessages.newArticleHeading;
   const phone = usePhone();
@@ -415,6 +438,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {isPublic === false && <RouterLink className="button-link" href="/settings#help-center-heading" onFollow={() => void navigate({ to: '/settings', hash: 'help-center-heading' })}>
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</RouterLink>}
       </section>
+      {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
         <strong id={`${id}-alt-warn`}>{kbMessages.imagesWithoutAlt(missing.length)}</strong>
         <span>{kbMessages.imagesWithoutAltHelp}</span>
@@ -462,7 +486,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           </span>
         </>}
       </header>
-      {(conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html) && <div className="kb-editor-notes">
+      {(conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
+        {base?.ai_exclusion && !phone && <ArticleAINote article={base} onChanged={aiChangedFromNote} />}
         {conflict && <div role="alert" className="warning-note kb-conflict">
           <p>{kbMessages.changedElsewhere}</p>
           <div className="button-row">
@@ -477,6 +502,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
         {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
       </div>}
+      {/* On a phone the box stands at the top of the page, as the note does on a wide screen: the way out and back is never behind Details. */}
+      {base && phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       <form id={`${id}-form`} className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); submit.current(); }}>
         <div className="kb-editor-main">
           <div className="field kb-title-field"><label htmlFor={`${id}-title`} className="sr-only">{kbMessages.articleTitle}</label>
@@ -545,10 +572,10 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       {altFor && <AltDialog image={altFor} library={missingNames[missing.findIndex((each) => each.markdown === altFor.markdown)]?.data}
         onSave={(alt) => { handle?.replace(altFor.markdown, altFor.markdown.replace(/^!\[\s*\]/, `![${alt.replace(/[[\]\\\n]/g, ' ')}]`)); setAltFor(undefined); }}
         onClose={() => setAltFor(undefined)} />}
-      {/* key: a save or a restore adds a version, so an open history loads again. */}
+      {/* key: a save, a restore or an AI exclusion adds a version, so an open history loads again. */}
       {base && historyOpen && <KBDialog title={kbMessages.versionHistory} className="kb-history" phone="full" closeLabel={kbMessages.closeHistory}
         onClose={() => setHistoryOpen(false)}>
-        <SavedReplyHistory<KBArticleVersion> key={base.updated_at} title={base.title} timezone={timezone} load={(before) => kbApi.versions(base.id, before)}
+        <SavedReplyHistory<KBArticleVersion> key={`${base.updated_at}-${base.last_change?.version}`} title={base.title} timezone={timezone} load={(before) => kbApi.versions(base.id, before)}
           text={(version) => version.body_md} changes={versionChanges} failedMessage={kbMessages.articleActionFailed}
           onRestore={restoreVersion} onClose={() => setHistoryOpen(false)} />
       </KBDialog>}

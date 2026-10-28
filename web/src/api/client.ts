@@ -2,14 +2,16 @@ import type { z } from 'zod';
 import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, signUpCloud } from './cloud-signup';
 import { OutboundRefusedError } from './outbound-error';
+import type { OutboundRefusalReason } from './outbound-error';
 import { requestExportLink } from './workspace-export';
 import { recordFailedCall } from '../lib/diagnostics';
+import { browserTimeZone } from '../lib/format-date';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
-  cloudWorkspaceChoicesSchema, consentLinkSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
+  cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentRequestListSchema, agentRequestSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentRequestListSchema, agentRequestSchema, agentTokenSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
 
@@ -88,7 +90,8 @@ async function invalidRequest(response: Response): Promise<Error> {
         const { latest_reply_number: latest, newer_replies: newer } = body.error as { latest_reply_number?: number; newer_replies?: Message[] };
         return new ReplyConflictError(body.error.message, latest ?? 0, newer ?? []);
       }
-      return response.status === 409 ? new ConflictError(body.error.message, body.error)
+      // A failed AI provider check carries why (check_error_code), which places the message under its field.
+      return response.status === 409 || body.error.code === 'ai_check_failed' ? new ConflictError(body.error.message, body.error)
         : new InvalidRequestError(body.error.message);
     }
   } catch {
@@ -128,18 +131,23 @@ async function planLimitFailure(response: Response): Promise<PlanLimitError> {
   return new PlanLimitError('This action is not included in your plan.');
 }
 
+const refusalReasons: readonly OutboundRefusalReason[] = ['contact_address_differs', 'mail_not_via_hosted_address', 'sender_authentication_failed'];
+const refusalReason = (value: unknown) => refusalReasons.find((known) => known === value);
+
 async function outboundRefusal(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown } };
-    const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo } = body.error ?? {};
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown; reason?: unknown } };
+    const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo, reason } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
-    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval'].includes(String(code)) && typeof message === 'string' && message)
+    // An agent asking for an admin token: the reason is shown next to the form.
+    if (code === 'admin_token_needs_admin' && typeof message === 'string' && message) return new InvalidRequestError(message);
+    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval', 'ai_checks_rate_limited', 'ai_drafts_rate_limited', 'rate_limited'].includes(String(code)) && typeof message === 'string' && message)
       return new ConflictError(message, { code });
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
       return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc,
-        typeof replyTo === 'string' && replyTo ? replyTo : undefined);
+        typeof replyTo === 'string' && replyTo ? replyTo : undefined, refusalReason(reason));
     }
   } catch {
     // An unreadable body is an ordinary failure.
@@ -179,7 +187,7 @@ export async function request<T>(path: string, schema: z.ZodType<T>, init?: Requ
   return schema.parse(response.status === 204 ? undefined : await response.json());
 }
 
-async function requestNoContent(path: string, init: RequestInit): Promise<void> {
+export async function requestNoContent(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, { credentials: 'same-origin', ...init });
   if (!response.ok) noteFailure(path, init, response);
   if (!response.ok) throw failure(response.status);
@@ -197,10 +205,11 @@ type OptionalBody<Operation extends keyof operations> =
   NonNullable<operations[Operation]['requestBody']> extends { content: { 'application/json': infer Body } } ? Body : never;
 const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
 
-function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number): FormData {
+function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string): FormData {
   const form = new FormData();
   form.append('kind', kind);
   form.append('body', body);
+  if (aiDraft) form.append('ai_draft_id', aiDraft);
   // Before the files: a reply refused for a newer one stores none of them.
   if (seen !== undefined) form.append('seen_reply_number', String(seen));
   // The server reads the copied addresses before the files, so a refusal costs no upload.
@@ -221,7 +230,8 @@ export class CloudWorkspaceChoiceError extends Error {
 
 async function exchangeCloudSession(token: string, workspaceSlug?: string) {
   // The user agent names this device in Settings → Sessions, as it does for a pairing link.
-  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}) };
+  // The browser's timezone starts a first-time agent on their own clock instead of UTC.
+  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}), timezone: browserTimeZone() };
   const response = await fetch('/api/v1/auth/cloud/exchange', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -245,11 +255,17 @@ async function errorCode(response: Response): Promise<unknown> {
 
 export const api = {
   emailChannel: () => request('/api/v1/channels/email', emailChannelSettingsSchema),
+  // One mailbox of several: the one a conversation's replies leave from.
+  emailChannelOf: (id: string) => request(`/api/v1/channels/${encodeURIComponent(id)}/email`, emailChannelSettingsSchema),
+  channelCounts: () => request('/api/v1/channels', channelCountsSchema),
+  // A test email from the signed-in agent to an email channel (the default one without an id).
+  // key names this click (Idempotency-Key): a repeat with the same key returns the first test message.
+  sendTestMessage: (channelId?: string, key?: string) => request(channelId ? `/api/v1/channels/${channelId}/email/test-message` : '/api/v1/channels/email/test-message', testMessageResultSchema,
+    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined }),
   // Without sender_name the channel keeps its name; a new channel starts with the workspace name.
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
   // Only the name: the server keeps the address, so a stale page cannot move the channel.
   saveEmailSenderName: (sender_name: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ sender_name }) }),
-  disconnectEmailChannel: () => requestNoContent('/api/v1/channels/email', { method: 'DELETE' }),
   webForm: () => request('/api/v1/channels/web-form', webFormSettingsSchema),
   saveWebForm: (enabled: boolean, allowed_origins: string[]) => request('/api/v1/channels/web-form', webFormSettingsSchema, { method: 'PUT', body: json<'putWebForm'>({ enabled, allowed_origins }) }),
   verifyEmailDomain: () => request('/api/v1/channels/email/domain-verification', emailChannelSettingsSchema, { method: 'POST' }),
@@ -266,7 +282,7 @@ export const api = {
   requestExportLink,
   logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }),
   redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {
-    method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie' }),
+    method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone() }),
   }),
   me: () => request('/api/v1/auth/me', meSchema),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),
@@ -276,6 +292,8 @@ export const api = {
   updateAgentDisplayName: (display_name: RequestBody<'updateAgentDisplayName'>['display_name']) => request('/api/v1/agents/me/display-name', agentSchema, { method: 'PATCH', body: json<'updateAgentDisplayName'>({ display_name }) }),
   updateAgent: (id: string, value: RequestBody<'updateAgent'>) => request(`/api/v1/agents/${id}`, teamMemberSchema, { method: 'PATCH', body: json<'updateAgent'>(value) }),
   sessions: () => request('/api/v1/auth/sessions', sessionListSchema),
+  // A token holds a tier (scope) or its own permissions, never both.
+  createAgentToken: (label: string, choice: Omit<RequestBody<'createAgentToken'>, 'label'>) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', body: json<'createAgentToken'>({ label, ...choice }) }),
   revokeSession: (id: string) => requestNoContent(`/api/v1/auth/sessions/${id}`, { method: 'DELETE' }),
   invites: () => request('/api/v1/auth/invites', inviteListSchema),
   createInvite: (email: string, role_ceiling: RequestBody<'createInvite'>['role_ceiling']) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', body: json<'createInvite'>({ email, role_ceiling }) }),
@@ -292,17 +310,20 @@ export const api = {
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
   timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
   // seen is the newest reply number the sender had seen when they started writing (409 ReplyConflictError when older).
-  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number) =>
-    request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST',
-      body: files.length > 0 ? messageForm(kind, body, files, cc, seen)
-        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }) }) }),
+  // aiDraft names the AI draft a reply was written from.
+  // key names this submit (Idempotency-Key): a retry with the same key returns the message the first stored.
+  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string, key?: string) =>
+    request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined,
+      body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft)
+        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}) }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),
   tags: () => request('/api/v1/tags', tagListSchema),
   createTag: (name: string) => request('/api/v1/tags', tagSchema, { method: 'POST', body: json<'createTag'>({ name }) }),
   savedReplies: () => request('/api/v1/saved-replies', savedReplyListSchema),
-  createSavedReply: (title: string, body: string) => request('/api/v1/saved-replies', savedReplySchema, { method: 'POST', body: json<'createSavedReply'>({ title, body }) }),
+  createSavedReply: (title: string, body: string, key?: string) => request('/api/v1/saved-replies', savedReplySchema,
+    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined, body: json<'createSavedReply'>({ title, body }) }),
   updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),
   // updatedAt is the version the person saw; the server refuses the delete if the reply was saved since.
   deleteSavedReply: (id: string, updatedAt: string) => requestNoContent(`/api/v1/saved-replies/${id}?${new URLSearchParams({ updated_at: updatedAt })}`, { method: 'DELETE' }),

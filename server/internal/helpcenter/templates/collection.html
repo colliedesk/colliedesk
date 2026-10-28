@@ -12,7 +12,14 @@
 <h3 class="card-tab"><a href="{{.URL}}">{{.Name}}</a></h3>
 <div class="card-body">
 {{- with .Description}}<p class="card-desc">{{.}}</p>{{end}}
+{{- if .Articles}}
+<ul class="card-list">{{range .Articles}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
+{{- end}}
+{{- if .More}}
+<a class="card-more" href="{{.URL}}">All {{template "count" .Count}}<span aria-hidden="true"> →</span></a>
+{{- else}}
 <p class="card-count">{{template "count" .Count}}</p>
+{{- end}}
 </div>
 </li>
 {{- end}}

@@ -84,7 +84,7 @@ func withoutContact(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		return nil, nil
 	}
 	var contact string
-	err := tx.QueryRow(ctx, `SELECT lower(ct.email) FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
+	err := tx.QueryRow(ctx, `SELECT COALESCE(lower(ct.email),'') FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 		WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, conversationID).Scan(&contact)
 	if err != nil {
 		return nil, fmt.Errorf("find conversation contact: %w", err)

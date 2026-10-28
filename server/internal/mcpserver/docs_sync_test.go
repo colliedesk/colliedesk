@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -45,5 +46,18 @@ func TestEmbeddedUserGuidesMatchTheDocsDirectory(t *testing.T) {
 		if string(got) != string(want) {
 			t.Errorf("%s differs from its embedded copy: run `make sync-user-docs`", filepath.Base(path))
 		}
+	}
+}
+
+// docs_search quotes the guides; the markers around a generated table are not text to quote.
+func TestGuideSectionsLeaveOutGeneratedMarkers(t *testing.T) {
+	sections := splitGuide("mcp", "# MCP\n\n## Tools\n\n<!-- generated:tools -->\n| a | b |\n<!-- /generated -->\n")
+	for _, section := range sections {
+		if strings.Contains(section.text, "<!--") || strings.Contains(section.text, "generated") {
+			t.Errorf("section %q keeps a marker: %q", section.heading, section.text)
+		}
+	}
+	if len(sections) != 1 || !strings.Contains(sections[0].text, "| a | b |") {
+		t.Errorf("sections = %+v, want the table under Tools", sections)
 	}
 }

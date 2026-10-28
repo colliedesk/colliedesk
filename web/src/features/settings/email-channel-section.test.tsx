@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render as renderInPage, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderInPage, screen, within } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { EmailChannelSettings } from '../../api/schemas';
@@ -15,6 +15,12 @@ const disconnected: EmailChannelSettings = {
   domain_verification: 'txt',
   sending_pause: null,
   gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null },
+  microsoft: {
+    available: false, missing_settings: ['MICROSOFT_OAUTH_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_SECRET'],
+    redirect_uri: 'https://desk.example.com/api/v1/channels/email/microsoft/callback',
+    admin_consent_redirect_uri: 'https://desk.example.com/api/v1/channels/email/microsoft/admin-consent',
+    admin_consent_url: null, large_attachment_bytes: 3145728, server_credentials_refused: false, connection: null,
+  },
 };
 const connected: EmailChannelSettings = {
   ...disconnected,
@@ -89,7 +95,7 @@ test('disconnecting asks first, says what stops, and can be cancelled', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage onDisconnect={onDisconnect} />);
   fireEvent.click(screen.getByRole('button', { name: /disconnect email/i }));
   const question = screen.getByRole('group', { name: 'Disconnect email?' });
-  expect(question).toHaveTextContent('mail sent to support@example.com stops arriving and replies are no longer emailed');
+  expect(question).toHaveTextContent('mail sent to support@example.com stops arriving. Conversations stay; their replies leave from the default mailbox');
   expect(within(question).getByRole('button', { name: 'Cancel' })).toHaveFocus();
   fireEvent.click(within(question).getByRole('button', { name: 'Cancel' }));
   expect(onDisconnect).not.toHaveBeenCalled();
@@ -191,7 +197,7 @@ test('the address name save shows Saving… and Saved separately from the suppor
   expect(screen.getByRole('button', { name: /save support address/i })).toBeEnabled();
   fireEvent.submit(screen.getByRole('textbox', { name: /workspace address name/i }));
   expect(onSaveSlug).not.toHaveBeenCalled();
-  rerender(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" slugSave={{ saved: true }} />);
+  rerender(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" onSaveSlug={onSaveSlug} slugSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
 });
 
@@ -280,7 +286,7 @@ test('says the records expired and to verify again', () => {
 test('while Gmail sends, domain verification is folded away and says it is not needed', () => {
   const gmailConnection = { provider: 'google' as const, address: 'support@example.com', status: 'connected' as const, error_code: null, error: null, failed_at: null, connected_at: '2026-10-19T08:00:00Z' };
   render(<EmailChannelSection settings={{ ...connected, gmail: { ...connected.gmail, connection: gmailConnection } }} timezone="UTC" canManage />);
-  const summary = screen.getByText(/not needed while replies go through Gmail/);
+  const summary = screen.getByText(/not needed while replies go through your mailbox/);
   const details = summary.closest('details');
   expect(details).not.toBeNull();
   expect(details).not.toHaveAttribute('open');
@@ -299,9 +305,9 @@ test('Escape closes the disconnect email question like Cancel', () => {
 
 test('Gmail is offered once the channel is connected, and connecting it calls back', async () => {
   const onConnectGmail = vi.fn();
-  const { rerender } = render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage onConnectGmail={onConnectGmail} />);
+  const { rerender } = render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage onConnectMailbox={onConnectGmail} />);
   expect(screen.queryByRole('button', { name: 'Connect Gmail' })).not.toBeInTheDocument();
-  rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage onConnectGmail={onConnectGmail} />);
+  rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage onConnectMailbox={onConnectGmail} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Connect Gmail' }));
   expect(onConnectGmail).toHaveBeenCalled();
 });
@@ -319,4 +325,57 @@ test('with Gmail sending, a server without SMTP is not a warning, and a broken G
   rerender(<EmailChannelSection settings={broken} timezone="UTC" canManage />);
   expect(screen.queryByText(/configure SMTP on the server/i)).not.toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('Gmail stopped sending');
+});
+
+test('a browser without the clipboard (a server on plain http) says the copy failed instead of doing nothing', async () => {
+  Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+  render(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" />);
+  fireEvent.click(screen.getByRole('button', { name: /copy forwarding address/i }));
+  expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toHaveAttribute('role', 'status');
+  cleanup();
+  render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage />);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy inbound URL' }));
+  expect(await screen.findByText('Could not copy. Select the text and copy it yourself.')).toBeInTheDocument();
+});
+
+test('a verified domain says every mailbox on it shares the verification', () => {
+  render(<EmailChannelSection part="replies" settings={{ ...connected, channel: { ...connected.channel!, domain_verified_at: '2026-10-15T00:00:00Z' } }} timezone="UTC" canManage />);
+  expect(screen.getByText(/The verification is for example\.com: every mailbox on it shares it\./)).toBeInTheDocument();
+});
+
+test('on a server without hosted mail, the inbound URL says what it is for, links the guide and gives a test request with the new secret', () => {
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage createdSecret="s3cret-value" part="connection" />);
+  expect(screen.getByText(/your mailbox cannot send to it by itself/i)).toBeInTheDocument();
+  expect(screen.getByText(/not your email password/i)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /how mail reaches the inbound url/i }))
+    .toHaveAttribute('href', 'https://colliedesk.com/docs/self-host/email#3-forward-mail-to-colliedesk');
+  const example = (screen.getByRole('textbox', { name: /test request/i }) as HTMLTextAreaElement).value;
+  expect(example).toContain(`curl -sS -X POST '${connected.inbound_url}'`);
+  expect(example).toContain("'X-Colliedesk-Inbound-Secret: s3cret-value'");
+  expect(example).toContain('To: support@example.com');
+  expect(screen.getByRole('button', { name: /copy test request/i })).toBeInTheDocument();
+});
+
+test('before a secret is shown, the test request names where the secret goes', () => {
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage part="connection" />);
+  expect((screen.getByRole('textbox', { name: /test request/i }) as HTMLTextAreaElement).value).toContain('X-Colliedesk-Inbound-Secret: YOUR_INBOUND_SECRET');
+});
+
+test('a workspace with a hosted forwarding address gets no inbound URL guide', () => {
+  render(<EmailChannelSection settings={{ ...connected, hosted_address: 'support@acme.colliedesk.com' }} timezone="UTC" canManage part="connection" />);
+  expect(screen.queryByRole('textbox', { name: /test request/i })).toBeNull();
+});
+
+test('replies say in plain words that this server sends them; the SMTP details are under Server details for admins only', () => {
+  const view = render(<EmailChannelSection settings={connected} timezone="UTC" canManage />);
+  expect(screen.getByText('Replies are sent by this server\'s outgoing email.')).toBeInTheDocument();
+  const details = screen.getByText(/smtp\.example\.net/).closest('details')!;
+  expect(within(details).getByText('Server details')).toBeInTheDocument();
+  expect(details).not.toHaveAttribute('open');
+  expect(details).toHaveTextContent('smtp.example.net:587 · STARTTLS on · authenticated');
+  view.unmount();
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage={false} />);
+  expect(screen.getByText('Replies are sent by this server\'s outgoing email.')).toBeInTheDocument();
+  expect(screen.queryByText('Server details')).not.toBeInTheDocument();
+  expect(screen.queryByText(/smtp\.example\.net/)).not.toBeInTheDocument();
 });

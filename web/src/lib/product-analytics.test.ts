@@ -170,3 +170,41 @@ describe('scrubEvent', () => {
     });
   });
 });
+
+describe('on the sign-in page', () => {
+  it('does not download the analytics library until the sign-in form is ready, so the two never share a slow connection', async () => {
+    const posthog = fakePostHog();
+    const loader = vi.fn(async () => posthog);
+    let ready!: () => void;
+    const formReady = new Promise<void>((resolve) => { ready = resolve; });
+    const started = startProductAnalytics(cloud, undefined, loader, formReady);
+    await Promise.resolve();
+    expect(loader).not.toHaveBeenCalled();
+    ready();
+    await started;
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('signInFormReady', () => {
+  it('resolves when the form says it is ready, or after the fallback when it never does', async () => {
+    vi.useFakeTimers();
+    try {
+      const { markSignInFormReady, signInFormReady, resetSignInFormReadyForTest } = await import('./sign-in-ready');
+      let done = false;
+      void signInFormReady(15_000).then(() => { done = true; });
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(done).toBe(true);
+      resetSignInFormReadyForTest();
+      let marked = false;
+      void signInFormReady(15_000).then(() => { marked = true; });
+      markSignInFormReady();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(marked).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

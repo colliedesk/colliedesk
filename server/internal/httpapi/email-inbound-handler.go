@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -13,6 +11,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -29,9 +29,10 @@ const (
 func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Request) {
 	secret := request.Header.Get(inboundSecretHeader)
 	platform := a.isPlatformSecret(secret)
-	workspaceID := ""
+	// A channel's own secret names the channel; the server-wide secret finds it from the recipient.
+	var target inboundTarget
 	if !platform {
-		found, ok, err := a.store.WorkspaceForInboundSecret(request.Context(), secret)
+		workspaceID, channelID, ok, err := a.store.ChannelForInboundSecret(request.Context(), secret)
 		if err != nil {
 			writeInternalError(response, err)
 			return
@@ -40,7 +41,7 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid inbound secret is required.")
 			return
 		}
-		workspaceID = found
+		target = inboundTarget{workspaceID: workspaceID, channelID: channelID}
 	}
 	raw, err := io.ReadAll(http.MaxBytesReader(response, request.Body, maxInboundBytes))
 	var tooLarge *http.MaxBytesError
@@ -65,15 +66,15 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 	parsed.Cc = a.withoutPlatformAddresses(parsed.Cc)
 	if platform {
 		var hosted bool
-		if workspaceID, hosted, err = a.platformWorkspace(request.Context(), parsed); err != nil {
+		if target, hosted, err = a.platformTarget(request.Context(), parsed); err != nil {
 			writeInternalError(response, err)
 			return
 		}
-		if workspaceID == "" && hosted {
+		if target.workspaceID == "" && hosted {
 			writeError(response, http.StatusNotFound, "unknown_recipient", "No connected workspace receives mail at this address.")
 			return
 		}
-		if workspaceID == "" {
+		if target.workspaceID == "" {
 			reason := "unknown_recipient"
 			writeJSON(response, http.StatusOK, store.InboundResult{Status: "dropped", Reason: &reason, Authentication: parsed.Authentication})
 			return
@@ -83,7 +84,12 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeInternalError(response, errors.New("attachment storage is not configured; inbound mail cannot be kept"))
 		return
 	}
-	result, err := a.store.IngestEmail(request.Context(), workspaceID, parsed, a.now(), a.stashEmail(workspaceID, raw, parsed.Files))
+	channel, err := a.inboundChannel(request.Context(), target)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	results, err := a.pipeline.Receive(request.Context(), channel, []channels.Raw{{Parsed: parsed, Body: raw, ReceivedAt: a.now()}})
 	if errors.Is(err, store.ErrRateLimited) {
 		response.Header().Set("Retry-After", strconv.Itoa(int(store.InboundRateWindow.Seconds())))
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many messages from this sender. Retry later.")
@@ -100,7 +106,9 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeInternalError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, result)
+	outcome := results[0]
+	writeJSON(response, http.StatusOK, store.InboundResult{Status: outcome.Status, Reason: outcome.Reason, ConversationID: outcome.ConversationID,
+		MessageID: outcome.MessageID, Authentication: parsed.Authentication})
 }
 
 // isPlatformSecret reports whether the secret is the server-wide secret of the MAIL_FROM_DOMAIN forwarder.
@@ -113,87 +121,85 @@ func (a *API) isPlatformSecret(secret string) bool {
 	return subtle.ConstantTimeCompare(want[:], got[:]) == 1
 }
 
-// platformWorkspace routes mail that arrived with the server-wide secret. An envelope recipient at
-// MAIL_FROM_DOMAIN is a reply address and picks the workspace of its conversation, even when that domain
-// sits below HOSTED_MAIL_DOMAIN. Otherwise a recipient under HOSTED_MAIL_DOMAIN picks the workspace by
-// its slug (hosted is true even when nothing matches, so the caller rejects instead of dropping), and
-// a reply token among the recipients is the last resort.
-func (a *API) platformWorkspace(ctx context.Context, parsed email.Inbound) (workspaceID string, hosted bool, err error) {
+// inboundTarget is where inbound mail goes: a workspace and, when the route knows it, its email channel.
+type inboundTarget struct {
+	workspaceID, channelID string
+}
+
+// inboundChannel reads the email channel mail for the target arrives on: the one named, else the
+// workspace's default email channel.
+func (a *API) inboundChannel(ctx context.Context, target inboundTarget) (channels.Channel, error) {
+	if target.channelID != "" {
+		return a.store.GetChannel(ctx, target.workspaceID, target.channelID)
+	}
+	channel, found, err := a.store.DefaultChannelOfType(ctx, target.workspaceID, channelemail.Type)
+	if err == nil && !found {
+		err = store.ErrEmailChannelMissing
+	}
+	return channel, err
+}
+
+// platformTarget routes mail that arrived with the server-wide secret. An envelope recipient at
+// MAIL_FROM_DOMAIN is a reply address and picks the workspace of its conversation and the channel the
+// conversation is answered from, even when that domain sits below HOSTED_MAIL_DOMAIN. Otherwise a
+// recipient under HOSTED_MAIL_DOMAIN picks the workspace by its slug and the channel by its local part
+// (hosted is true even when nothing matches, so the caller rejects instead of dropping), and a reply
+// token among the recipients is the last resort.
+func (a *API) platformTarget(ctx context.Context, parsed email.Inbound) (target inboundTarget, hosted bool, err error) {
 	config := a.config.Email
 	if email.ForDomain(parsed.EnvelopeTo, config.MailFromDomain) {
-		workspaceID, err = a.replyWorkspace(ctx, []string{parsed.EnvelopeTo})
-		return workspaceID, false, err
+		target, err = a.replyTarget(ctx, []string{parsed.EnvelopeTo})
+		return target, false, err
 	}
 	if email.UnderDomain(parsed.EnvelopeTo, config.HostedMailDomain) {
 		// Only the envelope recipient counts: To and Cc are written by the sender.
-		workspaceID, err = a.hostedWorkspace(ctx, parsed.EnvelopeTo)
-		return workspaceID, true, err
+		target, err = a.hostedTarget(ctx, parsed.EnvelopeTo)
+		return target, true, err
 	}
-	workspaceID, err = a.replyWorkspace(ctx, parsed.Recipients)
-	return workspaceID, false, err
+	target, err = a.replyTarget(ctx, parsed.Recipients)
+	return target, false, err
 }
 
-// replyWorkspace returns the workspace of the conversation named by a reply+<token>@MAIL_FROM_DOMAIN
-// recipient, or "" when there is none or no conversation has that token.
-func (a *API) replyWorkspace(ctx context.Context, recipients []string) (string, error) {
+// replyTarget returns the workspace of the conversation named by a reply+<token>@MAIL_FROM_DOMAIN
+// recipient and the email channel its replies leave from; an empty target when there is none or no
+// conversation has that token.
+func (a *API) replyTarget(ctx context.Context, recipients []string) (inboundTarget, error) {
 	token := email.PlatformReplyToken(recipients, a.config.Email.MailFromDomain)
 	if token == "" {
-		return "", nil
+		return inboundTarget{}, nil
 	}
-	workspaceID, _, err := a.store.WorkspaceForReplyToken(ctx, token)
-	return workspaceID, err
+	workspaceID, conversationID, found, err := a.store.ConversationForReplyToken(ctx, token)
+	if err != nil || !found {
+		return inboundTarget{}, err
+	}
+	route, err := a.store.ReplyRoute(ctx, workspaceID, conversationID)
+	if err != nil {
+		return inboundTarget{}, err
+	}
+	target := inboundTarget{workspaceID: workspaceID}
+	if route.Channel != nil && route.Channel.Type == channelemail.Type {
+		target.channelID = route.Channel.ID
+	}
+	return target, nil
 }
 
-// stashEmail writes the gzip-compressed raw message and every file of the message to attachment storage.
-// Objects are content-addressed and may be shared with other messages, so a failure never deletes them;
-// the forwarder's retry writes the same keys and references them.
-func (a *API) stashEmail(workspaceID string, raw []byte, files []email.File) store.StashFunc {
-	return func(ctx context.Context) ([]store.EmailFile, error) {
-		var compressed bytes.Buffer
-		writer := gzip.NewWriter(&compressed)
-		if _, err := writer.Write(raw); err != nil {
-			return nil, fmt.Errorf("compress original message: %w", err)
-		}
-		if err := writer.Close(); err != nil {
-			return nil, fmt.Errorf("compress original message: %w", err)
-		}
-		stored := make([]store.EmailFile, 0, len(files)+1)
-		put := func(filename, contentType string, data []byte, original, inline bool) error {
-			object, err := a.config.Attachments.Put(ctx, workspaceID, bytes.NewReader(data), int64(len(data)))
-			if err != nil {
-				return err
-			}
-			stored = append(stored, store.EmailFile{Filename: filename, ContentType: contentType, Original: original, Inline: inline, Object: object})
-			return nil
-		}
-		if err := put("original-message.eml.gz", "application/gzip", compressed.Bytes(), true, false); err != nil {
-			return nil, err
-		}
-		for _, file := range files {
-			if err := put(file.Filename, file.ContentType, file.Data, false, file.Embedded); err != nil {
-				return nil, err
-			}
-		}
-		return stored, nil
-	}
-}
-
-// hostedWorkspace returns the workspace that receives mail at a hosted address, or "" when no workspace
-// with a connected email channel owns it.
-func (a *API) hostedWorkspace(ctx context.Context, recipient string) (string, error) {
+// hostedTarget returns the workspace and the email channel that receive mail at a hosted address, or
+// an empty target when no workspace with a connected email channel owns it.
+func (a *API) hostedTarget(ctx context.Context, recipient string) (inboundTarget, error) {
 	slug := email.HostedSlug(recipient, a.config.Email.HostedMailDomain)
 	if slug == "" {
-		return "", nil
+		return inboundTarget{}, nil
 	}
-	found, ok, err := a.store.WorkspaceForMailSlug(ctx, slug)
+	workspaceID, ok, err := a.store.WorkspaceForMailSlug(ctx, slug)
 	if err != nil || !ok {
-		return "", err
+		return inboundTarget{}, err
 	}
-	channel, err := a.store.GetEmailChannel(ctx, found)
-	if err != nil || channel == nil {
-		return "", err
+	// billing+invoice@ is billing@'s mailbox, as a +tag is for support addresses.
+	channelID, found, err := a.store.ChannelForHostedAddress(ctx, workspaceID, email.LocalPart(email.MailboxKey(recipient)))
+	if err != nil || !found {
+		return inboundTarget{}, err
 	}
-	return found, nil
+	return inboundTarget{workspaceID: workspaceID, channelID: channelID}, nil
 }
 
 // checkInboundRecipient answers the hosted-cloud MTA before it accepts RCPT TO: 204 when inbound would
@@ -211,18 +217,18 @@ func (a *API) checkInboundRecipient(response http.ResponseWriter, request *http.
 		writeError(response, http.StatusBadRequest, "invalid_request", "The body must be {\"recipient\": \"<address>\"}.")
 		return
 	}
-	var workspaceID string
+	var target inboundTarget
 	var err error
 	if email.ForDomain(body.Recipient, a.config.Email.MailFromDomain) {
-		workspaceID, err = a.replyWorkspace(request.Context(), []string{body.Recipient})
+		target, err = a.replyTarget(request.Context(), []string{body.Recipient})
 	} else {
-		workspaceID, err = a.hostedWorkspace(request.Context(), body.Recipient)
+		target, err = a.hostedTarget(request.Context(), body.Recipient)
 	}
 	if err != nil {
 		writeInternalError(response, err)
 		return
 	}
-	if workspaceID == "" {
+	if target.workspaceID == "" {
 		writeError(response, http.StatusNotFound, "unknown_recipient", "No connected workspace receives mail at this address.")
 		return
 	}

@@ -1,4 +1,4 @@
-import { dayGroup, formatDate, formatShortDate } from './format-date';
+import { dayGroup, formatDate, formatListTime, formatShortDate, stampTitle, zoneSuffix } from './format-date';
 import { expect, test } from 'vitest';
 
 test('formats UTC timestamps in the agent effective IANA timezone', () => {
@@ -46,4 +46,26 @@ test('groups correctly on the day New York leaves daylight saving', () => {
   // 2026-11-01 is the 25-hour day: 04:30Z is 00:30 EDT, the next day at 04:30Z is 23:30 EST on the 1st.
   expect(dayGroup('2026-11-01T04:30:00Z', 'America/New_York', new Date('2026-11-02T04:30:00Z'))).toBe('today');
   expect(dayGroup('2026-11-01T04:30:00Z', 'America/New_York', new Date('2026-11-02T05:30:00Z'))).toBe('earlier');
+});
+
+test('a list row from today shows only its time; an earlier one keeps its date, by the agent timezone', () => {
+  const now = new Date('2026-10-23T03:00:00Z'); // 10:00 on the 23rd in Ho Chi Minh City
+  expect(formatListTime('2026-10-22T23:30:00Z', 'Asia/Ho_Chi_Minh', now)).toBe('6:30 AM'); // 06:30 on the 23rd there
+  expect(formatListTime('2026-10-22T17:00:00Z', 'Asia/Ho_Chi_Minh', now)).toBe('12:00 AM'); // midnight starts the 23rd
+  expect(formatListTime('2026-10-22T16:59:00Z', 'Asia/Ho_Chi_Minh', now)).toBe('Oct 22, 11:59 PM'); // still the 22nd
+  // The same 06:30 instant is 23:30 on the 22nd in UTC, so there it keeps its date.
+  expect(formatListTime('2026-10-22T23:30:00Z', 'UTC', now)).toBe('Oct 22, 11:30 PM');
+  expect(formatListTime('2025-12-30T12:00:00Z', 'UTC', now)).toBe('Dec 30, 2025, 12:00 PM');
+});
+
+test('a stamp names its timezone when the agent reads times in another zone than the browser, and always in its title', () => {
+  const at = '2026-10-28T05:42:00Z';
+  expect(zoneSuffix(at, 'UTC', 'Asia/Ho_Chi_Minh')).toBe(' UTC');
+  expect(zoneSuffix(at, 'Asia/Ho_Chi_Minh', 'UTC')).toBe(' GMT+7');
+  expect(zoneSuffix(at, 'Asia/Ho_Chi_Minh', 'Asia/Ho_Chi_Minh')).toBe('');
+  // Two names for the same offset at that moment read the same: no label.
+  expect(zoneSuffix(at, 'Asia/Saigon', 'Asia/Ho_Chi_Minh')).toBe('');
+  expect(stampTitle(at, 'UTC')).toBe('Oct 28, 2026, 5:42 AM UTC');
+  expect(stampTitle(at, 'Asia/Ho_Chi_Minh')).toBe('Oct 28, 2026, 12:42 PM GMT+7');
+  expect(stampTitle(at, 'America/New_York')).toBe('Oct 28, 2026, 1:42 AM EDT');
 });

@@ -310,8 +310,26 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 	if pageNumber > 1 {
 		data.Canonical += "?page=" + strconv.Itoa(pageNumber)
 	}
-	for _, child := range visible(current.children) {
-		data.Children = append(data.Children, v.card(child, nil))
+	// Each section lists its first articles, as the home page's topics do, so a collection that only
+	// holds sections still reaches an article in one click.
+	children := visible(current.children)
+	byChild := map[string][]articleLink{}
+	if len(children) > 0 {
+		ids := make([]string, len(children))
+		for index, child := range children {
+			ids[index] = child.ID
+		}
+		previews, err := s.config.Store.HelpCenterArticles(request.Context(), v.site.WorkspaceID, ids, 0, homeArticles)
+		if err != nil {
+			s.writeError(response, err)
+			return
+		}
+		for _, article := range previews {
+			byChild[article.CollectionID] = append(byChild[article.CollectionID], v.articleLinks([]domain.PublicKBArticle{article}, 0)...)
+		}
+	}
+	for _, child := range children {
+		data.Children = append(data.Children, v.card(child, byChild[child.ID]))
 	}
 	data.Articles = v.articleLinks(articles, 0)
 	data.PageNumber, data.Pages = pageNumber, pages

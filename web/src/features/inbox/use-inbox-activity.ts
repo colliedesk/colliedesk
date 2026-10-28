@@ -24,16 +24,25 @@ class SeenIds {
     if (this.ids.size > seenLimit) this.ids.delete(this.ids.values().next().value as string);
     return true;
   }
+
+  has(id: string): boolean {
+    return this.ids.has(id);
+  }
 }
 
 interface Alert { id: string; title: string; body: string }
 
 // A customer message is announced for my conversations, unassigned ones and the one I have open; a
 // teammate's conversation is otherwise theirs to answer. Items already announced as new or assigned
-// in the same poll are not announced a second time for the message that created them.
-function alerts(activity: Omit<Activity, 'updated' | 'viewing'>, replies: Activity['updated'], agentId: string | undefined, viewing: (id: string) => boolean): Alert[] {
+// in the same poll are not announced a second time for the message that created them. A new
+// conversation AI assigns moments later is one notification: it carries the conversation's tag, so it
+// takes the place of the "New conversation" one, and says both.
+function alerts(activity: Omit<Activity, 'updated' | 'viewing'>, replies: Activity['updated'], agentId: string | undefined, viewing: (id: string) => boolean,
+  announcedNew: (id: string) => boolean = () => false): Alert[] {
   const body = (item: { subject: string; contact_name: string }) => `${item.subject} · ${item.contact_name}`;
-  const assigned = activity.assigned_to_me.map((item) => ({ id: item.id, title: messages.notificationAssigned, body: body(item) }));
+  const fresh = new Set(activity.new_conversations.map((item) => item.id));
+  const assigned = activity.assigned_to_me.map((item) => ({ id: item.id, body: body(item),
+    title: !item.by_ai ? messages.notificationAssigned : fresh.has(item.id) || announcedNew(item.id) ? messages.notificationNewAssignedByAI : messages.notificationAssignedByAI }));
   const taken = new Set(assigned.map((item) => item.id));
   const created = activity.new_conversations.filter((item) => !taken.has(item.id))
     .map((item) => ({ id: item.id, title: messages.notificationNew, body: body(item) }));
@@ -94,7 +103,7 @@ export function useInboxActivity(enabled = true, agentId?: string) {
     const replies = changes.filter((item) => item.incoming_at !== null && seen.current.incoming.fresh(`${item.id}@${item.incoming_at}`) && Date.parse(item.incoming_at) > after);
     // A timeline with an observer is on screen: the agent is reading that conversation.
     const viewing = (id: string) => (client.getQueryCache().find({ queryKey: ['messages', id], exact: true })?.getObserversCount() ?? 0) > 0;
-    const items = alerts(unseen, replies, agentId, viewing);
+    const items = alerts(unseen, replies, agentId, viewing, (id) => seen.current.created.has(id) && !unseen.new_conversations.some((item) => item.id === id));
     // An update does not say who made it, so the caller's own change also refreshes the list once
     // more. That costs at most one list fetch per poll and keeps the server row free of an actor field.
     if (items.length > 0 || changes.length > 0) void client.invalidateQueries({ queryKey: ['conversations'] });

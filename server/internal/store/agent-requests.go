@@ -23,7 +23,7 @@ func agentRequestSelect(full bool) string {
 		reply = `NULL::jsonb,NULL::text,NULL::text,NULL::timestamptz,NULL::timestamptz`
 	}
 	return `SELECT r.id::text,r.kind,r.status,r.method,r.route,r.path,` + payload + `,r.summary,r.conversation_id::text,
-	r.token_id::text,r.token_label,r.token_scope,(t.id IS NULL OR t.revoked_at IS NOT NULL),r.requested_by_agent_id::text,COALESCE(NULLIF(ra.display_name,''),ra.email),
+	r.token_id::text,r.token_label,r.token_scope,COALESCE(r.token_permissions,'{}'),(t.id IS NULL OR t.revoked_at IS NOT NULL),r.requested_by_agent_id::text,COALESCE(NULLIF(ra.display_name,''),ra.email),
 	r.decided_by_agent_id::text,COALESCE(NULLIF(da.display_name,''),da.email),r.decided_at,r.reason,r.result_status,r.result_note,r.created_at,r.expires_at,` + reply + `
 	FROM agent_requests r
 	LEFT JOIN saved_replies sr ON sr.workspace_id=r.workspace_id AND sr.id=r.saved_reply_id
@@ -45,7 +45,7 @@ func scanAgentRequest(row pgx.Row) (domain.AgentRequest, error) {
 		updatedAt, deletedAt *time.Time
 	}
 	err := row.Scan(&item.ID, &item.Kind, &item.Status, &item.Method, &item.Route, &item.Path, &body, &edited, &result, &item.Summary, &item.ConversationID,
-		&item.RequestedBy.TokenID, &item.RequestedBy.TokenLabel, &item.RequestedBy.TokenScope, &item.RequestedBy.TokenRevoked,
+		&item.RequestedBy.TokenID, &item.RequestedBy.TokenLabel, &item.RequestedBy.TokenScope, &item.RequestedBy.TokenPermissions, &item.RequestedBy.TokenRevoked,
 		&item.RequestedBy.AgentID, &item.RequestedBy.AgentName, &deciderID, &deciderName, &item.DecidedAt, &item.Reason,
 		&resultStatus, &item.ResultNote, &item.CreatedAt, &item.ExpiresAt,
 		&replyBefore, &current.title, &current.body, &current.updatedAt, &current.deletedAt)
@@ -89,6 +89,8 @@ type NewAgentRequest struct {
 	ConversationID       *string
 	// SavedReply is the saved reply the call edits, deletes or restores, as the token saw it.
 	SavedReply *SavedReplySnapshot
+	// TokenPermissions is what the token held when it asked, kept for the person deciding.
+	TokenPermissions []string
 }
 
 // SavedReplySnapshot is a saved reply as an agent request keeps it: what the person deciding compares
@@ -162,11 +164,11 @@ func (s *Store) CreateAgentRequest(ctx context.Context, workspaceID string, in N
 			replyID, before = in.SavedReply.ID, string(encoded)
 		}
 		var id string
-		err := tx.QueryRow(ctx, `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,requested_by_agent_id,kind,method,route,path,body,summary,conversation_id,created_at,expires_at,saved_reply_id,saved_reply_before)
-			SELECT $1,s.id,s.label,s.scope,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb FROM sessions s
+		err := tx.QueryRow(ctx, `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,token_permissions,requested_by_agent_id,kind,method,route,path,body,summary,conversation_id,created_at,expires_at,saved_reply_id,saved_reply_before)
+			SELECT $1,s.id,s.label,s.scope,$15,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb FROM sessions s
 			WHERE s.workspace_id=$1 AND s.id=$2 AND s.scope IS NOT NULL
 			RETURNING id::text`, workspaceID, in.TokenID, in.AgentID, in.Kind, in.Method, in.Route, in.Path, body, in.Summary,
-			in.ConversationID, now, now.Add(domain.AgentRequestLifetime), replyID, before).Scan(&id)
+			in.ConversationID, now, now.Add(domain.AgentRequestLifetime), replyID, before, in.TokenPermissions).Scan(&id)
 		if err != nil {
 			return domain.AgentRequest{}, fmt.Errorf("insert agent request: %w", err)
 		}
@@ -345,7 +347,7 @@ func (s *Store) ConversationParticipants(ctx context.Context, workspaceID, conve
 	var contact string
 	known := map[string]bool{}
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `SELECT lower(ct.email) FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(lower(ct.email),'') FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 			WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, conversationID).Scan(&contact); err != nil {
 			return err
 		}

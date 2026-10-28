@@ -1,4 +1,5 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
 import { ConversationList } from './conversation-list';
@@ -148,4 +149,125 @@ test('a reply left untouched for minutes marks the row Draft open, not Replying,
   expect(within(marked).getByText('Draft open')).toBeInTheDocument();
   expect(within(marked).queryByText('Replying')).toBeNull();
   expect(marked).toHaveAccessibleName(/Open now: Lan \(reply not sent yet\)/);
+});
+
+test('a row from today shows only its time on a screen without hover; the full date stays its accessible name', () => {
+  vi.setSystemTime(new Date('2026-10-23T03:00:00Z'));
+  render(<ConversationList items={[row('2026-10-22T23:30:00Z'), { ...row('2026-10-21T13:56:00Z'), id: '33333333-3333-4333-8333-333333333333', subject: 'Older request' }]}
+    timezone="Asia/Ho_Chi_Minh" page={1} hasNextPage={false} />);
+  const today = screen.getByRole('button', { name: /example request/i });
+  expect(today.querySelector('.time-touch')).toHaveTextContent(/^6:30 AM$/);
+  expect(today).toHaveAccessibleName(/Oct 23, 6:30 AM/);
+  const earlier = screen.getByRole('button', { name: /older request/i });
+  expect(earlier.querySelector('.time-touch')).toHaveTextContent(/^Oct 21, 8:56 PM$/);
+});
+
+// j/k and the arrow keys open the next and previous conversation, like Gmail and Help Scout.
+const subjects = ['Alpha', 'Bravo', 'Charlie'];
+const rows = subjects.map((subject, index): Conversation => ({ ...row(`2026-10-15T0${9 - index}:00:00Z`), id: `${index + 1}${index + 1}${index + 1}${index + 1}1111-1111-4111-8111-111111111111`, subject }));
+function Keyed({ onSelect, initial }: { onSelect: (id: string) => void; initial?: string }) {
+  const [selected, setSelected] = useState(initial);
+  return <ConversationList items={rows} selectedId={selected} timezone="UTC" page={1} hasNextPage={false}
+    onSelect={(id) => { onSelect(id); setSelected(id); }} />;
+}
+const rowButton = (subject: string) => screen.getByRole('button', { name: new RegExp(subject) });
+
+test('j opens the next conversation and k the previous one, and focus follows the opened row', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  render(<Keyed onSelect={onSelect} initial={rows[0].id} />);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(rows[1].id);
+  expect(rowButton('Bravo')).toHaveFocus();
+  expect(rowButton('Bravo')).toHaveAttribute('aria-current', 'true');
+  fireEvent.keyDown(rowButton('Bravo'), { key: 'j' });
+  expect(rowButton('Charlie')).toHaveFocus();
+  fireEvent.keyDown(rowButton('Charlie'), { key: 'k' });
+  expect(onSelect).toHaveBeenLastCalledWith(rows[1].id);
+  expect(rowButton('Bravo')).toHaveFocus();
+});
+
+test('with nothing open j opens the first row, and the ends of the list stay put', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  render(<Keyed onSelect={onSelect} />);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(rows[0].id);
+  fireEvent.keyDown(document.body, { key: 'k' });
+  expect(onSelect).toHaveBeenCalledTimes(1);
+  fireEvent.keyDown(document.body, { key: 'j' });
+  fireEvent.keyDown(document.body, { key: 'j' });
+  fireEvent.keyDown(document.body, { key: 'j' });
+  expect(onSelect).toHaveBeenLastCalledWith(rows[2].id);
+  expect(onSelect).toHaveBeenCalledTimes(3);
+});
+
+test('ArrowDown and ArrowUp move while focus is in the list, and nowhere else', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  render(<><button type="button">Elsewhere</button><Keyed onSelect={onSelect} initial={rows[1].id} /></>);
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Elsewhere' }), { key: 'ArrowDown' });
+  expect(onSelect).not.toHaveBeenCalled();
+  fireEvent.keyDown(rowButton('Bravo'), { key: 'ArrowDown' });
+  expect(onSelect).toHaveBeenLastCalledWith(rows[2].id);
+  expect(rowButton('Charlie')).toHaveFocus();
+  // The row's checkbox is in the list too.
+  fireEvent.keyDown(screen.getByRole('checkbox', { name: /charlie/i }), { key: 'ArrowUp' });
+  expect(onSelect).toHaveBeenLastCalledWith(rows[1].id);
+  expect(rowButton('Bravo')).toHaveFocus();
+});
+
+test('j and k are text while typing, and nothing with a modifier key held', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const onSelect = vi.fn();
+  render(<><input aria-label="Search" /><textarea aria-label="Reply" /><select aria-label="Status"><option>Open</option></select>
+    <div contentEditable aria-label="Editor" role="textbox" /><Keyed onSelect={onSelect} initial={rows[0].id} /></>);
+  for (const field of [screen.getByLabelText('Search'), screen.getByLabelText('Reply'), screen.getByLabelText('Status'), screen.getByRole('textbox', { name: 'Editor' })]) {
+    fireEvent.keyDown(field, { key: 'j' });
+    fireEvent.keyDown(field, { key: 'k' });
+  }
+  for (const modifier of ['ctrlKey', 'metaKey', 'altKey', 'shiftKey']) {
+    fireEvent.keyDown(document.body, { key: 'j', [modifier]: true });
+    fireEvent.keyDown(rowButton('Alpha'), { key: 'ArrowDown', [modifier]: true });
+  }
+  fireEvent.keyDown(document.body, { key: 'j', isComposing: true });
+  expect(onSelect).not.toHaveBeenCalled();
+});
+
+test('in a brand-new workspace the first onboarding step is the primary action and every step is a full-size button', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} />);
+  const links = within(screen.getByRole('region', { name: 'Get started' })).getAllByRole('link');
+  expect(links[0]).toHaveTextContent('Connect your support email');
+  expect(links[0]).toHaveClass('button', 'primary-action');
+  for (const link of links.slice(1)) {
+    expect(link).toHaveClass('button');
+    expect(link).not.toHaveClass('primary-action');
+  }
+});
+
+test('a brand-new workspace with an email channel offers a test message it can send without leaving the app', async () => {
+  vi.useRealTimers();
+  let finish: () => void = () => undefined;
+  const send = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} onTestMessage={send} />);
+  const button = within(screen.getByRole('region', { name: 'Get started' })).getByRole('button', { name: 'Send yourself a test message' });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(button).toBeDisabled();
+  await act(async () => finish());
+  expect(button).toBeEnabled();
+});
+
+test('a test message that fails says why under the button', async () => {
+  vi.useRealTimers();
+  const send = vi.fn().mockRejectedValue(new Error('A workspace can send itself 5 test messages an hour. Try again later.'));
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} onTestMessage={send} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Send yourself a test message' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('5 test messages an hour');
+});
+
+test('without an email channel the get-started guide offers no test message', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} />);
+  expect(screen.queryByRole('button', { name: 'Send yourself a test message' })).not.toBeInTheDocument();
 });

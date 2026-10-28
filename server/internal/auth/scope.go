@@ -42,9 +42,10 @@ func ScopeAllows(have, need string) bool {
 // has more rights than the person it acts as.
 var ErrAdminTokenNeedsAdmin = errors.New("only a workspace admin can create an admin token")
 
-// tokenRoleCeiling is the role ceiling a token of scope is stored with.
-func tokenRoleCeiling(scope string) string {
-	if scope == ScopeAdmin {
+// tokenRoleCeiling is the role ceiling a token is stored with: admin for an admin token and for a
+// custom token that holds an admin-only permission, agent otherwise.
+func tokenRoleCeiling(scope string, permissions []string) string {
+	if NeedsAdmin(scope, permissions) {
 		return "admin"
 	}
 	return "agent"
@@ -57,14 +58,33 @@ func (e *InvalidTokenError) Error() string { return e.Reason }
 
 const maxTokenLabelRunes = 80
 
-// checkTokenRequest returns the trimmed label of a valid request.
-func checkTokenRequest(label, scope string) (string, error) {
-	label = strings.TrimSpace(label)
-	if label == "" || len([]rune(label)) > maxTokenLabelRunes {
-		return "", &InvalidTokenError{"A token needs a label of 1 to 80 characters."}
+// TokenRequest asks for a token: a tier (Scope) or a list of Permissions, never both.
+type TokenRequest struct {
+	Label       string
+	Scope       string
+	Permissions []string
+}
+
+// checkTokenRequest returns a valid request with its label trimmed and its permissions sorted; a
+// request with permissions comes back as scope custom.
+func checkTokenRequest(request TokenRequest) (TokenRequest, error) {
+	request.Label = strings.TrimSpace(request.Label)
+	if request.Label == "" || len([]rune(request.Label)) > maxTokenLabelRunes {
+		return request, &InvalidTokenError{"A token needs a label of 1 to 80 characters."}
 	}
-	if !ValidScope(scope) {
-		return "", &InvalidTokenError{"Scope must be one of: " + strings.Join(ScopeNames, ", ") + "."}
+	if request.Permissions != nil {
+		if request.Scope != "" && request.Scope != ScopeCustom {
+			return request, &InvalidTokenError{"Send a scope (a tier) or a list of permissions, not both."}
+		}
+		permissions, err := cleanPermissions(request.Permissions)
+		if err != nil {
+			return request, err
+		}
+		request.Scope, request.Permissions = ScopeCustom, permissions
+		return request, nil
 	}
-	return label, nil
+	if !ValidScope(request.Scope) {
+		return request, &InvalidTokenError{"Scope must be one of: " + strings.Join(ScopeNames, ", ") + "; or send a list of permissions."}
+	}
+	return request, nil
 }

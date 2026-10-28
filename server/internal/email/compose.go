@@ -37,6 +37,8 @@ type Outgoing struct {
 	// Opening is the first message of a thread a person starts: Subject stays as written, without
 	// "Re: ", and nothing marks it automatic.
 	Opening bool
+	// Unsubscribe is the page where the recipient stops this kind of mail (List-Unsubscribe, RFC 2369).
+	Unsubscribe string
 }
 
 // Compose renders a plain-text UTF-8 RFC 5322 message, or multipart/mixed with one part per file when
@@ -79,6 +81,7 @@ func Compose(message Outgoing) ([]byte, error) {
 		// RFC 3834: mail the system writes says so, and an auto-responder must not answer it.
 		header("Auto-Submitted", "auto-generated")
 	}
+	header("List-Unsubscribe", angle(cleanLine(message.Unsubscribe)))
 	header("In-Reply-To", angle(message.InReplyTo))
 	references := make([]string, 0, len(message.References))
 	for _, reference := range message.References {

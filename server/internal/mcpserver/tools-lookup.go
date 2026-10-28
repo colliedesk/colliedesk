@@ -6,12 +6,15 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 var tierMeaning = map[string]string{
 	"read":  "You can read the inbox. You cannot change anything.",
 	"draft": "You can read, change status, priority, assignee and tags, and add private notes. Nothing you do reaches a customer.",
 	"send":  "You may do everything a team member can, including replying to customers by email. A reply cannot be called back: confirm it with the user first.",
+	"custom": "This token holds its own list of permissions (permissions below): use only the tools listed in tools_you_can_use. " +
+		"Anything else, and anything that waits for a person's approval, comes back as a request a person decides.",
 	"admin": "You may also change workspace settings, agents, channels, revoke invites and agent tokens, as the admin who created this token, while that person is an admin. " +
 		"Creating tokens or invites, any change to an admin or making one, signing out another person, export, billing, disconnecting email, a new inbound secret and the workspace address still wait for a person's approval.",
 }
@@ -29,6 +32,7 @@ type whoamiOut struct {
 	} `json:"agent"`
 	TokenTier       string   `json:"token_tier"`
 	TierMeaning     string   `json:"tier_meaning"`
+	Permissions     []string `json:"permissions"`
 	WorkspaceLocked bool     `json:"workspace_locked"`
 	ToolsYouCanUse  []string `json:"tools_you_can_use"`
 }
@@ -47,9 +51,14 @@ func whoami(c *call, _ map[string]any) (any, error) {
 	out.TierMeaning = tierMeaning[out.TokenTier]
 	out.Workspace.Name, out.Workspace.Slug, out.Workspace.Timezone = me.Workspace.Name, me.Workspace.Slug, me.Workspace.Timezone
 	out.Agent.Name, out.Agent.Email, out.Agent.Role = agentName(me.Agent), me.Agent.Email, me.Agent.Role
+	out.Permissions = me.Permissions
+	if out.Permissions == nil {
+		out.Permissions = []string{}
+	}
+	who := auth.Principal{Scope: scope, Permissions: me.Permissions}
 	out.ToolsYouCanUse = []string{}
 	for _, spec := range Catalog() {
-		if spec.Tier == "any" || auth.ScopeAllows(scope, spec.Tier) {
+		if toolOpen(spec, who) {
 			out.ToolsYouCanUse = append(out.ToolsYouCanUse, spec.Name)
 		}
 	}
@@ -129,4 +138,27 @@ func agentsList(c *call, _ map[string]any) (any, error) {
 		rows[index] = agentRow{ID: agent.ID, Name: agentName(agent), Email: agent.Email, Role: agent.Role}
 	}
 	return map[string]any{"agents": rows, "count": len(rows)}, nil
+}
+
+// routeAccess is how each route is classified for tokens (httpapi's table), read once.
+var routeAccess = httpapi.TokenAccessTable()
+
+// toolOpen reports whether a token can use the tool: a preset token by its tier, as the tool states
+// it; a custom token when it holds the permission of every route the tool calls (for a route the
+// handler decides by the body, the least it needs). A route that always waits for a person is open
+// to call: the call becomes a request.
+func toolOpen(spec Spec, who auth.Principal) bool {
+	if spec.Tier == "any" {
+		return true
+	}
+	if who.Scope != auth.ScopeCustom {
+		return auth.ScopeAllows(who.Scope, spec.Tier)
+	}
+	for _, key := range spec.REST {
+		access := routeAccess[key]
+		if !access.Approval && access.Permission != "" && !who.Allows(access.Permission) {
+			return false
+		}
+	}
+	return true
 }
