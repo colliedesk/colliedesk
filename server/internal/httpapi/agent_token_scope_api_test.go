@@ -189,6 +189,9 @@ var routeTiers = map[string]string{
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  "draft",
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": "draft",
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    "draft",
+	"GET /api/v1/help-center/theme":                                    "read",
+	"PUT /api/v1/help-center/theme":                                    "admin",
+	"POST /api/v1/help-center/theme/check":                             "read",
 }
 
 // kbFileRouteKeys carry video bytes; like an image upload, a lower tier is refused, not filed.

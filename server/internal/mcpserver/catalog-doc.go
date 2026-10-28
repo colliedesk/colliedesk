@@ -4,6 +4,9 @@ package mcpserver
 // written for the model. The tool table in docs/user/mcp.md is generated from it (make docs-mcp),
 // with the tier from Tier and "Cannot be undone" from Destructive, so neither belongs here.
 var toolDocs = map[string]string{
+	"colliedesk_help_center_theme_get":            "Reads the public help center's logo, colors, fonts and links",
+	"colliedesk_help_center_theme_check":          "Checks a candidate brand and its color contrast without saving it",
+	"colliedesk_help_center_theme_update":         "Replaces the public help center's brand after checking its color contrast",
 	"colliedesk_channels_list":                    "Lists the channels with their state and the channel types the server runs",
 	"colliedesk_channels_get":                     "Shows one channel and its configuration",
 	"colliedesk_channels_events":                  "Shows the history of the channels",

@@ -4409,7 +4409,7 @@ paths:
       parameters:
         - {name: kind, in: query, schema: {type: string, enum: [image, video]}}
         - {name: q, in: query, schema: {type: string, maxLength: 200}}
-        - {name: usage, in: query, schema: {type: string, enum: [in_use, unused, missing_alt]}}
+        - {name: usage, in: query, description: 'in_use: a live article shows it, or the help center as its logo or favicon; unused: neither.', schema: {type: string, enum: [in_use, unused, missing_alt]}}
         - {name: sort, in: query, schema: {type: string, enum: [newest, oldest, name, largest], default: newest}}
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 60}}
@@ -4434,7 +4434,8 @@ paths:
       description: >
         The library's trash, last moved there first, 60 items a page unless `limit` says otherwise,
         each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its
-        usage. An item in the trash still counts toward the plan's storage until it is purged.
+        usage. An item the purge keeps (the help center's logo or favicon) has no `purge_at`. An item
+        in the trash still counts toward the plan's storage until it is purged.
       parameters:
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 60}}
@@ -4556,7 +4557,8 @@ paths:
       description: >
         Delete for good up to 100 items that are in the library's trash, with their files, freeing their
         storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in
-        the trash can be purged) or `not_found`. Articles in the trash and older versions that named one
+        the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no
+        longer names it) or `not_found`. Articles in the trash and older versions that named one
         then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets
         an agent request.
       requestBody:
@@ -4994,6 +4996,64 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/help-center/theme:
+    get:
+      operationId: getHelpCenterTheme
+      x-permission: conversations:read
+      description: >
+        The brand of the public help center: logo, favicon, website and contact links, colors and
+        fonts, with the contrast `checks` of the colors it shows. A null color or font is the default.
+      responses:
+        '200':
+          description: The help center theme
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterTheme'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    put:
+      operationId: putHelpCenterTheme
+      x-permission: access:write
+      description: >
+        Replace the brand of the public help center. A field left out or null goes back to its default,
+        so send the whole theme (read it first). Admins only, and an `admin` agent token. Every color
+        pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background):
+        422 `contrast_too_low` names each failing color in `fields` with a color that passes, and
+        nothing is saved. A logo or favicon must be an image of the workspace's media library outside
+        the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it
+        while the help center names it. A save changes `content_version`, so every page is new.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterThemeInput'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The saved theme
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterTheme'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ThemeInvalid'}
+  /api/v1/help-center/theme/check:
+    post:
+      operationId: checkHelpCenterTheme
+      x-permission: conversations:read
+      description: >
+        Check a candidate theme without saving it: the same checks as PUT. Contrast is answered with
+        200 and `ok` false, so an editor can show every pair while a person picks colors; a theme of
+        the wrong shape or a logo that is not in the library is 422 as on PUT.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterThemeInput'}
+      responses:
+        '200':
+          description: The checks of the candidate
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterThemeChecks'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ThemeInvalid'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -5111,6 +5171,13 @@ components:
     Unauthorized: {$ref: '#/components/responses/Error401'}
     Forbidden: {$ref: '#/components/responses/Error403'}
     NotFound: {$ref: '#/components/responses/Error404'}
+    ThemeInvalid:
+      description: >-
+        The theme was not saved. `error.code` is `validation_failed` (a field of the wrong shape),
+        `media_not_found` (a logo or favicon that is not an image of the library outside the trash) or
+        `contrast_too_low` (a color pair below WCAG AA; `error.checks` lists every pair). `error.fields`
+        holds one message per field, such as `colors.text`.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error400:
       description: Invalid request
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -6730,14 +6797,21 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         usage: {$ref: '#/components/schemas/KBMediaUsage'}
-        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept and no article ever saved.'}
+        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article and not the help center names.'}
     KBMediaUsage:
       type: object
-      required: [articles, trashed_articles, older_versions]
+      required: [articles, trashed_articles, older_versions, help_center]
       properties:
         articles: {type: integer, description: Live articles whose current text or a translation names it; above 0 means in use.}
         trashed_articles: {type: integer, description: Articles in the trash whose current text names it.}
         older_versions: {type: integer, description: Articles where only an older version names it.}
+        help_center:
+          type: array
+          items: {type: string, enum: [logo, favicon]}
+          description: >-
+            What the help center shows it as; empty when it does not. An item the help center shows is
+            in use: it is not listed as unused, Remove unused skips it, and neither the daily purge nor
+            Delete forever deletes it (purge answers in_use), even in the trash.
     KBMediaDetails:
       allOf:
         - {$ref: '#/components/schemas/KBMedia'}
@@ -6836,6 +6910,91 @@ components:
             a self-hosted server, `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that
             variable and the slug can be a host name. Changing the workspace slug changes it, and links
             to the old address stop working.
+    HelpCenterThemeColors:
+      type: object
+      additionalProperties: false
+      description: 'Each color is #rrggbb, or null for the default. Any color set makes the pages light only.'
+      properties:
+        primary: {$ref: '#/components/schemas/ThemeColor'}
+        header: {$ref: '#/components/schemas/ThemeColor'}
+        header_text: {$ref: '#/components/schemas/ThemeColor'}
+        background: {$ref: '#/components/schemas/ThemeColor'}
+        text: {$ref: '#/components/schemas/ThemeColor'}
+        link: {$ref: '#/components/schemas/ThemeColor'}
+        footer: {$ref: '#/components/schemas/ThemeColor'}
+    ThemeColor:
+      type: [string, 'null']
+      pattern: '^#[0-9a-fA-F]{6}$'
+      description: 'A color as #rrggbb; answers are lowercase.'
+    ThemeFont:
+      type: [string, 'null']
+      enum: [system-sans, humanist-sans, geometric-sans, classic-serif, transitional-serif, rounded-sans, mono, null]
+      description: >-
+        A font stack of the reader's own system: nothing is downloaded. Null is the default (system-sans
+        for text, classic-serif for headings).
+    HelpCenterThemeInput:
+      type: object
+      additionalProperties: false
+      properties:
+        logo_media_id: {type: [string, 'null'], format: uuid, description: 'An image of the media library shown at the top of every page. Outside its trash, except the image this field already names: a theme read and sent back whole saves even after its logo was moved to the trash.'}
+        favicon_media_id: {type: [string, 'null'], format: uuid, description: 'An image of the media library shown as the browser tab icon; the same trash rule as logo_media_id.'}
+        logo_alt: {type: [string, 'null'], maxLength: 200, description: 'What the logo says, for screen readers; empty uses the help center title.'}
+        linkback_url: {type: [string, 'null'], maxLength: 2000, description: 'Your website, an absolute http or https address, linked from the top of every page.'}
+        contact_url: {type: [string, 'null'], maxLength: 2000, description: 'Where readers contact you: an https address or mailto: and one plain email address (no name, no ?subject= or ?bcc=, no %-encoding).'}
+        contact_phone: {type: [string, 'null'], maxLength: 40, description: 'A phone number shown in the footer: digits, spaces and + - ( ).'}
+        colors: {$ref: '#/components/schemas/HelpCenterThemeColors'}
+        body_font: {$ref: '#/components/schemas/ThemeFont'}
+        heading_font: {$ref: '#/components/schemas/ThemeFont'}
+    HelpCenterTheme:
+      type: object
+      required: [logo_media_id, favicon_media_id, logo_alt, linkback_url, contact_url, contact_phone, colors, body_font, heading_font, content_version, updated_at, checks]
+      properties:
+        logo_media_id: {type: [string, 'null'], format: uuid}
+        favicon_media_id: {type: [string, 'null'], format: uuid}
+        logo_alt: {type: string}
+        linkback_url: {type: [string, 'null']}
+        contact_url: {type: [string, 'null']}
+        contact_phone: {type: [string, 'null']}
+        colors:
+          allOf: [{$ref: '#/components/schemas/HelpCenterThemeColors'}]
+          required: [primary, header, header_text, background, text, link, footer]
+        body_font: {$ref: '#/components/schemas/ThemeFont'}
+        heading_font: {$ref: '#/components/schemas/ThemeFont'}
+        content_version: {type: integer, minimum: 0}
+        updated_at: {type: [string, 'null'], format: date-time, description: Null until the help center settings were first changed.}
+        checks:
+          type: array
+          description: The contrast of every color pair the pages show, with defaults filled in.
+          items: {$ref: '#/components/schemas/ThemeContrastCheck'}
+    HelpCenterThemeChecks:
+      type: object
+      required: [ok, checks, fields]
+      properties:
+        ok: {type: boolean, description: True when every pair passes and the theme can be saved.}
+        checks:
+          type: array
+          items: {$ref: '#/components/schemas/ThemeContrastCheck'}
+        fields:
+          type: object
+          description: 'One message per failing color, keyed like colors.text; empty when ok.'
+          additionalProperties: {type: string}
+    ThemeContrastCheck:
+      type: object
+      required: [pair, field, foreground, background, ratio, required, passes, suggestion]
+      properties:
+        pair:
+          type: string
+          enum: [text_on_background, link_on_background, header_text_on_header, ink_on_primary, footer_ink_on_footer, primary_on_background]
+          description: >-
+            Which colors meet. ink_on_primary is the button text (white or black, the better one) on the
+            primary color; footer_ink_on_footer is the text or header text, the better one, on the footer.
+        field: {type: string, description: 'The color to change when it fails, such as colors.text.'}
+        foreground: {type: string, pattern: '^#[0-9a-f]{6}$'}
+        background: {type: string, pattern: '^#[0-9a-f]{6}$'}
+        ratio: {type: number, description: 'WCAG 2 contrast ratio, to two decimals; 4.5 means 4.5:1.'}
+        required: {type: number}
+        passes: {type: boolean}
+        suggestion: {type: [string, 'null'], pattern: '^#[0-9a-f]{6}$', description: 'Null when it passes: else the nearest color for field that passes every pair of that field.'}
     SavedReplyText:
       type: object
       required: [title, body, updated_at]
@@ -7822,6 +7981,10 @@ components:
                 `sender_authentication_failed`: the mail arrived at the forwarding address but failed sender
                 verification (SPF, DKIM or DMARC).
             reply_to: {type: string, description: 'Only with reason contact_address_differs: the address the reply would go to.'}
+            checks:
+              type: array
+              description: 'Only on contrast_too_low: every color pair of the theme, passing or not.'
+              items: {$ref: '#/components/schemas/ThemeContrastCheck'}
             contact:
               description: 'Only on contact_exists: the contact to use instead of adding one.'
               allOf: [{$ref: '#/components/schemas/Contact'}]

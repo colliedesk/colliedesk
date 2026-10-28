@@ -24,7 +24,7 @@ type restKBMedia struct {
 	DeletedAt    *string         `json:"deleted_at"`
 	CreatedAt    string          `json:"created_at"`
 	UpdatedAt    string          `json:"updated_at"`
-	Usage        *map[string]int `json:"usage"`
+	Usage        *map[string]any `json:"usage"`
 	PurgeAt      *string         `json:"purge_at"`
 }
 

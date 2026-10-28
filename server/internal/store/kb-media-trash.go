@@ -45,7 +45,12 @@ func lockKBMedia(ctx context.Context, tx pgx.Tx, workspaceID string, ids []strin
 
 // kbMediaIDsInUse returns which of ids a live article's current text names.
 func kbMediaIDsInUse(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string) (map[string]bool, error) {
-	rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.id=ANY($2::uuid[]) AND `+kbMediaInUse, workspaceID, ids)
+	return kbMediaIDsWhere(ctx, tx, workspaceID, ids, kbMediaInUse)
+}
+
+// kbMediaIDsWhere returns which of ids meet condition, an SQL rule on library rows aliased m.
+func kbMediaIDsWhere(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string, condition string) (map[string]bool, error) {
+	rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.id=ANY($2::uuid[]) AND `+condition, workspaceID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +172,7 @@ func (s *Store) TrashUnusedKBMedia(ctx context.Context, workspaceID string, acto
 	}
 	out, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (answer, error) {
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NULL AND m.created_at<$2
-				AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` ORDER BY m.id LIMIT `+strconv.Itoa(domain.MaxKBMediaUnusedBatch)+` FOR UPDATE OF m SKIP LOCKED`,
+				AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` ORDER BY m.id LIMIT `+strconv.Itoa(domain.MaxKBMediaUnusedBatch)+` FOR UPDATE OF m SKIP LOCKED`,
 			workspaceID, before, includeKept)
 		if err != nil {
 			return answer{}, err
@@ -208,7 +213,7 @@ func (s *Store) TrashUnusedKBMedia(ctx context.Context, workspaceID string, acto
 func (s *Store) UnusedKBMediaIDs(ctx context.Context, workspaceID string, includeKept bool, before time.Time, limit int) ([]string, error) {
 	ids, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]string, error) {
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE m.workspace_id=$1 AND m.deleted_at IS NULL AND m.created_at<$2
-			AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` ORDER BY m.size DESC, m.id LIMIT $4`, workspaceID, before, includeKept, limit)
+			AND ($3 OR NOT m.kept) AND NOT `+kbMediaInUse+` AND NOT `+kbMediaNamedByHelpCenter+` ORDER BY m.size DESC, m.id LIMIT $4`, workspaceID, before, includeKept, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -276,8 +281,9 @@ func (s *Store) RestoreKBMedia(ctx context.Context, workspaceID string, ids []st
 }
 
 // PurgeKBMediaNow deletes for good the items of ids that are in the library's trash, with their files,
-// and answers each: purged, not_in_trash or not_found. Articles in the trash and older versions that
-// named one then show "Media no longer exists".
+// and answers each: purged, not_in_trash, not_found, or in_use for the help center's logo or favicon,
+// which stays in the trash until the theme names another image. Articles in the trash and older
+// versions that named one then show "Media no longer exists".
 func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []string) ([]domain.KBMediaResult, error) {
 	ids, err := validKBMediaIDs(ids)
 	if err != nil {
@@ -296,6 +302,10 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 		if err != nil {
 			return answer{}, err
 		}
+		named, err := kbMediaIDsWhere(ctx, tx, workspaceID, ids, kbMediaNamedByHelpCenter)
+		if err != nil {
+			return answer{}, err
+		}
 		var gone []string
 		results := make([]domain.KBMediaResult, len(ids))
 		for i, id := range ids {
@@ -306,6 +316,9 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 				status = domain.KBMediaNotFound
 			case !inTrash || inUse[id]:
 				status = domain.KBMediaNotInTrash
+			case named[id]:
+				// The help center's logo or favicon waits in the trash until the theme lets go of it.
+				status = domain.KBMediaInUse
 			default:
 				gone = append(gone, id)
 			}
@@ -342,7 +355,7 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 }
 
 // ListTrashedKBMedia pages through the library's trash, last moved there first, with each item's usage
-// and when the purge deletes it.
+// and when the purge deletes it: none for an item the purge keeps.
 func (s *Store) ListTrashedKBMedia(ctx context.Context, workspaceID, cursor string, limit int) ([]domain.KBMedia, string, error) {
 	if limit < 1 || limit > domain.MaxKBMediaPage {
 		limit = 60
@@ -387,8 +400,11 @@ func (s *Store) ListTrashedKBMedia(ctx context.Context, workspaceID, cursor stri
 	out := make([]domain.KBMedia, len(items))
 	for i, item := range items {
 		out[i] = item.KBMedia
-		purgeAt := item.DeletedAt.Add(domain.KBTrashRetention)
-		out[i].PurgeAt = &purgeAt
+		// The purge keeps an item a live article or the help center still names (kbMediaPurgeable).
+		if usage := item.Usage; usage == nil || (usage.Articles == 0 && len(usage.HelpCenter) == 0) {
+			purgeAt := item.DeletedAt.Add(domain.KBTrashRetention)
+			out[i].PurgeAt = &purgeAt
+		}
 	}
 	return out, next, nil
 }

@@ -126,6 +126,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `send` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `send` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
+| `colliedesk_help_center_theme_get` | Reads the public help center's logo, colors, fonts and links | `read` |
+| `colliedesk_help_center_theme_check` | Checks a candidate brand and its color contrast without saving it | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
 | `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |
@@ -155,6 +157,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_sessions_list` | Lists sign-ins and agent tokens (the whole workspace with `admin`, otherwise your own) | `read` |
 | `colliedesk_session_revoke` | Revokes a token or signs out one of your own devices; signing out another person waits for approval. Cannot be undone | `admin` |
 | `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
+| `colliedesk_help_center_theme_update` | Replaces the public help center's brand after checking its color contrast | `admin` |
 | `colliedesk_web_form_get` | Shows the web form settings | `read` |
 | `colliedesk_web_form_update` | Turns the web form on or off and sets the allowed origins | `admin` |
 | `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |

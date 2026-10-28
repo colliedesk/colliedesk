@@ -79,7 +79,7 @@ var (
 // 30 days); the knowledge base is send for the same reason (an article can be published, which reaches
 // customers, but every change is a version and a delete waits 30 days in the trash), and so are its
 // image uploads. Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
-// admin: workspace settings (the help center's on and off among them), the team, revoking invites, channels and sessions. An admin token acts
+// admin: workspace settings (the help center's on and off and its brand among them), the team, revoking invites, channels and sessions. An admin token acts
 // with its creator's role, so it reaches these only while that person is an admin, and the role still
 // decides the admin-only reads (billing is classified admin for that reason). The handlers file a
 // request for every tier when the change is risky for people: a change that grants, keeps or takes
@@ -184,6 +184,8 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/agent-requests/{id}":         grant(auth.PermAgentRequestsRead),
 	"POST /api/v1/agent-requests/{id}/cancel": grant(auth.PermAgentRequestsCancel),
 	"POST " + problemReportPath:               anyToken,
+	"GET /api/v1/help-center/theme":           grant(auth.PermHelpCenterRead),
+	"POST /api/v1/help-center/theme/check":    grant(auth.PermHelpCenterRead),
 
 	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
 	"PUT /api/v1/conversations/{id}/presence":               grant(auth.PermConversationsRead),
@@ -234,6 +236,7 @@ var tokenTiers = map[string]TokenAccess{
 	"PUT /api/v1/channels/email":                      grant(auth.PermChannelsUpdate),
 	"POST /api/v1/channels/email/domain-verification": grant(auth.PermChannelsUpdate),
 	"DELETE /api/v1/auth/sessions/{id}":               grant(auth.PermTeamRevoke),
+	"PUT /api/v1/help-center/theme":                   grant(auth.PermHelpCenterUpdate),
 
 	"POST /api/v1/auth/tokens":           alwaysAsk(auth.PermTeamCreateTokens),
 	"POST /api/v1/auth/invites":          alwaysAsk(auth.PermTeamInvite),
