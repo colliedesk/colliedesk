@@ -98,6 +98,8 @@ func (s *Site) Preview(ctx context.Context, workspaceID string, theme domain.Hel
 	}
 	// A favicon shows nowhere in a frame; the preview has no public address; the brand goes inline.
 	data.Style, data.BrandStyle, data.Favicon, data.Canonical = pathPrefix+strings.TrimPrefix(stylePath, "/")+s.pages.styleName, "", "", ""
+	// Nothing indexes a preview, so it carries no structured data and stays free of script elements.
+	data.StructuredData = nil
 	if data.Logo != nil {
 		data.Logo.URL = domain.KBMediaPath + *read.Site.Theme.LogoMediaID
 	}
