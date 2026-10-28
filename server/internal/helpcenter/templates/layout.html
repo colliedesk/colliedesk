@@ -43,6 +43,9 @@
 {{- with .Favicon}}
 <link rel="icon" href="{{.}}">
 {{- end}}
+{{- range .StructuredData}}
+<script type="application/ld+json">{{.}}</script>
+{{- end}}
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>

@@ -48,7 +48,7 @@ export function TeamSection({ members, currentAgentId, canManage, timezone, erro
           const draft = roleDraft[member.id] ?? member.role;
           const lastAdmin = member.role === 'admin' && !deactivated && activeAdmins === 1;
           return <article key={member.id} tabIndex={-1} ref={(node) => { if (node) rows.current.set(member.id, node); else rows.current.delete(member.id); }}>
-            <div>
+            <div className="team-cells">
               <span className="team-person"><strong title={member.email}>{name}{member.id === currentAgentId && <small> ({messages.teamYou})</small>}</strong>
                 {member.display_name && <small>{member.email}</small>}</span>
               {canManage && !deactivated
@@ -63,16 +63,18 @@ export function TeamSection({ members, currentAgentId, canManage, timezone, erro
               <span>{deactivated ? messages.teamDeactivated : messages.teamActive}</span>
               <time>{member.last_active_at ? messages.teamLastActive(formatDate(member.last_active_at, timezone)) : messages.teamNeverSignedIn}</time>
             </div>
-            {canManage && renaming !== member.id &&
-              <button type="button" aria-label={messages.teamRenameName(name)} ref={(node) => { if (node) renameButtons.current.set(member.id, node); else renameButtons.current.delete(member.id); }}
-                onClick={() => { setConfirming(null); setRenaming(member.id); }}>{messages.teamRename}</button>}
+            {canManage && <span className="team-actions">
+              {renaming !== member.id &&
+                <button type="button" aria-label={messages.teamRenameName(name)} ref={(node) => { if (node) renameButtons.current.set(member.id, node); else renameButtons.current.delete(member.id); }}
+                  onClick={() => { setConfirming(null); setRenaming(member.id); }}>{messages.teamRename}</button>}
+              {!deactivated && !lastAdmin && confirming !== member.id &&
+                <button type="button" className="danger-action" aria-label={messages.teamDeactivateName(name)} ref={(node) => { if (node) buttons.current.set(member.id, node); else buttons.current.delete(member.id); }} onClick={() => { setRenaming(null); setConfirming(member.id); }}>{messages.teamDeactivate}</button>}
+              {deactivated &&
+                <button type="button" aria-label={messages.teamReactivateName(name)} title={messages.teamReactivateHelp} onClick={() => onReactivate?.(member.id)}>{messages.teamReactivate}</button>}
+            </span>}
             {renaming === member.id && <RenameForm member={member}
               onCancel={() => { setRenaming(null); setRefocus({ id: member.id, target: 'rename' }); }}
               onSave={(next) => { setRenaming(null); setRefocus({ id: member.id, target: 'row' }); onRename?.(member.id, next); }} />}
-            {canManage && !deactivated && !lastAdmin && confirming !== member.id &&
-              <button type="button" className="danger-action" aria-label={messages.teamDeactivateName(name)} ref={(node) => { if (node) buttons.current.set(member.id, node); else buttons.current.delete(member.id); }} onClick={() => { setRenaming(null); setConfirming(member.id); }}>{messages.teamDeactivate}</button>}
-            {canManage && deactivated &&
-              <button type="button" aria-label={messages.teamReactivateName(name)} title={messages.teamReactivateHelp} onClick={() => onReactivate?.(member.id)}>{messages.teamReactivate}</button>}
             {confirming === member.id && <DeactivateConfirm member={member} others={members.filter((other) => other.id !== member.id && other.deactivated_at === null)}
               isSelf={member.id === currentAgentId}
               onCancel={() => { setConfirming(null); setRefocus({ id: member.id, target: 'button' }); }}

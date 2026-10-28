@@ -29,6 +29,9 @@ import { addPoster } from './video-poster';
 
 // The limits the server checks (server/internal/domain/kb.go), counted in characters like the server.
 export const maxTitle = 300;
+// maxSEOTitle and maxSEODescription are the server's limits on an article's search title and meta description.
+export const maxSEOTitle = 120;
+export const maxSEODescription = 320;
 export const maxBody = 100000;
 
 // characters counts what a person sees as characters (Unicode code points), as the server does; a
@@ -40,9 +43,21 @@ interface Draft {
   slug: string;
   body: string;
   collection_id: string;
+  seo_title: string;
+  seo_description: string;
 }
 
-const draftOf = (article: KBArticle): Draft => ({ title: article.title, slug: article.slug, body: article.body_md, collection_id: article.collection_id });
+const draftOf = (article: KBArticle): Draft => ({ title: article.title, slug: article.slug, body: article.body_md, collection_id: article.collection_id,
+  seo_title: article.seo_title, seo_description: article.seo_description });
+// seoMessages are the search fields' strings; they live with the editor's own chunk, not the first bundle.
+const seoMessages = {
+  searchEngines: 'Search engines',
+  seoTitle: 'Search title',
+  seoDescription: 'Meta description',
+  seoHelp: 'What Google and other search engines show for this article. Left empty, the title and the start of the text are used.',
+};
+// seoValue is a search field as the server stores it: on one line, runs of spaces as one, trimmed.
+const seoValue = (text: string) => text.trim().split(/\s+/).filter(Boolean).join(' ');
 
 // ArticleRoute opens an article in the editor, or a new one (in collectionId when given).
 export function ArticleRoute({ articleId, collectionId }: { articleId?: string; collectionId?: string }) {
@@ -101,7 +116,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const tree = useMemo(() => flatten(buildTree(collections)), [collections]);
   // base is the article as the server last answered; every save and restore sends its updated_at.
   const [base, setBase] = useState(article);
-  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(article) : { title: '', slug: '', body: '', collection_id: defaultCollection }));
+  const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(article) : { title: '', slug: '', body: '', collection_id: defaultCollection, seo_title: '', seo_description: '' }));
   const wide = useSyncExternalStore(subscribeWide, isWide);
   const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
   const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
@@ -122,6 +137,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     // Compared as save() sends them: title and address name trimmed, and an emptied address name is not
     // a change (the server keeps the old one), so a form is never dirty with nothing to send.
     ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || !sameBody(form.body, base) || form.collection_id !== base.collection_id
+      || seoValue(form.seo_title) !== base.seo_title || seoValue(form.seo_description) !== base.seo_description
     : form.title.trim() !== '' || form.body.trim() !== '');
   const dirty = isDirty(draft);
   // bodyNow reads the editor at once: it tells the page of typing a moment after it stops.
@@ -139,7 +155,10 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const tooLong = bodyLength > maxBody;
   // Images still uploading hold a placeholder in the text; saving waits for them so it is never stored.
   const [uploading, setUploading] = useState(0);
-  const invalid = !draft.title.trim() || titleLength > maxTitle || tooLong || !draft.collection_id || uploading > 0;
+  const seoTitleLength = characters(seoValue(draft.seo_title));
+  const seoDescriptionLength = characters(seoValue(draft.seo_description));
+  const invalid = !draft.title.trim() || titleLength > maxTitle || tooLong || !draft.collection_id || uploading > 0
+    || seoTitleLength > maxSEOTitle || seoDescriptionLength > maxSEODescription;
 
   // Set from the press until the answer: clicks that land before the button turns disabled save nothing.
   const saving = useRef(false);
@@ -157,7 +176,9 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     setProblem(undefined);
     try {
       if (!current) {
-        const value = { collection_id: sent.collection_id, title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft' } as const;
+        const value = { collection_id: sent.collection_id, title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft',
+          ...(seoValue(sent.seo_title) ? { seo_title: seoValue(sent.seo_title) } : {}),
+          ...(seoValue(sent.seo_description) ? { seo_description: seoValue(sent.seo_description) } : {}) } as const;
         const created = await createArticle.run(value);
         client.setQueryData(['kb-article', created.id], created);
         void refresh();
@@ -171,6 +192,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         ...(!sameBody(sent.body, current) ? { body_md: sent.body } : {}),
         ...(sent.collection_id !== current.collection_id ? { collection_id: sent.collection_id } : {}),
         ...(status && status !== current.status ? { status } : {}),
+        ...(seoValue(sent.seo_title) !== current.seo_title ? { seo_title: seoValue(sent.seo_title) } : {}),
+        ...(seoValue(sent.seo_description) !== current.seo_description ? { seo_description: seoValue(sent.seo_description) } : {}),
       };
       // Nothing changed (Ctrl+S on a saved article): there is nothing to ask the server.
       if (Object.keys(change).length === 0) return;
@@ -459,6 +482,18 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {base && <div className="field"><label htmlFor={`${id}-slug-input`}>{kbMessages.articleSlug}</label>
           <input id={`${id}-slug-input`} value={draft.slug} aria-describedby={`${id}-slug`} onChange={(event) => set({ slug: event.target.value })} />
           <small id={`${id}-slug`} className="kb-hint">{kbMessages.articleSlugHelp(base.number, draft.slug.trim())}</small></div>}
+      </section>
+      <section className="kb-side-box" aria-labelledby={`${id}-search`}>
+        <h3 id={`${id}-search`}>{seoMessages.searchEngines}</h3>
+        <p id={`${id}-search-help`} className="kb-hint">{seoMessages.seoHelp}</p>
+        <div className="field"><label htmlFor={`${id}-seo-title`}>{seoMessages.seoTitle}</label>
+          <input id={`${id}-seo-title`} value={draft.seo_title} placeholder={draft.title.trim()} aria-describedby={`${id}-search-help ${id}-seo-title-count`}
+            aria-invalid={seoTitleLength > maxSEOTitle || undefined} onChange={(event) => set({ seo_title: event.target.value })} />
+          <small id={`${id}-seo-title-count`} className={seoTitleLength > maxSEOTitle ? 'error-copy' : 'kb-hint'}>{kbMessages.characters(seoTitleLength, maxSEOTitle)}</small></div>
+        <div className="field"><label htmlFor={`${id}-seo-description`}>{seoMessages.seoDescription}</label>
+          <textarea id={`${id}-seo-description`} rows={3} value={draft.seo_description} aria-describedby={`${id}-search-help ${id}-seo-description-count`}
+            aria-invalid={seoDescriptionLength > maxSEODescription || undefined} onChange={(event) => set({ seo_description: event.target.value })} />
+          <small id={`${id}-seo-description-count`} className={seoDescriptionLength > maxSEODescription ? 'error-copy' : 'kb-hint'}>{kbMessages.characters(seoDescriptionLength, maxSEODescription)}</small></div>
       </section>
     </>
   );

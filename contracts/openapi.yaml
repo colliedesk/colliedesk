@@ -4217,7 +4217,8 @@ paths:
       operationId: updateKBArticle
       x-permission: conversations:write
       description: >
-        Change the title, slug, text, collection or status (publish or unpublish). Send back the
+        Change the title, slug, text, collection, status (publish or unpublish), search title or meta
+        description. Send back the
         `updated_at` you read; when the article was saved since, nothing changes and the answer is 409
         `changed_elsewhere`. Every change adds a version to the history. An article in the trash is
         404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of
@@ -4236,6 +4237,8 @@ paths:
                 body_md: {type: string, maxLength: 100000}
                 collection_id: {type: string, format: uuid}
                 status: {type: string, enum: [draft, published]}
+                seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
+                seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
@@ -7475,6 +7478,8 @@ components:
         slug: {type: string, minLength: 1, maxLength: 120, description: 'Lowercase letters, digits and hyphens in any script; made from the title when left out.'}
         body_md: {type: string, maxLength: 100000, description: 'The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>; anything else is left out when shown and kept as written.'}
         status: {type: string, enum: [draft, published], default: draft}
+        seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
+        seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
     KBArticleStatus:
       type: string
       enum: [draft, published]
@@ -7567,7 +7572,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion]
+      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description]
       properties:
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         id: {type: string, format: uuid}
@@ -7587,6 +7592,8 @@ components:
             - {$ref: '#/components/schemas/KBArticleChange'}
         url: {type: string, format: uri, description: 'The public address of the article, as in KBArticleSummary.'}
         body_md: {type: string}
+        seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
+        seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
         has_source_html: {type: boolean, description: An import kept the original HTML; it is in the workspace export and is never shown on the help center.}
         translations:
           type: array
@@ -7630,7 +7637,7 @@ components:
         purges_at: {type: string, format: date-time, description: When the article and its history are deleted for good (30 days after deleted_at).}
     KBArticleVersion:
       type: object
-      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id]
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id, seo_title, seo_description]
       properties:
         version: {type: integer, minimum: 1}
         kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include]}
@@ -7652,6 +7659,8 @@ components:
         title: {type: string}
         slug: {type: string}
         body_md: {type: string}
+        seo_title: {type: string}
+        seo_description: {type: string}
         status: {$ref: '#/components/schemas/KBArticleStatus'}
         collection_id: {type: [string, 'null'], format: uuid, description: Null once that collection was deleted for good.}
     KBMedia:
