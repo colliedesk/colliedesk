@@ -522,6 +522,109 @@ type ResultsBaseline struct {
 	Numbers      json.RawMessage `json:"numbers"`
 }
 
+// AutofixInstallation is a GitHub App installation the workspace connected for Autofix.
+type AutofixInstallation struct {
+	ID                  string    `json:"id"`
+	InstallationID      int64     `json:"installation_id"`
+	AccountLogin        string    `json:"account_login"`
+	AccountType         string    `json:"account_type"`
+	RepositorySelection string    `json:"repository_selection"`
+	Status              string    `json:"status"`
+	ConnectedByAgentID  *string   `json:"connected_by_agent_id"`
+	ConnectedByName     string    `json:"connected_by_name"`
+	ConnectedAt         time.Time `json:"connected_at"`
+}
+
+// AutofixRepo is a repository connected for fixes.
+type AutofixRepo struct {
+	ID                  string     `json:"id"`
+	InstallationID      *int64     `json:"installation_id"`
+	GitHubRepoID        int64      `json:"github_repo_id"`
+	FullName            string     `json:"full_name"`
+	Visibility          string     `json:"visibility"`
+	VisibilityCheckedAt time.Time  `json:"visibility_checked_at"`
+	DefaultBranch       string     `json:"default_branch"`
+	IncludeNotes        bool       `json:"include_notes"`
+	DefaultConnector    *string    `json:"default_connector"`
+	PausedReason        *string    `json:"paused_reason"`
+	PausedAt            *time.Time `json:"paused_at"`
+	ConnectedByAgentID  *string    `json:"connected_by_agent_id"`
+	ConnectedByName     string     `json:"connected_by_name"`
+	ConnectedAt         time.Time  `json:"connected_at"`
+}
+
+// AutofixConnector is a coding agent's settings and the consent given for it; never its key, only whether
+// one is set, by whom and when.
+type AutofixConnector struct {
+	Kind                 string     `json:"kind"`
+	Enabled              bool       `json:"enabled"`
+	Mode                 *string    `json:"mode"`
+	ConsentAgentID       *string    `json:"consent_agent_id"`
+	ConsentName          *string    `json:"consent_name"`
+	ConsentAt            *time.Time `json:"consent_at"`
+	ConsentVersion       *string    `json:"consent_version"`
+	CredentialSet        bool       `json:"credential_set"`
+	CredentialSetByAgent *string    `json:"credential_set_by_agent_id"`
+	CredentialSetByName  *string    `json:"credential_set_by_name"`
+	CredentialSetAt      *time.Time `json:"credential_set_at"`
+	LastCheckAt          *time.Time `json:"last_check_at"`
+	LastCheckResult      *string    `json:"last_check_result"`
+	LastCheckMessage     *string    `json:"last_check_message"`
+}
+
+// Fix is one fix attempt: exactly what was sent, where, by whom, and where it went.
+type Fix struct {
+	ID                string     `json:"id"`
+	ConversationID    string     `json:"conversation_id"`
+	AttemptNo         int        `json:"attempt_no"`
+	PreviousAttemptID *string    `json:"previous_attempt_id"`
+	RepoID            *string    `json:"repo_id"`
+	RepoFullName      string     `json:"repo_full_name"`
+	Connector         string     `json:"connector"`
+	State             string     `json:"state"`
+	OutcomeReason     *string    `json:"outcome_reason"`
+	StateChangedAt    time.Time  `json:"state_changed_at"`
+	SentTitle         string     `json:"sent_title"`
+	SentBody          string     `json:"sent_body"`
+	SentMessageIDs    []string   `json:"sent_message_ids"`
+	SentNotes         bool       `json:"sent_notes"`
+	CreatedByKind     string     `json:"created_by_kind"`
+	CreatedByAgentID  *string    `json:"created_by_agent_id"`
+	CreatedByName     string     `json:"created_by_name"`
+	CreatedByTokenID  *string    `json:"created_by_token_id"`
+	ApprovedRequestID *string    `json:"approved_request_id"`
+	GitHubLogin       *string    `json:"github_login"`
+	CopilotAssignment *string    `json:"copilot_assignment"`
+	IssueNumber       *int       `json:"issue_number"`
+	VendorRef         *string    `json:"vendor_ref"`
+	VendorURL         *string    `json:"vendor_url"`
+	Branch            *string    `json:"branch"`
+	PRNumber          *int       `json:"pr_number"`
+	PRURL             *string    `json:"pr_url"`
+	PRLinkedBy        *string    `json:"pr_linked_by"`
+	MergeSHA          *string    `json:"merge_sha"`
+	MergedAt          *time.Time `json:"merged_at"`
+	MergedByLogin     *string    `json:"merged_by_login"`
+	DeployedAt        *time.Time `json:"deployed_at"`
+	DeployedByAgentID *string    `json:"deployed_by_agent_id"`
+	DeployedByName    *string    `json:"deployed_by_name"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
+
+// FixEvent is one line of a fix's timeline.
+type FixEvent struct {
+	ID        int64           `json:"id"`
+	FixID     string          `json:"fix_id"`
+	Kind      string          `json:"kind"`
+	FromState *string         `json:"from_state"`
+	ToState   *string         `json:"to_state"`
+	ActorKind string          `json:"actor_kind"`
+	ActorID   *string         `json:"actor_id"`
+	ActorName *string         `json:"actor_name"`
+	Data      json.RawMessage `json:"data"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
 // AITriage is one AI triage suggestion and what a person did with it.
 type AITriage struct {
 	ID                 string          `json:"id"`
@@ -659,6 +762,11 @@ type Sink interface {
 	AIDraft(AIDraft) error
 	AITriage(AITriage) error
 	ResultsBaseline(ResultsBaseline) error
+	AutofixInstallation(AutofixInstallation) error
+	AutofixRepo(AutofixRepo) error
+	AutofixConnector(AutofixConnector) error
+	Fix(Fix) error
+	FixEvent(FixEvent) error
 	Channel(Channel) error
 	ChannelEvent(ChannelEvent) error
 	ChannelInboundEvent(ChannelInboundEvent) error

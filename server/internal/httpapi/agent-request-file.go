@@ -171,6 +171,9 @@ var requestTitles = map[string]string{
 	"DELETE /api/v1/channels/{id}":                               "Remove a channel",
 	"POST /api/v1/channels/{id}/held/discard":                    "Discard the held messages of a channel",
 	"PATCH /api/v1/workspace/slug":                               "Change the workspace address",
+	"PUT /api/v1/autofix/connectors/{kind}":                      "Turn on a coding agent for Autofix",
+	"DELETE /api/v1/autofix/connectors/{kind}":                   "Turn off a coding agent for Autofix",
+	"DELETE /api/v1/autofix/connectors/cursor_api/key":           "Remove the Cursor key of Autofix",
 	"PATCH /api/v1/workspace/timezone":                           "Change the workspace timezone",
 	"PATCH /api/v1/workspace/name":                               "Rename the workspace",
 	"PATCH /api/v1/agents/me/timezone":                           "Change my timezone",
@@ -198,6 +201,20 @@ var requestTitles = map[string]string{
 	"DELETE /api/v1/saved-replies/{id}":                          "Delete a saved reply",
 	"POST /api/v1/saved-replies/{id}/restore":                    "Restore a saved reply from the trash",
 	"POST /api/v1/saved-replies/{id}/versions/{version}/restore": "Restore an earlier version of a saved reply",
+	"POST /api/v1/autofix/github/installations":                  "Connect GitHub for Autofix",
+	"DELETE /api/v1/autofix/github/installations/{id}":           "Disconnect GitHub from Autofix",
+	"POST /api/v1/autofix/repos":                                 "Connect a repository for Autofix",
+	"PATCH /api/v1/autofix/repos/{id}":                           "Change the coding agent a repository suggests",
+	"DELETE /api/v1/autofix/repos/{id}":                          "Disconnect a repository from Autofix",
+	"PUT /api/v1/autofix/repos/{id}/include-notes":               "Let fixes on a repository carry internal notes",
+	"DELETE /api/v1/autofix/repos/{id}/include-notes":            "Stop internal notes going with fixes on a repository",
+	"POST /api/v1/conversations/{id}/fixes":                      "Send a conversation to a coding agent",
+	"POST /api/v1/autofix/fixes/{id}/retry":                      "Send a fix to a coding agent again",
+	"POST /api/v1/autofix/fixes/{id}/cancel":                     "Cancel a fix",
+	"PUT /api/v1/autofix/fixes/{id}/deployed":                    "Mark a fix released",
+	"DELETE /api/v1/autofix/fixes/{id}/deployed":                 "Take back a fix's release",
+	"PUT /api/v1/autofix/fixes/{id}/pull-request":                "Link a pull request to a fix",
+	"DELETE /api/v1/autofix/fixes/{id}/pull-request":             "Unlink a fix's pull request",
 }
 
 const summaryDetail = 300
@@ -259,6 +276,14 @@ func summarizeRequest(route Route, kind string, body json.RawMessage) string {
 	if text, ok := fields["body"].(string); ok && route.Pattern == conversationRoutePrefix+"/messages" {
 		return clip(title + ": " + strings.Join(strings.Fields(text), " "))
 	}
+	// A send names the agent only: its title and text come from the customer and sit in the request's body,
+	// under the summary, for the person to read and edit.
+	if route.Pattern == conversationRoutePrefix+"/fixes" || route.Pattern == "/api/v1/autofix/fixes/{id}/retry" {
+		if agent, ok := fixAgentNames[fmt.Sprint(fields["connector"])]; ok {
+			return title + " (" + agent + ")"
+		}
+		return title
+	}
 	var details []string
 	for _, key := range slices.Sorted(maps.Keys(fields)) {
 		encoded, err := json.Marshal(fields[key])
@@ -272,6 +297,8 @@ func summarizeRequest(route Route, kind string, body json.RawMessage) string {
 	}
 	return clip(title + ": " + strings.Join(details, ", "))
 }
+
+var fixAgentNames = map[string]string{"claude_issue": "Claude", "copilot_issue": "Copilot", "cursor_api": "Cursor"}
 
 func clip(text string) string {
 	runes := []rune(text)

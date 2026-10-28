@@ -33,6 +33,7 @@ var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.n
 	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
 	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson",
 	"ai-providers.ndjson", "ai-slots.ndjson", "ai-settings-events.ndjson", "ai-usage.ndjson", "ai-drafts.ndjson", "ai-triage.ndjson", "results-baselines.ndjson",
+	"autofix-installations.ndjson", "autofix-repos.ndjson", "autofix-connectors.ndjson", "fixes.ndjson", "fix-events.ndjson",
 	"channels.ndjson", "channel-events.ndjson", "channel-inbound-events.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
@@ -40,6 +41,7 @@ var countKeys = map[string]string{
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
 	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people",
 	"ai-providers.ndjson": "ai_providers", "ai-slots.ndjson": "ai_slots", "ai-settings-events.ndjson": "ai_settings_events", "ai-usage.ndjson": "ai_usage", "ai-drafts.ndjson": "ai_drafts", "ai-triage.ndjson": "ai_triage_suggestions", "results-baselines.ndjson": "results_baselines",
+	"autofix-installations.ndjson": "autofix_installations", "autofix-repos.ndjson": "autofix_repos", "autofix-connectors.ndjson": "autofix_connectors", "fixes.ndjson": "fixes", "fix-events.ndjson": "fix_events",
 	"channels.ndjson": "channels", "channel-events.ndjson": "channel_events", "channel-inbound-events.ndjson": "channel_inbound_events",
 	"conversations.ndjson": "conversations",
 }
@@ -211,6 +213,26 @@ func (w *Writer) AITriage(record AITriage) error {
 
 func (w *Writer) ResultsBaseline(record ResultsBaseline) error {
 	return w.record("results-baselines.ndjson", record)
+}
+
+func (w *Writer) AutofixInstallation(record AutofixInstallation) error {
+	return w.record("autofix-installations.ndjson", record)
+}
+
+func (w *Writer) AutofixRepo(record AutofixRepo) error {
+	return w.record("autofix-repos.ndjson", record)
+}
+
+func (w *Writer) AutofixConnector(record AutofixConnector) error {
+	return w.record("autofix-connectors.ndjson", record)
+}
+
+func (w *Writer) Fix(record Fix) error {
+	return w.record("fixes.ndjson", record)
+}
+
+func (w *Writer) FixEvent(record FixEvent) error {
+	return w.record("fix-events.ndjson", record)
 }
 
 func (w *Writer) Channel(record Channel) error { return w.record("channels.ndjson", record) }

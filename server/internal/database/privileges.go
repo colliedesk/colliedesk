@@ -117,6 +117,17 @@ const (
 	// workspaces whose results page numbers are due. Only workspace ids leave the transaction; each is
 	// computed and stored in its own scope.
 	PrivilegeResultsClaim Privilege = "results-claim"
+	// PrivilegeAutofixClaim leases the Autofix fixes in progress of every workspace whose next check is
+	// due (a Cursor run to start or to read), for the Autofix worker. Only workspace ids, fix ids and
+	// connectors leave the transaction; each fix is then read, sent and moved in its own workspace.
+	PrivilegeAutofixClaim Privilege = "autofix-claim"
 	// PrivilegeResultsShareToken resolves the workspace of a results share link from its token hash.
 	PrivilegeResultsShareToken Privilege = "results-share-token"
+	// PrivilegeGitHubInstallation routes the Colliedesk GitHub App's webhook: it finds the one workspace
+	// that owns a GitHub installation id (unique on the server) and reads and records the delivery ids
+	// already applied (autofix_webhook_deliveries, a platform table like retention_deletions). The
+	// reconcile pass lists the workspaces with an installation, and old delivery ids are swept. Only
+	// workspace ids, installation ids and yes or no leave the transaction; each event is then applied in
+	// its own workspace.
+	PrivilegeGitHubInstallation Privilege = "github-installation"
 )

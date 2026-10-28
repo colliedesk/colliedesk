@@ -6,7 +6,7 @@ import { agentTokenMessages as text } from './agent-tokens-messages';
 import { CopyButton } from './copy-button';
 import { connectHosts, connectSnippets, exampleOrigin, mcpServerName } from './connect-snippets.generated';
 import type { ConnectHostID } from './connect-snippets.generated';
-import { actionLabels, presetPermissions, tokenResources } from './token-permissions';
+import { actionLabel, presetPermissions, tokenResources } from './token-permissions';
 import './agent-tokens.css';
 
 const scopes: TokenScope[] = ['read', 'draft', 'send', 'admin', 'custom'];
@@ -256,7 +256,7 @@ function PermissionMatrix({ picked, canCreateAdmin, onToggle }: { picked: TokenP
                   <label key={item.name} className="permission-chip" title={notes || undefined}>
                     <input type="checkbox" checked={picked.includes(item.name)} disabled={locked} onChange={() => onToggle(item.name)}
                       aria-description={notes || undefined} />
-                    {actionLabels[item.name.split(':')[1]]}
+                    {actionLabel(item.name)}
                     {item.outside && <span className="permission-mark outside" aria-hidden="true" />}
                     {item.asks && <span className="permission-mark asks" aria-hidden="true" />}
                   </label>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
@@ -21,11 +22,13 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/colliedesk/colliedesk/server/internal/github"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -49,6 +52,12 @@ var importJobNetwork func(*freshdesk.Options)
 
 // googleBaseURL replaces Google's addresses with a local stand-in; only end-to-end builds set it.
 var googleBaseURL = ""
+
+// githubBaseURL replaces GitHub's addresses with a local stand-in; only end-to-end builds set it.
+var githubBaseURL = ""
+
+// cursorBaseURL replaces Cursor's API with a local stand-in (cursortest); only end-to-end builds set it.
+var cursorBaseURL = ""
 
 // microsoftBaseURL replaces Microsoft's sign-in and Graph addresses with a local stand-in; only
 // end-to-end builds set it.
@@ -133,6 +142,11 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	googleConfig.Base = googleBaseURL
 	microsoftConfig.Base = microsoftBaseURL
+	githubConfig := github.ConfigFromEnv(os.Getenv)
+	if err := githubConfig.Check(); err != nil {
+		return err
+	}
+	githubConfig.Base = githubBaseURL
 	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
 	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
 	// replies that need them fail with the reason. The journal worker processes what Async channels received.
@@ -218,7 +232,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
 	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1", PlanLimits: billing.Enabled()}
-	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+	// One Cursor client per process, so the API and the Autofix worker keep one call budget. The worker
+	// starts with the GitHub connection, which reads a repository on GitHub before a fix leaves for it.
+	fixCursor := &autofixworker.Cursor{Store: store.NewWithDB(db).WithSealKeys(googleConfig.Keys), Base: cursorBaseURL}
+	apiConfig := httpapi.Config{Cursor: fixCursor, AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
@@ -237,6 +254,12 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	aiWorker.Handle(ai.SlotDraft, api.AI().DraftHandler())
 	aiWorker.Handle(ai.SlotTriage, api.AI().TriageHandler())
 	go aiWorker.Run(ctx)
+	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach.
+	if sync := api.GitHubSync(); sync != nil {
+		go sync.Run(ctx, githubsync.ReconcileEvery)
+		// Fixes sent to Cursor: the worker reads each repository on GitHub before a fix leaves for it.
+		go (&autofixworker.Worker{Cursor: fixCursor, Repos: sync}).Run(ctx, 5*time.Second)
+	}
 	if billing.Enabled() {
 		go refreshFoundingAtStart(ctx, api)
 	}
@@ -259,6 +282,13 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		defer cancel()
 		if err := server.Shutdown(shutdown); err != nil {
 			return fmt.Errorf("shutdown HTTP server: %w", err)
+		}
+		// Fixes being sent to GitHub finish (or time out) and revoke the person's token before the process ends.
+		sent := make(chan struct{})
+		go func() { api.WaitForAutofixSends(); close(sent) }()
+		select {
+		case <-sent:
+		case <-time.After(githubsync.DispatchTimeout):
 		}
 		return nil
 	}

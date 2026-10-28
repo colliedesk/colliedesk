@@ -7,6 +7,7 @@ import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/
 import { createQueryClient } from './query-client';
 import { resetProductAnalytics } from './lib/product-analytics';
 import { presenceViewPart } from './features/inbox/presence-part';
+import { autofixPart } from './features/autofix/autofix-part';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
 // Clerk draws its own sign-in form from the network; the page around it is what is under test here.
@@ -60,6 +61,8 @@ function open(path = '/') {
 beforeAll(async () => {
   presenceViewPart.preload();
   await import('./features/inbox/presence-view');
+  autofixPart.preload();
+  await import('./features/autofix/autofix-chunk');
 });
 
 test('a locked workspace sees the locked screen with the identity bar and an admin\'s plan choices', async () => {
@@ -457,4 +460,37 @@ test('an unknown page says so with a title and a way back to the inbox, and no r
   fireEvent.click(within(main).getByRole('link', { name: 'Back to Inbox' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   expect(within(rail).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
+});
+
+test('Autofix is in preview: without the browser\'s key there is no Fixes link, no status request and no Fixes page', async () => {
+  const autofixConfig = { ...config, autofix: { available: true, missing_settings: [] } };
+  const handlers = {
+    '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+    '/api/v1/config': () => json(200, autofixConfig),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+    '/api/v1/autofix/status': () => json(200, { connected_repos: 1, needs_person: 2, running: 0 }),
+  };
+  localStorage.removeItem('colliedesk.autofix');
+  serve(handlers);
+  open('/fixes');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Page not found' })).toBeInTheDocument();
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(true));
+  expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/autofix/status'))).toBe(false);
+  expect(screen.queryByRole('link', { name: /^Fixes/ })).not.toBeInTheDocument();
+});
+
+test('with the browser\'s key on, Autofix shows: the Fixes link with its badge', async () => {
+  localStorage.setItem('colliedesk.autofix', 'on');
+  try {
+    serve({
+      '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+      '/api/v1/config': () => json(200, { ...config, autofix: { available: true, missing_settings: [] } }),
+      '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+      '/api/v1/autofix/status': () => json(200, { connected_repos: 1, needs_person: 2, running: 0 }),
+    });
+    open('/settings');
+    expect(await screen.findByRole('link', { name: 'Fixes, 2 need a person' })).toHaveAttribute('href', '/fixes');
+  } finally {
+    localStorage.removeItem('colliedesk.autofix');
+  }
 });

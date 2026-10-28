@@ -2752,6 +2752,399 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/autofix/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What the navigation rail needs: how many repositories are connected (the Fixes link shows only when one is), and how many fixes wait for a person or are running (the groups of `GET /api/v1/autofix/fixes`). */
+        get: operations["getAutofixStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/fixes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's fixes, newest first, in pages, optionally one group of the Fixes screen: `needs_person` (the conversation's latest fix failed, was merged and waits for its release, or was sent and stayed silent for 30 minutes), `running` (in progress) or `done` (released, cancelled, or followed by a newer attempt), and optionally one repository and one coding agent. Without what was sent and the timeline: read one fix for those. */
+        get: operations["listFixes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/fixes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description One fix, with exactly what left Colliedesk (`sent_title`, `sent_body`) and its timeline. */
+        get: operations["getFix"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/fixes/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with the content the person reviewed (the preview, filled in from the attempt before). The same as `POST /api/v1/conversations/{id}/fixes` otherwise; 409 `fix_not_ended` while this fix is in progress. Every agent token's call becomes an agent request; the person who approves it sends. */
+        post: operations["retryFix"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/fixes/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Cancels a fix in progress (`cancelled`, reason `cancelled_by_person`). Cursor's run is cancelled. An issue is closed with a comment, but an agent already running may finish on GitHub: stop it there (`issue_url`). A pull request already open is not closed (the App cannot write pull requests). 409 `state_conflict` once the fix ended; with `row_version`, 409 `fix_changed` when it moved since. */
+        post: operations["cancelFix"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/fixes/{id}/deployed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Says a merged fix is released (`deployed`); one released already is answered as it is. 409 `state_conflict` otherwise. */
+        put: operations["markFixDeployed"];
+        post?: never;
+        /** @description Takes the release back (`merged` again), for a release that was rolled back or marked by mistake; a merged fix is answered as it is. 409 `state_conflict` otherwise. */
+        delete: operations["unmarkFixDeployed"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/fixes/{id}/pull-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Links a pull request by hand when Colliedesk did not find it (`pr_open`, `pr_linked_by` person), from `sent`, `working` or `failed` with reason `pr_closed`. The address must be a pull request of the fix's repository (400 `pull_request_not_in_repo`). */
+        put: operations["linkFixPullRequest"];
+        post?: never;
+        /** @description Unlinks a pull request a person linked (back to the stop it was at when the pull request was linked, `working` or `sent`); one Colliedesk found itself stays. */
+        delete: operations["unlinkFixPullRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/fixes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Every fix of the conversation, the latest attempt first. */
+        get: operations["listConversationFixes"];
+        put?: never;
+        /** @description Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and body given (build them with the preview), then, for an issue connector, answers `authorize_url`: the person's browser goes to GitHub to confirm, and the issue is created as that person on the way back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in), `cursor_key_missing` (Cursor without its key). Every agent token's call becomes an agent request; the person who approves it gets `authorize_url` (never the token) and sends as themselves. */
+        post: operations["sendFix"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/fixes/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Builds what a fix would send, without sending: a title and a body masked on the server (email addresses, phone and card numbers, strings that look like keys or tokens, secrets in query strings; `@mentions` and `#123` references made inert), the customer's words wrapped as untrusted data, the internal notes that may go (off by default, never one an agent token wrote) and how many files stay behind. The person edits it and sends it with `POST …/fixes`. 409 `repo_paused`, `notes_not_allowed`. */
+        post: operations["previewFix"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The GitHub installations, connected repositories and coding agents of the workspace. Never a key: Cursor's shows only who set it and when. */
+        get: operations["getAutofixSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/github/installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Starts installing the Colliedesk GitHub App: answers the address the admin's browser opens (choose "Only select repositories"). GitHub sends the browser back to `/api/v1/autofix/github/callback`, which checks with the admin's own authorization that the installation is theirs before it joins the workspace. An installation that reaches every repository is stored but blocked until narrowed. 503 `autofix_unavailable` while the server's GitHub App is not set up. Every agent token's call becomes an agent request; the person who approves it gets the address. */
+        post: operations["connectGitHub"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/github/installations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Uninstalls the App from that account on GitHub and removes the installation. Its repositories stay, paused (`removed_from_app`), so their fixes still show where they went; fixes in progress on them are cancelled (`repo_disconnected`). Connect again to resume. 503 `github_unavailable` when GitHub did not uninstall it: nothing changed. It uninstalls the App on the customer's GitHub, so every agent token's call becomes an agent request. */
+        delete: operations["disconnectGitHub"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/github/installations/{id}/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The repositories the installation can reach, read from GitHub now, each with its visibility and the connected repository if there is one. Only private ones can be connected. */
+        get: operations["listGitHubRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/github/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GitHub's redirect after installing the App or authorizing a fix
+         * @description Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the person who started (installing the App, or sending a fix) and the unused `state` of that start, looked up in that person's workspace only. Installing: the `installation_id` must be among the person's own installations, checked with their authorization, and they must administer every repository the installation reaches (an organization owner does; a member does not), else `installation_not_yours`. Sending a fix: the issue is created as the person in the background and the authorization is revoked. Every outcome is a 303: to `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`: only an admin connects GitHub), or to the conversation with `?fix=<id>` or `?fix_error=<reason>` (also `forbidden`: the person may no longer send a fix, by their role or a locked workspace; `expired` there also when the fix no longer waits for GitHub). The reasons: `signed_out`, `expired`, `wrong_person`, `denied`, `installation_not_yours`, `installation_in_use`, `github_unavailable`. GitHub's own error text is never echoed.
+         */
+        get: operations["finishGitHubAuthorization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Connects a repository of an active installation for fixes, after reading its visibility from GitHub now: 409 `repo_not_private` for a public or internal one, `installation_blocked` while the installation reaches every repository. */
+        post: operations["connectRepo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/repos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Disconnects the repository: fixes in progress on it are cancelled (`repo_disconnected`); its fixes stay with the repository's name. Connect it again to send new ones. */
+        delete: operations["disconnectRepo"];
+        options?: never;
+        head?: never;
+        /** @description Changes the coding agent a new fix on this repository suggests (null for none). */
+        patch: operations["updateRepo"];
+        trace?: never;
+    };
+    "/api/v1/autofix/repos/{id}/include-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Lets a fix on this repository carry internal notes the sender picks (never one an agent token wrote). Notes then leave the workspace for the coding agent, so every agent token's call becomes an agent request. */
+        put: operations["includeNotesInFixes"];
+        post?: never;
+        /** @description Stops internal notes from going with fixes on this repository (the default). */
+        delete: operations["excludeNotesFromFixes"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/connectors/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["FixConnector"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Turns a coding agent on and records the admin's consent to the data it receives (which version of the text, who, when). Every agent token's call becomes an agent request. Cursor also needs its key. 409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it is missing. An approved request records the consent in the approver's name: the approver agrees to the text the request names. */
+        put: operations["enableFixConnector"];
+        post?: never;
+        /** @description Turns a coding agent off: fixes not sent yet (`sending`) are cancelled `connector_disabled`, fixes already sent go on. The consent on record and Cursor's key stay until removed. */
+        delete: operations["disableFixConnector"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/connectors/{kind}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["FixConnector"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Checks what Colliedesk can check: the installation is active, the repositories are private and the App has its permissions; for Cursor also that the key works and reaches the repositories. The setup on the vendor's side (the Claude workflow and its secret, Copilot turned on for the repository) is a checklist the admin ticks. The result is kept in `last_check`. 409 `cursor_key_missing` for Cursor without a key. Cursor lists repositories once a minute, so a check within a minute of the last one only tries the key. */
+        post: operations["checkFixConnector"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/autofix/connectors/cursor_api/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service account key is advised (a user key acts with all of its owner's rights). A token without `autofix_settings:manage_credentials` is refused (403 `credentials_need_admin_token`), never filed as an agent request, because a request keeps its body. Cursor tries the key first (`GET /v1/me`): 400 `cursor_key_invalid` when it refuses it and 503 `cursor_unavailable` when it does not answer, with nothing changed; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS. */
+        put: operations["setCursorKey"];
+        post?: never;
+        /** @description Removes the Cursor key; Cursor cannot take new fixes until a key is set again. */
+        delete: operations["removeCursorKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Receives the Colliedesk GitHub App's events (installation, installation_repositories, repository, issues, issue_comment, pull_request). Authenticated by `X-Hub-Signature-256` (HMAC-SHA256 of the raw body with the App's webhook secret), not by a session; a missing or wrong signature is 401 and nothing is stored. A delivery (`X-GitHub-Delivery`) already applied answers `duplicate`. An event acts only in the workspace that owns the installation, and only on a repository connected there. Bodies over 5 MB are refused (413). */
+        post: operations["receiveGitHubWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/help-center/theme": {
         parameters: {
             query?: never;
@@ -3082,6 +3475,12 @@ export interface components {
             expires_at: string;
         };
         PublicConfig: {
+            autofix: {
+                /** @description The operator set up the server's GitHub App (GITHUB_APP_*), so Autofix can be used; the web app hides it otherwise. */
+                available: boolean;
+                /** @description The settings the operator still needs; empty when available. */
+                missing_settings: string[];
+            };
             ai: {
                 /** @description True when the operator configured an AI provider for every workspace (AI_SERVER_*). */
                 server_provider: boolean;
@@ -3948,7 +4347,7 @@ export interface components {
          * @description A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it; the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
          * @enum {string}
          */
-        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials";
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials" | "autofix:read" | "autofix:update" | "autofix:send" | "autofix_settings:read" | "autofix_settings:update" | "autofix_settings:manage_credentials";
         /**
          * @description Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
          * @enum {string}
@@ -5505,6 +5904,305 @@ export interface components {
                 contact?: components["schemas"]["Contact"];
             };
         };
+        /**
+         * @description Where a fix is. `sending`: stored, waiting for the person's GitHub confirmation or the worker; `sent`: the vendor took it (issue created, Cursor agent created); `working`: a sign the agent runs; `pr_open`: a pull request; `merged`; `deployed` (released, said by a person); `failed` and `cancelled` say why in `outcome_reason`.
+         * @enum {string}
+         */
+        FixState: "sending" | "sent" | "working" | "pr_open" | "merged" | "deployed" | "failed" | "cancelled";
+        /**
+         * @description The coding agent and how a fix reaches it. `claude_issue`: an issue created as the person, then an `@claude` comment for the repository's Claude Code workflow; `copilot_issue`: an issue created as the person and assigned to Copilot; `cursor_api`: a Cursor cloud agent created with the workspace's key.
+         * @enum {string}
+         */
+        FixConnector: "claude_issue" | "copilot_issue" | "cursor_api";
+        /**
+         * @description Why a fix failed (`vendor_auth` … `interrupted`) or was cancelled (`cancelled_by_person` … `connector_disabled`: an admin turned the agent off before the fix left Colliedesk, withdrawing the consent); docs/user/autofix.md says what each means and what to do.
+         * @enum {string}
+         */
+        FixOutcomeReason: "vendor_auth" | "vendor_repo_access" | "vendor_rejected" | "provider_unavailable" | "no_repo_access" | "copilot_unavailable" | "repo_public" | "pr_closed" | "agent_error" | "timed_out" | "interrupted" | "cancelled_by_person" | "authorization_abandoned" | "authorization_denied" | "repo_disconnected" | "conversation_deleted" | "issue_closed" | "connector_disabled";
+        /** @enum {string} */
+        FixGroup: "needs_person" | "running" | "done";
+        AutofixStatus: {
+            /** @description Connected repositories that are not paused. */
+            connected_repos: number;
+            needs_person: number;
+            running: number;
+        };
+        Fix: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /** @description The conversation's subject now (written by the customer). */
+            conversation_subject: string;
+            /** @description The customer's name now. */
+            contact_name: string | null;
+            attempt_no: number;
+            /**
+             * Format: uuid
+             * @description The failed or cancelled attempt this one retries.
+             */
+            previous_attempt_id: string | null;
+            /**
+             * Format: uuid
+             * @description Null once the repository was disconnected.
+             */
+            repo_id: string | null;
+            /** @description owner/name when it was sent. */
+            repo_full_name: string;
+            connector: components["schemas"]["FixConnector"];
+            state: components["schemas"]["FixState"];
+            outcome_reason: null | components["schemas"]["FixOutcomeReason"];
+            /** Format: date-time */
+            state_changed_at: string;
+            /** @description Send it back with a change to refuse one made on a fix that moved since. */
+            row_version: number;
+            /** @description Sent 30 minutes ago with no sign of the agent; the state is unchanged. */
+            stale: boolean;
+            group: components["schemas"]["FixGroup"];
+            /** @description The title that left Colliedesk (masked and reviewed by the sender). */
+            sent_title: string;
+            /** @description The messages it was built from. */
+            sent_message_ids: string[];
+            /** @description Internal notes went with it. */
+            sent_notes: boolean;
+            /** @enum {string} */
+            created_by_kind: "person" | "token";
+            /** Format: uuid */
+            created_by_agent_id: string | null;
+            /** @description Who sent it; for an agent token, the person who approved the request. */
+            created_by_name: string;
+            /** Format: uuid */
+            approved_request_id: string | null;
+            /** @description The GitHub account that created the issue. */
+            github_login: string | null;
+            /**
+             * @description Copilot only: assigned to Copilot through the API, or waiting for a person to assign it on GitHub (Assign to Copilot on GitHub); null for the other agents and before the issue exists.
+             * @enum {string|null}
+             */
+            copilot_assignment: "assigned" | "on_github" | null;
+            issue_number: number | null;
+            /** Format: uri */
+            issue_url: string | null;
+            /**
+             * Format: uri
+             * @description The vendor's page of the run (Cursor), or the issue.
+             */
+            vendor_url: string | null;
+            branch: string | null;
+            pr_number: number | null;
+            /** Format: uri */
+            pr_url: string | null;
+            /** @enum {string|null} */
+            pr_linked_by: "auto" | "person" | null;
+            merge_sha: string | null;
+            /** Format: date-time */
+            merged_at: string | null;
+            merged_by_login: string | null;
+            /** Format: date-time */
+            deployed_at: string | null;
+            deployed_by_name: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        FixDetail: components["schemas"]["Fix"] & {
+            /** @description Exactly what left Colliedesk; erased with the conversation. */
+            sent_body: string;
+            events: components["schemas"]["FixEvent"][];
+        };
+        FixEvent: {
+            id: number;
+            /** @description created, state_changed, signal_noted, cancel, link_pr, unlink_pr, mark_deployed, unmark_deployed, issue_created, issue_close_failed (a cancel whose issue GitHub did not close: close it there), dispatched (the Cursor agent was created), cursor_cancel_failed (a cancel Cursor did not stop: stop the run on Cursor, data.vendor_url), or a vendor signal (agent_comment …). */
+            kind: string;
+            from_state: null | components["schemas"]["FixState"];
+            to_state: null | components["schemas"]["FixState"];
+            /** @enum {string} */
+            actor_kind: "person" | "token" | "github" | "cursor" | "system";
+            /** @description The person, or the GitHub login that acted. */
+            actor_name: string | null;
+            /** @description What the event learned: reason, pr_url, issue_number, summary (a vendor line, cut)… */
+            data: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        FixChangeInput: {
+            /** @description The row_version read; a fix that moved since answers 409 fix_changed. */
+            row_version?: number;
+        };
+        FixPreviewInput: {
+            /** Format: uuid */
+            repo_id: string;
+            connector: components["schemas"]["FixConnector"];
+            /** @description Internal notes to include; only when the repository allows notes. */
+            note_ids?: string[];
+        };
+        FixPreview: {
+            title: string;
+            /** @description Markdown, masked. Each message the customer wrote sits between a line `<customer-message untrusted="true" from="<name>" at="<UTC time>">` and a line `</customer-message>` (attribute values HTML-escaped; the same tags inside the customer's text are escaped, so a block can never be closed early). A masked part reads `[email removed]`, `[phone removed]`, `[card removed]` or `[secret removed]`. Mentions and references are made inert with one U+200B (zero-width space) right after the `@` of an `@name`, the `#` of a `#123` and the `GH-` of a `GH-123`, so they read as written but GitHub neither pings nor links them (match them with `(?:@|#|GH-)\u200B`). Internal notes the sender picked sit between `<team-note from="<name>" at="<UTC time>">` and `</team-note>`. */
+            body: string;
+            message_ids: string[];
+            /** @description The internal notes the sender may include (never one an agent token wrote), and whether each is in the body. */
+            notes: {
+                /** Format: uuid */
+                message_id: string;
+                author_name: string | null;
+                /** Format: date-time */
+                created_at: string;
+                /** @description The note's start, masked the same way as the body (at most 300 characters), so the sender can pick it; only in this preview. */
+                excerpt: string;
+                included: boolean;
+            }[];
+            /** @description The repository lets notes go with a fix. */
+            notes_allowed?: boolean;
+            /** @description Files are never sent. */
+            attachments_left_out: number;
+            /** @description What masking took out of the title and body before you see them, by kind. */
+            removed: {
+                emails: number;
+                phones: number;
+                /** @description Numbers that look like payment cards. */
+                cards: number;
+                /** @description Strings that look like keys or tokens, and secrets in query strings. */
+                secrets: number;
+                /** @description @mentions made inert. */
+                mentions: number;
+                /** @description #123 and GH-123 references made inert. */
+                references: number;
+            };
+            destination: {
+                repo_full_name: string;
+                connector: components["schemas"]["FixConnector"];
+                /**
+                 * @description person: an issue created with your GitHub account after you confirm on GitHub; workspace_key: Cursor with the workspace key.
+                 * @enum {string}
+                 */
+                sends_as: "person" | "workspace_key";
+                /** @description How long the vendor keeps what is sent, in words. */
+                vendor_retention: string;
+            };
+        };
+        FixSendInput: {
+            /** Format: uuid */
+            repo_id: string;
+            connector: components["schemas"]["FixConnector"];
+            title: string;
+            /** @description Masked again on the server: what you send is what leaves, minus anything that looks like a secret; the masked body must also fit 65000 characters (400 otherwise). */
+            body: string;
+            message_ids?: string[];
+            note_ids?: string[];
+            /** @description A new random key per send; the same key sends once. */
+            client_key: string;
+        };
+        FixSent: {
+            fix: components["schemas"]["Fix"];
+            /**
+             * Format: uri
+             * @description For an issue connector: where your browser confirms on GitHub, valid 10 minutes. Null for Cursor.
+             */
+            authorize_url: string | null;
+        };
+        AutofixSettings: {
+            /** @description This server's GitHub App is set up. */
+            available: boolean;
+            /** @description The version of the data consent text an admin agrees to when turning a coding agent on. */
+            consent_version: string;
+            /** @description The GitHub App's slug, for its pages on GitHub. */
+            app_slug: string | null;
+            installations: components["schemas"]["GitHubInstallation"][];
+            repos: components["schemas"]["AutofixRepo"][];
+            connectors: components["schemas"]["AutofixConnector"][];
+        };
+        GitHubInstallation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            installation_id: number;
+            account_login: string;
+            /** @enum {string} */
+            account_type: "User" | "Organization";
+            /** @enum {string} */
+            repository_selection: "selected" | "all";
+            /**
+             * @description blocked_all_repositories: it reaches every repository of the account; narrow it to selected ones on GitHub and it unblocks by itself.
+             * @enum {string}
+             */
+            status: "active" | "blocked_all_repositories" | "suspended";
+            connected_by_name: string;
+            /** Format: date-time */
+            connected_at: string;
+            /**
+             * Format: uri
+             * @description The installation's page on GitHub (change its repositories there).
+             */
+            settings_url: string;
+        };
+        GitHubRepository: {
+            /** Format: int64 */
+            github_repo_id: number;
+            full_name: string;
+            /** @enum {string} */
+            visibility: "private" | "internal" | "public";
+            /** Format: uuid */
+            connected_repo_id: string | null;
+        };
+        AutofixRepo: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int64
+             * @description Null once the App was removed from it.
+             */
+            installation_id: number | null;
+            /** Format: int64 */
+            github_repo_id: number;
+            full_name: string;
+            /** @enum {string} */
+            visibility: "private" | "internal" | "public";
+            /** Format: date-time */
+            visibility_checked_at: string;
+            default_branch: string;
+            include_notes: boolean;
+            default_connector: null | components["schemas"]["FixConnector"];
+            /**
+             * @description A paused repository takes no new fix.
+             * @enum {string|null}
+             */
+            paused_reason: "became_public" | "removed_from_app" | "installation_suspended" | null;
+            /** Format: date-time */
+            paused_at: string | null;
+            connected_by_name: string;
+            /** Format: date-time */
+            connected_at: string;
+        };
+        AutofixConnector: {
+            kind: components["schemas"]["FixConnector"];
+            enabled: boolean;
+            /**
+             * @description Copilot only: assign_api assigns Copilot through the API; assign_on_github leaves the assignment to a person on GitHub (when the API refuses the App's permissions). Null for the other agents.
+             * @enum {string|null}
+             */
+            mode: "assign_api" | "assign_on_github" | null;
+            consent: null | {
+                version: string;
+                name: string;
+                /** Format: date-time */
+                at: string;
+            };
+            /** @description Cursor's key, never a character of it; null for the issue connectors and while none is set. */
+            credential: null | {
+                set_by_name: string | null;
+                /** Format: date-time */
+                set_at: string;
+            };
+            last_check: null | {
+                /** Format: date-time */
+                at: string;
+                /** @description ok, key_invalid, no_repo_access, installation_inactive, repo_not_private, provider_unavailable */
+                result: string;
+                message: string | null;
+            };
+        };
     };
     responses: {
         /** @description The Idempotency-Key already names another request with other input (`idempotency_key_reused`); nothing was created */
@@ -5621,6 +6319,24 @@ export interface components {
         };
         /** @description Message larger than 25 MiB or with more than 100 attachments; nothing was stored */
         PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Error code `autofix_unavailable` (this server's GitHub App is not set up: GET /api/v1/config names the missing settings) or `github_unavailable` / `cursor_unavailable` (the vendor did not answer; nothing changed, try again) */
+        AutofixUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A webhook body over 5 MB; nothing was stored */
+        WebhookTooLarge: {
             headers: {
                 [name: string]: unknown;
             };
@@ -12028,6 +12744,853 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getAutofixStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The counts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listFixes: {
+        parameters: {
+            query?: {
+                group?: components["schemas"]["FixGroup"];
+                /** @description Only fixes sent to this connected repository. */
+                repo_id?: string;
+                /** @description Only fixes sent to this coding agent. */
+                connector?: components["schemas"]["FixConnector"];
+                limit?: number;
+                /** @description The next_cursor of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fixes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Fix"][];
+                        /** @description Null on the last page. */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getFix: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    retryFix: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixSendInput"];
+            };
+        };
+        responses: {
+            /** @description The attempt this client_key already made */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixSent"];
+                };
+            };
+            /** @description The new attempt */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixSent"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelFix: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["FixChangeInput"];
+            };
+        };
+        responses: {
+            /** @description The fix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Fix"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    markFixDeployed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["FixChangeInput"];
+            };
+        };
+        responses: {
+            /** @description The fix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Fix"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unmarkFixDeployed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Fix"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    linkFixPullRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description https://github.com/<owner>/<repo>/pull/<number> */
+                    url: string;
+                    row_version?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The fix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Fix"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unlinkFixPullRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The fix */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Fix"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listConversationFixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fixes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Fix"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    sendFix: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixSendInput"];
+            };
+        };
+        responses: {
+            /** @description The fix this client_key already made */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixSent"];
+                };
+            };
+            /** @description The fix */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixSent"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    previewFix: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixPreviewInput"];
+            };
+        };
+        responses: {
+            /** @description The preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAutofixSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    connectGitHub: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where the browser goes */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        authorize_url: string;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["AutofixUnavailable"];
+        };
+    };
+    disconnectGitHub: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixSettings"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["AutofixUnavailable"];
+        };
+    };
+    listGitHubRepositories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Repositories */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["GitHubRepository"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["AutofixUnavailable"];
+        };
+    };
+    finishGitHubAuthorization: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                installation_id?: string;
+                setup_action?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Back to Colliedesk */
+            303: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    connectRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description The installation's id in Colliedesk.
+                     */
+                    installation_id: string;
+                    /** Format: int64 */
+                    github_repo_id: number;
+                    default_connector?: components["schemas"]["FixConnector"];
+                };
+            };
+        };
+        responses: {
+            /** @description The repository */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixRepo"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["AutofixUnavailable"];
+        };
+    };
+    disconnectRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    default_connector: null | components["schemas"]["FixConnector"];
+                };
+            };
+        };
+        responses: {
+            /** @description The repository */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixRepo"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    includeNotesInFixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The repository */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixRepo"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    excludeNotesFromFixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The repository */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixRepo"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    enableFixConnector: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["FixConnector"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The version of the consent text the admin read (AutofixSettings.consent_version). */
+                    consent_version: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The connector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixConnector"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Error code `consent_required`. consent_version is missing or empty, also in an approved agent request; nothing changed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    disableFixConnector: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["FixConnector"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixConnector"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    checkFixConnector: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["schemas"]["FixConnector"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixConnector"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Error code `rate_limited`. The workspace called Cursor from the settings 5 times this minute (Retry-After says when to try again). */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["AutofixUnavailable"];
+        };
+    };
+    setCursorKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    key: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The connector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixConnector"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description Error code `rate_limited`. The workspace called Cursor from the settings 5 times this minute (Retry-After says when to try again). */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["AutofixUnavailable"];
+        };
+    };
+    removeCursorKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connector */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutofixConnector"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    receiveGitHubWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Event understood */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["WebhookTooLarge"];
         };
     };
     getHelpCenterTheme: {

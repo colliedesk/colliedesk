@@ -47,6 +47,11 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getEmailChannel, a.verifyEmailDomain, a.rotateEmailSecret, a.connectGmail, a.disconnectGmail, a.submitWebForm,
 		a.connectMicrosoft, a.disconnectMicrosoft, a.finishMicrosoftConnect, a.finishMicrosoftAdminConsent,
 		a.connectMicrosoft, a.disconnectMicrosoft,
+		a.getAutofixStatus, a.listFixes, a.getFix, a.listConversationFixes,
+		a.getAutofixSettings, a.connectGitHub, a.disconnectGitHub, a.listGitHubRepositories, a.finishGitHubAuthorization,
+		a.connectRepo, a.updateRepo, a.disconnectRepo, a.includeNotesInFixes, a.excludeNotesFromFixes, a.receiveGitHubWebhook,
+		a.previewFix, a.sendFix, a.retryFix, a.cancelFix, a.markFixDeployed, a.unmarkFixDeployed, a.linkFixPullRequest, a.unlinkFixPullRequest,
+		a.enableFixConnector, a.disableFixConnector, a.checkFixConnector, a.setCursorKey, a.removeCursorKey,
 		a.sendTestMessage, a.sendTestMessage,
 	}
 	result := make([]routeSpec, len(routes))

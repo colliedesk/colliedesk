@@ -1,9 +1,6 @@
-import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { ports, scratchDir } from './checkout';
-import { goEnv } from './cli';
+import { ports } from './checkout';
+import { startStandIn } from './stand-in';
 
 // The local stand-in for Microsoft's sign-in, token endpoint, admin consent page and Graph
 // (server/cmd/microsoft-stand-in). An end-to-end build of collie reaches it through
@@ -22,22 +19,8 @@ export interface SentMessage { account: string; message_id: string; raw: string 
 
 // startMicrosoftStandIn builds and runs the stand-in, resolving once it answers.
 export async function startMicrosoftStandIn(): Promise<ChildProcess> {
-  const bin = join(scratchDir, 'bin', 'microsoft-stand-in');
-  mkdirSync(join(scratchDir, 'bin'), { recursive: true });
-  const built = spawnSync('go', ['build', '-o', bin, './cmd/microsoft-stand-in'], { cwd: '../server', encoding: 'utf8', env: { ...process.env, ...goEnv } });
-  if (built.status !== 0) throw new Error(`go build microsoft-stand-in failed: ${built.stderr}`);
-  const child = spawn(bin, ['-listen', `127.0.0.1:${ports.microsoftStandIn}`, '-client-id', microsoftStandIn.clientID, '-client-secret', microsoftStandIn.clientSecret],
-    { stdio: ['ignore', 'inherit', 'inherit'] });
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`microsoft-stand-in exited with ${child.exitCode}`);
-    try {
-      if ((await fetch(`${microsoftStandIn.url}/stand-in/messages`)).ok) return child;
-    } catch { /* not listening yet */ }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  child.kill('SIGTERM');
-  throw new Error('microsoft-stand-in did not start');
+  return await startStandIn('microsoft-stand-in', ['-listen', `127.0.0.1:${ports.microsoftStandIn}`, '-client-id', microsoftStandIn.clientID,
+    '-client-secret', microsoftStandIn.clientSecret], `${microsoftStandIn.url}/stand-in/messages`);
 }
 
 export async function sentThroughMicrosoft(): Promise<SentMessage[]> {

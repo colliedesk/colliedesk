@@ -305,6 +305,46 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  grant(auth.PermAIAssistCreate),
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": grant(auth.PermAIAssistCreate),
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    grant(auth.PermAIAssistCreate),
+	// Autofix: reading fixes and their timelines changes nothing (what was sent is the team's masked
+	// text, never a key).
+	"GET /api/v1/autofix/status":           grant(auth.PermAutofixRead),
+	"GET /api/v1/autofix/fixes":            grant(auth.PermAutofixRead),
+	"GET /api/v1/autofix/fixes/{id}":       grant(auth.PermAutofixRead),
+	"GET /api/v1/conversations/{id}/fixes": grant(auth.PermAutofixRead),
+	// Autofix settings: reading them shows no key. Changing them is admin; installing the App answers a
+	// one-time address, removing it uninstalls the App on the customer's GitHub, and letting notes go
+	// with fixes sends internal notes out, so a person approves those three.
+	"GET /api/v1/autofix/settings":                               grant(auth.PermAutofixSettingsRead),
+	"GET /api/v1/autofix/github/installations/{id}/repositories": grant(auth.PermAutofixSettingsRead),
+	"POST /api/v1/autofix/github/installations":                  alwaysAsk(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/github/installations/{id}":           alwaysAsk(auth.PermAutofixSettingsUpdate),
+	"POST /api/v1/autofix/repos":                                 grant(auth.PermAutofixSettingsUpdate),
+	"PATCH /api/v1/autofix/repos/{id}":                           grant(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/repos/{id}":                          grant(auth.PermAutofixSettingsUpdate),
+	"PUT /api/v1/autofix/repos/{id}/include-notes":               alwaysAsk(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/repos/{id}/include-notes":            grant(auth.PermAutofixSettingsUpdate),
+	// Autofix fixes: a preview changes nothing. Sending (and retrying) takes ticket data out to a coding
+	// agent as the person who approves, after their GitHub confirmation, so every token's call waits for
+	// a person, who gets the confirmation address. A person's changes to a fix stay in Colliedesk, except
+	// that a cancel closes the fix's issue.
+	"POST /api/v1/conversations/{id}/fixes/preview":  grant(auth.PermAutofixRead),
+	"POST /api/v1/conversations/{id}/fixes":          alwaysAsk(auth.PermAutofixSend),
+	"POST /api/v1/autofix/fixes/{id}/retry":          alwaysAsk(auth.PermAutofixSend),
+	"POST /api/v1/autofix/fixes/{id}/cancel":         grant(auth.PermAutofixUpdate),
+	"PUT /api/v1/autofix/fixes/{id}/deployed":        grant(auth.PermAutofixUpdate),
+	"DELETE /api/v1/autofix/fixes/{id}/deployed":     grant(auth.PermAutofixUpdate),
+	"PUT /api/v1/autofix/fixes/{id}/pull-request":    grant(auth.PermAutofixUpdate),
+	"DELETE /api/v1/autofix/fixes/{id}/pull-request": grant(auth.PermAutofixUpdate),
+	// Turning a coding agent on decides that ticket data leaves for that vendor, with the admin's
+	// consent on record, so every token's call waits for a person (like PUT /api/v1/ai/slots/{slot}).
+	// Turning it off and removing Cursor's key only stop new fixes: admin. A check reads what the
+	// settings show and tries the key, changing nothing but its result. Setting Cursor's key carries
+	// the key, a credential route.
+	"PUT /api/v1/autofix/connectors/{kind}":            alwaysAsk(auth.PermAutofixSettingsUpdate),
+	"DELETE /api/v1/autofix/connectors/{kind}":         grant(auth.PermAutofixSettingsUpdate),
+	"POST /api/v1/autofix/connectors/{kind}/check":     grant(auth.PermAutofixSettingsRead),
+	"PUT /api/v1/autofix/connectors/cursor_api/key":    grant(auth.PermAutofixSettingsManageCredentials),
+	"DELETE /api/v1/autofix/connectors/cursor_api/key": grant(auth.PermAutofixSettingsManageCredentials),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
@@ -318,12 +358,16 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/channels/email/inbound":           notForPeople,
 	"POST /api/v1/channels/email/inbound/recipient": notForPeople,
 	"POST " + polarWebhookPath:                      notForPeople,
-	"POST " + resendWebhookPath:                     notForPeople,
-	"GET " + foundingPath:                           notForPeople,
-	"GET " + helpCenterTLSAskPath:                   notForPeople,
-	"POST " + webFormSubmitPattern:                  notForPeople,
-	"POST " + webFormChannelPattern:                 notForPeople,
-	"GET " + exportLinkPath + "{token}":             notForPeople,
+	// GitHub's redirect after installing the App: it finishes only with the session cookie of the person
+	// who started. The App's webhook is signed with its secret.
+	"GET " + autofixCallbackPath:        notForPeople,
+	"POST " + githubWebhookPath:         notForPeople,
+	"POST " + resendWebhookPath:         notForPeople,
+	"GET " + foundingPath:               notForPeople,
+	"GET " + helpCenterTLSAskPath:       notForPeople,
+	"POST " + webFormSubmitPattern:      notForPeople,
+	"POST " + webFormChannelPattern:     notForPeople,
+	"GET " + exportLinkPath + "{token}": notForPeople,
 }
 
 // TokenAccessTable returns a copy of the classification, for the tests that hold it to Routes() and
@@ -370,12 +414,13 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 // below their tier is refused, never filed, because an agent request stores the call's body (and the
 // export carries it).
 var credentialRoutes = map[string]bool{
-	"POST /api/v1/imports":                  true,
-	"PUT /api/v1/imports/{id}/key":          true,
-	"POST /api/v1/ai/providers":             true,
-	"POST /api/v1/ai/models":                true,
-	"PUT /api/v1/ai/providers/{id}/key":     true,
-	"PUT /api/v1/channels/{id}/credentials": true,
+	"POST /api/v1/imports":                          true,
+	"PUT /api/v1/imports/{id}/key":                  true,
+	"POST /api/v1/ai/providers":                     true,
+	"POST /api/v1/ai/models":                        true,
+	"PUT /api/v1/ai/providers/{id}/key":             true,
+	"PUT /api/v1/channels/{id}/credentials":         true,
+	"PUT /api/v1/autofix/connectors/cursor_api/key": true,
 }
 
 // kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits

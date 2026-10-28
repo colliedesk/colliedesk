@@ -232,6 +232,11 @@ func (s idleSink) AIUsage(export.AIUsage) error                                 
 func (s idleSink) AIDraft(export.AIDraft) error                                    { return nil }
 func (s idleSink) AITriage(export.AITriage) error                                  { return nil }
 func (s idleSink) ResultsBaseline(export.ResultsBaseline) error                    { return nil }
+func (s idleSink) AutofixInstallation(export.AutofixInstallation) error            { return nil }
+func (s idleSink) AutofixRepo(export.AutofixRepo) error                            { return nil }
+func (s idleSink) AutofixConnector(export.AutofixConnector) error                  { return nil }
+func (s idleSink) Fix(export.Fix) error                                            { return nil }
+func (s idleSink) FixEvent(export.FixEvent) error                                  { return nil }
 func (s idleSink) BeginConversation(export.ConversationHead) error                 { return nil }
 func (s idleSink) Message(export.Message) error                                    { return nil }
 func (s idleSink) EndConversation([]domain.TimeEntry, []export.StatusChange) error { return nil }

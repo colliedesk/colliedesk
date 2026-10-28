@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"github.com/colliedesk/colliedesk/server/internal/autofix"
 	"maps"
 	"net/http"
 	"net/url"
@@ -25,6 +26,9 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 	t.Helper()
 	if item.path == webhookPath {
 		return signedWebhookRequest("msg_contract_"+method, []byte(item.raw))
+	}
+	if item.path == githubWebhookPath {
+		return signedGitHubRequest([]byte(item.raw))
 	}
 	if item.path == resendWebhookPath {
 		return signedResendRequest("msg_contract_"+method, []byte(item.raw))
@@ -187,6 +191,15 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"PATCH /api/v1/agents/{id}":                                  {"/api/v1/agents/" + f.agentID, map[string]any{"role": "agent"}, admin, 200, ""},
 		"GET /api/v1/tags":                                           {"/api/v1/tags", nil, admin, 200, ""},
 		"GET /api/v1/results":                                        {"/api/v1/results", nil, admin, 200, ""},
+		"GET /api/v1/autofix/status":                                 {"/api/v1/autofix/status", nil, admin, 200, ""},
+		"GET /api/v1/autofix/fixes":                                  {"/api/v1/autofix/fixes", nil, admin, 200, ""},
+		"GET /api/v1/autofix/fixes/{id}":                             {"/api/v1/autofix/fixes/" + f.fixID, nil, admin, 200, ""},
+		"GET /api/v1/conversations/{id}/fixes":                       {"/api/v1/conversations/" + f.conversationID + "/fixes", nil, admin, 200, ""},
+		"PUT /api/v1/autofix/connectors/{kind}":                      {"/api/v1/autofix/connectors/claude_issue", map[string]any{"consent_version": autofix.ConsentVersion}, admin, 200, ""},
+		"DELETE /api/v1/autofix/connectors/{kind}":                   {"/api/v1/autofix/connectors/claude_issue", nil, admin, 200, ""},
+		"POST /api/v1/autofix/connectors/{kind}/check":               {"/api/v1/autofix/connectors/claude_issue/check", nil, admin, 200, ""},
+		"PUT /api/v1/autofix/connectors/cursor_api/key":              {"/api/v1/autofix/connectors/cursor_api/key", map[string]any{"key": cursorCanaryKey}, admin, 200, ""},
+		"DELETE /api/v1/autofix/connectors/cursor_api/key":           {"/api/v1/autofix/connectors/cursor_api/key", nil, admin, 200, ""},
 		"GET /api/v1/results/share-link":                             {"/api/v1/results/share-link", nil, admin, 200, ""},
 		"POST /api/v1/results/share-link":                            {"/api/v1/results/share-link", nil, admin, 201, ""},
 		"DELETE /api/v1/results/share-link":                          {"/api/v1/results/share-link", nil, admin, 200, ""},
@@ -218,10 +231,34 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/channels/email/gmail":                          {path: "/api/v1/channels/email/gmail", token: admin, status: 200},
 		"DELETE /api/v1/channels/email/gmail":                        {path: "/api/v1/channels/email/gmail", token: admin, status: 404},
 		"GET /api/v1/channels/email/gmail/callback":                  {path: "/api/v1/channels/email/gmail/callback?state=unknown&code=x", status: 303},
-		"POST /api/v1/channels/email/microsoft":                      {path: "/api/v1/channels/email/microsoft", token: admin, status: 200},
-		"DELETE /api/v1/channels/email/microsoft":                    {path: "/api/v1/channels/email/microsoft", token: admin, status: 404},
-		"GET /api/v1/channels/email/microsoft/callback":              {path: "/api/v1/channels/email/microsoft/callback?state=unknown&code=x", status: 303},
-		"GET /api/v1/channels/email/microsoft/admin-consent":         {path: "/api/v1/channels/email/microsoft/admin-consent?admin_consent=True&tenant=x&state=y", status: 200},
+		"GET /api/v1/autofix/settings":                               {path: "/api/v1/autofix/settings", token: admin, status: 200},
+		"POST /api/v1/autofix/github/installations":                  {path: "/api/v1/autofix/github/installations", token: admin, status: 201},
+		"DELETE /api/v1/autofix/github/installations/{id}":           {path: "/api/v1/autofix/github/installations/" + f.github.removableInstallation, token: admin, status: 200},
+		"GET /api/v1/autofix/github/installations/{id}/repositories": {path: "/api/v1/autofix/github/installations/" + f.github.installation + "/repositories", token: admin, status: 200},
+		"GET /api/v1/autofix/github/callback":                        {path: "/api/v1/autofix/github/callback?state=unknown&code=x&installation_id=1&setup_action=install", status: 303},
+		"POST /api/v1/autofix/repos":                                 {path: "/api/v1/autofix/repos", body: map[string]any{"installation_id": f.github.installation, "github_repo_id": contractNewRepo, "default_connector": "copilot_issue"}, token: admin, status: 201},
+		"PATCH /api/v1/autofix/repos/{id}":                           {path: "/api/v1/autofix/repos/" + f.github.repo, body: map[string]any{"default_connector": "cursor_api"}, token: admin, status: 200},
+		"DELETE /api/v1/autofix/repos/{id}":                          {path: "/api/v1/autofix/repos/" + f.github.removableRepo, token: admin, status: 204},
+		"PUT /api/v1/autofix/repos/{id}/include-notes":               {path: "/api/v1/autofix/repos/" + f.github.repo + "/include-notes", token: admin, status: 200},
+		"DELETE /api/v1/autofix/repos/{id}/include-notes":            {path: "/api/v1/autofix/repos/" + f.github.repo + "/include-notes", token: admin, status: 200},
+		"POST /api/v1/conversations/{id}/fixes/preview": {path: "/api/v1/conversations/" + f.conversationID + "/fixes/preview",
+			body: map[string]any{"repo_id": f.github.repo, "connector": "claude_issue"}, token: admin, status: 200},
+		// The coding agent is off in the fixture: the send is refused before anything is stored.
+		"POST /api/v1/conversations/{id}/fixes": {path: "/api/v1/conversations/" + f.conversationID + "/fixes", body: map[string]any{"repo_id": f.github.repo,
+			"connector": "claude_issue", "title": "Checkout broken", "body": "It fails.", "client_key": "contract-send"}, token: admin, status: 409},
+		// The fixture's fix is merged: not ended (no retry), not in progress (no cancel), released and taken back.
+		"POST /api/v1/autofix/fixes/{id}/retry": {path: "/api/v1/autofix/fixes/" + f.fixID + "/retry", body: map[string]any{"repo_id": f.github.repo,
+			"connector": "claude_issue", "title": "Checkout broken", "body": "It fails.", "client_key": "contract-retry"}, token: admin, status: 409},
+		"POST /api/v1/autofix/fixes/{id}/cancel":             {path: "/api/v1/autofix/fixes/" + f.fixID + "/cancel", token: admin, status: 409},
+		"PUT /api/v1/autofix/fixes/{id}/deployed":            {path: "/api/v1/autofix/fixes/" + f.fixID + "/deployed", token: admin, status: 200},
+		"DELETE /api/v1/autofix/fixes/{id}/deployed":         {path: "/api/v1/autofix/fixes/" + f.fixID + "/deployed", token: admin, status: 200},
+		"PUT /api/v1/autofix/fixes/{id}/pull-request":        {path: "/api/v1/autofix/fixes/" + f.fixID + "/pull-request", body: map[string]any{"url": "https://github.com/acme/shop-web/pull/7"}, token: admin, status: 409},
+		"DELETE /api/v1/autofix/fixes/{id}/pull-request":     {path: "/api/v1/autofix/fixes/" + f.fixID + "/pull-request", token: admin, status: 409},
+		"POST /api/v1/webhooks/github":                       {path: githubWebhookPath, raw: `{"zen":"Design for failure.","installation":{"id":` + contractInstallationText + `}}`, status: 200},
+		"POST /api/v1/channels/email/microsoft":              {path: "/api/v1/channels/email/microsoft", token: admin, status: 200},
+		"DELETE /api/v1/channels/email/microsoft":            {path: "/api/v1/channels/email/microsoft", token: admin, status: 404},
+		"GET /api/v1/channels/email/microsoft/callback":      {path: "/api/v1/channels/email/microsoft/callback?state=unknown&code=x", status: 303},
+		"GET /api/v1/channels/email/microsoft/admin-consent": {path: "/api/v1/channels/email/microsoft/admin-consent?admin_consent=True&tenant=x&state=y", status: 200},
 		"POST /api/v1/channels/email/inbound": {path: inboundPath, status: 200, raw: mail([]string{
 			"From: Contract Customer <contract@customer.example>", "Subject: Contract mail", "Message-ID: <contract@customer.example>",
 		}, "Contract inbound.")},

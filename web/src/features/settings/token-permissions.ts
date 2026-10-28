@@ -38,6 +38,8 @@ export const tokenResources: ResourceInfo[] = [
   { resource: 'billing', label: 'Billing', permissions: [p('billing:read', 'admin'), p('billing:manage', 'admin', { asks: true })] },
   { resource: 'imports', label: 'Imports', permissions: [p('imports:read', 'admin'), p('imports:run', 'admin'), p('imports:manage_credentials', 'admin', { outside: true }), p('imports:undo', 'admin', { asks: true })] },
   { resource: 'ai_settings', label: 'AI settings', permissions: [p('ai_settings:read', 'read'), p('ai_settings:update', 'admin'), p('ai_settings:manage_credentials', 'admin', { outside: true })] },
+  { resource: 'autofix', label: 'Autofix', permissions: [p('autofix:read', 'read'), p('autofix:update', 'draft'), p('autofix:send', 'send', { outside: true, asks: true })] },
+  { resource: 'autofix_settings', label: 'Autofix settings', permissions: [p('autofix_settings:read', 'read'), p('autofix_settings:update', 'admin'), p('autofix_settings:manage_credentials', 'admin', { outside: true })] },
 ];
 
 export const actionLabels: Record<string, string> = {
@@ -45,6 +47,15 @@ export const actionLabels: Record<string, string> = {
   purge: 'Delete for good', share: 'Share links', cancel: 'Cancel', invite: 'Invite', revoke: 'Revoke', manage_roles: 'Change roles',
   create_tokens: 'Create tokens', manage_credentials: 'Keys and connections', export: 'Export', manage: 'Change plan', run: 'Run', undo: 'Undo',
 };
+
+// An action whose usual words would mislead for one resource: Autofix sends to a coding agent, not a customer.
+const actionOverrides: Partial<Record<TokenPermission, string>> = { 'autofix:send': 'Send to coding agents' };
+
+// The words of one permission's action, for example "Publish".
+export function actionLabel(name: string): string {
+  const action = name.split(':')[1];
+  return actionOverrides[name as TokenPermission] ?? actionLabels[action] ?? action;
+}
 
 export const allPermissions: PermissionInfo[] = tokenResources.flatMap((item) => item.permissions);
 
@@ -57,7 +68,7 @@ export function presetPermissions(scope: TokenPreset): TokenPermission[] {
 
 // The name people read for a permission, for example "Knowledge base articles: Publish".
 export function permissionLabel(name: string): string {
-  const [resource, action] = name.split(':');
+  const resource = name.split(':')[0];
   const label = tokenResources.find((item) => item.resource === resource)?.label ?? resource;
-  return `${label}: ${actionLabels[action] ?? action}`;
+  return `${label}: ${actionLabel(name)}`;
 }

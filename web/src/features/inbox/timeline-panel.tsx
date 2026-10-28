@@ -8,6 +8,7 @@ import { MessageItem } from './message-item';
 import { presenceViewPart } from './presence-part';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { TimeEntriesSection } from './time-entries-section';
+import { AutofixStrip } from '../autofix/autofix-slot';
 
 interface TimelinePanelProps {
   conversation?: Conversation;
@@ -38,6 +39,8 @@ interface TimelinePanelProps {
   onSetStatus?: (status: Conversation['status']) => Promise<unknown>;
   // Returns to the list; the button shows only where the thread replaces the list (a phone).
   onBack?: () => void;
+  // The server runs Autofix: narrow screens get the fix's one line under the header.
+  autofix?: boolean;
 }
 
 // One press resolves the conversation without the details pane (a drawer on narrower screens); a resolved or
@@ -60,7 +63,7 @@ function StatusButton({ status, onSetStatus }: { status: Conversation['status'];
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [], onSetStatus, onBack }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [], onSetStatus, onBack, autofix = false }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
@@ -84,6 +87,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
             {messages.showDetails}{suggestionWaiting && <span className="details-badge" aria-hidden="true" />}</button>}
         </div>}
       </header>
+      {autofix && conversation && onToggleDetails && <AutofixStrip conversationId={conversation.id} customerName={conversation.contact_name} timezone={timezone} onOpenDetails={onToggleDetails} />}
       <div className="timeline-scroll">
         <div className="timeline-stack">
           {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>

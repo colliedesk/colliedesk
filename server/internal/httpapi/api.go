@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -17,10 +19,12 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/github"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
@@ -57,6 +61,12 @@ type Config struct {
 	// Microsoft is the operator's app registration for connecting Microsoft 365; with a setting missing,
 	// Microsoft 365 cannot be connected and the settings name what is missing. It seals with Google.Keys.
 	Microsoft microsoft.Config
+	// GitHub is the operator's GitHub App that Autofix works through; with a setting missing, Autofix is
+	// off and GET /api/v1/config names what is missing.
+	GitHub github.Config
+	// Cursor is Cursor's API for Autofix, shared with the worker of the process so they keep one call
+	// budget. Nil uses Cursor itself; a Cursor without a Store gets the API's.
+	Cursor *autofixworker.Cursor
 	// ImportKeys holds the Freshdesk keys of in-app imports; the worker of the process shares it. Nil
 	// makes one from Google.Keys (tests).
 	ImportKeys *importjobs.Keys
@@ -149,6 +159,11 @@ type Route struct {
 }
 
 type API struct {
+	// githubSync is Autofix's GitHub App (nil while its settings are missing): the calls, the webhook and
+	// the reconcile pass.
+	githubSync *githubsync.Service
+	// dispatches counts the fixes being sent to GitHub by goroutines of this process.
+	dispatches sync.WaitGroup
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
@@ -183,6 +198,9 @@ type API struct {
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
 	providerChecks *webFormLimiter
+	// cursorCalls limits the calls of one workspace a person makes reach Cursor (check, set the key),
+	// so they cannot spend the call budget Cursor gives the key.
+	cursorCalls *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
 	// testMessages limits the test messages a workspace sends itself per hour.
@@ -201,6 +219,8 @@ type API struct {
 	imports *importjobs.Service
 	// ai reads and changes the workspace's AI providers and features.
 	ai *ai.Service
+	// cursor is config.Cursor, filled in.
+	cursor *autofixworker.Cursor
 	// mux serves every route; an approved agent request is replayed through it as the approver.
 	mux *http.ServeMux
 }
@@ -221,6 +241,10 @@ type Server struct {
 
 // AI is the service of the workspaces' AI settings and task queue, which the worker of the process shares.
 func (s *Server) AI() *ai.Service { return s.api.ai }
+
+// GitHubSync is Autofix's GitHub side (the reconcile pass, the repository check), nil while the server's
+// GitHub App is not set up.
+func (s *Server) GitHubSync() *githubsync.Service { return s.api.githubSync }
 
 // RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
 // does nothing when billing is off.
@@ -272,6 +296,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
+		cursorCalls:     newWindowLimiter(cursorCallsPerMinute, webFormMaxKeys, time.Minute),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
 		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
@@ -288,6 +313,16 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	api.imports = importjobs.NewService(db, importKeys)
 	api.imports.SetClock(clock)
+	api.cursor = config.Cursor
+	if api.cursor == nil {
+		api.cursor = &autofixworker.Cursor{}
+	}
+	if api.cursor.Store == nil {
+		api.cursor.Store = api.store
+	}
+	if api.cursor.Now == nil {
+		api.cursor.Now = clock
+	}
 	aiConfig := config.AI
 	if !aiConfig.Keys.Configured() {
 		aiConfig.Keys = config.Google.Keys
@@ -312,6 +347,14 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	if config.Billing.Enabled() {
 		api.polar = polar.NewClient(config.Billing)
+	}
+	if config.GitHub.Enabled() {
+		// serve checks the key first (github.Config.Check); a key that does not parse leaves Autofix off.
+		if app, err := github.NewApp(config.GitHub); err == nil {
+			api.githubSync = githubsync.New(api.store, app)
+		} else {
+			slog.Error("autofix: the GitHub App settings do not work", "error", err)
+		}
 	}
 	api.helpCenter = api.newHelpCenter()
 	api.liveChecks = helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock)
@@ -535,6 +578,38 @@ func Routes() []Route {
 		{http.MethodGet, microsoftAdminConsentPath, auth.PermissionPublic},
 		{http.MethodPost, channelMicrosoftPath, auth.PermissionAccessWrite},
 		{http.MethodDelete, channelMicrosoftPath, auth.PermissionAccessWrite},
+		// Autofix: what was sent to coding agents and where each fix is.
+		{http.MethodGet, "/api/v1/autofix/status", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/autofix/fixes", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/autofix/fixes/{id}", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/conversations/{id}/fixes", auth.PermissionConversationsRead},
+		// Autofix settings: the GitHub App's installations and the connected repositories.
+		{http.MethodGet, "/api/v1/autofix/settings", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/autofix/github/installations", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/github/installations/{id}", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/autofix/github/installations/{id}/repositories", auth.PermissionAccessRead},
+		{http.MethodGet, autofixCallbackPath, auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/autofix/repos", auth.PermissionAccessWrite},
+		{http.MethodPatch, "/api/v1/autofix/repos/{id}", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/repos/{id}", auth.PermissionAccessWrite},
+		{http.MethodPut, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/repos/{id}/include-notes", auth.PermissionAccessWrite},
+		{http.MethodPost, githubWebhookPath, auth.PermissionPublic},
+		// Autofix: sending a conversation to a coding agent and a person's changes to its fix.
+		{http.MethodPost, "/api/v1/conversations/{id}/fixes/preview", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/conversations/{id}/fixes", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/autofix/fixes/{id}/retry", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/autofix/fixes/{id}/cancel", auth.PermissionConversationsWrite},
+		{http.MethodPut, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionConversationsWrite},
+		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/deployed", auth.PermissionConversationsWrite},
+		{http.MethodPut, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionConversationsWrite},
+		{http.MethodDelete, "/api/v1/autofix/fixes/{id}/pull-request", auth.PermissionConversationsWrite},
+		// Autofix's coding agents: turned on with the admin's data consent, checked, and Cursor's key.
+		{http.MethodPut, "/api/v1/autofix/connectors/{kind}", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/connectors/{kind}", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/autofix/connectors/{kind}/check", auth.PermissionAccessRead},
+		{http.MethodPut, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionAccessWrite},
 		// A test message from the signed-in agent, on the default email channel or one of several.
 		{http.MethodPost, "/api/v1/channels/email/test-message", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/channels/{id}/email/test-message", auth.PermissionConversationsWrite},

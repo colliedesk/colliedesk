@@ -5041,6 +5041,612 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/autofix/status:
+    get:
+      operationId: getAutofixStatus
+      x-permission: conversations:read
+      description: >
+        What the navigation rail needs: how many repositories are connected (the Fixes link shows only
+        when one is), and how many fixes wait for a person or are running (the groups of
+        `GET /api/v1/autofix/fixes`).
+      responses:
+        '200':
+          description: The counts
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixStatus'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/autofix/fixes:
+    get:
+      operationId: listFixes
+      x-permission: conversations:read
+      description: >
+        The workspace's fixes, newest first, in pages, optionally one group of the Fixes screen:
+        `needs_person` (the conversation's latest fix failed, was merged and waits for its release, or was
+        sent and stayed silent for 30 minutes), `running` (in progress) or `done` (released, cancelled, or
+        followed by a newer attempt), and optionally one repository and one coding agent. Without what was
+        sent and the timeline: read one fix for those.
+      parameters:
+        - {name: group, in: query, schema: {$ref: '#/components/schemas/FixGroup'}}
+        - {name: repo_id, in: query, description: Only fixes sent to this connected repository., schema: {type: string, format: uuid}}
+        - {name: connector, in: query, description: Only fixes sent to this coding agent., schema: {$ref: '#/components/schemas/FixConnector'}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
+      responses:
+        '200':
+          description: Fixes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Fix'}}
+                  next_cursor: {type: [string, 'null'], description: Null on the last page.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/autofix/fixes/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getFix
+      x-permission: conversations:read
+      description: One fix, with exactly what left Colliedesk (`sent_title`, `sent_body`) and its timeline.
+      responses:
+        '200':
+          description: The fix
+          content: {application/json: {schema: {$ref: '#/components/schemas/FixDetail'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/autofix/fixes/{id}/retry:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: retryFix
+      x-permission: conversations:write
+      description: >
+        Sends a failed or cancelled fix again as a new attempt (`previous_attempt_id` names this one), with
+        the content the person reviewed (the preview, filled in from the attempt before). The same as
+        `POST /api/v1/conversations/{id}/fixes` otherwise; 409 `fix_not_ended` while this fix is in
+        progress. Every agent token's call becomes an agent request; the person who approves it sends.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FixSendInput'}}}
+      responses:
+        '200':
+          description: The attempt this client_key already made
+          content: {application/json: {schema: {$ref: '#/components/schemas/FixSent'}}}
+        '201':
+          description: The new attempt
+          content: {application/json: {schema: {$ref: '#/components/schemas/FixSent'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/autofix/fixes/{id}/cancel:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: cancelFix
+      x-permission: conversations:write
+      description: >
+        Cancels a fix in progress (`cancelled`, reason `cancelled_by_person`). Cursor's run is cancelled.
+        An issue is closed with a comment, but an agent already running may finish on GitHub: stop it there
+        (`issue_url`). A pull request already open is not closed (the App cannot write pull requests).
+        409 `state_conflict` once the fix ended; with `row_version`, 409 `fix_changed` when it moved since.
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/FixChangeInput'}}}
+      responses:
+        '200':
+          description: The fix
+          content: {application/json: {schema: {$ref: '#/components/schemas/Fix'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/autofix/fixes/{id}/deployed:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: markFixDeployed
+      x-permission: conversations:write
+      description: Says a merged fix is released (`deployed`); one released already is answered as it is. 409 `state_conflict` otherwise.
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/FixChangeInput'}}}
+      responses:
+        '200':
+          description: The fix
+          content: {application/json: {schema: {$ref: '#/components/schemas/Fix'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: unmarkFixDeployed
+      x-permission: conversations:write
+      description: Takes the release back (`merged` again), for a release that was rolled back or marked by mistake; a merged fix is answered as it is. 409 `state_conflict` otherwise.
+      responses:
+        '200':
+          description: The fix
+          content: {application/json: {schema: {$ref: '#/components/schemas/Fix'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/autofix/fixes/{id}/pull-request:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: linkFixPullRequest
+      x-permission: conversations:write
+      description: >
+        Links a pull request by hand when Colliedesk did not find it (`pr_open`, `pr_linked_by` person),
+        from `sent`, `working` or `failed` with reason `pr_closed`. The address must be a pull request of
+        the fix's repository (400 `pull_request_not_in_repo`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties:
+                url: {type: string, maxLength: 500, description: 'https://github.com/<owner>/<repo>/pull/<number>'}
+                row_version: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: The fix
+          content: {application/json: {schema: {$ref: '#/components/schemas/Fix'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: unlinkFixPullRequest
+      x-permission: conversations:write
+      description: Unlinks a pull request a person linked (back to the stop it was at when the pull request was linked, `working` or `sent`); one Colliedesk found itself stays.
+      responses:
+        '200':
+          description: The fix
+          content: {application/json: {schema: {$ref: '#/components/schemas/Fix'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/{id}/fixes:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listConversationFixes
+      x-permission: conversations:read
+      description: Every fix of the conversation, the latest attempt first.
+      responses:
+        '200':
+          description: Fixes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Fix'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: sendFix
+      x-permission: conversations:write
+      description: >
+        Sends the conversation to a coding agent: stores the fix in `sending` with exactly the title and
+        body given (build them with the preview), then, for an issue connector, answers `authorize_url`:
+        the person's browser goes to GitHub to confirm, and the issue is created as that person on the way
+        back. Cursor is sent by the server with the workspace's key (`authorize_url` null). The same
+        `client_key` answers 200 with the fix it made. 409 `fix_in_progress` while the conversation has
+        one, `connector_off`, `repo_paused`, `notes_not_allowed` (note_ids on a repository that keeps notes in),
+        `cursor_key_missing` (Cursor without its key). Every agent token's call becomes an agent request; the person
+        who approves it gets `authorize_url` (never the token) and sends as themselves.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FixSendInput'}}}
+      responses:
+        '200':
+          description: The fix this client_key already made
+          content: {application/json: {schema: {$ref: '#/components/schemas/FixSent'}}}
+        '201':
+          description: The fix
+          content: {application/json: {schema: {$ref: '#/components/schemas/FixSent'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/{id}/fixes/preview:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: previewFix
+      x-permission: conversations:read
+      description: >
+        Builds what a fix would send, without sending: a title and a body masked on the server (email
+        addresses, phone and card numbers, strings that look like keys or tokens, secrets in query strings;
+        `@mentions` and `#123` references made inert), the customer's words wrapped as untrusted data, the
+        internal notes that may go (off by default, never one an agent token wrote) and how many files stay
+        behind. The person edits it and sends it with `POST …/fixes`. 409 `repo_paused`, `notes_not_allowed`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FixPreviewInput'}}}
+      responses:
+        '200':
+          description: The preview
+          content: {application/json: {schema: {$ref: '#/components/schemas/FixPreview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/autofix/settings:
+    get:
+      operationId: getAutofixSettings
+      x-permission: access:read
+      description: >
+        The GitHub installations, connected repositories and coding agents of the workspace. Never a key:
+        Cursor's shows only who set it and when.
+      responses:
+        '200':
+          description: The settings
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixSettings'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/autofix/github/installations:
+    post:
+      operationId: connectGitHub
+      x-permission: access:write
+      description: >
+        Starts installing the Colliedesk GitHub App: answers the address the admin's browser opens (choose
+        "Only select repositories"). GitHub sends the browser back to `/api/v1/autofix/github/callback`,
+        which checks with the admin's own authorization that the installation is theirs before it joins
+        the workspace. An installation that reaches every repository is stored but blocked until narrowed.
+        503 `autofix_unavailable` while the server's GitHub App is not set up. Every agent token's call
+        becomes an agent request; the person who approves it gets the address.
+      responses:
+        '201':
+          description: Where the browser goes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorize_url]
+                properties:
+                  authorize_url: {type: string, format: uri}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/AutofixUnavailable'}
+  /api/v1/autofix/github/installations/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    delete:
+      operationId: disconnectGitHub
+      x-permission: access:write
+      description: >
+        Uninstalls the App from that account on GitHub and removes the installation. Its repositories stay,
+        paused (`removed_from_app`), so their fixes still show where they went; fixes in progress on them are
+        cancelled (`repo_disconnected`). Connect again to resume. 503 `github_unavailable` when GitHub did
+        not uninstall it: nothing changed. It uninstalls the App on the customer's GitHub, so every agent
+        token's call becomes an agent request.
+      responses:
+        '200':
+          description: The settings
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixSettings'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/AutofixUnavailable'}
+  /api/v1/autofix/github/installations/{id}/repositories:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listGitHubRepositories
+      x-permission: access:read
+      description: >
+        The repositories the installation can reach, read from GitHub now, each with its visibility and the
+        connected repository if there is one. Only private ones can be connected.
+      responses:
+        '200':
+          description: Repositories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/GitHubRepository'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/AutofixUnavailable'}
+  /api/v1/autofix/github/callback:
+    get:
+      operationId: finishGitHubAuthorization
+      security: []
+      x-permission: public
+      summary: GitHub's redirect after installing the App or authorizing a fix
+      description: >-
+        Opened by the browser GitHub redirects, never by an API client. It needs the session cookie of the
+        person who started (installing the App, or sending a fix) and the unused `state` of that start,
+        looked up in that person's workspace only. Installing: the `installation_id` must be among the
+        person's own installations, checked with their authorization, and they must administer every
+        repository the installation reaches (an organization owner does; a member does not), else
+        `installation_not_yours`. Sending a fix: the issue is created as
+        the person in the background and the authorization is revoked. Every outcome is a 303: to
+        `/settings/autofix?github=connected`, `?github=requested` (an organization member asked its owners
+        to install the App; connect again once they did) or `?github_error=<reason>` (also `forbidden`:
+        only an admin connects GitHub), or to the conversation with
+        `?fix=<id>` or `?fix_error=<reason>` (also `forbidden`: the person may no longer send a fix, by
+        their role or a locked workspace; `expired` there also when the fix no longer waits for GitHub).
+        The reasons: `signed_out`, `expired`, `wrong_person`, `denied`,
+        `installation_not_yours`, `installation_in_use`, `github_unavailable`. GitHub's own error text is
+        never echoed.
+      parameters:
+        - {name: code, in: query, required: false, schema: {type: string}}
+        - {name: state, in: query, required: false, schema: {type: string}}
+        - {name: installation_id, in: query, required: false, schema: {type: string}}
+        - {name: setup_action, in: query, required: false, schema: {type: string}}
+        - {name: error, in: query, required: false, schema: {type: string}}
+      responses:
+        '303':
+          description: Back to Colliedesk
+          headers:
+            Location: {schema: {type: string}}
+  /api/v1/autofix/repos:
+    post:
+      operationId: connectRepo
+      x-permission: access:write
+      description: >
+        Connects a repository of an active installation for fixes, after reading its visibility from GitHub
+        now: 409 `repo_not_private` for a public or internal one, `installation_blocked` while the
+        installation reaches every repository.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [installation_id, github_repo_id]
+              properties:
+                installation_id: {type: string, format: uuid, description: The installation's id in Colliedesk.}
+                github_repo_id: {type: integer, format: int64, minimum: 1}
+                default_connector: {$ref: '#/components/schemas/FixConnector'}
+      responses:
+        '201':
+          description: The repository
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixRepo'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/AutofixUnavailable'}
+  /api/v1/autofix/repos/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateRepo
+      x-permission: access:write
+      description: Changes the coding agent a new fix on this repository suggests (null for none).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [default_connector]
+              properties:
+                default_connector:
+                  oneOf:
+                    - {type: 'null'}
+                    - {$ref: '#/components/schemas/FixConnector'}
+      responses:
+        '200':
+          description: The repository
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixRepo'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: disconnectRepo
+      x-permission: access:write
+      description: >
+        Disconnects the repository: fixes in progress on it are cancelled (`repo_disconnected`); its fixes
+        stay with the repository's name. Connect it again to send new ones.
+      responses:
+        '204': {description: Disconnected}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/autofix/repos/{id}/include-notes:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: includeNotesInFixes
+      x-permission: access:write
+      description: >
+        Lets a fix on this repository carry internal notes the sender picks (never one an agent token
+        wrote). Notes then leave the workspace for the coding agent, so every agent token's call becomes an
+        agent request.
+      responses:
+        '200':
+          description: The repository
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixRepo'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: excludeNotesFromFixes
+      x-permission: access:write
+      description: Stops internal notes from going with fixes on this repository (the default).
+      responses:
+        '200':
+          description: The repository
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixRepo'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/autofix/connectors/{kind}:
+    parameters:
+      - {name: kind, in: path, required: true, schema: {$ref: '#/components/schemas/FixConnector'}}
+    put:
+      operationId: enableFixConnector
+      x-permission: access:write
+      description: >
+        Turns a coding agent on and records the admin's consent to the data it receives (which version of
+        the text, who, when). Every agent token's call becomes an agent request. Cursor also needs its key.
+        409 `consent_outdated` when consent_version is not the current text, 422 `consent_required` when it
+        is missing. An approved request records the consent in the approver's name: the approver agrees
+        to the text the request names.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [consent_version]
+              properties:
+                consent_version: {type: string, minLength: 1, maxLength: 40, description: The version of the consent text the admin read (AutofixSettings.consent_version).}
+      responses:
+        '200':
+          description: The connector
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixConnector'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: Error code `consent_required`. consent_version is missing or empty, also in an approved agent request; nothing changed.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    delete:
+      operationId: disableFixConnector
+      x-permission: access:write
+      description: >
+        Turns a coding agent off: fixes not sent yet (`sending`) are cancelled `connector_disabled`, fixes
+        already sent go on. The consent on record and Cursor's key stay until removed.
+      responses:
+        '200':
+          description: The connector
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixConnector'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/autofix/connectors/{kind}/check:
+    parameters:
+      - {name: kind, in: path, required: true, schema: {$ref: '#/components/schemas/FixConnector'}}
+    post:
+      operationId: checkFixConnector
+      x-permission: access:read
+      description: >
+        Checks what Colliedesk can check: the installation is active, the repositories are private and the
+        App has its permissions; for Cursor also that the key works and reaches the repositories. The setup
+        on the vendor's side (the Claude workflow and its secret, Copilot turned on for the repository) is a
+        checklist the admin ticks. The result is kept in `last_check`. 409 `cursor_key_missing` for Cursor
+        without a key. Cursor lists repositories once a minute, so a check within a minute of the last one
+        only tries the key.
+      responses:
+        '200':
+          description: The connector
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixConnector'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: Error code `rate_limited`. The workspace called Cursor from the settings 5 times this minute (Retry-After says when to try again).
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '503': {$ref: '#/components/responses/AutofixUnavailable'}
+  /api/v1/autofix/connectors/cursor_api/key:
+    put:
+      operationId: setCursorKey
+      x-permission: access:write
+      description: >
+        Stores the workspace's Cursor API key, sealed; it is never shown again, not one character. A service
+        account key is advised (a user key acts with all of its owner's rights). A token without
+        `autofix_settings:manage_credentials` is refused (403 `credentials_need_admin_token`), never filed
+        as an agent request, because a request keeps its body. Cursor tries the key first (`GET /v1/me`):
+        400 `cursor_key_invalid` when it refuses it and 503 `cursor_unavailable` when it does not answer,
+        with nothing changed; 409 `secret_keys_missing` on a server without MAILBOX_TOKEN_KEYS.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [key]
+              properties:
+                key: {type: string, minLength: 8, maxLength: 500, writeOnly: true}
+      responses:
+        '200':
+          description: The connector
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixConnector'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: Error code `rate_limited`. The workspace called Cursor from the settings 5 times this minute (Retry-After says when to try again).
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '503': {$ref: '#/components/responses/AutofixUnavailable'}
+    delete:
+      operationId: removeCursorKey
+      x-permission: access:write
+      description: Removes the Cursor key; Cursor cannot take new fixes until a key is set again.
+      responses:
+        '200':
+          description: The connector
+          content: {application/json: {schema: {$ref: '#/components/schemas/AutofixConnector'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/webhooks/github:
+    post:
+      operationId: receiveGitHubWebhook
+      security: [{githubWebhook: []}]
+      x-permission: public
+      description: >
+        Receives the Colliedesk GitHub App's events (installation, installation_repositories, repository,
+        issues, issue_comment, pull_request). Authenticated by `X-Hub-Signature-256` (HMAC-SHA256 of the raw
+        body with the App's webhook secret), not by a session; a missing or wrong signature is 401 and
+        nothing is stored. A delivery (`X-GitHub-Delivery`) already applied answers `duplicate`. An event acts
+        only in the workspace that owns the installation, and only on a repository connected there. Bodies
+        over 5 MB are refused (413).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: Event understood
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebhookResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '413': {$ref: '#/components/responses/WebhookTooLarge'}
   /api/v1/help-center/theme:
     get:
       operationId: getHelpCenterTheme
@@ -5246,6 +5852,7 @@ components:
     inboundSecret: {type: apiKey, in: header, name: X-Colliedesk-Inbound-Secret}
     polarWebhook: {type: apiKey, in: header, name: webhook-signature}
     resendWebhook: {type: apiKey, in: header, name: svix-signature}
+    githubWebhook: {type: apiKey, in: header, name: X-Hub-Signature-256}
   parameters:
     ID:
       name: id
@@ -5336,6 +5943,15 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     PayloadTooLarge:
       description: Message larger than 25 MiB or with more than 100 attachments; nothing was stored
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    AutofixUnavailable:
+      description: >-
+        Error code `autofix_unavailable` (this server's GitHub App is not set up: GET /api/v1/config names
+        the missing settings) or `github_unavailable` / `cursor_unavailable` (the vendor did not answer;
+        nothing changed, try again)
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    WebhookTooLarge:
+      description: A webhook body over 5 MB; nothing was stored
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     WebFormSettings:
       description: Web form channel state
@@ -5667,8 +6283,14 @@ components:
         expires_at: {type: string, format: date-time}
     PublicConfig:
       type: object
-      required: [cloud_sign_in, billing, signup, limits, product_analytics, ai]
+      required: [cloud_sign_in, billing, signup, limits, product_analytics, ai, autofix]
       properties:
+        autofix:
+          type: object
+          required: [available, missing_settings]
+          properties:
+            available: {type: boolean, description: 'The operator set up the server''s GitHub App (GITHUB_APP_*), so Autofix can be used; the web app hides it otherwise.'}
+            missing_settings: {type: array, items: {type: string}, description: The settings the operator still needs; empty when available.}
         ai:
           type: object
           required: [server_provider]
@@ -6556,6 +7178,12 @@ components:
         - ai_settings:read
         - ai_settings:update
         - ai_settings:manage_credentials
+        - autofix:read
+        - autofix:update
+        - autofix:send
+        - autofix_settings:read
+        - autofix_settings:update
+        - autofix_settings:manage_credentials
     TokenScope:
       type: string
       enum: [read, draft, send, admin, custom]
@@ -8305,3 +8933,273 @@ components:
             contact:
               description: 'Only on contact_exists: the contact to use instead of adding one.'
               allOf: [{$ref: '#/components/schemas/Contact'}]
+    FixState:
+      type: string
+      enum: [sending, sent, working, pr_open, merged, deployed, failed, cancelled]
+      description: >
+        Where a fix is. `sending`: stored, waiting for the person's GitHub confirmation or the worker;
+        `sent`: the vendor took it (issue created, Cursor agent created); `working`: a sign the agent runs;
+        `pr_open`: a pull request; `merged`; `deployed` (released, said by a person); `failed` and
+        `cancelled` say why in `outcome_reason`.
+    FixConnector:
+      type: string
+      enum: [claude_issue, copilot_issue, cursor_api]
+      description: >
+        The coding agent and how a fix reaches it. `claude_issue`: an issue created as the person, then an
+        `@claude` comment for the repository's Claude Code workflow; `copilot_issue`: an issue created as
+        the person and assigned to Copilot; `cursor_api`: a Cursor cloud agent created with the
+        workspace's key.
+    FixOutcomeReason:
+      type: string
+      enum: [vendor_auth, vendor_repo_access, vendor_rejected, provider_unavailable, no_repo_access, copilot_unavailable, repo_public, pr_closed, agent_error, timed_out, interrupted, cancelled_by_person, authorization_abandoned, authorization_denied, repo_disconnected, conversation_deleted, issue_closed, connector_disabled]
+      description: >
+        Why a fix failed (`vendor_auth` … `interrupted`) or was cancelled (`cancelled_by_person` …
+        `connector_disabled`: an admin turned the agent off before the fix left Colliedesk, withdrawing the
+        consent); docs/user/autofix.md says what each means and what to do.
+    FixGroup:
+      type: string
+      enum: [needs_person, running, done]
+    AutofixStatus:
+      type: object
+      required: [connected_repos, needs_person, running]
+      properties:
+        connected_repos: {type: integer, minimum: 0, description: Connected repositories that are not paused.}
+        needs_person: {type: integer, minimum: 0}
+        running: {type: integer, minimum: 0}
+    Fix:
+      type: object
+      required: [id, conversation_id, conversation_subject, contact_name, attempt_no, previous_attempt_id, repo_id, repo_full_name, connector, state, outcome_reason, state_changed_at, row_version, stale, group, sent_title, sent_message_ids, sent_notes, created_by_kind, created_by_agent_id, created_by_name, approved_request_id, github_login, copilot_assignment, issue_number, issue_url, vendor_url, branch, pr_number, pr_url, pr_linked_by, merge_sha, merged_at, merged_by_login, deployed_at, deployed_by_name, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        conversation_subject: {type: string, description: 'The conversation''s subject now (written by the customer).'}
+        contact_name: {type: [string, 'null'], description: 'The customer''s name now.'}
+        attempt_no: {type: integer, minimum: 1}
+        previous_attempt_id: {type: [string, 'null'], format: uuid, description: The failed or cancelled attempt this one retries.}
+        repo_id: {type: [string, 'null'], format: uuid, description: Null once the repository was disconnected.}
+        repo_full_name: {type: string, description: owner/name when it was sent.}
+        connector: {$ref: '#/components/schemas/FixConnector'}
+        state: {$ref: '#/components/schemas/FixState'}
+        outcome_reason:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/FixOutcomeReason'}
+        state_changed_at: {type: string, format: date-time}
+        row_version: {type: integer, minimum: 1, description: Send it back with a change to refuse one made on a fix that moved since.}
+        stale: {type: boolean, description: Sent 30 minutes ago with no sign of the agent; the state is unchanged.}
+        group: {$ref: '#/components/schemas/FixGroup'}
+        sent_title: {type: string, description: The title that left Colliedesk (masked and reviewed by the sender).}
+        sent_message_ids: {type: array, items: {type: string, format: uuid}, description: The messages it was built from.}
+        sent_notes: {type: boolean, description: Internal notes went with it.}
+        created_by_kind: {type: string, enum: [person, token]}
+        created_by_agent_id: {type: [string, 'null'], format: uuid}
+        created_by_name: {type: string, description: 'Who sent it; for an agent token, the person who approved the request.'}
+        approved_request_id: {type: [string, 'null'], format: uuid}
+        github_login: {type: [string, 'null'], description: The GitHub account that created the issue.}
+        copilot_assignment: {type: [string, 'null'], enum: [assigned, on_github, null], description: 'Copilot only: assigned to Copilot through the API, or waiting for a person to assign it on GitHub (Assign to Copilot on GitHub); null for the other agents and before the issue exists.'}
+        issue_number: {type: [integer, 'null']}
+        issue_url: {type: [string, 'null'], format: uri}
+        vendor_url: {type: [string, 'null'], format: uri, description: 'The vendor''s page of the run (Cursor), or the issue.'}
+        branch: {type: [string, 'null']}
+        pr_number: {type: [integer, 'null']}
+        pr_url: {type: [string, 'null'], format: uri}
+        pr_linked_by: {type: [string, 'null'], enum: [auto, person, null]}
+        merge_sha: {type: [string, 'null']}
+        merged_at: {type: [string, 'null'], format: date-time}
+        merged_by_login: {type: [string, 'null']}
+        deployed_at: {type: [string, 'null'], format: date-time}
+        deployed_by_name: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+    FixDetail:
+      allOf:
+        - {$ref: '#/components/schemas/Fix'}
+        - type: object
+          required: [sent_body, events]
+          properties:
+            sent_body: {type: string, description: Exactly what left Colliedesk; erased with the conversation.}
+            events: {type: array, items: {$ref: '#/components/schemas/FixEvent'}}
+    FixEvent:
+      type: object
+      required: [id, kind, from_state, to_state, actor_kind, actor_name, data, created_at]
+      properties:
+        id: {type: integer}
+        kind: {type: string, description: 'created, state_changed, signal_noted, cancel, link_pr, unlink_pr, mark_deployed, unmark_deployed, issue_created, issue_close_failed (a cancel whose issue GitHub did not close: close it there), dispatched (the Cursor agent was created), cursor_cancel_failed (a cancel Cursor did not stop: stop the run on Cursor, data.vendor_url), or a vendor signal (agent_comment …).'}
+        from_state:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/FixState'}
+        to_state:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/FixState'}
+        actor_kind: {type: string, enum: [person, token, github, cursor, system]}
+        actor_name: {type: [string, 'null'], description: 'The person, or the GitHub login that acted.'}
+        data: {type: object, additionalProperties: true, description: 'What the event learned: reason, pr_url, issue_number, summary (a vendor line, cut)…'}
+        created_at: {type: string, format: date-time}
+    FixChangeInput:
+      type: object
+      additionalProperties: false
+      properties:
+        row_version: {type: integer, minimum: 1, description: The row_version read; a fix that moved since answers 409 fix_changed.}
+    FixPreviewInput:
+      type: object
+      additionalProperties: false
+      required: [repo_id, connector]
+      properties:
+        repo_id: {type: string, format: uuid}
+        connector: {$ref: '#/components/schemas/FixConnector'}
+        note_ids: {type: array, maxItems: 50, items: {type: string, format: uuid}, description: Internal notes to include; only when the repository allows notes.}
+    FixPreview:
+      type: object
+      required: [title, body, message_ids, notes, attachments_left_out, removed, destination]
+      properties:
+        title: {type: string, maxLength: 256}
+        body:
+          type: string
+          description: >-
+            Markdown, masked. Each message the customer wrote sits between a line
+            `<customer-message untrusted="true" from="<name>" at="<UTC time>">` and a line
+            `</customer-message>` (attribute values HTML-escaped; the same tags inside the customer's text are
+            escaped, so a block can never be closed early). A masked part reads `[email removed]`,
+            `[phone removed]`, `[card removed]` or `[secret removed]`. Mentions and references are made inert
+            with one U+200B (zero-width space) right after the `@` of an `@name`, the `#` of a `#123` and the
+            `GH-` of a `GH-123`, so they read as written but GitHub neither pings nor links them (match them with
+            `(?:@|#|GH-)\u200B`). Internal notes the sender picked sit
+            between `<team-note from="<name>" at="<UTC time>">` and `</team-note>`.
+        message_ids: {type: array, items: {type: string, format: uuid}}
+        notes:
+          type: array
+          description: The internal notes the sender may include (never one an agent token wrote), and whether each is in the body.
+          items:
+            type: object
+            required: [message_id, author_name, created_at, excerpt, included]
+            properties:
+              message_id: {type: string, format: uuid}
+              author_name: {type: [string, 'null']}
+              created_at: {type: string, format: date-time}
+              excerpt: {type: string, maxLength: 300, description: 'The note''s start, masked the same way as the body (at most 300 characters), so the sender can pick it; only in this preview.'}
+              included: {type: boolean}
+        notes_allowed: {type: boolean, description: The repository lets notes go with a fix.}
+        attachments_left_out: {type: integer, minimum: 0, description: Files are never sent.}
+        removed:
+          type: object
+          description: What masking took out of the title and body before you see them, by kind.
+          required: [emails, phones, cards, secrets, mentions, references]
+          properties:
+            emails: {type: integer, minimum: 0}
+            phones: {type: integer, minimum: 0}
+            cards: {type: integer, minimum: 0, description: Numbers that look like payment cards.}
+            secrets: {type: integer, minimum: 0, description: 'Strings that look like keys or tokens, and secrets in query strings.'}
+            mentions: {type: integer, minimum: 0, description: '@mentions made inert.'}
+            references: {type: integer, minimum: 0, description: '#123 and GH-123 references made inert.'}
+        destination:
+          type: object
+          required: [repo_full_name, connector, sends_as, vendor_retention]
+          properties:
+            repo_full_name: {type: string}
+            connector: {$ref: '#/components/schemas/FixConnector'}
+            sends_as: {type: string, enum: [person, workspace_key], description: 'person: an issue created with your GitHub account after you confirm on GitHub; workspace_key: Cursor with the workspace key.'}
+            vendor_retention: {type: string, description: 'How long the vendor keeps what is sent, in words.'}
+    FixSendInput:
+      type: object
+      additionalProperties: false
+      required: [repo_id, connector, title, body, client_key]
+      properties:
+        repo_id: {type: string, format: uuid}
+        connector: {$ref: '#/components/schemas/FixConnector'}
+        title: {type: string, minLength: 1, maxLength: 256}
+        body: {type: string, minLength: 1, maxLength: 65000, description: 'Masked again on the server: what you send is what leaves, minus anything that looks like a secret; the masked body must also fit 65000 characters (400 otherwise).'}
+        message_ids: {type: array, maxItems: 500, items: {type: string, format: uuid}}
+        note_ids: {type: array, maxItems: 50, items: {type: string, format: uuid}}
+        client_key: {type: string, minLength: 1, maxLength: 100, description: A new random key per send; the same key sends once.}
+    FixSent:
+      type: object
+      required: [fix, authorize_url]
+      properties:
+        fix: {$ref: '#/components/schemas/Fix'}
+        authorize_url: {type: [string, 'null'], format: uri, description: 'For an issue connector: where your browser confirms on GitHub, valid 10 minutes. Null for Cursor.'}
+    AutofixSettings:
+      type: object
+      required: [available, consent_version, app_slug, installations, repos, connectors]
+      properties:
+        available: {type: boolean, description: This server's GitHub App is set up.}
+        consent_version: {type: string, description: The version of the data consent text an admin agrees to when turning a coding agent on.}
+        app_slug: {type: [string, 'null'], description: 'The GitHub App''s slug, for its pages on GitHub.'}
+        installations: {type: array, items: {$ref: '#/components/schemas/GitHubInstallation'}}
+        repos: {type: array, items: {$ref: '#/components/schemas/AutofixRepo'}}
+        connectors: {type: array, items: {$ref: '#/components/schemas/AutofixConnector'}}
+    GitHubInstallation:
+      type: object
+      required: [id, installation_id, account_login, account_type, repository_selection, status, connected_by_name, connected_at, settings_url]
+      properties:
+        id: {type: string, format: uuid}
+        installation_id: {type: integer, format: int64}
+        account_login: {type: string}
+        account_type: {type: string, enum: [User, Organization]}
+        repository_selection: {type: string, enum: [selected, all]}
+        status: {type: string, enum: [active, blocked_all_repositories, suspended], description: 'blocked_all_repositories: it reaches every repository of the account; narrow it to selected ones on GitHub and it unblocks by itself.'}
+        connected_by_name: {type: string}
+        connected_at: {type: string, format: date-time}
+        settings_url: {type: string, format: uri, description: The installation's page on GitHub (change its repositories there).}
+    GitHubRepository:
+      type: object
+      required: [github_repo_id, full_name, visibility, connected_repo_id]
+      properties:
+        github_repo_id: {type: integer, format: int64}
+        full_name: {type: string}
+        visibility: {type: string, enum: [private, internal, public]}
+        connected_repo_id: {type: [string, 'null'], format: uuid}
+    AutofixRepo:
+      type: object
+      required: [id, installation_id, github_repo_id, full_name, visibility, visibility_checked_at, default_branch, include_notes, default_connector, paused_reason, paused_at, connected_by_name, connected_at]
+      properties:
+        id: {type: string, format: uuid}
+        installation_id: {type: [integer, 'null'], format: int64, description: Null once the App was removed from it.}
+        github_repo_id: {type: integer, format: int64}
+        full_name: {type: string}
+        visibility: {type: string, enum: [private, internal, public]}
+        visibility_checked_at: {type: string, format: date-time}
+        default_branch: {type: string}
+        include_notes: {type: boolean}
+        default_connector:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/FixConnector'}
+        paused_reason: {type: [string, 'null'], enum: [became_public, removed_from_app, installation_suspended, null], description: A paused repository takes no new fix.}
+        paused_at: {type: [string, 'null'], format: date-time}
+        connected_by_name: {type: string}
+        connected_at: {type: string, format: date-time}
+    AutofixConnector:
+      type: object
+      required: [kind, enabled, mode, consent, credential, last_check]
+      properties:
+        kind: {$ref: '#/components/schemas/FixConnector'}
+        enabled: {type: boolean}
+        mode: {type: [string, 'null'], enum: [assign_api, assign_on_github, null], description: 'Copilot only: assign_api assigns Copilot through the API; assign_on_github leaves the assignment to a person on GitHub (when the API refuses the App''s permissions). Null for the other agents.'}
+        consent:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [version, name, at]
+              properties:
+                version: {type: string}
+                name: {type: string}
+                at: {type: string, format: date-time}
+        credential:
+          description: Cursor's key, never a character of it; null for the issue connectors and while none is set.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [set_by_name, set_at]
+              properties:
+                set_by_name: {type: [string, 'null']}
+                set_at: {type: string, format: date-time}
+        last_check:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [at, result, message]
+              properties:
+                at: {type: string, format: date-time}
+                result: {type: string, description: 'ok, key_invalid, no_repo_access, installation_inactive, repo_not_private, provider_unavailable'}
+                message: {type: [string, 'null']}

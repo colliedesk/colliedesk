@@ -114,6 +114,32 @@ var routeTiers = map[string]string{
 	"PATCH /api/v1/agents/me/display-name":                             "draft",
 	"GET /api/v1/tags":                                                 "read",
 	"GET /api/v1/results":                                              "read",
+	"GET /api/v1/autofix/status":                                       "read",
+	"GET /api/v1/autofix/fixes":                                        "read",
+	"GET /api/v1/autofix/fixes/{id}":                                   "read",
+	"GET /api/v1/conversations/{id}/fixes":                             "read",
+	"GET /api/v1/autofix/settings":                                     "read",
+	"GET /api/v1/autofix/github/installations/{id}/repositories":       "read",
+	"POST /api/v1/autofix/github/installations":                        "approval",
+	"DELETE /api/v1/autofix/github/installations/{id}":                 "approval",
+	"POST /api/v1/autofix/repos":                                       "admin",
+	"PATCH /api/v1/autofix/repos/{id}":                                 "admin",
+	"DELETE /api/v1/autofix/repos/{id}":                                "admin",
+	"PUT /api/v1/autofix/repos/{id}/include-notes":                     "approval",
+	"DELETE /api/v1/autofix/repos/{id}/include-notes":                  "admin",
+	"POST /api/v1/conversations/{id}/fixes/preview":                    "read",
+	"POST /api/v1/conversations/{id}/fixes":                            "approval",
+	"POST /api/v1/autofix/fixes/{id}/retry":                            "approval",
+	"POST /api/v1/autofix/fixes/{id}/cancel":                           "draft",
+	"PUT /api/v1/autofix/fixes/{id}/deployed":                          "draft",
+	"DELETE /api/v1/autofix/fixes/{id}/deployed":                       "draft",
+	"PUT /api/v1/autofix/fixes/{id}/pull-request":                      "draft",
+	"DELETE /api/v1/autofix/fixes/{id}/pull-request":                   "draft",
+	"PUT /api/v1/autofix/connectors/{kind}":                            "approval",
+	"DELETE /api/v1/autofix/connectors/{kind}":                         "admin",
+	"POST /api/v1/autofix/connectors/{kind}/check":                     "read",
+	"PUT /api/v1/autofix/connectors/cursor_api/key":                    "admin",
+	"DELETE /api/v1/autofix/connectors/cursor_api/key":                 "admin",
 	"GET /api/v1/results/share-link":                                   "admin",
 	"POST /api/v1/results/share-link":                                  "approval",
 	"DELETE /api/v1/results/share-link":                                "admin",
@@ -207,7 +233,7 @@ var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PU
 // credentialRouteKeys carry another service's API key; a lower tier is refused, not filed.
 var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true,
 	"POST /api/v1/ai/providers": true, "POST /api/v1/ai/models": true, "PUT /api/v1/ai/providers/{id}/key": true,
-	"PUT /api/v1/channels/{id}/credentials": true}
+	"PUT /api/v1/channels/{id}/credentials": true, "PUT /api/v1/autofix/connectors/cursor_api/key": true}
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)

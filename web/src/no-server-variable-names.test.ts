@@ -10,8 +10,9 @@ const skipped = /(\.test\.tsx?|generated\.ts|schemas\.ts|\.d\.ts)$/;
 const variable = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9]\b/;
 // A string literal ('…', "…" or `…`) on one line, outside comments.
 const literal = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
-// Values that are not server variables a person is asked to set.
-const allowed = new Set(['YOUR_INBOUND_SECRET']);
+// Values that are not server variables a person is asked to set. ANTHROPIC_API_KEY is the secret Claude's
+// GitHub workflow reads in the team's own repository, which Autofix's checklist asks the admin to add there.
+const allowed = new Set(['YOUR_INBOUND_SECRET', 'ANTHROPIC_API_KEY']);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

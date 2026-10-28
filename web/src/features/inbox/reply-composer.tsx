@@ -233,6 +233,19 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     caret.current = null;
   }, [body, picking]);
   useEffect(() => { if (disabled) { setPicking(null); setAssist(false); } }, [disabled]);
+  // Another part of the app (Autofix's Draft reply) puts a reply in the box, below what is there. It sends one only
+  // while its conversation is open, so the box is that conversation's.
+  useEffect(() => {
+    const put = (event: Event) => {
+      const detail = (event as CustomEvent<{ text: string; aiDraftId?: string }>).detail;
+      if (!detail || disabled) return;
+      if (detail.aiDraftId) return applyDraft(detail.text, 'below', detail.aiDraftId);
+      setKind('outgoing');
+      insertText(detail.text);
+    };
+    window.addEventListener('colliedesk:insert-reply', put);
+    return () => window.removeEventListener('colliedesk:insert-reply', put);
+  });
   const applyDraft = (text: string, how: 'replace' | 'below', id: string, warnings: string[] = []) => {
     setAssist(false);
     setKind('outgoing');

@@ -215,6 +215,32 @@ with `billing` and leave a note with a summary."
 | `colliedesk_channels_credentials_set` | Stores a channel's secret (admin token only) | `admin` |
 | `colliedesk_channels_delete_request` | Asks a person to remove a channel | `read` |
 | `colliedesk_channels_held_discard_request` | Asks a person to discard the messages a channel held | `read` |
+| `colliedesk_autofix_status` | Shows whether Autofix is set up and how many fixes wait for a person or are running | `read` |
+| `colliedesk_fixes_list` | Lists the fixes sent to coding agents, by group (needs a person, running, done) | `read` |
+| `colliedesk_fix_get` | Shows one fix: where it is, its issue and pull request, what was sent and its timeline | `read` |
+| `colliedesk_conversation_fixes_list` | Lists a conversation's fixes, the latest attempt first | `read` |
+| `colliedesk_autofix_settings_get` | Shows Autofix's GitHub installations, connected repositories and coding agents (never a key) | `read` |
+| `colliedesk_github_repositories_list` | Lists the repositories a GitHub installation reaches, read from GitHub now, and which are connected | `read` |
+| `colliedesk_github_connect_request` | Asks a person to install the Colliedesk GitHub App | `read` |
+| `colliedesk_github_disconnect_request` | Asks a person to uninstall the GitHub App from an account; its repositories stay, paused | `read` |
+| `colliedesk_autofix_repo_connect` | Connects a private repository for fixes (admin token) | `admin` |
+| `colliedesk_autofix_repo_update` | Sets the coding agent a repository suggests (admin token) | `admin` |
+| `colliedesk_autofix_repo_disconnect` | Disconnects a repository; its fixes in progress are cancelled (admin token). Cannot be undone | `admin` |
+| `colliedesk_autofix_repo_notes_include_request` | Asks a person to let fixes on a repository carry internal notes | `read` |
+| `colliedesk_autofix_repo_notes_exclude` | Stops internal notes going with fixes on a repository (admin token) | `admin` |
+| `colliedesk_fix_preview` | Builds what sending a conversation to a coding agent would send, masked, without sending | `read` |
+| `colliedesk_fix_send_request` | Asks a person to send a conversation to a coding agent; they confirm on GitHub and the issue is theirs | `read` |
+| `colliedesk_fix_retry_request` | Asks a person to send a failed or cancelled fix again | `read` |
+| `colliedesk_fix_cancel` | Cancels a fix in progress and closes its issue | `draft` |
+| `colliedesk_fix_mark_deployed` | Marks a merged fix released | `draft` |
+| `colliedesk_fix_unmark_deployed` | Takes back a fix's release | `draft` |
+| `colliedesk_fix_pr_link` | Links a pull request Colliedesk did not find to a fix | `draft` |
+| `colliedesk_fix_pr_unlink` | Unlinks a pull request a person linked | `draft` |
+| `colliedesk_coding_agent_enable_request` | Asks a person to turn on a coding agent for Autofix, with their consent to the data it receives | `read` |
+| `colliedesk_coding_agent_disable` | Turns off a coding agent for Autofix; fixes not sent yet are cancelled, fixes already sent go on | `admin` |
+| `colliedesk_coding_agent_check` | Checks a coding agent: the GitHub App and private repositories, or Cursor's key and its repositories | `read` |
+| `colliedesk_cursor_key_set` | Sets the Cursor key Autofix sends fixes with, after Cursor accepts it. The key passes through the conversation: refused below `admin` so it never waits in a request | `admin` |
+| `colliedesk_cursor_key_remove` | Erases the Cursor key; Cursor takes no new fix until one is set again | `admin` |
 <!-- /generated -->
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

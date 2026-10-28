@@ -5,7 +5,8 @@ import { formatDate } from '../../lib/format-date';
 import { track } from '../../lib/product-analytics';
 import { permissionLabel } from '../settings/token-permissions';
 import { messages } from '../../messages';
-import { PartUnavailable } from '../../ui/lazy-part';
+import { Part, PartUnavailable } from '../../ui/lazy-part';
+import { autofixPart } from '../autofix/autofix-part';
 import { gmailPart } from '../settings/gmail-part';
 import { replyCall } from './request-call';
 import { isSavedReplyRequest, SavedReplyProposal } from './saved-reply-proposal';
@@ -26,6 +27,8 @@ interface RequestCardProps {
 
 const resultURL = (result: unknown) =>
   typeof result === 'object' && result !== null && 'url' in result && typeof result.url === 'string' ? result.url : undefined;
+// An Autofix call (send a fix, install the App, notes, agents) is said in words by its chunk (features/autofix/autofix-request.tsx).
+const autofixRoute = (route: string) => /^\/api\/v1\/(autofix\/|conversations\/\{id\}\/fixes$)/.test(route);
 
 // Approving a mailbox connection answers the provider's sign-in link, so the mailbox block's disclosure comes
 // first: Google's statement for Gmail, the note about an admin's approval for Microsoft 365. It lives in that
@@ -67,6 +70,9 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
   };
   const person = current.requested_by.agent_name ?? messages.someone;
   const url = resultURL(outcome?.result);
+  const approve = () => void run(async () => { setOutcome(await onApprove(item.id)); track('agent_request_decided', { decision: 'approved' }); });
+  // Turning a coding agent on is approved in its detail, after the person ticks the data consent there.
+  const consent = current.method === 'PUT' && /connectors\/\{kind\}$/.test(current.route);
   const reply = current.kind === 'reply_draft' ? replyCall(current.body) : undefined;
   const edited = current.kind === 'reply_draft' ? replyCall(current.edited_body) : undefined;
   return (
@@ -89,7 +95,9 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
             {reply.cc.length > 0 && <p className="request-recipients">{messages.draftCc(reply.cc)}</p>}
           </>
         : isSavedReplyRequest(current) ? <SavedReplyProposal item={current} />
-          : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
+          : autofixRoute(current.route) ? <Part part={autofixPart} failed={<PartUnavailable />} render={(autofix) => <autofix.AutofixRequestDetail item={current} result={outcome?.result}
+            onApprove={consent && canApprove && current.status === 'pending' && !current.requested_by.token_revoked ? approve : undefined} busy={busy} />} />
+            : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
       {edited && <>
         <p className="muted-copy">{messages.editedBy(current.decided_by?.name ?? messages.someone)}</p>
         <p className="request-body reply-draft-text">{edited.text}</p>
@@ -101,7 +109,7 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
       {current.status !== 'pending' && current.decided_by && <p>{messages.requestOutcome(messages.requestDecisionVerb[current.status], current.decided_by.name, current.result_status)}</p>}
       {current.reason && <p className="muted-copy">{current.reason}</p>}
       {current.result_note && !outcome && <p className="muted-copy">{current.result_note}</p>}
-      {outcome && outcome.result !== null && <div className="request-result" role="status">
+      {outcome && outcome.result !== null && !autofixRoute(current.route) && <div className="request-result" role="status">
         <p>{messages.requestResultOnce}</p>
         {url ? <a href={url} target="_blank" rel="noreferrer">{messages.openResult(url)}</a> : <pre className="request-body">{JSON.stringify(outcome.result, null, 2)}</pre>}
       </div>}
@@ -109,8 +117,7 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
       {problem && <p role="alert" className="error-copy">{problem}</p>}
       {current.status === 'pending' && <div className="request-actions">
         {canApprove
-          ? <button type="button" className="primary-action" disabled={busy || current.requested_by.token_revoked}
-              onClick={() => void run(async () => { setOutcome(await onApprove(item.id)); track('agent_request_decided', { decision: 'approved' }); })}>{messages.approve}</button>
+          ? !consent && <button type="button" className="primary-action" disabled={busy || current.requested_by.token_revoked} onClick={approve}>{messages.approve}</button>
           : <span className="muted-copy">{item.approvable_by === 'owner' ? messages.onlyOwnerApproves : messages.onlyAdminApproves}</span>}
         <label className="request-reason"><span>{messages.rejectReason}</span>
           <input value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} /></label>

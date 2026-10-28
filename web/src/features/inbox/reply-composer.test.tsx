@@ -826,6 +826,16 @@ test('with no channel to carry replies the box opens on a private note, and a re
   expect(onSubmit.mock.calls[0]?.slice(0, 2)).toEqual(['note', 'Hello']);
 });
 
+test('a reply another part of the app puts in goes into the box as a reply', () => {
+  render(<ReplyComposer />);
+  fireEvent.keyDown(document.body, { key: 'n' });
+  const put = (text: string) =>
+    act(() => { window.dispatchEvent(new CustomEvent('colliedesk:insert-reply', { detail: { conversationId: 'c1', text } })); });
+  put('The fix is out.');
+  expect(screen.getByLabelText('Message body')).toHaveValue('The fix is out.');
+  expect(screen.getByRole('button', { name: 'Reply', pressed: true })).toBeInTheDocument();
+});
+
 test('an unsent reply survives the composer going away (a reload, Back) and comes back for the same conversation only', () => {
   window.localStorage.clear();
   const first = render(<ReplyComposer draftKey="ws-1:conv-1" onSubmit={vi.fn()} />);

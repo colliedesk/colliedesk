@@ -67,6 +67,7 @@ export const messages = {
   openResults: 'Open Results',
   clearFilter: 'Clear filter',
   results: 'Results',
+  autofix: 'Autofix',
   tryAgain: 'Try again',
   signIn: 'Sign in',
   noConversationsYet: 'No conversations yet',
