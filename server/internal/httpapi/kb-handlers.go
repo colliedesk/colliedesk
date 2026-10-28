@@ -277,15 +277,20 @@ func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request
 		writeStoreError(response, err)
 		return
 	}
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
 	for index := range items {
-		a.addressKBArticle(request, &items[index])
+		addressKBArticle(home, &items[index])
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_cursor": optionalString(next)})
 }
 
-// addressKBArticle fills in the article's public address on the workspace's help center.
-func (a *API) addressKBArticle(request *http.Request, article *domain.KBArticleSummary) {
-	article.URL = helpcenter.ArticleURL(a.config.Origin, a.config.HelpCenterDomain, principal(request).Workspace.Slug, article.Number, article.Slug)
+// addressKBArticle fills in the article's public address below home, the workspace's help center
+// address (helpCenterHome).
+func addressKBArticle(home string, article *domain.KBArticleSummary) {
+	article.URL = home + helpcenter.ArticlePath(article.Number, article.Slug)
 }
 
 func optionalString(value string) *string {
@@ -309,8 +314,12 @@ func (a *API) listTrashedKBArticles(response http.ResponseWriter, request *http.
 		writeStoreError(response, err)
 		return
 	}
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
 	for index := range items {
-		a.addressKBArticle(request, &items[index].KBArticleSummary)
+		addressKBArticle(home, &items[index].KBArticleSummary)
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_cursor": optionalString(next)})
 }
@@ -321,7 +330,11 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		writeKBError(response, err)
 		return
 	}
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	drafts, err := a.ai.ArticleDraftsThisMonth(request.Context(), principal(request).Workspace.ID, article.ID)
 	if err != nil {
 		writeStoreError(response, err)
@@ -424,7 +437,11 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 			return nil, errAnswered
 		}
 		a.warnMissingKBMedia(ctx, who.Workspace.ID, &article)
-		a.addressKBArticle(request, &article.KBArticleSummary)
+		home, ok := a.helpCenterHome(response, request)
+		if !ok {
+			return nil, errAnswered
+		}
+		addressKBArticle(home, &article.KBArticleSummary)
 		return article, nil
 	})
 }
@@ -462,7 +479,11 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -502,7 +523,11 @@ func (a *API) restoreKBArticle(response http.ResponseWriter, request *http.Reque
 		writeKBError(response, err)
 		return
 	}
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -521,7 +546,11 @@ func (a *API) setKBArticleAIExcluded(response http.ResponseWriter, request *http
 		writeKBError(response, err)
 		return
 	}
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -573,7 +602,11 @@ func (a *API) restoreKBArticleVersion(response http.ResponseWriter, request *htt
 		return
 	}
 	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -717,7 +750,11 @@ func (a *API) getHelpCenter(response http.ResponseWriter, request *http.Request)
 		writeStoreError(response, err)
 		return
 	}
-	center.URL = a.helpCenterURL(who.Workspace.Slug)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	center.URL = home
 	writeJSON(response, http.StatusOK, center)
 }
 
@@ -737,6 +774,10 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		writeKBError(response, err)
 		return
 	}
-	center.URL = a.helpCenterURL(who.Workspace.Slug)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	center.URL = home
 	writeJSON(response, http.StatusOK, center)
 }

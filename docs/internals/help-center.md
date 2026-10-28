@@ -192,8 +192,11 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   `TestTemplatesCarryNoBrandingScriptOrInlineStyle` and the HTTP test check it.
 - **`tls-ask`** (`GET /api/v1/public/help-center/tls-ask?domain=`) answers Caddy's on-demand TLS
   question: 200 only for exactly one valid label below `HELP_CENTER_DOMAIN` whose help center is
-  open. Without `HELP_CENTER_DOMAIN` it is always 404. It is not rate limited: its only client is
-  the proxy, which asks once per name it has no certificate for.
+  open. Without `HELP_CENTER_DOMAIN` it is always 404. A claim target or custom domain goes through
+  `Site.CertifyHost`: a name nobody claims is remembered (30 s, forgotten by a domain write), and a
+  name no cache knows is charged to the client's address (`TRUSTED_PROXIES`-aware, the same 10
+  unknown-name lookups a minute as `Wrap`) before any query, while names found claimed or served
+  are never charged, so random names cannot make the server query without bound.
 
 - **An article renders once per text, behind a guard (`render.go`).** goldmark cannot be stopped and
   has quadratic paths (Traps), so a public page must not parse Markdown on every visit nor let one
@@ -258,6 +261,83 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
     a color being typed, goes to the preview as empty and its field says the shape; Save sends what
     is written. An edit clears the refusal of the fields it changes.
 
+- **Custom domains: ownership by a CNAME to the claim's own target or a TXT token, never by address
+  or slug.** Every custom domain resolves to the same proxy, so an `A`/`AAAA` match would let any
+  workspace claim any other's domain. A claim (`help_center_domains`, one per workspace) is proven when
+  the end of the name's CNAME chain (`net.Resolver.LookupCNAME`) is exactly the claim's target
+  `hc-<claim>.<HELP_CENTER_DOMAIN>` (`helpcenter.ClaimHost`), or `_help-center-verify.<name>` holds its
+  128-bit token. The claim is 96 random bits made with the claim; setting another name, or removing and
+  setting the same one, makes a new claim, so a target is never reused. The workspace's slug host used
+  to be the target: a slug can be renamed and taken by another workspace, and a CNAME left at the
+  customer's DNS provider then proved the other workspace's claim (`TestACNAMELeftBehindNeverProvesAnotherWorkspacesClaim`).
+  `email.HelpCenterClaimLabel` reserves exactly the `hc-<24 hex>` shape, not the `hc-` prefix, so a
+  team called "HC Labs" keeps the slug `hc-labs`. A request on a target redirects to the help center's
+  current address, and `tls-ask` answers for it. Without `HELP_CENTER_DOMAIN` every workspace shares
+  the app's host, so only the token proves anything. The host name is stored lower-case ASCII (Unicode
+  goes through `idna.Lookup`), never an IP address, a single label, `APP_ORIGIN`'s host or a name at or
+  below `HELP_CENTER_DOMAIN` (`helpcenter.CustomHost`).
+- **A check records only the claim it looked up.** Activation and failure match `workspace_id` and
+  `claim`, never the host name: a remove and re-add of the same name during the 3 s lookup answers
+  `domain_changed` instead of activating the new claim with the old claim's proof.
+- **What DNS answered stays in the log.** `check_error` says which record to set ("points somewhere
+  else", "has no CNAME record pointing at", "the TXT record ... was not found"); the CNAME chain's end
+  and the lookup errors go to the server log (`DomainEvidence.Detail`), never TXT values. An admin may
+  type any name, and the server's resolver may answer for names inside its network.
+- **Active domains are released.** Pending claims of several workspaces coexist, any number of them;
+  the partial unique index on active names allows one active claim per name. A failed check of an
+  active domain keeps it serving and sets `failing_since`; the first failed check
+  `domain.HelpCenterDomainRelease` (7 days) later puts it back to pending with `pending_reason`
+  `proof_lost`. The daily re-check (`Server.RecheckHelpCenterDomains`, from `serve` at start and
+  daily) is what usually finds it, so a DNS provider's hiccup does not take a help center off line,
+  and a domain that changed hands stops receiving the old addresses' 301s within 7 to 8 days. The
+  time since the first failure counts, not the number of failed checks: every restart runs a re-check.
+- **Takeover is one transaction.** A claim proven while another workspace is active on the name runs
+  `takeOverHelpCenterHost` (`PrivilegeHelpCenterDomainTakeover`): it locks the holder's row, compares
+  the holder's claim and token with the same DNS answer inside the database, and either refuses
+  (`domain_taken`, the holder still proves it) or puts the holder back to pending (`taken_over`) and
+  activates the claim. Two takeovers of one name serialize on the holder's row; one that finds the
+  holder gone retries, so a name never has two active claims or none by accident (`TestATakeoverIsAtomic`).
+  `PUT` therefore accepts a name that is active elsewhere.
+- **One DNS change is enough.** `tls-ask` checks a pending name live (2 s) and activates it, so the
+  first visitor after the CNAME change gets a certificate. `helpcenter.LiveChecks` bounds those checks
+  to 4 at once and one per name every 30 s (4,096 names remembered; full of recent names it refuses),
+  and only names with a pending claim are checked at all, so `tls-ask` cannot make the server flood
+  DNS. It looks DNS up once and asks the database which pending claims that answer proves
+  (`HelpCenterHostProvenClaims`), so squatters' claims never crowd out the real one; a cap on claims
+  read per name would. Every refusal is the same 404. For an active name it records
+  `certificate_requested_at` at most once an hour per name (an in-process window plus the same
+  condition in the `UPDATE`): the question is public and must not write on every call.
+- **The app answers only on its own host.** `Wrap` passes a request to the app, the API and MCP only
+  when `Host` is `APP_ORIGIN`'s host, `localhost` or an IP address (the health check and Caddy's
+  `ask` use loopback). Every other name is the help center's: a slug host, a claim target or an active
+  custom domain serves it, and anything else, a domain just removed included, gets the help center's
+  404. A removed domain whose certificate Caddy still holds would otherwise serve the sign-in page,
+  and a login there sets a session cookie for that name. Proxies must keep `Host`
+  (`docs/self-host/running-behind-proxy.md#the-host-header`).
+- **Host lookups are cached, bounded and charged.** `Wrap` looks a host up only when it is a valid
+  name of two labels or more that is not `APP_ORIGIN`'s host, not at or below `HELP_CENTER_DOMAIN` and
+  not an IP address. The lookup (`store.HelpCenterHost`, `PrivilegeHelpCenterHost`, read-only) returns
+  only a workspace id. Known and unknown names have caches of their own, 30 s and 4,096 entries each,
+  so random names only evict random names. A name neither cache holds is charged to the client's
+  address first (`Config.AllowLookup`, 10 a minute; the busy page beyond); a known name whose entry
+  expired is looked up again without the charge. Concurrent misses are merged (`singleflight`). A
+  domain write forgets only the names it changes (`Site.ForgetDomain`: the old and new host, the claim
+  target, the workspace's address), and a check that changes no status forgets nothing; a generation
+  counter per cache keeps a lookup that started before a forget from storing its answer. The cache
+  only names a candidate: the page's own query (`OpenHelpCenterWorkspace`) reads the active domain, and
+  a host that no longer matches gets the 404, so a removal is served nowhere from the next request on.
+- **The TXT token is readable by every tier.** `GET /help-center/domain` and its MCP tool are
+  read-tier and show the token. It is public in DNS once the record exists and proves only its own
+  claim, so hiding it below admin would protect nothing; it still never leaves in an export or a log.
+- **Old addresses move with a 301 built from the stored name.** The slug host and `/help/<slug>`
+  redirect (no-store) to the custom domain with the escaped path and query, while the help center is
+  open; the target never uses a host name or path prefix the request names. `tls-ask` keeps answering
+  for the slug host so the redirect keeps its certificate.
+- **One address builder.** `helpcenter.SiteURL(origin, domain, slug, custom)` gives the help center's
+  address everywhere: the API's `url` fields (through `Site.Address`, cached per workspace like the
+  hosts), article `url`s, canonical links and the ETag, which holds the address so a page cached
+  under the old one is stale.
+
 ## Traps
 
 - **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line
@@ -283,3 +363,19 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **Image sizes are unknown** (not stored), so an article image can shift the text below it as it
   loads. Search and result pages carry `noindex`; other pages a canonical link and, for articles and
   collections, a description.
+
+- **A wildcard CNAME breaks the CNAME check.** The check compares where the name's chain ends; if
+  `*.<HELP_CENTER_DOMAIN>` is itself a CNAME, every chain ends at its target and no claim matches the
+  slug host. Keep the wildcard as `A`/`AAAA` records, or the owner uses the TXT record. Comparing the
+  two chains' ends instead would let any workspace claim a name CNAME'd to another's slug host.
+- **A flattened or proxied CNAME looks like an `A` record.** Cloudflare's proxied records and apex
+  CNAME flattening answer with addresses, so the chain ends at the name itself; the TXT record is the
+  way there.
+- **Cloud needs the catch-all site in its proxy.** The `https://` on-demand site of
+  `docs/self-host/running-behind-proxy.md` lives in the Cloud operator's infrastructure repository,
+  not here; without it a verified domain gets no certificate on Cloud.
+- **Other processes may lag 30 s.** A domain activated through one process gets the help center's
+  404 on another until its unknown-name entry expires, and API `url` fields there keep the previous
+  address as long. A removal is never served late (the page's query decides).
+- **`TRUSTED_PROXIES` matters for host lookups.** Behind an untrusted proxy every visitor has the
+  proxy's address and shares its 10 unknown-name lookups a minute; known names are unaffected.

@@ -326,6 +326,11 @@ type HelpCenter struct {
 	BodyFont          *string   `json:"body_font"`
 	HeadingFont       *string   `json:"heading_font"`
 	CustomCSS         string    `json:"custom_css"`
+	// CustomDomain is the help center's custom host name (null when none), CustomDomainStatus pending or
+	// active, CustomDomainVerifiedAt when its DNS check first passed. The proof token is not exported.
+	CustomDomain           *string    `json:"custom_domain"`
+	CustomDomainStatus     *string    `json:"custom_domain_status"`
+	CustomDomainVerifiedAt *time.Time `json:"custom_domain_verified_at"`
 }
 
 // AgentRequest is a call an agent token asked a person to approve, and what became of it. The answer

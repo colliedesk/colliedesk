@@ -79,7 +79,7 @@ var (
 // 30 days); the knowledge base is send for the same reason (an article can be published, which reaches
 // customers, but every change is a version and a delete waits 30 days in the trash), and so are its
 // image uploads. Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
-// admin: workspace settings (the help center's on and off and its brand among them), the team, revoking invites, channels and sessions. An admin token acts
+// admin: workspace settings (the help center's on and off, its brand and its custom domain among them), the team, revoking invites, channels and sessions. An admin token acts
 // with its creator's role, so it reaches these only while that person is an admin, and the role still
 // decides the admin-only reads (billing is classified admin for that reason). The handlers file a
 // request for every tier when the change is risky for people: a change that grants, keeps or takes
@@ -152,6 +152,10 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/kb/media/{id}/poster/{version}":                 grant(auth.PermKBMediaRead),
 	"GET /api/v1/kb/media/{id}/details":                          grant(auth.PermKBMediaRead),
 	"GET /api/v1/kb/media/{id}/thumbnail":                        grant(auth.PermKBMediaRead),
+	"GET /api/v1/help-center/domain":                             grant(auth.PermHelpCenterRead),
+	"PUT /api/v1/help-center/domain":                             grant(auth.PermHelpCenterUpdate),
+	"DELETE /api/v1/help-center/domain":                          grant(auth.PermHelpCenterUpdate),
+	"POST /api/v1/help-center/domain/check":                      grant(auth.PermHelpCenterUpdate),
 	"GET /api/v1/help-center":                                    grant(auth.PermHelpCenterRead),
 	"POST /api/v1/conversations":                                 grant(auth.PermMessagesSend),
 	"GET /api/v1/conversations/{id}":                             grant(auth.PermConversationsRead),

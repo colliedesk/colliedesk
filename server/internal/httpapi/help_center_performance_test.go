@@ -61,6 +61,50 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 	}
 }
 
+// TestHelpCenterCustomHostLatencyBudget holds the help center on an active custom domain to the same
+// budget on the shared fixture: the first request, which looks the host name up (cold cache), and
+// then home, a long collection page and an article (warm), each from its own address.
+func TestHelpCenterCustomHostLatencyBudget(t *testing.T) {
+	_, pool, _, slug := sharedKBBudget(t)
+	api, _, _, _ := testAPIOnPool(t, pool, nil)
+	site := helpCenterSite(api)
+	const host = "help.budget.example"
+	workspaceID := queryString(t, pool, `SELECT id::text FROM workspaces WHERE slug=$1`, slug)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO help_center_domains (workspace_id, hostname, claim, token, status, verified_at)
+		VALUES ($1, $2, left(md5('budget-claim'), 24), md5('budget-domain'), 'active', now())`, workspaceID, host); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(), `DELETE FROM help_center_domains WHERE workspace_id=$1`, workspaceID); err != nil {
+			t.Errorf("remove the budget domain: %v", err)
+		}
+	})
+	started := time.Now()
+	first := visit(site, "/", "198.51.100.240", "Host", host)
+	cold := time.Since(started)
+	t.Logf("help center custom host cold=%s", cold)
+	if first.Code != http.StatusOK || cold > inboxLatencyBudget {
+		t.Fatalf("first request on the custom host: status=%d in %s (budget %s)", first.Code, cold, inboxLatencyBudget)
+	}
+	for name, path := range map[string]string{"home": "/", "collection": "/c/budget", "article": "/a/1000-article-1000"} {
+		durations := make([]time.Duration, 20)
+		for index := range durations {
+			started := time.Now()
+			response := visit(site, path, fmt.Sprintf("198.51.100.%d", index+1), "Host", host)
+			durations[index] = time.Since(started)
+			if response.Code != http.StatusOK {
+				t.Fatalf("GET %s on the custom host status=%d", path, response.Code)
+			}
+		}
+		sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
+		p95 := durations[len(durations)*95/100-1]
+		t.Logf("help center custom host %s p95=%s", name, p95)
+		if p95 > inboxLatencyBudget {
+			t.Errorf("help center custom host %s p95 %s exceeds %s", name, p95, inboxLatencyBudget)
+		}
+	}
+}
+
 // brandColumns are the columns of help_centers brandKBBudget changes and puts back.
 const brandColumns = `logo_media_id, favicon_media_id, logo_alt, linkback_url, contact_url, contact_phone, color_primary, color_header,
 	color_header_text, color_background, color_text, color_link, color_footer, body_font, heading_font, custom_css, content_version`

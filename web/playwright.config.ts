@@ -5,6 +5,7 @@ import { defineConfig } from '@playwright/test';
 import { attachmentsDir, databaseURL, goEnv, servers } from './e2e/support/cli';
 import { identity, jwksURL } from './e2e/support/identity-provider';
 import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
+import { dnsFile } from './e2e/support/dns';
 import { mailpit } from './e2e/support/mailpit';
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
@@ -45,7 +46,7 @@ export default defineConfig({
     // provider on the local network, where the AI settings journey runs its fake model server. Every
     // server shares the database and runs an AI worker, and a task queued by the database (triage on a
     // new ticket) goes to whichever worker claims it first, so all of them allow that network.
-    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', AI_ALLOW_PRIVATE_BASE_URLS: '1' }, 'e2e'),
+    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', AI_ALLOW_PRIVATE_BASE_URLS: '1', COLLIEDESK_E2E_DNS_FILE: dnsFile }, 'e2e'),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any', AI_ALLOW_PRIVATE_BASE_URLS: '1' }),
     // The cloud server also imports in the app and sends replies by SMTP, for the golden path. Every server
     // with a relay runs an outbox worker that sends any workspace's queued reply, and the worker picks the

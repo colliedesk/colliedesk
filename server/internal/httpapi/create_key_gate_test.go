@@ -60,6 +60,7 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/kb/images":                    "Stored by content: the same bytes again answer the image already stored.",
 	"POST /api/v1/kb/media-uploads":             "An upload in progress holds no media; one left without parts expires, and the same bytes complete into the same item.",
 	// Checks and reads sent as POST: they store a status at most.
+	"POST /api/v1/help-center/domain/check":                "Checks DNS for the workspace's one domain and updates its status: repeats recheck the same claim, never create a second domain.",
 	"POST /api/v1/channels/{id}/check":                     "Reads the channel's state again; it changes nothing.",
 	"POST /api/v1/channels/{id}/email/domain-verification": "Checks the domain's DNS and marks it verified: a repeat checks again.",
 	"POST /api/v1/channels/email/domain-verification":      "Checks the domain's DNS and marks it verified: a repeat checks again.",
@@ -84,8 +85,8 @@ var postWithoutKey = map[string]string{
 }
 
 // maxPostWithoutKey is the ceiling of postWithoutKey; lower it when a route leaves the list.
-// One read that stores nothing was added: the candidate theme preview.
-const maxPostWithoutKey = 59
+// One DNS status check added for the workspace's single help center domain.
+const maxPostWithoutKey = 60
 
 func takesIdempotencyKey(path *openapi3.PathItem, operation *openapi3.Operation) bool {
 	for _, parameters := range []openapi3.Parameters{path.Parameters, operation.Parameters} {

@@ -5,6 +5,7 @@ import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { messages } from '../../messages';
 import { useSaveFeedback } from '../settings/save-feedback';
 import { kbApi } from './kb-api';
+import { HelpCenterDomainSection } from './help-center-domain';
 import { kbMessages } from './kb-messages';
 
 // The brand settings are a chunk of their own (with their styles and the preview), asked for as soon as this
@@ -32,9 +33,9 @@ function Brand({ canManage }: { canManage: boolean }) {
   return Section ? <Section canManage={canManage} /> : null;
 }
 
-// HelpCenterSettings is the body of the Help center card in Settings: whether the public pages are on and
-// their title. Every agent sees the state; only admins change it, as the server requires.
-export function HelpCenterSettings({ canManage, workspaceName }: { canManage: boolean; workspaceName?: string }) {
+// HelpCenterSettings is the body of the Help center card in Settings: whether the public pages are on, their
+// title, their custom domain and their brand. Every agent sees the state; only admins change it, as the server requires.
+export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' }: { canManage: boolean; workspaceName?: string; timezone?: string }) {
   const client = useQueryClient();
   const settings = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter });
   const save = useMutation({
@@ -67,6 +68,7 @@ export function HelpCenterSettings({ canManage, workspaceName }: { canManage: bo
             {feedback.status}</span>
         </form>
       : <p className="muted-copy">{kbMessages.helpCenterAdminsOnly}</p>}
+    <HelpCenterDomainSection canManage={canManage} timezone={timezone} />
     <Brand canManage={canManage} />
   </>;
 }

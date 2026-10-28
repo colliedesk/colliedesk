@@ -1392,7 +1392,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 only when `domain` is exactly one label below `HELP_CENTER_DOMAIN`, that label is a workspace slug that can be a host name, the workspace's help center is on and the workspace is not locked. Every other case, and a server without `HELP_CENTER_DOMAIN`, is the same 404. */
+        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 when the workspace's help center is on and the workspace is not locked, and `domain` is exactly one label below `HELP_CENTER_DOMAIN` whose label is that workspace's slug or the CNAME target `hc-<claim>` of its custom domain's claim (which redirects to the help center), or the workspace's custom domain. A custom domain answers 200 once it is active, or when it is pending and its DNS check passes now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a time on the server and at most one per host name every 30 seconds. Every other case is the same 404; custom domains work without `HELP_CENTER_DOMAIN` too. */
         get: operations["askHelpCenterCertificate"];
         put?: never;
         post?: never;
@@ -2798,6 +2798,42 @@ export interface paths {
         put?: never;
         /** @description Render a page of the help center with a candidate theme, saving nothing: the real page templates, the workspace's live collections and published articles (never drafts), also while the help center is off. `page` `article` shows the published article with the lowest number, or a sample text when nothing is published; a video in it shows as a placeholder. The answer is one HTML document for an `<iframe sandbox="allow-same-origin" srcdoc>`: it links the help center's style sheet under `/help/_/`, carries the candidate brand inline and its own policy (`default-src 'none'; img-src <origin>/api/v1/kb/images/ <origin>/api/v1/kb/media/; style-src <origin>/help/_/ 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'`), which runs no script; images load from the session's knowledge base routes and links take no pointer. Contrast is answered as in `/theme/check` (200 with `ok` false), so the person sees why Save would refuse; a theme of the wrong shape or a logo that is not an image of the library is 422 as on PUT. Each person may ask for 600 previews a minute (429 with `Retry-After` beyond). */
         post: operations["previewHelpCenterTheme"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The CNAME target and the token are random, made when the host name is set, and kept until it is removed or replaced; the workspace's slug proves nothing, since another workspace may take it after a rename. The token is in the TXT record's value; it is public in DNS once set, so every tier may read it, and it is never exported. */
+        get: operations["getHelpCenterDomain"];
+        /** @description Set or replace the help center's custom domain. Admins only, and an `admin` agent token. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it. A host name another workspace's help center serves on can be claimed too: the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim and no longer proves the other workspace's. */
+        put: operations["putHelpCenterDomain"];
+        post?: never;
+        /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, with a new CNAME target and TXT token. Admins only, and an `admin` agent token; removing when there is none changes nothing. */
+        delete: operations["deleteHelpCenterDomain"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/domain/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Admins only, and an `admin` agent token. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
+        post: operations["checkHelpCenterDomain"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4507,9 +4543,68 @@ export interface components {
             updated_at: string | null;
             /**
              * Format: uri
-             * @description The public address of the help center, also while it is off: `<APP_ORIGIN>/help/<slug>` on a self-hosted server, `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that variable and the slug can be a host name. Changing the workspace slug changes it, and links to the old address stop working.
+             * @description The public address of the help center, also while it is off: `https://<custom domain>` once the workspace's custom domain is active (GET /api/v1/help-center/domain), else `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that variable and the slug can be a host name. The older addresses redirect to the custom domain while it is active. Changing the workspace slug changes the slug addresses, and links to the old slug stop working.
              */
             url: string;
+        };
+        HelpCenterDomain: {
+            /** @description The custom host name in ASCII (punycode) form; null when none is set. */
+            hostname: string | null;
+            /**
+             * @description `pending` until a DNS check passes; `active` while the help center serves on it. An active domain goes back to `pending` when no check has proved it for 7 days, or when another workspace proves the host name while this domain's records do not (`pending_reason` says which).
+             * @enum {string}
+             */
+            status: "none" | "pending" | "active";
+            /** @description The DNS records to set at the domain's DNS provider; empty when no domain is set. */
+            records: components["schemas"]["HelpCenterDomainRecord"][];
+            /**
+             * Format: date-time
+             * @description When this host name was set.
+             */
+            created_at: string | null;
+            /**
+             * Format: date-time
+             * @description When a DNS check first passed.
+             */
+            verified_at: string | null;
+            /**
+             * Format: date-time
+             * @description The last DNS check: the button, the proxy's certificate question or the daily re-check.
+             */
+            checked_at: string | null;
+            /** @description Which record the last check did not find when it did not pass; null after a check that passed. */
+            check_error: string | null;
+            /**
+             * Format: date-time
+             * @description When the reverse proxy was last told it may get a certificate for the host name; recorded at most once an hour.
+             */
+            certificate_requested_at: string | null;
+            /**
+             * Format: date-time
+             * @description While the domain is active: the first failed DNS check since the last one that passed, null while checks pass. The first check that fails 7 days after it puts the domain back to `pending`.
+             */
+            failing_since: string | null;
+            /**
+             * @description Why an active domain went back to `pending`: `proof_lost` (no DNS check proved it for 7 days) or `taken_over` (another workspace proved the host name while this domain's records did not). Null otherwise; cleared when a check passes or the host name is set again.
+             * @enum {string|null}
+             */
+            pending_reason: "proof_lost" | "taken_over" | null;
+        };
+        HelpCenterDomainRecord: {
+            /** @enum {string} */
+            type: "CNAME" | "A" | "AAAA" | "TXT";
+            /** @description The record's full name. */
+            name: string;
+            value: string;
+            /**
+             * @description `route_and_verify`: sends visitors to the help center and proves ownership; `route`: only sends visitors; `verify`: only proves ownership.
+             * @enum {string}
+             */
+            purpose: "route_and_verify" | "route" | "verify";
+        };
+        HelpCenterDomainInput: {
+            /** @description A host name such as help.example.com; Unicode names are accepted and stored in punycode. */
+            hostname: string;
         };
         /** @description Each color is #rrggbb, or null for the default. Any color set makes the pages light only. */
         HelpCenterThemeColors: {
@@ -12038,6 +12133,123 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ThemeInvalid"];
             /** @description Too many previews in the last minute; try again after `Retry-After` seconds. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getHelpCenterDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The custom domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterDomain"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenterDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterDomainInput"];
+            };
+        };
+        responses: {
+            /** @description The custom domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterDomain"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description The host name cannot be a custom domain; `error.fields.hostname` says why */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteHelpCenterDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No custom domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterDomain"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    checkHelpCenterDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The custom domain after the check */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterDomain"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description The workspace checked its domain 10 times in the last hour; retry after `Retry-After` seconds. */
             429: {
                 headers: {
                     "Retry-After"?: number;
