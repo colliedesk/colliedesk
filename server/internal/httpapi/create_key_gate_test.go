@@ -59,6 +59,11 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/conversations/{id}/ai-triage": "The open suggestion is replaced: repeats leave one suggestion.",
 	"POST /api/v1/kb/images":                    "Stored by content: the same bytes again answer the image already stored.",
 	"POST /api/v1/kb/media-uploads":             "An upload in progress holds no media; one left without parts expires, and the same bytes complete into the same item.",
+	"POST /api/v1/autofix/repos":                "One row per GitHub repository: connecting it again updates that row (ON CONFLICT), never a second one.",
+	// Autofix's fixes: the body names the send (client_key), or the action finds the fix already moved.
+	"POST /api/v1/conversations/{id}/fixes":  "The body's client_key names the send: a repeat answers 200 with the fix that key already made.",
+	"POST /api/v1/autofix/fixes/{id}/retry":  "The body's client_key names the send: a repeat answers 200 with the attempt that key already made.",
+	"POST /api/v1/autofix/fixes/{id}/cancel": "Cancels one fix: a repeat finds it ended and is refused (409 state_conflict).",
 	// Checks and reads sent as POST: they store a status at most.
 	"POST /api/v1/help-center/domain/check":                "Checks DNS for the workspace's one domain and updates its status: repeats recheck the same claim, never create a second domain.",
 	"POST /api/v1/channels/{id}/check":                     "Reads the channel's state again; it changes nothing.",
@@ -71,6 +76,8 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/help-center/theme/preview":               "Renders a page with a candidate theme without saving it; it stores nothing.",
 	"POST /api/v1/help-center/theme/check":                 "Checks a candidate theme without saving it; it stores nothing.",
 	"POST /api/v1/export/link":                             "Stores no row: a short-lived signed link held in memory, to the same export.",
+	"POST /api/v1/conversations/{id}/fixes/preview":        "Shows what a fix would send; it stores nothing.",
+	"POST /api/v1/autofix/connectors/{kind}/check":         "Checks one coding agent and stores its last result: repeats leave one result.",
 	// Sessions opened at another service: nothing is stored here until it calls back.
 	"POST /api/v1/channels/{id}/email/gmail":     "Answers Google's consent address; the connection is stored only when Google calls back, once.",
 	"POST /api/v1/channels/{id}/email/microsoft": "Answers Microsoft's consent address; the connection is stored only when Microsoft calls back, once.",
@@ -78,15 +85,18 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/channels/email/microsoft":      "Answers Microsoft's consent address; the connection is stored only when Microsoft calls back, once.",
 	"POST /api/v1/billing/checkout":              "Opens a checkout session at the payment provider; nothing is stored here until it is paid.",
 	"POST /api/v1/billing/portal":                "Opens a portal session at the payment provider; nothing is stored here.",
+	"POST /api/v1/autofix/github/installations":  "Answers GitHub's install address with a one-time state that expires; the installation is stored only when GitHub sends the person back, once.",
 	// Deliveries from other servers, which name each delivery themselves.
 	"POST /api/v1/channels/email/inbound": "Mail from the relay: a Message-ID already stored is a duplicate, so a redelivery stores nothing.",
 	"POST /api/v1/webhooks/polar":         "Polar's redelivery of an event is recognised and not applied twice.",
 	"POST /api/v1/webhooks/resend":        "Resend's events fail one named reply: a redelivery finds it failed already.",
+	"POST /api/v1/webhooks/github":        "GitHub names each delivery (X-GitHub-Delivery): one applied already is recorded and has no second effect.",
 }
 
 // maxPostWithoutKey is the ceiling of postWithoutKey; lower it when a route leaves the list.
-// One DNS status check added for the workspace's single help center domain.
-const maxPostWithoutKey = 60
+// One DNS status check added for the workspace's single help center domain; eight Autofix routes, each
+// with its reason above.
+const maxPostWithoutKey = 68
 
 func takesIdempotencyKey(path *openapi3.PathItem, operation *openapi3.Operation) bool {
 	for _, parameters := range []openapi3.Parameters{path.Parameters, operation.Parameters} {
