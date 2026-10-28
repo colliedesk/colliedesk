@@ -450,6 +450,14 @@ checks and removes it.
 
 The certificate (`https://`) is issued automatically the first time someone opens the address.
 
+**Colliedesk Cloud:** a custom domain comes with every paid plan, one per workspace. During the trial
+you can set and verify it, to prepare the move, but the help center serves on it only once the
+workspace is paid: trial pages are hidden from search engines, and serving them on your domain would
+cost it its place in search results. Until then the card says *verified*, the help center stays on
+its own address, and no certificate is issued for the domain. Within a minute of paying, the domain
+serves the help center and the other addresses move there. A workspace whose trial ended unpaid
+serves on no address. A server you run yourself has no plans: every workspace serves on its domain.
+
 While the domain is active, the help center answers only help center pages on it: the app, the API
 and MCP stay on the Colliedesk address. Every address Colliedesk gives out uses the domain: the link
 in Settings, the address of each article in the reply box and in the API, and the page's canonical

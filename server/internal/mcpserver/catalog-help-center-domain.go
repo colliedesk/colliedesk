@@ -11,7 +11,7 @@ const (
 		`"type":{"type":"string","enum":["CNAME","A","AAAA","TXT"]},"name":{"type":"string"},"value":{"type":"string"},"purpose":{"type":"string","enum":["route_and_verify","route","verify"]}}}},` +
 		`"created_at":{"type":["string","null"]},"verified_at":{"type":["string","null"]},"checked_at":{"type":["string","null"]},` +
 		`"check_error":{"type":["string","null"]},"certificate_requested_at":{"type":["string","null"]},` +
-		`"failing_since":{"type":["string","null"]},"pending_reason":{"type":["string","null"],"enum":["proof_lost","taken_over",null]}}}`
+		`"failing_since":{"type":["string","null"]},"pending_reason":{"type":["string","null"],"enum":["proof_lost","taken_over",null]},"awaiting_payment":{"type":"boolean"}}}`
 	helpCenterDomainOutput = `{"type":"object","required":["domain"],"properties":{"domain":` + helpCenterDomainSchema + `}}`
 
 	helpCenterDomainRule = `The domain becomes active once DNS proves the workspace owns it: a CNAME of the host name to this claim's own target hc-<claim>.<HELP_CENTER_DOMAIN> ` +
@@ -26,7 +26,9 @@ func helpCenterDomainGetSpec() Spec {
 		Description: `Return the public help center's custom domain (such as help.example.com): status none, pending or active, the DNS records to set ` +
 			`(records: type, name, value, purpose), when it was verified and last checked, and which record the last check did not find (check_error). ` +
 			`An active domain whose checks fail shows failing_since; after 7 days without proof it goes back to pending with pending_reason proof_lost, ` +
-			`or taken_over when another workspace proved the host name while this domain's records did not.` + "\n\nTier: read.",
+			`or taken_over when another workspace proved the host name while this domain's records did not. ` +
+			`awaiting_payment is true while the workspace is on its trial (or locked after it): the domain can be set and verified, ` +
+			`but the help center serves on it only once the workspace is paid.` + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST:   []string{"GET " + helpCenterDomainPath},
 		Input:  noArguments,
