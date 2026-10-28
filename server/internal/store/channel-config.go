@@ -505,8 +505,23 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 		channel.WorkspaceID, channel.ID, channels.HoldChannelOff, DeliveryCodeChannelOff).Scan(&public.Held, &public.Unsent, &public.LastSeen); err != nil {
 		return public, fmt.Errorf("count channel messages: %w", err)
 	}
+	if public.Status.State == channels.StateWorking && public.LastSeen == nil {
+		var received bool
+		if err := tx.QueryRow(ctx, channelReceivedBefore, channel.WorkspaceID, channel.ID).Scan(&received); err != nil {
+			return public, fmt.Errorf("check first channel message: %w", err)
+		}
+		if !received {
+			public.Status = channels.Status{State: channels.StateWaiting, ReasonCode: channels.ReasonNoMessageYet}
+		}
+	}
 	return public, nil
 }
+
+// channelReceivedBefore is true for a channel that received a customer message before its inbound
+// journal existed: a conversation on it, not imported, holding an incoming message. A channel with a
+// journal entry never asks.
+const channelReceivedBefore = `SELECT EXISTS(SELECT 1 FROM conversations v WHERE v.workspace_id=$1 AND v.channel_id=$2 AND v.origin IS NULL
+	AND EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=v.workspace_id AND m.conversation_id=v.id AND m.kind='incoming'))`
 
 // AddChannelRow adds a channel of a type with its history entry, for a writer that
 // fills the type's own table itself in the same transaction (a new workspace's hosted email). Every

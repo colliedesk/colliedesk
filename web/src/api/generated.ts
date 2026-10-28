@@ -4868,9 +4868,12 @@ export interface components {
          */
         ChannelType: "email" | "web_form";
         ChannelState: {
-            /** @enum {string} */
-            state: "working" | "off" | "needs_attention" | "not_connected" | "removed";
-            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`. */
+            /**
+             * @description `waiting`: set up, but nothing has arrived on the channel yet (reason `no_message_yet`); it turns `working` with the first message received, which proves the way in works.
+             * @enum {string}
+             */
+            state: "working" | "waiting" | "off" | "needs_attention" | "not_connected" | "removed";
+            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`. A waiting channel has `no_message_yet`. */
             reason_code: string | null;
             message: string | null;
         };
@@ -5138,10 +5141,10 @@ export interface components {
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
                 /**
-                 * @description Only on trial_outbound_restricted when the customer wrote first, but from another address than the contact's (a contact merged into this one): the reply would go to `reply_to`, which never wrote.
+                 * @description Only on trial_outbound_restricted when the customer did write, but the trial cannot count the mail. `contact_address_differs`: the customer wrote from another address than the contact's (a contact merged into this one), and the reply would go to `reply_to`, which never wrote. `mail_not_via_hosted_address`: the mail was posted to the workspace's own inbound URL, not received at its hosted forwarding address, so nothing proves who sent it. `sender_authentication_failed`: the mail arrived at the forwarding address but failed sender verification (SPF, DKIM or DMARC).
                  * @enum {string}
                  */
-                reason?: "contact_address_differs";
+                reason?: "contact_address_differs" | "mail_not_via_hosted_address" | "sender_authentication_failed";
                 /** @description Only with reason contact_address_differs: the address the reply would go to. */
                 reply_to?: string;
                 /** @description Only on contact_exists: the contact to use instead of adding one. */
@@ -5382,7 +5385,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;

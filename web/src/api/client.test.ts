@@ -207,6 +207,13 @@ test('a trial refusal for a merged address carries the address the reply would g
   expect((error as OutboundRefusedError).replyTo).toBe('dana@work.example');
 });
 
+test('a trial refusal of mail the trial cannot count carries its reason', async () => {
+  fetchMock.mockResolvedValue(reply(403, { error: { code: 'trial_outbound_restricted', message: 'Not counted.', reason: 'sender_authentication_failed' } }));
+  const error = await api.createMessage('33333333-3333-4333-8333-333333333333', 'outgoing', 'Hi').catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(OutboundRefusedError);
+  expect((error as OutboundRefusedError).reason).toBe('sender_authentication_failed');
+});
+
 test('402 seat_paused becomes a SeatPausedError with the server\'s explanation', async () => {
   fetchMock.mockResolvedValue(reply(402, apiError('seat_paused', 'Your access is paused.')));
   const error = await api.tags().catch((caught: unknown) => caught);

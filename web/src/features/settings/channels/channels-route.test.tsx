@@ -108,6 +108,18 @@ test('a channel that needs attention says why with a link to fix it; one that is
   expect(screen.getAllByText('Off').length).toBeGreaterThan(0);
 });
 
+test('a channel set up but with nothing received yet reads Waiting for first message, never Working, and says how to test it', async () => {
+  const waiting = channel('email', { status: { state: 'waiting', reason_code: 'no_message_yet', message: null } });
+  channelsApi.list.mockResolvedValue({ items: [waiting], types: types(1, 0) });
+  show('');
+  expect(await screen.findByText('Waiting for first message')).toBeInTheDocument();
+  expect(screen.queryByText('Working')).toBeNull();
+  channelsApi.get.mockResolvedValue({ ...waiting, config: withChannel.channel });
+  show(EMAIL);
+  const notice = await screen.findByText(/Nothing has arrived yet/);
+  expect(notice).toHaveTextContent('Send a test message to your support address');
+});
+
 test('an agent reads the channels without switches or Add channel', async () => {
   api.me.mockResolvedValue(me('agent'));
   channelsApi.list.mockResolvedValue({ items: [channel('email')], types: types(1, 0) });

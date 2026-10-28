@@ -613,3 +613,22 @@ func TestAReplyNoChannelCarriesIsSavedNotSentAndRetriedOnceEmailIsConnected(t *t
 		t.Fatalf("after Retry the reply's channel is not the one that sends it (%s)", got)
 	}
 }
+
+// A channel whose setup is complete but which has received nothing yet says it is waiting for its
+// first message, not working: only mail that arrived proves the forwarding works.
+func TestAChannelWaitsForItsFirstMessageBeforeItIsWorking(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Waiting Desk", "admin@waiting-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@waiting-desk.example.com")
+	before, _ := listChannels(t, api, admin)
+	email := channelOf(t, before, "email")
+	if email.Status.State != "waiting" || email.Status.ReasonCode == nil || *email.Status.ReasonCode != "no_message_yet" {
+		t.Fatalf("a connected channel with no mail yet: %+v, want waiting / no_message_yet", email.Status)
+	}
+	inboundOK(t, api, secret, mail([]string{"From: first@customer.example", "To: support@waiting-desk.example.com",
+		"Subject: First", "Message-ID: <first@customer.example>"}, "Hello."))
+	items, _ := listChannels(t, api, admin)
+	if after := channelOf(t, items, "email"); after.Status.State != "working" || after.Status.ReasonCode != nil {
+		t.Fatalf("after the first message: %+v, want working", after.Status)
+	}
+}

@@ -9,7 +9,7 @@ import type { Generated } from './schemas';
 const nullableDate = z.string().datetime().nullable();
 export const channelTypeSchema = z.enum(['email', 'web_form']) satisfies z.ZodType<Generated<'ChannelType'>>;
 const channelStateSchema = z.object({
-  state: z.enum(['working', 'off', 'needs_attention', 'not_connected', 'removed']), reason_code: z.string().nullable(), message: z.string().nullable(),
+  state: z.enum(['working', 'waiting', 'off', 'needs_attention', 'not_connected', 'removed']), reason_code: z.string().nullable(), message: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'ChannelState'>>;
 export const channelSchema = z.object({
   id: z.string().uuid(), type: channelTypeSchema, name: z.string(), enabled: z.boolean(), status: channelStateSchema, summary: z.string(),

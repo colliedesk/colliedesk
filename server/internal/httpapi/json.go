@@ -129,8 +129,10 @@ func writeTrialOutbound(response http.ResponseWriter, refusal *domain.TrialOutbo
 		if len(refusal.RefusedCC) > 0 {
 			body["refused_cc"] = refusal.RefusedCC
 		}
+		if reason := refusal.Reason(); reason != "" {
+			body["reason"] = reason
+		}
 		if refusal.ReplyTo != "" {
-			body["reason"] = domain.ReasonContactAddressDiffers
 			body["reply_to"] = refusal.ReplyTo
 		}
 		writeJSON(response, http.StatusForbidden, map[string]any{"error": errorBody(response, body)})

@@ -92,9 +92,9 @@ function LoadFailed({ onRetry }: { onRetry: () => void }) {
 }
 
 const stateLabel: Record<Channel['status']['state'], string> = {
-  working: m.statusWorking, off: m.statusOff, needs_attention: m.statusNeedsAttention, not_connected: m.statusNotConnected, removed: m.statusRemoved,
+  working: m.statusWorking, waiting: m.statusWaiting, off: m.statusOff, needs_attention: m.statusNeedsAttention, not_connected: m.statusNotConnected, removed: m.statusRemoved,
 };
-const stateClass: Record<Channel['status']['state'], string> = { working: 'ch-st-ok', off: 'ch-st-off', needs_attention: 'ch-st-warn', not_connected: 'ch-st-off', removed: 'ch-st-off' };
+const stateClass: Record<Channel['status']['state'], string> = { working: 'ch-st-ok', waiting: 'ch-st-off', off: 'ch-st-off', needs_attention: 'ch-st-warn', not_connected: 'ch-st-off', removed: 'ch-st-off' };
 
 function StatePill({ channel }: { channel: Channel }) {
   return <span className={`status ${stateClass[channel.status.state]}`}>{stateLabel[channel.status.state]}</span>;
@@ -314,6 +314,7 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
         <div className="ch-row-actions"><StatePill channel={channel} />{isAdmin && <EnabledSwitch channel={channel} />}</div>
       </div>
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
+      {channel.status.state === 'waiting' && <p className="notice notice-plain" role="status"><span>{m.waitingHelp(channel.type)}</span></p>}
       <ChannelIdentity channel={channel} label={ui.label} isAdmin={isAdmin} navigate={navigate} />
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
       {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
