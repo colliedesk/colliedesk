@@ -49,6 +49,13 @@ interface Draft {
 
 const draftOf = (article: KBArticle): Draft => ({ title: article.title, slug: article.slug, body: article.body_md, collection_id: article.collection_id,
   seo_title: article.seo_title, seo_description: article.seo_description });
+// seoMessages are the search fields' strings; they live with the editor's own chunk, not the first bundle.
+const seoMessages = {
+  searchEngines: 'Search engines',
+  seoTitle: 'Search title',
+  seoDescription: 'Meta description',
+  seoHelp: 'What Google and other search engines show for this article. Left empty, the title and the start of the text are used.',
+};
 // seoValue is a search field as the server stores it: on one line, runs of spaces as one, trimmed.
 const seoValue = (text: string) => text.trim().split(/\s+/).filter(Boolean).join(' ');
 
@@ -477,13 +484,13 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           <small id={`${id}-slug`} className="kb-hint">{kbMessages.articleSlugHelp(base.number, draft.slug.trim())}</small></div>}
       </section>
       <section className="kb-side-box" aria-labelledby={`${id}-search`}>
-        <h3 id={`${id}-search`}>{kbMessages.searchEngines}</h3>
-        <p id={`${id}-search-help`} className="kb-hint">{kbMessages.seoHelp}</p>
-        <div className="field"><label htmlFor={`${id}-seo-title`}>{kbMessages.seoTitle}</label>
+        <h3 id={`${id}-search`}>{seoMessages.searchEngines}</h3>
+        <p id={`${id}-search-help`} className="kb-hint">{seoMessages.seoHelp}</p>
+        <div className="field"><label htmlFor={`${id}-seo-title`}>{seoMessages.seoTitle}</label>
           <input id={`${id}-seo-title`} value={draft.seo_title} placeholder={draft.title.trim()} aria-describedby={`${id}-search-help ${id}-seo-title-count`}
             aria-invalid={seoTitleLength > maxSEOTitle || undefined} onChange={(event) => set({ seo_title: event.target.value })} />
           <small id={`${id}-seo-title-count`} className={seoTitleLength > maxSEOTitle ? 'error-copy' : 'kb-hint'}>{kbMessages.characters(seoTitleLength, maxSEOTitle)}</small></div>
-        <div className="field"><label htmlFor={`${id}-seo-description`}>{kbMessages.seoDescription}</label>
+        <div className="field"><label htmlFor={`${id}-seo-description`}>{seoMessages.seoDescription}</label>
           <textarea id={`${id}-seo-description`} rows={3} value={draft.seo_description} aria-describedby={`${id}-search-help ${id}-seo-description-count`}
             aria-invalid={seoDescriptionLength > maxSEODescription || undefined} onChange={(event) => set({ seo_description: event.target.value })} />
           <small id={`${id}-seo-description-count`} className={seoDescriptionLength > maxSEODescription ? 'error-copy' : 'kb-hint'}>{kbMessages.characters(seoDescriptionLength, maxSEODescription)}</small></div>
