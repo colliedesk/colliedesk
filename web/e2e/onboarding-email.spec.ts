@@ -28,6 +28,8 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
   expect(inboundURL).toBe(`${baseURL}/api/v1/channels/email/inbound`);
   // How replies leave is on the channel's Replies tab.
   await page.getByRole('tab', { name: 'Replies' }).click();
+  // The relay's host and port are a server detail, folded away for admins.
+  await page.locator('details', { hasText: 'Outgoing email (SMTP)' }).getByText('Server details').click();
   await expect(page.getByText(`127.0.0.1:${mailpit.smtpPort} · STARTTLS off · no login`)).toBeVisible();
   await expect(page.getByText(`Replies are sent from ${support}.`)).toBeVisible();
 

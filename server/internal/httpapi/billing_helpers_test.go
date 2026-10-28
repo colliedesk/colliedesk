@@ -103,8 +103,14 @@ func newFakePolarAPI(t *testing.T) *fakePolarAPI {
 		case request.URL.Path == "/v1/customers/":
 			email, _ := body["email"].(string)
 			external, _ := body["external_id"].(string)
+			// Polar validates the address with email-validator, which refuses special-use domains.
+			if strings.HasSuffix(email, "@example.com") {
+				reply(http.StatusUnprocessableEntity, `{"error":"PolarRequestValidationError","detail":[{"type":"value_error","loc":["body","email"],`+
+					`"msg":"value is not a valid email address: The domain name example.com does not accept email.","input":%q}]}`, email)
+				return
+			}
 			if _, taken := fake.customers[external]; taken || fake.emails[email] || email == "" || external == "" {
-				reply(http.StatusUnprocessableEntity, `{"detail":"customer exists"}`)
+				reply(http.StatusUnprocessableEntity, `{"error":"PolarRequestValidationError","detail":[{"type":"value_error","loc":["body","email"],"msg":"A customer with this email address already exists."}]}`)
 				return
 			}
 			id := fmt.Sprintf("cus_fake_%d", len(fake.customers)+1)

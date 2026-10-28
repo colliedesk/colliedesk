@@ -39,6 +39,13 @@ reply.
 The older slug address belongs to the form that had it, whichever form is the default; removing that
 form leaves the older address answering `404`.
 
+## Try it
+
+The **Embed** tab explains the form in plain words and has a small **Try the form**: enter an email
+address and a message and select **Try the form**. It sends one submission from that page, the way a
+visitor's browser would, and says when the conversation is in your inbox. The form must be on; the
+test needs no allowed origin, because it comes from Colliedesk's own page.
+
 ## Send a submission
 
 The settings page shows the form's **Submit URL**: `<your Colliedesk address>/api/v1/public/web-forms/<form id>`.

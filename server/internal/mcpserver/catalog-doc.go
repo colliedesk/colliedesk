@@ -122,6 +122,7 @@ var toolDocs = map[string]string{
 	"colliedesk_email_channel_get":                "Shows the email channel, never the inbound secret",
 	"colliedesk_email_channel_update":             "Connects the email channel or changes the support address or the sender name",
 	"colliedesk_email_domain_verify":              "Checks the DNS record that verifies the sending domain",
+	"colliedesk_email_test_message_send":          "Sends your own address a test email that opens a conversation you can answer",
 	"colliedesk_billing_get":                      "Shows the plan, trial and seats on the hosted cloud",
 	"colliedesk_imports_list":                     "Lists imports",
 	"colliedesk_import_get":                       "Shows one import with its progress and why it failed or waits",

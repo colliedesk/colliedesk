@@ -756,7 +756,7 @@ test('Send and resolve posts the reply first and resolves through the conversati
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'All done' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send and resolve' }));
   await waitFor(() => expect(api.updateConversation).toHaveBeenCalledWith(alpha.id, { status: 'resolved' }));
-  expect(api.createMessage).toHaveBeenCalledWith(alpha.id, 'outgoing', 'All done', [], [], 0, undefined);
+  expect(api.createMessage).toHaveBeenCalledWith(alpha.id, 'outgoing', 'All done', [], [], 0, undefined, expect.any(String));
   expect(api.createMessage.mock.invocationCallOrder[0]).toBeLessThan(api.updateConversation.mock.invocationCallOrder[0]);
   // Resolved, the header offers the way back.
   expect(await screen.findByRole('button', { name: 'Reopen' })).toBeInTheDocument();
@@ -1007,4 +1007,28 @@ test('the composer warns about the mailbox a reply leaves from, and leads to tha
     api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
     navigate.mockRestore();
   }
+});
+
+test('a retried send carries the key of its first attempt, and the next message gets a new one', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.createMessage.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.createMessage.mockRejectedValueOnce(new Error('network')).mockResolvedValue({ id: '77777777-7777-4777-8777-777777777777' });
+  renderRoute();
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Retry me' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  await screen.findByRole('alert');
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(body).toHaveValue(''));
+  fireEvent.change(body, { target: { value: 'Retry me' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(api.createMessage).toHaveBeenCalledTimes(3));
+  const keys = api.createMessage.mock.calls.map((call) => call[7] as string);
+  expect(keys[0]).toMatch(/^[0-9a-f-]{32,36}$/);
+  expect(keys[1]).toBe(keys[0]);
+  expect(keys[2]).not.toBe(keys[0]);
 });

@@ -35,6 +35,7 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
   const [askingRotate, setAskingRotate] = useState(false);
   const secretSet = settings.data?.channel?.secret_set === true;
   return <>
+    {settings.data?.channel && <TestMessage channelID={channel.id} />}
     {rotateSecret.isError && <p role="alert" className="error-copy">{rotateSecret.error instanceof InvalidRequestError ? rotateSecret.error.message : messages.settingsActionFailed}</p>}
     <EmailChannelSection part="connection" settings={settings.data} timezone={timezone} canManage={canManage}
       addressSave={saveState(saveEmail)} onSave={(address) => saveEmail.mutate(address)} addressConflictLink={conflictLink}
@@ -48,8 +49,28 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
   </>;
 }
 
+// TestMessage sends the signed-in person a test email on this channel, the way a customer's arrives, and
+// links to the conversation it opened: the whole loop without a forwarder or a terminal.
+function TestMessage({ channelID }: { channelID: string }) {
+  const client = useQueryClient();
+  const send = useMutation({ mutationFn: () => channelsApi.emailTestMessage(channelID),
+    onSuccess: () => Promise.all(['conversations', 'channel', 'channels'].map((key) => client.invalidateQueries({ queryKey: [key] }))) });
+  return <div className="email-channel-test">
+    <p><button type="button" className="primary-action" disabled={send.isPending} onClick={() => send.mutate()}>{emailMessages.testSend}</button></p>
+    <p className="muted-copy">{emailMessages.testHelp}</p>
+    {send.data && <p role="status">{emailMessages.testSent(send.data.sent_to)}{' '}
+      <a href={`/conversations/${encodeURIComponent(send.data.conversation_id)}`}>{emailMessages.testOpen}</a></p>}
+    {send.isError && <p role="alert" className="error-copy">{send.error instanceof InvalidRequestError ? send.error.message : emailMessages.testFailed}</p>}
+  </div>;
+}
+
 // Words of the email tabs that the Settings page never had.
 const emailMessages = {
+  testSend: 'Send yourself a test message',
+  testHelp: 'It arrives from your own address like a customer\'s email and opens a conversation. Answer it: the reply is emailed to you, so you see what customers receive.',
+  testSent: (address: string) => `Test message sent from ${address}.`,
+  testOpen: 'Open the test conversation',
+  testFailed: 'The test message could not be sent. Try again.',
   rotateTitle: 'Rotate the inbound secret?',
   rotateBody: 'The current secret stops working at once: mail your forwarder sends with it is refused until you give it the new one, shown once after this.',
   rotateConfirm: 'Rotate secret',

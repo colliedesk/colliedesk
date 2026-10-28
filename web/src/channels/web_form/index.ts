@@ -2,7 +2,7 @@ import { FormIcon } from '../../ui/icons';
 import { lazyPart } from '../../ui/lazy-part';
 import type { ChannelUI } from '../registry';
 
-const capabilities: Record<string, string> = { form: 'Website form', attachments_in: 'Attachments in' };
+const capabilities: Record<string, string> = { form: 'A form on your website', attachments_in: 'Receives files' };
 
 export const webFormChannel: ChannelUI = {
   type: 'web_form',

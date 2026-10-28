@@ -171,6 +171,7 @@ export const emailChannelSettingsSchema = z.object({
 export const webFormSettingsSchema = z.object({
   channel_id: z.string().uuid().optional(), enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(), legacy_slug: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'WebFormSettings'>>;
+export const testMessageResultSchema = z.object({ conversation_id: z.string(), message_id: z.string(), sent_to: z.string() }) satisfies z.ZodType<JsonResponse<'sendEmailTestMessage', 201>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),

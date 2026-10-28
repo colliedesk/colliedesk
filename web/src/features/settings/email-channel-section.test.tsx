@@ -365,3 +365,17 @@ test('a workspace with a hosted forwarding address gets no inbound URL guide', (
   render(<EmailChannelSection settings={{ ...connected, hosted_address: 'support@acme.colliedesk.com' }} timezone="UTC" canManage part="connection" />);
   expect(screen.queryByRole('textbox', { name: /test request/i })).toBeNull();
 });
+
+test('replies say in plain words that this server sends them; the SMTP details are under Server details for admins only', () => {
+  const view = render(<EmailChannelSection settings={connected} timezone="UTC" canManage />);
+  expect(screen.getByText('Replies are sent by this server\'s outgoing email.')).toBeInTheDocument();
+  const details = screen.getByText(/smtp\.example\.net/).closest('details')!;
+  expect(within(details).getByText('Server details')).toBeInTheDocument();
+  expect(details).not.toHaveAttribute('open');
+  expect(details).toHaveTextContent('smtp.example.net:587 · STARTTLS on · authenticated');
+  view.unmount();
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage={false} />);
+  expect(screen.getByText('Replies are sent by this server\'s outgoing email.')).toBeInTheDocument();
+  expect(screen.queryByText('Server details')).not.toBeInTheDocument();
+  expect(screen.queryByText(/smtp\.example\.net/)).not.toBeInTheDocument();
+});

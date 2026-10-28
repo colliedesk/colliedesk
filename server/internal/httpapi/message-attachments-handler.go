@@ -94,6 +94,11 @@ func (f messageFields) validate() error {
 func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http.Request) {
 	identity := principal(request)
 	workspaceID, conversationID := identity.Workspace.ID, request.PathValue("id")
+	key, ok := idempotencyKey(request)
+	if !ok {
+		writeInvalidIdempotencyKey(response)
+		return
+	}
 	// A token that may not write any message is refused before a byte is stored; the kind, and so
 	// whether a reply needs messages:send, is known only once the fields are read. Files cannot wait
 	// days for a person's approval, so such a call is refused with the way forward.
@@ -143,8 +148,8 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		a.writeUploadError(response, refusal)
 		return
 	}
-	item, err := a.store.CreateReply(request.Context(), workspaceID, conversationID, actor, fields.kind, fields.body, cc, fields.seen, files...)
-	if a.writeReplyConflict(response, identity, err) {
+	item, replayed, err := a.store.CreateReplyOnce(request.Context(), workspaceID, conversationID, key, actor, fields.kind, fields.body, cc, fields.seen, files...)
+	if a.writeReplyConflict(response, identity, err) || writeKeyReused(response, err) {
 		return
 	}
 	if errors.Is(err, store.ErrObjectMissing) {
@@ -153,6 +158,11 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 	}
 	if err != nil {
 		writeStoreError(response, err)
+		return
+	}
+	if replayed {
+		// The earlier request's files are the message's; the ones this repeat sent are discarded.
+		writeJSON(response, http.StatusOK, item)
 		return
 	}
 	a.recordReply(identity, fields.kind)

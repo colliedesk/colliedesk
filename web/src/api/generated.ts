@@ -272,6 +272,8 @@ export interface paths {
          *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (customer mail through the platform forwarder that did not fail authentication, or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
          *
          *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
+         *
+         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body or author answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft or a call filed as an agent request (202) does not use it.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -489,6 +491,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{id}/email/test-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on this email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel; 409 `own_address` when the agent signs in with the support address itself, whose mail never opens a conversation. */
+        post: operations["sendEmailTestMessageByID"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{id}/email/gmail": {
         parameters: {
             query?: never;
@@ -576,6 +597,23 @@ export interface paths {
         put?: never;
         /** @description Create or replace the inbound secret of the default email channel. The raw secret is returned once; the previous one stops working. */
         post: operations["rotateEmailInboundSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/test-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on the default email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel; 409 `own_address` when the agent signs in with the support address itself, whose mail never opens a conversation. */
+        post: operations["sendEmailTestMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1270,7 +1308,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats (agents and pending invites) than the plan allows, or more stored attachment bytes, imported files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them. */
+        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats (agents and pending invites) than the plan allows, or more stored attachment bytes, imported files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them. 422 `billing_email_refused` when the payment provider does not accept the admin's address (a domain that receives no mail, for example); the message gives the provider's reason and what to do. */
         post: operations["createBillingCheckout"];
         delete?: never;
         options?: never;
@@ -4711,6 +4749,17 @@ export interface components {
                 content_type: string;
             }[];
         };
+        TestMessageResult: {
+            /** Format: uuid */
+            conversation_id: string;
+            /** Format: uuid */
+            message_id: string;
+            /**
+             * Format: email
+             * @description The agent's own address the test came from, where a reply to it is delivered.
+             */
+            sent_to: string;
+        };
         /** @description One email channel. Its domain's verification and provider domain belong to the domain: two channels of the workspace on one domain show the same, verify it once and share one provider domain. */
         EmailChannel: {
             /**
@@ -6042,7 +6091,10 @@ export interface operations {
     createMessage: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: components["parameters"]["ID"];
             };
@@ -6079,6 +6131,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The message an earlier request with the same Idempotency-Key created; nothing new was stored or sent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
             /** @description Created reply or private note */
             201: {
                 headers: {
@@ -6104,6 +6165,15 @@ export interface operations {
                 };
             };
             413: components["responses"]["AttachmentsTooLarge"];
+            /** @description The Idempotency-Key already names another message (`idempotency_key_reused`); nothing was stored */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             429: components["responses"]["TrialOutboundLimit"];
             /** @description The attachments volume is low on disk space; nothing was sent or stored */
             507: {
@@ -6493,6 +6563,44 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    sendEmailTestMessageByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The test message arrived and opened a conversation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description Five test messages were sent in the last hour; Retry-After says when the next one may go. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
     connectGmailByID: {
         parameters: {
             query?: never;
@@ -6695,6 +6803,42 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    sendEmailTestMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The test message arrived and opened a conversation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description Five test messages were sent in the last hour; Retry-After says when the next one may go. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -8132,6 +8276,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description The payment provider did not accept the admin's address; the message says why and what to do. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
             502: components["responses"]["BadGateway"];
         };

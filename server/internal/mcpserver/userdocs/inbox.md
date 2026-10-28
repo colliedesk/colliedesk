@@ -10,7 +10,10 @@ Back, returns to the list with the same filters and scrolled to where you left i
 and your address stay at the top while the page scrolls.
 
 A new workspace has no conversations yet. The list then links to the next steps: **Connect your
-support email**, **Import from Freshdesk** and **Invite your team** (admins see all three). If the list
+support email**, **Import from Freshdesk** and **Invite your team** (admins see all three). A workspace
+with an email channel also offers **Send yourself a test message**: it opens a conversation from your
+own address that you can answer, and the reply comes to your mailbox (see
+[Send yourself a test message](email-channel.md#send-yourself-a-test-message)). If the list
 cannot be loaded, it says so with **Try again** instead.
 
 **Find conversations**
@@ -187,10 +190,15 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   the note, then press **Resolve** above the thread.
 - Messages support Markdown.
 - **An unsent reply is kept.** What you type stays in this browser for you and that conversation, so a
-  reload, the browser's Back or a trip to Settings finds it in the box again. It is removed once the reply
-  or note is sent, seven days after you last opened or edited it, and for every conversation when you sign out, so a
+  reload, the browser's Back or a trip to Settings finds it in the box again. It is removed as soon as you
+  send the reply or note (and written back if the send fails, so a reload during the send never offers
+  the sent text again), seven days after you last opened or edited it, and for every conversation when you sign out, so a
   teammate who signs in on the same browser never sees it. Attached files are not kept. Another browser or
-  device does not see it.
+  device does not see it. Two tabs of the same browser share it: when you type in one, the other tab's
+  box takes the newer text and says **Updated from another tab**.
+- **One press sends once.** The button is disabled while a message is being sent, and every send carries
+  its own key, so pressing twice, or retrying after a lost connection, never posts the same note or reply
+  twice. Through the API, send the same `Idempotency-Key` header on every retry of one message.
 - **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
   tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
   yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps

@@ -3,8 +3,13 @@
 Once a day, a Colliedesk install sends one small usage report to the Colliedesk team. It tells us
 how many installs exist, which versions they run and how much they are used, so we know what to
 fix and which versions still need security updates. It carries counts and the public host name of
-your install. It never contains a person's name, an email address, a workspace name, a subject, a
-message or anything else your customers wrote.
+your install. This daily report never contains a person's name, an email address, a workspace name,
+a subject, a message or anything else your customers wrote.
+
+Colliedesk Cloud sends more than this report: trial, activation and payment events, and a daily
+`workspace_snapshot` that names each workspace (its name and slug), because HC Labs runs that
+service for those customers. A self-hosted install never sends either; see
+[Colliedesk Cloud only](#colliedesk-cloud-only-trial-activation-and-payment-events).
 
 The report is on by default. You can turn it off at any time.
 
@@ -75,9 +80,11 @@ anything written in a conversation):
 Each batch sent is logged as `workspace snapshots sent`. A failed send is logged as `usage report
 not sent` and never stops the server; the day's report is not retried.
 
-The workspace id is a random UUID. The events never carry the email address of the person who
-signed up, the workspace name or its address. They are sent in the background; a failure is logged
-as `funnel event not sent` and changes nothing in the workspace.
+The workspace id is a random UUID. The trial, activation and payment events in the first table
+never carry the email address of the person who signed up, the workspace name or its address; only
+`workspace_snapshot` carries the workspace's name and slug, and no event carries an email address.
+The events are sent in the background; a failure is logged as `funnel event not sent` and changes
+nothing in the workspace.
 
 ## How the web app is used
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { request, requestNoContent } from './client';
 import type { RequestBody } from './client';
-import { consentLinkSchema, emailChannelSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema } from './schemas';
+import { consentLinkSchema, emailChannelSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema } from './schemas';
 import type { Generated } from './schemas';
 
 // Channels load with their settings pages, a lazy part, so their schemas and calls are not in the first bundle.
@@ -68,6 +68,7 @@ export const channelsApi = {
   // One email channel of several: its settings and its own actions.
   email: (id: string) => request(`/api/v1/channels/${id}/email`, emailChannelSettingsSchema),
   emailSecret: (id: string) => request(`/api/v1/channels/${id}/email/secret`, inboundSecretSchema, { method: 'POST' }),
+  emailTestMessage: (id: string) => request(`/api/v1/channels/${id}/email/test-message`, testMessageResultSchema, { method: 'POST' }),
   emailVerifyDomain: (id: string) => request(`/api/v1/channels/${id}/email/domain-verification`, emailChannelSettingsSchema, { method: 'POST' }),
   emailConnectGmail: (id: string) => request(`/api/v1/channels/${id}/email/gmail`, consentLinkSchema, { method: 'POST' }),
   emailDisconnectGmail: (id: string) => requestNoContent(`/api/v1/channels/${id}/email/gmail`, { method: 'DELETE' }),

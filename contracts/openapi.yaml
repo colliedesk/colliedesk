@@ -621,6 +621,19 @@ paths:
         `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send
         anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is
         never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
+
+
+        Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a
+        repeated request returns the message the first one created (200) instead of storing and sending it
+        again. Keys belong to the workspace; the same key with another conversation, kind, body or author
+        answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft
+        or a call filed as an agent request (202) does not use it.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it.
+          schema: {type: string, minLength: 1, maxLength: 200}
       requestBody:
         required: true
         content:
@@ -663,6 +676,11 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Message'}
+        '200':
+          description: The message an earlier request with the same Idempotency-Key created; nothing new was stored or sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Message'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
@@ -672,6 +690,9 @@ paths:
           description: A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`); nothing was stored or sent
           content: {application/json: {schema: {$ref: '#/components/schemas/ReplyConflict'}}}
         '413': {$ref: '#/components/responses/AttachmentsTooLarge'}
+        '422':
+          description: The Idempotency-Key already names another message (`idempotency_key_reused`); nothing was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '429': {$ref: '#/components/responses/TrialOutboundLimit'}
         '507':
           description: The attachments volume is low on disk space; nothing was sent or stored
@@ -957,6 +978,39 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/{id}/email/test-message:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: sendEmailTestMessageByID
+      x-permission: conversations:write
+      description: >-
+        Send yourself a test message: an incoming email from the signed-in agent's own address arrives on
+        this email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the
+        whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's
+        mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only
+        recipient is an agent of this workspace whose address is proven (the agent signed in through a
+        pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused.
+        Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when
+        the workspace has no such email channel; 409 `own_address` when the agent signs in with the support
+        address itself, whose mail never opens a conversation.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '201':
+          description: The test message arrived and opened a conversation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TestMessageResult'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: Five test messages were sent in the last hour; Retry-After says when the next one may go.
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/{id}/email/gmail:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1123,6 +1177,37 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email/test-message:
+    post:
+      operationId: sendEmailTestMessage
+      x-permission: conversations:write
+      description: >-
+        Send yourself a test message: an incoming email from the signed-in agent's own address arrives on
+        the default email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the
+        whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's
+        mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only
+        recipient is an agent of this workspace whose address is proven (the agent signed in through a
+        pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused.
+        Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when
+        the workspace has no such email channel; 409 `own_address` when the agent signs in with the support
+        address itself, whose mail never opens a conversation.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '201':
+          description: The test message arrived and opened a conversation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TestMessageResult'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: Five test messages were sent in the last hour; Retry-After says when the next one may go.
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email/gmail:
     post:
@@ -2303,6 +2388,8 @@ paths:
         A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats
         (agents and pending invites) than the plan allows, or more stored attachment bytes, imported
         files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them.
+        422 `billing_email_refused` when the payment provider does not accept the admin's address (a
+        domain that receives no mail, for example); the message gives the provider's reason and what to do.
       requestBody:
         required: true
         content:
@@ -2321,6 +2408,9 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: The payment provider did not accept the admin's address; the message says why and what to do.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
         '502': {$ref: '#/components/responses/BadGateway'}
   /api/v1/billing/portal:
@@ -7014,6 +7104,13 @@ components:
             properties:
               filename: {type: string}
               content_type: {type: string}
+    TestMessageResult:
+      type: object
+      required: [conversation_id, message_id, sent_to]
+      properties:
+        conversation_id: {type: string, format: uuid}
+        message_id: {type: string, format: uuid}
+        sent_to: {type: string, format: email, description: "The agent's own address the test came from, where a reply to it is delivered."}
     EmailChannel:
       type: object
       required: [support_address, sender_name, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, dns_records, dns_records_expired_at, created_at, updated_at]

@@ -22,6 +22,24 @@ The channel reads **Waiting for first message** until a message has arrived, the
 the test from a different address than the support address: mail from the support address itself is
 never turned into a conversation.
 
+## Send yourself a test message
+
+The quickest way to see the whole loop needs no forwarder and no terminal. Select **Send yourself a
+test message**: on the empty inbox, or on **Settings → Channels → Email → Connection**. Colliedesk
+delivers one email from your own address to the channel, the way a customer's email arrives. It opens
+a conversation, **Test message from Colliedesk**, and the Connection tab links to it.
+
+Answer it like any customer. The reply is emailed to your own address, so you see what customers
+receive; on Colliedesk Cloud it arrives in your real mailbox. During the trial this reply is allowed,
+because it reaches only you: its only recipient is you, an agent of the workspace who signed in with a
+verified address (a Colliedesk Cloud sign-in, or a sign-in link from whoever runs the server). A Cc to
+anyone else is still refused, and the reply counts toward the trial's daily limit. An agent who joined
+only with an invite link has no verified address yet, so a reply to their test message waits until
+they sign in that way.
+
+A workspace can send itself five test messages an hour. Agent tokens do the same with the MCP tool
+`colliedesk_email_test_message_send`.
+
 ## Colliedesk Cloud: forward to your address
 
 On Colliedesk Cloud every workspace has a ready-made address, `support@<workspace>.colliedesk.com`.
@@ -72,9 +90,11 @@ A server without a hosted mail domain shows the **Inbound URL** instead of a for
 3. Give the inbound URL and the secret to the person who runs the server. They connect a forwarder
    (a Cloudflare Email Worker, Postmark, Amazon SES or a pipe on your mail server) as described in
    [forward mail to Colliedesk](../self-host/email.md#3-forward-mail-to-colliedesk).
-4. To check the URL works before the forwarder is ready, copy the **Test request** under the secret
-   (**Copy test request**) and run it in a terminal. It posts one message from
-   `customer@example.com`, which opens a conversation in the inbox. The channel then reads **Working**.
+4. To see a conversation arrive before the forwarder is ready, select **Send yourself a test
+   message** (see [above](#send-yourself-a-test-message)). Whoever runs the server can also check the
+   URL itself: open **Test from a terminal instead**, copy the **Test request** (**Copy test request**)
+   and run it in a terminal. It posts one message from `customer@example.com`, which opens a
+   conversation in the inbox. The channel then reads **Working**.
 
 On Colliedesk Cloud, mail posted to the inbound URL does not count as a customer who wrote first
 during the trial, because whoever holds the secret can write any sender; see

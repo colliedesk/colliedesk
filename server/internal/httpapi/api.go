@@ -176,7 +176,9 @@ type API struct {
 	providerChecks *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
-	polar          *polar.Client
+	// testMessages limits the test messages a workspace sends itself per hour.
+	testMessages *webFormLimiter
+	polar        *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
 	founding foundingState
@@ -259,6 +261,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
+		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
@@ -509,6 +512,9 @@ func Routes() []Route {
 		{http.MethodGet, microsoftAdminConsentPath, auth.PermissionPublic},
 		{http.MethodPost, channelMicrosoftPath, auth.PermissionAccessWrite},
 		{http.MethodDelete, channelMicrosoftPath, auth.PermissionAccessWrite},
+		// A test message from the signed-in agent, on the default email channel or one of several.
+		{http.MethodPost, "/api/v1/channels/email/test-message", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/email/test-message", auth.PermissionConversationsWrite},
 	}
 }
 

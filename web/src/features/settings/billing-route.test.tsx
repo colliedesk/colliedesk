@@ -4,8 +4,11 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { BillingRoute } from './billing-route';
 import { readCheckoutIntent, rememberCheckoutIntent } from './checkout-intent';
 
-const api = vi.hoisted(() => ({ me: vi.fn(), config: vi.fn(), billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() }));
-vi.mock('../../api/client', () => ({ api }));
+const { api, InvalidRequestError } = vi.hoisted(() => ({
+  api: { me: vi.fn(), config: vi.fn(), billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() },
+  InvalidRequestError: class InvalidRequestError extends Error {},
+}));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError }));
 // The Polar embed SDK is the only other boundary; the open-checkout module runs for real.
 const embed = vi.hoisted(() => ({ create: vi.fn() }));
 vi.mock('@polar-sh/checkout/embed', () => ({ PolarEmbedCheckout: { create: embed.create } }));
@@ -174,4 +177,16 @@ test('an intent is dropped when the billing data cannot be loaded', async () => 
   expect(await screen.findByRole('alert')).toHaveTextContent(/billing action failed/i);
   expect(api.startCheckout).not.toHaveBeenCalled();
   expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('a checkout the payment provider refuses shows its reason and what to do, not the generic failure', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(foundingFull);
+  api.startCheckout.mockRejectedValue(new InvalidRequestError('Polar, our payment provider, did not accept the address sam@example.com: The domain name example.com does not accept email. Change your account email to an address that receives mail, or contact us at support@colliedesk.com.'));
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /team, \$69 per month/i }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('did not accept the address sam@example.com');
+  expect(alert).toHaveTextContent('Change your account email');
+  expect(alert).not.toHaveTextContent('The billing action failed');
 });

@@ -151,30 +151,77 @@ func (s *Store) CreateMessageWithCC(ctx context.Context, workspaceID, conversati
 // (taken first, as every other writer of a reply takes it before any conversation row lock), so two
 // replies sent at once with the same seen never both go.
 func (s *Store) CreateReply(ctx context.Context, workspaceID, conversationID string, actor Actor, kind, body string, cc []string, seen *int, files ...NewAttachment) (domain.Message, error) {
+	message, _, err := s.CreateReplyOnce(ctx, workspaceID, conversationID, "", actor, kind, body, cc, seen, files...)
+	return message, err
+}
+
+// ErrIdempotencyKeyReused means a message key already names a message of the workspace that differs from
+// this one (another conversation, kind, text or author): the client reused a key for a new message.
+var ErrIdempotencyKeyReused = errors.New("the idempotency key already names another message")
+
+// CreateReplyOnce is CreateReply that remembers key, the client's name for this submit (empty: none).
+// When the workspace already holds a message under key, it is returned with replayed true and nothing is
+// stored, emailed or checked again; the files the caller stored for the repeat stay unreferenced. A key
+// held by a different message is ErrIdempotencyKeyReused. A lock on the key makes requests that arrive at
+// once wait for the first, so they find its message instead of storing their own.
+func (s *Store) CreateReplyOnce(ctx context.Context, workspaceID, conversationID, key string, actor Actor, kind, body string, cc []string, seen *int, files ...NewAttachment) (message domain.Message, replayed bool, err error) {
 	if len(cc) > 0 && kind != "outgoing" {
-		return domain.Message{}, ErrCCOnNote
+		return domain.Message{}, false, ErrCCOnNote
 	}
 	if len(cc) == 0 {
 		cc = nil
 	}
 	tx, err := s.db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
-		return domain.Message{}, fmt.Errorf("begin message creation: %w", err)
+		return domain.Message{}, false, fmt.Errorf("begin message creation: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	if kind == "outgoing" {
-		if err := checkReplySeen(ctx, tx, workspaceID, conversationID, seen, true); err != nil {
-			return domain.Message{}, err
+	if key != "" {
+		existing, found, err := messageForKey(ctx, tx, workspaceID, conversationID, key, actor, kind, body)
+		if err != nil || found {
+			return existing, found, err
 		}
 	}
-	message, err := s.createMessage(ctx, tx, workspaceID, conversationID, actor, kind, body, cc, files)
+	if kind == "outgoing" {
+		if err := checkReplySeen(ctx, tx, workspaceID, conversationID, seen, true); err != nil {
+			return domain.Message{}, false, err
+		}
+	}
+	message, err = s.createMessage(ctx, tx, workspaceID, conversationID, actor, kind, body, cc, files)
 	if err != nil {
-		return domain.Message{}, err
+		return domain.Message{}, false, err
+	}
+	if key != "" {
+		if _, err := tx.Exec(ctx, `INSERT INTO message_idempotency_keys(workspace_id,key,message_id) VALUES($1,$2,$3)`, workspaceID, key, message.ID); err != nil {
+			return domain.Message{}, false, fmt.Errorf("remember message key: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return domain.Message{}, fmt.Errorf("commit message creation: %w", err)
+		return domain.Message{}, false, fmt.Errorf("commit message creation: %w", err)
 	}
-	return message, nil
+	return message, false, nil
+}
+
+// messageForKey takes the key's lock and reads the message the key already names, if any.
+func messageForKey(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, key string, actor Actor, kind, body string) (domain.Message, bool, error) {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "message-key:"+workspaceID+":"+key); err != nil {
+		return domain.Message{}, false, fmt.Errorf("lock message key: %w", err)
+	}
+	var messageID, existingConversation, existingKind, existingBody, author string
+	err := tx.QueryRow(ctx, `SELECT m.id::text,m.conversation_id::text,m.kind,m.body,COALESCE(m.author_agent_id::text,'')
+		FROM message_idempotency_keys k JOIN messages m ON m.workspace_id=k.workspace_id AND m.id=k.message_id
+		WHERE k.workspace_id=$1 AND k.key=$2`, workspaceID, key).Scan(&messageID, &existingConversation, &existingKind, &existingBody, &author)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Message{}, false, nil
+	}
+	if err != nil {
+		return domain.Message{}, false, fmt.Errorf("read message key: %w", err)
+	}
+	if existingConversation != conversationID || existingKind != kind || existingBody != body || author != actor.AgentID {
+		return domain.Message{}, false, ErrIdempotencyKeyReused
+	}
+	message, err := getMessage(ctx, tx, workspaceID, messageID)
+	return message, err == nil, err
 }
 
 // createMessage writes a message, its files and its outbox row inside tx; see CreateMessageWithCC.

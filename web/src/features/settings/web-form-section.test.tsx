@@ -107,3 +107,28 @@ test('Allowed origins says in plain words which websites it means, with an examp
   render(<WebFormSection settings={off} canManage onSave={vi.fn()} />);
   expect(screen.getByRole('textbox', { name: /Allowed origins/i })).toHaveAccessibleDescription(/websites that may send this form.*https:\/\/www\.example\.com/i);
 });
+
+test('the form explains itself in plain words first and lets the team try it without a developer', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } }));
+  vi.stubGlobal('fetch', fetchMock);
+  render(<WebFormSection settings={on} canManage part="embed" />);
+  expect(screen.getByText(/Your website's contact form sends each visitor's email and message here/)).toBeInTheDocument();
+  expect(screen.queryByText(/Post JSON/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Your email' }), { target: { value: 'me@acme.test' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Testing the form' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Try the form' }));
+  expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('It arrived: a conversation from me@acme.test is in your inbox.');
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe('/api/v1/public/forms/acme');
+  expect(JSON.parse(init.body as string)).toEqual({ email: 'me@acme.test', message: 'Testing the form', source: 'Test from Colliedesk', website: '' });
+  vi.unstubAllGlobals();
+});
+
+test('a tried form that is refused says why', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: 'validation_failed', message: 'Check the highlighted fields.' } }), { status: 422, headers: { 'Content-Type': 'application/json' } })));
+  render(<WebFormSection settings={on} canManage part="embed" />);
+  fireEvent.change(screen.getByRole('textbox', { name: 'Your email' }), { target: { value: 'nope' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Try the form' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Check the highlighted fields.');
+  vi.unstubAllGlobals();
+});

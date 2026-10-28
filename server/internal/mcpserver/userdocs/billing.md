@@ -46,6 +46,10 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
     (API reason `sender_authentication_failed`).
 
   In both cases verifying your sending domain or choosing a plan lets you reply.
+
+  One reply needs no customer: the answer to your own
+  [test message](email-channel.md#send-yourself-a-test-message). It goes only to you, so the trial
+  allows it, as long as nobody else is copied.
 - **Attachments.** 2 GiB in total. Files that came in with a Freshdesk import do not count. At 80%
   the banner and **Plan and billing** warn you. At the limit, mail with a larger attachment is refused by
   the mail system and bounces to the sender; nothing is dropped silently.
@@ -140,6 +144,10 @@ trial (or the subscription) has ended, instead of the inbox.
 
 If the window does not load within 15 seconds (for example a browser extension blocks it),
 Colliedesk opens the same checkout as a full page instead.
+
+If the payment provider does not accept your account's email address (for example an address on a
+domain that receives no mail), the page shows the provider's reason instead of a generic failure. Sign
+in with an address that receives mail, or contact us at support@colliedesk.com.
 
 A workspace that already pays cannot start a second checkout. Change or cancel in the portal.
 If two checkouts ever run at once, the page warns that the workspace pays twice; cancel the extra

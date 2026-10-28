@@ -11,7 +11,8 @@ interface LockedScreenProps {
   // billing is read by admins only. It tells a lapsed subscription from an ended trial.
   billing?: Billing;
   timezone: string;
-  checkoutFailed?: boolean;
+  // true for a generic failure, or the server's words when it said why.
+  checkoutFailed?: boolean | string;
   // checkoutBusy is true while a checkout is starting or open; the plan buttons wait for it.
   checkoutBusy?: boolean;
   signOutFailed?: boolean;
@@ -41,7 +42,7 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <h1 ref={title} tabIndex={-1}>{heading(billing)}</h1>
         <p>{endedAt && `${billingMessages.lockedSince(formatDate(endedAt, timezone))} `}{isAdmin ? billingMessages.lockedAdminExplain : billingMessages.lockedAgentExplain}</p>
       </header>
-      {checkoutFailed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
+      {checkoutFailed && <p role="alert" className="error-copy">{typeof checkoutFailed === 'string' ? checkoutFailed : messages.billingActionFailed}</p>}
       {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
       <section className="settings-card" aria-labelledby="locked-plan-heading">
         <div className="section-heading"><h2 id="locked-plan-heading">{messages.choosePlan}</h2></div>

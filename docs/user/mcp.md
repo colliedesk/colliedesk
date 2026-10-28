@@ -160,6 +160,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address or the sender name | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
+| `colliedesk_email_test_message_send` | Sends your own address a test email that opens a conversation you can answer | `draft` |
 | `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `admin` |
 | `colliedesk_imports_list` | Lists imports | `admin` |
 | `colliedesk_import_get` | Shows one import with its progress and why it failed or waits | `admin` |

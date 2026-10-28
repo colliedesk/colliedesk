@@ -8,7 +8,7 @@ import { recordFailedCall } from '../lib/diagnostics';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
-  cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
+  cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentRequestListSchema, agentRequestSchema, agentTokenSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
@@ -141,7 +141,7 @@ async function outboundRefusal(response: Response): Promise<Error> {
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
     // An agent asking for an admin token: the reason is shown next to the form.
     if (code === 'admin_token_needs_admin' && typeof message === 'string' && message) return new InvalidRequestError(message);
-    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval', 'ai_checks_rate_limited', 'ai_drafts_rate_limited'].includes(String(code)) && typeof message === 'string' && message)
+    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval', 'ai_checks_rate_limited', 'ai_drafts_rate_limited', 'rate_limited'].includes(String(code)) && typeof message === 'string' && message)
       return new ConflictError(message, { code });
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
@@ -256,6 +256,8 @@ export const api = {
   // One mailbox of several: the one a conversation's replies leave from.
   emailChannelOf: (id: string) => request(`/api/v1/channels/${encodeURIComponent(id)}/email`, emailChannelSettingsSchema),
   channelCounts: () => request('/api/v1/channels', channelCountsSchema),
+  // A test email from the signed-in agent to an email channel (the default one without an id).
+  sendTestMessage: (channelId?: string) => request(channelId ? `/api/v1/channels/${channelId}/email/test-message` : '/api/v1/channels/email/test-message', testMessageResultSchema, { method: 'POST' }),
   // Without sender_name the channel keeps its name; a new channel starts with the workspace name.
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
   // Only the name: the server keeps the address, so a stale page cannot move the channel.
@@ -305,8 +307,9 @@ export const api = {
   timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
   // seen is the newest reply number the sender had seen when they started writing (409 ReplyConflictError when older).
   // aiDraft names the AI draft a reply was written from.
-  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string) =>
-    request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST',
+  // key names this submit (Idempotency-Key): a retry with the same key returns the message the first stored.
+  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string, key?: string) =>
+    request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined,
       body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft)
         : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}) }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
