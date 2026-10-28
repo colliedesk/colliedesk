@@ -9,6 +9,7 @@ import { CopyButton } from './copy-button';
 import { gmailMessages } from './gmail-messages';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
 import { microsoftMessages } from './microsoft-messages';
+import { selfHostGuide } from '../../lib/self-host-guide';
 
 const messages = { ...shared, ...gmailMessages, ...microsoftMessages };
 
@@ -27,7 +28,9 @@ interface ProviderText {
   failureReasons: Record<string, string>;
   failureUnknown: string;
   addressMismatch: (address: string, support: string) => string;
-  notAvailable: (settings: string[]) => string;
+  notAvailable: string;
+  // The self-hosting guide section that sets this provider up, linked under notAvailable.
+  setupGuide: { text: string; href: string };
   notSetUpSummary: string;
   redirectUri: string;
   disconnect: string;
@@ -44,7 +47,8 @@ const providers: Record<MailboxProvider, ProviderText> = {
     label: messages.gmailLabel, site: messages.gmailSite, connect: messages.connectGmail, connecting: messages.connectingGmail, reconnect: messages.reconnectGmail,
     useAnother: messages.useAnotherGmail, connectedDescription: messages.gmailConnectedDescription, connected: messages.gmailConnected,
     failedTitle: messages.gmailFailedTitle, failedBody: messages.gmailFailedBody, failureReasons: messages.gmailFailureReasons, failureUnknown: messages.gmailFailureUnknown,
-    addressMismatch: messages.gmailAddressMismatch, notAvailable: messages.gmailNotAvailable, notSetUpSummary: messages.gmailNotSetUpSummary,
+    addressMismatch: messages.gmailAddressMismatch, notAvailable: messages.gmailNotAvailable,
+    setupGuide: { text: messages.gmailSetupGuide, href: selfHostGuide('email.md', 'send-replies-through-gmail') }, notSetUpSummary: messages.gmailNotSetUpSummary,
     redirectUri: messages.gmailRedirectUri, disconnect: messages.disconnectGmail, disconnectQuestion: messages.disconnectGmailQuestion,
     confirmDisconnect: messages.confirmDisconnectGmail, signInAs: messages.gmailSignInAs, justConnected: messages.gmailJustConnected,
     connectFailed: messages.gmailConnectFailed, returnErrors: messages.gmailReturnErrors,
@@ -54,7 +58,8 @@ const providers: Record<MailboxProvider, ProviderText> = {
     reconnect: messages.reconnectMicrosoft, useAnother: messages.useAnotherMicrosoft, connectedDescription: messages.microsoftConnectedDescription,
     connected: messages.microsoftConnected, failedTitle: messages.microsoftFailedTitle, failedBody: messages.microsoftFailedBody,
     failureReasons: messages.microsoftFailureReasons, failureUnknown: messages.microsoftFailureUnknown, addressMismatch: messages.microsoftAddressMismatch,
-    notAvailable: messages.microsoftNotAvailable, notSetUpSummary: messages.microsoftNotSetUpSummary, redirectUri: messages.microsoftRedirectUri,
+    notAvailable: messages.microsoftNotAvailable,
+    setupGuide: { text: messages.microsoftSetupGuide, href: selfHostGuide('email.md', 'send-replies-through-microsoft-365') }, notSetUpSummary: messages.microsoftNotSetUpSummary, redirectUri: messages.microsoftRedirectUri,
     disconnect: messages.disconnectMicrosoft, disconnectQuestion: messages.disconnectMicrosoftQuestion, confirmDisconnect: messages.confirmDisconnectMicrosoft,
     signInAs: messages.microsoftSignInAs, justConnected: messages.microsoftJustConnected, connectFailed: messages.microsoftConnectFailed,
     returnErrors: messages.microsoftReturnErrors,
@@ -186,9 +191,9 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
   </details>;
   // What the operator must set for a provider; with no provider at all it stays open, as it always was.
   const setup = (provider: MailboxProvider, folded: boolean): ReactNode => {
-    const missing = provider === 'google' ? gmail.missing_settings : microsoft?.missing_settings ?? [];
     const body = <>
-      <p role="note" className="warning-note">{providers[provider].notAvailable(missing)}</p>
+      <p role="note" className="warning-note">{providers[provider].notAvailable}{' '}
+        <a href={providers[provider].setupGuide.href} target="_blank" rel="noopener noreferrer">{providers[provider].setupGuide.text}</a></p>
       {canManage && !connection && <label className="invite-link"><span className="field-label">{providers[provider].redirectUri}</span>
         <input readOnly value={provider === 'google' ? gmail.redirect_uri : microsoft!.redirect_uri} /></label>}
       {canManage && !connection && provider === 'microsoft' && <label className="invite-link"><span className="field-label">{messages.microsoftAdminConsentRedirectUri}</span>

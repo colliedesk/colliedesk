@@ -95,7 +95,11 @@ test('on the trial without a verified domain the window says why, links to the w
   const onClose = vi.fn();
   wrap(<NewConversationDialog blocked="trial" onStart={vi.fn()} onClose={onClose} onOpenSettings={onOpenSettings} onChoosePlan={onChoosePlan} />);
   const dialog = screen.getByRole('dialog', { name: 'Start a conversation' });
-  expect(within(dialog).getByRole('status')).toHaveTextContent(/trial/);
+  const status = within(dialog).getByRole('status');
+  expect(status).toHaveTextContent(/trial/);
+  // Says what a sending domain is and that replies to customers who write in still work.
+  expect(status).toHaveTextContent(/domain of your support address/);
+  expect(status).toHaveTextContent(/You can still reply to customers who email your support address/);
   expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
   expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
   fireEvent.click(within(dialog).getByRole('link', { name: 'Choose a plan' }));

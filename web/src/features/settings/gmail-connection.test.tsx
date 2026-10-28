@@ -116,17 +116,19 @@ test('agents see the state but no buttons', () => {
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
-test('a server without Google settings names them and the redirect URI to register', () => {
+test('a server without Google settings says whom to ask, not the variable names, and the redirect URI to register', () => {
   const missing: GmailSettings = { ...available, available: false, missing_settings: ['GOOGLE_OAUTH_CLIENT_ID', 'MAILBOX_TOKEN_KEYS'] };
   render(<GmailConnection gmail={missing} supportAddress="support@example.com" timezone="UTC" canManage />);
-  expect(screen.getByText(/GOOGLE_OAUTH_CLIENT_ID, MAILBOX_TOKEN_KEYS/)).toBeInTheDocument();
+  expect(screen.getByText(/Gmail sending is not set up on this server.*ask whoever runs it/)).toBeInTheDocument();
+  expect(screen.queryByText(/GOOGLE_OAUTH_CLIENT_ID|MAILBOX_TOKEN_KEYS/)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Self-hosting guide: send replies through Gmail' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/email.md#send-replies-through-gmail');
   expect(screen.getByRole('textbox', { name: 'Redirect URI to register in Google Cloud' })).toHaveValue(available.redirect_uri);
   expect(screen.queryByRole('button', { name: 'Connect Gmail' })).not.toBeInTheDocument();
 });
 
 test('a connection the server can no longer use says why instead of claiming replies go through Gmail', () => {
   render(<GmailConnection gmail={{ ...connected, available: false, missing_settings: ['MAILBOX_TOKEN_KEYS'] }} supportAddress="support@example.com" timezone="UTC" canManage />);
-  expect(screen.getByText(/not set up on this server.*MAILBOX_TOKEN_KEYS/)).toBeInTheDocument();
+  expect(screen.getByText(/not set up on this server.*ask whoever runs it/)).toBeInTheDocument();
   expect(screen.queryByText(/Replies are sent through Gmail/)).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Disconnect Gmail' })).toBeInTheDocument();
 });

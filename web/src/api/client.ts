@@ -2,6 +2,7 @@ import type { z } from 'zod';
 import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, signUpCloud } from './cloud-signup';
 import { OutboundRefusedError } from './outbound-error';
+import type { OutboundRefusalReason } from './outbound-error';
 import { requestExportLink } from './workspace-export';
 import { recordFailedCall } from '../lib/diagnostics';
 import type { operations } from './generated';
@@ -129,10 +130,13 @@ async function planLimitFailure(response: Response): Promise<PlanLimitError> {
   return new PlanLimitError('This action is not included in your plan.');
 }
 
+const refusalReasons: readonly OutboundRefusalReason[] = ['contact_address_differs', 'mail_not_via_hosted_address', 'sender_authentication_failed'];
+const refusalReason = (value: unknown) => refusalReasons.find((known) => known === value);
+
 async function outboundRefusal(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown } };
-    const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo } = body.error ?? {};
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown; reason?: unknown } };
+    const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo, reason } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
     // An agent asking for an admin token: the reason is shown next to the form.
@@ -142,7 +146,7 @@ async function outboundRefusal(response: Response): Promise<Error> {
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
       return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc,
-        typeof replyTo === 'string' && replyTo ? replyTo : undefined);
+        typeof replyTo === 'string' && replyTo ? replyTo : undefined, refusalReason(reason));
     }
   } catch {
     // An unreadable body is an ordinary failure.

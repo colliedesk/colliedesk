@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { markSignInFormReady } from '../../lib/sign-in-ready';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api, CloudWorkspaceChoiceError, PlanLimitError } from '../../api/client';
@@ -7,9 +8,11 @@ import type { SignupAnswers } from '../../api/cloud-signup';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
 import { readCheckoutIntent } from '../settings/checkout-intent';
+import { preconnectClerk } from './clerk-appearance';
 import { RedeemPage } from './redeem-page';
 
-const CloudSignIn = lazy(() => import('./cloud-sign-in').then((module) => ({ default: module.CloudSignIn })));
+const loadCloudSignIn = () => import('./cloud-sign-in');
+const CloudSignIn = lazy(() => loadCloudSignIn().then((module) => ({ default: module.CloudSignIn })));
 
 // buy is the plan named in the sign-in address when a visitor came from the website to buy it.
 // signedOut marks the arrival right after the browser's session ended. trial marks the website's
@@ -24,6 +27,9 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
     await client.resetQueries({ queryKey: ['me'] });
     return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: '/' });
   }, [client, navigate]);
+  // The website's trial and buy links only lead to cloud sign-in: its chunk downloads beside the config
+  // instead of after it. A page without a sign-in form lets what waited for one go.
+  useEffect(() => { if (!token && (trial || buy)) void loadCloudSignIn().catch(() => undefined); }, [token, trial, buy]);
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const [workspaceSlug, setWorkspaceSlug] = useState<string>();
   const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
@@ -50,6 +56,8 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
   }, [goAfterSignIn]);
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;
+  useEffect(() => { if (config.data && !cloudEnabled) markSignInFormReady(); }, [config.data, cloudEnabled]);
+  useEffect(() => { if (cloudEnabled && cloudConfig?.publishable_key) preconnectClerk(cloudConfig.publishable_key); }, [cloudEnabled, cloudConfig?.publishable_key]);
   const buying = buy ?? readCheckoutIntent();
 
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}

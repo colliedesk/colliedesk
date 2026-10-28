@@ -86,19 +86,21 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
   }, [checkedCount, allChecked]);
   const scroll = useRef<HTMLDivElement>(null);
   const onListKey = useListKeys(scroll, items.map((item) => item.id), selectedId, onSelect);
-  const settingsLink = (label: string, to: SettingsTarget = '/settings') => <a href={to} onClick={(event) => {
+  const settingsLink = (label: string, to: SettingsTarget, className: string) => <a href={to} className={className} onClick={(event) => {
     if (!onOpenSettings) return;
     event.preventDefault();
     onOpenSettings(to);
   }}>{label}</a>;
   const getStarted = getStartedSteps(onboardingGoal, canManage);
-  const stepLink: Record<Step, ReactNode> = {
-    connect: settingsLink(messages.connectEmail, '/settings/channels/type/email'),
+  // Every step is a full-size button; the first (the recommended one when there is one) is the primary
+  // action of a brand-new workspace, ahead of anything about billing.
+  const stepLink: Record<Step, (className: string) => ReactNode> = {
+    connect: (className) => settingsLink(messages.connectEmail, '/settings/channels/type/email', className),
     // An admin imports in the app; an agent reads how, to ask an admin.
-    import: canManage ? settingsLink(messages.importFreshdesk, '/settings/import-freshdesk')
-      : <a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,
-    invite: settingsLink(messages.inviteTeam),
-    mcp: <a href={messages.mcpURL} target="_blank" rel="noreferrer">{messages.connectAIAgent}</a>,
+    import: (className) => canManage ? settingsLink(messages.importFreshdesk, '/settings/import-freshdesk', className)
+      : <a href={messages.importFreshdeskURL} className={className} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,
+    invite: (className) => settingsLink(messages.inviteTeam, '/settings', className),
+    mcp: (className) => <a href={messages.mcpURL} className={className} target="_blank" rel="noreferrer">{messages.connectAIAgent}</a>,
   };
   return (
     <div className="conversation-scroll" aria-busy={refreshing} ref={scroll} onKeyDown={onListKey}>
@@ -107,8 +109,8 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
         <ul>
-          {getStarted.steps.map((step) => <li key={step} data-recommended={step === getStarted.recommended || undefined}>
-            {step === getStarted.recommended && <><span className="recommended-step">{messages.recommendedFirstStep}</span>{' '}</>}{stepLink[step]}</li>)}
+          {getStarted.steps.map((step, index) => <li key={step} data-recommended={step === getStarted.recommended || undefined}>
+            {step === getStarted.recommended && <><span className="recommended-step">{messages.recommendedFirstStep}</span>{' '}</>}{stepLink[step](index === 0 ? 'button primary-action' : 'button')}</li>)}
         </ul>
       </section>}
       {failed === 'results_refreshed' && <div className="empty-copy"><p role="alert" className="error-copy">{messages.resultsRefreshed}</p>

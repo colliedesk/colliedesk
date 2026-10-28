@@ -11,7 +11,8 @@ the banner at the top, and nothing else about billing.
 Every new cloud workspace starts a 14-day free trial of the full Team plan. No card is needed.
 
 - A banner under the workspace name shows "Trial: N days left". Admins get a **Choose a plan**
-  button in it.
+  button in it. In a new workspace the empty inbox's first step stays the main button; Choose a plan is
+  a plain one.
 - A workspace that imports its history from Freshdesk gets a longer trial: 30 days in total, once.
   The banner then says the trial was extended.
 - One trial per email address. Writing the address with capitals, a `+tag` or (for Gmail) dots does
@@ -35,7 +36,16 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
   bounced still counts, and retrying a failed delivery counts again.
 - **Who you can write to.** During the trial a reply goes only to customers who wrote to you first
   (mail that came in through your Colliedesk address, or imported history). To write to anyone,
-  verify your sending domain in **Settings**, or choose a plan.
+  verify your sending domain in **Settings**, or choose a plan. When the customer did write but their
+  mail does not count, the refusal says why:
+  - The mail was posted to your **inbound URL** (on your own forwarder) instead of arriving at your
+    Colliedesk **forwarding address**, so nothing proves who sent it (API reason
+    `mail_not_via_hosted_address`). Forward your mailbox to the forwarding address shown in
+    **Settings → Channels → Email**; mail that arrives there counts.
+  - The mail failed sender verification (SPF, DKIM or DMARC), so it may not come from that address
+    (API reason `sender_authentication_failed`).
+
+  In both cases verifying your sending domain or choosing a plan lets you reply.
 - **Attachments.** 2 GiB in total. Files that came in with a Freshdesk import do not count. At 80%
   the banner and **Plan and billing** warn you. At the limit, mail with a larger attachment is refused by
   the mail system and bounces to the sender; nothing is dropped silently.
@@ -96,8 +106,7 @@ files, and export all your data. **Email from your customers is never refused.**
 full, attachments included, even when that takes the workspace past the limit; those bytes still count,
 so **Plan and billing** shows the usage over the limit. What the limit stops is files you add yourself: an
 upload, an attachment on a reply, and a Freshdesk import that would pass it (the import does not
-start; see [Import from Freshdesk](import-freshdesk.md)). Colliedesk has no screen yet for uploading a
-file or attaching one to a reply; the limit applies to those the day they exist. Each refusal names
+start; see [Import from Freshdesk](import-freshdesk.md)). Each refusal names
 the limit. To raise the
 limit, switch to a larger plan under **Manage billing** (Solo to Small, Small or Founding to Team), contact us on Team or Team 25, or export your data. The trial is
 different: at its 2 GiB limit **all** incoming email is refused, because the size of the whole

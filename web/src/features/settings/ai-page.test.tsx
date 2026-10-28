@@ -41,7 +41,9 @@ const server = { kind: 'anthropic' as const, label: 'Colliedesk AI', models: { t
 test('a server without any provider explains the two ways to start, and every feature is off', () => {
   page();
   expect(screen.getByRole('heading', { name: 'No AI provider on this server yet' })).toBeInTheDocument();
-  expect(screen.getByText(/AI_SERVER_PROVIDER=anthropic/)).toBeInTheDocument();
+  expect(screen.getByText(/set up by whoever runs it/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Setup guide' })).toHaveAttribute('href', expect.stringContaining('environment-variables.md#ai-provider'));
+  expect(screen.queryByText(/AI_SERVER_PROVIDER/)).toBeNull();
   for (const name of ['Triage suggestions on', 'Reply drafts on']) expect(screen.getByRole('switch', { name })).toBeDisabled();
   expect(screen.getAllByText('Add a provider first, then turn this on.')).toHaveLength(2);
 });
@@ -221,7 +223,9 @@ test('a server that cannot store keys says so before anyone types one', () => {
   page({ settings: settings({ can_store_keys: false }) });
   fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
   const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
-  expect(within(dialog).getByRole('alert')).toHaveTextContent('MAILBOX_TOKEN_KEYS');
+  expect(within(dialog).getByRole('alert')).toHaveTextContent('ask whoever runs this server');
+  expect(within(dialog).getByRole('alert')).not.toHaveTextContent('MAILBOX_TOKEN_KEYS');
+  expect(within(within(dialog).getByRole('alert')).getByRole('link', { name: 'Self-hosting guide: the key that encrypts stored secrets' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/environment-variables.md#variables');
   expect(within(dialog).getByRole('button', { name: 'Check and save' })).toBeDisabled();
 });
 

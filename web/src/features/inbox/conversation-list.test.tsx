@@ -233,3 +233,14 @@ test('j and k are text while typing, and nothing with a modifier key held', () =
   fireEvent.keyDown(document.body, { key: 'j', isComposing: true });
   expect(onSelect).not.toHaveBeenCalled();
 });
+
+test('in a brand-new workspace the first onboarding step is the primary action and every step is a full-size button', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} />);
+  const links = within(screen.getByRole('region', { name: 'Get started' })).getAllByRole('link');
+  expect(links[0]).toHaveTextContent('Connect your support email');
+  expect(links[0]).toHaveClass('button', 'primary-action');
+  for (const link of links.slice(1)) {
+    expect(link).toHaveClass('button');
+    expect(link).not.toHaveClass('primary-action');
+  }
+});

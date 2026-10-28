@@ -11,7 +11,7 @@
 .seg-tabs button:hover:not(:disabled) { background: color-mix(in srgb, var(--text-1) 5%, transparent); box-shadow: none; color: var(--text-1); }
 .seg-tabs button[aria-selected="true"], .seg-tabs button[aria-selected="true"]:hover { background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
 .seg-tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-@media (pointer: coarse) { .seg-tabs button { --control: var(--touch); min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .seg-tabs button { --control: var(--touch); min-height: var(--touch); } }
 @media (prefers-reduced-motion: reduce) { .seg-tabs button { transition: none; } }
 @media (forced-colors: active) { .seg-tabs button[aria-selected="true"] { outline: 2px solid Highlight; } }
 @media (max-width: 30rem) { .seg-tabs button { padding: 0 var(--space-2); } }

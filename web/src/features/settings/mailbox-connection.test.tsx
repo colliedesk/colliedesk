@@ -62,11 +62,13 @@ test('while Microsoft opens, its button says so and no button can start another 
   expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeDisabled();
 });
 
-test('a provider the server lacks is folded away for the admin, with what to set and both redirect URIs', () => {
+test('a provider the server lacks is folded away for the admin, with whom to ask, the guide and both redirect URIs', () => {
   render(block({ microsoft: { ...microsoft, available: false, admin_consent_url: null, missing_settings: ['MICROSOFT_OAUTH_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_SECRET'] } }));
   expect(screen.queryByRole('button', { name: 'Connect Microsoft 365' })).not.toBeInTheDocument();
   const fold = screen.getByText('Microsoft 365 is not set up on this server').closest('details')!;
-  expect(fold).toHaveTextContent('MICROSOFT_OAUTH_CLIENT_ID, MICROSOFT_OAUTH_CLIENT_SECRET');
+  expect(fold).toHaveTextContent('ask whoever runs it');
+  expect(fold).not.toHaveTextContent('MICROSOFT_OAUTH');
+  expect(within(fold).getByRole('link', { name: 'Self-hosting guide: send replies through Microsoft 365' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/email.md#send-replies-through-microsoft-365');
   expect(within(fold).getByRole('textbox', { name: 'Redirect URI to register in Microsoft Entra' })).toHaveValue(microsoft.redirect_uri);
   expect(within(fold).getByRole('textbox', { name: /Second redirect URI/ })).toHaveValue(microsoft.admin_consent_redirect_uri);
   expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeInTheDocument();
@@ -141,7 +143,8 @@ test.each([
 test('when Microsoft refuses the server\'s secret the connection stays, and the admin is told reconnecting does not help', () => {
   render(block({ microsoft: { ...microsoft, connection: msConnection, server_credentials_refused: true } }));
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  expect(screen.getByRole('note')).toHaveTextContent('the administrator must update MICROSOFT_OAUTH_CLIENT_SECRET');
+  expect(screen.getByRole('note')).toHaveTextContent('whoever runs this server must replace its Microsoft app secret');
+  expect(screen.getByRole('note')).not.toHaveTextContent('MICROSOFT_OAUTH');
   expect(screen.getByRole('note')).toHaveTextContent('reconnecting does not help');
 });
 
@@ -171,7 +174,7 @@ test.each([
   ['mailbox_unavailable', 'created with another provider\'s address (for example a Gmail address)'],
   ['account_in_use', 'another email channel of this workspace already sends through this account'],
   ['email_channel_missing', 'save a support address first'],
-  ['server_misconfigured', 'MICROSOFT_OAUTH_CLIENT_SECRET'],
+  ['server_misconfigured', 'whoever runs this server must replace its Microsoft app secret'],
   ['microsoft_unavailable', 'Microsoft could not be reached'],
   ['admin_consent_failed', 'The approval was not completed at Microsoft'],
   ['<script>', 'Microsoft 365 could not be connected. Try again.'],
@@ -220,11 +223,12 @@ test('on Colliedesk Cloud a server without Microsoft settings leaves Microsoft 3
   expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeInTheDocument();
 });
 
-test('a self-hosted admin still sees what the server lacks for Microsoft 365', () => {
+test('a self-hosted admin still sees that Microsoft 365 is not set up and whom to ask, without server variable names', () => {
   const missing = { ...microsoft, available: false, admin_consent_url: null, missing_settings: ['MICROSOFT_OAUTH_CLIENT_ID' as const] };
   render(block({ microsoft: missing }));
   expect(screen.getByText('Microsoft 365 is not set up on this server')).toBeInTheDocument();
-  expect(screen.getByText(/MICROSOFT_OAUTH_CLIENT_ID/)).toBeInTheDocument();
+  expect(screen.getByText(/ask whoever runs it/)).toBeInTheDocument();
+  expect(screen.queryByText(/MICROSOFT_OAUTH_CLIENT_ID/)).not.toBeInTheDocument();
 });
 
 test('Microsoft asking for an admin\'s approval while a channel already sends offers the approval link there too', () => {

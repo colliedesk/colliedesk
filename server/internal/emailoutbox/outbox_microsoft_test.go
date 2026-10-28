@@ -169,7 +169,7 @@ func TestARefusedClientSecretKeepsTheConnectionAndTheReplyWaits(t *testing.T) {
 		clock = clock.Add(16 * time.Minute)
 	}
 	delivery := f.delivery(t, reply.ID)
-	if delivery.Status != "queued" || delivery.LastError == nil || !strings.Contains(*delivery.LastError, "MICROSOFT_OAUTH_CLIENT_SECRET") ||
+	if delivery.Status != "queued" || delivery.LastError == nil || !strings.Contains(*delivery.LastError, "whoever runs this server must replace its Microsoft app secret") || strings.Contains(*delivery.LastError, "MICROSOFT_OAUTH") ||
 		delivery.ReasonCode == nil || *delivery.ReasonCode != domain.MailboxServerConfigCode || delivery.Attempts != 0 {
 		t.Fatalf("delivery = %+v (reason %v)", delivery, delivery.ReasonCode)
 	}

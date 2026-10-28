@@ -154,26 +154,40 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 	return s.checkTrialCap(ctx, tx, workspaceID, now, recipients)
 }
 
-// customerWroteFromAnotherAddress is true for a conversation holding trusted customer mail from an
-// address that is not the contact's: a contact merged into this one wrote it.
-const customerWroteFromAnotherAddress = `SELECT COALESCE(k.email,''), EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
-	AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail')
+// customerMailThatDidNotCount reads, for a conversation the first-contact rule refused, the contact's
+// address and which customer mail it holds that the rule did not count: trusted mail from another
+// address (a contact merged into this one wrote it), platform mail that failed sender verification, and
+// mail posted to the workspace's own inbound URL.
+const customerMailThatDidNotCount = `SELECT COALESCE(k.email,''),
+	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+		AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail'),
+	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+		AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND m.email_meta->>'authentication'='fail'),
+	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+		AND m.kind='incoming' AND m.email_meta->>'via'='workspace')
 	FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`
 
-// trialFirstContactRefusal says why the first-contact rule refused a reply: nobody wrote, or the customer
-// wrote from another address than the one the reply goes to.
+// trialFirstContactRefusal says why the first-contact rule refused a reply: nobody wrote, the customer
+// wrote from another address than the one the reply goes to, their mail failed sender verification, or
+// it was posted to the workspace's own inbound URL. The rule itself is customerWroteFirst; this only
+// names the reason.
 func trialFirstContactRefusal(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) error {
 	var contactEmail string
-	var wroteElsewhere bool
-	err := tx.QueryRow(ctx, customerWroteFromAnotherAddress, workspaceID, conversationID).Scan(&contactEmail, &wroteElsewhere)
+	var wroteElsewhere, failedVerification, postedToWorkspace bool
+	err := tx.QueryRow(ctx, customerMailThatDidNotCount, workspaceID, conversationID).Scan(&contactEmail, &wroteElsewhere, &failedVerification, &postedToWorkspace)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &domain.TrialOutboundError{}
 	}
 	if err != nil {
 		return fmt.Errorf("check first contact address: %w", err)
 	}
-	if wroteElsewhere {
+	switch {
+	case wroteElsewhere:
 		return &domain.TrialOutboundError{ReplyTo: contactEmail}
+	case failedVerification:
+		return &domain.TrialOutboundError{Unverified: domain.ReasonSenderAuthenticationFailed}
+	case postedToWorkspace:
+		return &domain.TrialOutboundError{Unverified: domain.ReasonMailNotViaHostedAddress}
 	}
 	return &domain.TrialOutboundError{}
 }

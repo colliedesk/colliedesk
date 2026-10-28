@@ -66,11 +66,18 @@ func (a *API) mailboxProviders() map[string]mailboxProvider {
 
 func (a *API) redirectURI(p mailboxProvider) string { return a.config.Origin + p.callbackPath() }
 
+// logMissingSettings tells whoever runs the server which settings a refused feature needs. The answer to
+// the person never names them: someone using a workspace cannot set a server variable.
+func logMissingSettings(feature string, missing ...string) {
+	slog.Warn("server settings missing", "feature", feature, "missing", missing)
+}
+
 // connectMailbox starts the consent: it records who started it and answers the provider's consent address.
 func (a *API) connectMailbox(p mailboxProvider, response http.ResponseWriter, request *http.Request) {
 	if missing := p.missing(); len(missing) > 0 {
+		logMissingSettings(p.name(), missing...)
 		writeError(response, http.StatusConflict, p.notConfiguredCode(),
-			"This server cannot connect "+p.label()+" yet. The administrator must set "+strings.Join(missing, ", ")+".")
+			"This server cannot connect "+p.label()+" yet: it is not set up here, so ask whoever runs it.")
 		return
 	}
 	channel, ok := a.requestedEmailChannel(response, request)

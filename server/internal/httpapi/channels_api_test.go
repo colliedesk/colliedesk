@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -612,4 +613,77 @@ func TestAReplyNoChannelCarriesIsSavedNotSentAndRetriedOnceEmailIsConnected(t *t
 	if got := queryString(t, f.pool, `SELECT (COALESCE(m.channel_id::text,'') = COALESCE(o.channel_id::text,'-'))::text FROM messages m JOIN channel_outbox o ON o.message_id=m.id WHERE m.id=$1`, reply.ID); got != "true" {
 		t.Fatalf("after Retry the reply's channel is not the one that sends it (%s)", got)
 	}
+}
+
+// A channel whose setup is complete but which has received nothing yet says it is waiting for its
+// first message, not working: only mail that arrived proves the forwarding works.
+func TestAChannelWaitsForItsFirstMessageBeforeItIsWorking(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Waiting Desk", "admin@waiting-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@waiting-desk.example.com")
+	before, _ := listChannels(t, api, admin)
+	email := channelOf(t, before, "email")
+	if email.Status.State != "waiting" || email.Status.ReasonCode == nil || *email.Status.ReasonCode != "no_message_yet" {
+		t.Fatalf("a connected channel with no mail yet: %+v, want waiting / no_message_yet", email.Status)
+	}
+	inboundOK(t, api, secret, mail([]string{"From: first@customer.example", "To: support@waiting-desk.example.com",
+		"Subject: First", "Message-ID: <first@customer.example>"}, "Hello."))
+	items, _ := listChannels(t, api, admin)
+	if after := channelOf(t, items, "email"); after.Status.State != "working" || after.Status.ReasonCode != nil {
+		t.Fatalf("after the first message: %+v, want working", after.Status)
+	}
+}
+
+// Mail the channel received but did not turn into a conversation (sent from the support address
+// itself, or an automatic reply) still proves the forwarding works, so the channel stops waiting.
+func TestAChannelThatReceivedOnlyDroppedMailIsWorking(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Dropped Desk", "admin@dropped-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@dropped-desk.example.com")
+	inboundOK(t, api, secret, mail([]string{"From: support@dropped-desk.example.com", "To: support@dropped-desk.example.com",
+		"Subject: Test from ourselves", "Message-ID: <self-test@dropped-desk.example.com>"}, "Does it arrive?"))
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	if email.Status.State != "working" || email.Status.ReasonCode != nil {
+		t.Fatalf("after mail that was dropped as the desk's own address: %+v, want working", email.Status)
+	}
+	other := createSession(t, api, service, "Other Dropped Desk", "admin@other-dropped-desk.example.com")
+	connectEmail(t, api, other, "support@other-dropped-desk.example.com")
+	otherItems, _ := listChannels(t, api, other)
+	if got := channelOf(t, otherItems, "email"); got.Status.State != "waiting" {
+		t.Fatalf("another workspace's mail ended this workspace's wait: %+v", got.Status)
+	}
+}
+
+// A server without its key ring refuses a channel secret without naming the variable to the person,
+// and tells whoever runs it which one to set in its log.
+func TestAChannelSecretWithoutKeysNamesTheMissingSettingOnlyInTheLog(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Secret Desk", "admin@secret-desk.example.com")
+	connectEmail(t, api, admin, "support@secret-desk.example.com")
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	logs := captureLogs(t)
+	response := request(t, api, http.MethodPut, "/api/v1/channels/"+email.ID+"/credentials", map[string]any{"name": "token", "value": "s3cret"}, admin, nil)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "secret_keys_missing") || strings.Contains(response.Body.String(), "MAILBOX_TOKEN_KEYS") {
+		t.Fatalf("channel secret without keys: %d %s", response.Code, response.Body.String())
+	}
+	wantMissingSettingsLogged(t, logs, "channel_secrets", "MAILBOX_TOKEN_KEYS")
+}
+
+// wantMissingSettingsLogged checks that a refusal for want of server settings logged which ones, for
+// whoever runs the server.
+func wantMissingSettingsLogged(t *testing.T, logs *bytes.Buffer, feature, missing string) {
+	t.Helper()
+	for _, line := range logLines(t, logs, "server settings missing") {
+		names, _ := line["missing"].([]any)
+		got := make([]string, 0, len(names))
+		for _, name := range names {
+			got = append(got, fmt.Sprint(name))
+		}
+		if line["level"] == "WARN" && line["feature"] == feature && strings.Join(got, ",") == missing {
+			return
+		}
+	}
+	t.Fatalf("no warning names the missing settings %s for %s; logs:\n%s", missing, feature, logs.String())
 }

@@ -276,6 +276,25 @@ test('signing out forgets the agent for analytics only after the server ended th
   await waitFor(() => expect(resetProductAnalytics).toHaveBeenCalledTimes(1));
 });
 
+test('signing out forgets every unsent reply and note kept in this browser, and nothing else', async () => {
+  let loggedOut = false;
+  fetchMock.mockImplementation((url: string) => {
+    const path = url.split('?')[0];
+    if (path === '/api/v1/auth/logout') { loggedOut = true; return Promise.resolve(new Response(null, { status: 204 })); }
+    if (path === '/api/v1/auth/me') return Promise.resolve(loggedOut ? json(401, { error: { code: 'unauthorized', message: 'no' } }) : json(200, meBody('agent', null)));
+    if (path === '/api/v1/config') return Promise.resolve(json(200, config));
+    return Promise.resolve(json(200, { items: [], page: 1, page_size: 50 }));
+  });
+  window.localStorage.clear();
+  window.localStorage.setItem('colliedesk.reply-draft:ws-1:agent-1:conv-1', JSON.stringify({ kind: 'note', body: 'Private note', saved_at: Date.now() }));
+  window.localStorage.setItem('colliedesk.reply-draft:ws-1:conv-2', JSON.stringify({ kind: 'outgoing', body: 'Older format' }));
+  window.localStorage.setItem('colliedesk.other', 'kept');
+  open('/settings');
+  fireEvent.click(await screen.findByRole('button', { name: /account|sam@example.com/i }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+  await waitFor(() => expect(Object.keys(window.localStorage)).toEqual(['colliedesk.other']));
+});
+
 test('a paused agent sees why and can sign out, and nothing else', async () => {
   serve({
     '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'small', trial_ends_at: '2026-10-01T09:00:00Z', locked: false, trial_extended: false, agents_over: 1, seat_paused: true })),

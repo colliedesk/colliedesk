@@ -6,6 +6,7 @@ import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
+import { readDraft, writeDraft } from './reply-draft-storage';
 import { ConflictError, ReplyConflictError } from '../../api/client';
 import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
@@ -53,6 +54,8 @@ interface ReplyComposerProps {
   // Sets the conversation Resolved. With it a reply offers Send and resolve (Ctrl/Cmd+Shift+Enter), which
   // calls it only after the reply was accepted. A private note never resolves.
   onResolve?: () => Promise<unknown>;
+  // Where this browser keeps the unsent text (workspace, agent and conversation); without it nothing is kept.
+  draftKey?: string;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -72,10 +75,15 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, draftKey }: ReplyComposerProps) {
   // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
-  const [kind, setKind] = useState<Kind>(noReplies ? 'note' : 'outgoing');
-  const [body, setBody] = useState('');
+  const [stored] = useState(() => readDraft(draftKey));
+  const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
+  const [body, setBody] = useState(stored?.body ?? '');
+  // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
+  // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
+  // remounts the box with it, so the draft kept there is read before anything is written over it.
+  useEffect(() => writeDraft(draftKey, { kind, body }), [draftKey, kind, body]);
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
   const [files, setFiles] = useState<File[]>([]);

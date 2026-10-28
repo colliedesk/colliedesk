@@ -342,3 +342,26 @@ test('a verified domain says every mailbox on it shares the verification', () =>
   render(<EmailChannelSection part="replies" settings={{ ...connected, channel: { ...connected.channel!, domain_verified_at: '2026-10-15T00:00:00Z' } }} timezone="UTC" canManage />);
   expect(screen.getByText(/The verification is for example\.com: every mailbox on it shares it\./)).toBeInTheDocument();
 });
+
+test('on a server without hosted mail, the inbound URL says what it is for, links the guide and gives a test request with the new secret', () => {
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage createdSecret="s3cret-value" part="connection" />);
+  expect(screen.getByText(/your mailbox cannot send to it by itself/i)).toBeInTheDocument();
+  expect(screen.getByText(/not your email password/i)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /how mail reaches the inbound url/i }))
+    .toHaveAttribute('href', 'https://colliedesk.com/docs/self-host/email#3-forward-mail-to-colliedesk');
+  const example = (screen.getByRole('textbox', { name: /test request/i }) as HTMLTextAreaElement).value;
+  expect(example).toContain(`curl -sS -X POST '${connected.inbound_url}'`);
+  expect(example).toContain("'X-Colliedesk-Inbound-Secret: s3cret-value'");
+  expect(example).toContain('To: support@example.com');
+  expect(screen.getByRole('button', { name: /copy test request/i })).toBeInTheDocument();
+});
+
+test('before a secret is shown, the test request names where the secret goes', () => {
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage part="connection" />);
+  expect((screen.getByRole('textbox', { name: /test request/i }) as HTMLTextAreaElement).value).toContain('X-Colliedesk-Inbound-Secret: YOUR_INBOUND_SECRET');
+});
+
+test('a workspace with a hosted forwarding address gets no inbound URL guide', () => {
+  render(<EmailChannelSection settings={{ ...connected, hosted_address: 'support@acme.colliedesk.com' }} timezone="UTC" canManage part="connection" />);
+  expect(screen.queryByRole('textbox', { name: /test request/i })).toBeNull();
+});

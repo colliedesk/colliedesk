@@ -111,8 +111,13 @@
 .pagination { display: flex; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 .get-started { display: grid; gap: var(--space-2); padding: var(--space-6) var(--space-4); }
 .get-started h2 { font-size: 14px; font-weight: 600; }
-.get-started ul { display: grid; gap: var(--space-1); margin: 0; padding-left: var(--space-4); }
+.get-started ul { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .get-started .recommended-step { color: var(--text-1); font-weight: 600; }
+/* The next steps are buttons, the first one filled: the main way on from an empty workspace. */
+.get-started a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+  background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
+.get-started a.button.primary-action { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.get-started li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .empty-copy { padding: var(--space-4); }
 
 /* Status: a dot plus a word, never colour alone. */
@@ -270,7 +275,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .saved-reply-button svg { width: 14px; height: 14px; }
 .saved-reply-button kbd { margin-left: var(--space-1); }
 .saved-reply-button .ai-draft-badge { margin-left: var(--space-1); border-radius: 999px; background: var(--accent-soft); color: var(--text-1); padding: 0 var(--space-2); font-size: var(--fs-label); }
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 30rem) {
   .saved-reply-button, .cc-button, .attach-button, .composer-tabs button { --control: var(--touch); min-width: var(--touch); justify-content: center; }
   .cc-chips li button, .composer-files li button { --control: var(--touch); min-width: var(--touch); }
 }
@@ -413,7 +418,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .data-list .badge { color: var(--text-2); }
 .data-list .token-detail { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: var(--fs-label); }
 .token-permissions summary { cursor: pointer; color: var(--text-2); }
-@media (pointer: coarse) { .token-permissions summary { display: flex; align-items: center; min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .token-permissions summary { display: flex; align-items: center; min-height: var(--touch); } }
 .token-permissions ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); color: var(--text-2); }
 @media (max-width: 44rem) {
   .data-list article > div, .invite-form, .form-row { grid-template-columns: 1fr; gap: var(--space-2); }
@@ -615,7 +620,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .conversation-viewers li .avatar { margin-top: 1px; }
 .conversation-viewers li[data-state="typing"], .conversation-viewers li[data-state="left"] { color: var(--text-1); font-weight: 600; }
 .conversation-viewers .viewer-more { margin-top: var(--space-1); font-size: var(--fs-small); }
-@media (pointer: coarse) { .conversation-viewers .viewer-more { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .conversation-viewers .viewer-more { min-height: var(--touch); } }
 /* Someone answered while this reply was being written: a warning inside the reply box, the new replies
    quoted under it, the safe choice first. */
 .reply-conflict { display: grid; gap: var(--space-3); margin: var(--space-2) var(--space-2) 0; border: 1px solid var(--note-line); border-radius: var(--radius);
@@ -632,7 +637,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .reply-conflict-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .reply-conflict .send-anyway { border-color: transparent; background: transparent; box-shadow: none; color: var(--danger); }
 .reply-conflict .send-anyway:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); }
-@media (pointer: coarse) { .reply-conflict-actions button { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .reply-conflict-actions button { min-height: var(--touch); } }
 .badge-draft-open { background: var(--surface-3); color: var(--text-2); padding: 0 var(--space-1); font-size: var(--fs-label); line-height: 18px; }
 .reply-draft { display: grid; gap: var(--space-2); margin: 0 var(--space-6) var(--space-2); border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3); }
 .reply-draft-by { color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
@@ -798,7 +803,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* A link that leads on (Open the inbox) looks like the button next to it. */
 .import-page a.button, .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
-@media (pointer: coarse) { .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .agent-tokens a.button, .results-page a.button, .empty-copy a.button, .channels-settings a.button { min-height: var(--touch); } }
 .empty-copy .button-row { justify-content: center; margin-top: var(--space-3); }
 .import-page a.button.primary-action, .agent-tokens a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
 /* On a phone the actions of the import stay at the bottom of the screen, whatever the table above

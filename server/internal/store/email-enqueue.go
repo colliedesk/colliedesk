@@ -61,7 +61,7 @@ func (p OutboundPolicy) notReadyReason(domainVerified bool, mailbox *mailboxStat
 	case mailbox != nil:
 		return ""
 	case !p.Enabled:
-		return "Outgoing email is not configured on this server. Ask the administrator to set SMTP_HOST."
+		return "Outgoing email is not configured on this server: ask whoever runs it to set up outgoing email."
 	case p.RequireVerifiedDomain && !domainVerified && p.FallbackDomain == "":
 		return "Verify the support address domain in Settings before replies can be emailed."
 	default:
