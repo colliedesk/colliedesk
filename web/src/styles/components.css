@@ -828,3 +828,19 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .timeline-header > div:first-of-type { min-width: 0; }
 .timeline-header h2 { overflow-wrap: anywhere; }
 .details-toggle { flex: none; }
+
+/* Shown while the hosted checkout loads in this tab after the embedded one did not open. */
+.checkout-full-page {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483647;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text-1);
+  box-shadow: var(--shadow-2);
+}
