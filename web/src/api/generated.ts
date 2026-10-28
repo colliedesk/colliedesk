@@ -273,7 +273,7 @@ export interface paths {
          *
          *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
          *
-         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body or author answers 422 `idempotency_key_reused`.
+         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body or author answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft or a call filed as an agent request (202) does not use it.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -502,7 +502,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on this email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel. */
+        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on this email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel; 409 `own_address` when the agent signs in with the support address itself, whose mail never opens a conversation. */
         post: operations["sendEmailTestMessageByID"];
         delete?: never;
         options?: never;
@@ -612,7 +612,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on the default email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel. */
+        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on the default email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel; 409 `own_address` when the agent signs in with the support address itself, whose mail never opens a conversation. */
         post: operations["sendEmailTestMessage"];
         delete?: never;
         options?: never;
@@ -6587,6 +6587,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             /** @description Five test messages were sent in the last hour; Retry-After says when the next one may go. */
             429: {
                 headers: {
@@ -6827,6 +6828,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             /** @description Five test messages were sent in the last hour; Retry-After says when the next one may go. */
             429: {
                 headers: {

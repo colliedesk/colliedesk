@@ -921,3 +921,16 @@ test('a draft changed in another tab shows up in the open box with a notice', ()
   act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'colliedesk.reply-draft:ws-1:agent-1:other', newValue: newer, storageArea: window.localStorage })); });
   expect(screen.getByLabelText('Message body')).toHaveValue('Tab B text');
 });
+
+test('a private note written in another tab arrives as a note, never as a reply to the customer', () => {
+  window.localStorage.clear();
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-7" onSubmit={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Reply', pressed: true })).toBeInTheDocument();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-7';
+  const note = JSON.stringify({ kind: 'note', body: 'Refund denied, customer flagged', saved_at: Date.now() });
+  window.localStorage.setItem(key, note);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: note, storageArea: window.localStorage })); });
+  expect(screen.getByLabelText('Message body')).toHaveValue('Refund denied, customer flagged');
+  expect(screen.getByRole('button', { name: 'Private note', pressed: true })).toBeInTheDocument();
+  expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ kind: 'note' });
+});

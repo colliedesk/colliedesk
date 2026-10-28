@@ -86,17 +86,25 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   useEffect(() => writeDraft(draftKey, { kind, body }), [draftKey, kind, body]);
   const latestBody = useRef(body);
   latestBody.current = body;
-  // Another tab of this browser wrote (or sent) this draft: the box shows its text and says so.
+  const latestKind = useRef(kind);
+  latestKind.current = kind;
+  // Another tab of this browser wrote (or sent) this draft: the box shows its text, as a reply or a note
+  // the way that tab had it (a note must never turn into a reply), and says so.
   const [otherTab, setOtherTab] = useState(false);
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (!draftKey || event.key !== draftPrefix + draftKey) return;
-      const text = readDraft(draftKey)?.body ?? '';
-      if (text !== latestBody.current) { setBody(text); setOtherTab(true); }
+      const kept = readDraft(draftKey);
+      const text = kept?.body ?? '';
+      const nextKind = noReplies ? 'note' : kept?.kind ?? latestKind.current;
+      if (text === latestBody.current && nextKind === latestKind.current) return;
+      setKind(nextKind);
+      setBody(text);
+      setOtherTab(true);
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [draftKey]);
+  }, [draftKey, noReplies]);
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
   // Set from the press until the answer: clicks that land before the button turns disabled send nothing.

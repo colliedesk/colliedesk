@@ -98,8 +98,10 @@ func (c *Client) EnsureCustomer(ctx context.Context, externalID, email, name str
 // already has (ErrCustomerConflict, which the caller works around with another address) and anything
 // else it does not accept (CustomerRejectedError with Polar's words).
 func customerRefusal(reasons []string) error {
+	// Polar says "A customer with this email address already exists."; an address it cannot deliver to
+	// (a domain that "does not exist" or "does not accept email") is refused, not taken.
 	for _, reason := range reasons {
-		if strings.Contains(strings.ToLower(reason), "exist") {
+		if strings.Contains(strings.ToLower(reason), "already exists") {
 			return fmt.Errorf("create polar customer: %w", ErrCustomerConflict)
 		}
 	}

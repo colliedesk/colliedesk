@@ -35,6 +35,12 @@ func (a *API) sendTestMessage(response http.ResponseWriter, request *http.Reques
 		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
 		return
 	}
+	// Mail from the support address itself never opens a conversation, so there would be nothing to answer.
+	if email.MailboxKey(identity.Agent.Email) == email.MailboxKey(target.SupportAddress) {
+		writeError(response, http.StatusConflict, "own_address",
+			"You sign in with the support address itself, and mail from it never opens a conversation. Send the test from an agent with another address.")
+		return
+	}
 	if a.config.Attachments == nil {
 		writeInternalError(response, errors.New("attachment storage is not configured; inbound mail cannot be kept"))
 		return

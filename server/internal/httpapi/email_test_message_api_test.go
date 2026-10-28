@@ -116,3 +116,15 @@ func TestTestMessageNeedsAConnectedEmailChannel(t *testing.T) {
 		t.Fatalf("no email channel: status=%d body=%s, want 404", got.Code, got.Body)
 	}
 }
+
+func TestATestMessageFromTheSupportAddressItselfSaysWhyAndCostsNothing(t *testing.T) {
+	api, service, _, _ := testAPIOnPool(t, testPoolTraced(t, nil), nil)
+	admin := createSession(t, api, service, "Own Address", "support@own-address.example.com")
+	connectEmail(t, api, admin, "support@own-address.example.com")
+	for attempt := 0; attempt < 6; attempt++ {
+		got, _ := sendTestMessage(t, api, admin, "/api/v1/channels/email/test-message")
+		if got.Code != http.StatusConflict || !strings.Contains(got.Body, `"own_address"`) {
+			t.Fatalf("attempt %d from the support address: status=%d body=%s, want 409 own_address", attempt, got.Code, got.Body)
+		}
+	}
+}

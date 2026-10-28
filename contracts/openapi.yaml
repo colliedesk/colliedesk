@@ -626,7 +626,8 @@ paths:
         Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a
         repeated request returns the message the first one created (200) instead of storing and sending it
         again. Keys belong to the workspace; the same key with another conversation, kind, body or author
-        answers 422 `idempotency_key_reused`.
+        answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft
+        or a call filed as an agent request (202) does not use it.
       parameters:
         - name: Idempotency-Key
           in: header
@@ -991,7 +992,8 @@ paths:
         recipient is an agent of this workspace whose address is proven (the agent signed in through a
         pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused.
         Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when
-        the workspace has no such email channel.
+        the workspace has no such email channel; 409 `own_address` when the agent signs in with the support
+        address itself, whose mail never opens a conversation.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
@@ -1002,6 +1004,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '429':
           description: Five test messages were sent in the last hour; Retry-After says when the next one may go.
           headers:
@@ -1187,7 +1190,8 @@ paths:
         recipient is an agent of this workspace whose address is proven (the agent signed in through a
         pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused.
         Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when
-        the workspace has no such email channel.
+        the workspace has no such email channel; 409 `own_address` when the agent signs in with the support
+        address itself, whose mail never opens a conversation.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
@@ -1198,6 +1202,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '429':
           description: Five test messages were sent in the last hour; Retry-After says when the next one may go.
           headers:
