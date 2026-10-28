@@ -2,7 +2,9 @@
 
 Colliedesk can use a language model to suggest how to sort a new ticket (tags, priority, assignee)
 and to draft a reply an agent edits and sends. A model only suggests and drafts: a person accepts each
-suggestion, and nothing reaches a customer until someone presses **Send**. **Settings → Built-in AI** decides
+suggestion, unless an admin turns on [Apply suggestions automatically](#apply-suggestions-automatically),
+which lets the picked parts (tags, priority, assignee) apply by themselves and can be undone. Nothing
+reaches a customer until someone presses **Send**. **Settings → Built-in AI** decides
 which model each feature uses and records who agreed to send data to it.
 
 ## Every feature starts off
