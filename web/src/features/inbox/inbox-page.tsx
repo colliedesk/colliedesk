@@ -21,6 +21,8 @@ import { messages } from '../../messages';
 interface InboxPageProps {
   // The hosted cloud, where the server trusts a Cc line only on mail from the platform forwarder.
   hosted?: boolean;
+  // The workspace whose unsent replies this browser keeps, one per conversation.
+  workspaceId?: string;
   conversations?: Conversation[];
   selected?: Conversation;
   timeline?: Message[];
@@ -118,7 +120,7 @@ function ShownCount({ count, page, pageSize, more }: { count: number; page: numb
   return <span><span aria-hidden="true">{`${first}–${last}`}</span><span className="sr-only">{messages.inboxShown(first, last)}</span></span>;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
+export function InboxPage({ hosted = false, workspaceId, conversations = [], selected, threadOpen = false, onBack, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onSetStatus, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, pageSize = 50, onPage, onRetryDelivery, outboundNotice, sendsFrom, channelLabel, outboundLink = '/settings/channels/type/email?tab=replies', noReplies, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal, aiDrafts, aiTriage = false, onTriageApplied }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const latestCustomerMessage = useMemo(() => [...timeline].reverse().find((item) => item.kind === 'incoming')?.id, [timeline]);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -234,7 +236,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, thread
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
-        <ReplyComposer key={selected?.id} disabled={!selected} noReplies={noReplies} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
+        <ReplyComposer key={selected?.id} disabled={!selected} noReplies={noReplies} draftKey={selected && workspaceId ? `${workspaceId}:${selected.id}` : undefined} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
           latestCustomerMessage={latestCustomerMessage}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}

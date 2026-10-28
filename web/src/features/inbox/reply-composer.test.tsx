@@ -825,3 +825,33 @@ test('with no channel to carry replies the box opens on a private note, and a re
   fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
   expect(onSubmit.mock.calls[0]?.slice(0, 2)).toEqual(['note', 'Hello']);
 });
+
+test('an unsent reply survives the composer going away (a reload, Back) and comes back for the same conversation only', () => {
+  window.localStorage.clear();
+  const first = render(<ReplyComposer draftKey="ws-1:conv-1" onSubmit={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half a reply' } });
+  first.unmount();
+  const again = render(<ReplyComposer draftKey="ws-1:conv-1" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Half a reply');
+  again.unmount();
+  render(<ReplyComposer draftKey="ws-1:conv-2" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('');
+});
+
+test('a draft is cleared once its reply is sent, and kept when the send is refused', async () => {
+  window.localStorage.clear();
+  const refused = vi.fn().mockRejectedValue(new Error('network'));
+  const first = render(<ReplyComposer draftKey="ws-1:conv-3" onSubmit={refused} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Keep me' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  first.unmount();
+  const sent = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer draftKey="ws-1:conv-3" onSubmit={sent} />);
+  const restored = screen.getByLabelText('Message body');
+  expect(restored).toHaveValue('Keep me');
+  fireEvent.keyDown(restored, { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(restored).toHaveValue(''));
+  expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-3'))).toEqual([]);
+});
