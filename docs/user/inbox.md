@@ -191,11 +191,14 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - Messages support Markdown.
 - **An unsent reply is kept.** What you type stays in this browser for you and that conversation, so a
   reload, the browser's Back or a trip to Settings finds it in the box again. It is removed as soon as you
-  send the reply or note (and written back if the send fails, so a reload during the send never offers
-  the sent text again), seven days after you last opened or edited it, and for every conversation when you sign out, so a
+  send the reply or note. If the send fails, or a reload cuts it off, the text is written back, and the
+  next time the conversation opens it is dropped if the reply or note did arrive, so it is never offered
+  twice. It also goes seven days after you last opened or edited it, and for every conversation when you sign out, so a
   teammate who signs in on the same browser never sees it. Attached files are not kept. Another browser or
   device does not see it. Two tabs of the same browser share it: when you type in one, the other tab's
-  box takes the newer text and says **Updated from another tab**.
+  box takes the newer text and says **Updated from another tab**, unless you typed different text in that
+  tab too. Then your text stays, and the tab says **Another tab has a different draft** with **Use it**
+  and **Keep mine**.
 - **One press sends once.** The button is disabled while a message is being sent, and every send carries
   its own key, so pressing twice, or retrying after a lost connection, never posts the same note or reply
   twice. Through the API, send the same `Idempotency-Key` header on every retry of one message.

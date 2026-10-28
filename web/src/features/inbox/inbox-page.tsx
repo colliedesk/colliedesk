@@ -247,7 +247,8 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited}
           // Send and resolve is offered while there is something to resolve; a resolved or closed one is reopened from the header.
           onResolve={selected && onSetStatus && (selected.status === 'open' || selected.status === 'pending') ? () => onSetStatus(selected.id, 'resolved') : undefined}
-          aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId} />
+          aiDraftsFor={aiDrafts && selected ? selected.id : undefined} aiDraftsOff={aiDrafts === false} agentId={currentAgentId}
+          timeline={selected && !timelineLoading ? timeline : undefined} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied} currentAgentId={currentAgentId} canManage={canManage} onTriageWaiting={setTriageWaiting}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}

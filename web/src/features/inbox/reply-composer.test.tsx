@@ -907,11 +907,12 @@ test('a reload while the send is in flight does not bring the sent text back, an
   expect(screen.getByLabelText('Message body')).toHaveValue('Sent before the reload');
 });
 
-test('a draft changed in another tab shows up in the open box with a notice', () => {
+test('a draft changed in another tab shows up in a box not edited here, with a notice', () => {
   window.localStorage.clear();
-  render(<ReplyComposer draftKey="ws-1:agent-1:conv-6" onSubmit={vi.fn()} />);
-  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Tab A text' } });
   const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-6';
+  window.localStorage.setItem(key, JSON.stringify({ kind: 'outgoing', body: 'Tab A text', saved_at: Date.now() }));
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-6" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Tab A text');
   const newer = JSON.stringify({ kind: 'outgoing', body: 'Tab B text', saved_at: Date.now() });
   // The other tab has written the shared storage by the time this tab hears of it.
   window.localStorage.setItem(key, newer);
@@ -920,6 +921,44 @@ test('a draft changed in another tab shows up in the open box with a notice', ()
   expect(screen.getByRole('status')).toHaveTextContent('Updated from another tab');
   act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'colliedesk.reply-draft:ws-1:agent-1:other', newValue: newer, storageArea: window.localStorage })); });
   expect(screen.getByLabelText('Message body')).toHaveValue('Tab B text');
+});
+
+test('text typed in this tab is never replaced by another tab\'s different draft: the person chooses', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-8';
+  const other = (body: string) => {
+    const value = JSON.stringify({ kind: 'note', body, saved_at: Date.now() });
+    window.localStorage.setItem(key, value);
+    act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: value, storageArea: window.localStorage })); });
+  };
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-8" onSubmit={vi.fn()} />);
+  const box = screen.getByLabelText('Message body');
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(box, { target: { value: 'Tab A survives' } });
+  other('Tab B independent');
+  expect(box).toHaveValue('Tab A survives');
+  expect(screen.getByRole('status')).toHaveTextContent('Another tab has a different draft.');
+  fireEvent.click(screen.getByRole('button', { name: 'Keep mine' }));
+  expect(box).toHaveValue('Tab A survives');
+  expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ kind: 'note', body: 'Tab A survives' });
+  expect(screen.queryByRole('button', { name: 'Use it' })).not.toBeInTheDocument();
+  other('Tab B second');
+  expect(box).toHaveValue('Tab A survives');
+  fireEvent.click(screen.getByRole('button', { name: 'Use it' }));
+  expect(box).toHaveValue('Tab B second');
+  expect(screen.queryByRole('button', { name: 'Keep mine' })).not.toBeInTheDocument();
+});
+
+test('a draft another tab sent leaves this tab too when this tab held the same text', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-9';
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-9" onSubmit={vi.fn()} />);
+  const box = screen.getByLabelText('Message body');
+  fireEvent.change(box, { target: { value: 'Same words' } });
+  const before = window.localStorage.getItem(key);
+  window.localStorage.removeItem(key);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, oldValue: before, newValue: null, storageArea: window.localStorage })); });
+  expect(box).toHaveValue('');
 });
 
 test('a private note written in another tab arrives as a note, never as a reply to the customer', () => {
@@ -933,4 +972,45 @@ test('a private note written in another tab arrives as a note, never as a reply 
   expect(screen.getByLabelText('Message body')).toHaveValue('Refund denied, customer flagged');
   expect(screen.getByRole('button', { name: 'Private note', pressed: true })).toBeInTheDocument();
   expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ kind: 'note' });
+});
+
+const persistedNote = (body: string, createdAt: string) => ({
+  id: '99999999-9999-4999-8999-999999999999', conversation_id: 'conv-10', author_agent_id: 'agent-1', author_name: 'Lan', agent_token: null, agent_request_id: null,
+  ai_draft_id: null, ai_draft_outcome: null, kind: 'note' as const, body, body_html: null, origin: null, attachments: [], cc: [], created_at: createdAt,
+  delivery: null, email: null, reply_number: null,
+});
+
+test('a note sent just before a reload that the server stored does not come back as a draft', async () => {
+  window.localStorage.clear();
+  const stored = () => Object.keys(window.localStorage).filter((key) => key.includes('conv-10'));
+  let abort: (error: Error) => void = () => undefined;
+  const first = render(<ReplyComposer draftKey="ws-1:agent-1:conv-10" agentId="agent-1" onSubmit={() => new Promise((_, reject) => { abort = reject; })} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Marker r3' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  expect(stored()).toEqual([]);
+  // The reload cancels the request the server already received; the page goes.
+  act(() => abort(new TypeError('Failed to fetch')));
+  await act(async () => undefined);
+  first.unmount();
+  const again = render(<ReplyComposer draftKey="ws-1:agent-1:conv-10" agentId="agent-1" onSubmit={vi.fn()} />);
+  again.rerender(<ReplyComposer draftKey="ws-1:agent-1:conv-10" agentId="agent-1" onSubmit={vi.fn()} timeline={[persistedNote('Marker r3', new Date().toISOString())]} />);
+  await waitFor(() => expect(screen.getByLabelText('Message body')).toHaveValue(''));
+  expect(stored()).toEqual([]);
+});
+
+test('a note whose request never arrived before a reload comes back to send again', async () => {
+  window.localStorage.clear();
+  let abort: (error: Error) => void = () => undefined;
+  const first = render(<ReplyComposer draftKey="ws-1:agent-1:conv-11" agentId="agent-1" onSubmit={() => new Promise((_, reject) => { abort = reject; })} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Never arrived' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  act(() => abort(new TypeError('Failed to fetch')));
+  await act(async () => undefined);
+  first.unmount();
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-11" agentId="agent-1" onSubmit={vi.fn()}
+    timeline={[persistedNote('Never arrived', '2020-01-01T00:00:00Z')]} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Never arrived');
+  expect(screen.getByRole('button', { name: 'Private note', pressed: true })).toBeInTheDocument();
 });
