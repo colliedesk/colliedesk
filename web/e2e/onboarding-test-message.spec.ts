@@ -43,3 +43,24 @@ test('test message: a new cloud workspace sends itself a test message from the e
   expect(delivered.subject).toBe('Re: Test message from Colliedesk');
   expect(delivered.text).toContain(reply);
 });
+
+// The Connection tab offers the same test message before any inbound secret exists: like the inbox's action,
+// a press opens the conversation it started, and presses fired in one burst open a single conversation.
+test('the Connection tab sends one test message before an inbound secret exists and opens its conversation', async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const adminEmail = `owner-${suffix}@acme.example`;
+  expect((await signUp(page, provider, adminEmail, `Connection Test ${suffix}`)).status()).toBe(201);
+  await page.goto(baseURL);
+  await page.getByRole('region', { name: 'Get started' }).getByRole('link', { name: 'Connect your support email' }).click();
+  await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@acme.example`);
+  await page.getByRole('button', { name: 'Save support address' }).click();
+  await expect(page.getByRole('tab', { name: 'Connection' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create inbound secret' })).toBeVisible();
+
+  const send = page.getByRole('button', { name: 'Send yourself a test message' });
+  await send.evaluate((button: HTMLButtonElement) => { button.click(); button.click(); button.click(); });
+  await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
+  await expect(page.getByText('This is a test message you sent yourself from Colliedesk.')).toBeVisible();
+  const list = page.getByRole('region', { name: 'Conversation list' });
+  await expect(list.getByText('Test message from Colliedesk')).toHaveCount(1);
+});

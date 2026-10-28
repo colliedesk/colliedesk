@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -21,12 +22,14 @@ func (a *API) createContact(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "Name and a valid email are required.")
 		return
 	}
-	contact, err := a.store.CreateContact(request.Context(), principal(request).Workspace.ID, input.Name, input.Email)
-	if err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusCreated, contact)
+	a.createOnce(response, request, createContactOperation, []string{input.Name, input.Email}, func(ctx context.Context) (any, error) {
+		contact, err := a.store.CreateContact(ctx, principal(request).Workspace.ID, input.Name, input.Email)
+		if err != nil {
+			writeStoreError(response, err)
+			return nil, errAnswered
+		}
+		return contact, nil
+	})
 }
 
 func (a *API) getContact(response http.ResponseWriter, request *http.Request) {

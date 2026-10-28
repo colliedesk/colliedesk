@@ -247,7 +247,7 @@ test('connecting email creates the channel with its support address and opens it
   const navigate = show('new/email');
   fireEvent.change(await screen.findByRole('textbox', { name: 'Support address' }), { target: { value: ' help@example.com ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
-  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', config: { support_address: 'help@example.com' } }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', config: { support_address: 'help@example.com' } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${EMAIL}`, true));
 });
 
@@ -259,7 +259,7 @@ test('adding a web form creates it on, with its allowed origins, and opens it', 
   expect(screen.queryByRole('checkbox')).toBeNull();
   fireEvent.change(origins, { target: { value: 'https://example.com' } });
   fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
-  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'web_form', enabled: true, config: { allowed_origins: ['https://example.com'] } }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'web_form', enabled: true, config: { allowed_origins: ['https://example.com'] } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
 });
 
@@ -286,7 +286,7 @@ test('a second mailbox with an address another channel has is refused at that fi
   const address = screen.getByRole('textbox', { name: 'Support address' });
   fireEvent.change(address, { target: { value: 'support+x@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
-  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', name: 'Sales', config: { support_address: 'support+x@example.com' } }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', name: 'Sales', config: { support_address: 'support+x@example.com' } }, expect.any(String)));
   await waitFor(() => expect(address).toHaveAttribute('aria-invalid', 'true'));
   expect(address).toHaveAccessibleDescription(/Billing already uses/);
   expect(address).toHaveFocus();
@@ -596,7 +596,7 @@ test('a web form is added with the name given, and a name another form has is re
   expect(screen.queryByText('Another web form is called Careers.')).toBeNull();
   expect(name).not.toHaveAttribute('aria-invalid');
   fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
-  await waitFor(() => expect(channelsApi.create).toHaveBeenLastCalledWith({ type: 'web_form', name: 'Shop form', enabled: true, config: { allowed_origins: ['https://example.com'] } }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenLastCalledWith({ type: 'web_form', name: 'Shop form', enabled: true, config: { allowed_origins: ['https://example.com'] } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
 });
 
@@ -734,4 +734,13 @@ test('without an inbound secret, a test message that arrived says the inbox work
   fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
   const sent = await screen.findByText(/Test message sent from sam@example.com/);
   expect(sent.closest('[role="status"]')).toHaveTextContent('Your inbox and replies work. Customer email arrives once your support mailbox forwards here with an inbound secret (below).');
+});
+
+test('the Connection tab opens the conversation its test message started, as the inbox action does, before any inbound secret', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), status: { ...channel('email').status, reason_code: 'no_inbound_secret' }, config: withChannel.channel });
+  channelsApi.email.mockResolvedValue({ ...withChannel, channel: { ...withChannel.channel, secret_set: false } });
+  channelsApi.emailTestMessage.mockResolvedValue({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  const navigate = show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/conversations/66666666-6666-4666-8666-666666666666'));
 });

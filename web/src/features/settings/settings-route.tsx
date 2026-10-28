@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
-import { SubmitKeys } from '../../api/submit-key';
+import { AnsweredWithoutSecret, useCreateMutation } from '../../api/use-create';
 import { AgentTokensSection } from './agent-tokens-section';
 import { ExportAllData } from './export-all-data';
 import { SavedRepliesSection } from './saved-replies-section';
@@ -37,7 +37,7 @@ export function SettingsRoute() {
   const invites = useQuery({ queryKey: ['invites'], queryFn: api.invites });
   const team = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const refresh = (key: string) => client.invalidateQueries({ queryKey: [key] });
-  const createInvite = useMutation({ mutationFn: ({ email, role }: { email: string; role: 'admin' | 'agent' }) => api.createInvite(email, role), onSuccess: () => refresh('invites') });
+  const createInvite = useCreateMutation({ create: ({ email, role }: { email: string; role: 'admin' | 'agent' }, key: string) => api.createInvite(email, role, key), onSuccess: () => refresh('invites') });
   // A team change also moves seats, sessions and assignments, so every view that shows them reloads.
   const updateAgent = useMutation({
     mutationFn: ({ id, ...change }: { id: string; display_name?: string; role?: 'admin' | 'agent'; active?: boolean; reassign_to?: string | null }) => api.updateAgent(id, change),
@@ -47,8 +47,14 @@ export function SettingsRoute() {
   // A mutation, so that a 401 or 402 signs out or locks the app as any action does. The new token is in no
   // cache: keep hands it to the card, and the mutation's own result is empty. Sessions reloads to list it,
   // also after a failure whose outcome is unknown, so a token the server did create shows up to be revoked.
-  const createToken = useMutation({
-    mutationFn: async ({ label, choice, keep }: { label: string; choice: TokenChoice; keep: (created: AgentToken) => void }) => { keep(await api.createAgentToken(label, choice)); },
+  // A repeat of a press the server already answered comes back without the token (shown once): the card
+  // then points to Sessions, where the token is listed to revoke.
+  const createToken = useCreateMutation({
+    create: async ({ label, choice, keep }: { label: string; choice: TokenChoice; keep: (created: AgentToken & { token: string }) => void }, key: string) => {
+      const created = await api.createAgentToken(label, choice, key);
+      if (!created.token) throw new AnsweredWithoutSecret();
+      keep({ ...created, token: created.token });
+    },
     onSettled: () => refresh('sessions'),
   });
   const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => refresh('invites') });
@@ -65,9 +71,8 @@ export function SettingsRoute() {
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
   const refreshSavedReplies = () => refresh('saved-replies');
   // A saved reply added again after a failed request goes under the same key, so it is stored once.
-  const savedReplyKeys = useRef(new SubmitKeys());
-  const createSavedReply = useMutation({ mutationFn: ({ title, body }: { title: string; body: string }) => api.createSavedReply(title, body, savedReplyKeys.current.keyFor(JSON.stringify([title, body]))),
-    onSuccess: () => { savedReplyKeys.current.done(); return refreshSavedReplies(); } });
+  const createSavedReply = useCreateMutation({ create: ({ title, body }: { title: string; body: string }, key: string) => api.createSavedReply(title, body, key),
+    onSuccess: refreshSavedReplies });
   const updateSavedReply = useMutation({ mutationFn: ({ id, ...change }: { id: string; title: string; body: string; updated_at: string }) => api.updateSavedReply(id, change), onSuccess: refreshSavedReplies });
   const deleteSavedReply = useMutation({ mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) => api.deleteSavedReply(id, updatedAt), onSuccess: refreshSavedReplies });
   const isAdmin = me.data?.agent.role === 'admin';
@@ -106,7 +111,7 @@ export function SettingsRoute() {
         render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={isAdmin} workspaceName={me.data?.workspace.name} />} /></div>
     </section>}
     inviteError={createInvite.error instanceof PlanLimitError || createInvite.error instanceof InvalidRequestError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
-    createdInviteUrl={createInvite.data?.url}
+    createdInvite={createInvite.data ? { url: createInvite.data.url } : undefined} creatingInvite={createInvite.isPending}
     onCreateInvite={(email, role) => createInvite.mutate({ email, role })}
     onRevokeInvite={(id) => revokeInvite.mutate(id)} onRevokeSession={(id) => revokeSession.mutate(id)}
     onSetWorkspaceTimezone={(value) => workspaceTimezone.mutate(value)} onSetAgentTimezone={(value) => agentTimezone.mutate(value)} />;

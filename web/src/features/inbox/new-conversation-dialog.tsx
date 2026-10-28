@@ -17,6 +17,7 @@ import type { AttachmentLimits } from './attachment-picker';
 import { CcField } from './cc-field';
 import { largeAttachmentWarning } from './outbound-notice';
 import { replyRefusalText } from './refusal-text';
+import { useCreateAction } from '../../api/use-create';
 
 // Why a new conversation cannot be sent at all, known before the person writes anything.
 export type NewConversationBlock = 'no_channel' | 'trial' | undefined;
@@ -40,9 +41,11 @@ export function StartConversationWindow({ onClose, onStarted }: { onClose: () =>
   // domain or a plan allows; the server stays the judge, this only says so before anything is typed.
   const blocked: NewConversationBlock = list.data && !channelID ? 'no_channel'
     : me.data?.plan?.plan === 'trial' && channel.data && !channel.data.channel?.domain_verified_at ? 'trial' : undefined;
+  const startOnce = useCreateAction(({ contact, subject, reply }: { contact: ConversationContact; subject: string; reply: FirstReply }, key: string) =>
+    contactApi.startConversation(contact, subject, reply, key));
   const start = async (contact: ConversationContact, subject: string, reply: FirstReply) => {
     // A channel removed or turned off while the window was open is shown as it is now.
-    const created = await contactApi.startConversation(contact, subject, { ...reply, channelID }).catch((error: unknown) => {
+    const created = await startOnce.run({ contact, subject, reply: { ...reply, channelID } }).catch((error: unknown) => {
       if (channelRefusal(error)) void client.invalidateQueries({ queryKey: ['channels'] });
       throw error;
     });

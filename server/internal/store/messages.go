@@ -357,3 +357,28 @@ func checkReplySeen(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 	}
 	return &domain.ReplyConflictError{Latest: latest, Newer: newer}
 }
+
+// SentUnderKey returns the message a send with key stored in the conversation, or found false. It takes
+// the key's lock first, so a send under the key that is still running is waited for and the answer is final.
+func (s *Store) SentUnderKey(ctx context.Context, workspaceID, conversationID, key string) (domain.Message, bool, error) {
+	var message domain.Message
+	found := false
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "message-key:"+workspaceID+":"+key); err != nil {
+			return fmt.Errorf("lock message key: %w", err)
+		}
+		var messageID string
+		err := tx.QueryRow(ctx, `SELECT k.message_id::text FROM message_idempotency_keys k JOIN messages m ON m.workspace_id=k.workspace_id AND m.id=k.message_id
+			WHERE k.workspace_id=$1 AND k.key=$2 AND m.conversation_id=$3`, workspaceID, key, conversationID).Scan(&messageID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read message key: %w", err)
+		}
+		message, err = getMessage(ctx, tx, workspaceID, messageID)
+		found = err == nil
+		return err
+	})
+	return message, found, err
+}

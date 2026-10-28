@@ -92,7 +92,7 @@ const before = (beforeVersion?: number) => query({ before_version: beforeVersion
 export const kbApi = {
   collections: () => request('/api/v1/kb/collections', collectionListSchema),
   trashedCollections: () => request('/api/v1/kb/collections/trash', trashedCollectionListSchema),
-  createCollection: (value: RequestBody<'createKBCollection'>) => request('/api/v1/kb/collections', kbCollectionSchema, { method: 'POST', body: json<'createKBCollection'>(value) }),
+  createCollection: (value: RequestBody<'createKBCollection'>, key: string) => request('/api/v1/kb/collections', kbCollectionSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBCollection'>(value) }),
   updateCollection: (id: string, value: RequestBody<'updateKBCollection'>) => request(`/api/v1/kb/collections/${id}`, kbCollectionSchema, { method: 'PATCH', body: json<'updateKBCollection'>(value) }),
   // updatedAt is the version the person saw; the server refuses the delete if it was saved since.
   deleteCollection: (id: string, updatedAt: string) => request(`/api/v1/kb/collections/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
@@ -102,8 +102,8 @@ export const kbApi = {
   trashedArticles: (cursor?: string) => request(`/api/v1/kb/articles/trash${page(cursor)}`, trashedArticlePageSchema),
   article: (id: string) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema),
   // key names this save (Idempotency-Key): a retry with the same key returns the article the first stored.
-  createArticle: (value: RequestBody<'createKBArticle'>, key?: string) => request('/api/v1/kb/articles', kbArticleSchema,
-    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined, body: json<'createKBArticle'>(value) }),
+  createArticle: (value: RequestBody<'createKBArticle'>, key: string) => request('/api/v1/kb/articles', kbArticleSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBArticle'>(value) }),
   updateArticle: (id: string, value: RequestBody<'updateKBArticle'>) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema, { method: 'PATCH', body: json<'updateKBArticle'>(value) }),
   deleteArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
   restoreArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/restore`, kbArticleSchema, { method: 'POST', body: json<'restoreKBArticle'>({ updated_at: updatedAt }) }),

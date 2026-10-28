@@ -264,6 +264,7 @@ export interface paths {
             };
             cookie?: never;
         };
+        /** @description The conversation's timeline. With `idempotency_key`, only the message a send with that Idempotency-Key stored in this conversation, or no item when none did: a page reloaded while a send was in flight asks whether it arrived before offering the text again. A send under that key still running is waited for, so the answer is final. */
         get: operations["listMessages"];
         put?: never;
         /**
@@ -1602,7 +1603,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). An Idempotency-Key used before with other input is also refused with 422, code `idempotency_key_reused`. The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
         post: operations["addAIProvider"];
         delete?: never;
         options?: never;
@@ -5703,7 +5704,10 @@ export interface operations {
     createAgentToken: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -5719,6 +5723,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The session of the token an earlier request with the same Idempotency-Key created; the raw token is not shown again and nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        session: components["schemas"]["Session"];
+                    };
+                };
+            };
             /** @description The token and its session. The raw token is in this response only. */
             201: {
                 headers: {
@@ -5733,6 +5748,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listInvites: {
@@ -5761,7 +5778,10 @@ export interface operations {
     createInvite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -5775,6 +5795,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The invite an earlier request with the same Idempotency-Key created, without its one-time URL (shown once); nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        invite: components["schemas"]["Invite"];
+                    };
+                };
+            };
             /** @description The invite, and for a person its one-time URL */
             201: {
                 headers: {
@@ -5802,6 +5833,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     revokeInvite: {
@@ -5901,7 +5933,10 @@ export interface operations {
     createConversation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -5944,6 +5979,7 @@ export interface operations {
             };
         };
         responses: {
+            200: components["responses"]["Conversation"];
             201: components["responses"]["Conversation"];
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
@@ -5953,6 +5989,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["AttachmentsTooLarge"];
+            422: components["responses"]["IdempotencyKeyReused"];
             429: components["responses"]["TrialOutboundLimit"];
             /** @description The attachments volume is low on disk space; nothing was sent or stored */
             507: {
@@ -6080,7 +6117,10 @@ export interface operations {
     };
     listMessages: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The Idempotency-Key of a send, 1 to 200 printable ASCII characters */
+                idempotency_key?: string;
+            };
             header?: never;
             path: {
                 id: components["parameters"]["ID"];
@@ -6100,6 +6140,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
@@ -6258,7 +6299,10 @@ export interface operations {
     createChannel: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6268,6 +6312,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The channel an earlier request with the same Idempotency-Key created; nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
             /** @description The channel */
             201: {
                 headers: {
@@ -6282,6 +6335,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listChannelEvents: {
@@ -7361,7 +7415,10 @@ export interface operations {
     createContact: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7375,6 +7432,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The contact an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
             /** @description Created contact */
             201: {
                 headers: {
@@ -7397,6 +7463,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     getContact: {
@@ -7774,7 +7841,10 @@ export interface operations {
     createTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7788,6 +7858,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The tag an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
             /** @description Created tag */
             201: {
                 headers: {
@@ -7801,6 +7880,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     deleteTag: {
@@ -7886,7 +7967,10 @@ export interface operations {
     createSavedView: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7896,6 +7980,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The saved view an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
             /** @description Saved view */
             201: {
                 headers: {
@@ -7910,6 +8003,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listDeletedSavedViews: {
@@ -8807,7 +8901,10 @@ export interface operations {
     addAIProvider: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8817,6 +8914,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The provider an earlier request with the same Idempotency-Key added; nothing new was stored or checked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
             /** @description The provider, checked */
             201: {
                 headers: {
@@ -10020,7 +10126,10 @@ export interface operations {
     createProblemReport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -10036,6 +10145,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The report an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        reference: string;
+                    };
+                };
+            };
             /** @description The report reached the support desk */
             201: {
                 headers: {
@@ -10061,7 +10181,8 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`) */
+            409: components["responses"]["Conflict"];
+            /** @description Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`). Also `idempotency_key_reused` when the Idempotency-Key was used before with other input. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10109,7 +10230,10 @@ export interface operations {
     createKBCollection: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -10119,6 +10243,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The collection an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBCollection"];
+                };
+            };
             /** @description Created collection */
             201: {
                 headers: {
@@ -10133,6 +10266,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listTrashedKBCollections: {

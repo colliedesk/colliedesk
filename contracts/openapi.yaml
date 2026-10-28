@@ -211,6 +211,8 @@ paths:
         admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and
         scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last
         use, and one year after its creation at the latest.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -235,9 +237,14 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AgentToken'}
+        '200':
+          description: The session of the token an earlier request with the same Idempotency-Key created; the raw token is not shown again and nothing new was created
+          content: {application/json: {schema: {type: object, required: [session], properties: {session: {$ref: '#/components/schemas/Session'}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/auth/invites:
     get:
       operationId: listInvites
@@ -256,6 +263,8 @@ paths:
     post:
       operationId: createInvite
       x-permission: access:write
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -282,6 +291,9 @@ paths:
                 properties:
                   invite: {$ref: '#/components/schemas/Invite'}
                   url: {type: string, format: uri}
+        '200':
+          description: The invite an earlier request with the same Idempotency-Key created, without its one-time URL (shown once); nothing new was created
+          content: {application/json: {schema: {type: object, required: [invite], properties: {invite: {$ref: '#/components/schemas/Invite'}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/PlanLimitReached'}
@@ -291,6 +303,7 @@ paths:
             The address belongs to a deactivated agent (error code `agent_deactivated`). Reactivate the agent
             in the team list instead of inviting them again.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/auth/invites/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     delete:
@@ -438,6 +451,8 @@ paths:
         `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer
         added with the conversation (`contact`) is written in the same transaction; an address that is
         already a customer answers 409 `contact_exists` with the `contact` to use.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -484,6 +499,7 @@ paths:
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201': {$ref: '#/components/responses/Conversation'}
+        '200': {$ref: '#/components/responses/Conversation'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
@@ -495,6 +511,7 @@ paths:
         '507':
           description: The attachments volume is low on disk space; nothing was sent or stored
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
     patch:
       operationId: bulkUpdateConversations
       x-permission: conversations:write
@@ -581,6 +598,17 @@ paths:
     get:
       operationId: listMessages
       x-permission: conversations:read
+      description: >
+        The conversation's timeline. With `idempotency_key`, only the message a send with that
+        Idempotency-Key stored in this conversation, or no item when none did: a page reloaded while a
+        send was in flight asks whether it arrived before offering the text again. A send under that key
+        still running is waited for, so the answer is final.
+      parameters:
+        - name: idempotency_key
+          in: query
+          required: false
+          description: The Idempotency-Key of a send, 1 to 200 printable ASCII characters
+          schema: {type: string, minLength: 1, maxLength: 200}
       responses:
         '200':
           description: Ordered conversation timeline
@@ -591,6 +619,7 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/Message'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '404': {$ref: '#/components/responses/NotFound'}
         '401': {$ref: '#/components/responses/Unauthorized'}
     post:
@@ -760,6 +789,8 @@ paths:
         called as its type, a later one by its address (email) or with a number. The first channel of a
         type is its default; `is_default: true` makes a later one the default. The first email channel is
         what `PUT /api/v1/channels/email` connects.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/ChannelCreate'}}}
@@ -767,11 +798,15 @@ paths:
         '201':
           description: The channel
           content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
+        '200':
+          description: The channel an earlier request with the same Idempotency-Key created; nothing new was created
+          content: {application/json: {schema: {$ref: '#/components/schemas/ChannelDetail'}}}
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/channels/events:
     get:
       operationId: listChannelEvents
@@ -1673,6 +1708,8 @@ paths:
     post:
       operationId: createContact
       x-permission: contacts:write
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -1690,12 +1727,16 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Contact'}
+        '200':
+          description: The contact an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/Contact'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409':
           description: The address is already a customer (`contact_exists`); `contact` in the error is the contact to use, the one it was merged into when it was merged
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/contacts/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -2000,6 +2041,8 @@ paths:
     post:
       operationId: createTag
       x-permission: conversations:write
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -2015,9 +2058,14 @@ paths:
         '201':
           description: Created tag
           content: {application/json: {schema: {$ref: '#/components/schemas/Tag'}}}
+        '200':
+          description: The tag an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/Tag'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/tags/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     patch:
@@ -2077,6 +2125,8 @@ paths:
         it; a shared view by everyone in the workspace, and anyone may change or delete it. Names are
         unique ignoring case among the caller's personal views and among the shared views (409). Each
         person keeps at most 50 personal views and a workspace at most 50 shared ones (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -2087,10 +2137,14 @@ paths:
         '201':
           description: Saved view
           content: {application/json: {schema: {$ref: '#/components/schemas/SavedView'}}}
+        '200':
+          description: The saved view an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/SavedView'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/saved-views/trash:
     get:
       operationId: listDeletedSavedViews
@@ -2824,18 +2878,24 @@ paths:
         Adds a provider with the workspace's own key. The server sends one small request to the first
         model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code`
         otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved).
+        An Idempotency-Key used before with other input is also refused with 422, code `idempotency_key_reused`.
         The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is
         unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server
         cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https
         unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace
         (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403
         `credentials_need_admin_token`: an agent request would keep the key.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/AIProviderInput'}}}
       responses:
         '201':
           description: The provider, checked
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIProvider'}}}
+        '200':
+          description: The provider an earlier request with the same Idempotency-Key added; nothing new was stored or checked
           content: {application/json: {schema: {$ref: '#/components/schemas/AIProvider'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -3797,6 +3857,8 @@ paths:
         web app offers a GitHub issue instead. Any agent token tier may report. One agent may send 5
         reports an hour. Send JSON, or `multipart/form-data` with `description`, `diagnostics` (a JSON
         string) and up to 3 `screenshots` files (PNG, JPEG or WebP, 5 MiB in total).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -3825,6 +3887,9 @@ paths:
                 required: [reference]
                 properties:
                   reference: {type: string, description: 'The request id of this call; quote it when you write to support'}
+        '200':
+          description: The report an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used
+          content: {application/json: {schema: {type: object, required: [reference], properties: {reference: {type: string}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
@@ -3833,7 +3898,7 @@ paths:
           description: This server has no support desk for problem reports (error code `not_configured`)
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '422':
-          description: Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`)
+          description: Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`). Also `idempotency_key_reused` when the Idempotency-Key was used before with other input.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '429':
           description: This agent sent 5 reports in the last hour; retry after the `Retry-After` seconds
@@ -3841,6 +3906,7 @@ paths:
             Retry-After: {schema: {type: integer}}
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/kb/collections:
     get:
       operationId: listKBCollections
@@ -3869,6 +3935,8 @@ paths:
         collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash,
         or one already three levels deep, is 400. A workspace holds at most 1,000 collections,
         counting the ones in the trash (409 `kb_limit`).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -3879,10 +3947,14 @@ paths:
         '201':
           description: Created collection
           content: {application/json: {schema: {$ref: '#/components/schemas/KBCollection'}}}
+        '200':
+          description: The collection an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBCollection'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/collections/trash:
     get:
       operationId: listTrashedKBCollections

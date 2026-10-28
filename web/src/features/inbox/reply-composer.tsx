@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
-import type { Message, SavedReply } from '../../api/schemas';
+import type { SavedReply } from '../../api/schemas';
+import { newSubmitKey } from '../../api/submit-key';
 import { renderSavedReply } from '../../lib/saved-reply-variables';
 import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import { CcField } from './cc-field';
@@ -23,7 +24,11 @@ interface ReplyComposerProps {
   // May return a promise: the text is kept, with the reason shown, when it rejects.
   // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
   // only for a reply that copies someone. aiDraft (last) names the AI draft a reply was written from.
-  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string) => void | Promise<unknown>;
+  // With draftKey, every argument is passed and key (last) is the send's Idempotency-Key, kept with the draft.
+  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string, key?: string) => void | Promise<unknown>;
+  // findSent says whether the send under key stored its message; a draft kept with a send's key asks it once
+  // when the box opens, and is dropped when it did. Without it such a draft is offered again.
+  findSent?: (key: string) => Promise<boolean>;
   // The addresses the customer copied on their latest message; the field starts with them until the agent edits it.
   suggestedCc?: string[];
   // The server's per-message file limits; the composer warns and holds the send while they are exceeded.
@@ -57,9 +62,6 @@ interface ReplyComposerProps {
   onResolve?: () => Promise<unknown>;
   // Where this browser keeps the unsent text (workspace, agent and conversation); without it nothing is kept.
   draftKey?: string;
-  // The conversation's messages once loaded (undefined while loading). A draft kept after a send that was
-  // cut off (a reload) is dropped when its message is there: the server stored it after all.
-  timeline?: Message[];
 }
 
 type Kind = 'outgoing' | 'note';
@@ -79,7 +81,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, draftKey, timeline }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, draftKey, findSent }: ReplyComposerProps) {
   // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
   const [stored] = useState(() => readDraft(draftKey));
   const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
@@ -87,28 +89,35 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
   // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
   // remounts the box with it, so the draft kept there is read before anything is written over it.
-  // A draft written back after its send was cut off keeps that mark while its text is unchanged, so a
-  // second reload before the conversation loads still checks the timeline for it.
-  const cutOff = useRef(stored?.sentAt === undefined ? undefined : stored);
+  // A send in flight, failed or cut off keeps its key with the text while the text and kind are unchanged:
+  // sending it again goes under the same key, so the server stores it once.
+  const pendingSend = useRef(stored?.sendKey ? { kind: stored.kind, body: stored.body, key: stored.sendKey } : undefined);
+  const keyOf = (draft: StoredDraft) => {
+    const send = pendingSend.current;
+    return send && send.kind === draft.kind && send.body === draft.body ? send.key : undefined;
+  };
   useEffect(() => {
-    const sent = cutOff.current;
-    writeDraft(draftKey, { kind, body, ...(sent && sent.body === body ? { sentAt: sent.sentAt } : {}) });
+    const sendKey = keyOf({ kind, body });
+    writeDraft(draftKey, { kind, body, ...(sendKey ? { sendKey } : {}) });
   }, [draftKey, kind, body]);
   const latestBody = useRef(body);
   latestBody.current = body;
   const latestKind = useRef(kind);
   latestKind.current = kind;
-  // Once the timeline shows that the cut-off message arrived, the text leaves the box instead of inviting
-  // a second send.
+  // A draft kept with a send's key asks the server once whether that send stored its message: then the text
+  // leaves the box instead of inviting a second send. It is never sent by itself.
   useEffect(() => {
-    const sent = cutOff.current;
-    if (!sent || !timeline) return;
-    cutOff.current = undefined;
-    // A few minutes either way: the browser's clock and the server's may differ.
-    const arrived = timeline.some((item) => item.kind === sent.kind && item.body.trim() === sent.body.trim()
-      && (!agentId || item.author_agent_id === agentId) && Date.parse(item.created_at) >= (sent.sentAt ?? 0) - 5 * 60_000);
-    if (arrived && latestBody.current.trim() === sent.body.trim()) setBody('');
-  }, [timeline, agentId]);
+    const send = pendingSend.current;
+    if (!send || !findSent) return;
+    let current = true;
+    findSent(send.key).then((found) => {
+      if (!current || !found || pendingSend.current !== send) return;
+      pendingSend.current = undefined;
+      if (latestBody.current === send.body) setBody('');
+      else writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current });
+    }, () => undefined);
+    return () => { current = false; };
+  }, []);
   // Another tab of this browser wrote (or sent) this draft: a box not edited here shows its text, as a reply
   // or a note the way that tab had it (a note must never turn into a reply), and says so. Text typed here is
   // never replaced unasked: the person picks theirs or the other tab's.
@@ -258,11 +267,15 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     const seen = kind === 'outgoing' && latestReplyNumber !== undefined ? mark.current ?? latestReplyNumber : undefined;
     const fromDraft = kind === 'outgoing' ? aiDraft : undefined;
     setConflict(undefined);
-    // The kept draft goes before the request leaves, so a reload meanwhile does not offer the sent text
-    // again; a failure writes it back, marked as sent once.
-    const sentAt = Date.now();
-    writeDraft(draftKey, { kind, body: '' });
-    const send = (draftId?: string) => draftId ? onSubmit?.(kind, sent, sentFiles, sentCc, seen, draftId)
+    // The kept draft holds the send's key before the request leaves: a reload meanwhile asks the server about
+    // that key before offering the text again, and the same text sent again goes under the same key.
+    const key = draftKey ? keyOf({ kind, body }) ?? newSubmitKey() : undefined;
+    if (key) {
+      pendingSend.current = { kind, body, key };
+      writeDraft(draftKey, { kind, body, sendKey: key });
+    }
+    const send = (draftId?: string) => key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
+      : draftId ? onSubmit?.(kind, sent, sentFiles, sentCc, seen, draftId)
       : seen !== undefined ? onSubmit?.(kind, sent, sentFiles, sentCc, seen)
       : sentCc.length > 0 ? onSubmit?.(kind, sent, sentFiles, sentCc)
       : sentFiles.length > 0 ? onSubmit?.(kind, sent, sentFiles) : onSubmit?.(kind, sent);
@@ -270,7 +283,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     if (fromDraft && typeof (result as Promise<unknown> | undefined)?.then === 'function') {
       result = (result as Promise<unknown>).catch((error: unknown) => (draftGone(error) ? send() : Promise.reject(error)));
     }
-    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); void resolveNow(); return; }
+    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { pendingSend.current = undefined; setBody(''); setFiles([]); void resolveNow(); return; }
     inFlight.current = true;
     setSending(true);
     setProblem(undefined);
@@ -281,8 +294,11 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       setBody((current) => (current.trim() === sent ? '' : current));
       setFiles((current) => current.filter((file) => !sentFiles.includes(file)));
     };
-    (result as Promise<unknown>).then(() => { clearSent(); return resolveNow(); }, (error: unknown) => {
-      writeDraft(draftKey, { kind, body: latestBody.current, sentAt });
+    (result as Promise<unknown>).then(() => {
+      if (pendingSend.current?.key === key) pendingSend.current = undefined;
+      clearSent();
+      return resolveNow();
+    }, (error: unknown) => {
       if (error instanceof ReplyConflictError) setConflict(error);
       else setProblem(replyRefusalText(error));
     }).finally(() => { inFlight.current = false; setSending(false); });

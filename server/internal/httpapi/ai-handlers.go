@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -45,13 +46,15 @@ func (a *API) addAIProvider(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), label, models, api_key and, for openai_compatible, base_url.")
 		return
 	}
-	provider, err := a.ai.AddProvider(request.Context(), principal(request).Workspace.ID, aiActor(request),
-		ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
-	if err != nil {
-		writeAIError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusCreated, provider)
+	a.createOnce(response, request, addAIProviderOperation, append([]string{input.Kind, input.Label, input.BaseURL, input.APIKey}, input.Models...), func(ctx context.Context) (any, error) {
+		provider, err := a.ai.AddProvider(ctx, principal(request).Workspace.ID, aiActor(request),
+			ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
+		if err != nil {
+			writeAIError(response, err)
+			return nil, errAnswered
+		}
+		return provider, nil
+	})
 }
 
 // listAIModels lists the models a provider's key may use, before the provider is saved, so a person

@@ -55,7 +55,7 @@ export const channelsApi = {
   // Removed channels too, last: they still name the conversations they carried.
   listAll: () => request('/api/v1/channels?include_removed=true', channelListSchema),
   get: (id: string) => request(`/api/v1/channels/${id}`, channelDetailSchema),
-  create: (input: ChannelCreate) => request('/api/v1/channels', channelDetailSchema, { method: 'POST', body: json<'createChannel'>(input) }),
+  create: (input: ChannelCreate, key: string) => request('/api/v1/channels', channelDetailSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createChannel'>(input) }),
   update: (id: string, change: ChannelChange) => request(`/api/v1/channels/${id}`, channelDetailSchema, { method: 'PATCH', body: json<'updateChannel'>(change) }),
   remove: (id: string) => request(`/api/v1/channels/${id}`, removedSchema, { method: 'DELETE' }),
   events: (channelID?: string, cursor?: string) => {
@@ -68,8 +68,8 @@ export const channelsApi = {
   // One email channel of several: its settings and its own actions.
   email: (id: string) => request(`/api/v1/channels/${id}/email`, emailChannelSettingsSchema),
   emailSecret: (id: string) => request(`/api/v1/channels/${id}/email/secret`, inboundSecretSchema, { method: 'POST' }),
-  emailTestMessage: (id: string, key?: string) => request(`/api/v1/channels/${id}/email/test-message`, testMessageResultSchema,
-    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined }),
+  emailTestMessage: (id: string, key: string) => request(`/api/v1/channels/${id}/email/test-message`, testMessageResultSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key } }),
   emailVerifyDomain: (id: string) => request(`/api/v1/channels/${id}/email/domain-verification`, emailChannelSettingsSchema, { method: 'POST' }),
   emailConnectGmail: (id: string) => request(`/api/v1/channels/${id}/email/gmail`, consentLinkSchema, { method: 'POST' }),
   emailDisconnectGmail: (id: string) => requestNoContent(`/api/v1/channels/${id}/email/gmail`, { method: 'DELETE' }),

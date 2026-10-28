@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -132,5 +133,52 @@ func TestAMultipartMessageHonoursItsIdempotencyKey(t *testing.T) {
 	}
 	if count := queryString(t, f.pool, `SELECT count(*)::text FROM attachments WHERE workspace_id=$1 AND filename='a.txt'`, f.workspaceA); count != "1" {
 		t.Fatalf("attachments stored = %s, want 1", count)
+	}
+}
+
+func sentUnderKey(t *testing.T, api http.Handler, token, conversation, key string) (int, []string) {
+	t.Helper()
+	response := request(t, api, http.MethodGet, "/api/v1/conversations/"+conversation+"/messages?idempotency_key="+url.QueryEscape(key), nil, token, nil)
+	if response.Code != http.StatusOK {
+		return response.Code, nil
+	}
+	var page struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	decode(t, response, &page)
+	ids := []string{}
+	for _, item := range page.Items {
+		ids = append(ids, item.ID)
+	}
+	return response.Code, ids
+}
+
+// A page reloaded while a send was in flight asks, with the send's key, whether the message arrived: the
+// answer is that message or nothing, never another conversation's or another workspace's.
+func TestTheTimelineFindsTheMessageASendKeyStored(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversation := f.conversationA(t)
+	contact := create(t, f.api, f.adminA, "/api/v1/contacts", map[string]any{"name": "Other", "email": "other@customer-reload.example.com"})
+	other := create(t, f.api, f.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Another one"})
+	sent := postKeyed(t, f.api, f.adminA, conversation, "reload-1", map[string]any{"kind": "note", "body": "Called the customer"})
+	if sent.Code != http.StatusCreated {
+		t.Fatalf("send: status=%d body=%s", sent.Code, sent.Body.String())
+	}
+	if status, ids := sentUnderKey(t, f.api, f.adminA, conversation, "reload-1"); status != http.StatusOK || len(ids) != 1 || ids[0] != messageIDOf(t, sent) {
+		t.Fatalf("stored send: status=%d items=%v, want the message", status, ids)
+	}
+	if status, ids := sentUnderKey(t, f.api, f.adminA, conversation, "never-sent"); status != http.StatusOK || len(ids) != 0 {
+		t.Fatalf("send that never arrived: status=%d items=%v, want no item", status, ids)
+	}
+	if status, ids := sentUnderKey(t, f.api, f.adminA, other, "reload-1"); status != http.StatusOK || len(ids) != 0 {
+		t.Fatalf("another conversation: status=%d items=%v, want no item", status, ids)
+	}
+	if status, _ := sentUnderKey(t, f.api, f.adminB, conversation, "reload-1"); status != http.StatusNotFound {
+		t.Fatalf("another workspace: status=%d, want 404", status)
+	}
+	if status, _ := sentUnderKey(t, f.api, f.adminA, conversation, "has space"); status != http.StatusBadRequest {
+		t.Fatalf("a malformed key: status=%d, want 400", status)
 	}
 }

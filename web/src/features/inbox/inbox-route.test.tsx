@@ -638,7 +638,7 @@ test('a saved view is saved from the filters on screen and opens them again', as
   const menu = screen.getByRole('group', { name: 'Views' });
   fireEvent.change(within(menu).getByLabelText('View name'), { target: { value: 'Pending, our turn' } });
   fireEvent.click(within(menu).getByRole('button', { name: 'Save view' }));
-  await waitFor(() => expect(views.create).toHaveBeenCalledWith({ name: 'Pending, our turn', scope: 'personal', filters: { status: ['pending'], awaiting: 'team' } }));
+  await waitFor(() => expect(views.create).toHaveBeenCalledWith({ name: 'Pending, our turn', scope: 'personal', filters: { status: ['pending'], awaiting: 'team' } }, expect.any(String)));
   fireEvent.click(await within(menu).findByRole('button', { name: 'Urgent' }));
   await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&page=1&page_size=50', expect.anything()));
 });
@@ -683,7 +683,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   fireEvent.change(within(ready).getByLabelText('Subject'), { target: { value: 'Hello' } });
   fireEvent.change(within(ready).getByLabelText('Message'), { target: { value: 'First words' } });
   fireEvent.click(within(ready).getByRole('button', { name: 'Send' }));
-  await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(pat.id, 'Hello', { body: 'First words', files: [], cc: [], channelID: emailChannelID }));
+  await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(pat.id, 'Hello', { body: 'First words', files: [], cc: [], channelID: emailChannelID }, expect.any(String)));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 });
 
