@@ -56,9 +56,19 @@ export function browserTimeZone(): string {
   }
 }
 
+// One formatter per zone: a list formats many rows, and making a formatter is the slow part.
+const zoneFormats = new Map<string, Intl.DateTimeFormat>();
+
 // The short name of a timezone at a moment: UTC, GMT+7, EDT.
 function zoneName(date: Date, timeZone: string): string {
-  const part = (zone: string) => new Intl.DateTimeFormat('en', { timeZone: zone, timeZoneName: 'short' }).formatToParts(date).find((item) => item.type === 'timeZoneName')?.value ?? zone;
+  const part = (zone: string) => {
+    let formatter = zoneFormats.get(zone);
+    if (!formatter) {
+      formatter = new Intl.DateTimeFormat('en', { timeZone: zone, timeZoneName: 'short' });
+      zoneFormats.set(zone, formatter);
+    }
+    return formatter.formatToParts(date).find((item) => item.type === 'timeZoneName')?.value ?? zone;
+  };
   try {
     return part(timeZone);
   } catch {

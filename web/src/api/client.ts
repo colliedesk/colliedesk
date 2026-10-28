@@ -5,6 +5,7 @@ import { OutboundRefusedError } from './outbound-error';
 import type { OutboundRefusalReason } from './outbound-error';
 import { requestExportLink } from './workspace-export';
 import { recordFailedCall } from '../lib/diagnostics';
+import { browserTimeZone } from '../lib/format-date';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
@@ -229,7 +230,8 @@ export class CloudWorkspaceChoiceError extends Error {
 
 async function exchangeCloudSession(token: string, workspaceSlug?: string) {
   // The user agent names this device in Settings → Sessions, as it does for a pairing link.
-  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}) };
+  // The browser's timezone starts a first-time agent on their own clock instead of UTC.
+  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}), timezone: browserTimeZone() };
   const response = await fetch('/api/v1/auth/cloud/exchange', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -280,7 +282,7 @@ export const api = {
   requestExportLink,
   logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }),
   redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {
-    method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie' }),
+    method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone() }),
   }),
   me: () => request('/api/v1/auth/me', meSchema),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),

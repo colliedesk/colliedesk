@@ -2738,6 +2738,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description The browser's IANA timezone. At the agent's first sign-in, while they never chose a timezone and the workspace is still on its `UTC` default, it becomes the agent's own (`timezone_override`). A later sign-in never changes it, and an unknown zone is ignored; it never fails the sign-in. */
+        SignInTimezone: string;
         ImportPerson: {
             /** @description The Freshdesk agent id */
             external_id: string;
@@ -5464,7 +5466,7 @@ export interface components {
     };
     parameters: {
         ID: string;
-        /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; the same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+        /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
         CreateIdempotencyKey: string;
     };
     requestBodies: never;
@@ -5506,6 +5508,7 @@ export interface operations {
                     workspace_slug?: string;
                     /** @description Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in". */
                     label?: string;
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -5540,6 +5543,7 @@ export interface operations {
                     goal?: components["schemas"]["OnboardingGoal"];
                     role?: components["schemas"]["OnboardingRole"];
                     source?: components["schemas"]["OnboardingSource"];
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -5597,6 +5601,7 @@ export interface operations {
                      * @enum {string}
                      */
                     session_type?: "cookie" | "bearer";
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -6578,7 +6583,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; the same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path: {
@@ -6834,7 +6839,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; the same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -8042,7 +8047,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; the same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;
@@ -10295,7 +10300,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; the same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. */
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
                 "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
             };
             path?: never;

@@ -1014,3 +1014,28 @@ test('a note whose request never arrived before a reload comes back to send agai
   expect(screen.getByLabelText('Message body')).toHaveValue('Never arrived');
   expect(screen.getByRole('button', { name: 'Private note', pressed: true })).toBeInTheDocument();
 });
+
+test('a second reload before the conversation loads still knows the kept text was sent once', async () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-12';
+  window.localStorage.setItem(key, JSON.stringify({ kind: 'note', body: 'Twice reloaded', saved_at: Date.now(), sentAt: Date.now() }));
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-12" agentId="agent-1" onSubmit={vi.fn()} />).unmount();
+  expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ body: 'Twice reloaded', sentAt: expect.any(Number) });
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-12" agentId="agent-1" onSubmit={vi.fn()}
+    timeline={[persistedNote('Twice reloaded', new Date().toISOString())]} />);
+  await waitFor(() => expect(screen.getByLabelText('Message body')).toHaveValue(''));
+});
+
+test('another tab sending its own different text leaves the text typed here in the box and in storage', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-13';
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-13" onSubmit={vi.fn()} />);
+  const box = screen.getByLabelText('Message body');
+  fireEvent.change(box, { target: { value: 'Mine here' } });
+  const theirs = JSON.stringify({ kind: 'outgoing', body: 'Theirs there', saved_at: Date.now() });
+  window.localStorage.removeItem(key);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, oldValue: theirs, newValue: null, storageArea: window.localStorage })); });
+  expect(box).toHaveValue('Mine here');
+  expect(screen.queryByRole('button', { name: 'Use it' })).not.toBeInTheDocument();
+  expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ body: 'Mine here' });
+});

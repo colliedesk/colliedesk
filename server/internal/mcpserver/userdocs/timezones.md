@@ -6,9 +6,9 @@ Colliedesk stores every time in UTC and shows it in your timezone.
   **Same as workspace** to follow the workspace default.
 - **Workspace timezone** (admins, **Settings → General**): the default for everyone who has not
   chosen their own. It starts as `UTC`.
-- **The first time you sign in** to a workspace still on `UTC`, if you have not chosen a timezone,
-  Colliedesk sets yours to your browser's timezone, so times match your clock. This happens once per
-  browser; choose **Same as workspace** to go back, and it stays that way.
+- **Your first sign-in** to a workspace still on `UTC` sets your timezone to your browser's, so times
+  match your clock. It happens only at your first sign-in: choose **Same as workspace** to go back, and no
+  later sign-in, from any browser, changes it again. A workspace whose admin chose a timezone keeps it.
 - **A time shown in another zone than your computer's says so**: a message time in the timeline adds the
   zone (`UTC`, `GMT+7`) after it, the conversation list adds it to the time you point at, and a message
   time always names its zone when you point at it.

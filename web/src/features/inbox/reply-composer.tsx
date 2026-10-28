@@ -87,14 +87,19 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
   // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
   // remounts the box with it, so the draft kept there is read before anything is written over it.
-  useEffect(() => writeDraft(draftKey, { kind, body }), [draftKey, kind, body]);
+  // A draft written back after its send was cut off keeps that mark while its text is unchanged, so a
+  // second reload before the conversation loads still checks the timeline for it.
+  const cutOff = useRef(stored?.sentAt === undefined ? undefined : stored);
+  useEffect(() => {
+    const sent = cutOff.current;
+    writeDraft(draftKey, { kind, body, ...(sent && sent.body === body ? { sentAt: sent.sentAt } : {}) });
+  }, [draftKey, kind, body]);
   const latestBody = useRef(body);
   latestBody.current = body;
   const latestKind = useRef(kind);
   latestKind.current = kind;
-  // A draft written back after its send was cut off: once the timeline shows that message arrived, the
-  // text leaves the box instead of inviting a second send.
-  const cutOff = useRef(stored?.sentAt === undefined ? undefined : stored);
+  // Once the timeline shows that the cut-off message arrived, the text leaves the box instead of inviting
+  // a second send.
   useEffect(() => {
     const sent = cutOff.current;
     if (!sent || !timeline) return;
@@ -125,7 +130,13 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       if (text === latestBody.current && nextKind === latestKind.current) { setOtherDraft(undefined); return; }
       // The other tab sent or cleared the very text this box holds: it goes here too.
       const sameTextGone = !text.trim() && parseDraft(event.oldValue)?.body === latestBody.current;
-      if (editedHere.current && latestBody.current.trim() && !sameTextGone) {
+      const mine = editedHere.current && latestBody.current.trim() !== '';
+      // It sent or cleared text of its own: the text typed here stays, and is kept again.
+      if (mine && !text.trim() && !sameTextGone) {
+        writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current });
+        return;
+      }
+      if (mine && !sameTextGone) {
         setOtherTab(false);
         setOtherDraft({ kind: nextKind, body: text });
         return;

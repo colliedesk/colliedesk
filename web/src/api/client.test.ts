@@ -67,7 +67,7 @@ test('sign-up sends the onboarding answers with the workspace name', async () =>
   }));
   await api.signUpCloud('jwt', 'Acme', { goal: 'shared_inbox', role: 'support_lead', source: 'github' });
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme', goal: 'shared_inbox', role: 'support_lead', source: 'github' });
+  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme', goal: 'shared_inbox', role: 'support_lead', source: 'github', timezone: 'UTC' });
 });
 
 test('sign-up sends the bearer token and the workspace name and returns the session', async () => {
@@ -79,7 +79,7 @@ test('sign-up sends the bearer token and the workspace name and returns the sess
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(url).toBe('/api/v1/auth/cloud/signup');
   expect((init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
-  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme' });
+  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme', timezone: 'UTC' });
   expect(redeemed.workspace.slug).toBe('acme');
 });
 
@@ -196,7 +196,18 @@ test('a reply with files and copies sends one cc field per address, before the f
 test('the cloud exchange names this device by its user agent, like a pairing link', async () => {
   fetchMock.mockResolvedValueOnce(reply(403, apiError('forbidden')));
   await api.exchangeCloudSession('t', 'acme').catch(() => {});
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ label: navigator.userAgent, workspace_slug: 'acme' });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ label: navigator.userAgent, workspace_slug: 'acme', timezone: 'UTC' });
+});
+
+test('a sign-in link sends the browser\'s timezone, which a first sign-in starts the agent on', async () => {
+  process.env.TZ = 'America/Denver';
+  try {
+    fetchMock.mockResolvedValueOnce(reply(401, apiError('invalid_link')));
+    await api.redeem('link-token', 'Firefox').catch(() => {});
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ token: 'link-token', label: 'Firefox', session_type: 'cookie', timezone: 'America/Denver' });
+  } finally {
+    process.env.TZ = 'UTC';
+  }
 });
 
 

@@ -44,6 +44,8 @@ export async function openCheckout(url: string): Promise<void> {
     loading.catch(() => undefined);
     const checkout = await Promise.race([loading, timedOut]);
     if (checkout === 'timeout') {
+      // An overlay that loads after all, while the page is already leaving, is closed at once.
+      loading.then((late) => late.close(), () => undefined);
       removeEmbedLeftovers(url);
       sayFullPage();
       window.location.assign(url);

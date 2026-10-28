@@ -88,3 +88,21 @@ test('an embed script that cannot be loaded falls back to the hosted checkout', 
   await openCheckout('https://polar.example/checkout/2');
   expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/2');
 });
+
+test('an overlay that loads after the fallback started is closed, so it never covers the page that is leaving', async () => {
+  vi.useFakeTimers();
+  try {
+    const close = vi.fn();
+    let finish: (value: unknown) => void = () => undefined;
+    sdk.create.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const opened = openCheckout('https://polar.example/checkout/3');
+    await vi.advanceTimersByTimeAsync(3_000);
+    await opened;
+    finish({ addEventListener: vi.fn(), close });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(close).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+    document.querySelectorAll('[role="status"]').forEach((node) => node.remove());
+  }
+});
