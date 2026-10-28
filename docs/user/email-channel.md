@@ -411,4 +411,4 @@ send one `cc` field per address before the files. See `createMessage` in `contra
 - Text longer than 5 MiB is cut and marked. Subjects longer than 250 characters are shortened in
   replies.
 - Replies are plain text. Markdown is sent as written.
-- One support address per workspace.
+- One support address per email channel. For more addresses, add more channels (see [Several mailboxes](#several-mailboxes)).
