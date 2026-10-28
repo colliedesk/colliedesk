@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -174,12 +175,14 @@ func (a *API) createSavedView(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	who := principal(request)
-	view, err := a.store.CreateSavedView(request.Context(), who.Workspace.ID, who.Agent.ID, name, input.Scope, filters)
-	if err != nil {
-		writeSavedViewError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusCreated, view)
+	a.createOnce(response, request, createSavedViewOperation, []string{name, input.Scope, string(filters)}, func(ctx context.Context) (any, error) {
+		view, err := a.store.CreateSavedView(ctx, who.Workspace.ID, who.Agent.ID, name, input.Scope, filters)
+		if err != nil {
+			writeSavedViewError(response, err)
+			return nil, errAnswered
+		}
+		return view, nil
+	})
 }
 
 func (a *API) updateSavedView(response http.ResponseWriter, request *http.Request) {

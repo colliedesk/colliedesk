@@ -119,6 +119,19 @@ func (s *Store) CreateChannel(ctx context.Context, workspaceID string, kind chan
 	})
 }
 
+// CreateChannelPublic is CreateChannel answering the channel as GetChannelPublic shows it, read in the same
+// transaction: once the channel is committed nothing is left to fail, so a client that goes away right
+// after the commit still leaves an answer for its Idempotency-Key.
+func (s *Store) CreateChannelPublic(ctx context.Context, workspaceID string, kind channels.Type, input ChannelInput, actor ChannelActor) (ChannelPublic, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ChannelPublic, error) {
+		channel, err := s.CreateChannelTx(ctx, tx, workspaceID, kind, input, actor)
+		if err != nil {
+			return ChannelPublic{}, err
+		}
+		return s.DescribeChannel(ctx, tx, channel)
+	})
+}
+
 // CreateChannelTx is CreateChannel inside tx.
 func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID string, kind channels.Type, input ChannelInput, actor ChannelActor) (channels.Channel, error) {
 	adapter, err := s.adapterOf(kind)

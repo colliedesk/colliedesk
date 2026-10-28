@@ -6,6 +6,7 @@ import type { AIProviderInput, AISettings, AISlotInput, AISlotName } from '../..
 import { aiMessages as m } from './ai-messages';
 import { AIPage } from './ai-page';
 import type { FieldError } from './ai-page';
+import { useCreateAction } from '../../api/use-create';
 
 const consentKey = 'colliedesk.ai-consent-dismissed';
 
@@ -72,6 +73,7 @@ export function AIRoute() {
     mutationFn: aiApi.check, onMutate: (id) => setBusyProvider(id), onSettled: () => { setBusyProvider(undefined); void refresh(); },
   });
   // Dialog actions answer the dialog, which shows a refusal under its field.
+  const addProvider = useCreateAction((input: AIProviderInput, key: string) => aiApi.add(input, key));
   const run = async (action: () => Promise<unknown>): Promise<FieldError | undefined> => {
     try {
       await action();
@@ -95,7 +97,7 @@ export function AIRoute() {
     onConsent={() => { slot.reset(); check.reset(); consent.mutate(); }}
     onDismissConsent={() => { writeDismissed(workspaceID); setDismissed(true); }}
     onCheck={(id) => { slot.reset(); consent.reset(); check.mutate(id); }}
-    onAdd={(input: AIProviderInput) => run(() => aiApi.add(input))}
+    onAdd={(input: AIProviderInput) => run(() => addProvider.run(input))}
     onListModels={async (input) => {
       try { return (await aiApi.models(input)).models; } catch (error) {
         // A provider that keeps no list (or will not show it to this key) is answered by typing the names.

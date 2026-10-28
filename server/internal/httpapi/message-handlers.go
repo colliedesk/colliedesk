@@ -20,7 +20,16 @@ func (a *API) listMessages(response http.ResponseWriter, request *http.Request) 
 		writeStoreError(response, err)
 		return
 	}
-	items, err := a.store.ListMessages(request.Context(), identity.Workspace.ID, conversationID)
+	var items []domain.Message
+	var err error
+	if request.URL.Query().Has("idempotency_key") {
+		items, err = a.messagesSentUnderKey(response, request, conversationID)
+		if errors.Is(err, errAnswered) {
+			return
+		}
+	} else {
+		items, err = a.store.ListMessages(request.Context(), identity.Workspace.ID, conversationID)
+	}
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -32,6 +41,21 @@ func (a *API) listMessages(response http.ResponseWriter, request *http.Request) 
 		}
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items})
+}
+
+// messagesSentUnderKey answers the message a send with the idempotency_key query stored in the
+// conversation: one item, or none when no send under that key arrived.
+func (a *API) messagesSentUnderKey(response http.ResponseWriter, request *http.Request, conversationID string) ([]domain.Message, error) {
+	key := request.URL.Query().Get("idempotency_key")
+	if key == "" || !validIdempotencyKey(key) {
+		writeInvalidIdempotencyKey(response)
+		return nil, errAnswered
+	}
+	message, found, err := a.store.SentUnderKey(request.Context(), principal(request).Workspace.ID, conversationID, key)
+	if err != nil || !found {
+		return []domain.Message{}, err
+	}
+	return []domain.Message{message}, nil
 }
 
 // messageRoute is the route a message is posted on; a call that waits for approval names it.
@@ -113,15 +137,23 @@ const maxIdempotencyKey = 200
 // submit, the same on every retry of it. ok is false for a key that is too long or not printable ASCII.
 func idempotencyKey(request *http.Request) (string, bool) {
 	key := request.Header.Get("Idempotency-Key")
-	if len(key) > maxIdempotencyKey {
+	if !validIdempotencyKey(key) {
 		return "", false
+	}
+	return key, true
+}
+
+// validIdempotencyKey reports whether key is at most 200 printable ASCII characters without spaces.
+func validIdempotencyKey(key string) bool {
+	if len(key) > maxIdempotencyKey {
+		return false
 	}
 	for index := 0; index < len(key); index++ {
 		if key[index] < 0x21 || key[index] > 0x7e {
-			return "", false
+			return false
 		}
 	}
-	return key, true
+	return true
 }
 
 func writeInvalidIdempotencyKey(response http.ResponseWriter) {

@@ -18,6 +18,7 @@ import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { channelsMessages as m } from './channels-messages';
 import './channels.css';
+import { useCreateAction } from '../../../api/use-create';
 
 // The pages under /settings/channels. Everything a type adds comes from the web registry
 // (src/channels/registry.ts); nothing here names a type.
@@ -257,10 +258,11 @@ function TypeShortcut({ type, search, navigate }: PageProps & { type: string; se
 
 function NewChannel({ type, navigate, isAdmin, timezone }: PageProps & { type: string }) {
   const client = useQueryClient();
+  const createChannel = useCreateAction((input: Parameters<typeof channelsApi.create>[0], key: string) => channelsApi.create(input, key));
   const ui = channelUI(type);
   if (!ui) return <p role="alert" className="error-copy">{m.unknownType}</p>;
   const create: ConnectProps['create'] = async (input) => {
-    const created = await channelsApi.create({ type: ui.type, ...input });
+    const created = await createChannel.run({ type: ui.type, ...input });
     await client.invalidateQueries({ queryKey: ['channels'] });
     navigate(`${base}/${created.id}`, true);
     return created;
@@ -326,7 +328,7 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
         {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
           : <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
               const Panel = panels[open];
-              return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} /> : null;
+              return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
             }} />}
       </div>
       {isAdmin && <div className="button-row ch-remove">

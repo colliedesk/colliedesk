@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
@@ -199,5 +200,63 @@ func TestKeyedCreatesAtOnceNeverExhaustThePool(t *testing.T) {
 		if code != http.StatusCreated {
 			t.Fatalf("request %d: status=%d, want 201 (codes %v)", index, code, codes)
 		}
+	}
+}
+
+// cancelAfterChannelCommit cancels the request the moment the transaction that inserted a channel commits,
+// as a client that disconnects right after the row is written does.
+type cancelAfterChannelCommit struct {
+	mu       sync.Mutex
+	cancel   context.CancelFunc
+	inserted bool
+}
+
+func (c *cancelAfterChannelCommit) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cancel != nil && strings.Contains(data.SQL, "INSERT INTO channels(") {
+		c.inserted = true
+	}
+	return ctx
+}
+
+func (c *cancelAfterChannelCommit) TraceQueryEnd(_ context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.inserted && c.cancel != nil && data.Err == nil && strings.EqualFold(data.CommandTag.String(), "COMMIT") {
+		c.cancel()
+		c.cancel = nil
+	}
+}
+
+func TestAChannelCreateCutOffAfterCommitIsFoundByItsKey(t *testing.T) {
+	tracer := &cancelAfterChannelCommit{}
+	api, service, pool, _ := testAPIOnPool(t, testPoolTraced(t, tracer), nil)
+	admin := createSession(t, api, service, "Cut Channel", "admin@cut-channel.example.com")
+	body := map[string]any{"type": "email", "name": "Billing", "config": map[string]any{"support_address": "billing@cut-channel.example.com"}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	tracer.mu.Lock()
+	tracer.cancel = cancel
+	tracer.mu.Unlock()
+	req := newRequest(t, http.MethodPost, "/api/v1/channels", body, admin, nil).WithContext(ctx)
+	req.Header.Set("Idempotency-Key", "channel-1")
+	serve(api, req)
+	if ctx.Err() == nil {
+		t.Fatal("the request was never cancelled: the test did not reach the commit")
+	}
+
+	again := postWithKey(t, api, admin, "/api/v1/channels", "channel-1", body)
+	if again.Code != http.StatusOK {
+		t.Fatalf("retry with the same key: status=%d body=%s, want 200 with the channel the first press made", again.Code, again.Body.String())
+	}
+	id := idOf(t, again, "id")
+	var count int
+	var only string
+	if err := pool.QueryRow(context.Background(), `SELECT count(*), max(id::text) FROM channels WHERE name='Billing' AND deleted_at IS NULL`).Scan(&count, &only); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || only != id {
+		t.Fatalf("%d channels named Billing (retry answered %s), want exactly the one the first press made", count, id)
 	}
 }

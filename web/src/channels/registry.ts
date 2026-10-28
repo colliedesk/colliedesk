@@ -9,6 +9,8 @@ export interface ChannelPanelProps {
   channel: ChannelDetail;
   canManage: boolean;
   timezone: string;
+  // navigate opens another page of the app (a conversation an action started).
+  navigate?: (href: string) => void;
 }
 
 // What the type's connect form gets: create posts POST /api/v1/channels for this type.

@@ -70,7 +70,7 @@ export const aiApi = {
   settings: () => request('/api/v1/ai', aiSettingsSchema),
   // The models a key may use, asked before the provider is saved; nothing is stored.
   models: (input: AIModelsInput) => request('/api/v1/ai/models', aiModelListSchema, { method: 'POST', body: json<'listAIModels'>(input) }),
-  add: (input: AIProviderInput) => request('/api/v1/ai/providers', aiProviderSchema, { method: 'POST', body: json<'addAIProvider'>(input) }),
+  add: (input: AIProviderInput, key: string) => request('/api/v1/ai/providers', aiProviderSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'addAIProvider'>(input) }),
   update: (id: string, change: RequestBody<'updateAIProvider'>) =>
     request(`/api/v1/ai/providers/${id}`, aiProviderSchema, { method: 'PATCH', body: json<'updateAIProvider'>(change) }),
   setKey: (id: string, apiKey: string) => request(`/api/v1/ai/providers/${id}/key`, aiProviderSchema, { method: 'PUT', body: json<'setAIProviderKey'>({ api_key: apiKey }) }),

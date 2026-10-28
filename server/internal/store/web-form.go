@@ -15,6 +15,8 @@ type WebFormSubmission struct {
 	Email   string
 	Message string
 	Source  string
+	// Press names one press of the page's button when it sent an Idempotency-Key; empty otherwise.
+	Press string
 }
 
 // GetWebForm returns the settings of the workspace's default web form (`is_default`); a
