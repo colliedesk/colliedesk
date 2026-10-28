@@ -468,7 +468,7 @@ press **Check now**. The domain is then verified while your visitors still reach
 after the switch gets its certificate at once and does not wait for a DNS check. If you change the
 `CNAME` first, the first visitor makes the server check DNS and ask for the certificate, which takes
 longer. The old `*.freshdesk.com` addresses are covered in
-[Import from Freshdesk](import-freshdesk.md#old-freshdeskcom-addresses).
+[Import from Freshdesk](import-freshdesk.md#old-freshdesk-com-addresses).
 
 **Colliedesk Cloud:** a custom domain comes with every paid plan, one per workspace. During the trial
 you can set and verify it, to prepare the move, but the help center serves on it only once the
