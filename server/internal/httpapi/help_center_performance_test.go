@@ -23,7 +23,8 @@ import (
 // long), all in one collection, help centers on, workspace A's with a full theme and close to the
 // largest custom CSS (read and hashed into the brand sheet's name on every page). It times the home
 // page, the first and last page of that collection, a short and a 100,000-character article,
-// searches, the brand style sheet and the logo.
+// searches, the brand style sheet and the logo, and the files for crawlers and AI assistants: the
+// sitemap and llms.txt (every published article) and the 100,000-character article's Markdown.
 func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 	_, pool, _, slug := sharedKBBudget(t)
 	storage, err := attachments.NewLocalDisk(t.TempDir())
@@ -52,6 +53,9 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 		"search prefix":      base + "/search?q=" + word[:3],
 		"search no match":    base + "/search?q=zzzzqqqq",
 		"search title":       base + "/search?q=Article+1998",
+		"sitemap":            base + "/sitemap.xml",
+		"llms.txt":           base + "/llms.txt",
+		"article markdown":   base + "/a/2-article-2.md",
 	}
 	for name, path := range paths {
 		p95 := helpCenterP95(t, site, path)

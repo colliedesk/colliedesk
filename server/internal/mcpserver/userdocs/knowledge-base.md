@@ -513,6 +513,27 @@ With a [brand](#brand):
 - **Custom CSS** applies after the colors and fonts. Custom CSS alone keeps the visitor's light or
   dark setting.
 
+### Search engines and AI assistants
+
+Each help center is its own site for search engines, on the address it serves (its host, its custom
+domain, or `/help/<slug>` on a server without a help center domain). Everything below names only that
+address, never the app's address or another workspace's:
+
+- Every page has a canonical link, `og:url` and an `hreflang` link for the help center's language
+  (and `x-default`). Every other address of a page, such as a trailing slash, `?page=1`, a tracking
+  query (`?utm_source=…`), an old article slug or the slug host after a custom domain is active,
+  answers **301** to the canonical address, so search engines never see the same page twice.
+- `robots.txt` (on a host of its own) allows crawlers and names the sitemap.
+- `sitemap.xml` lists the home page, every collection that shows something and every published
+  article with the date it last changed.
+- `llms.txt` lists the published articles by collection, for AI assistants, each with a link to its
+  Markdown.
+- Every article's address followed by `.md` (`/a/12-reset-your-password.md`) is the article as
+  Markdown, with its images on the help center's address.
+
+During a Colliedesk Cloud **trial**, `robots.txt` asks every crawler to stay away, and `sitemap.xml`
+and `llms.txt` list nothing. A paid plan lifts this at once.
+
 ### Limits
 
 - One visitor address can load 600 pages and run 30 searches a minute; past that the page asks to
