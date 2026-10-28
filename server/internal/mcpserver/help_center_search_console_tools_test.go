@@ -36,3 +36,16 @@ func TestHelpCenterSearchConsoleToolsReadSaveAndPropose(t *testing.T) {
 		t.Fatalf("read = %v", got)
 	}
 }
+
+func TestHelpCenterFreshdeskRedirectToolSaysWhatToDoWithoutAnImport(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Redirect Tools Desk", "admin@redirect-tools.example.com")
+	read := e.connect(w.read, "")
+	got := e.ok(read, "colliedesk_help_center_freshdesk_redirect_get", map[string]any{"plan": "pro"})
+	if at(t, got, "redirect", "state") != "no_import" || at(t, got, "redirect", "snippet") != nil || at(t, got, "redirect", "keep_weeks") != float64(4) {
+		t.Fatalf("redirect = %v", got)
+	}
+	if message := e.fails(read, "colliedesk_help_center_freshdesk_redirect_get", map[string]any{"plan": "gold"}); message == "" {
+		t.Fatal("an unknown plan was accepted")
+	}
+}

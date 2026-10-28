@@ -450,6 +450,14 @@ checks and removes it.
 
 The certificate (`https://`) is issued automatically the first time someone opens the address.
 
+**Moving from Freshdesk: verify by TXT first, then change the CNAME.** Add only the `TXT` record and
+press **Check now**. The domain is then verified while your visitors still reach Freshdesk. Change the
+`CNAME` afterwards, to the target the card shows. The domain is already verified, so the first visit
+after the switch gets its certificate at once and does not wait for a DNS check. If you change the
+`CNAME` first, the first visitor makes the server check DNS and ask for the certificate, which takes
+longer. The old `*.freshdesk.com` addresses are covered in
+[Import from Freshdesk](import-freshdesk.md#old-freshdeskcom-addresses).
+
 **Colliedesk Cloud:** a custom domain comes with every paid plan, one per workspace. During the trial
 you can set and verify it, to prepare the move, but the help center serves on it only once the
 workspace is paid: trial pages are hidden from search engines, and serving them on your domain would

@@ -67,6 +67,7 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
     <h3 id="help-center-domain-heading">{domainMessages.heading}</h3>
     <p className="muted-copy">{domainMessages.description}</p>
     {domain.awaiting_payment && <p className="muted-copy">{domainMessages.trial}</p>}
+    {domain.status !== 'active' && <p className="muted-copy"><strong>{domainMessages.cutoverHeading}</strong> {domainMessages.cutover}</p>}
     <p role="status" className="saved-state" data-on={domain.status === 'active' && !domain.awaiting_payment ? 'true' : 'false'}>
       {domain.status === 'active' && domain.awaiting_payment && domain.hostname ? domainMessages.verifiedUnpaid(domain.hostname) : domainMessages.state(domain.status, domain.hostname)}</p>
     {domain.records.length > 0 && <div className="email-channel-dns">

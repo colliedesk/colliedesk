@@ -37,6 +37,7 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 	}
 	report.Warnings = r.reportWarnings()
 	report.Links = r.links
+	report.SearchConsole = r.searchConsole
 	report.Missing = missing(report)
 	switch {
 	case r.opts.DryRun:

@@ -223,6 +223,7 @@ var routeTiers = map[string]string{
 	"PUT /api/v1/help-center/theme":                                    "admin",
 	"GET /api/v1/help-center/search-console":                           "read",
 	"PUT /api/v1/help-center/search-console":                           "admin",
+	"GET /api/v1/help-center/freshdesk-redirect":                       "read",
 	"POST /api/v1/help-center/theme/check":                             "read",
 	"POST /api/v1/help-center/theme/preview":                           "read",
 	"PUT /api/v1/kb/order":                                             "send",

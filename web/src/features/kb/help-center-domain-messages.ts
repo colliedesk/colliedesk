@@ -11,6 +11,8 @@ const purposes: Record<Purpose, string> = {
 export const domainMessages = {
   heading: 'Custom domain',
   description: 'Serve the help center on your own address, such as help.example.com. Your other help center addresses then move there.',
+  cutoverHeading: 'Moving from Freshdesk?',
+  cutover: 'Verify by TXT first, then change the CNAME. Add only the TXT record and press Check now: the domain is then verified while your visitors still reach Freshdesk. Change the CNAME afterwards, to the target in the CNAME record below. The domain is already verified, so the first visit after the switch gets its certificate at once, without waiting for a DNS check.',
   trial: 'During the trial you can set and verify your domain to prepare the move. The help center serves on your domain once you pay for a plan: trial pages are hidden from search engines, and serving them on your domain would cost it its place in search results.',
   verifiedUnpaid: (hostname: string) => `${hostname} is verified. The help center serves there once you pay for a plan; until then it stays on its own address.`,
   state: (status: Status, hostname: string | null) => status === 'active'

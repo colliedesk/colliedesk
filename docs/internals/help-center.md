@@ -189,6 +189,16 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   to `[A-Za-z0-9_-]{16,100}` in the domain, the SQL check and the template's attribute escaping;
   any one of the three keeps a quote or angle bracket out of the head. A save bumps
   `content_version`, which is in every page's ETag.
+- **The Freshdesk head snippet is built from `SiteURL` and the ledger** (`FreshdeskHeadSnippet`,
+  `Site.LegacyRedirects`, `GET /api/v1/help-center/freshdesk-redirect`). The script's target is a JSON
+  string of the help center address plus either a path from the map (collection and article paths the
+  import made public), a fixed path, or the digits of a Freshdesk id, so it cannot be steered to another
+  host: `//evil.example/support/...` fails the anchored patterns and nothing moves. The id map is bounded
+  (`maxSnippetMapBytes`); a larger knowledge base sends every old id to the help center's own old-address
+  handler (`legacy.go`), which holds the whole mapping. There is no `meta refresh` in `<noscript>`: it
+  cannot tell help pages from sign-in and would move every visitor of the portal. `TestSnippet…` run the
+  script in Node with a stub `location` (they skip where Node is missing). The plan question exists
+  because Freshdesk Growth has no portal customization (checked 28/10/2026): that state returns no snippet.
 - **Every color pair the pages show reads (WCAG AA), not only the six the save checks.**
   `domain.ThemeBrandPalette` derives surface, muted, rule and the accent tints from the saved
   colors and falls back (surface to the background, muted to the text, tints to the surface) when

@@ -5729,6 +5729,34 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/ThemeInvalid'}
+  /api/v1/help-center/freshdesk-redirect:
+    get:
+      operationId: getFreshdeskRedirect
+      x-permission: conversations:read
+      description: >
+        What a team that moved from `<name>.freshdesk.com` should do about its old help center
+        addresses, read from the workspace's latest finished Freshdesk import. A team on its own
+        domain redirects at DNS (`own_domain`). Otherwise Freshdesk cannot answer 301 from
+        `*.freshdesk.com`, and the team pastes a script into its Freshdesk portal's head that sends a
+        visitor of an old help page to the new one. Freshdesk allows that only on its Pro and
+        Enterprise plans, so `plan` (the account's Freshdesk plan) decides: without it the state is
+        `ask_plan`; `growth` is `growth` and carries no snippet; `pro` and `enterprise` are `ready`
+        with the `snippet`. The snippet is built from the help center's address and the pages the
+        import made public, never from the request; it is a JavaScript redirect, not a 301, and works
+        only while the Freshdesk account does, so keep the account and the snippet for `keep_weeks`
+        after the switch. Only help pages (home, solutions, search) move; sign-in and tickets stay.
+      parameters:
+        - name: plan
+          in: query
+          required: false
+          description: The account's Freshdesk plan.
+          schema: {type: string, enum: [growth, pro, enterprise]}
+      responses:
+        '200':
+          description: The state and, when ready, the snippet
+          content: {application/json: {schema: {$ref: '#/components/schemas/FreshdeskRedirect'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /api/v1/help-center/theme/check:
     post:
       operationId: checkHelpCenterTheme
@@ -7872,6 +7900,31 @@ components:
       description: >-
         A font stack of the reader's own system: nothing is downloaded. Null is the default (system-sans
         for text, classic-serif for headings).
+    FreshdeskRedirect:
+      type: object
+      required: [state, freshdesk_domain, address, keep_weeks, snippet, mapped]
+      properties:
+        state:
+          type: string
+          enum: [no_import, own_domain, help_center_off, ask_plan, growth, ready]
+          description: >-
+            `no_import`: no finished Freshdesk import. `own_domain`: the old help center had its own
+            domain; redirect it at DNS. `help_center_off`: turn the help center on first. `ask_plan`:
+            send `plan`. `growth`: Freshdesk's Growth plan cannot paste code into the portal, so old
+            `*.freshdesk.com` links cannot be redirected; point your own links at the new address.
+            `ready`: `snippet` holds the code.
+        freshdesk_domain: {type: [string, 'null'], description: 'The imported account, such as acme.freshdesk.com.'}
+        address: {type: string, format: uri, description: 'The help center address the snippet redirects to.'}
+        keep_weeks: {type: integer, description: 'Keep the Freshdesk account and the snippet at least this many weeks after the switch.'}
+        snippet: {type: [string, 'null'], description: 'HTML for the Freshdesk portal head; null unless state is ready.'}
+        mapped:
+          type: [object, 'null']
+          required: [articles, folders, categories, embedded]
+          properties:
+            articles: {type: integer}
+            folders: {type: integer}
+            categories: {type: integer}
+            embedded: {type: boolean, description: 'False when the knowledge base was too large to embed: the snippet then redirects every old address by its id to the help center, which maps it.'}
     HelpCenterSearchConsoleInput:
       type: object
       additionalProperties: false

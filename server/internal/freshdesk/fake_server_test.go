@@ -97,6 +97,10 @@ type fakeFreshdesk struct {
 	revoked        bool
 	// remaining replaces the X-Ratelimit-Remaining of every API response (default 399 of 400).
 	remaining string
+	// portalPage is the old portal's public home page (/support/home), served without a key; empty
+	// answers 404. portalAuth records the Authorization header of its requests.
+	portalPage string
+	portalAuth []string
 }
 
 func newFakeFreshdesk(t *testing.T) *fakeFreshdesk {
@@ -143,6 +147,19 @@ func (f *fakeFreshdesk) stall(r *http.Request) {
 
 func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	n := f.hit(r.URL.Path)
+	if r.URL.Path == "/support/home" {
+		f.mu.Lock()
+		f.portalAuth = append(f.portalAuth, r.Header.Get("Authorization"))
+		page := f.portalPage
+		f.mu.Unlock()
+		if page == "" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(page))
+		return
+	}
 	want := "Basic " + base64.StdEncoding.EncodeToString([]byte(testAPIKey+":X"))
 	f.mu.Lock()
 	revoked, noAPI := f.revoked, f.noAPI

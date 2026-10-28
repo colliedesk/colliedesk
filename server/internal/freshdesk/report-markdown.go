@@ -82,6 +82,7 @@ func (r *Report) Markdown() string {
 		fmt.Fprintf(&b, "- **%s: %s.** %s %s\n", row.name, verdict, row.v.Method, row.v.Detail)
 	}
 	writeLinks(&b, r.Links)
+	writeSearchConsole(&b, r.SearchConsole)
 	writeList(&b, "Missing", r.Missing)
 	if len(r.Failures) > 0 {
 		b.WriteString("\n## Failures\n\n| Entity | Freshdesk id | Ticket | Error |\n|---|---|---|---|\n")

@@ -483,6 +483,7 @@ func Routes() []Route {
 		{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/help-center/search-console", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/help-center/search-console", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/help-center/freshdesk-redirect", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/help-center/theme/check", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/help-center/domain", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/help-center/domain", auth.PermissionAccessWrite},

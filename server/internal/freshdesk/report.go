@@ -236,6 +236,9 @@ type Report struct {
 	// Links reports the old Freshdesk help center addresses and links (report-links.go); absent from a
 	// dry run, a recent-tickets run and an account with no knowledge base and no such link.
 	Links *LinksReport `json:"links,omitempty"`
+	// SearchConsole reports the verification tokens of the old portal (search-console.go); absent from a
+	// dry run and a recent-tickets run.
+	SearchConsole *SearchConsoleReport `json:"search_console,omitempty"`
 	// StorageCap is set by a dry run on a workspace whose cap counts imports: whether the import would be refused.
 	StorageCap *StorageCapCheck `json:"storage_cap,omitempty"`
 }

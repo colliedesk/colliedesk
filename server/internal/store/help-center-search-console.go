@@ -69,3 +69,26 @@ func deref(text *string) string {
 	}
 	return *text
 }
+
+// CarryOverSearchConsole sets the tokens the workspace has none of yet, in tx, and reports which it set.
+// A token already set is never replaced. A change bumps content_version once, since the pages change;
+// without one nothing is written.
+func CarryOverSearchConsole(ctx context.Context, tx pgx.Tx, workspaceID string, google, bing string) (setGoogle, setBing bool, err error) {
+	var current domain.SearchConsoleView
+	err = tx.QueryRow(ctx, `SELECT google_site_verification,bing_site_verification FROM help_centers WHERE workspace_id=$1 FOR UPDATE`, workspaceID).
+		Scan(&current.Google, &current.Bing)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false, false, err
+	}
+	var change domain.SearchConsoleChange
+	if google != "" && current.Google == nil {
+		change.Google, setGoogle = &google, true
+	}
+	if bing != "" && current.Bing == nil {
+		change.Bing, setBing = &bing, true
+	}
+	if !setGoogle && !setBing {
+		return false, false, nil
+	}
+	return setGoogle, setBing, writeSearchConsole(ctx, tx, workspaceID, change)
+}
