@@ -46,7 +46,9 @@ func (a *API) addAIProvider(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), label, models, api_key and, for openai_compatible, base_url.")
 		return
 	}
-	a.createOnce(response, request, addAIProviderOperation, append([]string{input.Kind, input.Label, input.BaseURL, input.APIKey}, input.Models...), func(ctx context.Context) (any, error) {
+	// The provider's key never enters the fingerprint (it is a secret, and a fingerprint is a plain hash): a
+	// label is unique in the workspace, so the label, kind, address and models already name one provider.
+	a.createOnce(response, request, addAIProviderOperation, append([]string{input.Kind, input.Label, input.BaseURL}, input.Models...), func(ctx context.Context) (any, error) {
 		provider, err := a.ai.AddProvider(ctx, principal(request).Workspace.ID, aiActor(request),
 			ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
 		if err != nil {

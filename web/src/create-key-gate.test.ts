@@ -43,7 +43,9 @@ function keyedPaths(): string[] {
 test('every create the contract keys is sent with an Idempotency-Key', () => {
   const paths = keyedPaths();
   expect(paths).toEqual(expect.arrayContaining(['/api/v1/auth/invites', '/api/v1/tags', '/api/v1/channels', '/api/v1/conversations/{id}/messages']));
-  const pattern = (path: string) => new RegExp(`['\`]${path.replace(/\{[^}]+\}/g, '\\$\\{[^}]+\\}').replace(/[/.]/g, '\\$&')}['\`?]`);
+  // A path parameter ({id}) is written as a template value (${id}) in the web app.
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  const pattern = (path: string) => new RegExp(`['\`]${path.split(/\{[^}]+\}/).map(escape).join('\\$\\{[^}]+\\}')}['\`?]`);
   for (const path of paths) {
     const sent = files.flatMap((file) => {
       const lines = file.text.split('\n');
