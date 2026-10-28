@@ -19,8 +19,13 @@ type ConversationUpdate struct {
 
 func (s *Store) UpdateConversation(ctx context.Context, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
-		return updateConversation(ctx, tx, workspaceID, id, update)
+		return s.withChannelRef(ctx, tx, workspaceID)(updateConversation(ctx, tx, workspaceID, id, update))
 	})
+}
+
+// UpdateConversationIn changes a conversation in the caller's transaction, as UpdateConversation does.
+func UpdateConversationIn(ctx context.Context, tx pgx.Tx, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
+	return updateConversation(ctx, tx, workspaceID, id, update)
 }
 
 func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
@@ -42,6 +47,11 @@ func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 	}
 	if update.AssigneeID != nil && *update.AssigneeID != nil {
 		if err := ValidateAssignee(ctx, tx, workspaceID, **update.AssigneeID); err != nil {
+			return domain.Conversation{}, err
+		}
+	}
+	if update.Status != nil {
+		if err := setStatusActor(ctx, tx, update.ActorID); err != nil {
 			return domain.Conversation{}, err
 		}
 	}

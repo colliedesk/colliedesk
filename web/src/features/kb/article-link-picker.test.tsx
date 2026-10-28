@@ -31,7 +31,8 @@ test('lists only published articles, searches them on the server, and Enter pick
   const search = screen.getByRole('combobox', { name: 'Search published articles' });
   expect(search).toHaveFocus();
   fireEvent.change(search, { target: { value: 'refund' } });
-  await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Refund steps']));
+  await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.firstElementChild?.textContent)).toEqual(['Refund steps']));
+  expect(screen.getByRole('option', { name: 'Refund steps' })).toHaveAccessibleDescription('desk.example.com/help/acme/a/8-refund-steps');
   fireEvent.keyDown(search, { key: 'Enter' });
   expect(onPick).toHaveBeenCalledExactlyOnceWith('Refund steps\nhttps://desk.example.com/help/acme/a/8-refund-steps');
   const lists = calls.filter((call) => call.path === '/api/v1/kb/articles');
@@ -127,7 +128,7 @@ test('typing before the help center answered is still the search, and Enter link
   answer(json(200, center(true)));
   await waitFor(() => expect(calls.some((call) => call.path === '/api/v1/kb/articles' && call.search.get('q') === 'refund')).toBe(true));
   await waitFor(() => expect(onInsert).toHaveBeenCalledExactlyOnceWith('Refund steps\nhttps://desk.example.com/help/acme/a/8-refund-steps'));
-  expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Refund steps']);
+  expect(screen.getAllByRole('option').map((option) => option.firstElementChild?.textContent)).toEqual(['Refund steps']);
   expect(onInsert).toHaveBeenCalledExactlyOnceWith('Refund steps\nhttps://desk.example.com/help/acme/a/8-refund-steps');
 });
 
@@ -144,7 +145,7 @@ test('typing while it asks again about a help center it last saw off is still th
   expect(screen.getByRole('status')).toHaveTextContent('Loading articles…');
   fireEvent.change(screen.getByRole('combobox', { name: 'Search published articles' }), { target: { value: 'refund' } });
   answer(json(200, center(true)));
-  await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Refund steps']));
+  await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.firstElementChild?.textContent)).toEqual(['Refund steps']));
 });
 
 test('Enter that commits an input method (Safari sends keyCode 229) while the search runs links nothing', async () => {
@@ -157,7 +158,7 @@ test('Enter that commits an input method (Safari sends keyCode 229) while the se
   const search = screen.getByRole('combobox', { name: 'Search published articles' });
   fireEvent.change(search, { target: { value: 'refu' } });
   fireEvent.keyDown(search, { key: 'Enter', keyCode: 229 });
-  await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Refund steps']));
+  await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.firstElementChild?.textContent)).toEqual(['Refund steps']));
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(onInsert).not.toHaveBeenCalled();
 });

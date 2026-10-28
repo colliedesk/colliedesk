@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -98,11 +99,7 @@ func TestImportFreshdeskWritesReportsAndExitsNonZeroUnlessOK(t *testing.T) {
 
 func cliDatabase(t *testing.T) string {
 	t.Helper()
-	baseURL := os.Getenv("TEST_DATABASE_URL")
-	if baseURL == "" {
-		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL CLI test")
-	}
-	return isolatedDatabaseURL(t, baseURL)
+	return databasetest.URL(t)
 }
 
 func TestImportUndoReportsWhenThereIsNothingToUndo(t *testing.T) {

@@ -57,7 +57,7 @@ func TestNewConversationEmailStartsAThreadTheCustomerReplyJoins(t *testing.T) {
 		t.Fatal(err)
 	}
 	answer.Platform = true
-	result, err := f.store.IngestEmail(ctx, f.workspaceID, answer, time.Now().UTC(), nil)
+	result, err := ingestEmail(t, ctx, f.store, f.workspaceID, answer)
 	if err != nil || result.ConversationID == nil || *result.ConversationID != conversation.ID {
 		t.Fatalf("customer answer = %+v, %v; want it threaded into %s", result, err, conversation.ID)
 	}

@@ -41,7 +41,7 @@ test('each question offers exactly its listed answers', () => {
   const options = (label: string) => within(screen.getByRole('combobox', { name: label })).getAllByRole('option').map((option) => option.textContent);
   expect(radios('What do you want Colliedesk to do for you first?')).toEqual(['Move off Freshdesk or another helpdesk', 'Answer support email together as a team', 'Pay less per agent', 'Let AI agents draft or send replies', 'Something else']);
   expect(options('What is your role?')).toEqual(['Choose one', 'Founder or owner', 'Support lead or manager', 'Support agent', 'Developer or IT', 'Other']);
-  expect(options('Where did you hear about Colliedesk?')).toEqual(['Choose one', 'X (Twitter)', 'An email from us', 'Search engine', 'Reddit', 'GitHub', 'A friend or colleague', 'Other']);
+  expect(options('Where did you hear about Colliedesk?')).toEqual(['Choose one', 'X (Twitter)', 'An email from us', 'Search engine', 'ChatGPT', 'Claude', 'Gemini', 'Perplexity', 'Another AI assistant', 'TikTok', 'YouTube', 'Reddit', 'GitHub', 'A friend or colleague', 'Other']);
 });
 
 test('a name outside 2 to 60 characters is stopped before any request', () => {
@@ -91,4 +91,18 @@ test('a visitor who came to buy is told payment comes next, not a free trial', a
   answerSignupQuestions();
   fireEvent.click(screen.getByRole('button', { name: 'Create workspace and continue to payment' }));
   await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support', { goal: 'leave_helpdesk', role: 'founder', source: 'x' }));
+});
+
+test('records Claude as the single selected acquisition source', async () => {
+  const onCreate = vi.fn().mockResolvedValue(undefined);
+  render(<CloudSignup onCreate={onCreate} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: 'Claude Team' } });
+  answerSignupQuestions();
+  const source = screen.getByRole('combobox', { name: 'Where did you hear about Colliedesk?' });
+  const claude = within(source).getByRole('option', { name: 'Claude' });
+  fireEvent.change(source, { target: { value: (claude as HTMLOptionElement).value } });
+  expect(source).toHaveValue('ai_claude');
+  expect(within(source).getAllByRole('option', { selected: true })).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Claude Team', { goal: 'leave_helpdesk', role: 'founder', source: 'ai_claude' }));
 });

@@ -39,8 +39,8 @@ func TestOutboxRecipientCountUpgradeCountsQueuedCopies(t *testing.T) {
 	}
 	var copied, plain int
 	if err := pool.QueryRow(ctx, `SELECT
-			(SELECT o.recipients FROM email_outbox o JOIN messages m ON m.id=o.message_id WHERE m.body='copied'),
-			(SELECT o.recipients FROM email_outbox o JOIN messages m ON m.id=o.message_id WHERE m.body='plain')`).Scan(&copied, &plain); err != nil {
+			(SELECT o.recipients FROM channel_outbox o JOIN messages m ON m.id=o.message_id WHERE m.body='copied'),
+			(SELECT o.recipients FROM channel_outbox o JOIN messages m ON m.id=o.message_id WHERE m.body='plain')`).Scan(&copied, &plain); err != nil {
 		t.Fatal(err)
 	}
 	if copied != 3 || plain != 1 {

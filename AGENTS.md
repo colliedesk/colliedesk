@@ -83,8 +83,9 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 - `in-app freshdesk import: an admin reads the account, imports it in the background, reconcile OK with exact counts, and undoes it` (`web/e2e/onboarding-in-app-import.spec.ts`)
 - `cloud sign-in: a verified identity of an existing agent gets a Colliedesk session; every other token is refused` (`web/e2e/onboarding-cloud-sign-in.spec.ts`)
 - `cloud signup: a verified identity starts a trial, the same email cannot start a second one, the expired trial is locked and still exports` (`web/e2e/onboarding-cloud-signup.spec.ts`)
-- `golden path: a new team signs up on the cloud, imports Freshdesk in the app, reconcile OK, answers its first conversation by email` (`web/e2e/onboarding-golden-path.spec.ts`; #100 and #99 add their steps to this test)
+- `golden path: a new team signs up on the cloud, imports Freshdesk in the app, reconcile OK, answers its first conversation by email` (`web/e2e/onboarding-golden-path.spec.ts`; #99 adds its step to this test)
 - `link errors: expired, reused, revoked, mistyped, missing and another workspace's link explain themselves` (`web/e2e/onboarding-link-errors.spec.ts`)
+- `test message: a new cloud workspace sends itself a test message from the empty inbox, answers it on the trial, and the reply is delivered` (`web/e2e/onboarding-test-message.spec.ts`)
 
 Also: `tests/install-smoke.sh` (real `install.sh` with Docker against the image built from the
 commit; the printed link must sign in) and `tests/install-test.sh` (installer with stubbed Docker).
@@ -102,7 +103,8 @@ trial in the funnel and emails the team. Test locally or with the e2e suite firs
 
 - **Sign up on Cloud only with a team address.** The server reads `INTERNAL_SIGNUP_EMAILS`
   (`@colliedesk.com`, `@hclabs.co`, `@hclabs.colliedesk.com` on Cloud) and sends `trial_started` with `internal: true` for a
-  match. Never use a personal mailbox: it is counted as a customer. If you must, add that exact
+  match, and for any sign-up from a network in `INTERNAL_SIGNUP_NETWORKS` (the team's agent hosts).
+  Never use a personal mailbox: it is counted as a customer. If you must, add that exact
   address to `INTERNAL_SIGNUP_EMAILS` first (HC Labs `infra` repo,
   `hosts/collie-01/colliedesk/compose.yaml`) and wait for the deploy.
 - **Name a test workspace for what it is** (`e2e-…`, `test-…`), so a person reading the database

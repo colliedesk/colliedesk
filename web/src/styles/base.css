@@ -89,11 +89,12 @@ button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--
   text-underline-offset: 2px;
 }
 /* Reload page is the only way back from a part that failed: a finger must hit it too. */
-@media (pointer: coarse) { .part-reload { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .part-reload { min-height: var(--touch); } }
 .link-button:hover:not(:disabled), .link-action:hover:not(:disabled) { background: none; color: var(--accent-hover); }
 
-/* Touch screens keep 44 px targets; a mouse gets the denser 32 px controls. */
-@media (pointer: coarse) { :root { --control: var(--touch); } }
+/* Touch screens and windows 480 px wide or less keep 44 px targets; a mouse on a wider window gets the
+   denser 32 px controls. Every rule that sizes for a finger uses the same media query. */
+@media (pointer: coarse), (max-width: 30rem) { :root { --control: var(--touch); } }
 
 /* Tooltip for icon-only controls: the control keeps its aria-label, data-tip is the sighted copy. */
 [data-tip] { position: relative; }

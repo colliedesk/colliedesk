@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { savedReplyMatches } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
+import { SearchIcon } from '../../ui/icons';
 
 // The names the picker shows: what the list is, its search box, its four states and the way to add some.
 export interface PickerTexts { label: string; search: string; loading: string; failed: string; none: string; noMatch: string; manage: string }
@@ -26,11 +27,13 @@ interface SavedReplyPickerProps<T extends { id: string; title: string }> {
   // A source that searches by itself (the server) gets each search and hands back what matches, so the
   // picker shows its list as it is instead of matching titles in memory.
   onQueryChange?: (query: string) => void;
+  // A second, quieter line under an item's title, for example the address an article link points to.
+  detail?: (item: T) => string | undefined;
 }
 
 // SavedReplyPicker is a searchable list the keyboard drives end to end: type to filter by title,
 // arrows to move, Enter to insert, Escape to close. The list is already in memory, so it opens at once.
-export function SavedReplyPicker<T extends { id: string; title: string } = SavedReply>({ replies, onPick, onClose, onManage, state = 'ready', texts = savedReplyTexts, onQueryChange }: SavedReplyPickerProps<T>) {
+export function SavedReplyPicker<T extends { id: string; title: string } = SavedReply>({ replies, onPick, onClose, onManage, state = 'ready', texts = savedReplyTexts, onQueryChange, detail }: SavedReplyPickerProps<T>) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const search = useRef<HTMLInputElement>(null);
@@ -54,14 +57,19 @@ export function SavedReplyPicker<T extends { id: string; title: string } = Saved
     <div ref={panel} className="saved-reply-picker" role="dialog" aria-label={texts.label}
       // Focus leaving the panel (a click elsewhere) closes it; a click inside keeps focus in the search box.
       onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onClose(false); }}>
+      <div className="picker-search"><SearchIcon />
       <input ref={search} type="text" role="combobox" aria-expanded="true" aria-controls={`${prefix}-list`} aria-autocomplete="list"
         aria-activedescendant={matches.length > 0 ? optionId(current) : undefined} aria-label={texts.search}
         placeholder={texts.search} autoComplete="off" value={query} onKeyDown={onKey}
-        onChange={(event) => { setQuery(event.target.value); setActive(0); onQueryChange?.(event.target.value); }} />
+        onChange={(event) => { setQuery(event.target.value); setActive(0); onQueryChange?.(event.target.value); }} /></div>
       <ul id={`${prefix}-list`} role="listbox" aria-label={texts.label} onMouseDown={(event) => event.preventDefault()}>
         {matches.map((reply, index) => (
           <li key={reply.id} id={optionId(index)} role="option" aria-selected={index === current} onClick={() => onPick(reply)}
-            onMouseMove={() => { if (index !== current) setActive(index); }}>{reply.title}</li>
+            // The title names the option; the detail line describes it.
+            aria-labelledby={`${optionId(index)}-title`} aria-describedby={detail?.(reply) ? `${optionId(index)}-detail` : undefined}
+            onMouseMove={() => { if (index !== current) setActive(index); }}>
+            <span id={`${optionId(index)}-title`} className="picker-option-title">{reply.title}</span>
+            {detail?.(reply) && <span id={`${optionId(index)}-detail`} className="picker-option-detail">{detail(reply)}</span>}</li>
         ))}
       </ul>
       {state === 'loading' && replies.length === 0 && <p className="saved-reply-empty" role="status">{texts.loading}</p>}

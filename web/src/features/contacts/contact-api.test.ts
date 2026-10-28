@@ -31,6 +31,17 @@ test('a new conversation with a first reply sends it with the conversation, as f
   await contactApi.startConversation({ name: 'Pat', email: 'pat@example.com' }, 'New customer', { body: 'Hi', files: [], cc: [] });
   [, init] = fetchMock.mock.calls[2] as [string, RequestInit];
   expect(JSON.parse(init.body as string)).toEqual({ contact: { name: 'Pat', email: 'pat@example.com' }, subject: 'New customer', body: 'Hi' });
+
+  // A chosen channel goes with the conversation, in the JSON body and in the form with files.
+  const channelID = '55555555-5555-4555-8555-555555555555';
+  fetchMock.mockResolvedValue(reply(201, conversationBody));
+  await contactApi.startConversation(conversationBody.contact_id, 'From billing', { body: 'Hi', files: [], cc: [], channelID });
+  [, init] = fetchMock.mock.calls[3] as [string, RequestInit];
+  expect(JSON.parse(init.body as string)).toMatchObject({ channel_id: channelID });
+  fetchMock.mockResolvedValue(reply(201, conversationBody));
+  await contactApi.startConversation(conversationBody.contact_id, 'From billing', { body: 'Hi', files: [new File(['a'], 'a.txt')], cc: [], channelID });
+  [, init] = fetchMock.mock.calls[4] as [string, RequestInit];
+  expect((init.body as FormData).get('channel_id')).toBe(channelID);
 });
 
 test('a refused new conversation on the trial is an outbound refusal', async () => {

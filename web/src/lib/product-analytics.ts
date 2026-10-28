@@ -92,8 +92,8 @@ function options(host: string): Partial<PostHogConfig> {
 // never a contact, a message, an id or anything a person typed. The one exception is the answer to
 // the trial survey, which the admin sends by pressing Send.
 export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
-export type SettingsSection = 'profile' | 'preferences' | 'general' | 'team' | 'invites' | 'sessions' | 'email_channel'
-  | 'web_form' | 'saved_replies' | 'help_center' | 'export' | 'billing';
+export type SettingsSection = 'profile' | 'preferences' | 'general' | 'team' | 'invites' | 'agents' | 'sessions' | 'channels' | 'email_channel'
+  | 'web_form' | 'saved_replies' | 'help_center' | 'export' | 'billing' | 'ai';
 export type SurveyId = 'switch_blocker_v1';
 export type InboxFilterKind = 'status' | 'priority' | 'assignee' | 'tag' | 'contact' | 'organization' | 'awaiting' | 'draft' | 'delivery'
   | 'source' | 'channel' | 'created' | 'updated' | 'sort';
@@ -149,12 +149,13 @@ export function resetProductAnalytics(): void {
   }
 }
 
-// startProductAnalytics loads and starts PostHog once, then names the signed-in agent.
+// startProductAnalytics loads and starts PostHog once, then names the signed-in agent. With after, the
+// library is not even downloaded before it settles (the sign-in form, on a slow connection).
 export async function startProductAnalytics(settings: ProductAnalyticsSettings | undefined, me: Identity | undefined,
-  loader: PostHogLoader = loadPostHog): Promise<Client | null> {
+  loader: PostHogLoader = loadPostHog, after?: Promise<unknown>): Promise<Client | null> {
   if (!settings?.enabled || !settings.key || !settings.host) return null;
   const { key, host } = settings;
-  client ??= loader().then((posthog) => {
+  client ??= (after ?? Promise.resolve()).then(loader).then((posthog) => {
     posthog.init(key, options(host));
     // Only the realm, so a pageview before sign-in says which deployment it came from and nothing more.
     realm = settings.realm;
@@ -176,14 +177,15 @@ export async function startProductAnalytics(settings: ProductAnalyticsSettings |
   return posthog;
 }
 
-export function useProductAnalytics(settings: ProductAnalyticsSettings | undefined, me: Identity | undefined) {
+// after, when set, holds the download of the library until it settles (see startProductAnalytics).
+export function useProductAnalytics(settings: ProductAnalyticsSettings | undefined, me: Identity | undefined, after?: () => Promise<unknown>) {
   const enabled = settings?.enabled === true;
   const agentId = me?.agent.id;
   const plan = me?.plan?.plan;
   useEffect(() => {
     if (!enabled) return;
     // A failure to load analytics never affects the app.
-    startProductAnalytics(settings, me).catch(() => undefined);
+    startProductAnalytics(settings, me, loadPostHog, after?.()).catch(() => undefined);
     // Re-run only when what is reported changes: the agent, or the workspace's plan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, agentId, plan]);

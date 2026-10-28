@@ -24,6 +24,9 @@ func (r *run) listTickets(ctx context.Context) error {
 		query.Set("updated_since", since.Format(time.RFC3339))
 		query.Set("order_by", "updated_at")
 		query.Set("order_type", "asc")
+		// Ticket stats (resolved_at, first_responded_at, closed_at) for the results baseline; two more
+		// credits per page of 100.
+		query.Set("include", "stats")
 		target, pages, last := r.endpoint("/api/v2/tickets", query), 0, since
 		for target != "" && pages < r.opts.MaxTicketPages {
 			var page []fdTicket
@@ -35,7 +38,7 @@ func (r *run) listTickets(ctx context.Context) error {
 			for _, ticket := range page {
 				if !seen[ticket.ID] {
 					seen[ticket.ID] = true
-					r.refs = append(r.refs, ticketRef{id: ticket.ID, updatedAt: ticket.UpdatedAt.UTC()})
+					r.refs = append(r.refs, ticketRef{id: ticket.ID, updatedAt: ticket.UpdatedAt.UTC(), stats: ticket.Stats, status: ticket.Status})
 				}
 				if ticket.UpdatedAt.After(last) {
 					last = ticket.UpdatedAt.UTC()

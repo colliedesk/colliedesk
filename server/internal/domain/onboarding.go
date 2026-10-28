@@ -7,7 +7,7 @@ import "slices"
 var (
 	OnboardingGoals   = []string{"leave_helpdesk", "shared_inbox", "lower_cost", "ai_agents", "other"}
 	OnboardingRoles   = []string{"founder", "support_lead", "support_agent", "developer", "other"}
-	OnboardingSources = []string{"x", "email", "search", "reddit", "github", "referral", "other"}
+	OnboardingSources = []string{"x", "email", "search", "ai_chatgpt", "ai_claude", "ai_gemini", "ai_perplexity", "ai_other", "tiktok", "youtube", "reddit", "github", "referral", "other"}
 )
 
 // Onboarding holds what a person said about their team at cloud sign-up. A nil field was not answered.

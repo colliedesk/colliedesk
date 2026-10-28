@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -15,7 +16,7 @@ func (r *run) importTickets(ctx context.Context) error {
 		}
 		r.progress.tick("importing tickets", index+1, len(r.refs))
 	}
-	return nil
+	return r.flushStats(ctx)
 }
 
 // importTicket brings one ticket over with its messages, attachments and time
@@ -28,6 +29,9 @@ func (r *run) importTicket(ctx context.Context, ref ticketRef) error {
 		return err
 	}
 	if found && entry.Status == ledgerDone && entry.SourceUpdatedAt != nil && !ref.updatedAt.After(*entry.SourceUpdatedAt) {
+		if ref.stats != nil && entry.TargetID != nil {
+			return r.fillStats(ctx, *entry.TargetID, ref.stats, ref.status)
+		}
 		return nil
 	}
 	ticket, err := r.fetchTicket(ctx, ref)
@@ -59,7 +63,8 @@ func (r *run) importTicket(ctx context.Context, ref ticketRef) error {
 	if found {
 		existing = entry.TargetID
 	}
-	conversationID, err := r.writeConversation(ctx, ticket, contactID, existing, ref.archived)
+	ticket.Stats = ref.stats
+	conversationID, err := r.writeConversation(ctx, ticket, r.ticketMailboxes(ctx, ticket, conversations), contactID, existing, ref.archived)
 	if err != nil {
 		return r.ticketFailed(ctx, key, err)
 	}
@@ -167,4 +172,53 @@ func subjectOrDefault(subject string) string {
 		return "(no subject)"
 	}
 	return subject
+}
+
+// outboundTicket is Freshdesk's source of a ticket the team started by email: its recipients are customers.
+const outboundTicket = 10
+
+// ticketMailboxes are the addresses the ticket was sent to at Freshdesk, most trusted first: its email
+// configuration, the support address a reply left from, then its recipients (not for a ticket the team
+// started, whose recipients are customers). Replies leave from the email channel of the first one the
+// workspace has.
+func (r *run) ticketMailboxes(ctx context.Context, ticket fdTicket, conversations []fdConversation) []string {
+	var mailboxes []string
+	add := func(address string) {
+		address = strings.ToLower(strings.TrimSpace(address))
+		if address != "" && !slices.Contains(mailboxes, address) {
+			mailboxes = append(mailboxes, address)
+		}
+	}
+	if ticket.EmailConfigID != nil {
+		for _, address := range r.emailConfig(ctx, *ticket.EmailConfigID) {
+			add(address)
+		}
+	}
+	for _, conversation := range conversations {
+		if !conversation.Incoming && !conversation.Private && conversation.SupportEmail != nil {
+			add(*conversation.SupportEmail)
+			break
+		}
+	}
+	if ticket.Source != outboundTicket {
+		for _, address := range ticket.ToEmails {
+			add(address)
+		}
+	}
+	return mailboxes
+}
+
+// emailConfig returns the addresses of one of the account's mailboxes, reading them all on first use.
+// An account that refuses them imports on without: the report says so, the import does not fail.
+func (r *run) emailConfig(ctx context.Context, id int64) []string {
+	if r.emailConfigs == nil {
+		r.emailConfigs = map[int64][]string{}
+		if err := listAll(ctx, r.client, r.endpoint("/api/v2/email_configs", pageQuery()), func(config fdEmailConfig) error {
+			r.emailConfigs[config.ID] = []string{config.ReplyEmail, config.ToEmail}
+			return nil
+		}); err != nil {
+			r.warn("email_configs_unavailable", "Freshdesk did not list its email mailboxes ("+err.Error()+"); replies of imported tickets leave from the mailbox their other addresses name, or the default one.", "")
+		}
+	}
+	return r.emailConfigs[id]
 }

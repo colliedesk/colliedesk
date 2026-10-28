@@ -12,8 +12,9 @@ type restMe struct {
 		Name     string `json:"name"`
 		Timezone string `json:"timezone"`
 	} `json:"workspace"`
-	Scope *string `json:"scope"`
-	Plan  *struct {
+	Scope       *string  `json:"scope"`
+	Permissions []string `json:"permissions"`
+	Plan        *struct {
 		Locked bool `json:"locked"`
 	} `json:"plan"`
 }

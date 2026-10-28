@@ -5,7 +5,7 @@ import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
 
 const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
-  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, agent_request_id: null };
+  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null };
 const ada = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 function avatarOf(article: HTMLElement) {
@@ -43,7 +43,7 @@ test('a message an agent token wrote names the person once, in the token line', 
 
 test('a reply sent from an agent draft names the person who sent it once', () => {
   const sent: Message = { ...base, id: '55555555-5555-4555-8555-555555555555', kind: 'outgoing', body: 'Edited answer.', author_agent_id: ada, author_name: 'Ada Admin',
-    agent_request_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' };
+    ai_draft_id: null, ai_draft_outcome: null, agent_request_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' };
   render(<TimelinePanel items={[sent]} timezone="UTC" />);
   const article = screen.getByRole('article');
   expect(within(article).getByText('from an agent draft, edited and sent by Ada Admin')).toBeInTheDocument();

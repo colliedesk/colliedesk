@@ -28,18 +28,20 @@ type restInvite struct {
 }
 
 type restSession struct {
-	ID         string     `json:"id"`
-	AgentEmail string     `json:"agent_email"`
-	Label      string     `json:"label"`
-	Scope      *string    `json:"scope"`
-	Current    bool       `json:"current"`
-	LastSeenAt time.Time  `json:"last_seen_at"`
-	ExpiresAt  time.Time  `json:"expires_at"`
-	RevokedAt  *time.Time `json:"revoked_at"`
+	ID          string     `json:"id"`
+	AgentEmail  string     `json:"agent_email"`
+	Label       string     `json:"label"`
+	Scope       *string    `json:"scope"`
+	Permissions []string   `json:"permissions"`
+	Current     bool       `json:"current"`
+	LastSeenAt  time.Time  `json:"last_seen_at"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	RevokedAt   *time.Time `json:"revoked_at"`
 }
 
 type restEmailSettings struct {
 	Channel *struct {
+		ChannelID        string     `json:"channel_id"`
 		SupportAddress   string     `json:"support_address"`
 		SenderName       string     `json:"sender_name"`
 		SecretSet        bool       `json:"secret_set"`
@@ -62,6 +64,16 @@ type restEmailSettings struct {
 			Error   *string `json:"error"`
 		} `json:"connection"`
 	} `json:"gmail"`
+	Microsoft struct {
+		Available         bool    `json:"available"`
+		AdminConsentURL   *string `json:"admin_consent_url"`
+		ServerCredentials bool    `json:"server_credentials_refused"`
+		Connection        *struct {
+			Address string  `json:"address"`
+			Status  string  `json:"status"`
+			Error   *string `json:"error"`
+		} `json:"connection"`
+	} `json:"microsoft"`
 }
 
 func workspaceSettingsGet(c *call, _ map[string]any) (any, error) {
@@ -247,7 +259,7 @@ func sessionsList(c *call, _ map[string]any) (any, error) {
 		case !session.ExpiresAt.After(time.Now()):
 			state = "expired"
 		}
-		sessions[index] = map[string]any{"id": session.ID, "label": session.Label, "owner": session.AgentEmail, "token_tier": session.Scope,
+		sessions[index] = map[string]any{"id": session.ID, "label": session.Label, "owner": session.AgentEmail, "token_tier": session.Scope, "permissions": session.Permissions,
 			"this_token": session.Current, "state": state, "last_seen_at": utc(session.LastSeenAt), "expires_at": utc(session.ExpiresAt)}
 	}
 	return map[string]any{"sessions": sessions}, nil
@@ -288,16 +300,33 @@ func emailChannelView(settings restEmailSettings) map[string]any {
 		gmail["connected"], gmail["address"], gmail["status"], gmail["error"] = true, connection.Address, connection.Status, connection.Error
 	}
 	view["gmail"] = gmail
+	microsoft := map[string]any{"available": settings.Microsoft.Available, "connected": false, "admin_consent_url": settings.Microsoft.AdminConsentURL,
+		"server_credentials_refused": settings.Microsoft.ServerCredentials}
+	if connection := settings.Microsoft.Connection; connection != nil {
+		microsoft["connected"], microsoft["address"], microsoft["status"], microsoft["error"] = true, connection.Address, connection.Status, connection.Error
+	}
+	view["microsoft"] = microsoft
 	if channel := settings.Channel; channel != nil {
-		view["support_address"], view["sender_name"], view["inbound_secret_set"], view["domain"] = channel.SupportAddress, channel.SenderName, channel.SecretSet, channel.Domain
+		view["channel_id"], view["support_address"], view["sender_name"] = channel.ChannelID, channel.SupportAddress, channel.SenderName
+		view["inbound_secret_set"], view["domain"] = channel.SecretSet, channel.Domain
 		view["domain_verified"], view["dns_record_name"], view["dns_record_value"] = channel.DomainVerifiedAt != nil, channel.DNSRecordName, channel.DNSRecordValue
 	}
 	return view
 }
 
-func emailChannelGet(c *call, _ map[string]any) (any, error) {
+// emailChannelPath is the path of an email channel route: of the channel_id given, else of the default channel.
+func emailChannelPath(c *call, arguments map[string]any, suffix string) string {
+	id, _ := arguments["channel_id"].(string)
+	if id == "" {
+		return "/api/v1/channels/email" + suffix
+	}
+	c.notFound = "No email channel " + id + " in this workspace. List them with colliedesk_channels_list."
+	return "/api/v1/channels/" + url.PathEscape(id) + "/email" + suffix
+}
+
+func emailChannelGet(c *call, arguments map[string]any) (any, error) {
 	var settings restEmailSettings
-	if err := c.get("/api/v1/channels/email", nil, &settings); err != nil {
+	if err := c.get(emailChannelPath(c, arguments, ""), nil, &settings); err != nil {
 		return nil, err
 	}
 	return map[string]any{"email_channel": emailChannelView(settings)}, nil
@@ -311,13 +340,22 @@ func emailChannelUpdate(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"email_channel": emailChannelView(settings)}, nil
 }
 
-func emailDomainVerify(c *call, _ map[string]any) (any, error) {
+func emailDomainVerify(c *call, arguments map[string]any) (any, error) {
 	c.notFound = "The email channel is not connected. Connect it first with colliedesk_email_channel_update."
 	var settings restEmailSettings
-	if err := c.send(http.MethodPost, "/api/v1/channels/email/domain-verification", nil, &settings); err != nil {
+	if err := c.send(http.MethodPost, emailChannelPath(c, arguments, "/domain-verification"), nil, &settings); err != nil {
 		return nil, err
 	}
 	return map[string]any{"email_channel": emailChannelView(settings)}, nil
+}
+
+func emailTestMessageSend(c *call, arguments map[string]any) (any, error) {
+	c.notFound = "The email channel is not connected. Connect it first with colliedesk_email_channel_update."
+	var sent map[string]any
+	if err := c.send(http.MethodPost, emailChannelPath(c, arguments, "/test-message"), nil, &sent); err != nil {
+		return nil, err
+	}
+	return sent, nil
 }
 
 func billingGet(c *call, _ map[string]any) (any, error) {

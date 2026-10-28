@@ -24,6 +24,8 @@ export interface FirstReply {
   body: string;
   files: File[];
   cc: string[];
+  // The channel it is sent from; left out, the workspace's default of the type.
+  channelID?: string;
 }
 
 // Who a new conversation is with: a contact's id, or a customer added with it in the same transaction.
@@ -35,6 +37,7 @@ function conversationForm(contact: ConversationContact, subject: string, reply: 
   else { form.append('contact_name', contact.name); form.append('contact_email', contact.email); }
   form.append('subject', subject);
   form.append('body', reply.body);
+  if (reply.channelID) form.append('channel_id', reply.channelID);
   // The server reads the copied addresses before the files, so a refusal costs no upload.
   for (const address of reply.cc) form.append('cc', address);
   for (const file of reply.files) form.append('files', file, file.name);
@@ -50,7 +53,7 @@ export const contactApi = {
   startConversation: (contact: ConversationContact, subject: string, reply: FirstReply) => {
     const who = typeof contact === 'string' ? { contact_id: contact } : { contact };
     const body = reply.files.length > 0 ? conversationForm(contact, subject, reply)
-      : json<'createConversation'>(reply.cc.length > 0 ? { ...who, subject, body: reply.body, cc: reply.cc } : { ...who, subject, body: reply.body });
+      : json<'createConversation'>({ ...who, subject, body: reply.body, ...(reply.cc.length > 0 ? { cc: reply.cc } : {}), ...(reply.channelID ? { channel_id: reply.channelID } : {}) });
     return request('/api/v1/conversations', conversationSchema, { method: 'POST', body });
   },
   renameContact: (id: string, name: string) => request(`/api/v1/contacts/${id}`, contactSchema, { method: 'PATCH', body: json<'updateContact'>({ name }) }),

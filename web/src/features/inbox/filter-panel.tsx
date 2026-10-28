@@ -1,4 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
+import { QueryClientContext } from '@tanstack/react-query';
+import { channelsApi } from '../../api/channels';
+import type { ChannelList } from '../../api/channels';
+import { resultsApi } from '../../api/results';
+import type { Results } from '../../api/results';
+import { channelSchema } from '../../api/schemas';
 import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { messages } from '../../messages';
 import { FilterIcon, XIcon } from '../../ui/icons';
@@ -7,7 +13,7 @@ import { listOf, withoutValue } from '../../lib/inbox-query-edit';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { DraftInput } from './draft-input';
 import { trackFilterChanges } from './filter-analytics';
-import { filterMessages as text } from './filter-messages';
+import { channelLabel, filterMessages as text } from './filter-messages';
 
 // The Filter menu, the Sort menu and the chips of the active filters. They load on their own chunk, right
 // after the first screen (inbox-filters.tsx).
@@ -22,7 +28,8 @@ export interface FilterPartProps {
 }
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
-const channels = Object.keys(text.channels) as (keyof typeof text.channels)[];
+// Every value of the contract's ConversationChannel (channelSchema), named by the registry or as an origin.
+const channels = channelSchema.options;
 const dateFilters = [['created', 'created_after', 'created_before'], ['updated', 'updated_after', 'updated_before']] as const;
 
 // The day before an exclusive end is the last day the person picked.
@@ -42,8 +49,26 @@ const wholeDay = (value: string) => value === '' || /^[1-9]\d{3}-\d{2}-\d{2}$/.t
 // Filters counted on the Filter button; status, sort and search have their own controls, and a date range
 // counts once.
 const menuKeys: InboxQueryKey[] = ['priority', 'assignee', 'tag', 'contact', 'organization', 'awaiting', 'has_pending_draft', 'delivery_failed',
-  'source', 'channel', 'created_after', 'updated_after'];
+  'source', 'channel', 'channel_id', 'created_after', 'updated_after'];
 const has = (query: InboxQuery, key: InboxQueryKey) => query[key] !== undefined && query[key] !== '';
+
+// useChannelList reads the workspace's channels, removed ones too, once it is wanted: to choose one
+// channel in the menu and to name the chip of one. Through the app's query cache (Settings reloads it);
+// a part rendered without one reads them itself.
+function useChannelList(wanted: boolean): ChannelList | undefined {
+  const client = useContext(QueryClientContext);
+  const [list, setList] = useState<ChannelList>();
+  useEffect(() => {
+    if (!wanted) return undefined;
+    let live = true;
+    const load = client ? client.fetchQuery({ queryKey: ['channels', 'all'], queryFn: channelsApi.listAll, staleTime: 30_000 }) : channelsApi.listAll();
+    load.then((value) => { if (live) setList(value); }, () => {});
+    return () => { live = false; };
+  }, [client, wanted]);
+  return list;
+}
+
+type ListFilter = 'priority' | 'assignee' | 'tag' | 'channel' | 'channel_id';
 
 // changeOf replaces the filters (reporting what kind changed) and sets one of them.
 function changeOf({ query, onChange }: FilterPartProps) {
@@ -62,6 +87,8 @@ export function FilterBar(props: FilterPartProps) {
   const { query } = props;
   const { set } = changeOf(props);
   const menu = useRef<HTMLDetailsElement>(null);
+  // The channels are read the first time the menu opens.
+  const [opened, setOpened] = useState(false);
   useEffect(() => {
     const close = (event: PointerEvent) => { if (menu.current?.open && !menu.current.contains(event.target as Node)) menu.current.open = false; };
     document.addEventListener('pointerdown', close);
@@ -80,10 +107,10 @@ export function FilterBar(props: FilterPartProps) {
     + (!has(query, 'created_after') && has(query, 'created_before') ? 1 : 0) + (!has(query, 'updated_after') && has(query, 'updated_before') ? 1 : 0);
   return (
     <>
-      <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut}>
+      <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut} onToggle={(event) => { if (event.currentTarget.open) setOpened(true); }}>
         <summary><FilterIcon /><span>{messages.filter}</span>
           {active > 0 && <span className="filter-count" aria-label={messages.filtersActive(active)}>{active}</span>}</summary>
-        <div className="filter-popover" role="group" aria-label={messages.filter}><FilterPanel {...props} /></div>
+        <div className="filter-popover" role="group" aria-label={messages.filter}><FilterPanel {...props} opened={opened} /></div>
       </details>
       <select className="sort-field" aria-label={messages.inboxSort} value={query.sort ?? 'updated_desc'} onChange={(event) => set('sort', event.currentTarget.value === 'updated_desc' ? undefined : event.currentTarget.value)}>
         {Object.entries(text.sorts).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -92,10 +119,15 @@ export function FilterBar(props: FilterPartProps) {
   );
 }
 
-function FilterPanel(props: FilterPartProps) {
-  const { query, tags, agents, timezone } = props;
+function FilterPanel(props: FilterPartProps & { opened: boolean }) {
+  const { query, tags, agents, timezone, opened } = props;
   const { set } = changeOf(props);
-  const toggle = (key: 'priority' | 'assignee' | 'tag' | 'channel', value: string, on: boolean) => {
+  // A type with two or more live channels offers each of them; one chosen before stays listed.
+  const list = useChannelList(opened || Boolean(query.channel_id));
+  const chosenChannels = listOf(query, 'channel_id');
+  const channelGroups = (list?.types ?? []).map(({ type }) => ({ type, items: (list?.items ?? []).filter((item) => item.type === type && (!item.deleted_at || chosenChannels.includes(item.id))) }))
+    .filter((group) => group.items.filter((item) => !item.deleted_at).length > 1);
+  const toggle = (key: ListFilter, value: string, on: boolean) => {
     const values = listOf(query, key).filter((item) => item !== value);
     if (on) values.push(value);
     set(key, values.join(','));
@@ -104,7 +136,7 @@ function FilterPanel(props: FilterPartProps) {
   const awaiting = query.awaiting ?? '';
   const source = query.source ?? '';
   const chosenTags = listOf(query, 'tag');
-  const check = (key: 'priority' | 'assignee' | 'tag' | 'channel', value: string, label: string) => (
+  const check = (key: ListFilter, value: string, label: string) => (
     <label key={value} className="check-row"><input type="checkbox" checked={listOf(query, key).includes(value)} onChange={(event) => toggle(key, value, event.currentTarget.checked)} /><span>{label}</span></label>
   );
   return (
@@ -128,7 +160,9 @@ function FilterPanel(props: FilterPartProps) {
         <label className="check-row"><input type="checkbox" checked={query.has_pending_draft === true} onChange={(event) => set('has_pending_draft', event.currentTarget.checked || undefined)} /><span>{text.hasPendingDraft}</span></label>
         <label className="check-row"><input type="checkbox" checked={query.delivery_failed === true} onChange={(event) => set('delivery_failed', event.currentTarget.checked || undefined)} /><span>{text.deliveryFailed}</span></label>
       </fieldset>
-      <fieldset><legend>{text.channel}</legend>{channels.map((value) => check('channel', value, text.channels[value]))}</fieldset>
+      <fieldset><legend>{text.channel}</legend>{channels.map((value) => check('channel', value, channelLabel(value)))}</fieldset>
+      {channelGroups.map(({ type, items }) => <fieldset key={type}><legend>{text.channelsOf(channelLabel(type))}</legend>
+        {items.map((item) => check('channel_id', item.id, item.deleted_at ? text.removedChannel(item.name) : item.name))}</fieldset>)}
       <fieldset><legend>{text.source}</legend>
         {(['', 'imported', 'native'] as const).map((value) => (
           <label key={value || 'any'} className="check-row"><input type="radio" name="source" checked={source === value} onChange={() => set('source', value || undefined)} />
@@ -148,6 +182,32 @@ function FilterPanel(props: FilterPartProps) {
   );
 }
 
+// Metrics counted on the conversations created a week earlier (docs/user/results.md).
+const resolvedMetrics = new Set(['resolution', 'unresolved', 'without_resolve_time', 'reopened', 'handle']);
+
+// A number of the results page: `<snapshot id>:<window>.<metric>`. With the page's numbers at hand (they
+// are cached from Results, or read once) the chip says which side it counts and the days it covers.
+export function resultLabel(result: string, results: Results | undefined, timeZone: string): string {
+  const [snapshot, key] = result.split(':');
+  const [window, metric] = (key ?? '').split('.');
+  const metricName = text.resultMetrics[metric] ?? metric;
+  const side = results?.current?.id === snapshot ? results.current : results?.baseline?.id === snapshot ? results.baseline : undefined;
+  const numbers = side?.windows[window as '30d' | '7d'];
+  if (!side || !numbers) return text.countedIn(metricName, text.resultWindows[window] ?? window);
+  const name = side === results?.current ? 'Colliedesk' : side.source?.startsWith('helpscout:') ? 'Help Scout' : 'Freshdesk';
+  const span = resolvedMetrics.has(metric) ? numbers.resolved_created : numbers.created;
+  const day = (value: string) => zonedDayLabel(value, timeZone);
+  return text.countedInSide(metricName, name, `${day(span.from)} – ${day(span.to)}`);
+}
+
+function zonedDayLabel(value: string, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone }).format(new Date(value));
+  } catch {
+    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(value));
+  }
+}
+
 interface Chip {
   key: InboxQueryKey;
   value?: string;
@@ -157,6 +217,22 @@ interface Chip {
 export function FilterChips(props: FilterPartProps) {
   const { query, tags, agents, timezone, conversations } = props;
   const { change: onChange } = changeOf(props);
+  // The numbers of the results page name the side and days of a result chip: cached from Results, or
+  // read once for a link opened directly.
+  const cached = useContext(QueryClientContext)?.getQueryData<Results>(['results']);
+  const [fetched, setFetched] = useState<Results>();
+  useEffect(() => {
+    if (!query.result || cached) return undefined;
+    let live = true;
+    resultsApi.get().then((value) => { if (live) setFetched(value); }, () => {});
+    return () => { live = false; };
+  }, [query.result, cached]);
+  const results = { data: cached ?? fetched };
+  const channelList = useChannelList(Boolean(query.channel_id));
+  const channelName = (id: string) => {
+    const channel = channelList?.items.find((item) => item.id === id);
+    return !channel ? text.unknownChannel : channel.deleted_at ? text.removedChannel(channel.name) : channel.name;
+  };
   const agentName = (id: string) => {
     const agent = agents.find((item) => item.id === id);
     return agent ? agent.display_name || agent.email : text.unknownAgent;
@@ -172,9 +248,11 @@ export function FilterChips(props: FilterPartProps) {
     ...(query.awaiting === 'team' || query.awaiting === 'customer' ? [{ key: 'awaiting' as const, label: `${text.awaiting}: ${text.awaitingOptions[query.awaiting]}` }] : []),
     ...(query.has_pending_draft !== undefined ? [{ key: 'has_pending_draft' as const, label: query.has_pending_draft ? text.hasPendingDraft : text.noPendingDraft }] : []),
     ...(query.delivery_failed !== undefined ? [{ key: 'delivery_failed' as const, label: query.delivery_failed ? text.deliveryFailed : text.noDeliveryFailed }] : []),
-    ...listOf(query, 'channel').map((value) => ({ key: 'channel' as const, value, label: `${text.channel}: ${text.channels[value as keyof typeof text.channels] ?? value}` })),
+    ...listOf(query, 'channel').map((value) => ({ key: 'channel' as const, value, label: `${text.channel}: ${channelLabel(value)}` })),
+    ...listOf(query, 'channel_id').map((value) => ({ key: 'channel_id' as const, value, label: `${text.channel}: ${channelName(value)}` })),
     ...(query.source === 'imported' || query.source === 'native' ? [{ key: 'source' as const, label: `${text.source}: ${text.sources[query.source]}` }] : []),
     ...(query.organization ? [{ key: 'organization' as const, label: `${text.organization}: ${query.organization}` }] : []),
+    ...(query.result ? [{ key: 'result' as const, label: resultLabel(query.result, results.data, timezone) }] : []),
     ...dateFilters.flatMap(([name, after, before]) => (query[after] || query[before]
       ? [{ key: after, label: `${text[name]}: ${text.dateRange(query[after] ? zonedDay(query[after], timezone) : undefined, query[before] ? lastDay(query[before], timezone) : undefined)}` }]
       : [])),
@@ -194,6 +272,8 @@ export function FilterChips(props: FilterPartProps) {
             <button type="button" className="chip-remove" aria-label={text.remove(chip.label)} onClick={() => removeChip(chip)}><XIcon /></button></li>))}
       </ul>
       <button type="button" className="link-button" onClick={() => onChange?.({})}>{text.clearAll}</button>
+      {query.result && <a href={query.result.includes(':7d.') ? '/results?window=7d' : '/results'} className="link-button">{text.backToResults}</a>}
+      {query.result && <p className="filter-chips-note">{text.anyStatus}</p>}
     </div>
   );
 }

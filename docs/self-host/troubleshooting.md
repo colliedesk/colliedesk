@@ -21,6 +21,20 @@ The server applies database migrations when it starts, so a failed migration or 
 `DATABASE_URL` shows here first. Startup warnings, for example about `TRUSTED_PROXIES`, are here
 too.
 
+## A screen says a feature "is not set up on this server"
+
+The app never shows server variable names to the people using a workspace; it tells them to ask
+whoever runs the server, with a link to the guide section. The server log names what is missing each
+time someone tries the feature:
+
+```sh
+docker compose logs server | grep "server settings missing"
+```
+
+Each line has `feature` (`google`, `microsoft`, `channel_secrets`, `ai_provider_keys`) and `missing`,
+the variables to set. Set them in `.env` (see [environment variables](environment-variables.md)), then
+run `docker compose up -d`.
+
 ## The sign-in link expired
 
 A pairing link works once and expires after 15 minutes. Print a new one:

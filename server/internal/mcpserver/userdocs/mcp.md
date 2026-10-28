@@ -7,11 +7,13 @@ private notes for your team. With a `send` token it can also reply to customers.
 
 ## Endpoint and sign-in
 
+<!-- generated:versions -->
 - URL: `https://<your-colliedesk>/mcp`. It uses MCP Streamable HTTP without sessions, protocol
-  versions `2025-11-25` and `2026-07-28`.
+  versions `2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`.
+<!-- /generated -->
 - Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
   person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
-- Create the token as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
+- Create the token in **Settings → External AI agents**, as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
   that does the job. The token is shown once; revoke it in **Settings → Sessions**.
 
 | Tier | The agent can |
@@ -29,26 +31,25 @@ actions wait for a person with every tier, `admin` included: new tokens, invites
 admin or changing an admin, signing out another person, export, billing checkout and portal, disconnecting the email channel, a new
 inbound secret and the workspace address. No tool approves or rejects; only a person does.
 
-## Connect Claude Code
+## Connect your AI host
 
-```sh
-export COLLIEDESK_TOKEN=<your token>
-claude mcp add --transport http colliedesk https://desk.example.com/mcp \
-  --header "Authorization: Bearer $COLLIEDESK_TOKEN"
-```
+Each guide gives the shortest way for one host, keeps the token out of plain configuration where
+the host allows it, and says how to remove it again:
 
-## Connect Codex
-
-```sh
-export COLLIEDESK_TOKEN=<your token>
-codex mcp add colliedesk --url https://desk.example.com/mcp --bearer-token-env-var COLLIEDESK_TOKEN
-```
+<!-- generated:hosts -->
+- [Claude Code](connect-claude-code.md)
+- [Codex](connect-codex.md)
+- [Cursor](connect-cursor.md)
+- [VS Code](connect-vscode.md)
+- [Claude Desktop](connect-claude-desktop.md)
+<!-- /generated -->
 
 Then ask the agent, for example: "Triage the open conversations nobody owns: tag billing questions
 with `billing` and leave a note with a summary."
 
 ## Tools
 
+<!-- generated:tools -->
 | Tool | What it does | Tier |
 |---|---|---|
 | `colliedesk_whoami` | Shows the workspace, the team member, the token tier and the tools you can use | any |
@@ -61,7 +62,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `draft` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `draft` |
 | `colliedesk_note_add` | Adds a private note | `draft` |
-| `colliedesk_reply_send` | Sends a reply to the customer by email. Cannot be undone. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open | `send` |
+| `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Cannot be undone | `send` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `send` |
 | `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `send` |
 | `colliedesk_conversation_start` | Opens a conversation and emails its first message to the customer in one step, for a customer found or one added with it (`new_contact`); nothing is stored if the email is refused. Cannot be undone | `send` |
@@ -104,6 +105,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_undelete` | Takes an article out of the trash | `send` |
 | `colliedesk_kb_article_history` | Lists the versions of an article a page at a time (text cut after 2,000 characters; one version by number comes whole) | `read` |
 | `colliedesk_kb_article_version_restore` | Makes the text of an earlier version current again, as a new version | `send` |
+| `colliedesk_kb_article_ai_exclude` | Keeps an article away from reply drafts and triage suggestions, in every language; its text does not change | `send` |
+| `colliedesk_kb_article_ai_include` | Lets AI read an excluded article again | `send` |
 | `colliedesk_kb_image_upload` | Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one | `send` |
 | `colliedesk_kb_image_get` | Shows a knowledge base image to the model | `read` |
 | `colliedesk_kb_media_list` | Lists the media library: what no article uses (with the space it takes) and images missing alt text | `read` |
@@ -112,7 +115,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_media_trash` | Moves library items to the trash by id, or all unused ones; a lower tier's request names the ids | `send` |
 | `colliedesk_kb_media_trash_list` | Lists the library's trash, with when each item is deleted for good | `read` |
 | `colliedesk_kb_media_undelete` | Takes items out of the trash, by id or a whole "move to trash" batch | `send` |
-| `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage; the help center's logo or favicon answers `in_use` and stays | `admin` |
+| `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage. Cannot be undone | `admin` |
 | `colliedesk_kb_media_replace` | Puts another image or video in place of one in every article that shows it | `send` |
 | `colliedesk_kb_media_replace_undo` | Undoes a replacement | `send` |
 | `colliedesk_kb_video_upload_start` | Starts uploading a video (MP4 or WebM, up to 200 MiB) in parts | `send` |
@@ -123,8 +126,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `send` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `send` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
-| `colliedesk_help_center_theme_get` | Shows the help center's brand (logo, links, colors, fonts) with the contrast of every color pair | `read` |
-| `colliedesk_help_center_theme_check` | Checks a brand for readable contrast without saving it, with a passing color for each that fails | `read` |
+| `colliedesk_help_center_theme_get` | Reads the public help center's logo, colors, fonts and links | `read` |
+| `colliedesk_help_center_theme_check` | Checks a candidate brand and its color contrast without saving it | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
 | `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |
@@ -138,7 +141,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_email_secret_rotate_request` | Asks for a new inbound email secret; the approver sees it | `read` |
 | `colliedesk_gmail_connect_request` | Asks an admin to connect Gmail for sending replies; the approver gets Google's consent page | `read` |
 | `colliedesk_gmail_disconnect_request` | Asks to disconnect Gmail | `read` |
+| `colliedesk_microsoft_connect_request` | Asks an admin to connect Microsoft 365 for sending replies; the approver gets Microsoft's sign-in page | `read` |
+| `colliedesk_microsoft_disconnect_request` | Asks to disconnect Microsoft 365 | `read` |
 | `colliedesk_workspace_slug_change_request` | Asks to change the workspace address | `read` |
+| `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `admin` |
 | `colliedesk_workspace_rename` | Renames the workspace (replies never carry this name; it is the help center title while the help center has none) | `admin` |
@@ -150,24 +156,61 @@ with `billing` and leave a note with a summary."
 | `colliedesk_invite_revoke` | Revokes a pending invite. Cannot be undone | `admin` |
 | `colliedesk_sessions_list` | Lists sign-ins and agent tokens (the whole workspace with `admin`, otherwise your own) | `read` |
 | `colliedesk_session_revoke` | Revokes a token or signs out one of your own devices; signing out another person waits for approval. Cannot be undone | `admin` |
+| `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
+| `colliedesk_help_center_theme_update` | Replaces the public help center's brand after checking its color contrast | `admin` |
 | `colliedesk_web_form_get` | Shows the web form settings | `read` |
 | `colliedesk_web_form_update` | Turns the web form on or off and sets the allowed origins | `admin` |
-| `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
-| `colliedesk_help_center_theme_update` | Sets the help center's brand; colors that are hard to read are refused | `admin` |
 | `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address or the sender name | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
+| `colliedesk_email_test_message_send` | Sends your own address a test email that opens a conversation you can answer | `draft` |
 | `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `admin` |
+| `colliedesk_imports_list` | Lists imports | `admin` |
+| `colliedesk_import_get` | Shows one import with its progress and why it failed or waits | `admin` |
 | `colliedesk_import_preview` | Reads a Freshdesk account before importing it, without writing anything. Takes a Freshdesk admin's API key, which passes through the conversation: refused below `admin` so it never waits in a request | `admin` |
 | `colliedesk_import_start` | Starts a previewed import: recent tickets first, then the whole account | `admin` |
-| `colliedesk_imports_list`, `colliedesk_import_get` | Lists imports, or shows one with its progress and why it failed or waits | `admin` |
 | `colliedesk_import_cancel` | Stops an import or discards a preview; what was imported stays | `admin` |
 | `colliedesk_import_key_set` | Gives an import waiting for its Freshdesk key the key again | `admin` |
 | `colliedesk_import_report` | Reads the reconcile report of an import (JSON or Markdown) | `admin` |
 | `colliedesk_import_undo_request` | Asks to remove what an import brought in | `read` |
 | `colliedesk_import_people_list` | Lists the agents of an import's Freshdesk account and who each is linked to | `admin` |
-| `colliedesk_import_person_link`, `colliedesk_import_person_unlink` | Links a Freshdesk agent to a Colliedesk agent (their imported replies and tickets follow), or takes the link back | `admin` |
-| `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
+| `colliedesk_import_person_link` | Links a Freshdesk agent to a Colliedesk agent; their imported replies and tickets follow | `admin` |
+| `colliedesk_import_person_unlink` | Takes back the link between a Freshdesk agent and a Colliedesk agent | `admin` |
+| `colliedesk_ai_settings_get` | Shows the [AI settings](ai.md): providers (never a key), each feature's provider and model, and the change history | `read` |
+| `colliedesk_ai_models_list` | Lists the models a key may use, before adding the provider; saves and bills nothing. Refused below `admin` so the key never waits in a request | `admin` |
+| `colliedesk_ai_provider_add` | Adds an AI provider after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `admin` |
+| `colliedesk_ai_provider_update` | Renames an AI provider or changes its models | `admin` |
+| `colliedesk_ai_provider_key_set` | Replaces an AI provider's key after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `admin` |
+| `colliedesk_ai_provider_check` | Runs a check of an AI provider | `admin` |
+| `colliedesk_ai_provider_remove` | Deletes an AI provider and erases its key; its features turn off. Cannot be undone | `admin` |
+| `colliedesk_ai_slot_set_request` | Asks to set an AI feature: its provider and model, on or off | `read` |
+| `colliedesk_ai_usage_get` | Shows a month of AI usage per feature and provider, and what is left of the included AI | `admin` |
+| `colliedesk_ai_automatic_limits_set` | Changes how many automatic AI runs a workspace allows a day and a minute | `admin` |
+| `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
+| `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `read` |
+| `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `read` |
+| `colliedesk_ai_draft_discard` | Stops an AI draft being written or discards a ready one | `draft` |
+| `colliedesk_ai_triage_get` | Shows a conversation's newest [AI triage suggestion](ai.md#triage-suggestions): tags, priority, assignee and a reason | `read` |
+| `colliedesk_ai_triage_create` | Asks for a triage suggestion again | `draft` |
+| `colliedesk_ai_triage_accept` | Applies a suggestion (all of it, or the parts named) to its conversation | `draft` |
+| `colliedesk_ai_triage_dismiss` | Dismisses a suggestion | `draft` |
+| `colliedesk_ai_triage_undo` | Takes back what AI applied of a suggestion by itself (all of it, or the parts named); keeps what a person changed since | `draft` |
+| `colliedesk_results_get` | Shows the [results page](results.md): your numbers for the last 30 and 7 days next to the history you imported | `read` |
+| `colliedesk_results_share_link_get` | Shows whether the results page has an active share link, who made it and when it was last opened; never the link itself | `admin` |
+| `colliedesk_results_share_link_create` | Asks a person to create a share link of the results page; the old link stops working | `read` |
+| `colliedesk_results_share_link_revoke` | Turns off the results page's share link | `admin` |
+| `colliedesk_results_email_set` | Turns your weekly results email on or off (admins only) | `draft` |
+| `colliedesk_channels_list` | Lists the channels with their state and the channel types the server runs | `read` |
+| `colliedesk_channels_get` | Shows one channel and its configuration | `read` |
+| `colliedesk_channels_events` | Shows the history of the channels | `read` |
+| `colliedesk_channels_create` | Adds a channel (admin token) | `admin` |
+| `colliedesk_channels_update` | Renames a channel, turns it on or off, or changes its configuration or rules (admin token) | `admin` |
+| `colliedesk_channels_check` | Reads a channel's state again (admin token) | `admin` |
+| `colliedesk_channels_held_replay` | Opens the messages a channel held while it was off (admin token) | `admin` |
+| `colliedesk_channels_credentials_set` | Stores a channel's secret (admin token only) | `admin` |
+| `colliedesk_channels_delete_request` | Asks a person to remove a channel | `read` |
+| `colliedesk_channels_held_discard_request` | Asks a person to discard the messages a channel held | `read` |
+<!-- /generated -->
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the
 model to show you what it will do and wait for your yes, unless you already asked for exactly that.

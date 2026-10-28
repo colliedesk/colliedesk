@@ -23,7 +23,7 @@ const allPlans: { name: string; includes: string[]; prices: (Omit<PlanPrice, 'la
   { name: messages.plans.team25, includes: [billingMessages.planAgents(25), billingMessages.planStorage('250 GiB')], prices: [
     { plan: 'team25_monthly', interval: 'monthly', amount: '$149', charge: '$149 per month' },
     { plan: 'team25_yearly', interval: 'yearly', amount: '$124.17', billed: billingMessages.billedYearly('$1,490'), charge: '$1,490 per year' }] },
-  { name: messages.plans.founding, includes: [billingMessages.planAgents(10), billingMessages.planStorage('20 GiB'), billingMessages.foundingLimited], prices: [
+  { name: messages.plans.founding, includes: [billingMessages.planAgents(10), billingMessages.planStorage('20 GiB'), billingMessages.foundingMigration, billingMessages.moneyBack], prices: [
     { plan: 'founding', interval: 'yearly', amount: '$99', per: billingMessages.perQuarter, billed: billingMessages.billedFounding, charge: '$99 per quarter for life' }] },
 ];
 

@@ -26,6 +26,8 @@ import { ports, scratchDir } from './checkout';
 //   attachments: one on the description of every 10th ticket (30),
 //     one on the customer reply of every 30th ticket (10)                   -> 40 attachments
 //   time entries: one on every 20th ticket (15); ticket 150 is not a multiple of 20
+//   stats (list with include=stats): first response 20 minutes after creation; tickets with id % 4 = 2
+//     (resolved) and 3 (closed) resolved at 40 minutes, closed ones closed at 45
 //   canned responses: folder 801 "General" holds 2 (ids 9101, 9102), personal folder 802 "My drafts" holds 1 (id 9103)
 //   tags: every 3rd ticket "billing"; ticket ids 1, 4, 7, ... "shipping" and "vip"
 export const fixture = {
@@ -152,8 +154,9 @@ export class FakeFreshdesk {
     } else if (path === '/api/v2/tickets') {
       const since = Date.parse(url.searchParams.get('updated_since') ?? '');
       if (Number.isNaN(since)) { json(response, 400, { message: 'updated_since is required' }); return; }
+      const stats = url.searchParams.get('include') === 'stats';
       const listed = this.ticketIDs().filter((ticketID) => ticketID !== fixture.archivedTicket)
-        .map((ticketID) => this.ticket(ticketID, false)).filter((ticket) => Date.parse(String(ticket.updated_at)) >= since);
+        .map((ticketID) => this.ticket(ticketID, false, stats)).filter((ticket) => Date.parse(String(ticket.updated_at)) >= since);
       this.page(response, url, listed);
     } else if (parts[0] === 'tickets' && parts[1] === 'archived' && parts.length === 3) {
       if (this.options.archiveForbidden) { json(response, 403, { code: 'access_denied', message: 'You are not authorized to perform this action.' }); return; }
@@ -242,7 +245,7 @@ export class FakeFreshdesk {
 
   private ticketIDs() { return Array.from({ length: fixture.tickets }, (_, index) => index + 1); }
 
-  private ticket(id: number, full: boolean) {
+  private ticket(id: number, full: boolean, stats = false) {
     const created = epoch + id * 3_600_000;
     const subject = ticketSubject(id);
     const ticket: Record<string, unknown> = {
@@ -252,6 +255,15 @@ export class FakeFreshdesk {
       due_by: null, fr_due_by: null, cc_emails: [], fwd_emails: [], to_emails: null,
       created_at: iso(created), updated_at: iso(created + 30 * 60_000),
     };
+    if (stats) {
+      // Resolved (4) and closed (5) tickets were resolved 40 minutes after they were created, closed ones closed at 45.
+      const status = [2, 3, 4, 5][id % 4];
+      ticket.stats = {
+        first_responded_at: iso(created + 20 * 60_000),
+        resolved_at: status >= 4 ? iso(created + 40 * 60_000) : null,
+        closed_at: status === 5 ? iso(created + 45 * 60_000) : null,
+      };
+    }
     if (full) {
       ticket.description = `<div>Description of ticket ${id}.</div>`;
       ticket.description_text = `Description of ticket ${id}.`;

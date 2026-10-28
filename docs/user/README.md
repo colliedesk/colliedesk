@@ -12,6 +12,7 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Workspace name](workspace.md)
 - [Work the inbox](inbox.md)
 - [Customers (contacts)](contacts.md)
+- [Channels](channels.md)
 - [Email channel](email-channel.md)
 - [Web form](web-form.md)
 - [Plan and billing](billing.md) (hosted cloud only)
@@ -22,8 +23,19 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Sessions and devices](sessions.md)
 - [Connect an AI agent (MCP)](mcp.md)
 - [Agent requests and reply drafts](agent-requests.md)
+- [AI providers and features](ai.md)
+- [Results: before and after the move](results.md)
 - [Import from Freshdesk](import-freshdesk.md)
 - [Import from Help Scout](import-helpscout.md)
 - [Export all your data](export.md)
 - [Report a problem](problem-reports.md)
 - [Usage report (telemetry)](telemetry.md)
+
+## Connect an AI agent
+
+- [Claude Code](connect-claude-code.md)
+- [Codex](connect-codex.md)
+- [Cursor](connect-cursor.md)
+- [VS Code](connect-vscode.md)
+- [Claude Desktop](connect-claude-desktop.md)
+- [Agent skills](agent-skills.md)

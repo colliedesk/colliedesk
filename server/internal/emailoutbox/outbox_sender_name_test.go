@@ -23,7 +23,8 @@ func TestEveryTransportSendsAsTheChannelSenderNameNotTheWorkspaceName(t *testing
 	for _, item := range relay {
 		t.Run(item.name, func(t *testing.T) {
 			f := newFixture(t)
-			f.exec(t, `UPDATE email_channels SET sender_name='Colliedesk Support',domain_verified_at=`+orNull(item.verified)+` WHERE workspace_id=$1`, f.workspaceID)
+			f.exec(t, `UPDATE email_channels SET sender_name='Colliedesk Support' WHERE workspace_id=$1`, f.workspaceID)
+			f.exec(t, `UPDATE email_domains SET verified_at=`+orNull(item.verified)+` WHERE workspace_id=$1`, f.workspaceID)
 			server := startSMTPServer(t)
 			clock := time.Now().UTC().Add(time.Second)
 			worker := newWorker(f, server, &clock, func(options *emailoutbox.Options) {
@@ -90,7 +91,8 @@ func assertSenderName(t *testing.T, parsed *mail.Message, wantFrom string) {
 func TestAVietnameseSenderNameIsReadBackExactly(t *testing.T) {
 	const name = "Hỗ trợ khách hàng"
 	f := newFixture(t)
-	f.exec(t, `UPDATE email_channels SET sender_name=$2,domain_verified_at=now() WHERE workspace_id=$1`, f.workspaceID, name)
+	f.exec(t, `UPDATE email_channels SET sender_name=$2 WHERE workspace_id=$1`, f.workspaceID, name)
+	f.exec(t, `UPDATE email_domains SET verified_at=now() WHERE workspace_id=$1`, f.workspaceID)
 	server := startSMTPServer(t)
 	clock := time.Now().UTC().Add(time.Second)
 	worker := newWorker(f, server, &clock, func(options *emailoutbox.Options) {
