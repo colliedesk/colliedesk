@@ -46,7 +46,7 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const [connecting, setConnecting] = useState(false);
   const refresh = () => client.invalidateQueries({ queryKey: ['imports'] });
   const after = { onSuccess: () => { setConnecting(false); void refresh(); } };
-  const preview = useCreateMutation({ create: ({ domain, key }: { domain: string; key: string }, submitKey: string) => importsApi.preview(domain, key, submitKey),
+  const preview = useCreateMutation({ create: ({ domain, key, old }: { domain: string; key: string; old?: string }, submitKey: string) => importsApi.preview(domain, key, submitKey, old),
     onSuccess: (created) => { setJustAsked(created.id); after.onSuccess(); } });
   const start = useMutation({ mutationFn: importsApi.start, ...after });
   // A discarded preview gives the page back to the import before it.
@@ -104,7 +104,7 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
     job={job} report={reportReady && parsed.success && job?.kind !== 'undo' ? importReportSchema.parse(report.data) : undefined}
     undoReport={reportReady && parsed.success && job?.kind === 'undo' ? undoReportSchema.parse(report.data) : undefined} history={items} timezone={me.data?.timezone ?? 'UTC'}
     loadFailed={imports.isError} error={error ?? peopleError} busy={busy} connecting={connecting}
-    onPreview={(domain, key) => only(preview)({ domain, key })} onStart={only(start)} onCancel={only(cancel)}
+    onPreview={(domain, key, old) => only(preview)({ domain, key, old })} onStart={only(start)} onCancel={only(cancel)}
     onSetKey={(id, key) => only(setKey)({ id, key })} onUndo={only(undo)}
     onNewImport={() => { for (const mutation of all) mutation.reset(); setConnecting(true); }} />;
 }

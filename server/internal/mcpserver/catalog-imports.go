@@ -70,7 +70,8 @@ func importPreviewSpec() Spec {
 			`"domain":{"type":"string","minLength":1,"maxLength":255,"description":"The <account>.freshdesk.com address."},` +
 			`"api_key":{"type":"string","minLength":1,"maxLength":200},` +
 			`"recent_days":{"type":"integer","minimum":0,"maximum":365,"default":90,"description":"Import the tickets updated in these last days first, newest first; 0 skips that pass."},` +
-			`"include_personal_canned_responses":{"type":"boolean","default":false},"help_center_portal":{"type":"integer","minimum":0}}}`,
+			`"include_personal_canned_responses":{"type":"boolean","default":false},"help_center_portal":{"type":"integer","minimum":0},` +
+			`"old_help_center_domain":{"type":"string","maxLength":255,"description":"The old Freshdesk help center's own custom domain, for example support.acme.com: its links are pointed at the new help center too."}}}`,
 		Output: importJobOutput,
 		run:    importPreview,
 	}

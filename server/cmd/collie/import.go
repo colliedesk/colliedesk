@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -26,7 +27,7 @@ var importRun = freshdesk.Run
 // progressOutput receives progress lines (stderr), so stdout keeps its stable summary format.
 var progressOutput io.Writer = os.Stderr
 
-const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--help-center-portal ID] [--dry-run] [--report-dir DIR]"
+const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--help-center-portal ID] [--old-help-center-domain HOST] [--dry-run] [--report-dir DIR]"
 
 func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
 	if len(args) > 0 && args[0] == "undo" {
@@ -45,6 +46,13 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	if err := database.Migrate(ctx, pool); err != nil {
 		return err
 	}
+	// Old Freshdesk help center links are pointed at the help center's address, built as the server
+	// builds it. The origin is APP_ORIGIN as set, never the local default other commands fall back to:
+	// without it the import rewrites no link and says so, instead of writing a local address for good.
+	if options.HelpCenterDomain, err = helpcenter.DomainFromEnv(os.Getenv); err != nil {
+		return err
+	}
+	options.Origin = strings.TrimSpace(os.Getenv("APP_ORIGIN"))
 	options.Progress = progressOutput
 	if !options.DryRun {
 		storage, err := attachmentStorage()
@@ -115,6 +123,7 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	reportDir := flags.String("report-dir", ".", "directory for the reconcile report")
 	lastTicket := flags.Int64("last-ticket-id", 0, "highest ticket number shown in Freshdesk; the id check covers at least this far")
 	portal := flags.Int64("help-center-portal", 0, "on a Freshdesk account with several portals, the portal whose published knowledge base articles stay published")
+	oldHelpCenter := flags.String("old-help-center-domain", "", "the old Freshdesk help center's own custom domain, for example support.acme.com; its links are pointed at the new help center too")
 	includePersonal := flags.Bool("include-personal-canned-responses", false, "also import canned responses from personal folders; they become shared with the whole workspace")
 	if err := flags.Parse(args); err != nil {
 		return freshdesk.Options{}, "", fmt.Errorf("%w\n%s", err, importUsage)
@@ -126,11 +135,18 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	if err != nil {
 		return freshdesk.Options{}, "", fmt.Errorf("--domain must be your <account>.freshdesk.com address, got %q", *domain)
 	}
+	oldHelpCenterHost := ""
+	if *oldHelpCenter != "" {
+		if oldHelpCenterHost, err = freshdesk.OldHelpCenterHost(*oldHelpCenter); err != nil {
+			return freshdesk.Options{}, "", fmt.Errorf("--old-help-center-domain must be a host name such as support.acme.com, got %q", *oldHelpCenter)
+		}
+	}
 	apiKey := strings.TrimSpace(os.Getenv(*keyEnv))
 	if apiKey == "" {
 		return freshdesk.Options{}, "", fmt.Errorf("environment variable %s is empty; export your Freshdesk API key there", *keyEnv)
 	}
-	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled(), PlansOnSale: plansOnSale(), IncludePersonalCannedResponses: *includePersonal, HelpCenterPortal: *portal}
+	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled(), PlansOnSale: plansOnSale(), IncludePersonalCannedResponses: *includePersonal, HelpCenterPortal: *portal,
+		OldHelpCenterDomain: oldHelpCenterHost}
 	if *since != "" {
 		parsed, err := parseSince(*since)
 		if err != nil {

@@ -413,7 +413,9 @@ in **Settings → Help center** (see [Help center settings](#help-center-setting
 An article's address is the help center address followed by `/a/<number>-<address name>`, for example
 `/a/12-reset-your-password`. A link with an old or mistyped address name still leads to the article:
 the number finds it, and the page moves to the current address. A collection's address is the path
-of address names, `/c/billing/cards`; changing one is not redirected. **Changing the workspace
+of address names, `/c/billing/cards`; changing one is not redirected. Addresses of a Freshdesk help center you imported
+(`/support/solutions/articles/<id>-...`) lead to the imported pages on every one of these addresses;
+see [Old help center links](import-freshdesk.md#old-help-center-links). **Changing the workspace
 address name** (Settings → Email) changes every help center address, and old links stop working.
 
 ### Custom domain

@@ -181,31 +181,41 @@ test('freshdesk import: an archive refused with 403 is reported UNVERIFIED, neve
   }
 });
 
-test('freshdesk import: the knowledge base keeps its timestamps, drafts stay drafts, images are stored, and undo removes it', async ({ page }) => {
+// The knowledge base journey also carries the old Freshdesk help center (docs/user/import-freshdesk.md,
+// "Old help center links"): one import serves both, since each full import costs the CI budget.
+test('freshdesk import: the knowledge base keeps its timestamps, drafts stay drafts, images are stored, old help center addresses and links lead to the new pages, and undo removes it', async ({ page }) => {
   test.setTimeout(180_000);
   const suffix = uniqueSuffix();
   const adminEmail = `alice-${suffix}@acme.example`;
   const workspace = createWorkspaceWithSlug(`Knowledge ${suffix}`, adminEmail);
-  const fake = new FakeFreshdesk({ apiKey, agentEmail: adminEmail, knowledgeBase: true });
+  const fake = new FakeFreshdesk({ apiKey, agentEmail: adminEmail, knowledgeBase: true, links: true });
   await fake.start();
   try {
     await redeemLink(page, workspace.url);
+    expect((await page.request.put(`${baseURL}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Acme help', locale: 'en' } })).status()).toBe(200);
     const run = await importFreshdesk(fake, workspace.slug);
     expect(run.status, run.stderr).toBe(0);
-    expect(run.stdout).toContain('Knowledge base: articles 2/2, 1 published');
+    expect(run.stdout).toContain('Knowledge base: articles 3/3, 2 published');
+    const home = `${baseURL}/help/${workspace.slug}`;
+    // Old addresses, by hand: home, solutions, category 7001, folder 7101, articles 7201 and 7203
+    // (7202 is a draft), each also below /en/ and /es/; two links rewritten, none left.
     expect(run.report).toMatchObject({
       status: 'OK',
-      knowledge_base: { collections: { source: 2, imported: 2 }, articles: { source: 2, imported: 2 }, translations: { source: 1, imported: 1 },
-        images: { source: 1, imported: 1 }, published: ['7201'], drafts: { draft_in_freshdesk: ['7202'] }, languages: ['es'] },
+      knowledge_base: { collections: { source: 2, imported: 2 }, articles: { source: 3, imported: 3 }, translations: { source: 1, imported: 1 },
+        images: { source: 1, imported: 1 }, published: ['7201', '7203'], drafts: { draft_in_freshdesk: ['7202'] }, languages: ['es'] },
       verification: { knowledge_base: { verified: true } },
+      links: { status: 'OK', help_center: home, old_addresses: { found: 18, redirected: 18, unmapped: [] },
+        rewritten: { articles: 2, translations: 0, saved_replies: 0, links: 2 }, left: [] },
     });
 
-    type Summary = { id: string; title: string; status: string; created_at: string; updated_at: string };
+    type Summary = { id: string; number: number; slug: string; title: string; status: string; created_at: string; updated_at: string };
     const list = await (await page.request.get(`${baseURL}/api/v1/kb/articles`)).json() as { items: Summary[] };
     const byTitle = Object.fromEntries(list.items.map((item) => [item.title, item]));
-    expect(byTitle['Getting started with Acme']).toMatchObject({ status: 'published', created_at: fixture.kbArticleCreatedAt, updated_at: fixture.kbArticleUpdatedAt });
+    const started = byTitle['Getting started with Acme'];
+    const reset = byTitle['Reset your password'];
+    expect(started).toMatchObject({ status: 'published', created_at: fixture.kbArticleCreatedAt, updated_at: fixture.kbArticleUpdatedAt });
     expect(byTitle['Coming soon'].status).toBe('draft');
-    const article = await (await page.request.get(`${baseURL}/api/v1/kb/articles/${byTitle['Getting started with Acme'].id}`)).json() as
+    const article = await (await page.request.get(`${baseURL}/api/v1/kb/articles/${started.id}`)).json() as
       { body_md: string; has_source_html: boolean; translations: Array<{ locale: string; title: string }> };
     expect(article.has_source_html).toBe(true);
     expect(article.translations).toMatchObject([{ locale: 'es', title: 'Primeros pasos con Acme' }]);
@@ -213,9 +223,39 @@ test('freshdesk import: the knowledge base keeps its timestamps, drafts stay dra
     expect(image, article.body_md).toBeTruthy();
     expect(Buffer.from(await (await page.request.get(`${baseURL}${image}`)).body())).toEqual(kbImage);
 
+    // The link inside the article points at the new page, and every old address moves there.
+    const articleURL = (item: Summary) => `${home}/a/${item.number}-${item.slug}`;
+    expect(article.body_md).toContain(`[Reset your password](${articleURL(reset)})`);
+    expect(article.body_md).not.toContain('acme.freshdesk.com');
+    const moves: Array<[string, number, string]> = [
+      ['/support/home', 301, home],
+      ['/support/solutions', 301, home],
+      ['/support/solutions/7001', 301, `${home}/c/help`],
+      ['/support/solutions/folders/7101', 301, `${home}/c/help/start`],
+      ['/support/solutions/articles/7201-getting-started-with-acme', 301, articleURL(started)],
+      ['/support/solutions/articles/7203-reset-your-password', 301, articleURL(reset)],
+      ['/support/solutions/articles/7202-coming-soon', 302, `${home}/search?q=coming+soon`],
+      ['/support/solutions/articles/9999-billing-faq', 302, `${home}/search?q=billing+faq`],
+    ];
+    for (const [path, status, location] of moves) {
+      for (const prefix of ['', '/es']) {
+        const response = await page.request.get(`${home}${prefix}${path}`, { maxRedirects: 0 });
+        expect(response.status(), prefix + path).toBe(status);
+        expect(response.headers().location, prefix + path).toBe(location);
+      }
+    }
+    // A visitor following an old Freshdesk article address lands on the new article.
+    await page.goto(`${home}/es/support/solutions/articles/7203-reset-your-password`);
+    await expect(page).toHaveURL(articleURL(reset));
+    await expect(page.getByRole('heading', { level: 1, name: 'Reset your password' })).toBeVisible();
+    await page.goto(articleURL(started));
+    // The link inside the article is the absolute new address (the list beside it is relative).
+    await page.locator(`a[href="${articleURL(reset)}"]`).click();
+    await expect(page).toHaveURL(articleURL(reset));
+
     const undo = colliedesk(['import', 'undo', '--workspace', workspace.slug]);
     expect(undo.status, undo.stderr).toBe(0);
-    expect(undo.stdout).toContain('Knowledge base: 2 articles, 2 collections, 1 images.');
+    expect(undo.stdout).toContain('Knowledge base: 3 articles, 2 collections, 1 images.');
     expect((await (await page.request.get(`${baseURL}/api/v1/kb/articles`)).json() as { items: unknown[] }).items).toEqual([]);
   } finally {
     await fake.stop();

@@ -126,6 +126,18 @@ counts the statements). A name no cache knows is charged to the client first (10
 random names from one client make at most 10 queries (`TestRandomHostNamesCostABoundedNumberOfLookups`),
 and a domain write forgets only its own names (`TestDomainWritesForgetOnlyTheirOwnHostNames`). The gate adds about 0.5 s to the timed shard once the fixture is seeded.
 
+`TestHelpCenterOldFreshdeskAddressesLatencyBudget` adds to the same fixture the import ledger a real
+migration leaves (a `kb_article` row per article and 25,000 ticket rows in each workspace, by
+`generate_series`) and times old Freshdesk addresses 20 times each: a mapped article (301), a draft
+and an unknown id (302 to the search) and a folder (301, which also reads the collection tree), all
+under 100 ms (3–7 ms p95 locally). It checks that `import_items_source_id_idx` is partial (knowledge
+base rows only), and runs `EXPLAIN (GENERIC_PLAN)` on the store's own statement for each entity
+(`store.HelpCenterLegacyTargetSQL`), so a drift in the query or a plan that cannot use the partial
+index fails. Its rows are removed by a cleanup registered before the insert. Seeding takes about
+0.9 s, the visits about 0.3 s. Measured on a scratch database with 505,000 ledger rows (5,000 of them
+`kb_article`): the partial index is created in 73 ms and takes 264 kB; the full index it replaced took
+1.1 s and 24 MB.
+
 `TestHelpCenterHostileArticlesLatencyBudget` holds an article page to the same 100 ms when its
 100,000 characters are built to be slow to parse: one line of quote or list markers (`>`, `> `,
 `1. `, `+ `, mixed), 1,500 quoted players, same-named ATX and setext headings, open links and

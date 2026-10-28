@@ -171,7 +171,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		importPlans = billing.PlansOnSale()
 	}
 	importOptions := importjobs.WorkerOptions{Pool: pool, DB: db, Keys: importKeys, Storage: storage,
-		Cloud: billing.Enabled(), PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork, Origin: origin}
+		Cloud: billing.Enabled(), PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork, Origin: origin, HelpCenterDomain: helpCenterDomain}
 	// The admins hear when an import ends, from the platform address, as for retention notices.
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
 		importOptions.Mailer, importOptions.MailFrom = email.SMTPSender{Config: emailConfig.SMTP}, "noreply@"+emailConfig.MailFromDomain
