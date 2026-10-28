@@ -69,7 +69,7 @@
 .ai-st-off { --dot: var(--line-control); }
 .ai-st-warn { --dot: var(--pending); }
 .ai-meter-none { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
-@media (pointer: coarse) { .ai-slot-limit .link-button { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-slot-limit .link-button { min-height: var(--touch); } }
 
 
 .ai-sends { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); color: var(--text-2); font-size: var(--fs-small); }
@@ -179,7 +179,7 @@
 .ai-pick input { margin: 0; }
 .ai-auto-stat { margin-left: auto; color: var(--text-2); font-size: var(--fs-small); }
 .ai-facts { display: grid; gap: var(--space-2); margin: 0; padding-left: var(--space-5); }
-@media (pointer: coarse) { .ai-pick { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-pick { min-height: var(--touch); } }
 @media (max-width: 44rem) {
   .ai-auto { grid-template-areas: "lead side" "desc desc" "parts parts"; padding: var(--space-2); gap: 2px var(--space-2); }
   .ai-auto-desc { font-size: var(--fs-label); }
@@ -196,7 +196,7 @@
 /* A link that does what a button does looks like one, and is a full touch target on a phone. */
 .ai-link-button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
-@media (pointer: coarse) { .ai-link-button { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-link-button { min-height: var(--touch); } }
 /* The models a key may use, ticked instead of typed: picked ones first, the first is the default. */
 .ai-models { margin: 0; border: 0; padding: 0; min-width: 0; }
 .ai-models legend { padding: 0; margin-bottom: var(--space-1); }
@@ -213,4 +213,4 @@
 .ai-models-default { flex: none; margin-left: auto; border-radius: var(--radius-full); background: var(--surface-2); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
 .ai-models-empty { padding: var(--space-2); color: var(--text-3); font-size: var(--fs-small); }
 .ai-models-switch { justify-self: start; font-size: var(--fs-label); }
-@media (pointer: coarse) { .ai-models-list label { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-models-list label { min-height: var(--touch); } }

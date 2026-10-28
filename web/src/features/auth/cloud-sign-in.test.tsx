@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { NotAnAgentError } from '../../api/cloud-signup';
+import { clerkAppearance, narrowViewport } from './clerk-appearance';
 import { CloudSignIn } from './cloud-sign-in';
 import { answerSignupQuestions } from './test-signup-answers';
 
@@ -157,4 +158,11 @@ test('the Clerk form drops its own first-step header and fits the panel width', 
   expect(appearance.elements.card).toMatchObject({ '&.cl-signIn-start .cl-header': { display: 'none' } });
   expect(appearance.elements.rootBox).toMatchObject({ width: '100%' });
   expect(appearance.elements.cardBox).toMatchObject({ width: '100%', maxWidth: '100%' });
+});
+
+test('on a window 480 px wide or less, the sign-in form\'s buttons and fields are 44 px tall', () => {
+	const elements = clerkAppearance().elements as Record<string, Record<string, unknown>>;
+	for (const element of ['formButtonPrimary', 'socialButtonsBlockButton', 'formFieldInput', 'otpCodeFieldInput']) {
+		expect(elements[element]?.[narrowViewport], element).toEqual(expect.objectContaining({ minHeight: '44px' }));
+	}
 });

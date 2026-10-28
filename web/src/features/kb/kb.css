@@ -312,7 +312,7 @@ span.kb-article-open { opacity: 0.35; }
 .kb-preview th { background: var(--surface-2); font-weight: 600; }
 .kb-preview hr { border: 0; border-top: 1px solid var(--line); }
 
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 30rem) {
   .kb-tree-link, .kb-back { min-height: var(--touch); }
   .kb-tabs button { --control: var(--touch); }
   /* The status filter is a control of its own on a touch screen: each choice is a whole touch target. */
