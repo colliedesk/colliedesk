@@ -192,7 +192,7 @@ test('the preview shows YouTube and Vimeo players and library videos as the help
 test('restoring a version asks to save unsaved edits first, then makes the version current', async () => {
   const restored = article({ title: 'Old title', updated_at: '2026-10-06T00:00:00Z' });
   const version = (n: number, title: string) => ({ version: n, kind: n === 1 ? 'create' : 'edit', restored_from_version: null, changed_by: { agent_id: null, name: 'Ada' },
-    token: null, agent_request_id: null, created_at: '2026-10-02T00:00:00Z', title, slug: 'reset', body_md: 'Open **Settings**.', status: 'draft', collection_id: ids.setup });
+    token: null, agent_request_id: null, created_at: '2026-10-02T00:00:00Z', title, slug: 'reset', body_md: 'Open **Settings**.', seo_title: '', seo_description: '', status: 'draft', collection_id: ids.setup });
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()),
     'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions': () => json(200, { items: [version(2, 'Reset your password'), version(1, 'Old title')], next_before_version: null }),
     'POST /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions/1/restore': () => json(200, restored) });
@@ -286,7 +286,7 @@ test('the preview shows only images of the knowledge base, as the help center do
 test('an open history loads again after a save adds a version', async () => {
   let saved = false;
   const version = (n: number) => ({ version: n, kind: n === 1 ? 'create' : 'edit', restored_from_version: null, changed_by: { agent_id: null, name: 'Ada' },
-    token: null, agent_request_id: null, created_at: '2026-10-02T00:00:00Z', title: 'Reset your password', slug: 'reset', body_md: `Text ${n}`, status: 'draft', collection_id: ids.setup });
+    token: null, agent_request_id: null, created_at: '2026-10-02T00:00:00Z', title: 'Reset your password', slug: 'reset', body_md: `Text ${n}`, seo_title: '', seo_description: '', status: 'draft', collection_id: ids.setup });
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()),
     'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions': () => json(200, { items: saved ? [version(2), version(1)] : [version(1)], next_before_version: null }),
     'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => { saved = true; return json(200, article({ body_md: 'Text 2', updated_at: '2026-10-07T00:00:00Z' })); } });
@@ -337,7 +337,7 @@ test('a wrong type or a file over 5 MB is refused before any upload', async () =
 test('a restore puts the restored text in the editor', async () => {
   const restored = article({ body_md: 'Restored text', updated_at: '2026-10-06T00:00:00Z' });
   const version = { version: 1, kind: 'create', restored_from_version: null, changed_by: { agent_id: null, name: 'Ada' }, token: null, agent_request_id: null,
-    created_at: '2026-10-02T00:00:00Z', title: 'Reset your password', slug: 'reset', body_md: 'Restored text', status: 'draft', collection_id: ids.setup };
+    created_at: '2026-10-02T00:00:00Z', title: 'Reset your password', slug: 'reset', body_md: 'Restored text', seo_title: '', seo_description: '', status: 'draft', collection_id: ids.setup };
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()),
     'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions': () => json(200, { items: [{ ...version, version: 2, body_md: 'Open **Settings**.' }, version], next_before_version: null }),
     'POST /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions/1/restore': () => json(200, restored) });
@@ -586,4 +586,23 @@ test('a save that failed is retried under the same key, so a request that did ar
   expect(keys).toHaveLength(2);
   expect(keys[0]).toMatch(/^[\x21-\x7e]{1,200}$/);
   expect(keys[1]).toBe(keys[0]);
+});
+
+test('an article\'s search title and meta description are edited beside its address name, with the defaults shown, and sent only when changed', async () => {
+  const first = article({ updated_at: '2026-10-02T00:00:00Z', seo_description: 'Choose a new password.' });
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, first),
+    'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': (call) => json(200, article({ ...(call.body as object), updated_at: '2026-10-03T00:00:00Z' })) });
+  open({ articleId: ids.article });
+  const title = await screen.findByRole('textbox', { name: 'Search title' });
+  // Empty uses the article's title; the description shows what is saved.
+  expect(title).toHaveValue('');
+  expect(title).toHaveAttribute('placeholder', 'Reset your password');
+  expect(screen.getByRole('textbox', { name: 'Meta description' })).toHaveValue('Choose a new password.');
+  fireEvent.change(title, { target: { value: 'x'.repeat(121) } });
+  expect(screen.getByText('121 / 120 characters')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  fireEvent.change(title, { target: { value: '  Reset an Acme password ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+  expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-02T00:00:00Z', seo_title: 'Reset an Acme password' });
 });

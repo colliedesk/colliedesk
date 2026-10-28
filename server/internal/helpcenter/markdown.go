@@ -92,6 +92,13 @@ func renderArticle(body, base string) (template.HTML, error) {
 // renderArticleWith is renderArticle for a text whose library videos are videos: each plays from the
 // help center at base, with its poster and size; any other <video> is left out.
 func renderArticleWith(body, base string, videos []domain.PublicKBVideo) (template.HTML, error) {
+	page, _, err := renderArticlePage(body, base, videos)
+	return page, err
+}
+
+// renderArticlePage is renderArticleWith that also reads the text as a list of questions
+// (questionList) from the same parse, so a page is parsed once.
+func renderArticlePage(body, base string, videos []domain.PublicKBVideo) (template.HTML, []faqItem, error) {
 	var out bytes.Buffer
 	context := parser.NewContext(parser.WithIDs(&headingIDs{used: map[string]bool{}, next: map[string]int{}}))
 	context.Set(baseKey, base)
@@ -99,13 +106,15 @@ func renderArticleWith(body, base string, videos []domain.PublicKBVideo) (templa
 	context.Set(libraryKey, library)
 	// The node renderers are shared by every render; the writer carries this page's library to them.
 	writer := &pageWriter{Writer: bufio.NewWriter(&out), library: library}
-	if err := markdown.Convert(tame([]byte(body)), writer, parser.WithContext(context)); err != nil {
-		return "", err
+	source := tame([]byte(body))
+	document := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(context))
+	if err := markdown.Renderer().Render(writer, source, document); err != nil {
+		return "", nil, err
 	}
 	if err := writer.Flush(); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return template.HTML(out.String()), nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
+	return template.HTML(out.String()), questionList(document, source), nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
 }
 
 // pageWriter is the buffered writer goldmark renders a page into, with the library of that page.
