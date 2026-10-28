@@ -123,3 +123,8 @@ test('the trial page says in one line what a workspace is', () => {
 	render(<RedeemPage token="" cloudEnabled signupEnabled trial cloudSignIn={<div>form</div>} />);
 	expect(screen.getByText(/A workspace is your team's account in Colliedesk/)).toBeInTheDocument();
 });
+
+test('a new team is told in one line what a workspace is and what to name it', () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled trial cloudSignIn={<div>form</div>} />);
+	expect(screen.getByText('Your workspace is your team\'s shared inbox in Colliedesk; use your company name.')).toBeInTheDocument();
+});

@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import type { GmailSettings, MailboxConnection as Connection, MicrosoftSettings } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages as shared } from '../../messages';
+import { ServerDetails } from './server-details';
 import { CopyButton } from './copy-button';
 import { gmailMessages } from './gmail-messages';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
@@ -194,10 +195,10 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
     const body = <>
       <p role="note" className="warning-note">{providers[provider].notAvailable}{' '}
         <a href={providers[provider].setupGuide.href} target="_blank" rel="noopener noreferrer">{providers[provider].setupGuide.text}</a></p>
-      {canManage && !connection && <label className="invite-link"><span className="field-label">{providers[provider].redirectUri}</span>
-        <input readOnly value={provider === 'google' ? gmail.redirect_uri : microsoft!.redirect_uri} /></label>}
-      {canManage && !connection && provider === 'microsoft' && <label className="invite-link"><span className="field-label">{messages.microsoftAdminConsentRedirectUri}</span>
-        <input readOnly value={microsoft!.admin_consent_redirect_uri} /></label>}
+      {canManage && !connection && <ServerDetails><label className="invite-link"><span className="field-label">{providers[provider].redirectUri}</span>
+        <input readOnly value={provider === 'google' ? gmail.redirect_uri : microsoft!.redirect_uri} /></label>
+        {provider === 'microsoft' && <label className="invite-link"><span className="field-label">{messages.microsoftAdminConsentRedirectUri}</span>
+          <input readOnly value={microsoft!.admin_consent_redirect_uri} /></label>}</ServerDetails>}
     </>;
     return folded ? <details key={provider} className="email-channel-dns-folded"><summary>{providers[provider].notSetUpSummary}</summary>{body}</details> : <div key={provider}>{body}</div>;
   };

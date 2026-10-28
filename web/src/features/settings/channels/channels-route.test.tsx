@@ -178,8 +178,20 @@ test('the default channel of a type with two says Default; the other offers Make
 test('the channel name explains in plain words what the default channel does', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL);
-  expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription(
-    /when you do not pick a channel.*a conversation you start is sent from it/i);
+  const name = await screen.findByRole('textbox', { name: 'Name' });
+  expect(name).toHaveAccessibleDescription(/^New conversations you start are sent from the default channel\. /);
+  const sentences = (name.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ')
+    .split(/(?<=\.) /).filter((sentence) => /default channel|still arrive/.test(sentence));
+  expect(sentences).toHaveLength(2);
+  for (const sentence of sentences) expect(sentence.split(' ').length).toBeLessThanOrEqual(16);
+});
+
+test('what a channel handles is said in plain words', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { capabilities: ['threads', 'attachments_in', 'attachments_out', 'cc', 'html'] }), config: withChannel.channel });
+  show(EMAIL);
+  const line = await screen.findByText(/^What it handles:/);
+  expect(line).toHaveTextContent('What it handles: Keeps replies in one conversation · Receives files · Sends files · Copies other people (Cc) · Formatted text');
+  expect(screen.queryByText(/Carries/)).toBeNull();
 });
 
 test('Make default makes the channel the default of its type and says so where the button was', async () => {

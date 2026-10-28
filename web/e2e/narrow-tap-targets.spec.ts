@@ -43,6 +43,9 @@ test('on a 375 px screen the empty inbox steps, the composer, the email channel 
   await expect(page.getByLabel('Message body')).toBeVisible();
   await expectTapSized(page.locator('.composer-head'), 'composer tabs');
   await expectTapSized(page.locator('.composer-actions'), 'composer actions');
+  await page.getByRole('button', { name: /Insert saved reply/ }).click();
+  await expectTapSized(page.locator('.picker-search'), 'saved replies search');
+  await page.keyboard.press('Escape');
 
   await page.goto(`${servers.main}/settings/channels/type/email`);
   await expect(page.getByRole('textbox', { name: 'Support address' })).toBeVisible();

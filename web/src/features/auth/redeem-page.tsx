@@ -44,6 +44,7 @@ export function RedeemPage({
         {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
         <h1>{buyer ? messages.buyingTitle(buying) : newTeam ? messages.cloudTrialTitle : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
         <p>{buyer ? messages.buyingExplanation : newTeam ? messages.cloudTrialExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
+        {(buyer || newTeam) && <p className="muted-copy">{messages.workspaceExplained}</p>}
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
         {!token && cloudEnabled && <div className="cloud-sign-in">
           {workspaces.length > 0 ? <>

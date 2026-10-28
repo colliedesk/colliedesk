@@ -8,6 +8,7 @@ import { PartUnavailable } from '../../ui/lazy-part';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
 import { CopyButton } from './copy-button';
 import { InboundURLGuide } from './inbound-url-guide';
+import { ServerDetails } from './server-details';
 import { NameForm } from './name-form';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
@@ -170,7 +171,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </>;
   const smtpPart = <>
         {smtp && (smtp.configured
-          ? <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p>
+          ? <><p className="muted-copy">{messages.smtpPlain}</p>
+            {canManage && <ServerDetails><p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p></ServerDetails>}</>
           : !mailboxConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{channelSetupMessages.smtpNotConfigured}</p>)}
   </>;
   const repliesPart = <>{domainPart}{pausePart}{sendingPart}{gmailBlock}{smtpPart}</>;

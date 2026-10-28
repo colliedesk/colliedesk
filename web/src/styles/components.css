@@ -377,6 +377,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .composer-from { padding-inline: var(--space-3); }
   .saved-reply-button kbd { display: none; }
   .saved-reply-picker li { align-content: center; min-height: var(--touch); }
+  .picker-search input { min-height: var(--touch); }
   .status-tabs label { min-height: var(--touch); }
   .conversation-row { min-height: var(--touch); }
 }

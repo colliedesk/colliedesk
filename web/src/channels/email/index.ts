@@ -4,7 +4,7 @@ import { lazyPart } from '../../ui/lazy-part';
 import type { ChannelUI } from '../registry';
 
 const capabilities: Record<string, string> = {
-  threads: 'Threads replies', attachments_in: 'Attachments in', attachments_out: 'Attachments out', cc: 'Cc', html: 'Formatted mail',
+  threads: 'Keeps replies in one conversation', attachments_in: 'Receives files', attachments_out: 'Sends files', cc: 'Copies other people (Cc)', html: 'Formatted text',
 };
 
 export const emailChannel: ChannelUI = {
