@@ -68,7 +68,8 @@ export const channelsApi = {
   // One email channel of several: its settings and its own actions.
   email: (id: string) => request(`/api/v1/channels/${id}/email`, emailChannelSettingsSchema),
   emailSecret: (id: string) => request(`/api/v1/channels/${id}/email/secret`, inboundSecretSchema, { method: 'POST' }),
-  emailTestMessage: (id: string) => request(`/api/v1/channels/${id}/email/test-message`, testMessageResultSchema, { method: 'POST' }),
+  emailTestMessage: (id: string, key?: string) => request(`/api/v1/channels/${id}/email/test-message`, testMessageResultSchema,
+    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined }),
   emailVerifyDomain: (id: string) => request(`/api/v1/channels/${id}/email/domain-verification`, emailChannelSettingsSchema, { method: 'POST' }),
   emailConnectGmail: (id: string) => request(`/api/v1/channels/${id}/email/gmail`, consentLinkSchema, { method: 'POST' }),
   emailDisconnectGmail: (id: string) => requestNoContent(`/api/v1/channels/${id}/email/gmail`, { method: 'DELETE' }),

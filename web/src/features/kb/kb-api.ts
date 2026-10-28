@@ -101,7 +101,9 @@ export const kbApi = {
   articles: (filter: ArticleQuery, signal?: AbortSignal) => request(`/api/v1/kb/articles${query(filter)}`, articlePageSchema, { signal }),
   trashedArticles: (cursor?: string) => request(`/api/v1/kb/articles/trash${page(cursor)}`, trashedArticlePageSchema),
   article: (id: string) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema),
-  createArticle: (value: RequestBody<'createKBArticle'>) => request('/api/v1/kb/articles', kbArticleSchema, { method: 'POST', body: json<'createKBArticle'>(value) }),
+  // key names this save (Idempotency-Key): a retry with the same key returns the article the first stored.
+  createArticle: (value: RequestBody<'createKBArticle'>, key?: string) => request('/api/v1/kb/articles', kbArticleSchema,
+    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined, body: json<'createKBArticle'>(value) }),
   updateArticle: (id: string, value: RequestBody<'updateKBArticle'>) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema, { method: 'PATCH', body: json<'updateKBArticle'>(value) }),
   deleteArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
   restoreArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/restore`, kbArticleSchema, { method: 'POST', body: json<'restoreKBArticle'>({ updated_at: updatedAt }) }),

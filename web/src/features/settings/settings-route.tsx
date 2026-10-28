@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
+import { SubmitKeys } from '../../api/submit-key';
 import { AgentTokensSection } from './agent-tokens-section';
 import { ExportAllData } from './export-all-data';
 import { SavedRepliesSection } from './saved-replies-section';
@@ -63,7 +64,10 @@ export function SettingsRoute() {
   useEffect(helpCenterPart.preload, []);
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
   const refreshSavedReplies = () => refresh('saved-replies');
-  const createSavedReply = useMutation({ mutationFn: ({ title, body }: { title: string; body: string }) => api.createSavedReply(title, body), onSuccess: refreshSavedReplies });
+  // A saved reply added again after a failed request goes under the same key, so it is stored once.
+  const savedReplyKeys = useRef(new SubmitKeys());
+  const createSavedReply = useMutation({ mutationFn: ({ title, body }: { title: string; body: string }) => api.createSavedReply(title, body, savedReplyKeys.current.keyFor(JSON.stringify([title, body]))),
+    onSuccess: () => { savedReplyKeys.current.done(); return refreshSavedReplies(); } });
   const updateSavedReply = useMutation({ mutationFn: ({ id, ...change }: { id: string; title: string; body: string; updated_at: string }) => api.updateSavedReply(id, change), onSuccess: refreshSavedReplies });
   const deleteSavedReply = useMutation({ mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) => api.deleteSavedReply(id, updatedAt), onSuccess: refreshSavedReplies });
   const isAdmin = me.data?.agent.role === 'admin';

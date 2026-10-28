@@ -3,6 +3,7 @@ import type { KeyboardEvent } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/client';
+import { SubmitKeys } from '../../api/submit-key';
 import { messages } from '../../messages';
 import { RouterLink } from '../../ui/router-link';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
@@ -140,18 +141,25 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const [uploading, setUploading] = useState(0);
   const invalid = !draft.title.trim() || titleLength > maxTitle || tooLong || !draft.collection_id || uploading > 0;
 
+  // Set from the press until the answer: clicks that land before the button turns disabled save nothing.
+  const saving = useRef(false);
+  // A new article retried after a failure is sent under the same key, so the server stores it once.
+  const createKeys = useRef(new SubmitKeys());
   const save = async (status?: KBArticleStatus, over?: KBArticle) => {
     const body = bodyNow();
     const current = over ?? base;
     const sent = body === draft.body ? draft : { ...draft, body };
     // Typing not yet on the counter is now; a text over the limit shows there and is not sent.
     if (sent !== draft) setDraft(sent);
-    if (busy || invalid || characters(body) > maxBody) return;
+    if (busy || saving.current || invalid || characters(body) > maxBody) return;
+    saving.current = true;
     setBusy(true);
     setProblem(undefined);
     try {
       if (!current) {
-        const created = await kbApi.createArticle({ collection_id: sent.collection_id, title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft' });
+        const value = { collection_id: sent.collection_id, title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft' } as const;
+        const created = await kbApi.createArticle(value, createKeys.current.keyFor(JSON.stringify(value)));
+        createKeys.current.done();
         client.setQueryData(['kb-article', created.id], created);
         void refresh();
         leaving.current = true;
@@ -180,6 +188,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       if (error instanceof ChangedElsewhereError) setConflict(true);
       else setProblem(reason(error, kbMessages.articleActionFailed));
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   };
