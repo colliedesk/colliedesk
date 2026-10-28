@@ -6,6 +6,7 @@ import { messages } from '../../messages';
 import { useSaveFeedback } from '../settings/save-feedback';
 import { kbApi } from './kb-api';
 import { HelpCenterDomainSection } from './help-center-domain';
+import { HelpCenterFreshdeskRedirectSection } from './help-center-freshdesk-redirect';
 import { HelpCenterSearchConsoleSection } from './help-center-search-console';
 import { kbMessages } from './kb-messages';
 
@@ -71,6 +72,7 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
       : <p className="muted-copy">{kbMessages.helpCenterAdminsOnly}</p>}
     <HelpCenterDomainSection canManage={canManage} timezone={timezone} />
     <HelpCenterSearchConsoleSection canManage={canManage} />
+    <HelpCenterFreshdeskRedirectSection />
     <Brand canManage={canManage} />
   </>;
 }

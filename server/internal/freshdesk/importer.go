@@ -89,6 +89,8 @@ type run struct {
 	// the old help center links (solutions-links.go), nil when the account has nothing to report.
 	accountDomain string
 	links         *LinksReport
+	// searchConsole is the report of the old portal's Search Console tokens (search-console.go).
+	searchConsole *SearchConsoleReport
 }
 
 // Run imports (or, with DryRun, only counts) a Freshdesk account. Item-level
@@ -151,7 +153,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		{"listing tickets", r.listTickets}, {"checking ticket ids", r.classifyTickets}, {"verifying totals", r.verifyTotals}}
 	if !options.DryRun {
 		// Links are pointed at the new help center once every article and saved reply they may name is written.
-		steps = append(steps, step{"importing knowledge base", r.importKnowledgeBase}, step{"rewriting help center links", r.rewriteFreshdeskLinks},
+		steps = append(steps, step{"importing knowledge base", r.importKnowledgeBase}, step{"rewriting help center links", r.rewriteFreshdeskLinks}, step{"reading Search Console tokens", r.carryOverSearchConsole},
 			step{"importing tickets", r.importTickets})
 	}
 	for _, step := range steps {

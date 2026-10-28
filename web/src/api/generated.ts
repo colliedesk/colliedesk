@@ -3181,6 +3181,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/help-center/freshdesk-redirect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What a team that moved from `<name>.freshdesk.com` should do about its old help center addresses, read from the workspace's latest finished Freshdesk import. A team on its own domain redirects at DNS (`own_domain`). Otherwise Freshdesk cannot answer 301 from `*.freshdesk.com`, and the team pastes a script into its Freshdesk portal's head that sends a visitor of an old help page to the new one. Freshdesk allows that only on its Pro and Enterprise plans, so `plan` (the account's Freshdesk plan) decides: without it the state is `ask_plan`; `growth` is `growth` and carries no snippet; `pro` and `enterprise` are `ready` with the `snippet`. The snippet is built from the help center's address and the pages the import made public, never from the request; it is a JavaScript redirect, not a 301, and works only while the Freshdesk account does, so keep the account and the snippet for `keep_weeks` after the switch. Only help pages (home, solutions, search) move; sign-in and tickets stay. */
+        get: operations["getFreshdeskRedirect"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/help-center/theme/check": {
         parameters: {
             query?: never;
@@ -5054,6 +5071,31 @@ export interface components {
          * @enum {string|null}
          */
         ThemeFont: "system-sans" | "humanist-sans" | "geometric-sans" | "classic-serif" | "transitional-serif" | "rounded-sans" | "mono" | null;
+        FreshdeskRedirect: {
+            /**
+             * @description `no_import`: no finished Freshdesk import. `own_domain`: the old help center had its own domain; redirect it at DNS. `help_center_off`: turn the help center on first. `ask_plan`: send `plan`. `growth`: Freshdesk's Growth plan cannot paste code into the portal, so old `*.freshdesk.com` links cannot be redirected; point your own links at the new address. `ready`: `snippet` holds the code.
+             * @enum {string}
+             */
+            state: "no_import" | "own_domain" | "help_center_off" | "ask_plan" | "growth" | "ready";
+            /** @description The imported account, such as acme.freshdesk.com. */
+            freshdesk_domain: string | null;
+            /**
+             * Format: uri
+             * @description The help center address the snippet redirects to.
+             */
+            address: string;
+            /** @description Keep the Freshdesk account and the snippet at least this many weeks after the switch. */
+            keep_weeks: number;
+            /** @description HTML for the Freshdesk portal head; null unless state is ready. */
+            snippet: string | null;
+            mapped: {
+                articles: number;
+                folders: number;
+                categories: number;
+                /** @description False when the knowledge base was too large to embed: the snippet then redirects every old address by its id to the help center, which maps it. */
+                embedded: boolean;
+            } | null;
+        };
         HelpCenterSearchConsoleInput: {
             /** @description The content of Google Search Console's `google-site-verification` meta tag. Left out: unchanged. Null or empty: removed. */
             google_site_verification?: string | null;
@@ -13741,6 +13783,31 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    getFreshdeskRedirect: {
+        parameters: {
+            query?: {
+                /** @description The account's Freshdesk plan. */
+                plan?: "growth" | "pro" | "enterprise";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The state and, when ready, the snippet */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreshdeskRedirect"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     checkHelpCenterTheme: {

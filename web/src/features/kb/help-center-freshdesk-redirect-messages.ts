@@ -1,0 +1,22 @@
+// Strings of the old Freshdesk links part of the help center card; they live in the card's chunk.
+export const freshdeskRedirectMessages = {
+  heading: 'Old Freshdesk links',
+  intro: (domain: string) => `Your help center came from ${domain}. Search engines and readers still know its old addresses. Freshdesk cannot answer 301 from a ${domain} address, so a snippet in your Freshdesk portal sends them to the new pages.`,
+  planQuestion: 'Which Freshdesk plan is the account on?',
+  planHelp: 'Only the Pro and Enterprise plans can add code to the portal.',
+  growth: 'Growth',
+  pro: 'Pro',
+  enterprise: 'Enterprise',
+  growthAnswer: (domain: string) => `Old ${domain} links cannot be redirected: the Growth plan has no portal customization. Point your own links (your website, product and emails) at the new help center address instead.`,
+  snippetLabel: 'Snippet for the Freshdesk portal head',
+  copy: 'Copy snippet',
+  copied: 'Copied',
+  steps: 'In Freshdesk, open Admin → Channels → Portals, choose the portal, then Customize portal → Layout & Pages → Head, paste the snippet and save.',
+  javascript: 'The snippet is a JavaScript redirect, not a 301. It moves readers and search engines that run scripts. Only help pages move; sign-in and tickets stay on Freshdesk.',
+  keep: (weeks: number) => `It works only while the Freshdesk account exists. Keep the account and the snippet for at least ${weeks} weeks after the switch. Freshdesk suspends a cancelled account after 24 hours and deletes it after 14 days.`,
+  mapped: (articles: number, folders: number, categories: number) => `It maps ${articles} ${articles === 1 ? 'article' : 'articles'}, ${folders} ${folders === 1 ? 'folder' : 'folders'} and ${categories} ${categories === 1 ? 'category' : 'categories'} to their new pages.`,
+  notMapped: 'Your knowledge base is too large to list in the snippet. It sends each old address by its id to the help center, which finds the new page.',
+  ownDomain: 'Your old help center had its own domain. Redirect it with a 301 at your DNS provider or web host to the new address; the new help center then answers every old path.',
+  helpCenterOff: 'Turn the help center on first. The snippet sends readers to its address.',
+  loadFailed: 'The old Freshdesk links could not be loaded.',
+};

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { ImportJob, ImportPreview, ImportReport } from '../../api/imports';
 import { ImportPage } from './import-page';
@@ -171,6 +171,18 @@ test('a finished import says where the old help center addresses and links lead 
   expect(section).toHaveTextContent('5 Freshdesk links in 2 articles and 1 saved reply now point at the help center.');
   expect(section).toHaveTextContent('1 Freshdesk link(s) were left as written');
   expect(within(section).getByText('Needs a look')).toBeInTheDocument();
+});
+
+test('a finished import says which Search Console tokens it carried over from the old help center', async () => {
+  const searchConsole = { status: 'OK', source: 'acme.freshdesk.com', google: 'carried', bing: 'not_found', detail: [] };
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', search_console: searchConsole } });
+  const section = await screen.findByRole('region', { name: 'Search Console' });
+  expect(section).toHaveTextContent('Google: carried over to Settings → Help center → Search Console.');
+  expect(section).toHaveTextContent('Bing: no verification tag in the old help center.');
+  cleanup();
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', search_console: { ...searchConsole, status: 'UNVERIFIED', google: 'not_found',
+    detail: ['The old help center\'s home page answered HTTP 404, so its Search Console tokens were not read.'] } } });
+  expect(await screen.findByRole('region', { name: 'Search Console' })).toHaveTextContent('answered HTTP 404');
 });
 
 test('links rewritten in translations are counted where they were', () => {
