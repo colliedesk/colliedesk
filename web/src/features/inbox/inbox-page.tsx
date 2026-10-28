@@ -236,7 +236,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
-        <ReplyComposer key={selected?.id} disabled={!selected} noReplies={noReplies} draftKey={selected && workspaceId ? `${workspaceId}:${selected.id}` : undefined} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
+        <ReplyComposer key={selected?.id} disabled={!selected} noReplies={noReplies} draftKey={selected && workspaceId && currentAgentId ? `${workspaceId}:${currentAgentId}:${selected.id}` : undefined} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
           latestCustomerMessage={latestCustomerMessage}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}

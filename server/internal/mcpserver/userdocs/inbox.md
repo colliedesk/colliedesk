@@ -186,9 +186,11 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - A private note has no **Send and resolve**, because a note is often written while the work goes on. Add
   the note, then press **Resolve** above the thread.
 - Messages support Markdown.
-- **An unsent reply is kept.** What you type stays in this browser for that conversation, so a reload, the
-  browser's Back or a trip to Settings finds it in the box again. It is removed once the reply or note is
-  sent. Attached files are not kept. Another browser or device does not see it.
+- **An unsent reply is kept.** What you type stays in this browser for you and that conversation, so a
+  reload, the browser's Back or a trip to Settings finds it in the box again. It is removed once the reply
+  or note is sent, after seven days without a change, and for every conversation when you sign out, so a
+  teammate who signs in on the same browser never sees it. Attached files are not kept. Another browser or
+  device does not see it.
 - **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
   tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
   yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps

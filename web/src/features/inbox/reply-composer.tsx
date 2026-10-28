@@ -54,7 +54,7 @@ interface ReplyComposerProps {
   // Sets the conversation Resolved. With it a reply offers Send and resolve (Ctrl/Cmd+Shift+Enter), which
   // calls it only after the reply was accepted. A private note never resolves.
   onResolve?: () => Promise<unknown>;
-  // Where this browser keeps the unsent text (workspace and conversation); without it nothing is kept.
+  // Where this browser keeps the unsent text (workspace, agent and conversation); without it nothing is kept.
   draftKey?: string;
 }
 
@@ -80,8 +80,19 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const [stored] = useState(() => readDraft(draftKey));
   const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
   const [body, setBody] = useState(stored?.body ?? '');
+  // The key can arrive after the box (the workspace loads after the conversation on a reload): the draft
+  // kept under the new key is read before anything is written under it, so it is shown, never wiped.
+  const [readKey, setReadKey] = useState(draftKey);
+  if (readKey !== draftKey) {
+    setReadKey(draftKey);
+    const kept = readDraft(draftKey);
+    if (kept && !body.trim()) {
+      setBody(kept.body);
+      if (!noReplies) setKind(kept.kind);
+    }
+  }
   // The text is kept as it is typed, and forgotten once the box is empty again (after a send).
-  useEffect(() => writeDraft(draftKey, { kind, body }), [draftKey, kind, body]);
+  useEffect(() => { if (readKey === draftKey) writeDraft(draftKey, { kind, body }); }, [readKey, draftKey, kind, body]);
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
   const [files, setFiles] = useState<File[]>([]);

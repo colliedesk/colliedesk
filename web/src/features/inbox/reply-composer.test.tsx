@@ -855,3 +855,39 @@ test('a draft is cleared once its reply is sent, and kept when the send is refus
   await waitFor(() => expect(restored).toHaveValue(''));
   expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-3'))).toEqual([]);
 });
+
+test('a draft waits for its key: a composer that opened before the workspace was known shows the stored draft and keeps it', () => {
+  window.localStorage.clear();
+  const first = render(<ReplyComposer draftKey="ws-1:agent-1:conv-4" onSubmit={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Typed before the reload' } });
+  first.unmount();
+  const stored = Object.keys(window.localStorage).filter((key) => key.includes('conv-4'));
+  expect(stored).toHaveLength(1);
+  const reloaded = render(<ReplyComposer onSubmit={vi.fn()} />);
+  reloaded.rerender(<ReplyComposer draftKey="ws-1:agent-1:conv-4" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Typed before the reload');
+  expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-4'))).toEqual(stored);
+});
+
+test('a draft older than seven days is dropped when it is read, and a younger one comes back', () => {
+  window.localStorage.clear();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(new Date('2026-10-01T09:00:00Z'));
+    for (const id of ['conv-old', 'conv-young']) {
+      const view = render(<ReplyComposer draftKey={`ws-1:agent-1:${id}`} onSubmit={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText('Message body'), { target: { value: `Draft for ${id}` } });
+      view.unmount();
+    }
+    vi.setSystemTime(new Date('2026-10-07T21:00:00Z'));
+    const young = render(<ReplyComposer draftKey="ws-1:agent-1:conv-young" onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText('Message body')).toHaveValue('Draft for conv-young');
+    young.unmount();
+    vi.setSystemTime(new Date('2026-10-08T09:00:01Z'));
+    render(<ReplyComposer draftKey="ws-1:agent-1:conv-old" onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText('Message body')).toHaveValue('');
+    expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-old'))).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});

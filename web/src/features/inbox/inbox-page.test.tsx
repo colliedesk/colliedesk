@@ -410,3 +410,16 @@ test('on the hosted cloud the reply box offers no Cc from mail the workspace pos
   render(<InboxPage hosted selected={conversation} conversations={[conversation]} timeline={posted} />);
   expect(screen.queryByRole('list', { name: 'Cc' })).not.toBeInTheDocument();
 });
+
+test('an unsent reply belongs to the agent who wrote it: another agent signed in on the same browser starts empty', () => {
+  window.localStorage.clear();
+  const workspace = '33333333-3333-4333-8333-333333333333';
+  const first = render(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Private to agent A' } });
+  first.unmount();
+  const other = render(<InboxPage workspaceId={workspace} currentAgentId="agent-b" selected={conversation} conversations={[conversation]} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('');
+  other.unmount();
+  render(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Private to agent A');
+});

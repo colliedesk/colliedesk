@@ -20,6 +20,7 @@ import { kbPart } from './features/kb/kb-part';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
+import { forgetAllDrafts } from './features/inbox/reply-draft-storage';
 import { inboxQueryFromSearch } from './lib/inbox-query';
 import { signInFormReady } from './lib/sign-in-ready';
 
@@ -47,7 +48,7 @@ function AppLayout() {
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   const client = useQueryClient();
   // After sign out /auth/me answers 401, which turns the view into the signed-out screen.
-  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); return client.invalidateQueries({ queryKey: ['me'] }); } });
+  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); forgetAllDrafts(); return client.invalidateQueries({ queryKey: ['me'] }); } });
   // A paused agent (more agents than the plan allows) gets the same treatment as a lock: nothing but why and sign out.
   const paused = me.data?.plan?.seat_paused === true;
   const locked = me.data?.plan?.locked === true || paused;
