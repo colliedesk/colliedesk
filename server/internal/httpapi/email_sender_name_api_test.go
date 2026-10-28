@@ -114,7 +114,7 @@ func TestSavingOnlyTheSenderNameKeepsTheAddressAndItsVerification(t *testing.T) 
 		t.Fatalf("connect status=%d body=%s", status, body)
 	}
 	workspace := workspaceID(t, api, admin)
-	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET domain_verified_at='2026-10-20T08:00:00Z',provider_domain_id='pd-keep-address' WHERE workspace_id=$1`, workspace); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE email_domains SET verified_at='2026-10-20T08:00:00Z',provider_domain_id='pd-keep-address' WHERE workspace_id=$1`, workspace); err != nil {
 		t.Fatal(err)
 	}
 
@@ -122,8 +122,8 @@ func TestSavingOnlyTheSenderNameKeepsTheAddressAndItsVerification(t *testing.T) 
 	if status != http.StatusOK || !strings.Contains(body, `"sender_name":"Keep Support"`) || !strings.Contains(body, `"support_address":"help@keep-address.example.com"`) {
 		t.Fatalf("sender name alone: status=%d body=%s", status, body)
 	}
-	row := queryString(t, pool, `SELECT support_address||' '||domain_verified_at::text||' '||COALESCE(provider_domain_id,'none')||' '||
-		(SELECT count(*) FROM email_provider_domain_trash WHERE workspace_id=$1)::text FROM email_channels WHERE workspace_id=$1`, workspace)
+	row := queryString(t, pool, `SELECT e.support_address||' '||d.verified_at::text||' '||COALESCE(d.provider_domain_id,'none')||' '||
+		(SELECT count(*) FROM email_provider_domain_trash WHERE workspace_id=$1)::text FROM email_channels e JOIN email_domains d USING (workspace_id,domain) WHERE e.workspace_id=$1`, workspace)
 	if want := "help@keep-address.example.com 2026-10-20 08:00:00+00 pd-keep-address 0"; row != want {
 		t.Fatalf("after saving the sender name: %q, want %q", row, want)
 	}

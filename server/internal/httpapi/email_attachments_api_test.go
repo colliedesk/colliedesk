@@ -283,7 +283,7 @@ func replyToken(t *testing.T, api http.Handler, pool *pgxpool.Pool, admin, secre
 	t.Helper()
 	thread := inboundOK(t, api, secret, mail([]string{"From: z@customer.example", "Subject: Platform", "Message-ID: <" + messageID + ">"}, "Hi."))
 	reply := create(t, api, admin, "/api/v1/conversations/"+*thread.ConversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Answer."})
-	token := queryString(t, pool, `SELECT email_reply_token FROM conversations WHERE id=$1`, *thread.ConversationID)
+	token := queryString(t, pool, `SELECT substr(key,13) FROM conversation_thread_keys WHERE conversation_id=$1 AND channel_type='email'`, *thread.ConversationID)
 	return *thread.ConversationID, reply, token
 }
 
@@ -334,8 +334,8 @@ func TestPlatformDomainBounceMarksTheReplyFailed(t *testing.T) {
 	api, service, pool, _ := testAPIWithConfig(t, platformConfig)
 	admin := createSession(t, api, service, "Platform Bounce", "admin@platform-bounce.example.com")
 	conversation, reply, token := replyToken(t, api, pool, admin, connectEmail(t, api, admin, "support@bounce.example.com"), "pbounce@customer.example")
-	ourID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, reply)
-	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET status='sent',sent_at=now(),attempts=1`); err != nil {
+	ourID := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, reply)
+	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',sent_at=now(),attempts=1`); err != nil {
 		t.Fatal(err)
 	}
 	dsn := inboundOK(t, api, platformSecret, mail([]string{

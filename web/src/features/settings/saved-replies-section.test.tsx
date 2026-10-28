@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import type { SavedReply, SavedReplyVersion, TrashedSavedReply } from '../../api/schemas';
@@ -241,4 +241,20 @@ test('Trash loads more replies on demand', async () => {
   expect(await within(panel).findByText('Older')).toBeInTheDocument();
   expect(actions.loadTrash).toHaveBeenLastCalledWith('next');
   expect(within(panel).getByText('Newer')).toBeInTheDocument();
+});
+
+test('three fast clicks on Add saved reply add it once, with no false refusal', async () => {
+  const actions = handlers();
+  let finish: () => void = () => undefined;
+  actions.onCreate.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  render(<SavedRepliesSection replies={[]} {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
+  fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks for writing.' } });
+  const add = screen.getByRole('button', { name: 'Add saved reply' });
+  act(() => { add.click(); add.click(); add.click(); });
+  expect(actions.onCreate).toHaveBeenCalledTimes(1);
+  await act(async () => { finish(); });
+  await waitFor(() => expect(screen.queryByLabelText('Title')).not.toBeInTheDocument());
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

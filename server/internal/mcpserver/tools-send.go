@@ -140,6 +140,7 @@ func conversationCreate(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
 		ContactID string `json:"contact_id"`
 		Subject   string `json:"subject"`
+		ChannelID string `json:"channel_id"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -149,7 +150,11 @@ func conversationCreate(c *call, arguments map[string]any) (any, error) {
 	}
 	c.notFound = "No contact " + args.ContactID + " in this workspace. Use an id from colliedesk_contacts_find."
 	var created restConversation
-	if err := c.send(http.MethodPost, "/api/v1/conversations", map[string]any{"contact_id": args.ContactID, "subject": args.Subject}, &created); err != nil {
+	request := map[string]any{"contact_id": args.ContactID, "subject": args.Subject}
+	if args.ChannelID != "" {
+		request["channel_id"] = args.ChannelID
+	}
+	if err := c.send(http.MethodPost, "/api/v1/conversations", request, &created); err != nil {
 		return nil, err
 	}
 	// The conversation is saved already, so a failed team lookup only leaves the assignee's name out.

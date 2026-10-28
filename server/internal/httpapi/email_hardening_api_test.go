@@ -156,8 +156,8 @@ func TestInboundBounceMarksTheReplyFailed(t *testing.T) {
 	secret := connectEmail(t, api, admin, "support@bounce.example.com")
 	thread := inboundOK(t, api, secret, mail([]string{"From: s@customer.example", "Subject: Bounce", "Message-ID: <bounce-1@customer.example>"}, "Hi."))
 	reply := create(t, api, admin, "/api/v1/conversations/"+*thread.ConversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Answer."})
-	ourID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, reply)
-	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET status='sent',sent_at=now(),attempts=1`); err != nil {
+	ourID := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, reply)
+	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',sent_at=now(),attempts=1`); err != nil {
 		t.Fatal(err)
 	}
 	dsn := inboundOK(t, api, secret, mail([]string{
@@ -173,7 +173,7 @@ func TestInboundBounceMarksTheReplyFailed(t *testing.T) {
 	if items[1].Delivery == nil || items[1].Delivery.Status != "failed" {
 		t.Fatalf("bounced reply still shows %+v", items[1].Delivery)
 	}
-	if lastError := queryString(t, pool, `SELECT last_error FROM email_outbox`); !strings.Contains(lastError, "bounced") {
+	if lastError := queryString(t, pool, `SELECT last_error FROM channel_outbox`); !strings.Contains(lastError, "bounced") {
 		t.Fatalf("bounce reason not recorded: %q", lastError)
 	}
 }
@@ -215,8 +215,8 @@ func TestABounceFromACopiedAddressDoesNotFailTheReply(t *testing.T) {
 	thread := inboundOK(t, api, secret, mail([]string{"From: s@customer.example", "Subject: Bounce", "Message-ID: <bounce-cc@customer.example>"}, "Hi."))
 	reply := create(t, api, admin, "/api/v1/conversations/"+*thread.ConversationID+"/messages",
 		map[string]any{"kind": "outgoing", "body": "Answer.", "cc": []string{"gone@customer.example"}})
-	ourID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, reply)
-	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET status='sent',sent_at=now(),attempts=1`); err != nil {
+	ourID := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, reply)
+	if _, err := pool.Exec(t.Context(), `UPDATE channel_outbox SET status='sent',sent_at=now(),attempts=1`); err != nil {
 		t.Fatal(err)
 	}
 	inboundOK(t, api, secret, dsnFor(ourID, "gone@customer.example"))
@@ -224,7 +224,7 @@ func TestABounceFromACopiedAddressDoesNotFailTheReply(t *testing.T) {
 	if items[1].Delivery == nil || items[1].Delivery.Status != "sent" {
 		t.Fatalf("a bounce from a copied address failed the whole reply: %+v", items[1].Delivery)
 	}
-	if lastError := queryString(t, pool, `SELECT COALESCE(last_error,'') FROM email_outbox`); !strings.Contains(lastError, "gone@customer.example") {
+	if lastError := queryString(t, pool, `SELECT COALESCE(last_error,'') FROM channel_outbox`); !strings.Contains(lastError, "gone@customer.example") {
 		t.Fatalf("the bounced copy must be named on the delivery: %q", lastError)
 	}
 	inboundOK(t, api, secret, dsnFor(ourID, "S@customer.example"))

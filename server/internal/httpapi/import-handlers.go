@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -38,13 +39,21 @@ func (a *API) previewImport(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "freshdesk_key_missing", "Paste a Freshdesk admin's API key (Profile settings > API key in Freshdesk).")
 		return
 	}
-	who := principal(request)
-	job, err := a.imports.Preview(request.Context(), who.Workspace.ID, who.Agent.ID, input.Domain, key, input.Options)
+	options, err := json.Marshal(input.Options)
 	if err != nil {
-		writeImportError(response, err)
+		writeInternalError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusAccepted, job)
+	who := principal(request)
+	// The Freshdesk key stays out of the fingerprint: a remembered request never holds it, even hashed.
+	a.runOnce(response, request, http.StatusAccepted, previewImportOperation, []string{input.Source, input.Domain, string(options)}, func(ctx context.Context) (any, error) {
+		job, err := a.imports.Preview(ctx, who.Workspace.ID, who.Agent.ID, input.Domain, key, input.Options)
+		if err != nil {
+			writeImportError(response, err)
+			return nil, errAnswered
+		}
+		return job, nil
+	})
 }
 
 func (a *API) getImport(response http.ResponseWriter, request *http.Request) {

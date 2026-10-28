@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/jackc/pgx/v5"
 )
@@ -651,4 +652,32 @@ func (s *statementTracer) count(fragment string) int {
 		}
 	}
 	return count
+}
+
+func TestHelpCenterDomainNeedsPublishPermission(t *testing.T) {
+	api, service, _, dns := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Domain Publish", "admin@domain-publish.example.com")
+	writer := issueCustomToken(t, api, admin, "Settings only", auth.PermHelpCenterRead, auth.PermHelpCenterUpdate).Token
+	publisher := issueCustomToken(t, api, admin, "Publisher", auth.PermHelpCenterRead, auth.PermHelpCenterUpdate, auth.PermKBArticlesPublish).Token
+	for _, call := range []struct{ method, path string }{{http.MethodPut, domainPath}, {http.MethodPost, domainPath + "/check"}, {http.MethodDelete, domainPath}} {
+		var body any
+		if call.method == http.MethodPut {
+			body = map[string]any{"hostname": "help.publish.example"}
+		}
+		response := request(t, api, call.method, call.path, body, writer, nil)
+		if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"request_id"`) {
+			t.Fatalf("without publish %s: status=%d body=%s, want 202 with agent request", call.method, response.Code, response.Body.String())
+		}
+	}
+	var before domainView
+	kbCall(t, api, http.MethodGet, domainPath, nil, admin, http.StatusOK, &before)
+	if before.Status != "none" {
+		t.Fatalf("domain changed before approval: %+v", before)
+	}
+	view := setDomain(t, api, publisher, "help.publish.example", http.StatusOK)
+	dns.set("_help-center-verify.help.publish.example", view.token())
+	if checked := checkDomain(t, api, publisher, http.StatusOK); checked.Status != "active" {
+		t.Fatalf("publisher check: %+v", checked)
+	}
+	kbCall(t, api, http.MethodDelete, domainPath, nil, publisher, http.StatusOK, nil)
 }

@@ -4,15 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
-	"os"
-	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -100,37 +97,7 @@ func (e *env) keyErased(t *testing.T, id string) bool {
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL import job test")
-	}
-	name := regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(t.Name()), "_")
-	if len(name) > 30 {
-		name = name[:30]
-	}
-	schema := fmt.Sprintf("test_ij_%s%d", name, time.Now().UnixNano())
-	admin, err := pgxpool.New(context.Background(), databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := admin.Exec(context.Background(), "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE")
-		admin.Close()
-	})
-	return pool
+	return databasetest.Pool(t)
 }
 
 func ringless() tokenseal.Keys { return tokenseal.Keys{} }

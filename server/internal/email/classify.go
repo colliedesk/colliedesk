@@ -160,20 +160,35 @@ func PlusAddress(address, token string) string {
 // local part once a "+tag" is removed, compared without case. support+r-token@example.com is the
 // support address support@example.com.
 func SameMailbox(address, mailbox string) bool {
-	base := func(value string) (string, bool) {
-		at := strings.LastIndex(value, "@")
-		if at < 1 {
-			return "", false
-		}
-		local, _, _ := strings.Cut(value[:at], "+")
-		return strings.ToLower(local + value[at:]), local != ""
+	left, right := MailboxKey(address), MailboxKey(mailbox)
+	return left != "" && left == right
+}
+
+// MailboxKey is the mailbox an address reaches: its local part without a "+tag" and its domain, in
+// lower case (support+vip@Acme.com is support@acme.com); "" for no address. email_channels.mailbox_key
+// computes the same in SQL, which the support address check of the channels migration makes exact.
+func MailboxKey(address string) string {
+	at := strings.LastIndex(address, "@")
+	if at < 1 {
+		return ""
 	}
-	left, ok := base(address)
-	right, okMailbox := base(mailbox)
-	return ok && okMailbox && left == right
+	local, _, _ := strings.Cut(address[:at], "+")
+	if local == "" {
+		return ""
+	}
+	return strings.ToLower(local + address[at:])
 }
 
 // Domain returns the part after the last @.
 func Domain(address string) string {
 	return address[strings.LastIndex(address, "@")+1:]
+}
+
+// LocalPart returns the part before the last @, lowercased.
+func LocalPart(address string) string {
+	at := strings.LastIndex(address, "@")
+	if at < 0 {
+		return ""
+	}
+	return strings.ToLower(address[:at])
 }

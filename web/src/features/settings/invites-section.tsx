@@ -14,14 +14,17 @@ interface InvitesSectionProps {
   invites: Invite[];
   timezone: string;
   canCreateInvites: boolean;
-  createdInviteUrl?: string;
+  createdInvite?: { url?: string };
+  // creatingInvite disables Create invite while one is in flight.
+  creatingInvite?: boolean;
   // inviteError explains a refused invite, for example a full agent cap.
   inviteError?: string;
   onCreateInvite?: (email: string, role: 'admin' | 'agent') => void;
   onRevokeInvite?: (id: string) => void;
 }
 
-export function InvitesSection({ invites, timezone, canCreateInvites, createdInviteUrl, inviteError, onCreateInvite, onRevokeInvite }: InvitesSectionProps) {
+export function InvitesSection({ invites, timezone, canCreateInvites, createdInvite, creatingInvite = false, inviteError, onCreateInvite, onRevokeInvite }: InvitesSectionProps) {
+  const createdInviteUrl = createdInvite?.url;
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   return (
@@ -32,9 +35,10 @@ export function InvitesSection({ invites, timezone, canCreateInvites, createdInv
           <label className="field"><span>{messages.inviteRole}</span><select value={role} onChange={(event) => setRole(event.target.value as 'admin' | 'agent')}>
             <option value="agent">{messages.roles.agent}</option><option value="admin">{messages.roles.admin}</option>
           </select></label>
-          <button className="primary-action" type="submit">{messages.createInvite}</button>
+          <button className="primary-action" type="submit" disabled={creatingInvite}>{messages.createInvite}</button>
         </form>}
         {canCreateInvites && inviteError && <p role="alert" className="error-copy">{inviteError}</p>}
+        {canCreateInvites && createdInvite && !createdInviteUrl && <p role="status">{messages.inviteLinkShownOnce}</p>}
         {canCreateInvites && createdInviteUrl && <label className="invite-link"><span className="field-label">{messages.inviteLink}</span>
           <input aria-label={messages.inviteLink} readOnly value={createdInviteUrl} />
           <small>{messages.inviteLinkNotice}</small>

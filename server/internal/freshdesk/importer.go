@@ -14,6 +14,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/importkit"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,6 +23,10 @@ type ticketRef struct {
 	id        int64
 	updatedAt time.Time
 	archived  bool
+	// stats are the ticket stats the list returned, and status the listed status; stats is nil for
+	// an archived ticket.
+	stats  *fdStats
+	status int
 }
 
 type run struct {
@@ -32,6 +37,8 @@ type run struct {
 	workspaceID  string
 	agents       map[int64]fdAgent
 	agentTargets map[int64]string
+	// emailConfigs are the account's mailboxes by id, read once when a ticket names one (nil before).
+	emailConfigs map[int64][]string
 	// deactivatedAgents are the Freshdesk agents matched to a deactivated Colliedesk agent.
 	deactivatedAgents map[int64]bool
 	companies         map[int64]string
@@ -48,13 +55,17 @@ type run struct {
 	warnings          []*Warning
 	internalErr       error
 
-	listedContacts     int
-	probeAhead         int
-	probed             int
-	highestExisting    int64
-	highestProbed      int64
-	unclassified       []string
-	unchanged          []string
+	listedContacts  int
+	probeAhead      int
+	probed          int
+	highestExisting int64
+	highestProbed   int64
+	unclassified    []string
+	unchanged       []string
+	pendingStats    []pendingStats
+	// statsFrozen: this source's first full run has finished (the results anchor), so the stats it
+	// read stay and a run only fills tickets without them.
+	statsFrozen        bool
 	archiveUnavailable atomic.Bool
 	verification       Verifications
 	progress           *progress
@@ -94,6 +105,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 			return nil, err
 		}
 		defer release()
+		if r.statsFrozen, err = r.anchored(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if options.Mode == ModeRecent {
 		if err := r.importRecent(ctx); err != nil {
@@ -183,6 +197,13 @@ func (r *run) finish(ctx context.Context, report *Report) (*Report, error) {
 	if options.DryRun {
 		return report, r.checkDryRunStorage(ctx, report)
 	}
+	// A full run finished: the results page measures its baseline from it. The import is committed;
+	// a failure here is logged and the next run marks it again.
+	if options.Mode != ModeRecent {
+		if err := r.markResults(ctx, report.Status); err != nil {
+			log.Printf("freshdesk import: results baseline not marked for workspace %s: %v", options.WorkspaceSlug, err)
+		}
+	}
 	// The import is already committed; a failed extension must not hide its report. A rerun retries.
 	extendedTo, err := r.extendTrial(ctx)
 	switch {
@@ -249,9 +270,17 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 }
 
 // begin starts a transaction scoped to the import workspace; the importer never reads or writes
-// another workspace.
+// another workspace. Its status changes are recorded as the import's, not Colliedesk work.
 func (r *run) begin(ctx context.Context) (pgx.Tx, error) {
-	return r.db.BeginWorkspace(ctx, r.workspaceID)
+	tx, err := r.db.BeginWorkspace(ctx, r.workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.MarkImportWrites(ctx, tx); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
 }
 
 func probeAhead(hooks testHooks) int {

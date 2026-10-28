@@ -207,7 +207,7 @@ func TestNoteWithFilesIsStoredAndNeverQueuedForEmail(t *testing.T) {
 	if message.Kind != "note" || len(message.Attachments) != 1 || message.Delivery != nil {
 		t.Fatalf("note = %+v", message)
 	}
-	if got := queryString(t, f.pool, `SELECT count(*)::text FROM email_outbox`); got != "0" {
+	if got := queryString(t, f.pool, `SELECT count(*)::text FROM channel_outbox`); got != "0" {
 		t.Fatalf("outbox rows = %s, want 0", got)
 	}
 }

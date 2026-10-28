@@ -203,7 +203,7 @@ func TestTrialReplyToNewMailFromAMergedAddressWaitsForAVerifiedDomain(t *testing
 	}
 	f.verifyDomain(t, f.workspaceA)
 	f.wantReplyQueued(t, *later.ConversationID, "reply once the sending domain is verified")
-	if to := queryString(t, f.pool, `SELECT k.email FROM email_outbox o JOIN messages m ON m.id=o.message_id
+	if to := queryString(t, f.pool, `SELECT k.email FROM channel_outbox o JOIN messages m ON m.id=o.message_id
 		JOIN conversations c ON c.id=m.conversation_id JOIN contacts k ON k.id=c.contact_id WHERE o.workspace_id=$1`, f.workspaceA); to != "kept@customer.example" {
 		t.Fatalf("the reply is addressed to %s, want the kept contact's address", to)
 	}

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { NotAnAgentError } from '../../api/cloud-signup';
+import { clerkAppearance, clerkFrontendHost, narrowViewport } from './clerk-appearance';
 import { CloudSignIn } from './cloud-sign-in';
 import { answerSignupQuestions } from './test-signup-answers';
 
@@ -97,4 +98,78 @@ test('renders the combined sign-in-or-up flow with and without Colliedesk sign-u
   unmount();
   render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} onSignUp={vi.fn()} />);
   expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({ withSignUp: true }));
+});
+
+// Arriving right after a Colliedesk sign-out, an identity session still open in this browser is ended
+// first; otherwise the page would exchange it and sign the same person straight back in.
+test('arriving signed out ends the open identity session before anything is exchanged, then shows the form', async () => {
+  clerk.signOut.mockImplementation(() => { clerk.signedIn = false; return Promise.resolve(); });
+  const onSessionToken = vi.fn().mockResolvedValue(undefined);
+  render(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={onSessionToken} />);
+
+  await waitFor(() => expect(clerk.signOut).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+  expect(clerk.getToken).not.toHaveBeenCalled();
+  expect(onSessionToken).not.toHaveBeenCalled();
+});
+
+test('a sign-in completed after arriving signed out is exchanged, not signed out again', async () => {
+  clerk.signedIn = false;
+  clerk.getToken.mockResolvedValue('fresh-token');
+  const onSessionToken = vi.fn().mockResolvedValue(undefined);
+  const view = render(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={onSessionToken} />);
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+
+  clerk.signedIn = true;
+  view.rerender(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={onSessionToken} />);
+  await waitFor(() => expect(onSessionToken).toHaveBeenCalledWith('fresh-token'));
+  expect(clerk.signOut).not.toHaveBeenCalled();
+});
+
+test('the form returns to the sign-in page without the signed-out marker, so finishing sign-in never signs out again', () => {
+  window.history.pushState({}, '', '/sign-in?signed_out=true&buy=founding');
+  clerk.signedIn = false;
+  render(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={vi.fn()} />);
+  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({
+    forceRedirectUrl: '/sign-in?buy=founding',
+    signUpForceRedirectUrl: '/sign-in?buy=founding',
+  }));
+});
+
+test('an identity sign-out that fails is said aloud, nothing is exchanged, and it can be tried again', async () => {
+  clerk.signOut.mockRejectedValueOnce(new Error('offline')).mockImplementationOnce(() => { clerk.signedIn = false; return Promise.resolve(); });
+  const onSessionToken = vi.fn();
+  render(<CloudSignIn publishableKey="pk_test_example" endSession onSessionToken={onSessionToken} />);
+
+  expect(await screen.findByText(/sign out failed/i)).toBeInTheDocument();
+  expect(onSessionToken).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(await screen.findByText('Clerk widget')).toBeInTheDocument();
+  expect(onSessionToken).not.toHaveBeenCalled();
+});
+
+// Clerk titles its first step with its own h1 ("Continue to Colliedesk"); the page already has one,
+// so that header is hidden. Later steps keep theirs: it carries "Check your email" and the address.
+// The card fills the panel instead of Clerk's fixed width, so a 390 px screen does not scroll sideways.
+test('the Clerk form drops its own first-step header and fits the panel width', () => {
+  clerk.signedIn = false;
+  render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} />);
+  const { appearance } = clerk.signInProps.mock.lastCall![0] as { appearance: { elements: Record<string, Record<string, unknown>> } };
+  expect(appearance.elements.card).toMatchObject({ '&.cl-signIn-start .cl-header': { display: 'none' } });
+  expect(appearance.elements.rootBox).toMatchObject({ width: '100%' });
+  expect(appearance.elements.cardBox).toMatchObject({ width: '100%', maxWidth: '100%' });
+});
+
+test('on a window 480 px wide or less, the sign-in form\'s buttons and fields are 44 px tall', () => {
+	const elements = clerkAppearance().elements as Record<string, Record<string, unknown>>;
+	for (const element of ['formButtonPrimary', 'socialButtonsBlockButton', 'formFieldInput', 'otpCodeFieldInput']) {
+		expect(elements[element]?.[narrowViewport], element).toEqual(expect.objectContaining({ minHeight: '44px' }));
+	}
+});
+
+test('the Clerk host to warm up is read from the publishable key, and a malformed key gives none', () => {
+	// pk_live_ + base64("clerk.colliedesk.com$"), as Clerk issues it.
+	expect(clerkFrontendHost('pk_live_Y2xlcmsuY29sbGllZGVzay5jb20k')).toBe('clerk.colliedesk.com');
+	expect(clerkFrontendHost('pk_test_not-base64!')).toBeUndefined();
+	expect(clerkFrontendHost('')).toBeUndefined();
 });

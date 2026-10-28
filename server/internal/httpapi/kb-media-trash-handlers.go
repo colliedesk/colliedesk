@@ -116,7 +116,7 @@ func (a *API) trashUnusedKBMedia(response http.ResponseWriter, request *http.Req
 		return
 	}
 	who := principal(request)
-	if who.Scope != "" && !auth.ScopeAllows(who.Scope, auth.ScopeSend) {
+	if !who.Allows(auth.PermKBMediaDelete) {
 		a.proposeTrashOfUnusedKBMedia(response, request, who, *input.Before, input.IncludeKept)
 		return
 	}
@@ -213,6 +213,13 @@ func writeKBMediaReplaceError(response http.ResponseWriter, err error) {
 }
 
 func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request) {
+	// A replacement writes a new version of every live article that shows the item.
+	who := principal(request)
+	if a.askUnlessHeld(response, request, kbMediaReplaceRoute, who, auth.PermKBArticlesPublish, nil, func() (bool, error) {
+		return a.store.KBMediaShownPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+	}) {
+		return
+	}
 	var input struct {
 		With string `json:"with_media_id"`
 	}
@@ -220,7 +227,6 @@ func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send with_media_id, the item to put in its place.")
 		return
 	}
-	who := principal(request)
 	replacement, err := a.store.ReplaceKBMedia(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), input.With)
 	if err != nil {
 		writeKBMediaReplaceError(response, err)
@@ -231,6 +237,11 @@ func (a *API) replaceKBMedia(response http.ResponseWriter, request *http.Request
 
 func (a *API) undoKBMediaReplacement(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
+	if a.askUnlessHeld(response, request, kbMediaReplacementUndoRoute, who, auth.PermKBArticlesPublish, nil, func() (bool, error) {
+		return a.store.KBReplacementTouchesPublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+	}) {
+		return
+	}
 	replacement, err := a.store.UndoKBMediaReplacement(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"))
 	if err != nil {
 		writeKBMediaReplaceError(response, err)

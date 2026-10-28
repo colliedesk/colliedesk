@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { useCreateAction, useCreateMutation } from '../../api/use-create';
 import { api, ReplyConflictError } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
+import { leaveList, listIsBehind, showList, showThread } from './list-return';
 import { contactPart, ContactsPart } from '../contacts/contact-part';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import { apiQuery, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
@@ -13,7 +15,7 @@ import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
-import { outboundNotice } from './outbound-notice';
+import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
 import { useConversationPresence } from './use-conversation-presence';
@@ -162,11 +164,34 @@ export function InboxRoute() {
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
   // Fetched once and shared with Settings, so the picker opens from memory.
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
-  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  // How replies leave is read for the mailbox the open conversation's replies leave from; the default
+  // one for a conversation no channel carries yet.
+  const senderID = selected?.channel_ref?.replies_via?.id;
+  const emailChannel = useQuery({ queryKey: senderID ? ['email-channel', senderID] : ['email-channel'],
+    queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()) });
+  const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types;
+  const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
+  // A type with two channels or more names the channel on each row and thread; with one, nothing changes.
+  const several = new Set(channelTypes?.filter((info) => info.count > 1).map((info) => info.type));
+  const channelLabel = (conversation: Conversation) => {
+    const ref = conversation.channel_ref;
+    return ref && several.has(ref.type) ? (ref.deleted ? messages.removedChannel(ref.name) : ref.name) : undefined;
+  };
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
   const limits = config?.limits;
-  const outbound = outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  // The conversation's own channel comes first: off or removed, its replies wait whatever email can do.
+  const via = selected?.channel_ref;
+  // No channel carries the replies: its own was removed (they cannot be sent), or the one that would
+  // carry them is not connected yet (they are saved, as they always were, and not sent).
+  const removed = via?.deleted === true && via.replies_via === null;
+  const channelNotice = via && (removed ? messages.channelRemoved(via.name) : via.replies_via === null ? messages.repliesNotConnected
+    : via.replies_via.enabled ? undefined : messages.channelOff(via.replies_via.name));
+  const outbound = channelNotice ?? outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  // Which mailbox a reply leaves from, once there are two; and why, when the one it was pinned to is gone.
+  const sender = via?.replies_via;
+  const sendsFrom = !sender || outbound ? undefined : sender.instead_of ? messages.sendsInsteadOf(sender.instead_of.name, sender.name)
+    : mailboxes > 1 ? messages.sendsFrom(sender.name) : undefined;
   // A reply that just failed may mean Gmail stopped sending; the channel is read again so the notice above
   // the composer follows without a reload.
   const failedDeliveries = timeline.data?.items.filter((item) => item.delivery?.status === 'failed').map((item) => item.id).join(',') ?? '';
@@ -174,6 +199,22 @@ export function InboxRoute() {
     if (failedDeliveries) void client.invalidateQueries({ queryKey: ['email-channel'] });
   }, [client, failedDeliveries]);
   const [starting, setStarting] = useState(false);
+  // An address that names a conversation is the thread view; on a phone it replaces the list (layout.css).
+  const threadOpen = Boolean(params.conversationId);
+  useLayoutEffect(() => (threadOpen ? showThread() : showList()), [threadOpen]);
+  // Opening a conversation keeps the filters in the address, so Back returns to the same list.
+  const openConversation = (id: string) => {
+    reportedOpen.current = id;
+    leaveList(id);
+    setSelectedId(id);
+    void navigate({ to: '/conversations/$conversationId', params: { conversationId: id }, search: filters });
+  };
+  // Back to the list the agent came from steps back in the history, so the browser's Back does not reopen the
+  // conversation; a conversation reached by a link has no list behind it, so the list opens with its filters.
+  const backToList = () => {
+    if (params.conversationId && listIsBehind(params.conversationId)) window.history.back();
+    else void navigate({ to: '/', search: filters });
+  };
   const openContact = (contactId: string) => void navigate({ to: '/contacts/$contactId', params: { contactId } });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
@@ -193,15 +234,25 @@ export function InboxRoute() {
     onSettled: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: keepOpened });
-  const createTag = useMutation({ mutationFn: ({ name }: { conversationId: string; name: string }) => api.createTag(name), onSuccess: (tag, variables) => {
+  const createTag = useCreateMutation({ create: ({ name }: { conversationId: string; name: string }, key: string) => api.createTag(name, key), onSuccess: (tag, variables) => {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
   } });
-  const message = useMutation({ mutationFn: ({ kind, body, files, cc, seen }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number }) =>
-    api.createMessage(selected!.id, kind, body, files, cc, seen),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }),
+  // A message carries the key of its send: the reply box's own (kept with its draft, so a reload can ask
+  // whether it arrived), or one per conversation and text; a retry of the same text reuses it, so the server
+  // stores the message once however many times it is asked.
+  type Send = { conversationId: string; kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string; key?: string };
+  const message = useCreateAction(({ conversationId, kind, body, files, cc, seen, aiDraft, key }: Send, pressKey: string) =>
+    api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey));
+  const testMessage = useCreateAction((_nothing: void, key: string) => api.sendTestMessage(undefined, key));
+  const sent = useMutation({ mutationFn: message.run,
+    // The conversation the message went to, which the person may have left while it was sending.
+    onSuccess: (_sent, { conversationId, aiDraft }) => {
+      if (aiDraft) void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+      return client.invalidateQueries({ queryKey: ['messages', conversationId] });
+    },
     // A reply refused for a newer one: the timeline shows it at once.
-    onError: (error) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', selected?.id] }); } });
+    onError: (error, { conversationId }) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', conversationId] }); } });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // The others see that this tab has the conversation open and whether a reply is being written; the first
@@ -218,29 +269,36 @@ export function InboxRoute() {
     const replace = typedKeys.some((key) => (next[key] ?? '') !== (filters[key] ?? ''));
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };
-  return <><InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
+  return <><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} onboardingGoal={me.data?.onboarding_goal}
-    page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
-    // Opening a conversation keeps the filters in the address, so Back returns to the same list.
-    onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id }, search: filters }); }}
+    onTestMessage={mailboxes > 0 ? () => testMessage.run().then((test) => {
+      void client.invalidateQueries({ queryKey: ['conversations'] });
+      openConversation(test.conversation_id);
+    }) : undefined}
+    page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
+    onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
+    threadOpen={threadOpen} onBack={backToList}
     query={filters}
     viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
     onQuery={applyQuery}
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    onSetStatus={(conversationId, status) => update.mutateAsync({ conversationId, changes: { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body, files, cc, seen) => message.mutateAsync({ kind, body, files, cc, seen })}
+    onMessage={(kind, body, files, cc, seen, aiDraft, key) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key })}
+    onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={me.data?.ai_features?.draft}
+    aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
-    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outbound} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(emailChannel.data) } : undefined}
+    outboundNotice={outbound} sendsFrom={sendsFrom} channelLabel={channelLabel} noReplies={removed} outboundLink={via?.replies_via ? (channelNotice ? `/settings/channels/${via.replies_via.id}` : `/settings/channels/${via.replies_via.id}?tab=replies`) : undefined} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
-    failed={conversations.isError} onRetry={() => void conversations.refetch()}
+    failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={me.data?.agent?.role === 'admin'} onOpenSettings={(to = '/settings') => void navigate({ to })}
+    canManage={me.data?.agent?.role === 'admin'} onOpenSettings={(to = '/settings') => void navigate({ href: to })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
@@ -268,6 +326,6 @@ export function InboxRoute() {
     onOpenContact={openContact}
     onNewConversation={() => setStarting(true)} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
-      render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={setSelectedId} />} />}
+      render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}
   </>;
 }

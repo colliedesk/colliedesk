@@ -1,16 +1,19 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import type { Conversation, ConversationViewer, OnboardingGoal } from '../../api/schemas';
-import { dayGroup, formatDate, formatShortDate } from '../../lib/format-date';
+import { dayGroup, formatDate, formatListTime, formatShortDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { presenceViewPart } from './presence-part';
+import { useListKeys } from './use-list-keys';
 
 interface ConversationListProps {
   items: Conversation[];
+  // Names a conversation's channel where the workspace has two of its type.
+  channelLabel?: (conversation: Conversation) => string | undefined;
   selectedId?: string;
   timezone: string;
   onSelect?: (id: string) => void;
@@ -23,7 +26,7 @@ interface ConversationListProps {
   loading?: boolean;
   // refreshing: a refetch is running while the previous rows stay on screen.
   refreshing?: boolean;
-  failed?: boolean;
+  failed?: boolean | 'results_refreshed';
   onRetry?: () => void;
   onClearFilters?: () => void;
   canManage?: boolean;
@@ -44,6 +47,8 @@ interface ConversationListProps {
   grouped?: boolean;
   // onboardingGoal is what the team said it wants first at sign-up; its step leads the get-started list.
   onboardingGoal?: OnboardingGoal | null;
+  // Sends the agent a test message on the default email channel; only where the workspace has one.
+  onTestMessage?: () => Promise<unknown>;
 }
 
 type Step = 'connect' | 'import' | 'invite' | 'mcp';
@@ -53,7 +58,7 @@ const firstStep: Partial<Record<OnboardingGoal, Step>> = { leave_helpdesk: 'impo
 
 // getStartedSteps lists the steps this agent can take, the goal's step first. The settings steps stay
 // admin-only; a goal whose step this agent cannot take recommends nothing.
-export type SettingsTarget = '/settings' | '/settings/import-freshdesk';
+export type SettingsTarget = '/settings' | '/settings/import-freshdesk' | `/settings/channels/${string}`;
 
 function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boolean): { steps: Step[]; recommended?: Step } {
   const lead = goal ? firstStep[goal] : undefined;
@@ -64,8 +69,19 @@ function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boo
 }
 
 const visibleTags = 2;
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal }: ConversationListProps) {
+export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal, onTestMessage }: ConversationListProps) {
+  const [testing, setTesting] = useState(false);
+  const [testFailed, setTestFailed] = useState<string>();
+  const testInFlight = useRef(false);
+  const sendTest = () => {
+    if (testInFlight.current) return;
+    testInFlight.current = true;
+    setTesting(true);
+    setTestFailed(undefined);
+    onTestMessage?.().catch((error: unknown) => setTestFailed(error instanceof Error && !error.message.startsWith('API ') ? error.message : messages.testMessageFailed))
+      .finally(() => { testInFlight.current = false; setTesting(false); });
+  };
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -81,32 +97,42 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
   useEffect(() => {
     if (selectAll.current) selectAll.current.indeterminate = checkedCount > 0 && !allChecked;
   }, [checkedCount, allChecked]);
-  const settingsLink = (label: string, to: SettingsTarget = '/settings') => <a href={to} onClick={(event) => {
+  const scroll = useRef<HTMLDivElement>(null);
+  const onListKey = useListKeys(scroll, items.map((item) => item.id), selectedId, onSelect);
+  const settingsLink = (label: string, to: SettingsTarget, className: string) => <a href={to} className={className} onClick={(event) => {
     if (!onOpenSettings) return;
     event.preventDefault();
     onOpenSettings(to);
   }}>{label}</a>;
   const getStarted = getStartedSteps(onboardingGoal, canManage);
-  const stepLink: Record<Step, ReactNode> = {
-    connect: settingsLink(messages.connectEmail),
+  // Every step is a full-size button; the first (the recommended one when there is one) is the primary
+  // action of a brand-new workspace, ahead of anything about billing.
+  const stepLink: Record<Step, (className: string) => ReactNode> = {
+    connect: (className) => settingsLink(messages.connectEmail, '/settings/channels/type/email', className),
     // An admin imports in the app; an agent reads how, to ask an admin.
-    import: canManage ? settingsLink(messages.importFreshdesk, '/settings/import-freshdesk')
-      : <a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,
-    invite: settingsLink(messages.inviteTeam),
-    mcp: <a href={messages.mcpURL} target="_blank" rel="noreferrer">{messages.connectAIAgent}</a>,
+    import: (className) => canManage ? settingsLink(messages.importFreshdesk, '/settings/import-freshdesk', className)
+      : <a href={messages.importFreshdeskURL} className={className} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,
+    invite: (className) => settingsLink(messages.inviteTeam, '/settings', className),
+    mcp: (className) => <a href={messages.mcpURL} className={className} target="_blank" rel="noreferrer">{messages.connectAIAgent}</a>,
   };
   return (
-    <div className="conversation-scroll" aria-busy={refreshing}>
+    <div className="conversation-scroll" aria-busy={refreshing} ref={scroll} onKeyDown={onListKey}>
       {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
+        {onTestMessage && <p><button type="button" className="button" disabled={testing} onClick={sendTest}>{messages.sendTestMessage}</button>{' '}
+          <span className="muted-copy">{messages.sendTestMessageHint}</span>{testFailed && <span role="alert" className="error-copy"> {testFailed}</span>}</p>}
         <ul>
-          {getStarted.steps.map((step) => <li key={step} data-recommended={step === getStarted.recommended || undefined}>
-            {step === getStarted.recommended && <><span className="recommended-step">{messages.recommendedFirstStep}</span>{' '}</>}{stepLink[step]}</li>)}
+          {getStarted.steps.map((step, index) => <li key={step} data-recommended={step === getStarted.recommended || undefined}>
+            {step === getStarted.recommended && <><span className="recommended-step">{messages.recommendedFirstStep}</span>{' '}</>}{stepLink[step](index === 0 ? 'button primary-action' : 'button')}</li>)}
         </ul>
       </section>}
-      {failed && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
+      {failed === 'results_refreshed' && <div className="empty-copy"><p role="alert" className="error-copy">{messages.resultsRefreshed}</p>
+        <p className="muted-copy">{messages.resultsRefreshedWhy}</p>
+        <div className="button-row"><a href="/results" className="button">{messages.openResults}</a>
+          {onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilter}</button>}</div></div>}
+      {failed === true && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
       {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : messages.noConversations}</p>
         {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}
@@ -120,24 +146,27 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
       {items.map((item, index) => {
         const group = dayGroup(item.updated_at, timezone, now);
         const startsGroup = grouped && (index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now));
-        const full = formatDate(item.updated_at, timezone, now);
+        // The tooltip names the timezone when it is not the browser's, so 5:42 AM is never read as local time.
+        const full = formatDate(item.updated_at, timezone, now) + zoneSuffix(item.updated_at, timezone);
         const open = viewers?.get(item.id);
         return (
           <Fragment key={item.id}>
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
-          <div className="conversation-item">
+          <div className="conversation-item" data-conversation-id={item.id}>
           <label className="row-check">
             <input type="checkbox" aria-label={messages.selectRow(item.subject, full)} checked={checkedIds?.has(item.id) ?? false} onChange={() => onToggle?.(item.id)} />
           </label>
           <button className="conversation-row" aria-current={item.id === selectedId ? true : undefined} data-tip={full} onClick={() => onSelect?.(item.id)}>
             <span className="conversation-subject">{item.subject}</span>
-            <time dateTime={item.updated_at}>
+            <time dateTime={item.updated_at} title={stampTitle(item.updated_at, timezone)}>
               <span aria-hidden="true" className="time-short">{formatShortDate(item.updated_at, timezone, now)}</span>
+              <span aria-hidden="true" className="time-touch">{formatListTime(item.updated_at, timezone, now)}</span>
               <span className="time-full">{full}</span>
             </time>
             <span className="conversation-meta">
               <StatusLabel status={item.status} />
               <PriorityLabel priority={item.priority} />
+              {channelLabel?.(item) && <span className="channel-pill">{channelLabel(item)}</span>}
               {draftIds?.has(item.id) && <span className="badge badge-draft">{messages.draftWaiting}</span>}
               {open && open.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ViewerStack viewers={open} timezone={timezone} />} />}
               {item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}

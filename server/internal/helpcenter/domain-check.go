@@ -169,11 +169,11 @@ func LookupDomain(ctx context.Context, resolvers Resolvers, host, helpCenterDoma
 	return evidence
 }
 
-// Check reports whether the evidence proves the claim with this id and token: the host's CNAME chain
+// CheckClaim reports whether the evidence proves the claim with this id and token: the host's CNAME chain
 // ends at the claim's own target, or the TXT record holds its token. The error's text says what to
 // set, never what the resolver answered: a tenant may type any name, and the server's resolver may see
 // names the tenant must not (Detail keeps that for the log).
-func (e DomainEvidence) Check(claim, token string) error {
+func (e DomainEvidence) CheckClaim(claim, token string) error {
 	if e.Proof.Claim != "" && e.Proof.Claim == claim {
 		return nil
 	}

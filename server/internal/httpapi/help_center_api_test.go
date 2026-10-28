@@ -87,6 +87,8 @@ func TestHelpCenterShowsOnlyPublishedArticlesOfItsOwnWorkspace(t *testing.T) {
 	wantPage(t, visit(site, base+"/c/billing", "192.0.2.10"), http.StatusOK, []string{"Cards", "1 article"}, secrets)
 	wantPage(t, visit(site, base+"/c/billing/cards", "192.0.2.10"), http.StatusOK, []string{"Pay by card"}, secrets)
 	articlePath := fmt.Sprintf("%s/a/%d-%s", base, published.Number, published.Slug)
+	// A collection that only holds sections lists their articles too: no extra click to reach one.
+	wantPage(t, visit(site, base+"/c/billing", "192.0.2.10"), http.StatusOK, []string{`href="` + articlePath + `"`}, secrets)
 	wantPage(t, visit(site, articlePath, "192.0.2.10"), http.StatusOK,
 		[]string{"Pay by card", "<strong>any card</strong>", base + "/images/" + shown.ID, `href="` + base + `/c/billing/cards"`}, secrets)
 	wantPage(t, visit(site, base+"/search?q=pinewood", "192.0.2.10"), http.StatusOK, []string{"1 result", "Pay by card"}, secrets)

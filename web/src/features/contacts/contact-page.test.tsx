@@ -58,7 +58,7 @@ test('a rename that fails keeps the form open with the reason, and one that work
   expect(onRename).toHaveBeenCalledWith('Mai Linh Tran');
   fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
   await waitFor(() => expect(screen.queryByLabelText('Name')).not.toBeInTheDocument());
-  expect(screen.getByRole('button', { name: 'Rename' })).toHaveFocus();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Rename' })).toHaveFocus());
   expect(screen.getByText('Name saved.')).toBeInTheDocument();
 });
 
@@ -70,15 +70,15 @@ test('merging asks for the duplicate, says where replies will go, and only then 
   const dialog = screen.getByRole('dialog', { name: 'Merge a duplicate into Mai Linh' });
   fireEvent.change(within(dialog).getByLabelText('Search contacts by name or email'), { target: { value: 'mai' } });
   // The contact itself is never offered as its own duplicate.
-  const pick = await within(dialog).findByRole('button', { name: /Mai at home/ });
-  expect(within(dialog).queryByRole('button', { name: /mai@customer.example/ })).not.toBeInTheDocument();
+  const pick = await within(dialog).findByRole('option', { name: /Mai at home/ });
+  expect(within(dialog).queryByRole('option', { name: /mai@customer.example/ })).not.toBeInTheDocument();
   fireEvent.click(pick);
   expect(dialog).toHaveTextContent('replies on those conversations go to mai@customer.example');
   expect(onMerge).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Merge' }));
   await waitFor(() => expect(onMerge).toHaveBeenCalledWith(duplicate));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(screen.getByRole('button', { name: 'Merge a duplicate…' })).toHaveFocus();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Merge a duplicate…' })).toHaveFocus());
   expect(screen.getByText('Merged mai@home.example into this customer.')).toBeInTheDocument();
 });
 

@@ -16,7 +16,7 @@ import (
 // and, when a person approved an agent request, that person with the token that asked and the request.
 func savedReplyActor(ctx context.Context, who auth.Principal) store.Actor {
 	actor := store.Actor{AgentID: who.Agent.ID}
-	if who.Scope != "" {
+	if who.IsToken() {
 		actor.TokenID = who.SessionID
 	}
 	if replay, ok := approvalOf(ctx); ok {
@@ -65,12 +65,14 @@ func (a *API) createSavedReply(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	who := principal(request)
-	reply, err := a.store.CreateSavedReply(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), input.Title, input.Body)
-	if err != nil {
-		writeSavedReplyError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusCreated, reply)
+	a.createOnce(response, request, createSavedReplyOperation, []string{input.Title, input.Body}, func(ctx context.Context) (any, error) {
+		reply, err := a.store.CreateSavedReply(ctx, who.Workspace.ID, savedReplyActor(ctx, who), input.Title, input.Body)
+		if err != nil {
+			writeSavedReplyError(response, err)
+			return nil, errAnswered
+		}
+		return reply, nil
+	})
 }
 
 func (a *API) updateSavedReply(response http.ResponseWriter, request *http.Request) {

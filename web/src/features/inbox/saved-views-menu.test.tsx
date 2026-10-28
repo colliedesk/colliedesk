@@ -34,6 +34,14 @@ test('views are listed shared first, then personal, and opening one sets its fil
   expect(onApply).toHaveBeenCalledWith({ assignee: 'me', awaiting: 'team', sort: 'waiting_longest', status: 'all' });
 });
 
+test('while the views load the menu says so, not that there are none', () => {
+  const { rerender } = render(<SavedViewsMenu views={[]} loading trash={[]} query={{}} timezone="UTC" />);
+  expect(screen.getByText('Loading views…')).toBeInTheDocument();
+  expect(screen.queryByText(/No saved views yet/)).toBeNull();
+  rerender(<SavedViewsMenu views={[]} trash={[]} query={{}} timezone="UTC" />);
+  expect(screen.getByText(/No saved views yet/)).toBeInTheDocument();
+});
+
 test('the view that matches the current filters is marked as current', () => {
   render(<SavedViewsMenu views={[urgent, mine]} trash={[]} query={{ priority: 'urgent' }} timezone="UTC" />);
   const menu = open();
