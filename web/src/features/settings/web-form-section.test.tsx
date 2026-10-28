@@ -69,6 +69,7 @@ test('the Embed tab copies the submit URL and shows the code a page posts with, 
   const code = screen.getByRole('region', { name: 'Code for your page' });
   expect(code).toHaveTextContent(`fetch('${url}'`);
   expect(code).toHaveTextContent("website: ''");
+  expect(code).toHaveTextContent("'Idempotency-Key': key");
   fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
   expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining(`fetch('${url}'`));
 });

@@ -138,7 +138,7 @@ func (a *API) preflightWebForm(response http.ResponseWriter, request *http.Reque
 	header := response.Header()
 	header.Set("Access-Control-Allow-Origin", origin)
 	header.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	header.Set("Access-Control-Allow-Headers", "Content-Type")
+	header.Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
 	header.Set("Access-Control-Max-Age", webFormPreflightAge)
 	header.Set("Vary", "Origin")
 	response.WriteHeader(http.StatusNoContent)
@@ -183,6 +183,13 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 		return
 	}
 
+	// A page may name each press with an Idempotency-Key, so a retry of the same press stores one message.
+	press, ok := idempotencyKey(request)
+	if !ok {
+		writeInvalidIdempotencyKey(response)
+		return
+	}
+
 	var input struct {
 		Email   string `json:"email"`
 		Message string `json:"message"`
@@ -204,6 +211,11 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": errorBody(response, map[string]any{
 			"code": "validation_failed", "message": "Check the highlighted fields.", "fields": fields})})
 		return
+	}
+	if press != "" {
+		// The key is the visitor's own, so it names a submission only together with its form and words: the
+		// same key with other words is a new submission, and nobody's key can drop another's message.
+		submission.Press = store.RequestFingerprint(form.ChannelID, press, submission.Email, submission.Message, submission.Source)
 	}
 	err = a.submitToWebForm(request, form, submission)
 	switch {
@@ -257,7 +269,7 @@ func (a *API) submitToWebForm(request *http.Request, form store.OpenForm, submis
 	if !channel.Live() {
 		return domain.ErrWebFormClosed
 	}
-	body, err := json.Marshal(webform.Submission{Email: submission.Email, Message: submission.Message, Source: submission.Source})
+	body, err := json.Marshal(webform.Submission{Email: submission.Email, Message: submission.Message, Source: submission.Source, Press: submission.Press})
 	if err != nil {
 		return err
 	}

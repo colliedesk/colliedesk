@@ -46,7 +46,7 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const [connecting, setConnecting] = useState(false);
   const refresh = () => client.invalidateQueries({ queryKey: ['imports'] });
   const after = { onSuccess: () => { setConnecting(false); void refresh(); } };
-  const preview = useMutation({ mutationFn: ({ domain, key }: { domain: string; key: string }) => importsApi.preview(domain, key),
+  const preview = useCreateMutation({ create: ({ domain, key }: { domain: string; key: string }, submitKey: string) => importsApi.preview(domain, key, submitKey),
     onSuccess: (created) => { setJustAsked(created.id); after.onSuccess(); } });
   const start = useMutation({ mutationFn: importsApi.start, ...after });
   // A discarded preview gives the page back to the import before it.

@@ -5467,6 +5467,8 @@ export interface components {
     };
     parameters: {
         ID: string;
+        /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+        WebFormPressKey: string;
         /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
         CreateIdempotencyKey: string;
     };
@@ -8586,7 +8588,10 @@ export interface operations {
     previewImport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8596,6 +8601,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The preview job an earlier request with the same Idempotency-Key started, as it was then; nothing new was started. The Freshdesk key is not part of what makes two requests the same one. Read its state now with `GET /api/v1/imports/{id}`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"];
+                };
+            };
             /** @description The preview job, still previewing */
             202: {
                 headers: {
@@ -8608,6 +8622,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     getImport: {
@@ -9700,7 +9716,10 @@ export interface operations {
     submitWebForm: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+                "Idempotency-Key"?: components["parameters"]["WebFormPressKey"];
+            };
             path: {
                 workspace_slug: string;
             };
@@ -9794,7 +9813,10 @@ export interface operations {
     submitWebFormByChannel: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+                "Idempotency-Key"?: components["parameters"]["WebFormPressKey"];
+            };
             path: {
                 channel_id: string;
             };

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { expect, test } from 'vitest';
 
-// The web side of TestEveryCreateRouteTakesAnIdempotencyKey (server/internal/httpapi): a create the
+// The web side of TestEveryPostRouteTakesAnIdempotencyKey (server/internal/httpapi): a create the
 // contract keys is sent with its Idempotency-Key, and that key comes from api/use-create.ts, whose hooks also
 // disable the press while it is in flight. The API functions of those creates take the key as a required
 // argument, so a call outside the hooks has no key to give unless it makes one, which only these files may.

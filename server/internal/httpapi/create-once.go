@@ -27,6 +27,7 @@ const (
 	createChannelOperation      = "channel"
 	addAIProviderOperation      = "ai_provider"
 	problemReportOperation      = "problem_report"
+	previewImportOperation      = "import_preview"
 )
 
 // shownOnce is a create's answer that holds a secret shown once (an invite link, a token): the first
@@ -38,6 +39,12 @@ type shownOnce struct{ shown, kept any }
 // runs nothing; the key with other input answers 422. input is what makes two requests the same one; the
 // author is added to it. create writes its own refusals and returns errAnswered after doing so.
 func (a *API) createOnce(response http.ResponseWriter, request *http.Request, operation string, input []string, create func(context.Context) (any, error)) {
+	a.runOnce(response, request, http.StatusCreated, operation, input, create)
+}
+
+// runOnce is createOnce for a request whose first answer is first instead of 201, such as 202 for a job
+// that goes on in the background; repeats still answer 200.
+func (a *API) runOnce(response http.ResponseWriter, request *http.Request, first int, operation string, input []string, create func(context.Context) (any, error)) {
 	key, ok := idempotencyKey(request)
 	if !ok {
 		writeInvalidIdempotencyKey(response)
@@ -74,8 +81,8 @@ func (a *API) createOnce(response http.ResponseWriter, request *http.Request, op
 		return
 	}
 	if shown != nil {
-		writeJSON(response, http.StatusCreated, shown)
+		writeJSON(response, first, shown)
 		return
 	}
-	writeJSON(response, http.StatusCreated, json.RawMessage(answer))
+	writeJSON(response, first, json.RawMessage(answer))
 }

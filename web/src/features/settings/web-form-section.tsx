@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { z } from 'zod';
 import { InvalidRequestError, request } from '../../api/client';
+import { useCreateAction } from '../../api/use-create';
 import type { ReactNode } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
 import { messages } from '../../messages';
@@ -92,11 +93,14 @@ function TryForm({ path }: { path: string }) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState(tryMessages.messageDefault);
   const [state, setState] = useState<{ sending?: boolean; arrived?: string; failed?: string }>({});
+  // A press sent again after a lost answer goes under the same key, so the inbox gets one test message.
+  const submit = useCreateAction(({ from, text }: { from: string; text: string }, key: string) =>
+    request(path, z.object({ ok: z.boolean() }), { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ email: from, message: text, source: tryMessages.source, website: '' }) }));
   const send = () => {
-    if (state.sending) return;
+    if (submit.pending) return;
     const from = email.trim();
     setState({ sending: true });
-    request(path, z.object({ ok: z.boolean() }), { method: 'POST', body: JSON.stringify({ email: from, message, source: tryMessages.source, website: '' }) })
+    submit.run({ from, text: message })
       .then(() => setState({ arrived: from }), (error: unknown) => setState({ failed: error instanceof InvalidRequestError ? error.message : tryMessages.failed }));
   };
   return <section className="embed-code" aria-labelledby="try-form-heading">
@@ -122,9 +126,11 @@ const embedMessages = {
 
 // EmbedCode is the submit URL and the request a page sends to it, each with its copy button.
 function EmbedCode({ url }: { url: string }) {
-  const code = `await fetch('${url}', {
+  const code = `// One key per press of the button: send the same key again if the page retries that press.
+const key = crypto.randomUUID();
+await fetch('${url}', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
   body: JSON.stringify({ email, message, source: 'contact-page', website: '' }),
 });`;
   return <>

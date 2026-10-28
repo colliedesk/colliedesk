@@ -2638,6 +2638,8 @@ paths:
         hour. A new preview discards the workspace's earlier preview. An agent token below the admin
         tier is refused with 403 `credentials_need_admin_token` and nothing is stored: an agent request
         would keep the key.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -2647,9 +2649,17 @@ paths:
         '202':
           description: The preview job, still previewing
           content: {application/json: {schema: {$ref: '#/components/schemas/ImportJob'}}}
+        '200':
+          description: >-
+            The preview job an earlier request with the same Idempotency-Key started, as it was then; nothing new
+            was started. The Freshdesk key is not part of what makes two requests the same one. Read its state
+            now with `GET /api/v1/imports/{id}`.
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportJob'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/imports/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -3531,6 +3541,8 @@ paths:
         per minute across all forms; a workspace also accepts at most 50 form conversations per 10
         minutes, counted apart from email. Fields the form does not know are ignored. The message
         is marked `email.via = web_form` with authentication `none` (unverified address).
+      parameters:
+        - {$ref: '#/components/parameters/WebFormPressKey'}
       requestBody:
         required: true
         content:
@@ -3598,6 +3610,8 @@ paths:
         the conversation opens on this form, which checks its own allowed origins and counts its own
         submissions. The address names the form by its random channel id, so it tells nothing of the
         workspace's other forms. An unknown, removed or off form answers the same 404.
+      parameters:
+        - {$ref: '#/components/parameters/WebFormPressKey'}
       requestBody:
         required: true
         content:
@@ -4993,6 +5007,16 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
+    WebFormPressKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the
+        same key when the page retries that press. A repeat of the same key, form, email, message and source
+        is accepted (202) and stores nothing new; the same key with other words is a new submission. Without
+        a key every request is a submission. A malformed key is 400. Repeats still count against the limits.
+      schema: {type: string, minLength: 1, maxLength: 200}
     CreateIdempotencyKey:
       name: Idempotency-Key
       in: header
