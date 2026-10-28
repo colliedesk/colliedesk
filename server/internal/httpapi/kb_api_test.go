@@ -512,6 +512,7 @@ func TestExportCarriesTheWholeKnowledgeBaseAndNoOtherWorkspace(t *testing.T) {
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Exported guide", "body_md": "![s](" + image.URL + ")", "status": "published"})
 	trashed := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Trashed guide", "body_md": "gone"})
 	kbCall(t, api, http.MethodDelete, "/api/v1/kb/articles/"+trashed.ID+"?updated_at="+url.QueryEscape(trashed.UpdatedAt), nil, admin, http.StatusNoContent, nil)
+	kbCall(t, api, http.MethodPut, "/api/v1/kb/order", map[string]any{"parent_id": collection.ID, "collection_ids": []string{}, "article_ids": []string{article.ID}}, admin, http.StatusOK, nil)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `UPDATE kb_articles SET source_html='<p>original</p>', source_meta='{"freshdesk_id": 7}' WHERE id=$1`, article.ID); err != nil {
 		t.Fatal(err)
@@ -528,7 +529,8 @@ func TestExportCarriesTheWholeKnowledgeBaseAndNoOtherWorkspace(t *testing.T) {
 	}
 	entries := unzip(t, response.Body.Bytes())
 	articles := ndjsonLines(t, entries["kb-articles.ndjson"])
-	if len(articles) != 2 || articles[0]["source_html"] != "<p>original</p>" || articles[1]["deleted_at"] == nil {
+	if len(articles) != 2 || articles[0]["source_html"] != "<p>original</p>" || articles[1]["deleted_at"] == nil ||
+		articles[0]["position"] != float64(1) || articles[1]["position"] != float64(0) {
 		t.Fatalf("kb-articles.ndjson = %v", articles)
 	}
 	if ids, _ := articles[0]["image_ids"].([]any); len(ids) != 1 || ids[0] != image.ID {

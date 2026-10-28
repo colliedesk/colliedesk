@@ -55,6 +55,7 @@ var toolDocs = map[string]string{
 	"colliedesk_saved_view_update":                "Changes the name, the filters or who sees a view",
 	"colliedesk_saved_view_delete":                "Moves a view to the trash for 30 days; changes no conversation",
 	"colliedesk_saved_view_restore":               "Takes a view out of the trash",
+	"colliedesk_kb_order_set":                     "Sets the order of a collection's collections and articles, or of the top-level collections",
 	"colliedesk_kb_collections_list":              "Lists the knowledge base collections (at most three levels deep) with how many articles each holds",
 	"colliedesk_kb_collection_create":             "Adds a collection, at the top or inside another",
 	"colliedesk_kb_collection_update":             "Renames, reorders or moves a collection",

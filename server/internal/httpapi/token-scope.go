@@ -132,6 +132,7 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/kb/media/{id}":                                grant(auth.PermKBMediaUpdate),
 	"GET /api/v1/kb/media/trash":                                 grant(auth.PermKBMediaRead),
 	"POST /api/v1/kb/media/trash":                                grant(auth.PermKBMediaDelete),
+	"PUT /api/v1/kb/order":                                       grant(auth.PermKBArticlesUpdate),
 	// A lower tier's request names the ids it would move (proposeTrashOfUnusedKBMedia), never "all unused".
 	"POST /api/v1/kb/media/trash-unused":                         byHandler(auth.PermKBMediaDelete),
 	"POST /api/v1/kb/media/restore":                              grant(auth.PermKBMediaDelete),

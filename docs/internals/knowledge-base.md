@@ -33,6 +33,33 @@ The public help center is in `help-center.md`.
 - **`content_version` moves with every write.** `bumpKB` upserts `help_centers` in the same transaction
   as each knowledge base write, so a page cached under an older version is stale even when the newest
   `updated_at` did not change (unpublishing an older article). No row means the help center is off.
+- **Order by hand is a position per sibling, 0 until set.** `kb_articles.position` (migration
+  `kb-article-position`) and `kb_collections.position` sort siblings before the name or title, so 0
+  everywhere is the title order every list had before: the migration rewrites no row. `PUT
+  /api/v1/kb/order` takes the whole list of a parent's live children (collections and, under a
+  collection, articles, drafts included) and numbers them 1..n under `lockKB`; a list that misses or
+  adds one is 409 `order_stale` with the lists as they are, never a partial order. The web app reads
+  the parent's whole article list first when it does not have it (a parent's articles while another
+  collection is shown, or more than the loaded page, at `limit=200`), so a move is one `PUT`; only a
+  list that went stale meanwhile is moved again in the server's lists and sent once more, and a row
+  that is gone from them is reported, never sent as an unchanged order. Positions are not versioned
+  and do not touch `updated_at`, so reordering never makes someone's open edit `changed_elsewhere`;
+  an order that moves nothing does not bump `content_version`. A new, moved, imported (Freshdesk,
+  including an article that changed folder on a rerun) or restored item, and a new collection
+  without a position, goes after the last sibling only once the parent was ordered (max position >
+  0); otherwise it stays 0 and falls in by title.
+- **Lock order of an order by hand: `lockKB`, then article rows, then collection rows.** Moving an
+  article locks its row, then reads the target collection `FOR SHARE`; `SetKBOrder` once updated the
+  collections first and deadlocked against it (40P01, answered 409 `conflict`). Now `readKBOrder`
+  locks the members `FOR NO KEY UPDATE`, articles before collections, and every write that places an
+  item (article move, restore from the trash, reimport) takes `lockKB` before its row lock. Taking
+  `lockKB` after the row lock brings the deadlock back. The locked read also drops a row that moved
+  away while it waited (409, not a stale place written into the other collection), the `UPDATE`
+  filters on the parent and `deleted_at`, and a place computed under `lockKB` sees an order committed
+  just before it. `kb_order_race_test.go` holds each race open with a sleeping trigger. Every list sorts with
+  the same keys (`kbArticleOrder`, `kbCollectionOrder` in `store/kb-order.go`); the article list
+  without a collection uses the tree's depth-first path (`kbTreeOrder`) when `sort=manual`.
+  `kb_articles_order_idx` serves a collection's list in order without sorting it.
 - **Limits:** 2,000 articles (`domain.MaxKBArticles`, the one place the cap lives) and 1,000
   collections per workspace, the trash included (it stops a create-delete loop), 100,000 characters
   per text. A longer text is refused, never cut. The article cap is what search can serve inside the

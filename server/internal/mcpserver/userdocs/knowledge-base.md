@@ -29,6 +29,28 @@ one, for example "Getting started".
 - **Delete**: only an empty collection can be deleted. Move or delete its articles and collections
   first; otherwise Colliedesk says why and deletes nothing. A deleted collection goes to the trash.
 
+### Order
+
+Collections and the articles in a collection are listed by name (or title) until you order them by
+hand. The order you set is the one the help center, the collection's article list and the reply
+box's **Articles** list use.
+
+- **An article**: select its collection, with no search and **All** as the status. Each row has
+  **Move up** and **Move down** (the arrows at the end of the row). Drafts have a place too; readers
+  see only the published articles, in the same order.
+- **A collection**: select it, then **Move up** or **Move down** next to **Delete**. It moves among
+  the collections beside it (in the same collection, or at the top).
+
+The buttons are reached with `Tab` like any other, and a screen reader hears where the row went
+("Moved Billing to place 2 of 5."). Once a collection is ordered by hand, an article that is new,
+moved into it, brought in by an import or taken out of the trash goes last. In the same way a
+collection that is new, imported or taken out of the trash goes after the others once they are
+ordered; until then it falls in by name. If someone added, moved or deleted an article there a moment
+before, Colliedesk takes their change into account and moves yours again; if that fails too, the page
+says so and nothing changes. If someone else moved or deleted the very row you moved, the page says
+so and shows the list as it is now. The order is not part of an article's history, so restoring a
+version does not move an article.
+
 ## Find an article
 
 Type in **Search articles**. The search finds whole words and the start of words in titles and text,
@@ -360,8 +382,8 @@ address name** (Settings → Email) changes every help center address, and old l
   published in or below them never appear: not in a page, a count, a search or an address.
 - The home page lists the top-level collections, each with its first articles and the collections
   inside it. A collection page lists those collections, each with its first articles, and its own
-  articles by title, 50 a page. An
-  article page lists the other articles of its collection beside the text.
+  articles in their [order](#order), 50 a page. An article page lists the other articles of its
+  collection beside the text.
 - **Search** works like the search in the editor: whole words and the start of words in titles and
   text, and any part of a title. It shows the best 25 matches.
 - Images you added to an article are shown while a published article uses them. An image from
@@ -405,7 +427,8 @@ With a [brand](#brand):
 Point a customer to an article from the reply box of a conversation:
 
 1. Select **Articles** under the message box (or move to it with `Tab` and press `Enter`).
-2. Type to search the published articles. The search is the one of the knowledge base page: whole
+2. Before you type, the published articles are listed in the help center's [order](#order),
+   collection by collection. Type to search them. The search is the one of the knowledge base page: whole
    words and the start of words in titles and text, and any part of a title. Accents count, so
    `mat` does not find `mật`.
 3. Press the arrow keys to move, then `Enter` (or click) to insert. `Esc` closes the list and puts
@@ -430,7 +453,8 @@ unpublished or deleted, or while the help center is off.
 
 An AI agent connected through [MCP](mcp.md), or the API with an agent token, can search and read
 articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, publish, delete and
-restore them, manage collections, upload and read images, and read the help center settings and
+restore them, manage collections, put collections and articles in [order](#order)
+(`colliedesk_kb_order_set`, `PUT /api/v1/kb/order`), upload and read images, and read the help center settings and
 brand (`colliedesk_help_center_theme_get`, and `colliedesk_help_center_theme_check` to try one).
 Every article an agent reads or finds carries its public address in `url` (also in the API), so an
 agent links an article in a reply the same way a person does: the title and the address on two
@@ -444,7 +468,7 @@ move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's. An agent wit
 a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets its poster
 (`colliedesk_kb_video_poster_set`); a lower tier cannot upload files.
 
-| Token tier | Read, search, history, trash | Write, publish, delete, restore, upload images | Turn the help center on or off, set its brand |
+| Token tier | Read, search, history, trash | Write, publish, delete, restore, order, upload images | Turn the help center on or off, set its brand |
 |---|---|---|---|
 | `admin` | Yes | Yes, at once | Yes |
 | `send` | Yes | Yes, at once. The version names the token | Proposed for an admin to approve |

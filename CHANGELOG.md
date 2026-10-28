@@ -34,6 +34,13 @@ API changes in the email view (the full notes will be on the releases page):
 - New operator command `collie email sender-name [--by <name>] <workspace slug> <name>` sets a sender
   name that the brand check of Colliedesk Cloud refuses through the API, for the brand's owner. It
   checks the name as the API does and skips only the brand check.
+- New route `PUT /kb/order` (`send` tier; MCP `colliedesk_kb_order_set`) sets the order of the collections
+  and articles directly under one parent; a list that is not exactly the parent's live children is 409
+  `order_stale` with the current lists. Article answers have a new required field, `position`.
+  `GET /kb/articles` takes `sort` (`recent` or `manual`); with `collection_id` and no `q` it now lists the
+  collection's articles in their order (by title until ordered by hand) instead of most recently updated first.
+  Under a parent ordered by hand, `POST /kb/collections` without `position` or with 0 puts the collection
+  last (an explicit 0 used to be kept); a created, moved, imported or restored article or collection goes last too.
 
 ## 0.0.1
 

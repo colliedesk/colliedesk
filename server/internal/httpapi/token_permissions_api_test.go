@@ -142,6 +142,7 @@ func TestKBChangesThatReachTheHelpCenterNeedPublish(t *testing.T) {
 		{"publish a draft", http.MethodPatch, "/api/v1/kb/articles/" + draft.ID, map[string]any{"updated_at": articleSeen(t, api, admin, draft.ID), "status": "published"}},
 		{"edit a published article", http.MethodPatch, "/api/v1/kb/articles/" + live.ID, map[string]any{"updated_at": live.UpdatedAt, "title": "Changed"}},
 		{"trash a published article", http.MethodDelete, "/api/v1/kb/articles/" + live.ID + "?updated_at=" + url.QueryEscape(live.UpdatedAt), nil},
+		{"reorder a collection", http.MethodPut, "/api/v1/kb/order", kbOrderBody(collection.ID, []string{}, []string{live.ID, draft.ID})},
 		{"rename a collection", http.MethodPatch, "/api/v1/kb/collections/" + collection.ID, map[string]any{"updated_at": collection.UpdatedAt, "name": "Renamed"}},
 		{"replace an image a published article shows", http.MethodPost, "/api/v1/kb/media/" + image.ID + "/replace", map[string]any{"with_media_id": other.ID}},
 	} {
