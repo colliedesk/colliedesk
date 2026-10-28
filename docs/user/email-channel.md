@@ -13,9 +13,11 @@ the one your server uses:
 
 - **Forwarding address** (Colliedesk Cloud): an email address, `support@<workspace>.colliedesk.com`.
   Your mailbox forwards to it like to any other address.
-- **Inbound URL** (your own server): a web address, not an email address. Your mailbox cannot send
-  to it by itself; a mail forwarder posts each message to it with the **inbound secret**, a password
-  for that forwarder only (not your email password). See
+- **Inbound URL** (your own server): a web address, not an email address. Ask whoever manages your
+  email to send a copy of every message to it, with the **inbound secret**: a password for that only,
+  not your email password. Technical details: your mailbox cannot send to it by itself; a mail
+  forwarder (a Cloudflare Email Worker, Postmark, Amazon SES or a pipe on your mail server) posts each
+  message to it. See
   [On your own server: the inbound URL](#on-your-own-server-the-inbound-url).
 
 The channel reads **Waiting for first message** until a message has arrived, then **Working**. Send
@@ -27,7 +29,7 @@ never turned into a conversation.
 The quickest way to see the whole loop needs no forwarder and no terminal. Select **Send yourself a
 test message**: on the empty inbox, or on **Settings → Channels → Email → Connection**. Colliedesk
 delivers one email from your own address to the channel, the way a customer's email arrives. It opens
-a conversation, **Test message from Colliedesk**, and the Connection tab links to it. The test works
+a conversation, **Test message from Colliedesk**, and opens it, from either place. The test works
 before forwarding is set up, so it shows that your inbox and replies work; customer email still needs
 your support mailbox to forward here. Before a support address is saved, the button says to save one
 first. Pressing it several times quickly sends one test message.

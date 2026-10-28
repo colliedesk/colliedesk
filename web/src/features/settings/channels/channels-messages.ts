@@ -99,7 +99,7 @@ const reasons: Record<string, string> = {
   gmail_broken: 'The Gmail connection stopped working.',
   microsoft_broken: 'The Microsoft 365 connection stopped working.',
   domain_unverified: 'The domain is not verified yet.',
-  no_inbound_secret: 'Customer email sent to your support address cannot arrive yet: your mail forwarder needs an inbound secret (its password for this server). A test message works without it.',
+  no_inbound_secret: 'Customer email sent to your support address cannot arrive yet: whoever manages your email needs an inbound secret to send it here (a password for this only). A test message works without it.',
   no_origins: 'No website is allowed to post to it yet.',
 };
 

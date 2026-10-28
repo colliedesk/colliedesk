@@ -525,3 +525,47 @@ func TestLockedWorkspaceWebFormAnswersLikeAnUnknownWorkspace(t *testing.T) {
 		t.Fatalf("locked workspace conversations=%s, want only the one from before the lock", n)
 	}
 }
+
+// keyedSubmit posts to the public form with the Idempotency-Key a page sends with each press.
+func keyedSubmit(api http.Handler, slug, body, key string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/public/forms/"+slug, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", siteOrigin)
+	req.Header.Set("Idempotency-Key", key)
+	return serve(api, req)
+}
+
+func TestWebFormStoresOneMessageForARepeatedPress(t *testing.T) {
+	f := newWebFormFixture(t, nil)
+	f.enable(t, f.adminA, siteOrigin)
+	press := `{"email":"twice@example.com","message":"Is the shop open on Sunday?"}`
+	wantAccepted(t, keyedSubmit(f.api, f.slugA, press, "press-1"))
+	wantAccepted(t, keyedSubmit(f.api, f.slugA, press, "press-1"))
+	if messages := f.count(t, "messages", f.workspaceA); messages != "1" {
+		t.Fatalf("messages=%s after one press sent twice, want 1", messages)
+	}
+	// The same key with other words is another submission, not a replay that drops them.
+	wantAccepted(t, keyedSubmit(f.api, f.slugA, `{"email":"twice@example.com","message":"And on Monday?"}`, "press-1"))
+	// Without a key every submission is stored, as before.
+	wantAccepted(t, f.submit(f.slugA, press, siteOrigin, ""))
+	if messages := f.count(t, "messages", f.workspaceA); messages != "3" {
+		t.Fatalf("messages=%s, want 3: the repeat dropped, the new words and the unkeyed press kept", messages)
+	}
+	// The same key on another workspace's form names another submission.
+	f.enable(t, f.adminB, siteOrigin)
+	wantAccepted(t, keyedSubmit(f.api, f.slugB, press, "press-1"))
+	if messages := f.count(t, "messages", f.workspaceB); messages != "1" {
+		t.Fatalf("workspace B messages=%s, want 1", messages)
+	}
+	if bad := keyedSubmit(f.api, f.slugA, press, strings.Repeat("k", 201)); bad.Code != http.StatusBadRequest {
+		t.Fatalf("a 201-character key: status=%d body=%s, want 400", bad.Code, bad.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/public/forms/"+f.slugA, nil)
+	req.Header.Set("Origin", siteOrigin)
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "content-type,idempotency-key")
+	if allowed := serve(f.api, req); !strings.Contains(strings.ToLower(allowed.Header().Get("Access-Control-Allow-Headers")), "idempotency-key") {
+		t.Fatalf("preflight allows headers %q, want Idempotency-Key among them", allowed.Header().Get("Access-Control-Allow-Headers"))
+	}
+}

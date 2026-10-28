@@ -345,7 +345,7 @@ test('a verified domain says every mailbox on it shares the verification', () =>
 
 test('on a server without hosted mail, the inbound URL says what it is for, links the guide and gives a test request with the new secret', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage createdSecret="s3cret-value" part="connection" />);
-  expect(screen.getByText(/your mailbox cannot send to it by itself/i)).toBeInTheDocument();
+  expect(screen.getByText(/Your mailbox cannot send to the inbound URL by itself/i)).toBeInTheDocument();
   expect(screen.getByText(/not your email password/i)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /how mail reaches the inbound url/i }))
     .toHaveAttribute('href', 'https://colliedesk.com/docs/self-host/email#3-forward-mail-to-colliedesk');

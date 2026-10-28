@@ -114,13 +114,19 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 		slug = *input.Slug
 	}
 	who := principal(request)
-	collection, err := a.store.CreateKBCollection(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
-		store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position})
-	if err != nil {
-		writeKBError(response, err)
-		return
+	parent := ""
+	if input.ParentID != nil {
+		parent = *input.ParentID
 	}
-	writeJSON(response, http.StatusCreated, collection)
+	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position)}, func(ctx context.Context) (any, error) {
+		collection, err := a.store.CreateKBCollection(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
+			store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position})
+		if err != nil {
+			writeKBError(response, err)
+			return nil, errAnswered
+		}
+		return collection, nil
+	})
 }
 
 func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Request) {

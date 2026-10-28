@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -156,21 +158,24 @@ func (a *API) createAgentToken(response http.ResponseWriter, request *http.Reque
 		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a scope (a tier) or a list of permissions are required.")
 		return
 	}
-	created, err := a.auth.CreateAgentToken(request.Context(), principal(request), auth.TokenRequest{Label: input.Label, Scope: input.Scope, Permissions: input.Permissions})
-	var invalid *auth.InvalidTokenError
-	if errors.As(err, &invalid) {
-		writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
-		return
-	}
-	if errors.Is(err, auth.ErrAdminTokenNeedsAdmin) {
-		writeError(response, http.StatusForbidden, "admin_token_needs_admin", "Only a workspace admin can create an admin token or give a token an admin-only permission. Choose read, draft or send, or leave out the admin-only permissions.")
-		return
-	}
-	if err != nil {
-		writeInternalError(response, err)
-		return
-	}
-	// The raw token is in the body once; no cache may keep it.
+	// The raw token is in the body once; no cache may keep it, and a repeat of one press (the same
+	// Idempotency-Key) answers the same session without it.
 	response.Header().Set("Cache-Control", "no-store")
-	writeJSON(response, http.StatusCreated, created)
+	permissions := slices.Sorted(slices.Values(input.Permissions))
+	a.createOnce(response, request, createAgentTokenOperation, append([]string{input.Label, input.Scope}, permissions...), func(ctx context.Context) (any, error) {
+		created, err := a.auth.CreateAgentToken(ctx, principal(request), auth.TokenRequest{Label: input.Label, Scope: input.Scope, Permissions: input.Permissions})
+		var invalid *auth.InvalidTokenError
+		if errors.As(err, &invalid) {
+			writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
+			return nil, errAnswered
+		}
+		if errors.Is(err, auth.ErrAdminTokenNeedsAdmin) {
+			writeError(response, http.StatusForbidden, "admin_token_needs_admin", "Only a workspace admin can create an admin token or give a token an admin-only permission. Choose read, draft or send, or leave out the admin-only permissions.")
+			return nil, errAnswered
+		}
+		if err != nil {
+			return nil, err
+		}
+		return shownOnce{shown: created, kept: map[string]any{"session": created.Session}}, nil
+	})
 }

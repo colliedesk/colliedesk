@@ -1,7 +1,7 @@
 // Strings of Settings → Built-in AI. The page is a lazy part, so they live in its chunk.
 export const aiMessages = {
   heading: 'Built-in AI',
-  description: 'Triage suggestions and reply drafts inside Colliedesk, on a model you choose. A person accepts, edits and sends; nothing reaches a customer until someone presses Send.',
+  description: 'Triage suggestions and reply drafts inside Colliedesk, on a model you choose. A person accepts, edits and sends; nothing reaches a customer until someone presses Send. Triage suggestions are accepted by a person too, unless an admin turns on Apply suggestions automatically below.',
   loadFailed: 'The AI settings could not be loaded. Reload the page to try again.',
   tabs: 'Built-in AI settings',
   tabFeatures: 'Features',
@@ -120,7 +120,7 @@ export const aiMessages = {
   columnOn: 'On',
   slotName: { triage: 'Triage suggestions', draft: 'Reply drafts' } as Record<'triage' | 'draft', string>,
   slotHelp: {
-    triage: 'When a new ticket arrives, suggests tags, priority and an assignee. An agent accepts or dismisses each one.',
+    triage: 'When a new ticket arrives, suggests tags, priority and an assignee. An agent accepts or dismisses each one, unless an admin turns on Apply suggestions automatically: then AI fills what nobody set, and each change has Undo.',
     draft: 'Someone on your team asks for a draft, with a short prompt if they like; the model drafts a reply from the ticket, matching KB articles and similar solved tickets. They edit it and send it.',
   } as Record<'triage' | 'draft', string>,
   statusOn: 'On',

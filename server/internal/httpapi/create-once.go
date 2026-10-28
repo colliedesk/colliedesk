@@ -14,16 +14,37 @@ var errAnswered = errors.New("the create already answered")
 
 // The operations whose Idempotency-Key is remembered; one key names one request of each.
 const (
-	createKBArticleOperation  = "kb_article"
-	createSavedReplyOperation = "saved_reply"
-	sendTestMessageOperation  = "test_message"
+	createKBArticleOperation    = "kb_article"
+	createSavedReplyOperation   = "saved_reply"
+	sendTestMessageOperation    = "test_message"
+	createInviteOperation       = "invite"
+	createAgentTokenOperation   = "agent_token"
+	createConversationOperation = "conversation"
+	createContactOperation      = "contact"
+	createTagOperation          = "tag"
+	createSavedViewOperation    = "saved_view"
+	createKBCollectionOperation = "kb_collection"
+	createChannelOperation      = "channel"
+	addAIProviderOperation      = "ai_provider"
+	problemReportOperation      = "problem_report"
+	previewImportOperation      = "import_preview"
 )
+
+// shownOnce is a create's answer that holds a secret shown once (an invite link, a token): the first
+// request answers shown, and its key remembers only kept, so the secret is never stored to answer a repeat.
+type shownOnce struct{ shown, kept any }
 
 // createOnce answers a create request that may carry an Idempotency-Key: the first request runs create and
 // answers 201 with what it made; a repeat with the same key and input answers 200 with that same answer and
 // runs nothing; the key with other input answers 422. input is what makes two requests the same one; the
 // author is added to it. create writes its own refusals and returns errAnswered after doing so.
 func (a *API) createOnce(response http.ResponseWriter, request *http.Request, operation string, input []string, create func(context.Context) (any, error)) {
+	a.runOnce(response, request, http.StatusCreated, operation, input, create)
+}
+
+// runOnce is createOnce for a request whose first answer is first instead of 201, such as 202 for a job
+// that goes on in the background; repeats still answer 200.
+func (a *API) runOnce(response http.ResponseWriter, request *http.Request, first int, operation string, input []string, create func(context.Context) (any, error)) {
 	key, ok := idempotencyKey(request)
 	if !ok {
 		writeInvalidIdempotencyKey(response)
@@ -31,7 +52,15 @@ func (a *API) createOnce(response http.ResponseWriter, request *http.Request, op
 	}
 	who := principal(request)
 	fingerprint := store.RequestFingerprint(append([]string{who.Agent.ID}, input...)...)
-	answer, replayed, err := a.store.CreateOnce(request.Context(), who.Workspace.ID, operation, key, fingerprint, create)
+	var shown any
+	answer, replayed, err := a.store.CreateOnce(request.Context(), who.Workspace.ID, operation, key, fingerprint, func(ctx context.Context) (any, error) {
+		made, err := create(ctx)
+		if once, ok := made.(shownOnce); ok {
+			shown = once.shown
+			return once.kept, err
+		}
+		return made, err
+	})
 	switch {
 	case errors.Is(err, errAnswered):
 		return
@@ -47,9 +76,13 @@ func (a *API) createOnce(response http.ResponseWriter, request *http.Request, op
 		writeInternalError(response, err)
 		return
 	}
-	status := http.StatusCreated
 	if replayed {
-		status = http.StatusOK
+		writeJSON(response, http.StatusOK, json.RawMessage(answer))
+		return
 	}
-	writeJSON(response, status, json.RawMessage(answer))
+	if shown != nil {
+		writeJSON(response, first, shown)
+		return
+	}
+	writeJSON(response, first, json.RawMessage(answer))
 }

@@ -11,6 +11,7 @@ import type { InboxQuery } from '../../lib/inbox-query';
 import { messages } from '../../messages';
 import { savedViewMessages } from './filter-messages';
 import { BookmarkIcon } from '../../ui/icons';
+import { useCreateMutation } from '../../api/use-create';
 
 export interface SavedViewChange {
   name?: string;
@@ -107,7 +108,7 @@ export function SavedViewsMenu({ query, timezone, onApply }: Pick<SavedViewsMenu
   const views = useQuery({ queryKey: ['saved-views'], queryFn: savedViewsApi.list, enabled: opened });
   const trash = useQuery({ queryKey: ['saved-views', 'trash'], queryFn: savedViewsApi.trash, enabled: trashOpened });
   const changed = () => client.invalidateQueries({ queryKey: ['saved-views'] });
-  const create = useMutation({ mutationFn: (view: Parameters<typeof savedViewsApi.create>[0]) => savedViewsApi.create(view), onSettled: changed });
+  const create = useCreateMutation({ create: (view: Parameters<typeof savedViewsApi.create>[0], key: string) => savedViewsApi.create(view, key), onSettled: changed });
   // A change carries the version it was made on; someone else's save since is refused (409), not overwritten.
   const update = useMutation({ mutationFn: ({ view, change }: { view: SavedView; change: SavedViewChange }) => savedViewsApi.update(view.id, { ...change, updated_at: view.updated_at }),
     onSettled: changed });

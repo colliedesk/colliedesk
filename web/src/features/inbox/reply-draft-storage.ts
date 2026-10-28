@@ -7,9 +7,10 @@ export const draftPrefix = 'colliedesk.reply-draft:';
 const prefix = draftPrefix;
 const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
 
-// sentAt is set on a draft written back after its send failed or was cut off (a reload): the page that
-// reads it checks the conversation for that message before offering the text again.
-export interface StoredDraft { kind: 'outgoing' | 'note'; body: string; sentAt?: number }
+// sendKey is the Idempotency-Key of a send of this text that is in flight, failed or was cut off (a reload):
+// the page that reads it asks the server whether that send stored its message before offering the text again.
+// sendInput names the files and copies that send carried; the key goes with them too.
+export interface StoredDraft { kind: 'outgoing' | 'note'; body: string; sendKey?: string; sendInput?: string }
 
 // parseDraft reads one stored value (a storage event's old or new value, or the item itself).
 export function parseDraft(raw: string | null | undefined): StoredDraft | undefined {
@@ -19,7 +20,8 @@ export function parseDraft(raw: string | null | undefined): StoredDraft | undefi
     // A missing or non-numeric saved_at gives NaN, which is never fresh. A stale draft is not shown, and
     // the composer that reads it then writes its empty box, which removes it.
     if (value && Date.now() - (value.saved_at as number) <= maxAgeMs && typeof value.body === 'string') {
-      return { kind: value.kind === 'note' ? 'note' : 'outgoing', body: value.body, ...(typeof value.sentAt === 'number' ? { sentAt: value.sentAt } : {}) };
+      return { kind: value.kind === 'note' ? 'note' : 'outgoing', body: value.body, ...(typeof value.sendKey === 'string' ? { sendKey: value.sendKey } : {}),
+        ...(typeof value.sendInput === 'string' ? { sendInput: value.sendInput } : {}) };
     }
   } catch {
     // A value written by something else: start empty.

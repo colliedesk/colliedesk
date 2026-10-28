@@ -252,9 +252,10 @@ export const api = {
   emailChannelOf: (id: string) => request(`/api/v1/channels/${encodeURIComponent(id)}/email`, emailChannelSettingsSchema),
   channelCounts: () => request('/api/v1/channels', channelCountsSchema),
   // A test email from the signed-in agent to an email channel (the default one without an id).
-  // key names this click (Idempotency-Key): a repeat with the same key returns the first test message.
-  sendTestMessage: (channelId?: string, key?: string) => request(channelId ? `/api/v1/channels/${channelId}/email/test-message` : '/api/v1/channels/email/test-message', testMessageResultSchema,
-    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined }),
+  // Every create takes the key of its press (Idempotency-Key, from api/use-create): a repeat with the same key
+  // answers what the first one made and creates nothing.
+  sendTestMessage: (channelId: string | undefined, key: string) => request(channelId ? `/api/v1/channels/${channelId}/email/test-message` : '/api/v1/channels/email/test-message', testMessageResultSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key } }),
   // Without sender_name the channel keeps its name; a new channel starts with the workspace name.
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
   // Only the name: the server keeps the address, so a stale page cannot move the channel.
@@ -286,21 +287,25 @@ export const api = {
   updateAgent: (id: string, value: RequestBody<'updateAgent'>) => request(`/api/v1/agents/${id}`, teamMemberSchema, { method: 'PATCH', body: json<'updateAgent'>(value) }),
   sessions: () => request('/api/v1/auth/sessions', sessionListSchema),
   // A token holds a tier (scope) or its own permissions, never both.
-  createAgentToken: (label: string, choice: Omit<RequestBody<'createAgentToken'>, 'label'>) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', body: json<'createAgentToken'>({ label, ...choice }) }),
+  createAgentToken: (label: string, choice: Omit<RequestBody<'createAgentToken'>, 'label'>, key: string) => request('/api/v1/auth/tokens', agentTokenSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createAgentToken'>({ label, ...choice }) }),
   revokeSession: (id: string) => requestNoContent(`/api/v1/auth/sessions/${id}`, { method: 'DELETE' }),
   invites: () => request('/api/v1/auth/invites', inviteListSchema),
-  createInvite: (email: string, role_ceiling: RequestBody<'createInvite'>['role_ceiling']) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', body: json<'createInvite'>({ email, role_ceiling }) }),
+  createInvite: (email: string, role_ceiling: RequestBody<'createInvite'>['role_ceiling'], key: string) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createInvite'>({ email, role_ceiling }) }),
   revokeInvite: (id: string) => requestNoContent(`/api/v1/auth/invites/${id}`, { method: 'DELETE' }),
   // signal lets a newer search cancel the request of the one it replaced.
   conversations: (query: string, signal?: AbortSignal) => request(`/api/v1/conversations?${query}`, conversationPageSchema, { signal }),
   inboxActivity: (since?: string) => request(`/api/v1/inbox/activity${since ? `?since=${encodeURIComponent(since)}` : ''}`, inboxActivitySchema),
-  createConversation: (contact_id: string, subject: string) => request('/api/v1/conversations', conversationSchema, { method: 'POST', body: json<'createConversation'>({ contact_id, subject }) }),
+  createConversation: (contact_id: string, subject: string, key: string) => request('/api/v1/conversations', conversationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createConversation'>({ contact_id, subject }) }),
   conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema),
   updateConversation: (id: string, value: UpdateConversationRequest) => request(`/api/v1/conversations/${id}`, conversationSchema, { method: 'PATCH', body: json<'updateConversation'>(value) }),
   bulkUpdateConversations: (ids: string[], changes: BulkConversationChanges) => request('/api/v1/conversations', bulkUpdateResultSchema, { method: 'PATCH', body: json<'bulkUpdateConversations'>({ ids, changes }) }),
   addConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'PUT' }),
   removeConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'DELETE' }),
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
+  // Whether a send under key stored its message in the conversation: a page reloaded mid-send asks before
+  // offering the text again. The server waits for a send under the key that is still running.
+  sentUnderKey: (id: string, key: string) => request(`/api/v1/conversations/${id}/messages?${new URLSearchParams({ idempotency_key: key })}`, messageListSchema)
+    .then((page) => page.items.length > 0),
   timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
   // seen is the newest reply number the sender had seen when they started writing (409 ReplyConflictError when older).
   // aiDraft names the AI draft a reply was written from.
@@ -310,13 +315,13 @@ export const api = {
       body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft)
         : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}) }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
-  createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),
+  createContact: (name: string, email: string, key: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),
   tags: () => request('/api/v1/tags', tagListSchema),
-  createTag: (name: string) => request('/api/v1/tags', tagSchema, { method: 'POST', body: json<'createTag'>({ name }) }),
+  createTag: (name: string, key: string) => request('/api/v1/tags', tagSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createTag'>({ name }) }),
   savedReplies: () => request('/api/v1/saved-replies', savedReplyListSchema),
-  createSavedReply: (title: string, body: string, key?: string) => request('/api/v1/saved-replies', savedReplySchema,
-    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined, body: json<'createSavedReply'>({ title, body }) }),
+  createSavedReply: (title: string, body: string, key: string) => request('/api/v1/saved-replies', savedReplySchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createSavedReply'>({ title, body }) }),
   updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),
   // updatedAt is the version the person saw; the server refuses the delete if the reply was saved since.
   deleteSavedReply: (id: string, updatedAt: string) => requestNoContent(`/api/v1/saved-replies/${id}?${new URLSearchParams({ updated_at: updatedAt })}`, { method: 'DELETE' }),

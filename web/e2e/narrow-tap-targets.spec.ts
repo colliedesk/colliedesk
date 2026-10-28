@@ -52,3 +52,16 @@ test('on a 375 px screen the empty inbox steps, the composer, the email channel 
   await expectTapSized(page.locator('form').filter({ has: page.getByRole('textbox', { name: 'Support address' }) }), 'email channel form');
   await expectTapSized(page.getByRole('navigation', { name: 'Settings sections' }), 'settings sections');
 });
+
+test('on a 375 px screen the test message conversation, its email links and the contact history link are tap-sized', async ({ page }) => {
+  await newDesk(page, 'Narrow Mail');
+  await page.goto(`${servers.main}/settings/channels/type/email`);
+  await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${Date.now()}@narrow-mail.example`);
+  await page.getByRole('button', { name: 'Save support address' }).click();
+  await page.getByRole('button', { name: 'Send yourself a test message' }).click();
+  await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole('link', { name: 'Download original email' })).toBeVisible();
+  await expectTapSized(page.locator('.message-envelope'), 'incoming email links');
+  await page.getByRole('button', { name: 'Show details' }).click();
+  await expectTapSized(page.locator('.conversation-source'), 'contact history link');
+});

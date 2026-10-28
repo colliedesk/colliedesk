@@ -7,6 +7,7 @@ import { messages } from '../../messages';
 import { reportMessages } from './report-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
 import { issueURL } from './report-issue-url';
+import { useCreateAction } from '../../api/use-create';
 
 const ALLOWED = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_FILES = 3;
@@ -47,11 +48,13 @@ export function ReportProblemDialog({ appVersion, onClose }: Props) {
     setFiles(refusal ? [] : chosen);
     if (refusal) event.target.value = '';
   };
+  const report = useCreateAction(({ text: description, diagnostics: facts, files: shots }: { text: string; diagnostics: ReturnType<typeof collectDiagnostics>; files: File[] }, key: string) =>
+    sendProblemReport(description, facts, shots, key));
   const send = async () => {
     setSending(true);
     setProblem(null);
     try {
-      const reference = await sendProblemReport(text, diagnostics, files);
+      const reference = await report.run({ text, diagnostics, files });
       track('problem_reported');
       setOutcome({ reference });
     } catch (error) {

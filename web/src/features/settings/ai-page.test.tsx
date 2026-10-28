@@ -432,3 +432,10 @@ test('OpenAI and OpenRouter need only a key: their address is filled in', async 
   await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' })); });
   expect(onAdd).toHaveBeenCalledWith({ kind: 'openai_compatible', label: 'Router', base_url: 'https://openrouter.ai/api/v1', api_key: 'sk-or-1', models: ['openai/gpt-5'] });
 });
+
+test('where the page says a person accepts each suggestion, it names the admin exception, Apply suggestions automatically', () => {
+  page();
+  for (const claim of [/A person accepts, edits and sends/, /An agent accepts or dismisses each one/]) {
+    expect(screen.getAllByText(claim)[0]).toHaveTextContent(/unless an admin turns on Apply suggestions automatically/);
+  }
+});

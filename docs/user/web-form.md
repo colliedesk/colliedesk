@@ -49,17 +49,25 @@ test needs no allowed origin, because it comes from Colliedesk's own page.
 ## Send a submission
 
 The settings page shows the form's **Submit URL**: `<your Colliedesk address>/api/v1/public/web-forms/<form id>`.
-A workspace's first form also keeps the older address, `<your Colliedesk address>/api/v1/public/forms/<workspace slug>`,
-so sites that embed it keep working; its **Embed** tab shows that address and says the form also has
-its own. Post JSON from a page on an allowed origin:
+Give that address to whoever builds your website. A workspace's first form also keeps the older address,
+`<your Colliedesk address>/api/v1/public/forms/<workspace slug>`, so sites that already send to it keep
+working; its **Embed** tab lists it under **Older address**, to use only for such a site. Post JSON from
+a page on an allowed origin:
 
 ```js
+// One key per press of the button: send the same key again if the page retries that press.
+const key = crypto.randomUUID();
 await fetch('https://desk.example.com/api/v1/public/forms/acme', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
   body: JSON.stringify({ email, message, source: 'site:updates', website: '' }),
 });
 ```
+
+The `Idempotency-Key` header is optional. With it, a press that arrives twice (a double click, a retry
+after a lost answer) stores one message: the same key with the same email, message and source is
+answered `202` and stores nothing new. The same key with other words is a new submission. Without the
+header, every request is a submission.
 
 | Field | Rule |
 | --- | --- |
@@ -75,6 +83,7 @@ Answers:
 - `422`: invalid input; `error.fields` names each field, for example `{"email": "Enter a valid email address."}`.
 - `429`: too many submissions (see Limits). `Retry-After` says how long to wait.
 - `415`: the body is not `application/json`.
+- `400`: the `Idempotency-Key` header is not 1 to 200 printable characters without spaces.
 
 ## Limits and safety
 

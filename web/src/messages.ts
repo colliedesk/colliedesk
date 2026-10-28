@@ -312,6 +312,7 @@ export const messages = {
   invites: 'Invites',
   invitesDescription: 'A one-time sign-in link for a new teammate. The person joins with the role you choose, or less.',
   createInvite: 'Create invite',
+  inviteLinkShownOnce: 'This invite was created by an earlier press, and its link is shown only once. Revoke it below and create a new one to get a link.',
   inviteEmail: 'Invite email',
   inviteLink: 'One-time invite link',
   inviteLinkNotice: 'Copy this link now. It is not shown in the invite list.',
