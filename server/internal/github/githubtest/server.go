@@ -294,10 +294,11 @@ func (s *Server) Authorize(authorizeURL, login string) (string, error) {
 	if query.Get("code_challenge_method") != "S256" || query.Get("code_challenge") == "" {
 		return "", errors.New("authorize without PKCE S256")
 	}
-	redirect := query.Get("redirect_uri")
-	if redirect == "" {
-		redirect = s.CallbackURL
+	// GitHub refuses a redirect_uri other than the App's callback URL, so the browser only ever goes back there.
+	if redirect := query.Get("redirect_uri"); redirect != "" && redirect != s.CallbackURL {
+		return "", fmt.Errorf("redirect_uri is not the App's callback URL: %s", redirect)
 	}
+	redirect := s.CallbackURL
 	code := s.issueCode(pendingCode{login: login, challenge: query.Get("code_challenge"), redirectURI: redirect})
 	return redirect + "?" + url.Values{"code": {code}, "state": {query.Get("state")}}.Encode(), nil
 }

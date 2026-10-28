@@ -55,7 +55,7 @@ async function signIn(page: Page, name: string): Promise<Desk> {
   await page.getByRole('button', { name: 'Create inbound secret' }).click();
   const secret = await page.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
   nextInstallation += 1;
-  return { suffix, secret, support, account: `acme-${suffix}`.toLowerCase(), installation: nextInstallation };
+  return { suffix, secret, support, account: `acme-${process.pid}-${nextInstallation}`, installation: nextInstallation };
 }
 
 // receive delivers a customer's email and opens its conversation.

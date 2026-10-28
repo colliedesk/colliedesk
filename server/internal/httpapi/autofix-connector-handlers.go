@@ -147,7 +147,7 @@ func (a *API) checkFixConnector(response http.ResponseWriter, request *http.Requ
 		}
 		ctx, cancel := context.WithTimeout(request.Context(), 2*cursorCallTimeout)
 		defer cancel()
-		setting, err := a.cursor.Check(ctx, workspaceID)
+		setting, err := a.cursor.CheckKey(ctx, workspaceID)
 		if err != nil {
 			writeConnectorError(response, err)
 			return

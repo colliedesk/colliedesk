@@ -118,9 +118,9 @@ func sameRepo(address, fullName string) bool {
 	return strings.EqualFold(address, "github.com/"+fullName)
 }
 
-// Check checks the workspace's Cursor key: Cursor knows it, and it reaches the connected repositories
+// CheckKey checks the workspace's Cursor key: Cursor knows it, and it reaches the connected repositories
 // when Cursor can say (a service account key lists none). The result is kept on the connector.
-func (c *Cursor) Check(ctx context.Context, workspaceID string) (autofix.ConnectorSetting, error) {
+func (c *Cursor) CheckKey(ctx context.Context, workspaceID string) (autofix.ConnectorSetting, error) {
 	key, err := c.Store.OpenCursorKey(ctx, workspaceID)
 	if err != nil {
 		return autofix.ConnectorSetting{}, err
