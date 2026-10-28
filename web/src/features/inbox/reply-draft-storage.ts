@@ -3,7 +3,8 @@
 // written are kept; never files. A draft older than a week is dropped when read, and signing out forgets
 // every draft, so a shared browser does not hand one agent's private notes to the next.
 // This module is in the first bundle, which has a size budget: keep it small.
-const prefix = 'colliedesk.reply-draft:';
+export const draftPrefix = 'colliedesk.reply-draft:';
+const prefix = draftPrefix;
 const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
 
 export interface StoredDraft { kind: 'outgoing' | 'note'; body: string }

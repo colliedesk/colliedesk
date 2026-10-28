@@ -5,7 +5,6 @@ import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
-import { RequestsRoute } from './features/requests/requests-route';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
@@ -33,6 +32,8 @@ const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
 const channelsRoutePart = lazyPart(() => import('./features/settings/channels/channels-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
+// Agent requests are their own chunk too: the rail link starts loading it on hover and focus.
+const requestsRoutePart = lazyPart(() => import('./features/requests/requests-route'));
 const resultsSharePart = lazyPart(() => import('./features/results/results-share-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
@@ -92,7 +93,7 @@ function AppLayout() {
     links={locked ? undefined : <>
       <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || inResults || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
       <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
-        aria-current={inRequests ? 'page' : undefined}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
+        aria-current={inRequests ? 'page' : undefined} onPointerEnter={requestsRoutePart.preload} onFocus={requestsRoutePart.preload}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
       <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
@@ -201,7 +202,11 @@ function SettingsPage() {
   </main>;
 }
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
-const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
+const requestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/requests',
+  component: () => <Part part={requestsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ RequestsRoute }) => <RequestsRoute />} />,
+});
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/billing',

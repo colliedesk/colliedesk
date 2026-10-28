@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import type { Conversation, ConversationViewer, OnboardingGoal } from '../../api/schemas';
 import { dayGroup, formatDate, formatListTime, formatShortDate } from '../../lib/format-date';
@@ -47,6 +47,8 @@ interface ConversationListProps {
   grouped?: boolean;
   // onboardingGoal is what the team said it wants first at sign-up; its step leads the get-started list.
   onboardingGoal?: OnboardingGoal | null;
+  // Sends the agent a test message on the default email channel; only where the workspace has one.
+  onTestMessage?: () => Promise<unknown>;
 }
 
 type Step = 'connect' | 'import' | 'invite' | 'mcp';
@@ -68,7 +70,18 @@ function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boo
 
 const visibleTags = 2;
 export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal, onTestMessage }: ConversationListProps) {
+  const [testing, setTesting] = useState(false);
+  const [testFailed, setTestFailed] = useState<string>();
+  const testInFlight = useRef(false);
+  const sendTest = () => {
+    if (testInFlight.current) return;
+    testInFlight.current = true;
+    setTesting(true);
+    setTestFailed(undefined);
+    onTestMessage?.().catch((error: unknown) => setTestFailed(error instanceof Error && !error.message.startsWith('API ') ? error.message : messages.testMessageFailed))
+      .finally(() => { testInFlight.current = false; setTesting(false); });
+  };
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -108,6 +121,8 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
+        {onTestMessage && <p><button type="button" className="button" disabled={testing} onClick={sendTest}>{messages.sendTestMessage}</button>{' '}
+          <span className="muted-copy">{messages.sendTestMessageHint}</span>{testFailed && <span role="alert" className="error-copy"> {testFailed}</span>}</p>}
         <ul>
           {getStarted.steps.map((step, index) => <li key={step} data-recommended={step === getStarted.recommended || undefined}>
             {step === getStarted.recommended && <><span className="recommended-step">{messages.recommendedFirstStep}</span>{' '}</>}{stepLink[step](index === 0 ? 'button primary-action' : 'button')}</li>)}

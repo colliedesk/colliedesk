@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
@@ -877,4 +877,47 @@ test('a draft older than seven days is dropped when it is read, and a younger on
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('three fast clicks on Add private note send one note', () => {
+  const submit = vi.fn(() => new Promise(() => undefined));
+  render(<ReplyComposer onSubmit={submit} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Only once' } });
+  const button = screen.getByRole('button', { name: 'Add private note' });
+  act(() => { button.click(); button.click(); button.click(); });
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(button).toBeDisabled();
+});
+
+test('a reload while the send is in flight does not bring the sent text back, and a refused send keeps it', async () => {
+  window.localStorage.clear();
+  const stored = () => Object.keys(window.localStorage).filter((key) => key.includes('conv-5'));
+  let refuse: (error: Error) => void = () => undefined;
+  const first = render(<ReplyComposer draftKey="ws-1:agent-1:conv-5" onSubmit={() => new Promise((_, reject) => { refuse = reject; })} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Sent before the reload' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(stored()).toEqual([]);
+  act(() => refuse(new Error('network')));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  expect(stored()).toHaveLength(1);
+  first.unmount();
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-5" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Sent before the reload');
+});
+
+test('a draft changed in another tab shows up in the open box with a notice', () => {
+  window.localStorage.clear();
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-6" onSubmit={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Tab A text' } });
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-6';
+  const newer = JSON.stringify({ kind: 'outgoing', body: 'Tab B text', saved_at: Date.now() });
+  // The other tab has written the shared storage by the time this tab hears of it.
+  window.localStorage.setItem(key, newer);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: newer, storageArea: window.localStorage })); });
+  expect(screen.getByLabelText('Message body')).toHaveValue('Tab B text');
+  expect(screen.getByRole('status')).toHaveTextContent('Updated from another tab');
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'colliedesk.reply-draft:ws-1:agent-1:other', newValue: newer, storageArea: window.localStorage })); });
+  expect(screen.getByLabelText('Message body')).toHaveValue('Tab B text');
 });

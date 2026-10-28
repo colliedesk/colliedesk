@@ -6,7 +6,7 @@ import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
-import { readDraft, writeDraft } from './reply-draft-storage';
+import { draftPrefix, readDraft, writeDraft } from './reply-draft-storage';
 import { ConflictError, ReplyConflictError } from '../../api/client';
 import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
@@ -84,8 +84,23 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
   // remounts the box with it, so the draft kept there is read before anything is written over it.
   useEffect(() => writeDraft(draftKey, { kind, body }), [draftKey, kind, body]);
+  const latestBody = useRef(body);
+  latestBody.current = body;
+  // Another tab of this browser wrote (or sent) this draft: the box shows its text and says so.
+  const [otherTab, setOtherTab] = useState(false);
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (!draftKey || event.key !== draftPrefix + draftKey) return;
+      const text = readDraft(draftKey)?.body ?? '';
+      if (text !== latestBody.current) { setBody(text); setOtherTab(true); }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [draftKey]);
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
+  // Set from the press until the answer: clicks that land before the button turns disabled send nothing.
+  const inFlight = useRef(false);
   const [files, setFiles] = useState<File[]>([]);
   const fileProblem = attachmentProblem(files, attachmentLimits);
   // undefined until the agent edits the list, so suggestions that load later still show up.
@@ -176,7 +191,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const blocked = kind === 'outgoing' && noReplies;
   const cannotSend = sending || !body.trim() || Boolean(fileProblem) || ccHolds || blocked;
   const submit = (resolve = false) => {
-    if (!body.trim() || sending || fileProblem || ccHolds || blocked) return;
+    if (!body.trim() || inFlight.current || fileProblem || ccHolds || blocked) return;
     const resolving = resolve && canResolve;
     resolveAfter.current = resolving;
     // The reply stays sent when the status change fails; the person is told and can press Resolve. The button
@@ -202,8 +217,12 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       result = (result as Promise<unknown>).catch((error: unknown) => (draftGone(error) ? send() : Promise.reject(error)));
     }
     if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); void resolveNow(); return; }
+    inFlight.current = true;
     setSending(true);
     setProblem(undefined);
+    // The kept draft goes as the request leaves, so a reload meanwhile does not offer the sent text again;
+    // a failure writes it back.
+    writeDraft(draftKey, { kind, body: '' });
     // Clear only what was sent: text typed while the request was in flight (a note right after a reply) stays.
     // The files go with it; files picked meanwhile stay.
     const clearSent = () => {
@@ -212,9 +231,10 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       setFiles((current) => current.filter((file) => !sentFiles.includes(file)));
     };
     (result as Promise<unknown>).then(() => { clearSent(); return resolveNow(); }, (error: unknown) => {
+      writeDraft(draftKey, { kind, body: latestBody.current });
       if (error instanceof ReplyConflictError) setConflict(error);
       else setProblem(replyRefusalText(error));
-    }).finally(() => setSending(false));
+    }).finally(() => { inFlight.current = false; setSending(false); });
   };
   // R starts a reply and N a private note from anywhere on the page, as the keycaps on the tabs say.
   useEffect(() => {
@@ -260,7 +280,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
         )}
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
-          placeholder={kind === 'note' ? messages.notePlaceholder : noReplies ? messages.replyNotSendable : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
+          placeholder={kind === 'note' ? messages.notePlaceholder : noReplies ? messages.replyNotSendable : messages.replyPlaceholder} onChange={(event) => { setBody(event.target.value); setOtherTab(false); }} />
+        {otherTab && <p role="status" className="composer-hint">{messages.draftFromOtherTab}</p>}
         {picking && !disabled && (pickers.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
           // Until the chunk is there, the list's own box says it is loading, where the list will be.
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
