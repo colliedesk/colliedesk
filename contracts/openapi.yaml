@@ -994,6 +994,8 @@ paths:
         Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when
         the workspace has no such email channel; 409 `own_address` when the agent signs in with the support
         address itself, whose mail never opens a conversation.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
@@ -1001,6 +1003,9 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/TestMessageResult'}
+        '200':
+          description: The test message an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used
+          content: {application/json: {schema: {$ref: '#/components/schemas/TestMessageResult'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -1011,6 +1016,7 @@ paths:
             Retry-After: {schema: {type: integer}}
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/channels/{id}/email/gmail:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1192,6 +1198,8 @@ paths:
         Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when
         the workspace has no such email channel; 409 `own_address` when the agent signs in with the support
         address itself, whose mail never opens a conversation.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
@@ -1199,6 +1207,9 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/TestMessageResult'}
+        '200':
+          description: The test message an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used
+          content: {application/json: {schema: {$ref: '#/components/schemas/TestMessageResult'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -1209,6 +1220,7 @@ paths:
             Retry-After: {schema: {type: integer}}
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/channels/email/gmail:
     post:
       operationId: connectGmail
@@ -2182,6 +2194,8 @@ paths:
         `duplicate_title`). A workspace holds at most 500, counting the ones in the trash (409
         `saved_reply_limit`).
         The new reply has version 1 in its history.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -2192,10 +2206,14 @@ paths:
         '201':
           description: Created saved reply
           content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
+        '200':
+          description: The saved reply an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/saved-replies/trash:
     get:
       operationId: listTrashedSavedReplies
@@ -4003,6 +4021,8 @@ paths:
         title. The text holds at most 100,000 characters and is never cut; a workspace holds at most
         2,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may
         create one; a lower tier files an agent request (at most 64 KiB of JSON).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
         required: true
         content:
@@ -4013,10 +4033,14 @@ paths:
         '201':
           description: Created article
           content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '200':
+          description: The article an earlier request with the same Idempotency-Key created; nothing new was stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/kb/articles/trash:
     get:
       operationId: listTrashedKBArticles
@@ -4894,7 +4918,19 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
+    CreateIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: >-
+        The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry
+        of it. A repeat within a day returns what the first request created (200) and creates nothing; the
+        same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace.
+      schema: {type: string, minLength: 1, maxLength: 200}
   responses:
+    IdempotencyKeyReused:
+      description: The Idempotency-Key already names another request with other input (`idempotency_key_reused`); nothing was created
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     AgentRequestAccepted:
       description: >-
         An agent token called this above its tier, or the action needs a person's approval for every
