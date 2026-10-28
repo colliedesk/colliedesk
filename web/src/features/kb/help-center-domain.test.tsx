@@ -8,7 +8,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const none = {
   hostname: null, status: 'none', records: [], created_at: null, verified_at: null, checked_at: null, check_error: null, certificate_requested_at: null,
-  failing_since: null, pending_reason: null,
+  failing_since: null, pending_reason: null, awaiting_payment: false,
 };
 const records = [
   { type: 'CNAME', name: 'help.acme.example', value: 'hc-0123456789abcdef01234567.help.example.net', purpose: 'route_and_verify' },
@@ -125,4 +125,28 @@ test('an agent sees the domain and its records but cannot change it', async () =
   expect(screen.queryByRole('button', { name: 'Check now' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Remove domain' })).not.toBeInTheDocument();
   expect(screen.getByText('Only admins can set or remove the custom domain.')).toBeInTheDocument();
+});
+
+test('on the trial an admin verifies a domain, and the card says it serves there once the workspace is paid', async () => {
+  serve({
+    'GET /api/v1/help-center/domain': () => json(200, { ...none, awaiting_payment: true }),
+    'PUT /api/v1/help-center/domain': () => json(200, { ...pending, awaiting_payment: true }),
+    'POST /api/v1/help-center/domain/check': () => json(200, { ...active, awaiting_payment: true }),
+  });
+  open(true);
+  expect(await screen.findByText(/The help center serves on your domain once you pay for a plan/)).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Host name' }), { target: { value: 'help.acme.example' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Set domain' }));
+  expect(await screen.findByText(/help.acme.example is waiting for its DNS records/)).toHaveAttribute('role', 'status');
+  fireEvent.click(screen.getByRole('button', { name: 'Check now' }));
+  expect(await screen.findByText('help.acme.example is verified. The help center serves there once you pay for a plan; until then it stays on its own address.'))
+    .toHaveAttribute('role', 'status');
+  expect(screen.queryByText('The help center is served on help.acme.example.')).not.toBeInTheDocument();
+});
+
+test('a paid workspace sees no payment note', async () => {
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, active) });
+  open(true);
+  expect(await screen.findByText('The help center is served on help.acme.example.')).toBeInTheDocument();
+  expect(screen.queryByText(/once you pay for a plan/)).not.toBeInTheDocument();
 });

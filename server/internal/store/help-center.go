@@ -26,7 +26,8 @@ func (s *Store) OpenHelpCenter(ctx context.Context, slug string) (domain.HelpCen
 }
 
 // OpenHelpCenterWorkspace is OpenHelpCenter for a workspace already found, such as the one a custom
-// domain belongs to. CustomHost is the workspace's active custom domain, read in the same query.
+// domain belongs to. CustomHost is the workspace's active custom domain, read in the same query, and "" during
+// the trial: the help center serves on its custom domain only once the workspace is paid.
 func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string) (domain.HelpCenterSite, bool, error) {
 	type state struct {
 		site    domain.HelpCenterSite
@@ -60,6 +61,11 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 		}
 		access, err := workspaceAccess(ctx, tx, workspaceID, s.now())
 		got.locked, got.site.Trial = access.Locked, access.Plan == domain.PlanTrial
+		// A trial workspace may verify its custom domain, but its noindex pages never serve there: the
+		// help center stays on its own address until the workspace is paid.
+		if got.site.Trial {
+			got.site.CustomHost = ""
+		}
 		return got, err
 	})
 	if err != nil {

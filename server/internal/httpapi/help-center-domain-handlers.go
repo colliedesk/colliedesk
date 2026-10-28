@@ -39,18 +39,25 @@ type helpCenterDomainView struct {
 	CertificateRequestedAt *time.Time                `json:"certificate_requested_at"`
 	FailingSince           *time.Time                `json:"failing_since"`
 	PendingReason          *string                   `json:"pending_reason"`
+	AwaitingPayment        bool                      `json:"awaiting_payment"`
 }
 
-func noHelpCenterDomain() helpCenterDomainView {
-	return helpCenterDomainView{Status: domain.HelpCenterDomainNone, Records: []helpcenter.DomainRecord{}}
+// awaitingPayment reports whether the workspace's custom domain waits for a paid plan before it serves:
+// true during the trial and once an unpaid trial has ended, never on a server without billing.
+func awaitingPayment(access domain.Access) bool {
+	return access.Plan == domain.PlanTrial || access.Locked
 }
 
-func (a *API) helpCenterDomainView(d domain.HelpCenterDomain) helpCenterDomainView {
+func noHelpCenterDomain(access domain.Access) helpCenterDomainView {
+	return helpCenterDomainView{Status: domain.HelpCenterDomainNone, Records: []helpcenter.DomainRecord{}, AwaitingPayment: awaitingPayment(access)}
+}
+
+func (a *API) helpCenterDomainView(d domain.HelpCenterDomain, access domain.Access) helpCenterDomainView {
 	host, created := d.Hostname, d.CreatedAt
 	return helpCenterDomainView{Hostname: &host, Status: d.Status,
 		Records:   helpcenter.Records(d.Hostname, d.Claim, d.Token, a.config.Origin, a.config.HelpCenterDomain),
 		CreatedAt: &created, VerifiedAt: d.VerifiedAt, CheckedAt: d.CheckedAt, CheckError: d.CheckError, CertificateRequestedAt: d.CertificateRequestedAt,
-		FailingSince: d.FailingSince, PendingReason: d.PendingReason}
+		FailingSince: d.FailingSince, PendingReason: d.PendingReason, AwaitingPayment: awaitingPayment(access)}
 }
 
 func (a *API) resolvers() helpcenter.Resolvers {
@@ -74,18 +81,19 @@ func checkClaim(evidence helpcenter.DomainEvidence, workspaceID string, claim do
 	return failure
 }
 
-// writeHelpCenterDomain answers with the workspace's custom domain as it is now.
-func (a *API) writeHelpCenterDomain(response http.ResponseWriter, ctx context.Context, workspaceID string) {
-	current, found, err := a.store.GetHelpCenterDomain(ctx, workspaceID)
+// writeHelpCenterDomain answers with the requesting workspace's custom domain as it is now.
+func (a *API) writeHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
+	who := principal(request)
+	current, found, err := a.store.GetHelpCenterDomain(request.Context(), who.Workspace.ID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
 	if !found {
-		writeJSON(response, http.StatusOK, noHelpCenterDomain())
+		writeJSON(response, http.StatusOK, noHelpCenterDomain(who.Access))
 		return
 	}
-	writeJSON(response, http.StatusOK, a.helpCenterDomainView(current))
+	writeJSON(response, http.StatusOK, a.helpCenterDomainView(current, who.Access))
 }
 
 func writeDomainTaken(response http.ResponseWriter) {
@@ -93,7 +101,7 @@ func writeDomainTaken(response http.ResponseWriter) {
 }
 
 func (a *API) getHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
-	a.writeHelpCenterDomain(response, request.Context(), principal(request).Workspace.ID)
+	a.writeHelpCenterDomain(response, request)
 }
 
 func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
@@ -132,7 +140,7 @@ func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Re
 		a.helpCenter.ForgetDomain(workspaceID, previous.Hostname, previous.Claim)
 		a.helpCenter.ForgetDomain(workspaceID, set.Hostname, set.Claim)
 	}
-	a.writeHelpCenterDomain(response, ctx, workspaceID)
+	a.writeHelpCenterDomain(response, request)
 }
 
 func (a *API) deleteHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
@@ -148,7 +156,7 @@ func (a *API) deleteHelpCenterDomain(response http.ResponseWriter, request *http
 	if found {
 		a.helpCenter.ForgetDomain(workspaceID, removed.Hostname, removed.Claim)
 	}
-	writeJSON(response, http.StatusOK, noHelpCenterDomain())
+	writeJSON(response, http.StatusOK, noHelpCenterDomain(principal(request).Access))
 }
 
 // checkHelpCenterDomain looks the custom domain up in DNS now and records the result. Every check
@@ -186,7 +194,7 @@ func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.
 		writeStoreError(response, err)
 		return
 	}
-	a.writeHelpCenterDomain(response, ctx, who.Workspace.ID)
+	a.writeHelpCenterDomain(response, request)
 }
 
 // recordCheck records what a DNS check of the workspace's claim current showed: active when the
@@ -224,8 +232,9 @@ func (a *API) certifyClaimHost(ctx context.Context, claim string) (open, claimed
 }
 
 // certifyCustomHost reports whether the reverse proxy may get a certificate for host (it is an
-// active custom domain whose help center is open, or the pending domain of a workspace whose DNS
-// proves it within helpCenterLiveCheckTimeout, which then becomes active) and whether any workspace
+// active custom domain whose help center is open and serves there, or the pending domain of a workspace
+// whose DNS proves it within helpCenterLiveCheckTimeout, which then becomes active; a workspace on its
+// trial verifies its domain but gets no certificate until it is paid) and whether any workspace
 // claims host, active or pending. Live checks are bounded by liveChecks, so a stream of questions
 // cannot make the server flood DNS.
 func (a *API) certifyCustomHost(ctx context.Context, host string) (open, claimed bool, err error) {
@@ -233,8 +242,8 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (open, claimed
 		if err != nil {
 			return false, false, err
 		}
-		_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
-		if err != nil || !open {
+		site, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
+		if err != nil || !open || site.CustomHost != host {
 			return false, true, err
 		}
 		// The question is public: note the certificate at most once an hour per name in this process
@@ -267,11 +276,12 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (open, claimed
 		if !found || claim.Hostname != host || claim.Status != domain.HelpCenterDomainPending {
 			continue
 		}
-		_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
+		site, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
 		if err != nil {
 			return false, true, err
 		}
-		after, err := a.recordCheck(ctx, workspaceID, claim, evidence, open)
+		serves := open && !site.Trial
+		after, err := a.recordCheck(ctx, workspaceID, claim, evidence, serves)
 		if errors.Is(err, domain.ErrHelpCenterDomainTaken) || errors.Is(err, domain.ErrHelpCenterDomainMissing) {
 			continue
 		}
@@ -279,7 +289,7 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (open, claimed
 			return false, true, err
 		}
 		if after.Status == domain.HelpCenterDomainActive {
-			return open, true, nil
+			return serves, true, nil
 		}
 	}
 	return false, true, nil

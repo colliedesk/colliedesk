@@ -48,9 +48,13 @@ func (a *API) allowHelpCenterHostLookup(request *http.Request) (bool, time.Durat
 }
 
 // helpCenterHome is the public address of the requesting workspace's help center, its custom domain
-// while that is active (helpcenter.SiteURL); on a failure it answers and reports false.
+// while that is active and the workspace is paid (helpcenter.SiteURL); on a failure it answers and
+// reports false.
 func (a *API) helpCenterHome(response http.ResponseWriter, request *http.Request) (string, bool) {
 	who := principal(request)
+	if awaitingPayment(who.Access) {
+		return helpcenter.SiteURL(a.config.Origin, a.config.HelpCenterDomain, who.Workspace.Slug, ""), true
+	}
 	home, err := a.helpCenter.Address(request.Context(), who.Workspace.ID, who.Workspace.Slug)
 	if err != nil {
 		writeStoreError(response, err)

@@ -5760,7 +5760,8 @@ paths:
         token are random, made when the host name is set, and kept until it is removed or replaced; the
         workspace's slug proves nothing, since another workspace may take it after a rename. The token is
         in the TXT record's value; it is public in DNS once set, so every tier may read it, and it is
-        never exported.
+        never exported. On a server with billing, a workspace on its trial may set and verify a domain, but
+        the help center serves on it only once the workspace is paid (`awaiting_payment`).
       responses:
         '200':
           description: The custom domain
@@ -7754,7 +7755,7 @@ components:
             slug addresses, and links to the old slug stop working.
     HelpCenterDomain:
       type: object
-      required: [hostname, status, records, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason]
+      required: [hostname, status, records, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason, awaiting_payment]
       properties:
         hostname: {type: [string, 'null'], description: 'The custom host name in ASCII (punycode) form; null when none is set.'}
         status:
@@ -7786,6 +7787,13 @@ components:
             Why an active domain went back to `pending`: `proof_lost` (no DNS check proved it for 7 days) or
             `taken_over` (another workspace proved the host name while this domain's records did not). Null
             otherwise; cleared when a check passes or the host name is set again.
+        awaiting_payment:
+          type: boolean
+          description: >-
+            True while the workspace is on its trial or locked after it: the domain can be set and verified,
+            but the help center serves on it, and the reverse proxy gets its certificate, only once the
+            workspace is paid. Until then the help center stays on its own address. Always false on a server
+            without billing.
     HelpCenterDomainRecord:
       type: object
       required: [type, name, value, purpose]
