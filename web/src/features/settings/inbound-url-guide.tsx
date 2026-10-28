@@ -7,8 +7,9 @@ const text = {
   secret: 'The inbound secret is a password for that forwarder only, not your email password.',
   guide: 'Read how mail reaches the inbound URL',
   guideURL: 'https://colliedesk.com/docs/self-host/email#3-forward-mail-to-colliedesk',
+  terminal: 'Test from a terminal instead',
   example: 'Test request',
-  exampleHelp: 'Run it in a terminal: it posts one test message, which opens a conversation in your inbox.',
+  exampleHelp: 'For whoever runs the server: run it in a terminal to post one message the way your forwarder will.',
   copy: 'Copy test request',
   copied: 'Request copied',
   secretPlaceholder: 'YOUR_INBOUND_SECRET',
@@ -27,10 +28,12 @@ export function InboundURLGuide({ inboundURL, supportAddress, secret }: { inboun
   const command = testRequest(inboundURL, supportAddress, secret);
   return <div className="email-channel-forwarding">
     <p className="muted-copy">{text.what} {text.secret}{' '}<a href={text.guideURL} target="_blank" rel="noreferrer">{text.guide}</a></p>
-    <div className="copy-field">
-      <label className="invite-link"><span className="field-label">{text.example}</span>
-        <textarea readOnly rows={4} value={command} spellCheck={false} /><small>{text.exampleHelp}</small></label>
-      <span className="button-row"><CopyButton value={command} copiedText={text.copied}>{text.copy}</CopyButton></span>
-    </div>
+    <details><summary>{text.terminal}</summary>
+      <div className="copy-field">
+        <label className="invite-link"><span className="field-label">{text.example}</span>
+          <textarea readOnly rows={4} value={command} spellCheck={false} /><small>{text.exampleHelp}</small></label>
+        <span className="button-row"><CopyButton value={command} copiedText={text.copied}>{text.copy}</CopyButton></span>
+      </div>
+    </details>
   </div>;
 }
