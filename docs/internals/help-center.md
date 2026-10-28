@@ -128,7 +128,24 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   meta description the excerpt; both default when empty. Versions keep them and a restore brings them
   back.
 - **Trial pages ask not to be indexed** (`<meta name="robots">`, `X-Robots-Tag`, and `robots.txt`
-  on a help center host). There is no sitemap.
+  on a help center host). A trial's `sitemap.xml` and `llms.txt` list nothing and carry
+  `X-Robots-Tag: noindex`, as its Markdown files do.
+- **Files for crawlers and AI assistants are per address** (`seo-files.go`): `robots.txt` (only on
+  a host of its own, with a `Sitemap:` line), `sitemap.xml` (home, every visible collection's first
+  page, every published article with `lastmod`), `llms.txt` (llmstxt.org: one section per collection,
+  links to each article's Markdown) and `<article address>.md` (the text as written, images and
+  videos on the help center's address, HTML comments dropped, `Link: rel="canonical"` to the page).
+  They are read from the workspace's own rows and name only `view.address`, so a slug host that moved
+  to a custom domain answers 301 for them like for pages. `store.HelpCenterIndex` reads the published
+  articles in one query, bounded by the article cap.
+- **One address per page; every other one is 301, never a canonical tag on a copy.** The home page
+  has no trailing slash below `/help/` and no query; a collection has no empty path part, no query but
+  `page` past 1; an article and its Markdown have no query and the current slug. Search pages keep
+  their query and carry `noindex`. Freshdesk keeps answering 200 on its old host behind a canonical
+  tag, which is what this rule avoids.
+- **hreflang names only the page's own language and `x-default`.** Imported translations are kept
+  and exported but not rendered, so there is no other language's page to point at; when they are
+  served, each gets its address and the links grow.
 - **The brand is a second style sheet, not inline style** (`theme.go`). `style-src 'self'` refuses
   inline style, and the CSP stays byte for byte as it is, so `brandCSS` writes the theme as custom
   properties of `site.css` into `<base>/_/brand-<sha256[:16]>.css`, served after `OpenHelpCenter`,

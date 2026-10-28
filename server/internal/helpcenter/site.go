@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -279,6 +278,11 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	view := s.newView(site, base)
 	switch {
 	case sub == "/" || sub == "":
+		// One address for the home page: no trailing slash below /help/, no query.
+		if request.URL.RawQuery != "" || base != "" && request.URL.Path != base {
+			moveTo(response, request, view.home)
+			return
+		}
 		s.home(response, request, view)
 	case sub == "/search":
 		s.search(response, request, view)
@@ -294,6 +298,10 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		s.brandAsset(response, request, view, strings.TrimPrefix(sub, stylePath))
 	case sub == "/robots.txt" && base == "":
 		s.robots(response, request, view)
+	case sub == "/sitemap.xml":
+		s.sitemap(response, request, view)
+	case sub == "/llms.txt":
+		s.llms(response, request, view)
 	default:
 		if old, ok := ParseLegacyPath(sub); ok {
 			s.legacy(response, request, view, old)
@@ -440,21 +448,6 @@ func (s *Site) writeStyle(response http.ResponseWriter, request *http.Request, s
 	response.WriteHeader(http.StatusOK)
 	if request.Method != http.MethodHead {
 		_, _ = response.Write(style)
-	}
-}
-
-func (s *Site) robots(response http.ResponseWriter, request *http.Request, v view) {
-	body := "User-agent: *\nDisallow:\n"
-	if v.site.Trial {
-		body = "User-agent: *\nDisallow: /\n"
-	}
-	if fresh(response, request, v.etag) {
-		return
-	}
-	response.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	response.Header().Set("X-Content-Type-Options", "nosniff")
-	if request.Method != http.MethodHead {
-		_, _ = io.WriteString(response, body)
 	}
 }
 

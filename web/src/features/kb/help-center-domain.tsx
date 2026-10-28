@@ -16,7 +16,7 @@ const recordSchema = z.object({
 const domainSchema = z.object({
   hostname: z.string().nullable(), status: z.enum(['none', 'pending', 'active']), records: z.array(recordSchema),
   created_at: date, verified_at: date, checked_at: date, check_error: z.string().nullable(), certificate_requested_at: date,
-  failing_since: date, pending_reason: z.enum(['proof_lost', 'taken_over']).nullable(),
+  failing_since: date, pending_reason: z.enum(['proof_lost', 'taken_over']).nullable(), awaiting_payment: z.boolean(),
 }) satisfies z.ZodType<Generated<'HelpCenterDomain'>>;
 
 export type HelpCenterDomain = z.infer<typeof domainSchema>;
@@ -66,7 +66,9 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
   return <section className="stacked-form" aria-labelledby="help-center-domain-heading">
     <h3 id="help-center-domain-heading">{domainMessages.heading}</h3>
     <p className="muted-copy">{domainMessages.description}</p>
-    <p role="status" className="saved-state" data-on={domain.status === 'active' ? 'true' : 'false'}>{domainMessages.state(domain.status, domain.hostname)}</p>
+    {domain.awaiting_payment && <p className="muted-copy">{domainMessages.trial}</p>}
+    <p role="status" className="saved-state" data-on={domain.status === 'active' && !domain.awaiting_payment ? 'true' : 'false'}>
+      {domain.status === 'active' && domain.awaiting_payment && domain.hostname ? domainMessages.verifiedUnpaid(domain.hostname) : domainMessages.state(domain.status, domain.hostname)}</p>
     {domain.records.length > 0 && <div className="email-channel-dns">
       <p className="muted-copy">{domain.status === 'active' ? domainMessages.recordsKeep : domainMessages.recordsHelp}</p>
       {domain.records.map((record) => <DnsRecord key={`${record.type} ${record.name}`} record={record} />)}

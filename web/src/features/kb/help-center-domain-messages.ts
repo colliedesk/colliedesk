@@ -11,6 +11,8 @@ const purposes: Record<Purpose, string> = {
 export const domainMessages = {
   heading: 'Custom domain',
   description: 'Serve the help center on your own address, such as help.example.com. Your other help center addresses then move there.',
+  trial: 'During the trial you can set and verify your domain to prepare the move. The help center serves on your domain once you pay for a plan: trial pages are hidden from search engines, and serving them on your domain would cost it its place in search results.',
+  verifiedUnpaid: (hostname: string) => `${hostname} is verified. The help center serves there once you pay for a plan; until then it stays on its own address.`,
   state: (status: Status, hostname: string | null) => status === 'active'
     ? `The help center is served on ${hostname}.`
     : status === 'pending' ? `${hostname} is waiting for its DNS records. It starts serving as soon as a check finds them.` : 'No custom domain is set.',

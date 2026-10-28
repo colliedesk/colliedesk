@@ -90,7 +90,9 @@ type page struct {
 	Lang, Title, SiteTitle, Home, SearchURL, Style string
 	// Canonical (and Description, which a collection also shows) describe the page to search engines
 	// and link previews.
-	Canonical           string
+	Canonical string
+	// Markdown is the address of an article's Markdown, for AI assistants.
+	Markdown            string
 	NoIndex, HeroSearch bool
 	Query               string
 	Crumbs              []link
@@ -305,7 +307,7 @@ func (s *Site) homeOf(v view, t tree, articles []domain.PublicKBArticle) page {
 		byCollection[article.CollectionID] = append(byCollection[article.CollectionID], v.articleLinks([]domain.PublicKBArticle{article}, 0)...)
 	}
 	data := s.page(v, "", nil)
-	data.HeroSearch, data.Canonical = true, v.address
+	data.HeroSearch, data.Canonical = true, v.homeURL()
 	data.StructuredData = []template.JS{v.breadcrumbs(nil, link{Name: "Home", URL: v.home})}
 	for _, root := range visible(t.roots) {
 		data.Collections = append(data.Collections, v.card(root, byCollection[root.ID]))
@@ -323,6 +325,22 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 		}
 		pageNumber = parsed
 	}
+	// One address per collection page: its slugs without empty parts, and no query but a page past the first.
+	var slugs []string
+	for _, part := range strings.Split(path, "/") {
+		if part != "" {
+			slugs = append(slugs, part)
+		}
+	}
+	query := request.URL.Query()
+	if canonical := v.base + CollectionPath(slugs); request.URL.EscapedPath() != canonical || len(query) > 1 ||
+		len(query) == 1 && !query.Has("page") || pageNumber == 1 && query.Has("page") {
+		if pageNumber > 1 {
+			canonical += "?page=" + strconv.Itoa(pageNumber)
+		}
+		moveTo(response, request, canonical)
+		return
+	}
 	if fresh(response, request, v.etag) {
 		return
 	}
@@ -331,7 +349,6 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 		s.writeError(response, err)
 		return
 	}
-	slugs := strings.Split(strings.Trim(path, "/"), "/")
 	current := t.find(slugs)
 	if len(slugs) > domain.MaxKBDepth || current == nil {
 		s.writeSiteNotFound(response, v)
@@ -392,6 +409,11 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 }
 
 func (s *Site) article(response http.ResponseWriter, request *http.Request, v view, address string) {
+	address, asMarkdown := strings.CutSuffix(address, markdownSuffix)
+	suffix := ""
+	if asMarkdown {
+		suffix = markdownSuffix
+	}
 	match := articleAddress.FindStringSubmatch(address)
 	if match == nil {
 		s.writeSiteNotFound(response, v)
@@ -402,7 +424,8 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		s.writeSiteNotFound(response, v)
 		return
 	}
-	if fresh(response, request, v.etag) {
+	// A query names no other article: the address without it is the canonical one, checked below.
+	if request.URL.RawQuery == "" && fresh(response, request, v.etag) {
 		return
 	}
 	article, err := s.config.Store.HelpCenterArticle(request.Context(), v.site.WorkspaceID, number)
@@ -414,11 +437,14 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		s.writeError(response, err)
 		return
 	}
-	// The number finds the article; any other slug, an old one included, moves to the current address.
-	if match[2] != article.Slug {
-		response.Header().Del("ETag")
-		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, v.base+ArticlePath(article.Number, article.Slug), http.StatusMovedPermanently)
+	// The number finds the article; any other slug, an old one included, or a query moves to the
+	// current address.
+	if match[2] != article.Slug || request.URL.RawQuery != "" {
+		moveTo(response, request, v.base+ArticlePath(article.Number, article.Slug)+suffix)
+		return
+	}
+	if asMarkdown {
+		s.articleMarkdown(response, request, v, article)
 		return
 	}
 	data, plain, err := s.articlePage(request.Context(), v, article)
@@ -457,6 +483,7 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	data = s.page(v, article.Title, v.crumbs(collection))
 	data.Heading, data.Body = article.Title, rendered.body
 	data.Description, data.Canonical = rendered.description, v.address+ArticlePath(article.Number, article.Slug)
+	data.Markdown = data.Canonical + markdownSuffix
 	// The article's own search title and description replace the defaults.
 	if article.SEOTitle != "" {
 		data.Title = article.SEOTitle
