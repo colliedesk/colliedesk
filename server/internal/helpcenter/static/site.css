@@ -1,17 +1,18 @@
-/* Public help center. System fonts only: the page's CSP loads nothing from other hosts. */
+/* Public help center. System fonts only: the page's CSP loads nothing from other hosts. It is the customer's
+   own site, so it is white-label ink and paper: neutral greys, ink links and buttons, no vendor colour. */
 :root {
-  --paper: #f5f7f5;
+  --paper: #fafafa;
   --surface: #ffffff;
-  --ink: #16201c;
-  --muted: #53605a;
-  --rule: #d8dfdb;
-  --accent: #17675a;
+  --ink: #171717;
+  --muted: #4d4d4d;
+  --rule: #dcdcdc;
+  --accent: #171717;
   --accent-ink: #ffffff;
-  --accent-hover: #145b4f;
-  --accent-soft: #e2efeb;
-  --tab: #eaf2ef;
-  --thumb: rgba(22, 32, 28, 0.22);
-  --thumb-hover: rgba(22, 32, 28, 0.42);
+  --accent-hover: #333333;
+  --accent-soft: #efefef;
+  --tab: #f4f4f4;
+  --thumb: rgba(23, 23, 23, 0.22);
+  --thumb-hover: rgba(23, 23, 23, 0.42);
   --serif: "Iowan Old Style", "Charter", "Bitstream Charter", "Sitka Text", Cambria, "Palatino Linotype", Georgia, serif;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
@@ -34,18 +35,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #0f1412;
-    --surface: #161d1a;
-    --ink: #e3e9e5;
-    --muted: #9ba8a1;
-    --rule: #28322e;
-    --accent: #6cc4b1;
-    --accent-ink: #0b1714;
-    --accent-hover: #7ecbba;
-    --accent-soft: #19302a;
-    --tab: #1c2925;
-    --thumb: rgba(227, 233, 229, 0.2);
-    --thumb-hover: rgba(227, 233, 229, 0.4);
+    --paper: #0a0a0a;
+    --surface: #141414;
+    --ink: #fafafa;
+    --muted: #a3a3a3;
+    --rule: #2e2e2e;
+    --accent: #fafafa;
+    --accent-ink: #0a0a0a;
+    --accent-hover: #e5e5e5;
+    --accent-soft: #222222;
+    --tab: #1c1c1c;
+    --thumb: rgba(250, 250, 250, 0.2);
+    --thumb-hover: rgba(250, 250, 250, 0.4);
   }
 }
 
