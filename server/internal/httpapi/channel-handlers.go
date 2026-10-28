@@ -255,13 +255,8 @@ func (a *API) createChannel(response http.ResponseWriter, request *http.Request)
 	}
 	fingerprint := []string{string(input.Type), name, enabled, isDefault, string(input.Config), string(input.Settings)}
 	a.createOnce(response, request, createChannelOperation, fingerprint, func(ctx context.Context) (any, error) {
-		channel, err := a.store.CreateChannel(ctx, workspaceID, input.Type,
+		public, err := a.store.CreateChannelPublic(ctx, workspaceID, input.Type,
 			store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings}, channelActor(request))
-		if err != nil {
-			writeChannelError(response, err)
-			return nil, errAnswered
-		}
-		public, err := a.store.GetChannelPublic(ctx, workspaceID, channel.ID)
 		if err != nil {
 			writeChannelError(response, err)
 			return nil, errAnswered
