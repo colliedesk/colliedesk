@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -59,10 +62,30 @@ func (a *API) createProblemReport(response http.ResponseWriter, request *http.Re
 		return
 	}
 	who := principal(request)
+	diagnostics, err := json.Marshal(report.diagnostics)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	fingerprint := []string{report.description, string(diagnostics)}
+	for _, shot := range report.screenshots {
+		sum := sha256.Sum256(shot.data)
+		fingerprint = append(fingerprint, shot.filename, hex.EncodeToString(sum[:]))
+	}
+	// A repeat of one press (the same Idempotency-Key) answers the first report's reference: one report
+	// reaches the desk and one counts against the hourly five.
+	a.createOnce(response, request, problemReportOperation, fingerprint, func(ctx context.Context) (any, error) {
+		return a.sendProblemReport(ctx, response, who, desk, report)
+	})
+}
+
+// sendProblemReport counts the report against the agent's hourly allowance and files it in the desk; a
+// refusal is written to response and returned as errAnswered.
+func (a *API) sendProblemReport(ctx context.Context, response http.ResponseWriter, who auth.Principal, desk string, report problemReport) (any, error) {
 	if allowed, wait := a.problemReports.allow(who.Agent.ID, a.now()); !allowed {
 		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 		writeError(response, http.StatusTooManyRequests, "rate_limited", fmt.Sprintf("You can send %d problem reports an hour. Try again later.", problemReportsPerHour))
-		return
+		return nil, errAnswered
 	}
 	requestID := requestIDOf(ctx)
 	name := who.Agent.DisplayName
@@ -76,22 +99,21 @@ func (a *API) createProblemReport(response http.ResponseWriter, request *http.Re
 	for _, shot := range report.screenshots {
 		if err := a.checkDiskSpace(); err != nil {
 			a.writeUploadError(response, err)
-			return
+			return nil, errAnswered
 		}
 		object, err := a.config.Attachments.Put(ctx, desk, strings.NewReader(string(shot.data)), int64(len(shot.data)))
 		if err != nil {
 			a.writeUploadError(response, err)
-			return
+			return nil, errAnswered
 		}
 		stored = append(stored, store.NewAttachment{Object: object})
 		input.Files = append(input.Files, store.EmailFile{Filename: shot.filename, ContentType: shot.contentType, Object: object})
 	}
 	if _, err := a.store.CreateProblemReport(ctx, desk, input); err != nil {
-		writeInternalError(response, err)
-		return
+		return nil, err
 	}
 	stored = nil // referenced now: keep the bytes
-	writeJSON(response, http.StatusCreated, map[string]string{"reference": requestID})
+	return map[string]string{"reference": requestID}, nil
 }
 
 // problemReportDesk resolves the configured support desk. A slug that names no workspace is a

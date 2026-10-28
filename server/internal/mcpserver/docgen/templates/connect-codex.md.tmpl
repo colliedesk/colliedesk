@@ -1,0 +1,36 @@
+# Connect Codex
+
+Connect [Codex](https://developers.openai.com/codex) to Colliedesk. The Codex CLI, its IDE
+extension and the ChatGPT desktop app share one configuration, `~/.codex/config.toml`; the token
+stays in an environment variable and never in that file.
+
+{{template "before" .}}
+## Connect
+
+1. Put the token in your shell profile (`~/.zshrc` or `~/.bashrc`) so every new terminal has it,
+   and open a new terminal:
+
+   ```sh
+   {{index .Snippets "tokenEnv"}}
+   ```
+
+2. Add Colliedesk:
+
+   ```sh
+   {{index .Snippets "codex"}}
+   ```
+
+`codex mcp list` shows `{{.ServerName}}` with `Bearer token`. Codex reads the variable when it
+starts, so start it from a terminal that has it. The IDE extension and the desktop app only see it
+when they are started from such a terminal.
+
+{{template "try" .}}
+{{template "tiers" .}}
+## Remove it
+
+```sh
+codex mcp remove {{.ServerName}}
+```
+
+Delete the `export` line from your shell profile. {{template "revoke" .}}
+{{template "others" .}}

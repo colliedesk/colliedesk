@@ -39,8 +39,15 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
   await teammate.getByRole('link', { name: 'Settings' }).click();
   await expect(teammate.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await expect(teammate.getByRole('button', { name: 'Create invite' })).toHaveCount(0);
-  await expect(teammate.getByRole('button', { name: 'Save support address' })).toHaveCount(0);
   await expect(teammate.getByLabel('Workspace timezone')).toHaveCount(0);
+  // The email channel lives under Channels; an agent reads it there and cannot change it.
+  await teammate.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Channels' }).click();
+  await expect(teammate.getByRole('heading', { name: 'Channels', level: 1 })).toBeVisible();
+  await expect(teammate.getByRole('button', { name: 'Add channel' })).toHaveCount(0);
+  await teammate.goto(`${baseURL}/settings/channels/type/email`);
+  await expect(teammate.getByRole('heading', { name: 'Email', exact: true })).toBeVisible();
+  await expect(teammate.getByText('Support address:')).toBeVisible();
+  await expect(teammate.getByRole('button', { name: 'Save support address' })).toHaveCount(0);
   for (const [method, path, data] of [
     ['post', '/api/v1/auth/invites', { email: `x-${suffix}@example.com`, role_ceiling: 'agent' }],
     ['put', '/api/v1/channels/email', { support_address: `support-${suffix}@example.com` }],

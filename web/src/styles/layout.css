@@ -61,9 +61,10 @@
 .settings-nav { position: sticky; top: 0; display: grid; gap: var(--space-5); }
 .settings-nav ul { display: grid; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .settings-nav a { display: block; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--text-2); font-size: var(--fs-small); text-decoration: none; }
+@media (pointer: coarse), (max-width: 30rem) { .settings-nav a { display: flex; align-items: center; min-height: var(--touch); } }
 .settings-nav a:hover { background: var(--surface-2); color: var(--text-1); }
 .settings-nav a[aria-current="page"] { background: var(--surface-2); color: var(--text-1); font-weight: 600; }
-.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
 .settings-nav .settings-group-label { padding: 0 var(--space-2); }
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }
 .settings-sections > .settings-group-label:first-child, .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
@@ -89,6 +90,7 @@
 .wordmark { display: block; height: 1em; width: auto; flex: none; }
 .signin-tagline { max-width: 26rem; font: 500 30px/1.12 var(--font-display); letter-spacing: -0.02em; }
 .signin-footnote { margin-top: auto; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
+.signin-status { max-width: 26rem; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
 .signin-brand .signin-footnote { margin-top: var(--space-8); }
 .signin-split .redeem-panel { align-self: center; justify-self: center; border: 0; box-shadow: none; }
 .signin-split .redeem-panel .brand-lockup { display: none; }
@@ -109,7 +111,8 @@
   .details-panel { display: none; }
 }
 @media (max-width: 56rem) {
-  .redeem-page.signin-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  /* minmax(0, 1fr): the column never grows to fit a wide child, so a phone never scrolls sideways. */
+  .redeem-page.signin-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .signin-brand { gap: var(--space-3); padding: var(--space-6); }
   .signin-brand-lockup .logo-mark { width: 40px; height: 40px; }
   .signin-tagline { font-size: 16px; }
@@ -129,8 +132,10 @@
   .settings-nav a { white-space: nowrap; border: 1px solid var(--line); padding: var(--space-1) var(--space-3); }
 }
 @media (max-width: 44rem) {
+  /* The page scrolls; the top bar (its links and buttons are --touch tall) stays, and the identity bar under it. */
+  :root { --top-bar: calc(var(--touch) + 2 * var(--space-2) + 1px); scroll-padding-top: calc(var(--top-bar) + 2.25rem); }
   .app-shell { height: auto; min-height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
-  .app-rail { position: sticky; top: 0; z-index: 2; flex-direction: row; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  .app-rail { position: sticky; top: 0; z-index: 3; flex-direction: row; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .rail-brand { margin: 0 var(--space-2) 0 0; }
   /* Labelled links can be wider than a small tablet: scroll, never push the page. */
   .rail-links { flex: 1 1 auto; min-width: 0; flex-direction: row; overflow-x: auto; scrollbar-width: none; }
@@ -160,12 +165,20 @@
   .account-menu { margin: 0 0 0 auto; }
   .rail-avatar, .rail-brand { width: var(--touch); height: var(--touch); }
   .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); }
-  .identity-bar { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  .identity-bar { position: sticky; top: var(--top-bar); z-index: 2; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .app-content > .inbox-shell { height: auto; }
   .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; padding: 0; }
   .panel { border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
-  .list-pane .conversation-scroll { max-height: 22rem; }
-  .conversation-center { min-height: 32rem; }
+  /* The list and an opened conversation take turns: the list scrolls with the page, the conversation fills the
+     screen under the bars like on a wide screen, its timeline scrolling between the title and the reply box. */
+  .inbox-shell[data-view="list"] > .conversation-center, .inbox-shell[data-view="thread"] > .list-pane { display: none; }
+  .app-shell:has(.inbox-shell[data-view="thread"]) { height: 100dvh; min-height: 0; }
+  .app-shell:has(.inbox-shell[data-view="thread"]) .app-main { overflow: hidden; }
+  /* Nothing scrolls the page here, and app-main would be the bar's scroll container: it stays in the flow. */
+  .app-shell:has(.inbox-shell[data-view="thread"]) .identity-bar { position: static; }
+  .app-shell:has(.inbox-shell[data-view="thread"]) .app-content { overflow: auto; }
+  .app-content > .inbox-shell[data-view="thread"] { height: 100%; grid-template-rows: minmax(0, 1fr); }
+  .inbox-shell[data-view="thread"] .composer { max-height: 60dvh; overflow-y: auto; }
   .settings-page { margin: 0; padding: var(--space-5) var(--space-4); }
   .settings-card { padding: var(--space-5) 0; }
 }

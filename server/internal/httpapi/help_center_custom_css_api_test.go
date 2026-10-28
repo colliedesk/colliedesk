@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
 // pageCSP is the policy of every public help center page; custom CSS must leave it as it is.
@@ -201,4 +203,22 @@ func TestHelpCenterThemeSaveWithoutCustomCSSIsRefusedAndKeepsIt(t *testing.T) {
 	if cleared.CustomCSS != "" || cleared.ContentVersion != 2 {
 		t.Fatalf("theme after custom_css null = %+v", cleared)
 	}
+}
+
+func TestHelpCenterCustomCSSNeedsPublishPermission(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "CSS Publish", "admin@css-publish.example.com")
+	writer := issueCustomToken(t, api, admin, "Settings only", auth.PermHelpCenterRead, auth.PermHelpCenterUpdate).Token
+	publisher := issueCustomToken(t, api, admin, "Publisher", auth.PermHelpCenterRead, auth.PermHelpCenterUpdate, auth.PermKBArticlesPublish).Token
+	body := map[string]any{"custom_css": ".masthead{color:#0b5cad}"}
+	response := request(t, api, http.MethodPut, themePath, body, writer, nil)
+	if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"request_id"`) {
+		t.Fatalf("without publish: status=%d body=%s, want 202 with an agent request", response.Code, response.Body.String())
+	}
+	var before themeView
+	kbCall(t, api, http.MethodGet, themePath, nil, admin, http.StatusOK, &before)
+	if before.CustomCSS != "" {
+		t.Fatalf("CSS changed before approval: %q", before.CustomCSS)
+	}
+	kbCall(t, api, http.MethodPut, themePath, body, publisher, http.StatusOK, nil)
 }

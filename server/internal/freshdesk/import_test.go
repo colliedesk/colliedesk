@@ -233,3 +233,25 @@ func TestTicketsOfADeactivatedAgentStayUnassignedAndAreReported(t *testing.T) {
 		t.Fatalf("no assignee_deactivated warning listing the tickets in %+v", report.Warnings)
 	}
 }
+
+// A re-run that sets a status from Freshdesk records the change as the import's, so the results
+// page never counts Freshdesk's work as Colliedesk's.
+func TestRerunStatusChangeIsRecordedAsTheImports(t *testing.T) {
+	env := newImportEnv(t)
+	env.mustRun(t)
+	conversation := env.target(t, "ticket", "1")
+	if _, err := env.pool.Exec(context.Background(), `UPDATE conversations SET status='resolved' WHERE id=$1`, conversation); err != nil {
+		t.Fatal(err)
+	}
+	env.fake.ticket1Updated = true
+	env.mustRun(t)
+	var from, to, source string
+	var actor *string
+	if err := env.pool.QueryRow(context.Background(), `SELECT from_status,to_status,source,actor_agent_id::text FROM conversation_status_changes
+		WHERE conversation_id=$1 ORDER BY changed_at DESC,id DESC LIMIT 1`, conversation).Scan(&from, &to, &source, &actor); err != nil {
+		t.Fatal(err)
+	}
+	if from != "resolved" || to != "open" || source != "import" || actor != nil {
+		t.Fatalf("re-run change = %s -> %s source=%s actor=%v, want resolved -> open by the import", from, to, source, actor)
+	}
+}

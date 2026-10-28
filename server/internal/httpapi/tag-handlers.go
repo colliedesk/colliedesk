@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strings"
 )
@@ -17,12 +18,14 @@ func (a *API) createTag(response http.ResponseWriter, request *http.Request) {
 	if input.Color == "" {
 		input.Color = "#64748b"
 	}
-	tag, err := a.store.CreateTag(request.Context(), principal(request).Workspace.ID, strings.TrimSpace(input.Name), input.Color)
-	if err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusCreated, tag)
+	a.createOnce(response, request, createTagOperation, []string{strings.TrimSpace(input.Name), input.Color}, func(ctx context.Context) (any, error) {
+		tag, err := a.store.CreateTag(ctx, principal(request).Workspace.ID, strings.TrimSpace(input.Name), input.Color)
+		if err != nil {
+			writeStoreError(response, err)
+			return nil, errAnswered
+		}
+		return tag, nil
+	})
 }
 
 func (a *API) updateTag(response http.ResponseWriter, request *http.Request) {

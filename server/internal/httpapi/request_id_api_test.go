@@ -115,7 +115,7 @@ func TestErrorBodiesNameTheRequestID(t *testing.T) {
 func TestInternalErrorsAreLoggedWithTheRequestID(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	token := createSession(t, api, service, "Logged Desk", "admin@logged.example.com")
-	if _, err := pool.Exec(context.Background(), `DROP TABLE web_form_channels CASCADE`); err != nil {
+	if _, err := pool.Exec(context.Background(), `DROP TABLE channels CASCADE`); err != nil {
 		t.Fatal(err)
 	}
 	logs := captureLogs(t)

@@ -43,7 +43,7 @@ export function PlanBanner({ plan, isAdmin, billing, now, onChoosePlan }: PlanBa
       {storageFull && <p role="status" className="plan-banner-warning">
         {messages.storageWarning(Math.floor((used / limit) * 100), formatBytes(used), formatBytes(limit))}
       </p>}
-      {isAdmin && onChoosePlan && <button type="button" className="primary-action" onClick={onChoosePlan}>{messages.choosePlan}</button>}
+      {isAdmin && onChoosePlan && <button type="button" onClick={onChoosePlan}>{messages.choosePlan}</button>}
     </section>
   );
 }

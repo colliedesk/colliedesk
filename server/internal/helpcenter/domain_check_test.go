@@ -99,7 +99,7 @@ func TestCheckDomainProvesOwnershipOnlyByTheClaimsOwnCNAMEOrToken(t *testing.T) 
 		"nothing at all":                           {stubResolvers{}, domain, false},
 	} {
 		evidence := LookupDomain(ctx, c.dns.resolvers(), host, c.domain)
-		err := evidence.Check(claim, token)
+		err := evidence.CheckClaim(claim, token)
 		if (err == nil) != c.proven {
 			t.Errorf("%s: Check error = %v, proven want %v", name, err, c.proven)
 		}
@@ -110,7 +110,7 @@ func TestCheckDomainProvesOwnershipOnlyByTheClaimsOwnCNAMEOrToken(t *testing.T) 
 	// The message says what to set, never what the server's resolver saw: that would let a tenant read
 	// the resolver's answers for any name.
 	seen := LookupDomain(ctx, stubResolvers{cname: map[string]string{host: "db.internal.example."}}.resolvers(), host, domain)
-	err := seen.Check(claim, token)
+	err := seen.CheckClaim(claim, token)
 	if err == nil || strings.Contains(err.Error(), "db.internal.example") {
 		t.Errorf("the message %q names what DNS answered", err)
 	}
@@ -122,10 +122,10 @@ func TestCheckDomainProvesOwnershipOnlyByTheClaimsOwnCNAMEOrToken(t *testing.T) 
 	if detail := seen.Detail(); !strings.Contains(detail, "db.internal.example") {
 		t.Errorf("the log detail %q does not keep what DNS answered", detail)
 	}
-	if err := LookupDomain(ctx, stubResolvers{}.resolvers(), host, domain).Check(claim, token); err == nil || !strings.Contains(err.Error(), "has no CNAME record pointing at "+target) {
+	if err := LookupDomain(ctx, stubResolvers{}.resolvers(), host, domain).CheckClaim(claim, token); err == nil || !strings.Contains(err.Error(), "has no CNAME record pointing at "+target) {
 		t.Errorf("without any record the message is %q", err)
 	}
-	if err := LookupDomain(ctx, stubResolvers{}.resolvers(), host, "").Check(claim, token); err == nil || strings.Contains(err.Error(), "CNAME") {
+	if err := LookupDomain(ctx, stubResolvers{}.resolvers(), host, "").CheckClaim(claim, token); err == nil || strings.Contains(err.Error(), "CNAME") {
 		t.Errorf("without a help center domain the message %q must ask for the TXT record only", err)
 	}
 	// What DNS showed names the claim of the target and the TXT values, for claims of other workspaces.
@@ -143,7 +143,7 @@ func TestCheckDomainStopsAtItsDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	err := LookupDomain(ctx, slow, "help.acme.example", "help.example.net").Check("0123456789abcdef01234567", "0123456789abcdef0123456789abcdef")
+	err := LookupDomain(ctx, slow, "help.acme.example", "help.example.net").CheckClaim("0123456789abcdef01234567", "0123456789abcdef0123456789abcdef")
 	if !errors.Is(err, ErrDomainNotProven) || !strings.Contains(err.Error(), "DNS did not answer in time") || time.Since(started) > time.Second {
 		t.Fatalf("a hung resolver: error %v after %s", err, time.Since(started))
 	}

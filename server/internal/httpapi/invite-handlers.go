@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -19,13 +20,17 @@ func (a *API) createInvite(response http.ResponseWriter, request *http.Request) 
 		writeError(response, http.StatusBadRequest, "invalid_request", "Email and role ceiling are required.")
 		return
 	}
-	invite, link, err := a.auth.CreateInvite(request.Context(), principal(request), input.Email, input.RoleCeiling)
-	if err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	a.recordFunnel("teammate_invited", principal(request).Workspace.ID, nil)
-	writeJSON(response, http.StatusCreated, map[string]any{"invite": invite, "url": link})
+	// A repeat of one press (the same Idempotency-Key) answers the same invite without its link: the link is
+	// shown once and stored only as a hash.
+	a.createOnce(response, request, createInviteOperation, []string{input.Email, input.RoleCeiling}, func(ctx context.Context) (any, error) {
+		invite, link, err := a.auth.CreateInvite(ctx, principal(request), input.Email, input.RoleCeiling)
+		if err != nil {
+			writeStoreError(response, err)
+			return nil, errAnswered
+		}
+		a.recordFunnel("teammate_invited", principal(request).Workspace.ID, nil)
+		return shownOnce{shown: map[string]any{"invite": invite, "url": link}, kept: map[string]any{"invite": invite}}, nil
+	})
 }
 
 // fileGrantRequest files a token's call that a person must approve whatever the token's tier.

@@ -11,8 +11,9 @@ export function replyRefusalText(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
     if (error.code === 'trial_outbound_limit') return messages.trialReplyLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds));
     if (error.refusedCc.length > 0) return messages.trialCcRestricted(error.refusedCc);
-    // A customer who wrote from a merged address: the server's words name the address the reply would go to.
-    return error.replyTo && error.message ? `${error.message} ${messages.textStillHere}` : messages.trialReplyRestricted;
+    // A customer who did write, but whose mail does not count (a merged address, mail posted to the inbound
+    // URL, failed sender verification): the server's words name the real reason and the way out.
+    return (error.replyTo || error.reason) && error.message ? `${error.message} ${messages.textStillHere}` : messages.trialReplyRestricted;
   }
   if (error instanceof AttachmentsTooLargeError || error instanceof AttachmentStorageError) return error.message;
   return messages.replyNotSent;
@@ -21,7 +22,8 @@ export function replyRefusalText(error: unknown): string {
 // retryRefusalText says why retrying a failed delivery was refused; there is no draft to keep.
 export function retryRefusalText(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
-    return error.code === 'trial_outbound_limit' ? messages.trialRetryLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds)) : messages.trialRetryRestricted;
+    if (error.code === 'trial_outbound_limit') return messages.trialRetryLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds));
+    return error.reason && error.message ? error.message : messages.trialRetryRestricted;
   }
   // A refusal with a reason (no SMTP relay, Gmail broken or not set up) will not pass by trying again.
   if (error instanceof InvalidRequestError) return error.message;

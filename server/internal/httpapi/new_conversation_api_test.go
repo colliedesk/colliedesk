@@ -71,7 +71,7 @@ func TestNewConversationEmailsTheContactAndTheirReplyThreadsBack(t *testing.T) {
 	if cc := queryString(t, pool, `SELECT array_to_string(cc,',') FROM messages WHERE conversation_id=$1`, conversation.ID); cc != "boss@prospect.example" {
 		t.Fatalf("stored cc=%q", cc)
 	}
-	ours := queryString(t, pool, `SELECT email_message_id FROM messages WHERE conversation_id=$1`, conversation.ID)
+	ours := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE conversation_id=$1`, conversation.ID)
 
 	answer := inboundOK(t, api, secret, mail([]string{
 		"From: pat@prospect.example", "To: support@outbound-start.example.com", "Subject: Re: Your renewal",

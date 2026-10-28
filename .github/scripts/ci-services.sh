@@ -17,7 +17,8 @@ run_service() {
       "$DOCKER" run -d --name ci-postgres -p 5432:5432 \
         --tmpfs /var/lib/postgresql/data:rw,size=2g \
         -e POSTGRES_DB=colliedesk_test -e POSTGRES_USER=colliedesk -e POSTGRES_PASSWORD=colliedesk \
-        postgres:17-bookworm ;;
+        postgres:17-bookworm \
+        postgres -c max_locks_per_transaction=256 ;;
     mailpit) "$DOCKER" run -d --name ci-mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.27 ;;
   esac
 }

@@ -3,6 +3,7 @@ import type { UpdateConversationRequest } from '../../api/client';
 import type { TeamMember, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { AITriageSlot } from './ai-triage-slot';
 
 interface DetailsPanelProps {
   conversation?: Conversation;
@@ -16,9 +17,17 @@ interface DetailsPanelProps {
   onClose?: () => void;
   // Narrows the list to this customer's conversations.
   onShowContactConversations?: (contactId: string) => void;
+  // Triage suggestions are on in the workspace; onTriageApplied reads the conversation again after a part is applied.
+  aiTriage?: boolean;
+  onTriageApplied?: () => void;
+  // The signed-in agent and whether they are an admin, for the suggestion's wording and next steps.
+  currentAgentId?: string;
+  canManage?: boolean;
+  // Told whether the suggestion has a part nobody accepted, for the toggle that hides the panel.
+  onTriageWaiting?: (waiting: boolean) => void;
 }
 
-export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations }: DetailsPanelProps) {
+export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations, aiTriage = false, onTriageApplied, currentAgentId, canManage = false, onTriageWaiting }: DetailsPanelProps) {
   const [tagName, setTagName] = useState('');
   const createTag = () => {
     if (!conversation || !tagName.trim()) return;
@@ -29,6 +38,8 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
     <aside id="conversation-details" className="details-panel panel" aria-label={messages.conversationDetails}
       onKeyDown={(event) => { if (event.key === 'Escape' && onClose && !(event.target instanceof HTMLSelectElement)) onClose(); }}>
       {onClose && <button type="button" className="drawer-close" onClick={onClose} autoFocus>{messages.hideDetails}</button>}
+      {aiTriage && conversation && <AITriageSlot conversationId={conversation.id} tags={tags} agents={agents} onApplied={() => onTriageApplied?.()}
+        currentAgentId={currentAgentId} timezone={timezone} canManage={canManage} onWaiting={onTriageWaiting} />}
       <section className="details-section">
         <h2>{messages.properties}</h2>
         <label className="property-row"><span>{messages.status}</span><select value={conversation?.status ?? 'open'} disabled={!conversation}

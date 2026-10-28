@@ -37,6 +37,7 @@ export function pairs() {
   add('--note-text', '--note-bg', 4.5, 'private note label');
   add('--text-1', '--note-bg', 4.5, 'private note body');
   add('--danger', '--danger-soft', 4.5, 'urgent chip');
+  add('--surface-1', '--text-2', 4.5, 'high priority chip');
   add('--text-1', '--danger-soft', 4.5, 'error card body');
   add('--warn', '--warn-soft', 4.5, 'high chip');
   add('--ok', '--ok-soft', 4.5, 'sent badge, reconcile footer');

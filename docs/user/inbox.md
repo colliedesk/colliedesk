@@ -4,8 +4,16 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right. On a narrower screen the
 details pane is hidden; open it with **Show details** above the timeline.
 
+On a phone the list and the conversation take turns. A conversation you open fills the screen, with its
+subject at the top and the composer at the bottom. **Back to Inbox** above the subject, or the browser's
+Back, returns to the list with the same filters and scrolled to where you left it. The workspace name
+and your address stay at the top while the page scrolls.
+
 A new workspace has no conversations yet. The list then links to the next steps: **Connect your
-support email**, **Import from Freshdesk** and **Invite your team** (admins see all three). If the list
+support email**, **Import from Freshdesk** and **Invite your team** (admins see all three). A workspace
+with an email channel also offers **Send yourself a test message**: it opens a conversation from your
+own address that you can answer, and the reply comes to your mailbox (see
+[Send yourself a test message](email-channel.md#send-yourself-a-test-message)). If the list
 cannot be loaded, it says so with **Try again** instead.
 
 **Find conversations**
@@ -27,7 +35,15 @@ cannot be loaded, it says so with **Try again** instead.
 - When nothing matches, **Clear filters** below the message resets the search and every filter, and
   returns to **Open**, in one step.
 - By default the list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
+- A row under **Today** shows only its time; an earlier row shows its date. Days follow your timezone
+  (see [Timezones](timezones.md)). The full date and time are in the tooltip of the row and are read out
+  by a screen reader.
 - Dates from an earlier year show the year, for example imported history.
+- **Move with the keyboard:** press **J** to open the next conversation in the list and **K** for the
+  previous one. While a row (or its box) has the focus, **Down arrow** and **Up arrow** do the same. The
+  focus moves to the row you opened. With no conversation open, **J** opens the first one. The keys do
+  nothing while you type in a box, while you hold Ctrl, Cmd, Alt or Shift, or at the first and last row of the
+  page; use **Next page** to go on.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
   You do not need to reload to see new mail.
 
@@ -47,6 +63,10 @@ conversations with any of them; each filter you add narrows the list further.
   **Started by the team** (created in Colliedesk by a teammate or an agent token) or **Problem report**.
   Conversations that existed before channels were recorded got theirs from their first message; one
   without a message from the customer first counts as started by the team.
+- **Email channels**, **Web form channels**: shown when the workspace has two or more channels of that
+  type. Each one lists the conversations that came through it or whose replies leave from it. The chip
+  names the channel, with "(removed)" for a channel that was removed. In an address it is
+  `?channel_id=<id>`, which **Settings → Channels** links use.
 - **Source**: **Imported** or **Created in Colliedesk**.
 - **Organization**: the exact organization name of the customer, in any case.
 - **Created** and **Last activity**: a range of days, picked in your timezone (see
@@ -161,7 +181,27 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   connected, it is also emailed to the contact and shows **Queued**, **Sent** or
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
+- **Send reply** (or Ctrl/Cmd + Enter) sends what you wrote.
+- **Send and resolve**, next to **Send reply** (or Ctrl/Cmd + Shift + Enter), sends the reply and then sets
+  the conversation to **Resolved**, in one step. The status changes only after the reply was accepted: if the
+  reply is refused, nothing changes and your text stays in the box with the reason. If the reply was sent but
+  the status could not be changed, a message says so; press **Resolve** above the thread to try again.
+- A private note has no **Send and resolve**, because a note is often written while the work goes on. Add
+  the note, then press **Resolve** above the thread.
 - Messages support Markdown.
+- **An unsent reply is kept.** What you type stays in this browser for you and that conversation, so a
+  reload, the browser's Back or a trip to Settings finds it in the box again. It is removed as soon as you
+  send the reply or note. If the send fails, or a reload cuts it off, the text is written back, and the
+  next time the conversation opens it is dropped if the reply or note did arrive, so it is never offered
+  twice. It also goes seven days after you last opened or edited it, and for every conversation when you sign out, so a
+  teammate who signs in on the same browser never sees it. Attached files are not kept. Another browser or
+  device does not see it. Two tabs of the same browser share it: when you type in one, the other tab's
+  box takes the newer text and says **Updated from another tab**, unless you typed different text in that
+  tab too. Then your text stays, and the tab says **Another tab has a different draft** with **Use it**
+  and **Keep mine**.
+- **One press sends once.** The button is disabled while a message is being sent, and every send carries
+  its own key, so pressing twice, or retrying after a lost connection, never posts the same note or reply
+  twice. Through the API, send the same `Idempotency-Key` header on every retry of one message.
 - **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
   tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
   yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps
@@ -201,7 +241,12 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - AI agents start one with the MCP tool `colliedesk_conversation_start`, or the API
   `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 
-**Change the conversation** (details pane)
+**Change the conversation**
+- **Resolve** above the thread sets an open or pending conversation to Resolved in one press, at any
+  screen width, without opening the details. A resolved or closed conversation shows **Reopen** there
+  instead, which sets it back to Open. If the change fails, a message under the button says so.
+
+In the details pane (**Show details** on a narrower screen):
 - **Status**: every status can be changed back, for example Resolved → Open to reopen.
 - **Priority**: Low, Normal, High, Urgent.
 - **Assignee**: assign to a teammate or set back to unassigned.

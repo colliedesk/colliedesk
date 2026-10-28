@@ -5,6 +5,8 @@ type Spec struct {
 	Name        string
 	Title       string
 	Description string
+	// Doc is one Markdown sentence for people: the "What it does" of the tool table in the user guide.
+	Doc string
 	// Tier is the lowest agent token tier that may call the tool: read, draft, send or admin. "any" means
 	// every valid token, because the tool needs nothing a read token lacks.
 	Tier       string
@@ -26,7 +28,7 @@ type Spec struct {
 // Catalog lists every tool in documentation order. It is the one place a tool is defined: the
 // server registers from it and the user guide and the generated references read it.
 func Catalog() []Spec {
-	return []Spec{
+	specs := []Spec{
 		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), conversationPresenceSpec(), timeEntriesListSpec(), attachmentGetSpec(),
 		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
 		conversationStartSpec(),
@@ -36,20 +38,30 @@ func Catalog() []Spec {
 		savedViewsListSpec(), savedViewCreateSpec(), savedViewUpdateSpec(), savedViewDeleteSpec(), savedViewRestoreSpec(),
 		kbCollectionsListSpec(), kbCollectionCreateSpec(), kbCollectionUpdateSpec(), kbCollectionDeleteSpec(), kbCollectionsTrashSpec(), kbCollectionUndeleteSpec(), kbOrderSetSpec(),
 		kbArticlesSearchSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
-		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbImageUploadSpec(), kbImageGetSpec(),
+		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbArticleAIExcludeSpec(), kbArticleAIIncludeSpec(), kbImageUploadSpec(), kbImageGetSpec(),
 		kbMediaListSpec(), kbMediaGetSpec(), kbMediaUpdateSpec(), kbMediaTrashSpec(), kbMediaTrashListSpec(), kbMediaUndeleteSpec(), kbMediaPurgeSpec(), kbMediaReplaceSpec(), kbMediaReplaceUndoSpec(),
 		kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
 		helpCenterThemeGetSpec(), helpCenterThemeCheckSpec(), helpCenterDomainGetSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
 		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
 		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),
-		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), workspaceSlugRequestSpec(), problemReportSpec(),
+		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), microsoftConnectRequestSpec(), microsoftDisconnectRequestSpec(), workspaceSlugRequestSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
-		helpCenterUpdateSpec(), helpCenterThemeUpdateSpec(), helpCenterDomainSetSpec(), helpCenterDomainCheckSpec(), helpCenterDomainRemoveSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), billingGetSpec(),
+		helpCenterUpdateSpec(), helpCenterThemeUpdateSpec(), helpCenterDomainSetSpec(), helpCenterDomainCheckSpec(), helpCenterDomainRemoveSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), emailTestMessageSendSpec(), billingGetSpec(),
 		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoRequestSpec(),
 		importPeopleListSpec(), importPersonLinkSpec(), importPersonUnlinkSpec(),
+		aiSettingsGetSpec(), aiModelsListSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetRequestSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
+		aiDraftCreateSpec(), aiDraftGetSpec(), aiDraftsListSpec(), aiDraftDiscardSpec(),
+		aiTriageGetSpec(), aiTriageCreateSpec(), aiTriageAcceptSpec(), aiTriageDismissSpec(), aiTriageUndoSpec(),
+		resultsGetSpec(), resultsShareLinkGetSpec(), resultsShareLinkCreateSpec(), resultsShareLinkRevokeSpec(), resultsEmailSetSpec(),
+		channelsListSpec(), channelsGetSpec(), channelsEventsSpec(), channelsCreateSpec(), channelsUpdateSpec(), channelsCheckSpec(), channelsHeldReplaySpec(),
+		channelsCredentialsSetSpec(), channelsDeleteRequestSpec(), channelsHeldDiscardRequestSpec(),
 	}
+	for i := range specs {
+		specs[i].Doc = toolDocs[specs[i].Name]
+	}
+	return specs
 }
 
 const (
@@ -66,17 +78,18 @@ const (
 
 	personSchema = `{"type":["object","null"],"properties":{"id":{"type":"string"},"name":{"type":"string"},"email":{"type":"string"}}}`
 
-	conversationRowSchema = `{"type":"object","required":["id","status","priority","assignee","tags","updated_at","untrusted_customer_content"],"properties":{` +
-		`"id":{"type":"string"},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
-		`"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee":` + personSchema + `,` +
-		`"tags":{"type":"array","items":{"type":"string"}},` +
-		`"channel":{"type":"string","enum":["email","web_form","imported","agent","problem_report"],"description":"How it started: a customer's mail, the web form, an import from another helpdesk, a team member, or Report a problem."},` +
-		`"created_at":{"type":"string"},"updated_at":{"type":"string","description":"UTC, to the second"},` +
-		`"contact_id":{"type":"string"},` +
-		`"untrusted_customer_content":{"type":"object","required":["subject","contact"],"properties":{"subject":{"type":"string"},` +
-		`"contact":{"type":["object","null"],"properties":{"name":{"type":"string"},"email":{"type":"string"},"organization":{"type":["string","null"]}}}}}}}`
-
 	stateSchema = `{"type":"object","required":["id","status","priority","assignee","tags","updated_at"],"properties":{` +
 		`"id":{"type":"string"},"status":{"type":"string"},"priority":{"type":"string"},"assignee":` + personSchema + `,` +
 		`"tags":{"type":"array","items":{"type":"string"}},"updated_at":{"type":"string"}}}`
 )
+
+// conversationRowSchema lists how a conversation started from the registry (channel-values.go), so it is not a constant.
+var conversationRowSchema = `{"type":"object","required":["id","status","priority","assignee","tags","updated_at","untrusted_customer_content"],"properties":{` +
+	`"id":{"type":"string"},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
+	`"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee":` + personSchema + `,` +
+	`"tags":{"type":"array","items":{"type":"string"}},` +
+	`"channel":{"type":"string","enum":` + conversationChannelEnum + `,"description":"How it started: a customer's mail, the web form, an import from another helpdesk, a team member, or Report a problem."},` +
+	`"created_at":{"type":"string"},"updated_at":{"type":"string","description":"UTC, to the second"},` +
+	`"contact_id":{"type":"string"},` +
+	`"untrusted_customer_content":{"type":"object","required":["subject","contact"],"properties":{"subject":{"type":"string"},` +
+	`"contact":{"type":["object","null"],"properties":{"name":{"type":"string"},"email":{"type":"string"},"organization":{"type":["string","null"]}}}}}}}`

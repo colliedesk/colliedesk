@@ -11,7 +11,6 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +18,9 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/retention"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -93,41 +94,13 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL retention test")
-	}
-	schema := "test_retention_" + regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(t.Name()), "_") + fmt.Sprint(time.Now().UnixNano())
-	admin, err := pgxpool.New(context.Background(), databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := admin.Exec(context.Background(), "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE")
-		admin.Close()
-	})
-	if err := database.Migrate(context.Background(), pool); err != nil {
-		t.Fatal(err)
-	}
+	pool := databasetest.Pool(t)
 	root := t.TempDir()
 	local, err := attachments.NewLocalDisk(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{pool: pool, db: database.New(pool), store: store.New(pool), disk: local, root: root, mailer: &recordingMailer{}, polar: &fakePolar{paid: map[string]bool{}}}
+	e := &env{pool: pool, db: database.New(pool), store: store.New(pool).WithChannels(registry.New(registry.Config{})), disk: local, root: root, mailer: &recordingMailer{}, polar: &fakePolar{paid: map[string]bool{}}}
 	e.service = e.serviceWith(nil)
 	return e
 }
@@ -163,7 +136,7 @@ func (e *env) workspace(t *testing.T, name string, trialEnd string, admins ...st
 	if err != nil {
 		t.Fatal(err)
 	}
-	conversation, err := e.store.CreateConversation(ctx, created.ID, contact.ID, "Where is my order")
+	conversation, err := e.store.CreateConversation(ctx, created.ID, contact.ID, "Where is my order", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -903,7 +876,9 @@ func TestDeactivatedAdminsAreNotNoticedAndNeverCountAsReached(t *testing.T) {
 func TestDeletingAWorkspaceKeepsItsProviderDomainsQueuedForDeletion(t *testing.T) {
 	e := newEnv(t)
 	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
-	e.exec(t, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,sender_name) VALUES($1,'support@alpha.example','token','dom_alpha_current','Alpha')`, a.ID)
+	e.exec(t, `WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'email','Email',true) RETURNING id),
+		d AS (INSERT INTO email_domains(workspace_id,domain,verification_token,provider_domain_id) VALUES($1,'alpha.example','token','dom_alpha_current') RETURNING 1)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT $1,c.id,'support@alpha.example','Alpha','support' FROM c,d`, a.ID)
 	e.exec(t, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) VALUES($1,'dom_alpha_earlier')`, a.ID)
 
 	e.run(t, "2027-10-02T00:00:00Z")

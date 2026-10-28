@@ -103,7 +103,7 @@ func TestReplyConflictWhenSomeoneRepliedSinceTheSenderStartedWriting(t *testing.
 		t.Fatalf("first reply number = %v", lan.ReplyNumber)
 	}
 	// The admin started writing before it arrived: told, with Lan's reply, and nothing is stored.
-	before, queuedBefore := count(`SELECT count(*) FROM messages`), count(`SELECT count(*) FROM email_outbox`)
+	before, queuedBefore := count(`SELECT count(*) FROM messages`), count(`SELECT count(*) FROM channel_outbox`)
 	refused := d.send(t, d.admin, d.conversation, map[string]any{"kind": "outgoing", "body": "We will refund you.", "seen_reply_number": 0})
 	if refused.Code != http.StatusConflict {
 		t.Fatalf("stale reply status=%d body=%s", refused.Code, refused.Body.String())
@@ -117,7 +117,7 @@ func TestReplyConflictWhenSomeoneRepliedSinceTheSenderStartedWriting(t *testing.
 	if after := count(`SELECT count(*) FROM messages`); after != before {
 		t.Fatalf("a refused reply stored %d messages", after-before)
 	}
-	if queued := count(`SELECT count(*) FROM email_outbox`); queued != queuedBefore {
+	if queued := count(`SELECT count(*) FROM channel_outbox`); queued != queuedBefore {
 		t.Fatalf("a refused reply queued %d emails", queued-queuedBefore)
 	}
 	// A private note never waits on that check.

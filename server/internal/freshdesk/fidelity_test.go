@@ -38,7 +38,7 @@ func TestTimestampsArePreservedInUTC(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertUTC(t, "contact created_at", contact.CreatedAt, "2024-03-01T12:00:00Z")
-	if contact.Email != "carol@globex.example" || contact.Organization == nil || *contact.Organization != "Globex" {
+	if contact.EmailOf() != "carol@globex.example" || contact.Organization == nil || *contact.Organization != "Globex" {
 		t.Fatalf("contact = %+v", contact.Contact)
 	}
 }

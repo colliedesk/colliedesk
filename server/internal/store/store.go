@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
@@ -15,6 +17,10 @@ import (
 type Store struct {
 	db       *database.DB
 	outbound OutboundPolicy
+	// channels routes what arrives and every reply through the channel types; see WithChannels.
+	channels *channels.Registry
+	// sealKeys seal channel secrets (MAILBOX_TOKEN_KEYS); see WithSealKeys.
+	sealKeys tokenseal.Keys
 	// limits turns on the trial, lock and agent cap of the hosted cloud; the zero value (self-hosted) has none.
 	limits bool
 	// plansOnSale are the plans this server sells; a seat refusal points to the next one up.

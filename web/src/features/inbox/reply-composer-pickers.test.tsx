@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import type { SavedReply } from '../../api/schemas';
 import { presenceViewPart } from './presence-part';
@@ -37,7 +37,8 @@ test('a list opened before its chunk arrived says it is loading where the list w
   expect(screen.getByRole('status')).toHaveTextContent('Loading…');
   expect(screen.getByRole('status').closest('.saved-reply-picker')).not.toBeNull();
   release();
-  expect(await screen.findByRole('combobox', { name: 'Search saved replies' })).toHaveFocus();
+  const search = await screen.findByRole('combobox', { name: 'Search saved replies' });
+  await waitFor(() => expect(search).toHaveFocus());
   expect(screen.getByRole('option', { name: 'Refund steps' })).toBeInTheDocument();
   expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
 });

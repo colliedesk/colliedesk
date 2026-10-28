@@ -7,10 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -45,6 +47,19 @@ type contractFixture struct {
 	approveRequestID, rejectRequestID, cancelRequestID string
 	kb                                                 contractKB
 	imports                                            importJobs
+	// aiProviderID is changed, checked and finally deleted by the AI cases.
+	aiProviderID string
+	// aiDraftID is a draft of conversationID, still queued: read, then discarded by the cases.
+	aiDraftID string
+	// aiTriageID is a ready suggestion of conversationID (high priority), accepted by the cases;
+	// aiTriageOtherID a ready one of another conversation, dismissed.
+	aiTriageID, aiTriageOtherID, aiTriageOtherConversation, aiTriageNewConversation, aiDraftsProviderID string
+	// aiTriageAutoID is a suggestion AI applied by itself on aiTriageAutoConversation, undone by its case.
+	aiTriageAutoID, aiTriageAutoConversation string
+	// webFormChannelID is changed and checked by the channel cases; emailChannelID is removed by one.
+	webFormChannelID, emailChannelID string
+	// secondEmailChannelID is a second email channel of the admin's workspace.
+	secondEmailChannelID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -64,6 +79,8 @@ func newContractFixture(t *testing.T) contractFixture {
 		config.ProblemReportWorkspace = "contract-support"
 		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
 		config.Google = google.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Keys: keys, Base: "http://127.0.0.1:1"}
+		config.Microsoft = microsoft.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Tenant: "common", Keys: keys, Base: "http://127.0.0.1:1"}
+		config.AI = fakeAIConfig(&aiprovider.Fake{})
 	})
 	createSession(t, api, service, "Contract Support", "support@contract-support.example.com")
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")
@@ -157,6 +174,25 @@ func newContractFixture(t *testing.T) contractFixture {
 	if response := request(t, api, http.MethodPut, "/api/v1/channels/web-form", map[string]any{"enabled": true, "allowed_origins": []string{}}, adminToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("enable web form status=%d body=%s", response.Code, response.Body.String())
 	}
+	channelIDs := map[string]string{}
+	var channelList struct {
+		Items []struct{ ID, Type string } `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/channels", nil, adminToken, nil), &channelList)
+	for _, item := range channelList.Items {
+		if channelIDs[item.Type] == "" {
+			channelIDs[item.Type] = item.ID
+		}
+	}
+	// A second mailbox on the same domain, for the routes of one email channel of several.
+	var billing struct {
+		ID string `json:"id"`
+	}
+	decode(t, request(t, api, http.MethodPost, "/api/v1/channels", map[string]any{"type": "email", "name": "Billing",
+		"config": map[string]any{"support_address": "billing@contract-all.example.com"}}, adminToken, nil), &billing)
+	if billing.ID == "" {
+		t.Fatal("add a second email channel")
+	}
 
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
 	requestToken := issueToken(t, api, adminToken, "Contract requester", "read").Token
@@ -181,7 +217,47 @@ func newContractFixture(t *testing.T) contractFixture {
 		}
 	}
 	imports := seedImportJobs(t, pool, workspaceID(t, api, adminToken))
-	return contractFixture{imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	aiProviderID := create(t, api, adminToken, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Contract key", "api_key": "sk-contract-0001", "models": []string{"claude-sonnet-5-5", "claude-haiku-5-5"}})
+	// Reply drafts run on a provider of their own, which the provider cases leave alone.
+	draftsProvider := create(t, api, adminToken, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "Contract drafts", "api_key": "sk-contract-0004", "models": []string{"claude-sonnet-5-5"}})
+	if response := request(t, api, http.MethodPut, "/api/v1/ai/slots/draft", map[string]any{"source": "provider", "provider_id": draftsProvider, "enabled": true}, adminToken, nil); response.Code != http.StatusOK {
+		t.Fatalf("turn reply drafts on: %d %s", response.Code, response.Body.String())
+	}
+	queued := request(t, api, http.MethodPost, "/api/v1/conversations/"+conversationID+"/ai-drafts", map[string]any{"prompt": "Contract draft"}, adminToken, nil)
+	var draft struct {
+		ID string `json:"id"`
+	}
+	decode(t, queued, &draft)
+	if queued.Code != http.StatusAccepted || draft.ID == "" {
+		t.Fatalf("ask for an AI draft: %d %s", queued.Code, queued.Body.String())
+	}
+	aiDraftID := draft.ID
+	if response := request(t, api, http.MethodPut, "/api/v1/ai/slots/triage", map[string]any{"source": "provider", "provider_id": draftsProvider, "enabled": true}, adminToken, nil); response.Code != http.StatusOK {
+		t.Fatalf("turn triage on: %d %s", response.Code, response.Body.String())
+	}
+	readyTriage := func(conversation string) string {
+		var id string
+		if err := pool.QueryRow(context.Background(), `INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,status,priority,reason,model,ready_at)
+			SELECT workspace_id,id,'ready','high','Printer down','claude-haiku-5-5',now() FROM conversations WHERE id=$1 RETURNING id::text`, conversation).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	aiTriageID := readyTriage(conversationID)
+	otherTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage contract"})
+	aiTriageOtherID := readyTriage(otherTriageConversation)
+	// One AI applied by itself (the priority), on a conversation of its own: the undo case takes it back.
+	autoTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "AI applied"})
+	var aiTriageAutoID string
+	if err := pool.QueryRow(context.Background(), `WITH c AS (UPDATE conversations SET priority='urgent' WHERE id=$1 RETURNING workspace_id,id)
+		INSERT INTO ai_triage_suggestions(workspace_id,conversation_id,status,automatic,priority,reason,base,ready_at,applied,auto_applied,auto_applied_at,outcome,decided_at)
+		SELECT workspace_id,id,'ready',true,'urgent','Printer down','{"priority":"normal","assignee_agent_id":null}',now(),
+			'{"tag_ids":[],"priority":"urgent","assignee_agent_id":null}','{"tag_ids":[],"priority":"urgent","assignee_agent_id":null}',now(),'auto_applied',now() FROM c
+		RETURNING id::text`, autoTriageConversation).Scan(&aiTriageAutoID); err != nil {
+		t.Fatal(err)
+	}
+	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
+	return contractFixture{webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }
@@ -246,7 +322,7 @@ func withFailedEmailReply(t *testing.T, api http.Handler, pool *pgxpool.Pool, ad
 		t.Fatal(err)
 	}
 	replyID := create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Contract reply"})
-	if _, err := pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, replyID); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE channel_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, replyID); err != nil {
 		t.Fatal(err)
 	}
 	return api, secret, replyID

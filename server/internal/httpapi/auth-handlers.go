@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -17,6 +19,8 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		RequestedRole string `json:"requested_role"`
 		Label         string `json:"label"`
 		SessionType   string `json:"session_type"`
+		// Timezone is the browser's IANA zone: a first sign-in starts the agent on it.
+		Timezone string `json:"timezone"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Token == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A one-time token is required.")
@@ -42,6 +46,7 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 	if _, err := a.imports.LinkByEmail(request.Context(), result.Workspace.ID, result.Agent.ID, result.Agent.Email); err != nil {
 		slog.Error("link imported Freshdesk agent", "workspace_id", result.Workspace.ID, "error", err)
 	}
+	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
 	if input.SessionType == "cookie" {
 		setSessionCookie(response, result.Token)
 		result.Token = ""
@@ -76,7 +81,7 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 	if a.limits {
 		plan = &identity.Access
 	}
-	// scope is the tier of an agent token and null for a person's session.
+	// scope is the tier of an agent token (custom for its own list) and null for a person's session.
 	var scope *string
 	if identity.Scope != "" {
 		scope = &identity.Scope
@@ -86,9 +91,19 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 		writeStoreError(response, err)
 		return
 	}
+	features, err := a.ai.ActiveFeatures(request.Context(), identity.Workspace.ID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	// permissions is what an agent token holds (its tier's, or its own list); empty for a person.
+	permissions := identity.HeldPermissions()
+	if permissions == nil {
+		permissions = []string{}
+	}
 	writeJSON(response, http.StatusOK, map[string]any{
-		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "scope": scope, "plan": plan,
-		"onboarding_goal": goal,
+		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "scope": scope, "permissions": permissions, "plan": plan,
+		"onboarding_goal": goal, "ai_features": features,
 	})
 }
 
@@ -106,7 +121,7 @@ var sessionRevokeRoute = Route{http.MethodDelete, "/api/v1/auth/sessions/{id}", 
 func (a *API) revokeSession(response http.ResponseWriter, request *http.Request) {
 	// Signing another person out waits for a person whatever the token's tier; the creator's own
 	// sign-ins and any agent token are revoked directly.
-	if who := principal(request); who.Scope != "" {
+	if who := principal(request); who.IsToken() {
 		target, found, err := a.workspaceSession(request.Context(), who, request.PathValue("id"))
 		if err != nil {
 			writeStoreError(response, err)
@@ -126,7 +141,7 @@ func (a *API) revokeSession(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusNotFound, "not_found", "The session was not found.")
 		return
 	}
-	if who := principal(request); who.Scope != "" {
+	if who := principal(request); who.IsToken() {
 		// The session list shows the revocation; the log also names the token that did it.
 		slog.Info("agent token revoked a session", "workspace_id", who.Workspace.ID, "token_session_id", who.SessionID, "revoked_session_id", request.PathValue("id"))
 	}
@@ -135,28 +150,32 @@ func (a *API) revokeSession(response http.ResponseWriter, request *http.Request)
 
 func (a *API) createAgentToken(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Label string `json:"label"`
-		Scope string `json:"scope"`
+		Label       string   `json:"label"`
+		Scope       string   `json:"scope"`
+		Permissions []string `json:"permissions"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a scope are required.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a scope (a tier) or a list of permissions are required.")
 		return
 	}
-	created, err := a.auth.CreateAgentToken(request.Context(), principal(request), input.Label, input.Scope)
-	var invalid *auth.InvalidTokenError
-	if errors.As(err, &invalid) {
-		writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
-		return
-	}
-	if errors.Is(err, auth.ErrAdminTokenNeedsAdmin) {
-		writeError(response, http.StatusForbidden, "admin_token_needs_admin", "Only a workspace admin can create an admin token. Choose read, draft or send.")
-		return
-	}
-	if err != nil {
-		writeInternalError(response, err)
-		return
-	}
-	// The raw token is in the body once; no cache may keep it.
+	// The raw token is in the body once; no cache may keep it, and a repeat of one press (the same
+	// Idempotency-Key) answers the same session without it.
 	response.Header().Set("Cache-Control", "no-store")
-	writeJSON(response, http.StatusCreated, created)
+	permissions := slices.Sorted(slices.Values(input.Permissions))
+	a.createOnce(response, request, createAgentTokenOperation, append([]string{input.Label, input.Scope}, permissions...), func(ctx context.Context) (any, error) {
+		created, err := a.auth.CreateAgentToken(ctx, principal(request), auth.TokenRequest{Label: input.Label, Scope: input.Scope, Permissions: input.Permissions})
+		var invalid *auth.InvalidTokenError
+		if errors.As(err, &invalid) {
+			writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
+			return nil, errAnswered
+		}
+		if errors.Is(err, auth.ErrAdminTokenNeedsAdmin) {
+			writeError(response, http.StatusForbidden, "admin_token_needs_admin", "Only a workspace admin can create an admin token or give a token an admin-only permission. Choose read, draft or send, or leave out the admin-only permissions.")
+			return nil, errAnswered
+		}
+		if err != nil {
+			return nil, err
+		}
+		return shownOnce{shown: created, kept: map[string]any{"session": created.Session}}, nil
+	})
 }

@@ -101,7 +101,7 @@
   .cm-host .cm-line { padding: 0 var(--space-3); }
   .cm-preview { padding: var(--space-4); }
 }
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 30rem) {
   .kb-editor-card .cm-host .cm-search .cm-textfield, .kb-editor-card .cm-host .cm-search .cm-button { --control: var(--touch); }
   .kb-editor-card .cm-host .cm-search [name="close"] { width: var(--touch); height: var(--touch); }
   .kb-editor-card .cm-host .cm-search label { min-height: var(--touch); padding-right: var(--space-2); }

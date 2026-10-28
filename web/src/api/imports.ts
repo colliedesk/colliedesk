@@ -81,9 +81,9 @@ const json = <Operation extends 'previewImport' | 'setImportKey' | 'linkImportPe
 export const importsApi = {
   list: () => request('/api/v1/imports', importListSchema),
   get: (id: string) => request(`/api/v1/imports/${id}`, importJobSchema),
-  // oldHelpCenterDomain is the old Freshdesk help center's own domain, when it had one.
-  preview: (domain: string, apiKey: string, oldHelpCenterDomain?: string) =>
-    request('/api/v1/imports', importJobSchema, { method: 'POST', body: json<'previewImport'>({ source: 'freshdesk', domain, api_key: apiKey,
+  // submitKey names the press; oldHelpCenterDomain identifies the previous public host.
+  preview: (domain: string, apiKey: string, submitKey: string, oldHelpCenterDomain?: string) =>
+    request('/api/v1/imports', importJobSchema, { method: 'POST', headers: { 'Idempotency-Key': submitKey }, body: json<'previewImport'>({ source: 'freshdesk', domain, api_key: apiKey,
       ...(oldHelpCenterDomain ? { options: { old_help_center_domain: oldHelpCenterDomain } } : {}) }) }),
   start: (id: string) => request(`/api/v1/imports/${id}/start`, importJobSchema, { method: 'POST' }),
   cancel: (id: string) => request(`/api/v1/imports/${id}/cancel`, importJobSchema, { method: 'POST' }),

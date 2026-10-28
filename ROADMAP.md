@@ -35,6 +35,12 @@ database schema.
   ships, with an upgrade guide, rollback from a backup and a one-workspace restore.
 - **Colliedesk Cloud**: 14-day free trial, then Team or Founding; a workspace whose trial ended is
   locked and can still export everything.
+- **AI included**: reply drafts and triage suggestions from your own knowledge base and solved
+  tickets, with their sources shown; your own provider key or the server's; optionally a draft for
+  every customer message and suggestions that apply themselves (with Undo). AI never sends.
+- **Results**: your numbers in Colliedesk next to the history you imported from Freshdesk (first
+  response, time to resolve, reopens, volume, AI drafts), each opening the conversations it counts,
+  with a share link and a weekly email to admins.
 
 ## Next: beta (0.1.0)
 
@@ -46,14 +52,9 @@ Beta starts when HC Labs announces it. Before that:
 
 ## Then: AI included
 
-- Draft replies and triage from your own past replies and knowledge base, with their sources shown
-  ([#89](https://github.com/colliedesk/colliedesk/issues/89)).
 - A backtest before you pay: how drafts would have answered your own past tickets ([#99](https://github.com/colliedesk/colliedesk/issues/99)).
-- Results page and weekly report: before and after numbers measured against your imported history
-  ([#100](https://github.com/colliedesk/colliedesk/issues/100)).
 - Auto-answer only for topics where drafts proved accurate, with a human in the loop.
 - Usage metering; bring your own AI key.
-- Connect any agent host in one step, with setup docs and an Agent Skills pack ([#113](https://github.com/colliedesk/colliedesk/issues/113)).
 
 ## Later
 
