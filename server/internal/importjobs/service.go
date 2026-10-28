@@ -64,6 +64,11 @@ func (s *Service) Preview(ctx context.Context, workspaceID, agentID, domain, api
 	if !options.valid() {
 		return Job{}, ErrOptions
 	}
+	if options.OldHelpCenterDomain != "" {
+		if options.OldHelpCenterDomain, err = freshdesk.OldHelpCenterHost(options.OldHelpCenterDomain); err != nil {
+			return Job{}, err
+		}
+	}
 	encoded, err := json.Marshal(options)
 	if err != nil {
 		return Job{}, err

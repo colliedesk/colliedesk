@@ -44,6 +44,7 @@ export function RedeemPage({
         {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
         <h1>{buyer ? messages.buyingTitle(buying) : newTeam ? messages.cloudTrialTitle : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
         <p>{buyer ? messages.buyingExplanation : newTeam ? messages.cloudTrialExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
+        {(buyer || newTeam) && <p className="muted-copy">{messages.workspaceExplained}</p>}
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
         {!token && cloudEnabled && <div className="cloud-sign-in">
           {workspaces.length > 0 ? <>
@@ -53,9 +54,15 @@ export function RedeemPage({
                 onClick={() => onSelectWorkspace?.(workspace.slug)} disabled={pending}>{workspace.name}</button>)}
             </div>
           </> : cloudSignIn}
+          {newTeam && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialWorkspace}</p>}
           {newTeam && workspaces.length === 0 && <p className="muted-copy">{messages.cloudTrialSignInInstead}</p>}
           {!buyer && !newTeam && signupEnabled && workspaces.length === 0 && <p className="muted-copy">{messages.cloudNewHere}</p>}
           {!buyer && !newTeam && <p className="muted-copy">{messages.oneTimeLinkInstead}</p>}
+          {/* Where a visitor can start a workspace, the page says what they agree to and links the prices. */}
+          {signupEnabled && <p className="muted-copy signin-consent">{messages.consentBefore}
+            <a href={messages.termsURL} target="_blank" rel="noreferrer">{messages.consentTerms}</a>{messages.consentAnd}
+            <a href={messages.privacyURL} target="_blank" rel="noreferrer">{messages.consentPrivacy}</a>.{' '}{messages.consentSee}
+            <a href={messages.pricingURL} target="_blank" rel="noreferrer">{messages.consentPricing}</a>.</p>}
         </div>}
         {failed && workspaces.length === 0 && <p role="alert" className="error-copy">
           {token ? (planLimited ? messages.linkPlanLimited : messages.invalidLink) : messages.cloudSignInFailed}

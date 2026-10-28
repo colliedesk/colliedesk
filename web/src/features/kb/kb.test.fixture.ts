@@ -24,7 +24,7 @@ export const collections = [
 export const change = { version: 1, kind: 'create', restored_from_version: null, changed_by: { agent_id: null, name: 'Ada' }, token: null, agent_request_id: null, created_at: '2026-10-02T00:00:00Z' };
 
 export const summary = (n: number, title: string, status: 'draft' | 'published' = 'draft') => ({
-  id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, number: n, collection_id: ids.setup, title, slug: title.toLowerCase().replace(/ /g, '-'), status,
+  id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, number: n, collection_id: ids.setup, position: 0, title, slug: title.toLowerCase().replace(/ /g, '-'), status,
   published_at: status === 'published' ? '2026-10-02T00:00:00Z' : null, author_agent_id: null, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z', last_change: change,
   url: `https://desk.example.com/help/acme/a/${n}-${title.toLowerCase().replace(/ /g, '-')}`,
 });

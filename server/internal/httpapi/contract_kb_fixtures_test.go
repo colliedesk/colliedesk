@@ -124,6 +124,7 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"PATCH /api/v1/kb/collections/{id}":                        {"/api/v1/kb/collections/" + kb.collectionID, map[string]any{"updated_at": kb.collectionSeen, "description": "Updated"}, admin, 200, ""},
 		"DELETE /api/v1/kb/collections/{id}":                       {"/api/v1/kb/collections/" + kb.deleteCollectionID + "?updated_at=" + url.QueryEscape(kb.deleteCollectionSeen), nil, admin, 204, ""},
 		"POST /api/v1/kb/collections/{id}/restore":                 {"/api/v1/kb/collections/" + kb.trashCollectionID + "/restore", map[string]any{"updated_at": kb.trashCollectionSeen}, admin, 200, ""},
+		"PUT /api/v1/kb/order":                                     {"/api/v1/kb/order", map[string]any{"parent_id": kb.collectionID, "collection_ids": []string{}, "article_ids": []string{}}, admin, 409, ""},
 		"GET /api/v1/kb/articles":                                  {"/api/v1/kb/articles?q=contract&status=draft", nil, admin, 200, ""},
 		"POST /api/v1/kb/articles":                                 {"/api/v1/kb/articles", map[string]any{"collection_id": kb.collectionID, "title": "Created contract article", "body_md": "Hi", "status": "published"}, admin, 201, ""},
 		"GET /api/v1/kb/articles/trash":                            {"/api/v1/kb/articles/trash", nil, admin, 200, ""},
@@ -161,6 +162,14 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/kb/media/{id}/thumbnail":                      {path: "/api/v1/kb/media/" + kb.imageID + "/thumbnail", token: admin, status: 200},
 		"GET /api/v1/help-center":                                  {"/api/v1/help-center", nil, admin, 200, ""},
 		"PUT /api/v1/help-center":                                  {"/api/v1/help-center", map[string]any{"enabled": true, "title": "Contract help", "locale": "en"}, admin, 200, ""},
+		"GET /api/v1/help-center/theme":                            {path: "/api/v1/help-center/theme", token: admin, status: 200},
+		"PUT /api/v1/help-center/theme":                            {"/api/v1/help-center/theme", map[string]any{"logo_media_id": kb.imageID, "colors": map[string]any{"primary": "#0b5cad"}, "custom_css": ""}, admin, 200, ""},
+		"GET /api/v1/help-center/domain":                           {path: "/api/v1/help-center/domain", token: admin, status: 200},
+		"PUT /api/v1/help-center/domain":                           {"/api/v1/help-center/domain", map[string]any{"hostname": "help.contract.example"}, admin, 200, ""},
+		"POST /api/v1/help-center/domain/check":                    {"/api/v1/help-center/domain/check", nil, admin, 404, ""},
+		"DELETE /api/v1/help-center/domain":                        {path: "/api/v1/help-center/domain", token: admin, status: 200},
+		"POST /api/v1/help-center/theme/check":                     {"/api/v1/help-center/theme/check", map[string]any{"colors": map[string]any{"text": "#999999"}}, admin, 200, ""},
+		"POST /api/v1/help-center/theme/preview":                   {"/api/v1/help-center/theme/preview", map[string]any{"page": "article", "theme": map[string]any{"colors": map[string]any{"text": "#999999"}}}, admin, 200, ""},
 		// The contract server has no HELP_CENTER_DOMAIN, so every host name is refused.
 		"GET /api/v1/public/help-center/tls-ask": {"/api/v1/public/help-center/tls-ask?domain=acme.help.example.net", nil, "", 404, ""},
 	}

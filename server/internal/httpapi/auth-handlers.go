@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -17,6 +19,8 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		RequestedRole string `json:"requested_role"`
 		Label         string `json:"label"`
 		SessionType   string `json:"session_type"`
+		// Timezone is the browser's IANA zone: a first sign-in starts the agent on it.
+		Timezone string `json:"timezone"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Token == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A one-time token is required.")
@@ -42,6 +46,7 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 	if _, err := a.imports.LinkByEmail(request.Context(), result.Workspace.ID, result.Agent.ID, result.Agent.Email); err != nil {
 		slog.Error("link imported Freshdesk agent", "workspace_id", result.Workspace.ID, "error", err)
 	}
+	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
 	if input.SessionType == "cookie" {
 		setSessionCookie(response, result.Token)
 		result.Token = ""
@@ -153,21 +158,24 @@ func (a *API) createAgentToken(response http.ResponseWriter, request *http.Reque
 		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a scope (a tier) or a list of permissions are required.")
 		return
 	}
-	created, err := a.auth.CreateAgentToken(request.Context(), principal(request), auth.TokenRequest{Label: input.Label, Scope: input.Scope, Permissions: input.Permissions})
-	var invalid *auth.InvalidTokenError
-	if errors.As(err, &invalid) {
-		writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
-		return
-	}
-	if errors.Is(err, auth.ErrAdminTokenNeedsAdmin) {
-		writeError(response, http.StatusForbidden, "admin_token_needs_admin", "Only a workspace admin can create an admin token or give a token an admin-only permission. Choose read, draft or send, or leave out the admin-only permissions.")
-		return
-	}
-	if err != nil {
-		writeInternalError(response, err)
-		return
-	}
-	// The raw token is in the body once; no cache may keep it.
+	// The raw token is in the body once; no cache may keep it, and a repeat of one press (the same
+	// Idempotency-Key) answers the same session without it.
 	response.Header().Set("Cache-Control", "no-store")
-	writeJSON(response, http.StatusCreated, created)
+	permissions := slices.Sorted(slices.Values(input.Permissions))
+	a.createOnce(response, request, createAgentTokenOperation, append([]string{input.Label, input.Scope}, permissions...), func(ctx context.Context) (any, error) {
+		created, err := a.auth.CreateAgentToken(ctx, principal(request), auth.TokenRequest{Label: input.Label, Scope: input.Scope, Permissions: input.Permissions})
+		var invalid *auth.InvalidTokenError
+		if errors.As(err, &invalid) {
+			writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
+			return nil, errAnswered
+		}
+		if errors.Is(err, auth.ErrAdminTokenNeedsAdmin) {
+			writeError(response, http.StatusForbidden, "admin_token_needs_admin", "Only a workspace admin can create an admin token or give a token an admin-only permission. Choose read, draft or send, or leave out the admin-only permissions.")
+			return nil, errAnswered
+		}
+		if err != nil {
+			return nil, err
+		}
+		return shownOnce{shown: created, kept: map[string]any{"session": created.Session}}, nil
+	})
 }

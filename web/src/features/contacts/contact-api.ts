@@ -50,11 +50,11 @@ export const contactApi = {
     request(`/api/v1/contacts?${new URLSearchParams({ search, limit: String(limit) })}`, contactListSchema, { signal }),
   contact: (id: string) => request(`/api/v1/contacts/${id}`, contactDetailSchema),
   // Starts the conversation by emailing the contact; a refused email stores nothing, not even a new customer.
-  startConversation: (contact: ConversationContact, subject: string, reply: FirstReply) => {
+  startConversation: (contact: ConversationContact, subject: string, reply: FirstReply, key: string) => {
     const who = typeof contact === 'string' ? { contact_id: contact } : { contact };
     const body = reply.files.length > 0 ? conversationForm(contact, subject, reply)
       : json<'createConversation'>({ ...who, subject, body: reply.body, ...(reply.cc.length > 0 ? { cc: reply.cc } : {}), ...(reply.channelID ? { channel_id: reply.channelID } : {}) });
-    return request('/api/v1/conversations', conversationSchema, { method: 'POST', body });
+    return request('/api/v1/conversations', conversationSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body });
   },
   renameContact: (id: string, name: string) => request(`/api/v1/contacts/${id}`, contactSchema, { method: 'PATCH', body: json<'updateContact'>({ name }) }),
   // Merges the duplicate into the contact kept (id); undoMerge moves its conversations back.

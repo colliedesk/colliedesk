@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { expect, test } from 'vitest';
 
 // Brand guideline rules of docs/internals/design.md that a stylesheet can break.
@@ -73,4 +73,39 @@ test('the composer card sits on its ring, without a border', () => {
   expect(rule(components, '.composer-card[data-kind="note"]')).not.toMatch(/border-color/);
   expect(rule(components, '.composer-card[data-kind="note"]')).toMatch(/box-shadow:\s*inset 0 0 0 1px var\(--note-line\), var\(--shadow-2\)/);
   expect(rule(components, '.composer-card:focus-within')).toMatch(/outline:\s*2px solid var\(--focus\)/);
+});
+
+// "Ink, paper and one orange" (rule 2): the orange belongs to Colliedesk itself, the logo tile. Only the
+// token file and the mark may name it, so it never turns up on a button, chip or warning.
+test('the brand orange appears only in the logo', () => {
+  const root = new URL('../src/', import.meta.url);
+  const files = (dir) => readdirSync(dir).flatMap((name) => {
+    const url = new URL(name, dir);
+    return statSync(url).isDirectory() ? files(new URL(`${name}/`, dir)) : [url];
+  });
+  const allowed = ['styles/tokens.css', 'ui/logo.tsx'];
+  const offenders = files(root)
+    .filter((url) => /\.(css|tsx?)$/.test(url.pathname) && !url.pathname.endsWith('.test.tsx') && !url.pathname.endsWith('.test.ts'))
+    .map((url) => url.pathname.slice(root.pathname.length))
+    .filter((path) => !allowed.includes(path) && /#c2410c|--logo-tile/i.test(readFileSync(new URL(path, root), 'utf8')));
+  expect(offenders).toEqual([]);
+});
+
+// The high priority chip is a dark neutral chip with its arrow: the warning orange sat 8° of hue from the
+// brand orange, so a High ticket looked like the logo. Urgent keeps red.
+test('the high priority chip is neutral, not the warning orange', () => {
+  const high = rule(read('styles/components.css'), '.priority-high');
+  expect(high).not.toMatch(/var\(--warn(?:-soft)?\)/);
+  expect(high).toMatch(/background:\s*var\(--text-2\)/);
+  expect(high).toMatch(/color:\s*var\(--surface-1\)/);
+});
+
+// The public help center is the customer's own site: white-label, so it carries neither the Colliedesk
+// orange nor a hue of its own. Its paper, ink, lines and accent are neutral greys in both themes.
+test('the help center palette is ink and paper', () => {
+  const css = readFileSync(new URL('../../server/internal/helpcenter/static/site.css', import.meta.url), 'utf8');
+  const tinted = [...css.matchAll(/--(paper|surface|ink|muted|rule|accent|accent-ink|accent-soft|tab):\s*#([0-9a-f]{6})/gi)]
+    .filter(([, , hex]) => !(hex.slice(0, 2) === hex.slice(2, 4) && hex.slice(2, 4) === hex.slice(4, 6)))
+    .map(([, name, hex]) => `--${name} #${hex}`);
+  expect(tinted).toEqual([]);
 });

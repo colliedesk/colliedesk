@@ -16,6 +16,9 @@ export const importMessages = {
   reading: (domain: string) => `Reading ${domain}… This takes a few seconds, up to a minute on a large account.`,
   domainMissing: 'Enter the address of your Freshdesk account, for example acme.freshdesk.com.',
   domainInvalid: 'This is not a Freshdesk address: it ends in .freshdesk.com, for example acme.freshdesk.com. Enter <account>.freshdesk.com.',
+  oldHelpCenterLabel: 'Old help center address (optional)',
+  oldHelpCenterPlaceholder: 'support.acme.com',
+  oldHelpCenterHelp: 'Only if your Freshdesk help center had a domain of its own: its links in your articles and saved replies then point at the new help center too.',
   keyMissing: 'Paste the API key of a Freshdesk admin.',
 
   foundHeading: (domain: string) => `Found in ${domain}`,
@@ -33,6 +36,15 @@ export const importMessages = {
   rowTimeEntries: 'Time entries',
   rowSavedReplies: 'Saved replies',
   rowArticles: 'Knowledge base articles',
+
+  linksHeading: 'Old help center links',
+  linksOK: 'All good',
+  linksUnverified: 'Needs a look',
+  linksRedirected: (redirected: number, found: number, address: string) =>
+    `${redirected.toLocaleString('en')} of ${found.toLocaleString('en')} old addresses lead to their new page${address ? ` on ${address}` : ''}.`,
+  linksRewritten: (links: number, articles: number, translations: number, replies: number) =>
+    `${links.toLocaleString('en')} Freshdesk links in ${articles.toLocaleString('en')} ${articles === 1 ? 'article' : 'articles'}${translations > 0 ? `, ${translations.toLocaleString('en')} ${translations === 1 ? 'translation' : 'translations'}` : ''} and ${replies.toLocaleString('en')} ${replies === 1 ? 'saved reply' : 'saved replies'} now point at the help center.`,
+  linksReportNote: 'The report lists every address and link that does not, and why.',
   atLeast: (n: number) => `at least ${n.toLocaleString('en')}`,
   unknownCount: 'not counted',
   ticketsNote: 'Freshdesk does not count archived tickets ahead of time; the import finds them and the report counts them.',

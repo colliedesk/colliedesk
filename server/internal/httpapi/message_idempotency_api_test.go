@@ -1,0 +1,223 @@
+package httpapi_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync"
+	"testing"
+)
+
+func postKeyed(t *testing.T, api http.Handler, token, conversation, key string, body map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+	req := newRequest(t, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages", body, token, nil)
+	if key != "" {
+		req.Header.Set("Idempotency-Key", key)
+	}
+	return serve(api, req)
+}
+
+func messageIDOf(t *testing.T, response *httptest.ResponseRecorder) string {
+	t.Helper()
+	var message struct {
+		ID string `json:"id"`
+	}
+	decode(t, response, &message)
+	return message.ID
+}
+
+func TestARepeatedIdempotencyKeyReturnsTheMessageItAlreadyCreated(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversation := f.conversationA(t)
+	note := map[string]any{"kind": "note", "body": "Checked the order"}
+	first := postKeyed(t, f.api, f.adminA, conversation, "submit-1", note)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first: status=%d body=%s", first.Code, first.Body.String())
+	}
+	created := messageIDOf(t, first)
+	again := postKeyed(t, f.api, f.adminA, conversation, "submit-1", note)
+	if again.Code != http.StatusOK {
+		t.Fatalf("repeat: status=%d body=%s, want 200 with the earlier message", again.Code, again.Body.String())
+	}
+	if id := messageIDOf(t, again); id != created {
+		t.Fatalf("repeat returned %s, want %s", id, created)
+	}
+	if count := queryString(t, f.pool, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND body='Checked the order'`, f.workspaceA); count != "1" {
+		t.Fatalf("notes stored = %s, want 1", count)
+	}
+	if next := postKeyed(t, f.api, f.adminA, conversation, "submit-2", note); next.Code != http.StatusCreated {
+		t.Fatalf("a new key is a new message: status=%d body=%s", next.Code, next.Body.String())
+	}
+	if plain := postKeyed(t, f.api, f.adminA, conversation, "", note); plain.Code != http.StatusCreated {
+		t.Fatalf("no key keeps the old behaviour: status=%d body=%s", plain.Code, plain.Body.String())
+	}
+}
+
+func TestConcurrentRequestsWithOneIdempotencyKeyStoreOneMessage(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversation := f.conversationA(t)
+	reply := map[string]any{"kind": "outgoing", "body": "On its way"}
+	var wait sync.WaitGroup
+	codes := make([]int, 3)
+	for index := range codes {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			codes[index] = postKeyed(t, f.api, f.adminA, conversation, "triple-click", reply).Code
+		}()
+	}
+	wait.Wait()
+	for _, code := range codes {
+		if code != http.StatusCreated && code != http.StatusOK {
+			t.Fatalf("codes=%v, want each 201 or 200", codes)
+		}
+	}
+	if count := queryString(t, f.pool, `SELECT count(*)::text FROM messages WHERE workspace_id=$1 AND body='On its way'`, f.workspaceA); count != "1" {
+		t.Fatalf("replies stored = %s, want 1", count)
+	}
+	if outbox := f.outboxCount(t, f.workspaceA); outbox != "1" {
+		t.Fatalf("outbox rows = %s, want 1: the reply is emailed once", outbox)
+	}
+}
+
+func TestAnIdempotencyKeyReusedForAnotherMessageIsRefused(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversation := f.conversationA(t)
+	if first := postKeyed(t, f.api, f.adminA, conversation, "reused", map[string]any{"kind": "note", "body": "First text"}); first.Code != http.StatusCreated {
+		t.Fatalf("first: status=%d body=%s", first.Code, first.Body.String())
+	}
+	other := postKeyed(t, f.api, f.adminA, conversation, "reused", map[string]any{"kind": "note", "body": "Other text"})
+	if other.Code != http.StatusUnprocessableEntity || !strings.Contains(other.Body.String(), `"idempotency_key_reused"`) {
+		t.Fatalf("other body under the same key: status=%d body=%s, want 422 idempotency_key_reused", other.Code, other.Body.String())
+	}
+	if bad := postKeyed(t, f.api, f.adminA, conversation, strings.Repeat("k", 201), map[string]any{"kind": "note", "body": "Long key"}); bad.Code != http.StatusBadRequest {
+		t.Fatalf("a key over 200 characters: status=%d, want 400", bad.Code)
+	}
+}
+
+func TestIdempotencyKeysBelongToOneWorkspace(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversationA := f.conversationA(t)
+	resultB := f.receive(t, true, 2, "Bravo question")
+	note := map[string]any{"kind": "note", "body": "Same words"}
+	if first := postKeyed(t, f.api, f.adminA, conversationA, "shared-key", note); first.Code != http.StatusCreated {
+		t.Fatalf("A: status=%d body=%s", first.Code, first.Body.String())
+	}
+	inB := postKeyed(t, f.api, f.adminB, *resultB.ConversationID, "shared-key", note)
+	if inB.Code != http.StatusCreated {
+		t.Fatalf("B with A's key: status=%d body=%s, want its own 201", inB.Code, inB.Body.String())
+	}
+	if conversation := queryString(t, f.pool, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND id=$2`, f.workspaceB, messageIDOf(t, inB)); conversation != *resultB.ConversationID {
+		t.Fatalf("B's message is on %s, want B's conversation", conversation)
+	}
+	// A's key never reaches into A's conversation from B.
+	if cross := postKeyed(t, f.api, f.adminB, conversationA, "shared-key", note); cross.Code != http.StatusNotFound {
+		t.Fatalf("B posting to A's conversation: status=%d, want 404", cross.Code)
+	}
+}
+
+func TestAMultipartMessageHonoursItsIdempotencyKey(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversation := f.conversationA(t)
+	send := func() *httptest.ResponseRecorder {
+		req := multipartMessage(t, conversation, f.adminA, "note", "With a file", []upload{{name: "a.txt", contentType: "text/plain", data: []byte("hello")}})
+		req.Header.Set("Idempotency-Key", "files-1")
+		return serve(f.api, req)
+	}
+	if first := send(); first.Code != http.StatusCreated {
+		t.Fatalf("first: status=%d body=%s", first.Code, first.Body.String())
+	}
+	if again := send(); again.Code != http.StatusOK {
+		t.Fatalf("repeat: status=%d body=%s, want 200", again.Code, again.Body.String())
+	}
+	if count := queryString(t, f.pool, `SELECT count(*)::text FROM attachments WHERE workspace_id=$1 AND filename='a.txt'`, f.workspaceA); count != "1" {
+		t.Fatalf("attachments stored = %s, want 1", count)
+	}
+}
+
+func sentUnderKey(t *testing.T, api http.Handler, token, conversation, key string) (int, []string) {
+	t.Helper()
+	response := request(t, api, http.MethodGet, "/api/v1/conversations/"+conversation+"/messages?idempotency_key="+url.QueryEscape(key), nil, token, nil)
+	if response.Code != http.StatusOK {
+		return response.Code, nil
+	}
+	var page struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	decode(t, response, &page)
+	ids := []string{}
+	for _, item := range page.Items {
+		ids = append(ids, item.ID)
+	}
+	return response.Code, ids
+}
+
+// A page reloaded while a send was in flight asks, with the send's key, whether the message arrived: the
+// answer is that message or nothing, never another conversation's or another workspace's.
+func TestTheTimelineFindsTheMessageASendKeyStored(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversation := f.conversationA(t)
+	contact := create(t, f.api, f.adminA, "/api/v1/contacts", map[string]any{"name": "Other", "email": "other@customer-reload.example.com"})
+	other := create(t, f.api, f.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Another one"})
+	sent := postKeyed(t, f.api, f.adminA, conversation, "reload-1", map[string]any{"kind": "note", "body": "Called the customer"})
+	if sent.Code != http.StatusCreated {
+		t.Fatalf("send: status=%d body=%s", sent.Code, sent.Body.String())
+	}
+	if status, ids := sentUnderKey(t, f.api, f.adminA, conversation, "reload-1"); status != http.StatusOK || len(ids) != 1 || ids[0] != messageIDOf(t, sent) {
+		t.Fatalf("stored send: status=%d items=%v, want the message", status, ids)
+	}
+	if status, ids := sentUnderKey(t, f.api, f.adminA, conversation, "never-sent"); status != http.StatusOK || len(ids) != 0 {
+		t.Fatalf("send that never arrived: status=%d items=%v, want no item", status, ids)
+	}
+	if status, ids := sentUnderKey(t, f.api, f.adminA, other, "reload-1"); status != http.StatusOK || len(ids) != 0 {
+		t.Fatalf("another conversation: status=%d items=%v, want no item", status, ids)
+	}
+	if status, _ := sentUnderKey(t, f.api, f.adminB, conversation, "reload-1"); status != http.StatusNotFound {
+		t.Fatalf("another workspace: status=%d, want 404", status)
+	}
+	if status, _ := sentUnderKey(t, f.api, f.adminA, conversation, "has space"); status != http.StatusBadRequest {
+		t.Fatalf("a malformed key: status=%d, want 400", status)
+	}
+}
+
+// A send cut off before its answer may be pressed again after the person changed the files or the copies:
+// that is another message, never a replay of the first that silently drops what changed.
+func TestAKeyReusedWithOtherFilesOrCopiesIsRefused(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversation := f.conversationA(t)
+	withFile := func(key, name, data string) *httptest.ResponseRecorder {
+		req := multipartMessage(t, conversation, f.adminA, "note", "Here it is", []upload{{name: name, contentType: "text/plain", data: []byte(data)}})
+		req.Header.Set("Idempotency-Key", key)
+		return serve(f.api, req)
+	}
+	if first := withFile("files-2", "a.txt", "hello"); first.Code != http.StatusCreated {
+		t.Fatalf("first: status=%d body=%s", first.Code, first.Body.String())
+	}
+	for name, response := range map[string]*httptest.ResponseRecorder{
+		"another file":           withFile("files-2", "b.txt", "hello"),
+		"same name, other bytes": withFile("files-2", "a.txt", "hullo"),
+		"no file":                postKeyed(t, f.api, f.adminA, conversation, "files-2", map[string]any{"kind": "note", "body": "Here it is"}),
+	} {
+		if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "idempotency_key_reused") {
+			t.Errorf("%s under the same key: status=%d body=%s, want 422 idempotency_key_reused", name, response.Code, response.Body.String())
+		}
+	}
+	if again := withFile("files-2", "a.txt", "hello"); again.Code != http.StatusOK {
+		t.Fatalf("the same file again: status=%d body=%s, want 200", again.Code, again.Body.String())
+	}
+
+	reply := map[string]any{"kind": "outgoing", "body": "Copying billing.", "cc": []string{"billing@cust.example.com"}}
+	if first := postKeyed(t, f.api, f.adminA, conversation, "cc-1", reply); first.Code != http.StatusCreated {
+		t.Fatalf("first reply: status=%d body=%s", first.Code, first.Body.String())
+	}
+	other := map[string]any{"kind": "outgoing", "body": "Copying billing.", "cc": []string{"billing@cust.example.com", "ops@cust.example.com"}}
+	if response := postKeyed(t, f.api, f.adminA, conversation, "cc-1", other); response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("other copies under the same key: status=%d body=%s, want 422", response.Code, response.Body.String())
+	}
+	if again := postKeyed(t, f.api, f.adminA, conversation, "cc-1", reply); again.Code != http.StatusOK {
+		t.Fatalf("the same reply again: status=%d body=%s, want 200", again.Code, again.Body.String())
+	}
+}

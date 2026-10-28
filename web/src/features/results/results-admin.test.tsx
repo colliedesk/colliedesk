@@ -68,7 +68,7 @@ describe('ResultsAdmin', () => {
     cleanup();
     renderAdmin({ weekly: { ...weekly, subscribed: false, can_send: false } });
     expect(screen.getByRole('switch', { name: 'Email me on Mondays' })).toBeDisabled();
-    expect(screen.getByText(/Ask whoever runs it to set SMTP_HOST and MAIL_FROM_DOMAIN/)).toBeVisible();
+    expect(screen.getByText(/This server cannot send email yet\. Ask whoever runs it to set up outgoing email\./)).toBeVisible();
     expect(screen.getByRole('link', { name: 'How to set up outgoing email' })).toBeVisible();
   });
 });

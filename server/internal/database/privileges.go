@@ -85,6 +85,21 @@ const (
 	// address, after a workspace dropped its own. Google revokes an account's whole grant to the project, so
 	// the grant is revoked only when no workspace holds it. Only a yes or no leaves the transaction.
 	PrivilegeMailboxGrantShared Privilege = "mailbox-grant-shared"
+	// PrivilegeHelpCenterHost finds the workspace whose help center serves on a custom host name (the
+	// request's Host, or the name the reverse proxy asks a certificate for), and, for the certificate
+	// question, the workspaces still waiting to prove they own it. Only workspace ids leave the
+	// transaction; the token, the check and the pages run scoped to each workspace.
+	PrivilegeHelpCenterHost Privilege = "help-center-host"
+	// PrivilegeHelpCenterDomainTakeover moves a custom help center host name from the workspace active on
+	// it to another workspace whose claim DNS proves now, when the same DNS answer does not prove the
+	// holder's claim (its CNAME target or its TXT token). One transaction locks the holder's row,
+	// compares its claim and token with what DNS showed inside the database, puts it back to pending and
+	// activates the new claim; only the holder's workspace id leaves it, to refresh the server's cache.
+	PrivilegeHelpCenterDomainTakeover Privilege = "help-center-domain-takeover"
+	// PrivilegeHelpCenterDomainRecheck lists the workspaces with an active custom help center domain for
+	// the daily DNS re-check. Only workspace ids leave the transaction; each check reads and records in
+	// its own workspace.
+	PrivilegeHelpCenterDomainRecheck Privilege = "help-center-domain-recheck"
 	// PrivilegeMailboxKeepAlive lists, in every workspace, the connected mailboxes of a provider whose grant
 	// was not renewed for a week, so a quiet Microsoft 365 grant is refreshed before it expires unused. Only
 	// workspace and channel ids leave the transaction; each grant is read and renewed in its own workspace.

@@ -6,7 +6,9 @@ import type { Generated, JsonResponse } from '../../api/schemas';
 // The media library's schemas and calls, in the knowledge base chunk. A video goes up in parts
 // (uploadVideo below); an image in one request.
 
-const usageSchema = z.object({ articles: z.number().int(), trashed_articles: z.number().int(), older_versions: z.number().int() }) satisfies z.ZodType<Generated<'KBMediaUsage'>>;
+const usageSchema = z.object({
+  articles: z.number().int(), trashed_articles: z.number().int(), older_versions: z.number().int(), help_center: z.array(z.enum(['logo', 'favicon'])),
+}) satisfies z.ZodType<Generated<'KBMediaUsage'>>;
 export const kbMediaSchema = z.object({
   id: z.string().uuid(), kind: z.enum(['image', 'video']),
   content_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4', 'video/webm']), size: z.number().int(), sha256: z.string(),

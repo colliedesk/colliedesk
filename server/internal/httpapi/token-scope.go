@@ -79,7 +79,7 @@ var (
 // 30 days); the knowledge base is send for the same reason (an article can be published, which reaches
 // customers, but every change is a version and a delete waits 30 days in the trash), and so are its
 // image uploads. Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
-// admin: workspace settings (the help center's on and off among them), the team, revoking invites, channels and sessions. An admin token acts
+// admin: workspace settings (the help center's on and off, its brand and its custom domain among them), the team, revoking invites, channels and sessions. An admin token acts
 // with its creator's role, so it reaches these only while that person is an admin, and the role still
 // decides the admin-only reads (billing is classified admin for that reason). The handlers file a
 // request for every tier when the change is risky for people: a change that grants, keeps or takes
@@ -132,6 +132,7 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/kb/media/{id}":                                grant(auth.PermKBMediaUpdate),
 	"GET /api/v1/kb/media/trash":                                 grant(auth.PermKBMediaRead),
 	"POST /api/v1/kb/media/trash":                                grant(auth.PermKBMediaDelete),
+	"PUT /api/v1/kb/order":                                       grant(auth.PermKBArticlesUpdate),
 	// A lower tier's request names the ids it would move (proposeTrashOfUnusedKBMedia), never "all unused".
 	"POST /api/v1/kb/media/trash-unused":                         byHandler(auth.PermKBMediaDelete),
 	"POST /api/v1/kb/media/restore":                              grant(auth.PermKBMediaDelete),
@@ -151,6 +152,10 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/kb/media/{id}/poster/{version}":                 grant(auth.PermKBMediaRead),
 	"GET /api/v1/kb/media/{id}/details":                          grant(auth.PermKBMediaRead),
 	"GET /api/v1/kb/media/{id}/thumbnail":                        grant(auth.PermKBMediaRead),
+	"GET /api/v1/help-center/domain":                             grant(auth.PermHelpCenterRead),
+	"PUT /api/v1/help-center/domain":                             grant(auth.PermHelpCenterUpdate),
+	"DELETE /api/v1/help-center/domain":                          grant(auth.PermHelpCenterUpdate),
+	"POST /api/v1/help-center/domain/check":                      grant(auth.PermHelpCenterUpdate),
 	"GET /api/v1/help-center":                                    grant(auth.PermHelpCenterRead),
 	"POST /api/v1/conversations":                                 grant(auth.PermMessagesSend),
 	"GET /api/v1/conversations/{id}":                             grant(auth.PermConversationsRead),
@@ -184,6 +189,9 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/agent-requests/{id}":         grant(auth.PermAgentRequestsRead),
 	"POST /api/v1/agent-requests/{id}/cancel": grant(auth.PermAgentRequestsCancel),
 	"POST " + problemReportPath:               anyToken,
+	"GET /api/v1/help-center/theme":           grant(auth.PermHelpCenterRead),
+	"POST /api/v1/help-center/theme/check":    grant(auth.PermHelpCenterRead),
+	"POST /api/v1/help-center/theme/preview":  grant(auth.PermHelpCenterRead),
 
 	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
 	"PUT /api/v1/conversations/{id}/presence":               grant(auth.PermConversationsRead),
@@ -217,19 +225,24 @@ var tokenTiers = map[string]TokenAccess{
 	"POST " + channelMicrosoftPath:                         alwaysAsk(auth.PermChannelsManageCredentials),
 	"DELETE " + channelMicrosoftPath:                       alwaysAsk(auth.PermChannelsManageCredentials),
 	"GET /api/v1/channels/email":                           grant(auth.PermChannelsRead),
-	"GET /api/v1/channels/web-form":                        grant(auth.PermChannelsRead),
-	"PATCH /api/v1/agents/me/timezone":                     grant(auth.PermProfileUpdate),
-	"PATCH /api/v1/agents/me/display-name":                 grant(auth.PermProfileUpdate),
-	"GET /api/v1/billing":                                  grant(auth.PermBillingRead),
-	"PATCH /api/v1/workspace/timezone":                     grant(auth.PermWorkspaceUpdate),
-	"PATCH /api/v1/workspace/name":                         grant(auth.PermWorkspaceUpdate),
-	"PATCH /api/v1/agents/{id}":                            grant(auth.PermTeamManageRoles),
-	"DELETE /api/v1/auth/invites/{id}":                     grant(auth.PermTeamRevoke),
-	"PUT /api/v1/channels/web-form":                        grant(auth.PermChannelsUpdate),
-	"PUT /api/v1/help-center":                              grant(auth.PermHelpCenterUpdate),
-	"PUT /api/v1/channels/email":                           grant(auth.PermChannelsUpdate),
-	"POST /api/v1/channels/email/domain-verification":      grant(auth.PermChannelsUpdate),
-	"DELETE /api/v1/auth/sessions/{id}":                    grant(auth.PermTeamRevoke),
+	// A test message reaches nobody but the token's own agent: it opens a conversation, like a change
+	// that never reaches a customer (draft). Answering it is a reply, which needs send as always.
+	"POST /api/v1/channels/email/test-message":        grant(auth.PermConversationsUpdate),
+	"POST /api/v1/channels/{id}/email/test-message":   grant(auth.PermConversationsUpdate),
+	"GET /api/v1/channels/web-form":                   grant(auth.PermChannelsRead),
+	"PATCH /api/v1/agents/me/timezone":                grant(auth.PermProfileUpdate),
+	"PATCH /api/v1/agents/me/display-name":            grant(auth.PermProfileUpdate),
+	"GET /api/v1/billing":                             grant(auth.PermBillingRead),
+	"PATCH /api/v1/workspace/timezone":                grant(auth.PermWorkspaceUpdate),
+	"PATCH /api/v1/workspace/name":                    grant(auth.PermWorkspaceUpdate),
+	"PATCH /api/v1/agents/{id}":                       grant(auth.PermTeamManageRoles),
+	"DELETE /api/v1/auth/invites/{id}":                grant(auth.PermTeamRevoke),
+	"PUT /api/v1/channels/web-form":                   grant(auth.PermChannelsUpdate),
+	"PUT /api/v1/help-center":                         grant(auth.PermHelpCenterUpdate),
+	"PUT /api/v1/channels/email":                      grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/email/domain-verification": grant(auth.PermChannelsUpdate),
+	"DELETE /api/v1/auth/sessions/{id}":               grant(auth.PermTeamRevoke),
+	"PUT /api/v1/help-center/theme":                   grant(auth.PermHelpCenterUpdate),
 
 	"POST /api/v1/auth/tokens":           alwaysAsk(auth.PermTeamCreateTokens),
 	"POST /api/v1/auth/invites":          alwaysAsk(auth.PermTeamInvite),

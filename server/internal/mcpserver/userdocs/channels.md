@@ -10,12 +10,18 @@ the list and cannot change it.
 Each channel shows its type, its name, one line about it (the support address, the website origins)
 and its state:
 
-- **Working**: it receives and sends.
+- **Working**: it receives and sends. A channel is Working only once a first message has arrived on it.
+- **Waiting for first message**: it is set up, but nothing has arrived yet. Send a test message (to
+  your support address from a different address, or through the form) and check that it opens a
+  conversation in the inbox; the channel then reads Working. Mail sent from the support address itself,
+  or an automatic reply, still ends the wait but opens no conversation. Through the API the state is
+  `waiting` with reason `no_message_yet`.
 - **Off**: an admin turned it off. See [Turn a channel off](#turn-a-channel-off).
 - **Needs attention**: it works only in part, and says why with a link to fix it. Email: sending is
   paused after spam complaints, the server cannot send (no SMTP relay and no Gmail), the Gmail
   connection broke, the support address domain is not verified yet, or (on your own server) no
-  inbound secret is set so no mail can arrive. Web form: it is on but lists no website origin, so no
+  inbound secret is set, so customer email forwarded from your mailbox cannot arrive yet. A test
+  message works without it. Web form: it is on but lists no website origin, so no
   page can post to it.
 
 ## Add a channel

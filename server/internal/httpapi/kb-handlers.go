@@ -114,13 +114,19 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 		slug = *input.Slug
 	}
 	who := principal(request)
-	collection, err := a.store.CreateKBCollection(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
-		store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position})
-	if err != nil {
-		writeKBError(response, err)
-		return
+	parent := ""
+	if input.ParentID != nil {
+		parent = *input.ParentID
 	}
-	writeJSON(response, http.StatusCreated, collection)
+	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position)}, func(ctx context.Context) (any, error) {
+		collection, err := a.store.CreateKBCollection(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
+			store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position})
+		if err != nil {
+			writeKBError(response, err)
+			return nil, errAnswered
+		}
+		return collection, nil
+	})
 }
 
 func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Request) {
@@ -198,13 +204,62 @@ func (a *API) restoreKBCollection(response http.ResponseWriter, request *http.Re
 	writeJSON(response, http.StatusOK, collection)
 }
 
+// setKBOrder puts the collections and articles directly under one parent in the order given.
+func (a *API) setKBOrder(response http.ResponseWriter, request *http.Request) {
+	// The order is public navigation, like a collection's name and place.
+	if a.askUnlessHeld(response, request, Route{http.MethodPut, "/api/v1/kb/order", auth.PermissionConversationsWrite}, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+		return
+	}
+	var input struct {
+		ParentID      json.RawMessage `json:"parent_id"`
+		CollectionIDs *[]string       `json:"collection_ids"`
+		ArticleIDs    *[]string       `json:"article_ids"`
+	}
+	if err := decodeJSON(request, &input); err != nil || input.ParentID == nil || input.CollectionIDs == nil || input.ArticleIDs == nil {
+		writeError(response, http.StatusBadRequest, "invalid_request",
+			"Send parent_id (null for the top), collection_ids and article_ids: everything directly under that parent, first to last.")
+		return
+	}
+	order := domain.KBOrder{CollectionIDs: *input.CollectionIDs, ArticleIDs: *input.ArticleIDs}
+	if string(input.ParentID) != "null" {
+		var parent string
+		if err := json.Unmarshal(input.ParentID, &parent); err != nil {
+			writeError(response, http.StatusBadRequest, "invalid_request", "parent_id is a collection id, or null for the top.")
+			return
+		}
+		order.ParentID = &parent
+	}
+	order, err := a.store.SetKBOrder(request.Context(), principal(request).Workspace.ID, order)
+	var stale *domain.KBOrderStaleError
+	if errors.As(err, &stale) {
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "order_stale",
+			"message":        "Something was added, moved or deleted here since you read it. Nothing changed; read the order again and send it whole.",
+			"collection_ids": stale.Current.CollectionIDs, "article_ids": stale.Current.ArticleIDs})})
+		return
+	}
+	if errors.Is(err, domain.ErrKBCollectionNotFound) {
+		writeError(response, http.StatusNotFound, "not_found", "The parent collection was not found, or it is in the trash.")
+		return
+	}
+	if err != nil {
+		writeKBError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, order)
+}
+
 func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request) {
 	limit, ok := savedReplyPage(response, request)
 	if !ok {
 		return
 	}
 	query := request.URL.Query()
-	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Limit: limit, Cursor: query.Get("cursor")}
+	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Sort: query.Get("sort"),
+		Limit: limit, Cursor: query.Get("cursor")}
+	if filter.Sort != "" && filter.Sort != store.KBSortRecent && filter.Sort != store.KBSortManual {
+		writeError(response, http.StatusBadRequest, "invalid_request", "sort is recent or manual.")
+		return
+	}
 	if len([]rune(filter.Query)) > 200 {
 		writeError(response, http.StatusBadRequest, "invalid_request", "q holds at most 200 characters.")
 		return
@@ -222,15 +277,20 @@ func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request
 		writeStoreError(response, err)
 		return
 	}
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
 	for index := range items {
-		a.addressKBArticle(request, &items[index])
+		addressKBArticle(home, &items[index])
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_cursor": optionalString(next)})
 }
 
-// addressKBArticle fills in the article's public address on the workspace's help center.
-func (a *API) addressKBArticle(request *http.Request, article *domain.KBArticleSummary) {
-	article.URL = helpcenter.ArticleURL(a.config.Origin, a.config.HelpCenterDomain, principal(request).Workspace.Slug, article.Number, article.Slug)
+// addressKBArticle fills in the article's public address below home, the workspace's help center
+// address (helpCenterHome).
+func addressKBArticle(home string, article *domain.KBArticleSummary) {
+	article.URL = home + helpcenter.ArticlePath(article.Number, article.Slug)
 }
 
 func optionalString(value string) *string {
@@ -254,8 +314,12 @@ func (a *API) listTrashedKBArticles(response http.ResponseWriter, request *http.
 		writeStoreError(response, err)
 		return
 	}
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
 	for index := range items {
-		a.addressKBArticle(request, &items[index].KBArticleSummary)
+		addressKBArticle(home, &items[index].KBArticleSummary)
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_cursor": optionalString(next)})
 }
@@ -266,7 +330,11 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		writeKBError(response, err)
 		return
 	}
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	drafts, err := a.ai.ArticleDraftsThisMonth(request.Context(), principal(request).Workspace.ID, article.ID)
 	if err != nil {
 		writeStoreError(response, err)
@@ -361,15 +429,21 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.askUnlessHeld(response, request, kbArticleCreateRoute, who, auth.PermKBArticlesPublish, raw, nil) {
 		return
 	}
-	article, err := a.store.CreateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
-		store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status})
-	if err != nil {
-		writeKBError(response, err)
-		return
-	}
-	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
-	a.addressKBArticle(request, &article.KBArticleSummary)
-	writeJSON(response, http.StatusCreated, article)
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, input.Title, slug, *input.BodyMD, input.Status}, func(ctx context.Context) (any, error) {
+		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
+			store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status})
+		if err != nil {
+			writeKBError(response, err)
+			return nil, errAnswered
+		}
+		a.warnMissingKBMedia(ctx, who.Workspace.ID, &article)
+		home, ok := a.helpCenterHome(response, request)
+		if !ok {
+			return nil, errAnswered
+		}
+		addressKBArticle(home, &article.KBArticleSummary)
+		return article, nil
+	})
 }
 
 func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Request) {
@@ -405,7 +479,11 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -445,7 +523,11 @@ func (a *API) restoreKBArticle(response http.ResponseWriter, request *http.Reque
 		writeKBError(response, err)
 		return
 	}
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -464,7 +546,11 @@ func (a *API) setKBArticleAIExcluded(response http.ResponseWriter, request *http
 		writeKBError(response, err)
 		return
 	}
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -516,7 +602,11 @@ func (a *API) restoreKBArticleVersion(response http.ResponseWriter, request *htt
 		return
 	}
 	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
-	a.addressKBArticle(request, &article.KBArticleSummary)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	addressKBArticle(home, &article.KBArticleSummary)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -660,7 +750,11 @@ func (a *API) getHelpCenter(response http.ResponseWriter, request *http.Request)
 		writeStoreError(response, err)
 		return
 	}
-	center.URL = a.helpCenterURL(who.Workspace.Slug)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	center.URL = home
 	writeJSON(response, http.StatusOK, center)
 }
 
@@ -680,6 +774,10 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		writeKBError(response, err)
 		return
 	}
-	center.URL = a.helpCenterURL(who.Workspace.Slug)
+	home, ok := a.helpCenterHome(response, request)
+	if !ok {
+		return
+	}
+	center.URL = home
 	writeJSON(response, http.StatusOK, center)
 }

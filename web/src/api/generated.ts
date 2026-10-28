@@ -264,6 +264,7 @@ export interface paths {
             };
             cookie?: never;
         };
+        /** @description The conversation's timeline. With `idempotency_key`, only the message a send with that Idempotency-Key stored in this conversation, or no item when none did: a page reloaded while a send was in flight asks whether it arrived before offering the text again. A send under that key still running is waited for, so the answer is final. */
         get: operations["listMessages"];
         put?: never;
         /**
@@ -272,6 +273,8 @@ export interface paths {
          *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (customer mail through the platform forwarder that did not fail authentication, or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
          *
          *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
+         *
+         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body, author, `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft or a call filed as an agent request (202) does not use it.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -489,6 +492,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{id}/email/test-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on this email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel; 409 `own_address` when the agent signs in with the support address itself, whose mail never opens a conversation. */
+        post: operations["sendEmailTestMessageByID"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{id}/email/gmail": {
         parameters: {
             query?: never;
@@ -576,6 +598,23 @@ export interface paths {
         put?: never;
         /** @description Create or replace the inbound secret of the default email channel. The raw secret is returned once; the previous one stops working. */
         post: operations["rotateEmailInboundSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/test-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on the default email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel; 409 `own_address` when the agent signs in with the support address itself, whose mail never opens a conversation. */
+        post: operations["sendEmailTestMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1270,7 +1309,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats (agents and pending invites) than the plan allows, or more stored attachment bytes, imported files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them. */
+        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats (agents and pending invites) than the plan allows, or more stored attachment bytes, imported files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them. 422 `billing_email_refused` when the payment provider does not accept the admin's address (a domain that receives no mail, for example); the message gives the provider's reason and what to do. */
         post: operations["createBillingCheckout"];
         delete?: never;
         options?: never;
@@ -1353,7 +1392,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 only when `domain` is exactly one label below `HELP_CENTER_DOMAIN`, that label is a workspace slug that can be a host name, the workspace's help center is on and the workspace is not locked. Every other case, and a server without `HELP_CENTER_DOMAIN`, is the same 404. */
+        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 when the workspace's help center is on and the workspace is not locked, and `domain` is exactly one label below `HELP_CENTER_DOMAIN` whose label is that workspace's slug or the CNAME target `hc-<claim>` of its custom domain's claim (which redirects to the help center), or the workspace's custom domain. A custom domain answers 200 once it is active, or when it is pending and its DNS check passes now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a time on the server and at most one per host name every 30 seconds. Every other case is the same 404; custom domains work without `HELP_CENTER_DOMAIN` too. */
         get: operations["askHelpCenterCertificate"];
         put?: never;
         post?: never;
@@ -1564,7 +1603,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). An Idempotency-Key used before with other input is also refused with 422, code `idempotency_key_reused`. The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
         post: operations["addAIProvider"];
         delete?: never;
         options?: never;
@@ -2145,7 +2184,7 @@ export interface paths {
         /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most three levels deep (category, folder, subfolder). `article_count` counts its articles outside the trash, drafts included. */
         get: operations["listKBCollections"];
         put?: never;
-        /** @description Any agent may create one, and a `send` agent token; a lower tier files an agent request a person approves. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). */
+        /** @description Any agent may create one, and a `send` agent token; a lower tier files an agent request a person approves. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
         post: operations["createKBCollection"];
         delete?: never;
         options?: never;
@@ -2201,8 +2240,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Take a collection out of the trash. Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `parent_in_trash` when its parent is in the trash (restore that first), 409 `duplicate_slug` when a sibling took its slug meanwhile. 404 when it is not in the trash. */
+        /** @description Take a collection out of the trash. Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `parent_in_trash` when its parent is in the trash (restore that first), 409 `duplicate_slug` when a sibling took its slug meanwhile. 404 when it is not in the trash. Among siblings ordered by hand it comes back last; otherwise it falls in by name. */
         post: operations["restoreKBCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Set by hand the order of what sits directly under one parent: its collections and, under a collection, its articles (drafts included). `parent_id` null is the top, which holds collections only (`article_ids` is then empty). The lists must name every collection and article outside the trash under that parent, each once, and nothing else; otherwise nothing changes and the answer is 409 `order_stale` with the lists as they are now in `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they were read). A parent that is not a collection of this workspace outside the trash is 404. The help center, the article list of a collection and the reply box's article picker follow the order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not change, and an order that moves nothing leaves `content_version` as it is. After an order by hand, a new, moved, imported or restored item goes last. Any agent may set it, and a `send` agent token; a lower tier files an agent request. */
+        put: operations["setKBOrder"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2216,10 +2272,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the most recently updated come first. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
+        /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's order (collections in their order, a collection's own articles before those of its collections, and in each collection by `position`, then title, then number). `sort` is `manual` with `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
         get: operations["listKBArticles"];
         put?: never;
-        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
         post: operations["createKBArticle"];
         delete?: never;
         options?: never;
@@ -2276,7 +2332,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Take an article out of the trash, as it was when deleted (a published article is published again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is not in the trash. */
+        /** @description Take an article out of the trash, as it was when deleted (a published article is published again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is not in the trash. In a collection ordered by hand it comes back last; otherwise it falls in by title. */
         post: operations["restoreKBArticle"];
         delete?: never;
         options?: never;
@@ -2403,7 +2459,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item in the trash still counts toward the plan's storage until it is purged. */
+        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item the purge keeps (the help center's logo or favicon) has no `purge_at`. An item in the trash still counts toward the plan's storage until it is purged. */
         get: operations["listTrashedKBMedia"];
         put?: never;
         /** @description Move up to 100 library items to the trash, each only while no live article's current text names it, and answer each id: `trashed`, `already_in_trash`, `in_use` or `not_found`. Send the `batch_id` of an earlier call to add to its batch; `POST /api/v1/kb/media/restore` with that `batch_id` brings back the whole batch. Saving an article that names an item in the trash takes it out again. Calling it twice changes nothing more. */
@@ -2457,7 +2513,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets an agent request. */
+        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged), `in_use` (the help center's logo or favicon stays until its theme no longer names it) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets an agent request. */
         post: operations["purgeKBMedia"];
         delete?: never;
         options?: never;
@@ -3089,10 +3145,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/help-center/theme": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The brand of the public help center: logo, favicon, website and contact links, colors and fonts, with the contrast `checks` of the colors it shows. A null color or font is the default. */
+        get: operations["getHelpCenterTheme"];
+        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). `custom_css` is the exception: it is required, and null or an empty string clears it; a body without it is refused (422 `validation_failed`, with `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent request filed before it existed, cannot remove the custom CSS. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
+        put: operations["putHelpCenterTheme"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/theme/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Check a candidate theme without saving it: the same checks as PUT. Contrast is answered with 200 and `ok` false, so an editor can show every pair while a person picks colors; a theme of the wrong shape or a logo that is not in the library is 422 as on PUT. */
+        post: operations["checkHelpCenterTheme"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/theme/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Render a page of the help center with a candidate theme, saving nothing: the real page templates, the workspace's live collections and published articles (never drafts), also while the help center is off. `page` `article` shows the published article with the lowest number, or a sample text when nothing is published; a video in it shows as a placeholder. The answer is one HTML document for an `<iframe sandbox="allow-same-origin" srcdoc>`: it links the help center's style sheet under `/help/_/`, carries the candidate brand inline and its own policy (`default-src 'none'; img-src <origin>/api/v1/kb/images/ <origin>/api/v1/kb/media/; style-src <origin>/help/_/ 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'`), which runs no script; images load from the session's knowledge base routes and links take no pointer. Contrast is answered as in `/theme/check` (200 with `ok` false), so the person sees why Save would refuse; a theme of the wrong shape or a logo that is not an image of the library is 422 as on PUT. Each person may ask for 600 previews a minute (429 with `Retry-After` beyond). */
+        post: operations["previewHelpCenterTheme"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The CNAME target and the token are random, made when the host name is set, and kept until it is removed or replaced; the workspace's slug proves nothing, since another workspace may take it after a rename. The token is in the TXT record's value; it is public in DNS once set, so every tier may read it, and it is never exported. */
+        get: operations["getHelpCenterDomain"];
+        /** @description Set or replace the help center's custom domain. Admins only, and an `admin` agent token. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it. A host name another workspace's help center serves on can be claimed too: the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim and no longer proves the other workspace's. */
+        put: operations["putHelpCenterDomain"];
+        post?: never;
+        /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, with a new CNAME target and TXT token. Admins only, and an `admin` agent token; removing when there is none changes nothing. */
+        delete: operations["deleteHelpCenterDomain"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/domain/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Admins only, and an `admin` agent token. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
+        post: operations["checkHelpCenterDomain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description The browser's IANA timezone. At the agent's first sign-in, while they never chose a timezone and the workspace is still on its `UTC` default, it becomes the agent's own (`timezone_override`). A later sign-in never changes it, and an unknown zone is ignored; it never fails the sign-in. */
+        SignInTimezone: string;
         ImportPerson: {
             /** @description The Freshdesk agent id */
             external_id: string;
@@ -3116,6 +3262,8 @@ export interface components {
             include_personal_canned_responses?: boolean;
             /** @description On an account with several portals, the portal whose published articles stay published. */
             help_center_portal?: number;
+            /** @description The old Freshdesk help center's own custom domain, for example support.acme.com (an http:// or https:// prefix and a trailing slash are dropped; stored as the host). Its /support/ links in imported articles and saved replies are pointed at the new help center like the account domain's. Answers 400 when it is not a host name. */
+            old_help_center_domain?: string;
         };
         ImportInput: {
             /** @enum {string} */
@@ -4401,6 +4549,7 @@ export interface components {
             description?: string;
             /** Format: uuid */
             parent_id?: string | null;
+            /** @description Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand, else 0 (by name). */
             position?: number;
         };
         KBCollection: {
@@ -4486,6 +4635,17 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        KBOrder: {
+            /**
+             * Format: uuid
+             * @description The collection whose children these are; null for the top.
+             */
+            parent_id: string | null;
+            /** @description Its collections outside the trash, first to last. */
+            collection_ids: string[];
+            /** @description Its articles outside the trash, drafts included, first to last; empty at the top. */
+            article_ids: string[];
+        };
         KBArticleSummary: {
             /** Format: uuid */
             id: string;
@@ -4493,6 +4653,8 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            /** @description Its place in its collection, set with PUT /api/v1/kb/order; 0 until the collection is ordered by hand. Ties go by title, then number. */
+            position: number;
             title: string;
             slug: string;
             status: components["schemas"]["KBArticleStatus"];
@@ -4535,6 +4697,7 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            position: number;
             title: string;
             slug: string;
             status: components["schemas"]["KBArticleStatus"];
@@ -4573,6 +4736,7 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            position: number;
             title: string;
             slug: string;
             status: components["schemas"]["KBArticleStatus"];
@@ -4665,7 +4829,7 @@ export interface components {
             usage?: components["schemas"]["KBMediaUsage"];
             /**
              * Format: date-time
-             * @description When the purge deletes it: set only for an item nobody kept and no article ever saved.
+             * @description When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article and not the help center names.
              */
             purge_at?: string;
         };
@@ -4676,6 +4840,8 @@ export interface components {
             trashed_articles: number;
             /** @description Articles where only an older version names it. */
             older_versions: number;
+            /** @description What the help center shows it as; empty when it does not. An item the help center shows is in use: it is not listed as unused, Remove unused skips it, and neither the daily purge nor Delete forever deletes it (purge answers in_use), even in the trash. */
+            help_center: ("logo" | "favicon")[];
         };
         KBMediaDetails: components["schemas"]["KBMedia"] & {
             articles: {
@@ -4778,9 +4944,180 @@ export interface components {
             updated_at: string | null;
             /**
              * Format: uri
-             * @description The public address of the help center, also while it is off: `<APP_ORIGIN>/help/<slug>` on a self-hosted server, `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that variable and the slug can be a host name. Changing the workspace slug changes it, and links to the old address stop working.
+             * @description The public address of the help center, also while it is off: `https://<custom domain>` once the workspace's custom domain is active (GET /api/v1/help-center/domain), else `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that variable and the slug can be a host name. The older addresses redirect to the custom domain while it is active. Changing the workspace slug changes the slug addresses, and links to the old slug stop working.
              */
             url: string;
+        };
+        HelpCenterDomain: {
+            /** @description The custom host name in ASCII (punycode) form; null when none is set. */
+            hostname: string | null;
+            /**
+             * @description `pending` until a DNS check passes; `active` while the help center serves on it. An active domain goes back to `pending` when no check has proved it for 7 days, or when another workspace proves the host name while this domain's records do not (`pending_reason` says which).
+             * @enum {string}
+             */
+            status: "none" | "pending" | "active";
+            /** @description The DNS records to set at the domain's DNS provider; empty when no domain is set. */
+            records: components["schemas"]["HelpCenterDomainRecord"][];
+            /**
+             * Format: date-time
+             * @description When this host name was set.
+             */
+            created_at: string | null;
+            /**
+             * Format: date-time
+             * @description When a DNS check first passed.
+             */
+            verified_at: string | null;
+            /**
+             * Format: date-time
+             * @description The last DNS check: the button, the proxy's certificate question or the daily re-check.
+             */
+            checked_at: string | null;
+            /** @description Which record the last check did not find when it did not pass; null after a check that passed. */
+            check_error: string | null;
+            /**
+             * Format: date-time
+             * @description When the reverse proxy was last told it may get a certificate for the host name; recorded at most once an hour.
+             */
+            certificate_requested_at: string | null;
+            /**
+             * Format: date-time
+             * @description While the domain is active: the first failed DNS check since the last one that passed, null while checks pass. The first check that fails 7 days after it puts the domain back to `pending`.
+             */
+            failing_since: string | null;
+            /**
+             * @description Why an active domain went back to `pending`: `proof_lost` (no DNS check proved it for 7 days) or `taken_over` (another workspace proved the host name while this domain's records did not). Null otherwise; cleared when a check passes or the host name is set again.
+             * @enum {string|null}
+             */
+            pending_reason: "proof_lost" | "taken_over" | null;
+        };
+        HelpCenterDomainRecord: {
+            /** @enum {string} */
+            type: "CNAME" | "A" | "AAAA" | "TXT";
+            /** @description The record's full name. */
+            name: string;
+            value: string;
+            /**
+             * @description `route_and_verify`: sends visitors to the help center and proves ownership; `route`: only sends visitors; `verify`: only proves ownership.
+             * @enum {string}
+             */
+            purpose: "route_and_verify" | "route" | "verify";
+        };
+        HelpCenterDomainInput: {
+            /** @description A host name such as help.example.com; Unicode names are accepted and stored in punycode. */
+            hostname: string;
+        };
+        /** @description Each color is #rrggbb, or null for the default. Any color set makes the pages light only. */
+        HelpCenterThemeColors: {
+            primary?: components["schemas"]["ThemeColor"];
+            header?: components["schemas"]["ThemeColor"];
+            header_text?: components["schemas"]["ThemeColor"];
+            background?: components["schemas"]["ThemeColor"];
+            text?: components["schemas"]["ThemeColor"];
+            link?: components["schemas"]["ThemeColor"];
+            footer?: components["schemas"]["ThemeColor"];
+        };
+        /** @description A color as #rrggbb; answers are lowercase. */
+        ThemeColor: string | null;
+        /**
+         * @description A font stack of the reader's own system: nothing is downloaded. Null is the default (system-sans for text, classic-serif for headings).
+         * @enum {string|null}
+         */
+        ThemeFont: "system-sans" | "humanist-sans" | "geometric-sans" | "classic-serif" | "transitional-serif" | "rounded-sans" | "mono" | null;
+        HelpCenterThemeInput: {
+            /**
+             * Format: uuid
+             * @description An image of the media library shown at the top of every page. Outside its trash, except the image this field already names: a theme read and sent back whole saves even after its logo was moved to the trash.
+             */
+            logo_media_id?: string | null;
+            /**
+             * Format: uuid
+             * @description An image of the media library shown as the browser tab icon; the same trash rule as logo_media_id.
+             */
+            favicon_media_id?: string | null;
+            /** @description What the logo says, for screen readers; empty uses the help center title. */
+            logo_alt?: string | null;
+            /** @description Your website, an absolute http or https address, linked from the top of every page. */
+            linkback_url?: string | null;
+            /** @description Where readers contact you: an https address or mailto: and one plain email address (no name, no ?subject= or ?bcc=, no %-encoding). */
+            contact_url?: string | null;
+            /** @description A phone number shown in the footer: digits, spaces and + - ( ). */
+            contact_phone?: string | null;
+            colors?: components["schemas"]["HelpCenterThemeColors"];
+            body_font?: components["schemas"]["ThemeFont"];
+            heading_font?: components["schemas"]["ThemeFont"];
+            /** @description CSS served after the theme's colors and fonts on every public page, for details the other fields do not cover; empty or null is none. At most 32,768 bytes of UTF-8, counted by the server (a character outside ASCII takes 2 to 4 bytes; a JSON schema can only count characters, so the limit is not a maxLength here). Refused (422 `custom_css_refused`, with the line and column) when it could load anything or leave its style sheet: `url()` and the image functions (`image()`, `image-set()`, `cross-fade()`, `element()`, `src()`, `paint()`), `expression()`, the properties `behavior` and `-moz-binding` (a class such as `.behavior` is fine), at-rules other than `@media`, `@supports`, `@keyframes`, `@layer` and `@container`, a backslash outside quotes, `</`, `<!--`, a control character other than tab, newline, carriage return and form feed, an unbalanced bracket, an unclosed string or comment, and `url(`, `@import`, `image-set(`, `image(`, `cross-fade(`, `element(`, `src(`, `paint(`, `expression(`, `javascript:` or `vbscript:` anywhere once escapes are read. It is stored and served exactly as sent. The contrast checks do not cover it. */
+            custom_css?: string | null;
+        };
+        /** @description The body of a save: the theme with `custom_css` required (null or an empty string for none), so a body that leaves it out cannot remove it by accident. */
+        HelpCenterThemeSave: WithRequired<components["schemas"]["HelpCenterThemeInput"], "custom_css">;
+        HelpCenterTheme: {
+            /** Format: uuid */
+            logo_media_id: string | null;
+            /** Format: uuid */
+            favicon_media_id: string | null;
+            logo_alt: string;
+            linkback_url: string | null;
+            contact_url: string | null;
+            contact_phone: string | null;
+            colors: WithRequired<components["schemas"]["HelpCenterThemeColors"], "primary" | "header" | "header_text" | "background" | "text" | "link" | "footer">;
+            body_font: components["schemas"]["ThemeFont"];
+            heading_font: components["schemas"]["ThemeFont"];
+            /** @description The custom CSS, empty for none. */
+            custom_css: string;
+            content_version: number;
+            /**
+             * Format: date-time
+             * @description Null until the help center settings were first changed.
+             */
+            updated_at: string | null;
+            /** @description The contrast of every color pair the pages show, with defaults filled in. */
+            checks: components["schemas"]["ThemeContrastCheck"][];
+        };
+        HelpCenterThemeChecks: {
+            /** @description True when every pair passes and the theme can be saved. */
+            ok: boolean;
+            checks: components["schemas"]["ThemeContrastCheck"][];
+            /** @description One message per failing color, keyed like colors.text; empty when ok. */
+            fields: {
+                [key: string]: string;
+            };
+        };
+        HelpCenterThemePreviewInput: {
+            /**
+             * @description The page to render.
+             * @enum {string}
+             */
+            page: "home" | "article";
+            theme: components["schemas"]["HelpCenterThemeInput"];
+        };
+        HelpCenterThemePreview: {
+            /** @description A whole HTML document with its own Content-Security-Policy, the help center style sheet linked and the brand inline; it holds no script. */
+            html: string;
+            /** @description True when every pair passes and the theme can be saved. */
+            ok: boolean;
+            checks: components["schemas"]["ThemeContrastCheck"][];
+            /** @description One message per failing color, keyed like colors.text; empty when ok. */
+            fields: {
+                [key: string]: string;
+            };
+        };
+        ThemeContrastCheck: {
+            /**
+             * @description Which colors meet. ink_on_primary is the button text (white or black, the better one) on the primary color; footer_ink_on_footer is the text or header text, the better one, on the footer.
+             * @enum {string}
+             */
+            pair: "text_on_background" | "link_on_background" | "header_text_on_header" | "ink_on_primary" | "footer_ink_on_footer" | "primary_on_background";
+            /** @description The color to change when it fails, such as colors.text. */
+            field: string;
+            foreground: string;
+            background: string;
+            /** @description WCAG 2 contrast ratio, to two decimals; 4.5 means 4.5:1. */
+            ratio: number;
+            required: number;
+            passes: boolean;
+            /** @description Null when it passes: else the nearest color for field that passes every pair of that field. */
+            suggestion: string | null;
         };
         SavedReplyText: {
             title: string;
@@ -5110,6 +5447,17 @@ export interface components {
                 content_type: string;
             }[];
         };
+        TestMessageResult: {
+            /** Format: uuid */
+            conversation_id: string;
+            /** Format: uuid */
+            message_id: string;
+            /**
+             * Format: email
+             * @description The agent's own address the test came from, where a reply to it is delivered.
+             */
+            sent_to: string;
+        };
         /** @description One email channel. Its domain's verification and provider domain belong to the domain: two channels of the workspace on one domain show the same, verify it once and share one provider domain. */
         EmailChannel: {
             /**
@@ -5267,9 +5615,12 @@ export interface components {
          */
         ChannelType: "email" | "web_form";
         ChannelState: {
-            /** @enum {string} */
-            state: "working" | "off" | "needs_attention" | "not_connected" | "removed";
-            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`. */
+            /**
+             * @description `waiting`: set up, but nothing has arrived on the channel yet (reason `no_message_yet`); it turns `working` with the first message received, which proves the way in works.
+             * @enum {string}
+             */
+            state: "working" | "waiting" | "off" | "needs_attention" | "not_connected" | "removed";
+            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`. A waiting channel has `no_message_yet`. */
             reason_code: string | null;
             message: string | null;
         };
@@ -5537,12 +5888,18 @@ export interface components {
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
                 /**
-                 * @description Only on trial_outbound_restricted when the customer wrote first, but from another address than the contact's (a contact merged into this one): the reply would go to `reply_to`, which never wrote.
+                 * @description Only on trial_outbound_restricted when the customer did write, but the trial cannot count the mail. `contact_address_differs`: the customer wrote from another address than the contact's (a contact merged into this one), and the reply would go to `reply_to`, which never wrote. `mail_not_via_hosted_address`: the mail was posted to the workspace's own inbound URL, not received at its hosted forwarding address, so nothing proves who sent it. `sender_authentication_failed`: the mail arrived at the forwarding address but failed sender verification (SPF, DKIM or DMARC).
                  * @enum {string}
                  */
-                reason?: "contact_address_differs";
+                reason?: "contact_address_differs" | "mail_not_via_hosted_address" | "sender_authentication_failed";
                 /** @description Only with reason contact_address_differs: the address the reply would go to. */
                 reply_to?: string;
+                /** @description Only on order_stale: the collections under the parent now, in their current order. */
+                collection_ids?: string[];
+                /** @description Only on order_stale: the articles under the parent now, in their current order. */
+                article_ids?: string[];
+                /** @description Only on contrast_too_low: every color pair of the theme, passing or not. */
+                checks?: components["schemas"]["ThemeContrastCheck"][];
                 /** @description Only on contact_exists: the contact to use instead of adding one. */
                 contact?: components["schemas"]["Contact"];
             };
@@ -5848,6 +6205,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description The Idempotency-Key already names another request with other input (`idempotency_key_reused`); nothing was created */
+        IdempotencyKeyReused: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description An agent token called this above its tier, or the action needs a person's approval for every tier: nothing happened yet. The call is stored as an agent request a person approves or rejects (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A token gets 429 `too_many_requests` while 50 of its requests wait or after 100 in an hour (with `Retry-After`), 402 `workspace_locked` in a locked workspace, and a call with files gets 403 `files_need_approval` (send the text alone, attach files after approval). */
         AgentRequestAccepted: {
             headers: {
@@ -6034,6 +6400,15 @@ export interface components {
             };
             content?: never;
         };
+        /** @description The theme was not saved. `error.code` is `validation_failed` (a field of the wrong shape), `media_not_found` (a logo or favicon that is not an image of the library outside the trash) or `contrast_too_low` (a color pair below WCAG AA; `error.checks` lists every pair) or `custom_css_refused` (`error.fields.custom_css` says where and why, such as `line 3, column 14: url() is not allowed`). `error.fields` holds one message per field, such as `colors.text`. */
+        ThemeInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Invalid request */
         Error400: {
             headers: {
@@ -6098,7 +6473,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -6119,6 +6494,10 @@ export interface components {
     };
     parameters: {
         ID: string;
+        /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+        WebFormPressKey: string;
+        /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+        CreateIdempotencyKey: string;
     };
     requestBodies: never;
     headers: never;
@@ -6159,6 +6538,7 @@ export interface operations {
                     workspace_slug?: string;
                     /** @description Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in". */
                     label?: string;
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -6193,6 +6573,7 @@ export interface operations {
                     goal?: components["schemas"]["OnboardingGoal"];
                     role?: components["schemas"]["OnboardingRole"];
                     source?: components["schemas"]["OnboardingSource"];
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -6250,6 +6631,7 @@ export interface operations {
                      * @enum {string}
                      */
                     session_type?: "cookie" | "bearer";
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -6351,7 +6733,10 @@ export interface operations {
     createAgentToken: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6367,6 +6752,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The session of the token an earlier request with the same Idempotency-Key created; the raw token is not shown again and nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        session: components["schemas"]["Session"];
+                    };
+                };
+            };
             /** @description The token and its session. The raw token is in this response only. */
             201: {
                 headers: {
@@ -6381,6 +6777,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listInvites: {
@@ -6409,7 +6807,10 @@ export interface operations {
     createInvite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6423,6 +6824,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The invite an earlier request with the same Idempotency-Key created, without its one-time URL (shown once); nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        invite: components["schemas"]["Invite"];
+                    };
+                };
+            };
             /** @description The invite, and for a person its one-time URL */
             201: {
                 headers: {
@@ -6450,6 +6862,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     revokeInvite: {
@@ -6549,7 +6962,10 @@ export interface operations {
     createConversation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6592,6 +7008,7 @@ export interface operations {
             };
         };
         responses: {
+            200: components["responses"]["Conversation"];
             201: components["responses"]["Conversation"];
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
@@ -6601,6 +7018,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["AttachmentsTooLarge"];
+            422: components["responses"]["IdempotencyKeyReused"];
             429: components["responses"]["TrialOutboundLimit"];
             /** @description The attachments volume is low on disk space; nothing was sent or stored */
             507: {
@@ -6728,7 +7146,10 @@ export interface operations {
     };
     listMessages: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The Idempotency-Key of a send, 1 to 200 printable ASCII characters */
+                idempotency_key?: string;
+            };
             header?: never;
             path: {
                 id: components["parameters"]["ID"];
@@ -6748,6 +7169,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
@@ -6755,7 +7177,10 @@ export interface operations {
     createMessage: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: components["parameters"]["ID"];
             };
@@ -6792,6 +7217,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The message an earlier request with the same Idempotency-Key created; nothing new was stored or sent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
             /** @description Created reply or private note */
             201: {
                 headers: {
@@ -6817,6 +7251,15 @@ export interface operations {
                 };
             };
             413: components["responses"]["AttachmentsTooLarge"];
+            /** @description The Idempotency-Key already names another message (`idempotency_key_reused`); nothing was stored */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             429: components["responses"]["TrialOutboundLimit"];
             /** @description The attachments volume is low on disk space; nothing was sent or stored */
             507: {
@@ -6885,7 +7328,10 @@ export interface operations {
     createChannel: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6895,6 +7341,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The channel an earlier request with the same Idempotency-Key created; nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
             /** @description The channel */
             201: {
                 headers: {
@@ -6909,6 +7364,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listChannelEvents: {
@@ -7206,6 +7662,57 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    sendEmailTestMessageByID: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The test message an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            /** @description The test message arrived and opened a conversation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+            /** @description Five test messages were sent in the last hour; Retry-After says when the next one may go. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
     connectGmailByID: {
         parameters: {
             query?: never;
@@ -7408,6 +7915,55 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    sendEmailTestMessage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The test message an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            /** @description The test message arrived and opened a conversation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+            /** @description Five test messages were sent in the last hour; Retry-After says when the next one may go. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -7888,7 +8444,10 @@ export interface operations {
     createContact: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7902,6 +8461,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The contact an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
             /** @description Created contact */
             201: {
                 headers: {
@@ -7924,6 +8492,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     getContact: {
@@ -8301,7 +8870,10 @@ export interface operations {
     createTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8315,6 +8887,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The tag an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
             /** @description Created tag */
             201: {
                 headers: {
@@ -8328,6 +8909,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     deleteTag: {
@@ -8413,7 +8996,10 @@ export interface operations {
     createSavedView: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8423,6 +9009,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The saved view an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
             /** @description Saved view */
             201: {
                 headers: {
@@ -8437,6 +9032,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listDeletedSavedViews: {
@@ -8573,7 +9169,10 @@ export interface operations {
     createSavedReply: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8583,6 +9182,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The saved reply an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReply"];
+                };
+            };
             /** @description Created saved reply */
             201: {
                 headers: {
@@ -8597,6 +9205,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listTrashedSavedReplies: {
@@ -8845,6 +9454,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description The payment provider did not accept the admin's address; the message says why and what to do. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
             502: components["responses"]["BadGateway"];
         };
@@ -8997,7 +9615,10 @@ export interface operations {
     previewImport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -9007,6 +9628,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The preview job an earlier request with the same Idempotency-Key started, as it was then; nothing new was started. The Freshdesk key is not part of what makes two requests the same one. Read its state now with `GET /api/v1/imports/{id}`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"];
+                };
+            };
             /** @description The preview job, still previewing */
             202: {
                 headers: {
@@ -9019,6 +9649,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     getImport: {
@@ -9312,7 +9944,10 @@ export interface operations {
     addAIProvider: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -9322,6 +9957,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The provider an earlier request with the same Idempotency-Key added; nothing new was stored or checked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
             /** @description The provider, checked */
             201: {
                 headers: {
@@ -10099,7 +10743,10 @@ export interface operations {
     submitWebForm: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+                "Idempotency-Key"?: components["parameters"]["WebFormPressKey"];
+            };
             path: {
                 workspace_slug: string;
             };
@@ -10143,7 +10790,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid input; `error.fields` names each bad field */
+            /** @description Invalid input; `error.fields` names each bad field and `error.message` joins their sentences, for example "Message is too long: at most 5,000 characters." */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10193,7 +10840,10 @@ export interface operations {
     submitWebFormByChannel: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+                "Idempotency-Key"?: components["parameters"]["WebFormPressKey"];
+            };
             path: {
                 channel_id: string;
             };
@@ -10237,7 +10887,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid input; `error.fields` names each bad field */
+            /** @description Invalid input; `error.fields` names each bad field and `error.message` joins their sentences, for example "Message is too long: at most 5,000 characters." */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10525,7 +11175,10 @@ export interface operations {
     createProblemReport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -10541,6 +11194,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The report an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        reference: string;
+                    };
+                };
+            };
             /** @description The report reached the support desk */
             201: {
                 headers: {
@@ -10566,7 +11230,8 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`) */
+            409: components["responses"]["Conflict"];
+            /** @description Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`). Also `idempotency_key_reused` when the Idempotency-Key was used before with other input. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -10614,7 +11279,10 @@ export interface operations {
     createKBCollection: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -10624,6 +11292,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The collection an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBCollection"];
+                };
+            };
             /** @description Created collection */
             201: {
                 headers: {
@@ -10638,6 +11315,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listTrashedKBCollections: {
@@ -10767,6 +11445,36 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    setKBOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBOrder"];
+            };
+        };
+        responses: {
+            /** @description The order now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBOrder"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     listKBArticles: {
         parameters: {
             query?: {
@@ -10774,6 +11482,8 @@ export interface operations {
                 status?: "draft" | "published";
                 /** @description Only the articles directly in this collection. */
                 collection_id?: string;
+                /** @description The order without `q`; ignored with `q`. */
+                sort?: "recent" | "manual";
                 limit?: number;
                 /** @description The next_cursor of the previous page. */
                 cursor?: string;
@@ -10804,7 +11514,10 @@ export interface operations {
     createKBArticle: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -10814,6 +11527,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The article an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
             /** @description Created article */
             201: {
                 headers: {
@@ -10828,6 +11550,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listTrashedKBArticles: {
@@ -11192,6 +11915,7 @@ export interface operations {
             query?: {
                 kind?: "image" | "video";
                 q?: string;
+                /** @description in_use: a live article shows it, or the help center as its logo or favicon; unused: neither. */
                 usage?: "in_use" | "unused" | "missing_alt";
                 sort?: "newest" | "oldest" | "name" | "largest";
                 /** @description The next_cursor of the previous page. */
@@ -12869,4 +13593,240 @@ export interface operations {
             413: components["responses"]["WebhookTooLarge"];
         };
     };
+    getHelpCenterTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The help center theme */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterTheme"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenterTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterThemeSave"];
+            };
+        };
+        responses: {
+            /** @description The saved theme */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterTheme"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    checkHelpCenterTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterThemeInput"];
+            };
+        };
+        responses: {
+            /** @description The checks of the candidate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterThemeChecks"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    previewHelpCenterTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterThemePreviewInput"];
+            };
+        };
+        responses: {
+            /** @description The page and the checks of the candidate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterThemePreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ThemeInvalid"];
+            /** @description Too many previews in the last minute; try again after `Retry-After` seconds. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getHelpCenterDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The custom domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterDomain"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenterDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterDomainInput"];
+            };
+        };
+        responses: {
+            /** @description The custom domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterDomain"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description The host name cannot be a custom domain; `error.fields.hostname` says why */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteHelpCenterDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No custom domain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterDomain"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    checkHelpCenterDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The custom domain after the check */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterDomain"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description The workspace checked its domain 10 times in the last hour; retry after `Retry-After` seconds. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
 }
+type WithRequired<T, K extends keyof T> = T & {
+    [P in K]-?: T[P];
+};

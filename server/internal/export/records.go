@@ -182,6 +182,7 @@ type KBCollection struct {
 type KBArticle struct {
 	ID               string          `json:"id"`
 	CollectionID     string          `json:"collection_id"`
+	Position         int             `json:"position"`
 	Number           int64           `json:"number"`
 	Title            string          `json:"title"`
 	Slug             string          `json:"slug"`
@@ -300,7 +301,8 @@ type KBMediaReplacement struct {
 	UndoneByAgentID   *string         `json:"undone_by_agent_id"`
 }
 
-// HelpCenter is the public help center's settings and the knowledge base counters.
+// HelpCenter is the public help center's settings, its theme and the knowledge base counters. A null
+// theme field is the default look; the logo and favicon are kb-images.ndjson ids.
 type HelpCenter struct {
 	Enabled           bool      `json:"enabled"`
 	Title             string    `json:"title"`
@@ -308,6 +310,27 @@ type HelpCenter struct {
 	ContentVersion    int64     `json:"content_version"`
 	LastArticleNumber int64     `json:"last_article_number"`
 	UpdatedAt         time.Time `json:"updated_at"`
+	LogoMediaID       *string   `json:"logo_media_id"`
+	FaviconMediaID    *string   `json:"favicon_media_id"`
+	LogoAlt           string    `json:"logo_alt"`
+	LinkbackURL       *string   `json:"linkback_url"`
+	ContactURL        *string   `json:"contact_url"`
+	ContactPhone      *string   `json:"contact_phone"`
+	ColorPrimary      *string   `json:"color_primary"`
+	ColorHeader       *string   `json:"color_header"`
+	ColorHeaderText   *string   `json:"color_header_text"`
+	ColorBackground   *string   `json:"color_background"`
+	ColorText         *string   `json:"color_text"`
+	ColorLink         *string   `json:"color_link"`
+	ColorFooter       *string   `json:"color_footer"`
+	BodyFont          *string   `json:"body_font"`
+	HeadingFont       *string   `json:"heading_font"`
+	CustomCSS         string    `json:"custom_css"`
+	// CustomDomain is the help center's custom host name (null when none), CustomDomainStatus pending or
+	// active, CustomDomainVerifiedAt when its DNS check first passed. The proof token is not exported.
+	CustomDomain           *string    `json:"custom_domain"`
+	CustomDomainStatus     *string    `json:"custom_domain_status"`
+	CustomDomainVerifiedAt *time.Time `json:"custom_domain_verified_at"`
 }
 
 // AgentRequest is a call an agent token asked a person to approve, and what became of it. The answer

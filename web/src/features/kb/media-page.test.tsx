@@ -18,7 +18,7 @@ function open(view: MediaView = 'library', search: MediaSearch = {}) {
 }
 
 const id = (n: number) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(n).padStart(12, '0')}`;
-const usage = (articles: number, trashed = 0, older = 0) => ({ articles, trashed_articles: trashed, older_versions: older });
+const usage = (articles: number, trashed = 0, older = 0, helpCenter: string[] = []) => ({ articles, trashed_articles: trashed, older_versions: older, help_center: helpCenter });
 const item = (n: number, fields: Record<string, unknown> = {}) => ({
   id: id(n), kind: 'image', content_type: 'image/png', size: 2048 * n, sha256: 'a'.repeat(64), url: `/api/v1/kb/images/${id(n)}`, name: `Screenshot ${n}`, alt: '',
   width: 800, height: 600, duration_ms: null, codecs: [], thumbnail_url: `/api/v1/kb/media/${id(n)}/thumbnail?v=1`, poster_url: null, kept: false, deleted_at: null,
@@ -162,6 +162,32 @@ test('only an admin deletes forever, after a second confirmation that names what
   fireEvent.click(within(dialog).getByRole('button', { name: 'Delete 1 item forever' }));
   expect(await screen.findByText('Deleted 1 item for good.')).toBeInTheDocument();
   expect(calls.find((call) => call.path === '/api/v1/kb/media/purge')?.body).toEqual({ ids: [id(6)] });
+});
+
+test('the library says the help center uses an image, instead of calling it not used', async () => {
+  serve({ ...base, 'GET /api/v1/kb/media': () => json(200, { items: [item(7, { usage: usage(0, 0, 0, ['logo', 'favicon']), kept: true })], next_cursor: null }) });
+  open();
+  const grid = await screen.findByRole('list', { name: 'Library items' });
+  const card = await within(grid).findByRole('button', { name: /^Screenshot 7, image, 14\.0 KiB, Used by the help center \(logo, favicon\)/ });
+  expect(card).not.toHaveTextContent('Not used');
+});
+
+test('the trash gives no purge date for an item the purge keeps, and Delete forever says why it stayed', async () => {
+  const logo = item(8, { deleted_at: '2026-10-10T00:00:00Z', usage: usage(0, 0, 0, ['logo']) });
+  const loose = item(9, { deleted_at: '2026-10-11T00:00:00Z', usage: usage(0), purge_at: '2026-11-10T00:00:00Z' });
+  serve({ ...base, 'GET /api/v1/kb/media/trash': () => json(200, { items: [logo, loose], next_cursor: null }),
+    'POST /api/v1/kb/media/purge': () => json(200, { results: [{ id: id(8), status: 'in_use' }, { id: id(9), status: 'purged' }] }) });
+  open('trash');
+  const kept = await screen.findByRole('checkbox', { name: 'Select Screenshot 8' });
+  const keptCard = kept.closest('label') as HTMLElement;
+  expect(keptCard).toHaveTextContent('Used by the help center (logo)');
+  expect(keptCard).not.toHaveTextContent('Deleted for good on');
+  expect(screen.getByRole('checkbox', { name: 'Select Screenshot 9' }).closest('label')).toHaveTextContent(/Deleted for good on Nov 10/);
+  fireEvent.click(kept);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select Screenshot 9' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
+  fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Delete forever?' })).getByRole('button', { name: 'Delete 2 items forever' }));
+  expect(await screen.findByText('Deleted 1 item for good. 1 item stayed: the help center shows it as its logo or favicon; choose another image there first.')).toBeInTheDocument();
 });
 
 test('an agent cannot delete forever', async () => {

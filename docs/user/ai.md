@@ -2,7 +2,9 @@
 
 Colliedesk can use a language model to suggest how to sort a new ticket (tags, priority, assignee)
 and to draft a reply an agent edits and sends. A model only suggests and drafts: a person accepts each
-suggestion, and nothing reaches a customer until someone presses **Send**. **Settings → Built-in AI** decides
+suggestion, unless an admin turns on [Apply suggestions automatically](#apply-suggestions-automatically),
+which lets the picked parts (tags, priority, assignee) apply by themselves and can be undone. Nothing
+reaches a customer until someone presses **Send**. **Settings → Built-in AI** decides
 which model each feature uses and records who agreed to send data to it.
 
 ## Every feature starts off
@@ -67,8 +69,9 @@ is accepted too.
 
 A feature that is on sends its provider the ticket's messages, the customer's name, matching published
 knowledge base articles, and short excerpts of similar solved tickets with other customers' names and
-emails removed. Private notes are never sent. Colliedesk does not store the prompts it sends or the
-provider's answers beyond the draft or suggestion itself. Each provider keeps data under its own
+emails removed. Private notes are never sent. Colliedesk does not keep what it sent the provider, nor the
+provider's answers, apart from the draft or suggestion itself. A draft keeps its text and the request
+that asked for it until 90 days after it ended, and both are in the export (`ai-drafts.ndjson`). Each provider keeps data under its own
 policy; read it before you add one, for example [Anthropic's](https://www.anthropic.com/legal/privacy).
 
 To keep data on your own servers, add an OpenAI-compatible provider on your network (vLLM, Ollama)

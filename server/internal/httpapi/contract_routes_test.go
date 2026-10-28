@@ -296,6 +296,8 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"DELETE /api/v1/channels/{id}/email/gmail":             {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/gmail", token: admin, status: 404},
 		"POST /api/v1/channels/{id}/email/microsoft":           {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/microsoft", token: admin, status: 200},
 		"DELETE /api/v1/channels/{id}/email/microsoft":         {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/microsoft", token: admin, status: 404},
+		"POST /api/v1/channels/{id}/email/test-message":        {path: "/api/v1/channels/" + f.secondEmailChannelID + "/email/test-message", token: admin, status: 201},
+		"POST /api/v1/channels/email/test-message":             {path: "/api/v1/channels/email/test-message", token: admin, status: 201},
 		"POST /api/v1/public/web-forms/{channel_id}":           {path: "/api/v1/public/web-forms/" + f.webFormChannelID, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:careers"}, status: 202},
 		"GET /api/v1/agent-requests":                           {path: "/api/v1/agent-requests?status=pending", token: admin, status: 200},
 		"GET /api/v1/agent-requests/{id}":                      {path: "/api/v1/agent-requests/" + f.approveRequestID, token: f.requestToken, status: 200},

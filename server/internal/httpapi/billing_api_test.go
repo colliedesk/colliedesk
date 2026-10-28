@@ -149,6 +149,27 @@ func TestCheckoutGivesEachWorkspaceItsOwnPolarCustomerEvenForTheSameAdminEmail(t
 	}
 }
 
+func TestCheckoutSaysWhatToDoWhenPolarRefusesTheAdminsAddress(t *testing.T) {
+	f := newBillingFixture(t)
+	admin := createSession(t, f.api, f.service, "Reserved Domain", "owner@example.com")
+	response := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team_monthly"}, admin, nil)
+	body := response.Body.String()
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(body, `"billing_email_refused"`) {
+		t.Fatalf("status=%d body=%s, want 422 billing_email_refused", response.Code, body)
+	}
+	for _, want := range []string{"owner@example.com", "does not accept email", "Change your account email"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("message %s does not say %q", body, want)
+		}
+	}
+	if created := f.fake.callsTo("/v1/customers/"); len(created) != 1 {
+		t.Fatalf("customer create calls=%d, want 1: a refused address is not retried with a tagged one", len(created))
+	}
+	if calls := f.fake.callsTo("/v1/checkouts/"); len(calls) != 0 {
+		t.Fatalf("checkout calls=%d, want none", len(calls))
+	}
+}
+
 func TestCheckoutIgnoresAnyWorkspaceOrCustomerFromTheClient(t *testing.T) {
 	f := newBillingFixture(t)
 	response := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout",

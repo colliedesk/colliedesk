@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { LockedRoute } from './locked-route';
 
 const api = vi.hoisted(() => ({ billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn(), logout: vi.fn() }));
-vi.mock('../../api/client', () => ({ api }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class InvalidRequestError extends Error {} }));
 const embed = vi.hoisted(() => ({ create: vi.fn() }));
 vi.mock('@polar-sh/checkout/embed', () => ({ PolarEmbedCheckout: { create: embed.create } }));
 

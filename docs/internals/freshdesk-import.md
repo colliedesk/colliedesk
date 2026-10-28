@@ -403,6 +403,72 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   article links, with their files. `targetExists` covers every `kb_*` entity, so a kept article keeps
   its ledger row and a later import does not add it twice.
 
+### Old help center links
+
+Code: `solutions-links.go`, `solutions-link-targets.go`, `report-links.go`; the writes are
+`store/import-links.go`. The help center's redirect of the same addresses is `helpcenter/legacy.go`
+(`help-center.md`), and both read them with `helpcenter.ParseLegacyPath`.
+
+- **One pass after everything it may link is written.** Step "rewriting help center links" runs after
+  the knowledge base (saved replies are written before it), so a link to an article imported later
+  than the one holding it is found. It runs in the full run only, never in a dry run or `ModeRecent`,
+  so the CLI and the in-app job (the same `Run`) do the same thing; `Options.Origin` and
+  `HelpCenterDomain` (APP_ORIGIN, HELP_CENTER_DOMAIN, passed by `collie import` and the worker) give
+  `helpcenter.SiteURL`, the address every new link uses. `collie import` passes APP_ORIGIN as set,
+  never the `http://localhost:8080` the other commands fall back to: a rewritten link no longer holds
+  `/support/`, so a wrong origin could never be repaired by a rerun. Without it every link is listed
+  (`no_server_address`). The worker passes the server's own origin, which is where it serves.
+- **Which links.** `oldLinkPattern` finds candidates, `resolveLink` decides. Ours: an absolute
+  address on the API host, the account's `account_domain` (View Account), `Options.OldHelpCenterDomain`
+  (the old portal's own custom domain: CLI `--old-help-center-domain`, in-app and MCP
+  `options.old_help_center_domain`, normalized by `OldHelpCenterHost`) or the hostname of the
+  workspace's help center domain claim (an old portal's custom domain usually becomes it); or a
+  relative path that is a Markdown link's, "text (url)"'s or a quoted attribute's address. Paths match
+  in any case (`ParseLegacyPath`). `/support/solutions/...` on any other host is listed
+  (`unknown_host`; the detail names the old help center address as the fix) and makes the section
+  UNVERIFIED; other `/support/...` paths there are someone else's site and are ignored. A match that
+  goes on as a word (`/supporters`, `/support.html`) is not an address. Trailing `.,;:!?*` are not
+  part of the address. Matches inside a code fence or inline code span (`codeRanges`) are examples and
+  are neither changed nor listed; a span over two lines is not seen as one. `source_html` is left as
+  Freshdesk sent it.
+- **Where they lead.** Home, `/support/home`, `/support/solutions`: the help center's address. The old
+  search: `helpcenter.SearchPath` of its `term`. An item: `linkTargets`. Any other old portal page
+  (`/support/tickets/new`, sign-in) has no counterpart and is listed (`no_new_page`). The fragment is
+  kept. A collection link points at its slug path (`/c/billing/cards`): the help center has no address
+  for a collection by id, so a later rename or move breaks the rewritten link (not redirected), while
+  the old Freshdesk address keeps resolving through the ledger. Accepted and stated in the user doc.
+- **Translations** (`kb_article_translations`) follow their article: rewritten
+  (`RewriteImportedKBTranslationBody`, article row locked first, text compared) while the article's
+  newest version is `import`, listed `changed_in_colliedesk` otherwise. A person changes a translation
+  only through a media replacement, which records an article version, so the article's rule covers
+  it. The translation keeps Freshdesk's timestamps; a newer Freshdesk translation still replaces it
+  and the pass rewrites it again. Listed as entity `kb_translation`, id `<article id>:<locale>`.
+- **Only content nobody changed.** An article only while its newest version is `import` and it is
+  outside the trash; the article row is locked and its text compared with what was read
+  (`RewriteImportedKBArticleBody`); the change is a new version of kind `import`, so undo and the
+  rerun rule treat it as the import's and the earlier text stays restorable. The article keeps
+  Freshdesk's timestamps. A saved reply only while `updated_at = created_at` and the text is unchanged
+  (`RewriteImportedSavedReplyBody`): the version kind is `create` with no person (the kind the importer
+  writes; the CHECK has no import kind) and `updated_at` does not move, so undo still removes it and a
+  rerun may still rewrite it. Anything else is listed (`changed_in_colliedesk`).
+- **Only to pages public now, only while the help center is on.** A link to a draft, an item in the
+  trash or a collection with nothing published is left (`not_public`), one to an id this account's
+  ledger lacks too (`not_imported`); the next run rewrites it once it is public. With the help center
+  off (`help_center_off`) or no Origin (`no_server_address`) nothing is rewritten: a saved reply would
+  send customers to a 404 while the Freshdesk link still works.
+- **Idempotent.** A rerun finds the new addresses, which are not Freshdesk's, and writes nothing;
+  `links.rewritten` counts this run's changes only.
+- **Report `links`.** Its own `OK`/`UNVERIFIED`; links are not data, so the import's status ignores it.
+  Old addresses are counted from what the import listed: `/support/home`, `/support/solutions`, every
+  category with a folder every visitor sees, every such folder, every article the import publishes;
+  each also below `/<lang>/` for the primary and portal languages when the portal has any. UNVERIFIED
+  when the help center is off, an old address leads to no public page, or a link was left. Absent from a
+  dry run, `ModeRecent` and an account with no knowledge base and no such link. The in-app page shows a
+  summary; the Markdown and JSON list each address and link.
+- **Trap: an edit open in a browser.** The saved reply rewrite does not move `updated_at`, so an agent
+  who opened the reply before the import and saves after overwrites the rewritten text without a
+  conflict. The rewrite is in the history and a rerun rewrites again.
+
 ### Not verified against a live account
 
 1. Whether the article list returns draft articles (and whether `articles_count` counts them; a

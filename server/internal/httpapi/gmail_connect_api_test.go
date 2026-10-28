@@ -184,8 +184,10 @@ func TestAServerWithoutGoogleSettingsSaysWhatIsMissing(t *testing.T) {
 	if view.Gmail.Available || strings.Join(view.Gmail.MissingSettings, ",") != "GOOGLE_OAUTH_CLIENT_ID,GOOGLE_OAUTH_CLIENT_SECRET,MAILBOX_TOKEN_KEYS" {
 		t.Fatalf("gmail = %+v", view.Gmail)
 	}
+	logs := captureLogs(t)
 	response := request(t, api, http.MethodPost, "/api/v1/channels/email/gmail", nil, admin, nil)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "gmail_not_configured") {
+	wantMissingSettingsLogged(t, logs, "google", "GOOGLE_OAUTH_CLIENT_ID,GOOGLE_OAUTH_CLIENT_SECRET,MAILBOX_TOKEN_KEYS")
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "gmail_not_configured") || strings.Contains(response.Body.String(), "GOOGLE_OAUTH") {
 		t.Fatalf("start without settings: %d %s", response.Code, response.Body.String())
 	}
 }
@@ -212,7 +214,7 @@ func TestAConnectionTheServerCanNoLongerUseFailsRepliesAtOnce(t *testing.T) {
 	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Olive", "email": "olive@customer.example"})
 	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hi"})
 	create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hello"})
-	if row := queryString(t, pool, `SELECT status||' '||last_error FROM channel_outbox`); !strings.HasPrefix(row, "failed ") || !strings.Contains(row, "GOOGLE_OAUTH_CLIENT_ID") {
+	if row := queryString(t, pool, `SELECT status||' '||last_error FROM channel_outbox`); !strings.HasPrefix(row, "failed ") || !strings.Contains(row, "ask whoever runs it") || strings.Contains(row, "GOOGLE_OAUTH") {
 		t.Fatalf("outbox row = %q, want failed with the missing settings", row)
 	}
 }

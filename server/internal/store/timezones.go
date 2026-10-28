@@ -68,3 +68,22 @@ func (s *Store) UpdateAgentTimezone(ctx context.Context, workspaceID, agentID st
 	}
 	return agent, nil
 }
+
+// StartOnBrowserTimezone makes timezone the agent's own at their first sign-in: only while they never chose
+// one, the workspace is still on its UTC default, and the session just made is their first (agent tokens
+// do not count). A later sign-in, from any browser, never changes a choice, including "same as workspace".
+// It reports whether the timezone was set.
+func (s *Store) StartOnBrowserTimezone(ctx context.Context, workspaceID, agentID, timezone string) (bool, error) {
+	var set bool
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE agents a SET timezone_override=$3 WHERE a.workspace_id=$1 AND a.id=$2 AND a.timezone_override IS NULL
+			AND (SELECT w.timezone FROM workspaces w WHERE w.id=$1)='UTC'
+			AND (SELECT count(*) FROM sessions s WHERE s.workspace_id=$1 AND s.agent_id=$2 AND s.scope IS NULL)=1`, workspaceID, agentID, timezone)
+		set = tag.RowsAffected() == 1
+		return err
+	})
+	if err != nil {
+		return false, fmt.Errorf("start agent on browser timezone: %w", err)
+	}
+	return set, nil
+}

@@ -126,7 +126,8 @@ func writeChannelError(response http.ResponseWriter, err error) {
 	case errors.Is(err, channels.ErrUnknownType):
 		writeError(response, http.StatusBadRequest, "invalid_request", "This server runs no channel of that type.")
 	case errors.Is(err, store.ErrSealKeysMissing):
-		writeError(response, http.StatusConflict, "secret_keys_missing", "This server has no MAILBOX_TOKEN_KEYS, so it cannot keep a channel secret.")
+		logMissingSettings("channel_secrets", "MAILBOX_TOKEN_KEYS")
+		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot keep a channel secret yet: its key that encrypts them is not set up, so ask whoever runs it.")
 	case errors.Is(err, store.ErrRateLimited):
 		response.Header().Set("Retry-After", strconv.Itoa(int(store.InboundRateWindow.Seconds())))
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many at once. Try again later.")
@@ -242,19 +243,27 @@ func (a *API) createChannel(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	workspaceID := principal(request).Workspace.ID
-	channel, err := a.store.CreateChannel(request.Context(), workspaceID, input.Type,
-		store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings}, channelActor(request))
-	if err != nil {
-		writeChannelError(response, err)
-		return
+	name, enabled, isDefault := "", "", ""
+	if input.Name != nil {
+		name = "name:" + *input.Name
 	}
-	public, err := a.store.GetChannelPublic(request.Context(), workspaceID, channel.ID)
-	if err != nil {
-		writeChannelError(response, err)
-		return
+	if input.Enabled != nil {
+		enabled = strconv.FormatBool(*input.Enabled)
 	}
-	a.recordActivation(workspaceID, nil, public)
-	a.writeChannelDetail(response, http.StatusCreated, public)
+	if input.IsDefault != nil {
+		isDefault = strconv.FormatBool(*input.IsDefault)
+	}
+	fingerprint := []string{string(input.Type), name, enabled, isDefault, string(input.Config), string(input.Settings)}
+	a.createOnce(response, request, createChannelOperation, fingerprint, func(ctx context.Context) (any, error) {
+		public, err := a.store.CreateChannelPublic(ctx, workspaceID, input.Type,
+			store.ChannelInput{Name: input.Name, Enabled: input.Enabled, IsDefault: input.IsDefault, Config: input.Config, Settings: input.Settings}, channelActor(request))
+		if err != nil {
+			writeChannelError(response, err)
+			return nil, errAnswered
+		}
+		a.recordActivation(workspaceID, nil, public)
+		return channelDetailBody{channelBody: a.channelJSON(public), Config: public.Config}, nil
+	})
 }
 
 func (a *API) updateChannel(response http.ResponseWriter, request *http.Request) {

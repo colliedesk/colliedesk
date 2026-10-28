@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -45,13 +46,17 @@ func (a *API) addAIProvider(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), label, models, api_key and, for openai_compatible, base_url.")
 		return
 	}
-	provider, err := a.ai.AddProvider(request.Context(), principal(request).Workspace.ID, aiActor(request),
-		ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
-	if err != nil {
-		writeAIError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusCreated, provider)
+	// The provider's key never enters the fingerprint (it is a secret, and a fingerprint is a plain hash): a
+	// label is unique in the workspace, so the label, kind, address and models already name one provider.
+	a.createOnce(response, request, addAIProviderOperation, append([]string{input.Kind, input.Label, input.BaseURL}, input.Models...), func(ctx context.Context) (any, error) {
+		provider, err := a.ai.AddProvider(ctx, principal(request).Workspace.ID, aiActor(request),
+			ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
+		if err != nil {
+			writeAIError(response, err)
+			return nil, errAnswered
+		}
+		return provider, nil
+	})
 }
 
 // listAIModels lists the models a provider's key may use, before the provider is saved, so a person
@@ -198,7 +203,8 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No AI provider or feature with that name in this workspace.")
 	case errors.Is(err, ai.ErrKeysMissing):
-		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot store API keys yet: the operator has not set MAILBOX_TOKEN_KEYS, which encrypts them at rest. Nothing was saved.")
+		logMissingSettings("ai_provider_keys", "MAILBOX_TOKEN_KEYS")
+		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot store API keys yet: its key that encrypts them is not set up, so ask whoever runs it. Nothing was saved.")
 	case errors.Is(err, ai.ErrLimit):
 		writeError(response, http.StatusConflict, "ai_provider_limit", "A workspace can have 5 AI providers. Delete one to add another.")
 	case errors.Is(err, ai.ErrLabelTaken):

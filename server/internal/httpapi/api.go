@@ -102,6 +102,9 @@ type Config struct {
 	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
+	// LookupCNAME returns the end of a host name's CNAME chain, for the help center's custom domain
+	// check; nil uses the system resolver.
+	LookupCNAME func(ctx context.Context, host string) (string, error)
 	// MaxConcurrentExports caps workspace exports running at once on this server (default 2);
 	// more get 429. ExportWriteTimeout is how long one write to a slow client may block
 	// (default 60 s) before the export is aborted and its database connection released.
@@ -185,6 +188,12 @@ type API struct {
 	// helpCenterPages and helpCenterSearches count each client address's help center pages and searches.
 	helpCenterPages, helpCenterSearches *webFormLimiter
 	helpCenter                          *helpcenter.Site
+	// liveChecks bounds the DNS checks the reverse proxy's certificate question starts.
+	liveChecks *helpcenter.LiveChecks
+	// certificateNotes lets the certificate question record a certificate once an hour per host name.
+	certificateNotes *webFormLimiter
+	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
+	helpCenterHostLookups *webFormLimiter
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
@@ -194,7 +203,9 @@ type API struct {
 	cursorCalls *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
-	polar          *polar.Client
+	// testMessages limits the test messages a workspace sends itself per hour.
+	testMessages *webFormLimiter
+	polar        *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
 	founding foundingState
@@ -268,6 +279,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if config.LookupTXT == nil {
 		config.LookupTXT = net.DefaultResolver.LookupTXT
 	}
+	if config.LookupCNAME == nil {
+		config.LookupCNAME = net.DefaultResolver.LookupCNAME
+	}
 	outbound := Outbound(config)
 	requestPool := config.RequestPool
 	if requestPool == nil {
@@ -284,7 +298,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
 		cursorCalls:     newWindowLimiter(cursorCallsPerMinute, webFormMaxKeys, time.Minute),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
+		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
+		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
 			WithSealKeys(config.Google.Keys)}
@@ -341,6 +357,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		}
 	}
 	api.helpCenter = api.newHelpCenter()
+	api.liveChecks = helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock)
 	mux := http.NewServeMux()
 	api.mux = mux
 	for _, route := range append(api.routeSpecs(), api.channelTypeRoutes()...) {
@@ -424,6 +441,7 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite},
 		{http.MethodDelete, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/kb/collections/{id}/restore", auth.PermissionConversationsWrite},
+		{http.MethodPut, "/api/v1/kb/order", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/kb/articles", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/kb/articles", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/kb/articles/trash", auth.PermissionConversationsRead},
@@ -461,6 +479,14 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/kb/media/{id}/thumbnail", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/help-center", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/help-center", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/help-center/theme", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/help-center/theme/check", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/help-center/domain", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/help-center/domain", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/help-center/domain", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/help-center/domain/check", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/help-center/theme/preview", auth.PermissionConversationsRead},
 		{http.MethodGet, helpCenterTLSAskPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},
@@ -584,6 +610,9 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/autofix/connectors/{kind}/check", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionAccessWrite},
 		{http.MethodDelete, "/api/v1/autofix/connectors/cursor_api/key", auth.PermissionAccessWrite},
+		// A test message from the signed-in agent, on the default email channel or one of several.
+		{http.MethodPost, "/api/v1/channels/email/test-message", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/email/test-message", auth.PermissionConversationsWrite},
 	}
 }
 

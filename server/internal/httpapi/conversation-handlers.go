@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"mime"
@@ -39,37 +40,47 @@ func (a *API) createConversation(response http.ResponseWriter, request *http.Req
 		}
 	}
 	identity := principal(request)
-	if input.Body == nil {
-		if len(input.CC) > 0 {
-			writeError(response, http.StatusBadRequest, "invalid_request", "Only a conversation that starts with a reply (body) can copy other addresses.")
-			return
-		}
-		item, err := a.store.CreateConversation(request.Context(), identity.Workspace.ID, input.ContactID, input.Subject, input.ChannelID)
-		if err != nil {
-			writeStoreError(response, err)
-			return
-		}
-		writeJSON(response, http.StatusCreated, item)
+	if input.Body == nil && len(input.CC) > 0 {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Only a conversation that starts with a reply (body) can copy other addresses.")
 		return
 	}
-	if strings.TrimSpace(*input.Body) == "" {
+	if input.Body != nil && strings.TrimSpace(*input.Body) == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "The first reply needs a body.")
 		return
 	}
-	actor, _ := messageActor(request.Context(), identity, "outgoing")
-	cc, refusal := a.cleanCC(request.Context(), identity.Workspace.ID, "outgoing", input.CC)
-	if refusal != nil {
-		a.writeUploadError(response, refusal)
-		return
+	fingerprint := append([]string{input.ContactID, input.Subject, input.ChannelID}, input.CC...)
+	if input.Contact != nil {
+		fingerprint = append(fingerprint, "contact", input.Contact.Name, input.Contact.Email)
 	}
-	item, err := a.store.StartConversation(request.Context(), identity.Workspace.ID,
-		store.NewConversation{ContactID: input.ContactID, NewContact: input.Contact, Subject: input.Subject, ChannelID: input.ChannelID}, actor, *input.Body, cc)
-	if err != nil {
-		writeStoreError(response, err)
-		return
+	if input.Body != nil {
+		fingerprint = append(fingerprint, "body", *input.Body)
 	}
-	a.recordReply(identity, "outgoing")
-	writeJSON(response, http.StatusCreated, item)
+	// A repeat of one press (the same Idempotency-Key) answers the conversation the first one started and
+	// emails nothing again.
+	a.createOnce(response, request, createConversationOperation, fingerprint, func(ctx context.Context) (any, error) {
+		if input.Body == nil {
+			item, err := a.store.CreateConversation(ctx, identity.Workspace.ID, input.ContactID, input.Subject, input.ChannelID)
+			if err != nil {
+				writeStoreError(response, err)
+				return nil, errAnswered
+			}
+			return item, nil
+		}
+		actor, _ := messageActor(ctx, identity, "outgoing")
+		cc, refusal := a.cleanCC(ctx, identity.Workspace.ID, "outgoing", input.CC)
+		if refusal != nil {
+			a.writeUploadError(response, refusal)
+			return nil, errAnswered
+		}
+		item, err := a.store.StartConversation(ctx, identity.Workspace.ID,
+			store.NewConversation{ContactID: input.ContactID, NewContact: input.Contact, Subject: input.Subject, ChannelID: input.ChannelID}, actor, *input.Body, cc)
+		if err != nil {
+			writeStoreError(response, err)
+			return nil, errAnswered
+		}
+		a.recordReply(identity, "outgoing")
+		return item, nil
+	})
 }
 
 // newContactProblem checks a customer added with a conversation, trimming it in place, and says what is

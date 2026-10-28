@@ -152,8 +152,13 @@ func TestNoKeyRingRefusesAKeyAndSaysWhy(t *testing.T) {
 	fake := &aiprovider.Fake{}
 	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.AI = fakeAIConfig(fake) })
 	admin := createSession(t, api, service, "No Keys", "admin@nokeys.example.com")
-	wantResponse(t, request(t, api, http.MethodPost, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "K", "api_key": "sk-1", "models": []string{"m"}}, admin, nil),
-		http.StatusConflict, "secret_keys_missing")
+	logs := captureLogs(t)
+	refused := request(t, api, http.MethodPost, "/api/v1/ai/providers", map[string]any{"kind": "anthropic", "label": "K", "api_key": "sk-1", "models": []string{"m"}}, admin, nil)
+	wantResponse(t, refused, http.StatusConflict, "secret_keys_missing")
+	wantMissingSettingsLogged(t, logs, "ai_provider_keys", "MAILBOX_TOKEN_KEYS")
+	if strings.Contains(refused.Body.String(), "MAILBOX_TOKEN_KEYS") {
+		t.Fatalf("the answer names a server variable: %s", refused.Body.String())
+	}
 	if len(fake.Requests()) != 0 {
 		t.Fatal("a check was spent on a key that cannot be stored")
 	}

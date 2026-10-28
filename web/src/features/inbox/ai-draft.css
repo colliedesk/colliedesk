@@ -29,7 +29,7 @@
 .ai-draft-quiet { margin: 0; color: var(--text-3); font-size: var(--fs-small); }
 .ai-draft-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .ai-draft-again { margin-left: auto; }
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 30rem) {
   .ai-draft button { min-height: var(--touch); }
 }
 /* A phone: the panel is a sheet at the foot of the screen, its buttons always in view. */
@@ -57,7 +57,7 @@
 .ai-auto-draft-text:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .ai-auto-draft-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .ai-auto-draft-row > .muted-copy { flex: 1 1 12rem; font-size: var(--fs-label); }
-@media (pointer: coarse) { .ai-auto-draft button, .ai-auto-draft a { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-auto-draft button, .ai-auto-draft a { min-height: var(--touch); } }
 @media (max-width: 44rem) {
   .ai-auto-draft { margin: 0 0 var(--space-2); }
   .ai-auto-draft-text { max-height: 5.5rem; }

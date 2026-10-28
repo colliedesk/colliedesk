@@ -82,6 +82,10 @@ var routeTiers = map[string]string{
 	"GET /api/v1/kb/media/{id}/poster/{version}":                       "read",
 	"GET /api/v1/kb/media/{id}/details":                                "read",
 	"GET /api/v1/kb/media/{id}/thumbnail":                              "read",
+	"GET /api/v1/help-center/domain":                                   "read",
+	"PUT /api/v1/help-center/domain":                                   "admin",
+	"DELETE /api/v1/help-center/domain":                                "admin",
+	"POST /api/v1/help-center/domain/check":                            "admin",
 	"GET /api/v1/help-center":                                          "read",
 	"PUT /api/v1/help-center":                                          "admin",
 	"POST /api/v1/conversations":                                       "send",
@@ -171,6 +175,8 @@ var routeTiers = map[string]string{
 	"POST /api/v1/channels/{id}/held/discard":                          "approval",
 	"GET /api/v1/channels/{id}/email":                                  "read",
 	"POST /api/v1/channels/{id}/email/domain-verification":             "admin",
+	"POST /api/v1/channels/email/test-message":                         "draft",
+	"POST /api/v1/channels/{id}/email/test-message":                    "draft",
 	"POST /api/v1/channels/{id}/email/secret":                          "approval",
 	"POST /api/v1/channels/{id}/email/gmail":                           "approval",
 	"DELETE /api/v1/channels/{id}/email/gmail":                         "approval",
@@ -213,6 +219,11 @@ var routeTiers = map[string]string{
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  "draft",
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": "draft",
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    "draft",
+	"GET /api/v1/help-center/theme":                                    "read",
+	"PUT /api/v1/help-center/theme":                                    "admin",
+	"POST /api/v1/help-center/theme/check":                             "read",
+	"POST /api/v1/help-center/theme/preview":                           "read",
+	"PUT /api/v1/kb/order":                                             "send",
 }
 
 // kbFileRouteKeys carry video bytes; like an image upload, a lower tier is refused, not filed.

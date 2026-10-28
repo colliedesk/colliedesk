@@ -261,12 +261,16 @@ type Adapter interface {
 // Status states a channel can be in. off and not_connected are the frame's; an adapter reports
 // working or needs_attention with a reason code.
 const (
-	StateWorking        = "working"
+	StateWorking = "working"
+	// StateWaiting is the frame's for a working channel on which nothing has arrived yet.
+	StateWaiting        = "waiting"
 	StateOff            = "off"
 	StateNeedsAttention = "needs_attention"
 	StateNotConnected   = "not_connected"
 	// StateRemoved is a removed channel's, shown only where removed channels are listed.
 	StateRemoved = "removed"
+	// ReasonNoMessageYet is the reason of StateWaiting.
+	ReasonNoMessageYet = "no_message_yet"
 )
 
 // Status is a channel's state with a fixed reason code the web app explains.

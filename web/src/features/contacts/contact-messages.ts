@@ -65,7 +65,7 @@ export const contactMessages = {
   newConversationSending: 'Sending…',
   newConversationNotSent: 'The conversation was not started. Your text is still here; try again.',
   newConversationNeedsChannel: 'A new conversation is emailed to the customer, so the workspace needs its email channel first.',
-  newConversationTrial: 'During the trial, email goes only to customers who wrote to you first, so a new conversation cannot be sent yet.',
+  newConversationTrial: 'During the trial, Colliedesk does not email someone who has not written to you, so you cannot start a conversation yet. You can still reply to customers who email your support address. To start one yourself, verify your sending domain (the domain of your support address, such as example.com) or choose a plan:',
   newConversationRefused: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan to start new conversations. Your text is still here.',
   newConversationContactInvalid: 'Enter a valid email address, such as name@example.com.',
   newConversationMissing: (fields: string[]) => `To send, add ${fields.join(', ')}.`,

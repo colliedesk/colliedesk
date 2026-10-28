@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { useCreateAction, useCreateMutation } from '../../api/use-create';
 import { api, ReplyConflictError } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
@@ -233,18 +234,25 @@ export function InboxRoute() {
     onSettled: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: keepOpened });
-  const createTag = useMutation({ mutationFn: ({ name }: { conversationId: string; name: string }) => api.createTag(name), onSuccess: (tag, variables) => {
+  const createTag = useCreateMutation({ create: ({ name }: { conversationId: string; name: string }, key: string) => api.createTag(name, key), onSuccess: (tag, variables) => {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
   } });
-  const message = useMutation({ mutationFn: ({ kind, body, files, cc, seen, aiDraft }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string }) =>
-    api.createMessage(selected!.id, kind, body, files, cc, seen, aiDraft),
-    onSuccess: (_sent, { aiDraft }) => {
-      if (aiDraft) void client.invalidateQueries({ queryKey: ['ai-drafts', selected?.id] });
-      return client.invalidateQueries({ queryKey: ['messages', selected?.id] });
+  // A message carries the key of its send: the reply box's own (kept with its draft, so a reload can ask
+  // whether it arrived), or one per conversation and text; a retry of the same text reuses it, so the server
+  // stores the message once however many times it is asked.
+  type Send = { conversationId: string; kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string; key?: string };
+  const message = useCreateAction(({ conversationId, kind, body, files, cc, seen, aiDraft, key }: Send, pressKey: string) =>
+    api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey));
+  const testMessage = useCreateAction((_nothing: void, key: string) => api.sendTestMessage(undefined, key));
+  const sent = useMutation({ mutationFn: message.run,
+    // The conversation the message went to, which the person may have left while it was sending.
+    onSuccess: (_sent, { conversationId, aiDraft }) => {
+      if (aiDraft) void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+      return client.invalidateQueries({ queryKey: ['messages', conversationId] });
     },
     // A reply refused for a newer one: the timeline shows it at once.
-    onError: (error) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', selected?.id] }); } });
+    onError: (error, { conversationId }) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', conversationId] }); } });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // The others see that this tab has the conversation open and whether a reply is being written; the first
@@ -261,8 +269,12 @@ export function InboxRoute() {
     const replace = typedKeys.some((key) => (next[key] ?? '') !== (filters[key] ?? ''));
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };
-  return <><InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
+  return <><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} onboardingGoal={me.data?.onboarding_goal}
+    onTestMessage={mailboxes > 0 ? () => testMessage.run().then((test) => {
+      void client.invalidateQueries({ queryKey: ['conversations'] });
+      openConversation(test.conversation_id);
+    }) : undefined}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}
@@ -273,7 +285,8 @@ export function InboxRoute() {
     onSetStatus={(conversationId, status) => update.mutateAsync({ conversationId, changes: { status } })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body, files, cc, seen, aiDraft) => message.mutateAsync({ kind, body, files, cc, seen, aiDraft })} aiDrafts={me.data?.ai_features?.draft}
+    onMessage={(kind, body, files, cc, seen, aiDraft, key) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key })}
+    onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={me.data?.ai_features?.draft}
     autofix={config?.autofix?.available} aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}

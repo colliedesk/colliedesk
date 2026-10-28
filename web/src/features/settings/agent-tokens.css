@@ -42,7 +42,7 @@
 .agent-tokens a.button { color: var(--text-1); background: var(--surface-1); }
 .agent-tokens a.button.primary-action { background: var(--accent); color: var(--on-accent); }
 .agent-tokens [aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
-@media (pointer: coarse) { .snippet-head button { --control: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .snippet-head button { --control: var(--touch); } }
 .agent-tokens .button-row > .link-button { align-self: center; font-size: var(--fs-small); }
 .agent-tokens .primary-action[aria-disabled="true"]:hover { border-color: var(--accent); background: var(--accent); }
 /* The permissions of a token: one row per resource, a chip per action. A tier ticks its own; changing one makes the token custom. */
@@ -68,4 +68,4 @@
 .permission-mark.asks { border: 1.5px solid var(--text-3); background: transparent; }
 .permission-mark.locked { width: 14px; height: 9px; border: 1px dashed var(--text-3); border-radius: var(--radius-full); }
 @media (max-width: 40rem) { .permission-matrix li { grid-template-columns: 1fr; gap: var(--space-1); } .permission-resource { padding-top: 0; } }
-@media (pointer: coarse) { .permission-chip { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .permission-chip { min-height: var(--touch); } }

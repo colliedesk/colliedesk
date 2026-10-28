@@ -17,13 +17,15 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listSavedReplies, a.createSavedReply, a.updateSavedReply, a.deleteSavedReply,
 		a.listTrashedSavedReplies, a.restoreSavedReply, a.listSavedReplyVersions, a.restoreSavedReplyVersion,
 		a.listSavedViews, a.createSavedView, a.listDeletedSavedViews, a.updateSavedView, a.deleteSavedView, a.restoreSavedView,
-		a.listKBCollections, a.createKBCollection, a.listTrashedKBCollections, a.updateKBCollection, a.deleteKBCollection, a.restoreKBCollection,
+		a.listKBCollections, a.createKBCollection, a.listTrashedKBCollections, a.updateKBCollection, a.deleteKBCollection, a.restoreKBCollection, a.setKBOrder,
 		a.listKBArticles, a.createKBArticle, a.listTrashedKBArticles, a.getKBArticle, a.updateKBArticle, a.deleteKBArticle, a.restoreKBArticle,
 		a.listKBArticleVersions, a.restoreKBArticleVersion, a.excludeKBArticleFromAI, a.includeKBArticleInAI, a.uploadKBImage, a.getKBImage,
 		a.listKBMedia, a.updateKBMedia,
 		a.listTrashedKBMedia, a.trashKBMedia, a.trashUnusedKBMedia, a.restoreKBMediaBatch, a.purgeKBMedia, a.trashOneKBMedia, a.restoreKBMedia, a.replaceKBMedia, a.undoKBMediaReplacement,
 		a.createKBMediaUpload, a.listKBMediaUploads, a.getKBMediaUpload, a.putKBMediaUploadPart, a.cancelKBMediaUpload, a.completeKBMediaUpload, a.getKBMediaFile, a.putKBVideoPoster, a.getKBVideoPoster,
-		a.getKBMediaDetails, a.getKBMediaThumbnail, a.getHelpCenter, a.putHelpCenter, a.askHelpCenterCertificate,
+		a.getKBMediaDetails, a.getKBMediaThumbnail, a.getHelpCenter, a.putHelpCenter,
+		a.getHelpCenterTheme, a.putHelpCenterTheme, a.checkHelpCenterTheme,
+		a.getHelpCenterDomain, a.putHelpCenterDomain, a.deleteHelpCenterDomain, a.checkHelpCenterDomain, a.previewHelpCenterTheme, a.askHelpCenterCertificate,
 		a.retryMessageDelivery,
 		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.checkInboundRecipient, a.rotateEmailSecret,
 		a.connectGmail, a.disconnectGmail, a.finishGmailConnect,
@@ -50,6 +52,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.connectRepo, a.updateRepo, a.disconnectRepo, a.includeNotesInFixes, a.excludeNotesFromFixes, a.receiveGitHubWebhook,
 		a.previewFix, a.sendFix, a.retryFix, a.cancelFix, a.markFixDeployed, a.unmarkFixDeployed, a.linkFixPullRequest, a.unlinkFixPullRequest,
 		a.enableFixConnector, a.disableFixConnector, a.checkFixConnector, a.setCursorKey, a.removeCursorKey,
+		a.sendTestMessage, a.sendTestMessage,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

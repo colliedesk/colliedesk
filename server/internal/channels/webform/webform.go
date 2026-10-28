@@ -197,6 +197,9 @@ type Submission struct {
 	Email   string `json:"email"`
 	Message string `json:"message"`
 	Source  string `json:"source,omitempty"`
+	// Press names one press of the page's submit button (from its Idempotency-Key); a repeat of it is the
+	// duplicate of the message it stored.
+	Press string `json:"press,omitempty"`
 }
 
 type inbound struct{}
@@ -223,9 +226,14 @@ func (inbound) Parse(_ context.Context, _ channels.Channel, _ any, raw channels.
 	if sentAt.IsZero() {
 		sentAt = time.Now().UTC()
 	}
+	externalID := ""
+	if submission.Press != "" {
+		externalID = "press:" + submission.Press
+	}
 	return []channels.Inbound{{
-		Sender:  channels.Sender{Identity: channels.Identity{Kind: channels.IdentityEmail, Value: submission.Email}, Email: address},
-		Subject: subject, Text: text, SentAt: sentAt,
+		ExternalID: externalID,
+		Sender:     channels.Sender{Identity: channels.Identity{Kind: channels.IdentityEmail, Value: submission.Email}, Email: address},
+		Subject:    subject, Text: text, SentAt: sentAt,
 		EmailMeta: &domain.IncomingEmail{From: submission.Email, Authentication: "none", Via: domain.ViaWebForm, Attachments: []domain.EmailAttachment{}},
 	}}, nil
 }

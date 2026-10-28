@@ -11,7 +11,8 @@ interface BillingPageProps {
   timezone: string;
   // checkoutReturned is set when the browser comes back from a successful checkout.
   checkoutReturned?: boolean;
-  failed?: boolean;
+  // failed is true for a generic failure, or the server's words when it said why (the provider refused the address).
+  failed?: boolean | string;
   // busy is true while a checkout is starting or open; the plan buttons wait so a second click cannot open a second one.
   busy?: boolean;
   onCheckout: (plan: CheckoutPlan) => void;
@@ -72,7 +73,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
         {/* Only admins reach this page, and an admin sees every settings section. */}
         <SettingsNav page="/settings/billing" shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: true, importData: true, ai: true }} />
         <div className="settings-sections">
-          {failed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
+          {failed && <p role="alert" className="error-copy">{typeof failed === 'string' ? failed : messages.billingActionFailed}</p>}
           {checkoutReturned && <p role="status">{billingMessages.checkoutReturned}</p>}
           {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{billingMessages.duplicateSubscriptions}</p>}
           {billing.status === 'past_due' && <p role="alert" className="error-copy">{billingMessages.pastDueNotice}</p>}

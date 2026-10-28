@@ -259,6 +259,21 @@ func emailChannelUpdateSpec() Spec {
 	}
 }
 
+func emailTestMessageSendSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_email_test_message_send",
+		Title: "Send yourself a test email",
+		Description: `Deliver one test email from your own agent's address to an email channel, the way a customer's mail arrives: it opens a conversation ` +
+			`"Test message from Colliedesk" in the inbox. Answer it with colliedesk_reply_send to see the whole loop; the reply is emailed to your agent's address ` +
+			`(allowed on a trial, because it reaches only you; a Cc to anyone else is refused). Five per workspace an hour. ` + emailChannelChoice + "\n\nTier: draft.",
+		Tier:   "draft",
+		REST:   []string{"POST /api/v1/channels/email/test-message", "POST /api/v1/channels/{id}/email/test-message"},
+		Input:  emailChannelInput,
+		Output: `{"type":"object","required":["conversation_id","message_id","sent_to"],"properties":{"conversation_id":{"type":"string"},"message_id":{"type":"string"},"sent_to":{"type":"string"}}}`,
+		run:    emailTestMessageSend,
+	}
+}
+
 func emailDomainVerifySpec() Spec {
 	return Spec{
 		Name:  "colliedesk_email_domain_verify",

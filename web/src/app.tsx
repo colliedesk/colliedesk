@@ -5,7 +5,6 @@ import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
-import { RequestsRoute } from './features/requests/requests-route';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
@@ -22,7 +21,9 @@ import { kbPart } from './features/kb/kb-part';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
+import { forgetAllDrafts } from './features/inbox/reply-draft-storage';
 import { inboxQueryFromSearch } from './lib/inbox-query';
+import { signInFormReady } from './lib/sign-in-ready';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
 // Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
@@ -33,6 +34,8 @@ const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
 const channelsRoutePart = lazyPart(() => import('./features/settings/channels/channels-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
+// Agent requests are their own chunk too: the rail link starts loading it on hover and focus.
+const requestsRoutePart = lazyPart(() => import('./features/requests/requests-route'));
 const resultsSharePart = lazyPart(() => import('./features/results/results-share-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
@@ -48,7 +51,7 @@ function AppLayout() {
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   const client = useQueryClient();
   // After sign out /auth/me answers 401, which turns the view into the signed-out screen.
-  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); return client.invalidateQueries({ queryKey: ['me'] }); } });
+  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); forgetAllDrafts(); return client.invalidateQueries({ queryKey: ['me'] }); } });
   // A paused agent (more agents than the plan allows) gets the same treatment as a lock: nothing but why and sign out.
   const paused = me.data?.plan?.seat_paused === true;
   const locked = me.data?.plan?.locked === true || paused;
@@ -59,7 +62,8 @@ function AppLayout() {
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
   useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
   // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
-  useProductAnalytics(config.data?.product_analytics, me.data);
+  // On a sign-in page the analytics library waits for the sign-in form, so a slow connection loads the form first.
+  useProductAnalytics(config.data?.product_analytics, me.data, onSignIn ? signInFormReady : undefined);
   // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
   // Fixes shows once a repository is connected to Autofix; its badge counts the fixes that need a person.
@@ -94,7 +98,7 @@ function AppLayout() {
     links={locked ? undefined : <>
       <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || inResults || inFixes || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
       <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
-        aria-current={inRequests ? 'page' : undefined}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
+        aria-current={inRequests ? 'page' : undefined} onPointerEnter={requestsRoutePart.preload} onFocus={requestsRoutePart.preload}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
       {fixes && fixes.connected_repos > 0 && <Link to="/fixes" className="rail-link" data-tip={messages.fixes} aria-label={fixes.needs_person > 0 ? messages.fixesWaiting(fixes.needs_person) : messages.fixes}
         aria-current={inFixes ? 'page' : undefined} onPointerEnter={autofixPart.preload} onFocus={autofixPart.preload}><WrenchIcon /><span className="rail-label" aria-hidden="true">{messages.fixes}</span>
@@ -206,7 +210,11 @@ function SettingsPage() {
   </main>;
 }
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
-const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
+const requestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/requests',
+  component: () => <Part part={requestsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ RequestsRoute }) => <RequestsRoute />} />,
+});
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/billing',

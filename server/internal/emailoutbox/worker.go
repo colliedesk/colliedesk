@@ -163,7 +163,7 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) channels.Send
 		return w.deliverMailbox(ctx, item, provider)
 	}
 	if w.sender == nil {
-		return channels.Failed("Outgoing email is not configured on this server. Ask the administrator to set SMTP_HOST.")
+		return channels.Failed("Outgoing email is not configured on this server: ask whoever runs it to set up outgoing email.")
 	}
 	from, envelope, ok := w.identity(item)
 	if !ok {

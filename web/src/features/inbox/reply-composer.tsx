@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
+import { newSubmitKey } from '../../api/submit-key';
 import { renderSavedReply } from '../../lib/saved-reply-variables';
 import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
+import { draftPrefix, parseDraft, readDraft, writeDraft } from './reply-draft-storage';
+import type { StoredDraft } from './reply-draft-storage';
 import { ConflictError, ReplyConflictError } from '../../api/client';
 import { presenceViewPart } from './presence-part';
 import { track } from '../../lib/product-analytics';
@@ -21,7 +24,11 @@ interface ReplyComposerProps {
   // May return a promise: the text is kept, with the reason shown, when it rejects.
   // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
   // only for a reply that copies someone. aiDraft (last) names the AI draft a reply was written from.
-  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string) => void | Promise<unknown>;
+  // With draftKey, every argument is passed and key (last) is the send's Idempotency-Key, kept with the draft.
+  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number, aiDraft?: string, key?: string) => void | Promise<unknown>;
+  // findSent says whether the send under key stored its message; a draft kept with a send's key asks it once
+  // when the box opens, and is dropped when it did. Without it such a draft is offered again.
+  findSent?: (key: string) => Promise<boolean>;
   // The addresses the customer copied on their latest message; the field starts with them until the agent edits it.
   suggestedCc?: string[];
   // The server's per-message file limits; the composer warns and holds the send while they are exceeded.
@@ -55,6 +62,8 @@ interface ReplyComposerProps {
   onResolve?: () => Promise<unknown>;
   // The conversation the box writes to: a reply put in for it from elsewhere (colliedesk:insert-reply) lands here.
   conversationId?: string;
+  // Where this browser keeps the unsent text (workspace, agent and conversation); without it nothing is kept.
+  draftKey?: string;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -65,6 +74,15 @@ const shortcuts: Record<string, Kind> = { r: 'outgoing', n: 'note' };
 
 const noAddresses: string[] = [];
 
+// inputOf names the files and copies of a send: each list counted first, a file by name, size and date (its
+// bytes are not read), so a changed attachment or Cc after a lost answer is a new message, never a replay.
+const inputOf = (files: File[], cc: string[]) =>
+  JSON.stringify([cc.length, ...cc, files.length, ...files.map((file) => [file.name, file.size, file.lastModified])]);
+const noInput = inputOf([], []);
+
+// PendingSend is a send in flight, failed or cut off: its text, files and copies, and its Idempotency-Key.
+interface PendingSend { kind: Kind; body: string; key: string; input: string }
+
 // The lists under the box are a chunk of their own, so the first bundle carries neither. The composer
 // starts loading it when it mounts, which is when a conversation opens: a click a moment later finds it.
 export const replyPickersPart = lazyPart(() => import('./reply-pickers'));
@@ -74,12 +92,88 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, conversationId }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, draftKey, findSent, conversationId }: ReplyComposerProps) {
   // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
-  const [kind, setKind] = useState<Kind>(noReplies ? 'note' : 'outgoing');
-  const [body, setBody] = useState('');
+  const [stored] = useState(() => readDraft(draftKey));
+  const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
+  const [body, setBody] = useState(stored?.body ?? '');
+  // The text is kept as it is typed, and forgotten once the box is empty again (after a send). The key is
+  // read once: a page whose key arrives later (the workspace loads after the conversation on a reload)
+  // remounts the box with it, so the draft kept there is read before anything is written over it.
+  // A send in flight, failed or cut off keeps its key with the text while the text and kind are unchanged:
+  // sending it again goes under the same key, so the server stores it once.
+  // The files and copies of a send are part of it too (input, from inputOf): other ones are a new message.
+  // Another tab of this browser sending the same text wrote its key with the draft: that key is this one's.
+  const pendingSend = useRef<PendingSend | undefined>(stored?.sendKey ? { kind: stored.kind, body: stored.body, key: stored.sendKey, input: stored.sendInput ?? noInput } : undefined);
+  const sendOf = (kind: Kind, body: string, input?: string): PendingSend | undefined => {
+    const kept = readDraft(draftKey);
+    const fromStorage = kept?.sendKey ? { kind: kept.kind, body: kept.body, key: kept.sendKey, input: kept.sendInput ?? noInput } : undefined;
+    return [pendingSend.current, fromStorage].find((send) => send && send.kind === kind && send.body === body && (input === undefined || send.input === input));
+  };
+  useEffect(() => {
+    const send = sendOf(kind, body);
+    writeDraft(draftKey, { kind, body, ...(send ? { sendKey: send.key, sendInput: send.input } : {}) });
+  }, [draftKey, kind, body]);
+  const latestBody = useRef(body);
+  latestBody.current = body;
+  const latestKind = useRef(kind);
+  latestKind.current = kind;
+  // A draft kept with a send's key asks the server once whether that send stored its message: then the text
+  // leaves the box instead of inviting a second send. It is never sent by itself.
+  useEffect(() => {
+    const send = pendingSend.current;
+    if (!send || !findSent) return;
+    let current = true;
+    findSent(send.key).then((found) => {
+      if (!current || !found || pendingSend.current !== send) return;
+      pendingSend.current = undefined;
+      if (latestBody.current === send.body) setBody('');
+      else writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current });
+    }, () => undefined);
+    return () => { current = false; };
+  }, []);
+  // Another tab of this browser wrote (or sent) this draft: a box not edited here shows its text, as a reply
+  // or a note the way that tab had it (a note must never turn into a reply), and says so. Text typed here is
+  // never replaced unasked: the person picks theirs or the other tab's.
+  const [otherTab, setOtherTab] = useState(false);
+  const editedHere = useRef(false);
+  const [otherDraft, setOtherDraft] = useState<StoredDraft>();
+  const adopt = (draft: StoredDraft) => {
+    setKind(draft.kind);
+    setBody(draft.body);
+    editedHere.current = false;
+    setOtherDraft(undefined);
+  };
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (!draftKey || event.key !== draftPrefix + draftKey) return;
+      const kept = readDraft(draftKey);
+      const text = kept?.body ?? '';
+      const nextKind = noReplies ? 'note' : kept?.kind ?? latestKind.current;
+      if (text === latestBody.current && nextKind === latestKind.current) { setOtherDraft(undefined); return; }
+      // The other tab sent or cleared the very text this box holds: it goes here too.
+      const sameTextGone = !text.trim() && parseDraft(event.oldValue)?.body === latestBody.current;
+      const mine = editedHere.current && latestBody.current.trim() !== '';
+      // It sent or cleared text of its own: the text typed here stays, and is kept again.
+      if (mine && !text.trim() && !sameTextGone) {
+        writeDraft(draftKey, { kind: latestKind.current, body: latestBody.current });
+        return;
+      }
+      if (mine && !sameTextGone) {
+        setOtherTab(false);
+        setOtherDraft({ kind: nextKind, body: text });
+        return;
+      }
+      adopt({ kind: nextKind, body: text });
+      setOtherTab(true);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [draftKey, noReplies]);
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
+  // Set from the press until the answer: clicks that land before the button turns disabled send nothing.
+  const inFlight = useRef(false);
   const [files, setFiles] = useState<File[]>([]);
   const fileProblem = attachmentProblem(files, attachmentLimits);
   // undefined until the agent edits the list, so suggestions that load later still show up.
@@ -182,7 +276,7 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   const blocked = kind === 'outgoing' && noReplies;
   const cannotSend = sending || !body.trim() || Boolean(fileProblem) || ccHolds || blocked;
   const submit = (resolve = false) => {
-    if (!body.trim() || sending || fileProblem || ccHolds || blocked) return;
+    if (!body.trim() || inFlight.current || fileProblem || ccHolds || blocked) return;
     const resolving = resolve && canResolve;
     resolveAfter.current = resolving;
     // The reply stays sent when the status change fails; the person is told and can press Resolve. The button
@@ -199,7 +293,16 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     const seen = kind === 'outgoing' && latestReplyNumber !== undefined ? mark.current ?? latestReplyNumber : undefined;
     const fromDraft = kind === 'outgoing' ? aiDraft : undefined;
     setConflict(undefined);
-    const send = (draftId?: string) => draftId ? onSubmit?.(kind, sent, sentFiles, sentCc, seen, draftId)
+    // The kept draft holds the send's key before the request leaves: a reload meanwhile asks the server about
+    // that key before offering the text again, and the same text sent again goes under the same key.
+    const input = inputOf(sentFiles, sentCc);
+    const key = draftKey ? sendOf(kind, body, input)?.key ?? newSubmitKey() : undefined;
+    if (key) {
+      pendingSend.current = { kind, body, key, input };
+      writeDraft(draftKey, { kind, body, sendKey: key, sendInput: input });
+    }
+    const send = (draftId?: string) => key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
+      : draftId ? onSubmit?.(kind, sent, sentFiles, sentCc, seen, draftId)
       : seen !== undefined ? onSubmit?.(kind, sent, sentFiles, sentCc, seen)
       : sentCc.length > 0 ? onSubmit?.(kind, sent, sentFiles, sentCc)
       : sentFiles.length > 0 ? onSubmit?.(kind, sent, sentFiles) : onSubmit?.(kind, sent);
@@ -207,7 +310,8 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     if (fromDraft && typeof (result as Promise<unknown> | undefined)?.then === 'function') {
       result = (result as Promise<unknown>).catch((error: unknown) => (draftGone(error) ? send() : Promise.reject(error)));
     }
-    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); void resolveNow(); return; }
+    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { pendingSend.current = undefined; setBody(''); setFiles([]); void resolveNow(); return; }
+    inFlight.current = true;
     setSending(true);
     setProblem(undefined);
     // Clear only what was sent: text typed while the request was in flight (a note right after a reply) stays.
@@ -217,10 +321,14 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
       setBody((current) => (current.trim() === sent ? '' : current));
       setFiles((current) => current.filter((file) => !sentFiles.includes(file)));
     };
-    (result as Promise<unknown>).then(() => { clearSent(); return resolveNow(); }, (error: unknown) => {
+    (result as Promise<unknown>).then(() => {
+      if (pendingSend.current?.key === key) pendingSend.current = undefined;
+      clearSent();
+      return resolveNow();
+    }, (error: unknown) => {
       if (error instanceof ReplyConflictError) setConflict(error);
       else setProblem(replyRefusalText(error));
-    }).finally(() => setSending(false));
+    }).finally(() => { inFlight.current = false; setSending(false); });
   };
   // R starts a reply and N a private note from anywhere on the page, as the keycaps on the tabs say.
   useEffect(() => {
@@ -266,7 +374,11 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
           <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
         )}
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
-          placeholder={kind === 'note' ? messages.notePlaceholder : noReplies ? messages.replyNotSendable : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
+          placeholder={kind === 'note' ? messages.notePlaceholder : noReplies ? messages.replyNotSendable : messages.replyPlaceholder} onChange={(event) => { setBody(event.target.value); setOtherTab(false); editedHere.current = true; }} />
+        {otherTab && <p role="status" className="composer-hint">{messages.draftFromOtherTab}</p>}
+        {otherDraft && <p role="status" className="composer-hint">{messages.otherTabDraftDiffers}{' '}
+          <button type="button" className="link-action" onClick={() => adopt(otherDraft)}>{messages.useOtherTabDraft}</button>{' '}
+          <button type="button" className="link-action" onClick={() => { writeDraft(draftKey, { kind, body }); setOtherDraft(undefined); }}>{messages.keepMyDraft}</button></p>}
         {picking && !disabled && (pickers.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
           // Until the chunk is there, the list's own box says it is loading, where the list will be.
           : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>

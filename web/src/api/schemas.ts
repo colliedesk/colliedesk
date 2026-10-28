@@ -173,6 +173,7 @@ export const emailChannelSettingsSchema = z.object({
 export const webFormSettingsSchema = z.object({
   channel_id: z.string().uuid().optional(), enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(), legacy_slug: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'WebFormSettings'>>;
+export const testMessageResultSchema = z.object({ conversation_id: z.string(), message_id: z.string(), sent_to: z.string() }) satisfies z.ZodType<JsonResponse<'sendEmailTestMessage', 201>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
@@ -195,10 +196,12 @@ export const meSchema = z.object({
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
-// The raw token is in this answer only; the client keeps it in no cache.
-export const agentTokenSchema = z.object({ token: z.string().startsWith('cdk_agent_'), session: sessionSchema }) satisfies z.ZodType<JsonResponse<'createAgentToken', 201>>;
+// The raw token is in this answer only; the client keeps it in no cache. A repeat of the same press (200)
+// answers the session without it.
+export const agentTokenSchema = z.object({ token: z.string().startsWith('cdk_agent_').optional(), session: sessionSchema }) satisfies z.ZodType<JsonResponse<'createAgentToken', 201> | JsonResponse<'createAgentToken', 200>>;
 export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satisfies z.ZodType<JsonResponse<'listInvites', 200>>;
-export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createInvite', 201>>;
+// A repeat of the same press (200) answers the invite without its one-time link.
+export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url().optional() }) satisfies z.ZodType<JsonResponse<'createInvite', 201> | JsonResponse<'createInvite', 200>>;
 export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
 export const conversationViewerSchema = z.object({
   agent_id: z.string().uuid(), name: z.string(), writing: z.boolean(), writing_since: z.string().datetime().nullable(), edited_at: z.string().datetime().nullable(),

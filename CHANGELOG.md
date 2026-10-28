@@ -10,6 +10,13 @@ requests. This file keeps the first release.
 
 ## Unreleased
 
+**Operators: the reverse proxy must send the visitor's `Host` header.** The server now answers the app,
+the API, MCP and attachments only when the `Host` of the request is `APP_ORIGIN`'s host, `localhost` or
+an IP address (health checks, the proxy's certificate question). Every other host name gets the help
+center, or the help center's 404. Caddy keeps the `Host` header by default. With nginx, set
+`proxy_set_header Host $host;`; a proxy that rewrites it to an internal name such as `colliedesk:8080`
+now gets 404 for everything. See [running behind a proxy](docs/self-host/running-behind-proxy.md#the-host-header).
+
 API changes in the email view (the full notes will be on the releases page):
 
 - `GET /contacts/{id}` no longer embeds `conversations` (an unpaged list). It returns
@@ -34,6 +41,28 @@ API changes in the email view (the full notes will be on the releases page):
 - New operator command `collie email sender-name [--by <name>] <workspace slug> <name>` sets a sender
   name that the brand check of Colliedesk Cloud refuses through the API, for the brand's owner. It
   checks the name as the API does and skips only the brand check.
+- New route `PUT /kb/order` (`send` tier; MCP `colliedesk_kb_order_set`) sets the order of the collections
+  and articles directly under one parent; a list that is not exactly the parent's live children is 409
+  `order_stale` with the current lists. Article answers have a new required field, `position`.
+  `GET /kb/articles` takes `sort` (`recent` or `manual`); with `collection_id` and no `q` it now lists the
+  collection's articles in their order (by title until ordered by hand) instead of most recently updated first.
+- The help center can serve on a custom domain: `GET`, `PUT`, `DELETE /help-center/domain` and `POST
+  /help-center/domain/check` (MCP `colliedesk_help_center_domain_get`, `_set`, `_check`, `_remove`).
+  While it is active, `HelpCenter.url` and every article `url` name it, the slug addresses answer 301 to it,
+  and `tls-ask` answers for it. The export's `help-center.ndjson` has `custom_domain`, `custom_domain_status`
+  and `custom_domain_verified_at`. The `CNAME` target is the claim's own `hc-<claim>.<HELP_CENTER_DOMAIN>`;
+  slugs of exactly that shape are reserved. An active domain that no check proves for 7 days goes back to
+  `pending`, and another workspace that proves the host name while its records do not takes it over
+  (`HelpCenterDomain.failing_since`, `pending_reason`). Checks are limited to 10 an hour per workspace.
+- The help center theme takes `custom_css` (`PUT /help-center/theme`, `/check`, `/preview`; MCP
+  `colliedesk_help_center_theme_update` and `_check`), served after the brand on every public page;
+  CSS that could load anything is 422 `custom_css_refused` with its line and column. `HelpCenterTheme`
+  answers have a new required field, `custom_css`, and the export's `help-center.ndjson` carries it.
+  `PUT /help-center/theme` requires `custom_css` (null or `""` clears it): a save without it is 422
+  `validation_failed` and an agent request without it is not filed, so an older client cannot clear it.
+  The brand sheet's name is now `brand-<32 hex digits>.css`.
+  Under a parent ordered by hand, `POST /kb/collections` without `position` or with 0 puts the collection
+  last (an explicit 0 used to be kept); a created, moved, imported or restored article or collection goes last too.
 
 ## 0.0.1
 

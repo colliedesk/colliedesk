@@ -41,7 +41,9 @@ const server = { kind: 'anthropic' as const, label: 'Colliedesk AI', models: { t
 test('a server without any provider explains the two ways to start, and every feature is off', () => {
   page();
   expect(screen.getByRole('heading', { name: 'No AI provider on this server yet' })).toBeInTheDocument();
-  expect(screen.getByText(/AI_SERVER_PROVIDER=anthropic/)).toBeInTheDocument();
+  expect(screen.getByText(/set up by whoever runs it/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Setup guide' })).toHaveAttribute('href', expect.stringContaining('environment-variables.md#ai-provider'));
+  expect(screen.queryByText(/AI_SERVER_PROVIDER/)).toBeNull();
   for (const name of ['Triage suggestions on', 'Reply drafts on']) expect(screen.getByRole('switch', { name })).toBeDisabled();
   expect(screen.getAllByText('Add a provider first, then turn this on.')).toHaveLength(2);
 });
@@ -221,7 +223,9 @@ test('a server that cannot store keys says so before anyone types one', () => {
   page({ settings: settings({ can_store_keys: false }) });
   fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
   const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
-  expect(within(dialog).getByRole('alert')).toHaveTextContent('MAILBOX_TOKEN_KEYS');
+  expect(within(dialog).getByRole('alert')).toHaveTextContent('ask whoever runs this server');
+  expect(within(dialog).getByRole('alert')).not.toHaveTextContent('MAILBOX_TOKEN_KEYS');
+  expect(within(within(dialog).getByRole('alert')).getByRole('link', { name: 'Self-hosting guide: the key that encrypts stored secrets' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/environment-variables.md#variables');
   expect(within(dialog).getByRole('button', { name: 'Check and save' })).toBeDisabled();
 });
 
@@ -427,4 +431,18 @@ test('OpenAI and OpenRouter need only a key: their address is filled in', async 
   fireEvent.click(within(dialog).getByRole('checkbox', { name: /openai\/gpt-5/ }));
   await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and save' })); });
   expect(onAdd).toHaveBeenCalledWith({ kind: 'openai_compatible', label: 'Router', base_url: 'https://openrouter.ai/api/v1', api_key: 'sk-or-1', models: ['openai/gpt-5'] });
+});
+
+test('where the page says a person accepts each suggestion, it names the admin exception, Apply suggestions automatically', () => {
+  page();
+  for (const claim of [/A person accepts, edits and sends/, /An agent accepts or dismisses each one/]) {
+    expect(screen.getAllByText(claim)[0]).toHaveTextContent(/unless an admin turns on Apply suggestions automatically/);
+  }
+});
+
+test('the data notice says what a draft keeps, for how long, and that it is exported', () => {
+  page({ settings: settings({ server }) });
+  const notice = document.querySelector('.ai-sends');
+  expect(notice).toHaveTextContent('Private notes are never sent. A draft keeps its text and your request for 90 days after it ended, and both are in the export.');
+  expect(notice).not.toHaveTextContent('prompts are not stored');
 });

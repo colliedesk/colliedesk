@@ -50,7 +50,12 @@ Do not widen either budget.
 2,000 articles of about 9,000 characters from a vocabulary of 20,000 words, 20 of them at the
 100,000-character limit) and calls the article list 50 times per path at the largest page: a two-word
 search, a short prefix, a search that matches nothing, a title search, the published articles, and
-the collections. Each path must stay at or below 100 ms p95 (about 11 ms locally). A search reads every
+the collections. Each path must stay at or below 100 ms p95 (about 11 ms locally). Half the articles have
+a position set by hand, scattered, and two more paths are called 20 times each (to spare the latency
+runner): a collection's articles in their order, and the published ones in the help center's order
+(the reply box's article list). On 2026-10-22 locally: 5–7 ms and 12–17 ms p95. The collection's list
+took 17 ms before `kb_articles_order_idx`, which lets it read one page in order instead of sorting the
+collection; the gate's run went from 5.1–5.2 s to 5.1–5.4 s, within the noise of the shared host. A search reads every
 vector of the workspace, because row-level security keeps Postgres off the GIN index; raise the cap
 only with this gate, after reading `docs/internals/knowledge-base.md`.
 
@@ -108,7 +113,30 @@ page 50 times, HTML rendering included: the home page, the first and last page o
 (1,000 published articles, 50 a page), a 9,000- and a 100,000-character article, and searches with two
 words, a short prefix, no match and a title. Each must stay at or below 100 ms p95 (6–16 ms locally).
 A page is five short scoped transactions at most (slug lookup, settings and lock, collections,
-articles, neighbours); a 304 stops after the second.
+articles, neighbours); a 304 stops after the second. Workspace A carries a full theme with about
+31 KiB of custom CSS, the worst case of what every page reads and hashes into the brand sheet's name
+(page p95 unchanged, and the gate took 0.4 s longer locally).
+
+`TestHelpCenterCustomHostLatencyBudget` gives workspace A of the same fixture an active custom domain
+and loads it by host name: the first request, which looks the host up (cold cache, 15 ms locally),
+then the home page, the collection and an article 20 times each (warm, 8–9 ms p95), all under the same
+100 ms. The host lookup adds one indexed privileged query per host name per 30 s per process; requests
+to `APP_ORIGIN`'s host and the slug hosts never make it (`TestAppRequestsNeverLookUpACustomHost`
+counts the statements). A name no cache knows is charged to the client first (10 a minute), so 20
+random names from one client make at most 10 queries (`TestRandomHostNamesCostABoundedNumberOfLookups`),
+and a domain write forgets only its own names (`TestDomainWritesForgetOnlyTheirOwnHostNames`). The gate adds about 0.5 s to the timed shard once the fixture is seeded.
+
+`TestHelpCenterOldFreshdeskAddressesLatencyBudget` adds to the same fixture the import ledger a real
+migration leaves (a `kb_article` row per article and 25,000 ticket rows in each workspace, by
+`generate_series`) and times old Freshdesk addresses 20 times each: a mapped article (301), a draft
+and an unknown id (302 to the search) and a folder (301, which also reads the collection tree), all
+under 100 ms (3–7 ms p95 locally). It checks that `import_items_source_id_idx` is partial (knowledge
+base rows only), and runs `EXPLAIN (GENERIC_PLAN)` on the store's own statement for each entity
+(`store.HelpCenterLegacyTargetSQL`), so a drift in the query or a plan that cannot use the partial
+index fails. Its rows are removed by a cleanup registered before the insert. Seeding takes about
+0.9 s, the visits about 0.3 s. Measured on a scratch database with 505,000 ledger rows (5,000 of them
+`kb_article`): the partial index is created in 73 ms and takes 264 kB; the full index it replaced took
+1.1 s and 24 MB.
 
 `TestHelpCenterHostileArticlesLatencyBudget` holds an article page to the same 100 ms when its
 100,000 characters are built to be slow to parse: one line of quote or list markers (`>`, `> `,
@@ -117,6 +145,20 @@ images, and emphasis runs (goldmark's quadratic paths: up to 24 s before `tame`,
 `linkify`). Each article's first visit renders it cold and is held to the budget (6–35 ms locally);
 then 20 visits (not 50, to spare the shared latency runner) read the kept page (4–12 ms).
 `TestHelpCenterRenderedPagesAreNeverSharedAcrossWorkspaces` keeps that memory per workspace.
+
+`TestHelpCenterThemePreviewLatencyBudget` holds the brand preview to the same 100 ms p95. A person
+waits for it 300 ms after each pause in typing, so it is a keystroke path. On the same fixture,
+workspace A with a full candidate brand (logo, favicon, links, seven colors, two fonts): the home page
+and the first published article (100,000 characters) are each previewed 50 times through
+`POST /api/v1/help-center/theme/preview`, after one warm-up. The article is also timed cold: its first
+render on the fixture's new server, held to the budget, and it must be the rendered page, not the text
+shown while a render runs late. It reuses the fixture's server and adds about 1 s to the latency
+shard. On 2026-10-22 locally, before the
+change: home 16 ms p95 (22 KB answer), article 19 ms (127 KB), cold 24–37 ms. After it: home
+9–12 ms (6 KB), article 11–13 ms (110 KB), cold 13–30 ms. The change has two parts. The reads became
+one transaction sent as one batch (`TestHelpCenterThemePreviewReadsInOneTransaction` counts the
+transactions: as many as reading the saved theme). `site.css` is linked by its immutable address
+instead of being inlined in every answer.
 
 ## Results budget
 
@@ -192,6 +234,15 @@ On 2026-10-25 Settings → Channels (its pages, the channel registry and every c
 On 2026-10-27 Autofix (the bridge to the customer's own coding agent) kept in the first bundle only the rail's Fixes link with its wrench icon and count (`useAutofixStatus`, one `GET /api/v1/autofix/status` a minute), the two routes, the slots in the conversation details and under the thread header, the Settings menu item, the request card's branch for Autofix calls, the composer's listener for a reply put in from elsewhere (`colliedesk:insert-reply`, used by Draft reply): 203,612 → 204,698 bytes (+1,086), CSS 16,828 → 16,833. Every Autofix screen (the conversation block, the send dialog, Fixes, Settings → Autofix, the request detail) is one lazy part, `autofix-chunk`: 25,451 bytes gzip plus 4,339 of CSS; the rail link preloads it on hover and focus. That leaves 102 bytes under the gate: the next feature has to move something out first. Measured with Playwright on a local `collie serve` (Chromium, 1,280 px, the Autofix routes answered by the test page, median of 5): rail → Fixes with its groups 68 ms, a click on a conversation → its Autofix block with the track 37 ms. Going to GitHub to confirm a fix leaves the app and is not counted; the page it comes back to shows the fix as Sending at once and reads it again every 3 seconds while it sends. On 2026-10-28 the Autofix end-to-end test (P6) measured it again against a real `collie serve`, PostgreSQL and the GitHub stand-in (`cmd/github-stand-in`), not routes answered by the test page: Chromium, 1,280 px, an Apple M4, assets cached, median of 5, each time read in the page (`performance.now()` checked every animation frame, since Playwright's own retries add up to 250 ms that are not the app's). Rail → Fixes with its groups 28 ms; a click on a conversation → its Autofix block with the track 38 ms; back from GitHub (the callback's redirect and a full load of the conversation's address) → the block's Sending or Sent badge 116 ms from the start of that navigation. The first bundle is 204,705 bytes (raw size unchanged; +7 gzip only from the new chunk names it references), `autofix-chunk` 25,782 bytes gzip (P6 fixes: the GitHub address is checked before leaving and a refusal is said; the issue's creator on the timeline) plus 4,312 of CSS.
 
 On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,776 bytes (−209 against 201,985), CSS 14,267 → 14,317.
+
+On 2026-10-22 the help center card got its brand settings and preview. They are a chunk of their own
+(`help-center-theme-form`, 5.9 KB gzip, 0.8 KB CSS) that the card asks for when its own chunk runs,
+by a plain `import()`: through `ui/lazy-part`, or with its CSS in the card's chunk, the first bundle
+would have had to export `lazyPart` to it or list one more file to preload. The library picker
+comes from `kb-chunk` when someone opens it, so it adds no shared chunk. The first bundle holds the
+same modules and went from 203,371 to 203,370–203,372 bytes across builds (the content hashes of the
+chunk names it preloads compress differently; the refusal's `detail` moved from `ConflictError` to
+`InvalidRequestError`, so a 422 keeps its field messages, at no cost). Its CSS stayed at 14,413.
 
 On 2026-10-22 the in-app Freshdesk import (#97) brought the first bundle to 203,852 bytes, and collision detection (#101) needed about 1,100 more. Settings (its route and every section: team, email channel, saved replies, web form, help center, preferences) moved to a lazy part, `settings-route` (7,988 bytes gzip), as Plan and billing already was: the first bundle went from 203,852 to 196,712. The rail link starts loading the chunk on hover and focus; while it loads, `/settings` keeps an empty Settings page (`aria-busy`), so nothing jumps when the sections arrive. Measured with Playwright on the dev host against the e2e server: from a click on the rail link to the Settings heading 29 to 88 ms (5 runs), a full load of `/settings` 64 to 86 ms (3 runs).
 

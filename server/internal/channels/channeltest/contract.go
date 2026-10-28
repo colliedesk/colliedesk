@@ -572,8 +572,10 @@ func (c *contract) config(t *testing.T) {
 	if c.h.Secret != "" && strings.Contains(string(encoded)+described.Summary, c.h.Secret) {
 		t.Fatalf("public configuration %s shows the secret", encoded)
 	}
-	switch described.Status.State {
-	case channels.StateWorking, channels.StateNeedsAttention:
+	// A connected channel works, needs attention, or (nothing received on it yet) waits for its first message.
+	switch {
+	case described.Status.State == channels.StateWorking, described.Status.State == channels.StateNeedsAttention:
+	case described.Status.State == channels.StateWaiting && described.Status.ReasonCode == channels.ReasonNoMessageYet && described.LastSeen == nil:
 	default:
 		t.Fatalf("status of a connected channel that is on: %+v", described.Status)
 	}

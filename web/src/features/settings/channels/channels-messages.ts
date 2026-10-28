@@ -24,6 +24,9 @@ export const channelsMessages = {
   configureName: (name: string) => `Configure ${name}`,
   backToChannels: 'All channels',
   statusWorking: 'Working',
+  statusWaiting: 'Waiting for first message',
+  // A waiting channel's page says how to prove the way in works.
+  waitingHelp: 'Nothing has arrived yet. Send a test message through it: it opens a conversation in the inbox, and this channel then reads Working.',
   statusOff: 'Off',
   statusNeedsAttention: 'Needs attention',
   statusNotConnected: 'Not connected',
@@ -32,7 +35,7 @@ export const channelsMessages = {
   defaultOf: (type: string) => `Default ${type} channel`,
   makeDefault: 'Make default',
   madeDefault: (name: string) => `${name} is now the default. A new conversation that names no channel, and the older links and addresses, use it.`,
-  defaultHelp: 'The default channel is the one a conversation started without choosing a channel leaves from, and the one older links and addresses reach.',
+  defaultHelp: 'A channel is an email address or web form where conversations come in and go out. New conversations you start go out from the default channel.',
   nameLabel: 'Name',
   saveName: 'Save name',
   nameSaved: 'Name saved.',
@@ -73,7 +76,7 @@ export const channelsMessages = {
   unknownType: 'This kind of channel is not available on this server.',
   connectHeading: (label: string) => `Connect ${label}`,
   adminsOnly: 'Only an admin can add or change channels.',
-  capabilities: 'Carries',
+  capabilities: 'What it handles',
   historyHeading: 'History',
   historyEmpty: 'Nothing has changed yet.',
   historyHelp: 'Who added, changed, turned on or off and removed a channel. Secrets are never shown.',
@@ -96,8 +99,8 @@ const reasons: Record<string, string> = {
   gmail_broken: 'The Gmail connection stopped working.',
   microsoft_broken: 'The Microsoft 365 connection stopped working.',
   domain_unverified: 'The domain is not verified yet.',
-  no_inbound_secret: 'No inbound secret is set, so no mail can arrive.',
-  no_origins: 'No website is allowed to post to it yet.',
+  no_inbound_secret: 'Customer email sent to your support address cannot arrive yet: whoever manages your email needs an inbound secret to send it here (a password for this only). A test message works without it.',
+  no_origins: 'No website can send messages through this form yet. Add your website address below.',
 };
 
 const messagesOf = (count: number | undefined) => (count === undefined ? 'messages' : `${count} ${count === 1 ? 'message' : 'messages'}`);

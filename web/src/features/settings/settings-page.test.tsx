@@ -7,7 +7,7 @@ test('creates an invite and exposes its one-time URL', () => {
   const onCreateInvite = vi.fn();
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC"
     canCreateInvites
-    createdInviteUrl="https://desk.example.com/sign-in?token=once"
+    createdInvite={{ url: "https://desk.example.com/sign-in?token=once" }}
     onCreateInvite={onCreateInvite} />);
 
   fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'agent@example.com' } });

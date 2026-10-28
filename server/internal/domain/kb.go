@@ -86,6 +86,7 @@ type KBArticleSummary struct {
 	ID            string           `json:"id"`
 	Number        int64            `json:"number"`
 	CollectionID  string           `json:"collection_id"`
+	Position      int              `json:"position"`
 	Title         string           `json:"title"`
 	Slug          string           `json:"slug"`
 	Status        string           `json:"status"`
@@ -292,6 +293,14 @@ type HelpCenterSite struct {
 	Locale         string
 	ContentVersion int64
 	Trial          bool
+	// Theme is the brand the pages show. A logo or favicon that is no longer an image of the library
+	// outside its trash is left out (nil), so a page never links an image it cannot serve.
+	Theme HelpCenterTheme
+	// LogoWidth and LogoHeight are the logo's size in pixels, 0 when unknown.
+	LogoWidth, LogoHeight int
+	// CustomHost is the workspace's active custom domain, "" when it has none: the help center serves
+	// there and its other addresses redirect there.
+	CustomHost string
 }
 
 // PublicKBCollection is a live collection as the help center lists it; Published counts its own

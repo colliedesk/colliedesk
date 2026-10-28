@@ -1,7 +1,7 @@
 // Strings of Settings → Built-in AI. The page is a lazy part, so they live in its chunk.
 export const aiMessages = {
   heading: 'Built-in AI',
-  description: 'Triage suggestions and reply drafts inside Colliedesk, on a model you choose. A person accepts, edits and sends; nothing reaches a customer until someone presses Send.',
+  description: 'Triage suggestions and reply drafts inside Colliedesk, on a model you choose. A person accepts, edits and sends; nothing reaches a customer until someone presses Send. Triage suggestions are accepted by a person too, unless an admin turns on Apply suggestions automatically below.',
   loadFailed: 'The AI settings could not be loaded. Reload the page to try again.',
   tabs: 'Built-in AI settings',
   tabFeatures: 'Features',
@@ -110,7 +110,7 @@ export const aiMessages = {
   emptyOwnHeading: 'Add an API key for this workspace',
   emptyOwnBody: 'Anthropic, or any OpenAI-compatible service: OpenAI, OpenRouter, vLLM, Ollama. Your workspace pays the provider directly.',
   emptyOperatorHeading: 'Or ask the server operator',
-  emptyOperatorBody: 'One provider for every workspace on this server. Set these and restart:',
+  emptyOperatorBody: 'One provider for every workspace on this server, set up by whoever runs it. The setup guide has the steps.',
   setupGuide: 'Setup guide',
 
   features: 'Features',
@@ -120,7 +120,7 @@ export const aiMessages = {
   columnOn: 'On',
   slotName: { triage: 'Triage suggestions', draft: 'Reply drafts' } as Record<'triage' | 'draft', string>,
   slotHelp: {
-    triage: 'When a new ticket arrives, suggests tags, priority and an assignee. An agent accepts or dismisses each one.',
+    triage: 'When a new ticket arrives, suggests tags, priority and an assignee. An agent accepts or dismisses each one, unless an admin turns on Apply suggestions automatically: then AI fills what nobody set, and each change has Undo.',
     draft: 'Someone on your team asks for a draft, with a short prompt if they like; the model drafts a reply from the ticket, matching KB articles and similar solved tickets. They edit it and send it.',
   } as Record<'triage' | 'draft', string>,
   statusOn: 'On',
@@ -141,7 +141,7 @@ export const aiMessages = {
   addFirst: 'Add a provider first, then turn this on.',
   saving: 'Saving…',
   sends: 'A feature that is on sends its provider the ticket’s messages, the customer’s name, matching published KB articles, and excerpts of similar solved tickets with other customers’ names and emails removed.',
-  sendsStrong: 'Private notes are never sent; prompts are not stored.',
+  sendsStrong: 'Private notes are never sent. A draft keeps its text and your request for 90 days after it ended, and both are in the export.',
 
   kindAnthropic: 'Anthropic',
   kindOpenAI: 'OpenAI-compatible',
@@ -201,7 +201,8 @@ export const aiMessages = {
   modelsPick: 'Pick at least one model.',
   checkAndSave: 'Check and save',
   noKeysNotice: 'This server cannot store API keys yet.',
-  noKeysBody: 'The operator has not set MAILBOX_TOKEN_KEYS, which encrypts keys at rest. Ask them to set it and restart.',
+  noKeysBody: 'Its key that encrypts stored API keys is not set up: ask whoever runs this server. They find the steps here:',
+  noKeysGuide: 'Self-hosting guide: the key that encrypts stored secrets',
   labelMissing: 'Give the provider a name.',
   baseURLMissing: 'Enter the provider’s base URL.',
   keyMissing: 'Paste the API key.',

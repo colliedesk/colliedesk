@@ -131,7 +131,7 @@ func TestEveryWayInHasAWayOut(t *testing.T) {
 // The migration and the contract hold the same states, connectors and reasons as this package, so a
 // branch that adds one cannot forget the others.
 func TestTheDatabaseAndTheContractNameTheSameStatesAndReasons(t *testing.T) {
-	migration := readFile(t, "../../migrations/20261027200000-autofix.up.sql")
+	migration := readFile(t, "../../migrations/20261028130000-autofix.up.sql")
 	contract := readFile(t, "../../../contracts/openapi.yaml")
 	quoted := func(text string) []string {
 		var names []string

@@ -5,11 +5,37 @@ import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { messages } from '../../messages';
 import { useSaveFeedback } from '../settings/save-feedback';
 import { kbApi } from './kb-api';
+import { HelpCenterDomainSection } from './help-center-domain';
 import { kbMessages } from './kb-messages';
 
-// HelpCenterSettings is the body of the Help center card in Settings: whether the public pages are on and
-// their title. Every agent sees the state; only admins change it, as the server requires.
-export function HelpCenterSettings({ canManage, workspaceName }: { canManage: boolean; workspaceName?: string }) {
+// The brand settings are a chunk of their own (with their styles and the preview), asked for as soon as this
+// card's chunk runs, so the card's switch and title never wait for them. A plain import rather than
+// ui/lazy-part, which the first bundle would then have to export.
+type ThemeSection = typeof import('./help-center-theme-form').HelpCenterThemeSection;
+let themeSection: Promise<ThemeSection> | undefined;
+const loadThemeSection = () => (themeSection ??= import('./help-center-theme-form').then((module) => module.HelpCenterThemeSection, (error: unknown) => {
+  themeSection = undefined;
+  throw error;
+}));
+
+function Brand({ canManage }: { canManage: boolean }) {
+  const [Section, setSection] = useState<ThemeSection>();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadThemeSection().then((loaded) => { if (alive) setSection(() => loaded); }, (error: unknown) => {
+      console.warn('A part of the page could not be loaded', error);
+      if (alive) setFailed(true);
+    });
+    return () => { alive = false; };
+  }, []);
+  if (failed) return <p role="alert" className="error-copy">{messages.partNotLoaded} <button type="button" className="link-action" onClick={() => window.location.reload()}>{messages.reloadPage}</button></p>;
+  return Section ? <Section canManage={canManage} /> : null;
+}
+
+// HelpCenterSettings is the body of the Help center card in Settings: whether the public pages are on, their
+// title, their custom domain and their brand. Every agent sees the state; only admins change it, as the server requires.
+export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' }: { canManage: boolean; workspaceName?: string; timezone?: string }) {
   const client = useQueryClient();
   const settings = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter });
   const save = useMutation({
@@ -42,5 +68,7 @@ export function HelpCenterSettings({ canManage, workspaceName }: { canManage: bo
             {feedback.status}</span>
         </form>
       : <p className="muted-copy">{kbMessages.helpCenterAdminsOnly}</p>}
+    <HelpCenterDomainSection canManage={canManage} timezone={timezone} />
+    <Brand canManage={canManage} />
   </>;
 }

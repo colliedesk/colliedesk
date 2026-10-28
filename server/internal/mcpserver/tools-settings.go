@@ -349,6 +349,15 @@ func emailDomainVerify(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"email_channel": emailChannelView(settings)}, nil
 }
 
+func emailTestMessageSend(c *call, arguments map[string]any) (any, error) {
+	c.notFound = "The email channel is not connected. Connect it first with colliedesk_email_channel_update."
+	var sent map[string]any
+	if err := c.send(http.MethodPost, emailChannelPath(c, arguments, "/test-message"), nil, &sent); err != nil {
+		return nil, err
+	}
+	return sent, nil
+}
+
 func billingGet(c *call, _ map[string]any) (any, error) {
 	c.notFound = "This Colliedesk server has no billing (it is self-hosted), so there is no plan to show."
 	var billing map[string]any

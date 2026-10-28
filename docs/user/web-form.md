@@ -39,35 +39,51 @@ reply.
 The older slug address belongs to the form that had it, whichever form is the default; removing that
 form leaves the older address answering `404`.
 
+## Try it
+
+The **Embed** tab explains the form in plain words and has a small **Try the form**: enter an email
+address and a message and select **Try the form**. It sends one submission from that page, the way a
+visitor's browser would, and says when the conversation is in your inbox. The form must be on; the
+test needs no allowed origin, because it comes from Colliedesk's own page.
+
 ## Send a submission
 
 The settings page shows the form's **Submit URL**: `<your Colliedesk address>/api/v1/public/web-forms/<form id>`.
-A workspace's first form also keeps the older address, `<your Colliedesk address>/api/v1/public/forms/<workspace slug>`,
-so sites that embed it keep working; its **Embed** tab shows that address and says the form also has
-its own. Post JSON from a page on an allowed origin:
+Give that address to whoever builds your website. A workspace's first form also keeps the older address,
+`<your Colliedesk address>/api/v1/public/forms/<workspace slug>`, so sites that already send to it keep
+working; its **Embed** tab lists it under **Older address**, to use only for such a site. Post JSON from
+a page on an allowed origin:
 
 ```js
+// One key per press of the button: send the same key again if the page retries that press.
+const key = crypto.randomUUID();
 await fetch('https://desk.example.com/api/v1/public/forms/acme', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
   body: JSON.stringify({ email, message, source: 'site:updates', website: '' }),
 });
 ```
+
+The `Idempotency-Key` header is optional. With it, a press that arrives twice (a double click, a retry
+after a lost answer) stores one message: the same key with the same email, message and source is
+answered `202` and stores nothing new. The same key with other words is a new submission. Without the
+header, every request is a submission.
 
 | Field | Rule |
 | --- | --- |
 | `email` | Required, a plain valid address, at most 254 characters. |
 | `message` | Optional, at most 5000 characters. Empty shows as "(no message)". |
 | `source` | Optional, at most 100 characters. Becomes the subject `Web form: <source>`. Without it the subject is `Web form`. |
-| `website` | A hidden field that real visitors leave empty. If it holds text the request is treated as spam: it answers `202` like a success and stores nothing. |
+| `website` | A hidden trap for spam bots: keep it empty. A real visitor never sees it. If it holds text the message is thrown away: the answer is `202` like a success, so the bot does not learn it was caught, and nothing is stored. |
 
 Answers:
 
 - `202 {"ok": true}`: stored (or dropped as spam).
 - `404`: unknown workspace or form, form off or removed, or workspace locked.
-- `422`: invalid input; `error.fields` names each field, for example `{"email": "Enter a valid email address."}`.
+- `422`: invalid input; `error.fields` names each field, for example `{"email": "Enter a valid email address."}`, and `error.message` joins those sentences, so a page can show it as it is. A message over the limit answers "Message is too long: at most 5,000 characters."
 - `429`: too many submissions (see Limits). `Retry-After` says how long to wait.
 - `415`: the body is not `application/json`.
+- `400`: the `Idempotency-Key` header is not 1 to 200 printable characters without spaces.
 
 ## Limits and safety
 

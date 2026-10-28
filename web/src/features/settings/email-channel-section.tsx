@@ -3,9 +3,12 @@ import type { ReactNode } from 'react';
 import type { EmailChannelSettings, EmailDnsRecord } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { channelSetupMessages } from './channel-setup-messages';
 import { PartUnavailable } from '../../ui/lazy-part';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
 import { CopyButton } from './copy-button';
+import { InboundURLGuide } from './inbound-url-guide';
+import { ServerDetails } from './server-details';
 import { NameForm } from './name-form';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
@@ -117,9 +120,10 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           <span className="button-row"><CopyButton value={settings.inbound_url} copiedText={messages.urlCopied}>{messages.copyInboundURL}</CopyButton></span>
         </div>}
         {channel && !hostedAddress && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
-          ? messages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : messages.inboundSecretMissing}</p>}
+          ? messages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : channelSetupMessages.inboundSecretMissing}</p>}
         {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{messages.inboundSecret}</span>
           <input readOnly value={createdSecret} /><small>{messages.inboundSecretNotice}</small></label>}
+        {canManage && channel && settings && !hostedAddress && <InboundURLGuide inboundURL={settings.inbound_url} supportAddress={channel.support_address} secret={createdSecret} />}
         {canManage && channel && <span className="button-row">
           {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>}
           {!confirmingDisconnect && onDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{messages.disconnectEmail}</button>}
@@ -167,8 +171,9 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </>;
   const smtpPart = <>
         {smtp && (smtp.configured
-          ? <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p>
-          : !mailboxConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{messages.smtpNotConfigured}</p>)}
+          ? <><p className="muted-copy">{messages.smtpPlain}</p>
+            {canManage && <ServerDetails><p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p></ServerDetails>}</>
+          : !mailboxConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{channelSetupMessages.smtpNotConfigured}</p>)}
   </>;
   const repliesPart = <>{domainPart}{pausePart}{sendingPart}{gmailBlock}{smtpPart}</>;
   if (part === 'connection') return <div className="settings-body">{addressPart}{arrivalPart}</div>;
@@ -182,7 +187,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </div>;
   return (
     <section className="settings-card" aria-labelledby="email-channel-heading">
-      <div className="section-heading"><h2 id="email-channel-heading">{messages.emailChannel}</h2><p>{messages.emailChannelDescription}</p></div>
+      <div className="section-heading"><h2 id="email-channel-heading">{messages.emailChannel}</h2><p>{channelSetupMessages.emailChannelDescription}</p></div>
       <div className="settings-body">
         {addressPart}{senderPart}{arrivalPart}{repliesPart}
       </div>

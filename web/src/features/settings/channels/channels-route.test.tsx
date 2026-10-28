@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
   };
   const channelsApi = { list: vi.fn(), listAll: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), replayHeld: vi.fn(), discardHeld: vi.fn(),
     email: vi.fn(), emailSecret: vi.fn(), emailVerifyDomain: vi.fn(), emailConnectGmail: vi.fn(), emailDisconnectGmail: vi.fn(),
-    emailConnectMicrosoft: vi.fn(), emailDisconnectMicrosoft: vi.fn() };
+    emailConnectMicrosoft: vi.fn(), emailDisconnectMicrosoft: vi.fn(), emailTestMessage: vi.fn() };
   return { api, channelsApi, InvalidRequestError, ConflictError, PlanLimitError, UnauthorizedError };
 });
 vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError, PlanLimitError: mocks.PlanLimitError, UnauthorizedError: mocks.UnauthorizedError }));
@@ -108,6 +108,19 @@ test('a channel that needs attention says why with a link to fix it; one that is
   expect(screen.getAllByText('Off').length).toBeGreaterThan(0);
 });
 
+test('a channel set up but with nothing received yet reads Waiting for first message, never Working, and says how to test it', async () => {
+  const waiting = channel('email', { status: { state: 'waiting', reason_code: 'no_message_yet', message: null } });
+  channelsApi.list.mockResolvedValue({ items: [waiting], types: types(1, 0) });
+  show('');
+  expect(await screen.findByText('Waiting for first message')).toBeInTheDocument();
+  expect(screen.queryByText('Working')).toBeNull();
+  channelsApi.get.mockResolvedValue({ ...waiting, config: withChannel.channel });
+  show(EMAIL);
+  const notice = await screen.findByText(/Nothing has arrived yet/);
+  expect(notice).toHaveTextContent('Send yourself a test message');
+  expect(notice).toHaveTextContent('from a different address than the support address');
+});
+
 test('an agent reads the channels without switches or Add channel', async () => {
   api.me.mockResolvedValue(me('agent'));
   channelsApi.list.mockResolvedValue({ items: [channel('email')], types: types(1, 0) });
@@ -160,6 +173,25 @@ test('the default channel of a type with two says Default; the other offers Make
   show('');
   expect(await screen.findByText('sales@example.com')).toBeInTheDocument();
   expect(screen.getAllByText('Default')).toHaveLength(1);
+});
+
+test('the channel name explains in plain words what the default channel does', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  show(EMAIL);
+  const name = await screen.findByRole('textbox', { name: 'Name' });
+  expect(name).toHaveAccessibleDescription(/^A channel is an email address or web form where conversations come in and go out\. /);
+  const sentences = (name.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ')
+    .split(/(?<=\.) /).filter((sentence) => /channel/.test(sentence));
+  expect(sentences).toHaveLength(2);
+  for (const sentence of sentences) expect(sentence.split(' ').length).toBeLessThanOrEqual(16);
+});
+
+test('what a channel handles is said in plain words', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { capabilities: ['threads', 'attachments_in', 'attachments_out', 'cc', 'html'] }), config: withChannel.channel });
+  show(EMAIL);
+  const line = await screen.findByText(/^What it handles:/);
+  expect(line).toHaveTextContent('What it handles: Keeps replies in one conversation · Receives files · Sends files · Copies other people (Cc) · Formatted text');
+  expect(screen.queryByText(/Carries/)).toBeNull();
 });
 
 test('Make default makes the channel the default of its type and says so where the button was', async () => {
@@ -215,7 +247,7 @@ test('connecting email creates the channel with its support address and opens it
   const navigate = show('new/email');
   fireEvent.change(await screen.findByRole('textbox', { name: 'Support address' }), { target: { value: ' help@example.com ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
-  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', config: { support_address: 'help@example.com' } }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', config: { support_address: 'help@example.com' } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${EMAIL}`, true));
 });
 
@@ -227,7 +259,7 @@ test('adding a web form creates it on, with its allowed origins, and opens it', 
   expect(screen.queryByRole('checkbox')).toBeNull();
   fireEvent.change(origins, { target: { value: 'https://example.com' } });
   fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
-  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'web_form', enabled: true, config: { allowed_origins: ['https://example.com'] } }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'web_form', enabled: true, config: { allowed_origins: ['https://example.com'] } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
 });
 
@@ -254,7 +286,7 @@ test('a second mailbox with an address another channel has is refused at that fi
   const address = screen.getByRole('textbox', { name: 'Support address' });
   fireEvent.change(address, { target: { value: 'support+x@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
-  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', name: 'Sales', config: { support_address: 'support+x@example.com' } }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', name: 'Sales', config: { support_address: 'support+x@example.com' } }, expect.any(String)));
   await waitFor(() => expect(address).toHaveAttribute('aria-invalid', 'true'));
   expect(address).toHaveAccessibleDescription(/Billing already uses/);
   expect(address).toHaveFocus();
@@ -324,6 +356,12 @@ test('saving the sender name sends only the trimmed name to this channel, never 
   fireEvent.change(field, { target: { value: ' Colliedesk Support ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(EMAIL, { config: { sender_name: 'Colliedesk Support' } }));
+});
+
+test('a web form that lists no website says so in plain words', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form', { status: { state: 'needs_attention', reason_code: 'no_origins', message: null } }), config: webFormConfig });
+  show(FORM);
+  expect(await screen.findByText('No website can send messages through this form yet. Add your website address below.')).toBeInTheDocument();
 });
 
 test('the web form save shows Saved after it succeeds', async () => {
@@ -564,7 +602,7 @@ test('a web form is added with the name given, and a name another form has is re
   expect(screen.queryByText('Another web form is called Careers.')).toBeNull();
   expect(name).not.toHaveAttribute('aria-invalid');
   fireEvent.click(screen.getByRole('button', { name: /save web form/i }));
-  await waitFor(() => expect(channelsApi.create).toHaveBeenLastCalledWith({ type: 'web_form', name: 'Shop form', enabled: true, config: { allowed_origins: ['https://example.com'] } }));
+  await waitFor(() => expect(channelsApi.create).toHaveBeenLastCalledWith({ type: 'web_form', name: 'Shop form', enabled: true, config: { allowed_origins: ['https://example.com'] } }, expect.any(String)));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${FORM}`, true));
 });
 
@@ -626,4 +664,89 @@ test('back from an admin\'s approval, the block says to connect again', async ()
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL, { tab: 'replies', microsoft: 'admin_consent_done' });
   expect(await screen.findByText('Your Microsoft 365 admin approved Colliedesk. Select Connect Microsoft 365 to finish.')).toBeInTheDocument();
+});
+
+test('the Connection tab sends a test message in one click and links to the conversation it opened; the terminal request is a detail', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  channelsApi.emailTestMessage.mockResolvedValue({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  show(EMAIL);
+  const button = await screen.findByRole('button', { name: 'Send yourself a test message' });
+  fireEvent.click(button);
+  await waitFor(() => expect(channelsApi.emailTestMessage).toHaveBeenCalledWith(EMAIL, expect.any(String)));
+  const sent = await screen.findByRole('status', { name: '' });
+  expect(sent).toHaveTextContent('from sam@example.com');
+  expect(within(sent).getByRole('link', { name: 'Open the test conversation' })).toHaveAttribute('href', '/conversations/66666666-6666-4666-8666-666666666666');
+  const terminal = screen.getByText('Test from a terminal instead').closest('details');
+  expect(terminal).not.toHaveAttribute('open');
+  expect(within(terminal as HTMLElement).getByRole('button', { name: 'Copy test request' })).toBeInTheDocument();
+});
+
+test('a refused test message shows the server message', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  channelsApi.emailTestMessage.mockRejectedValue(new mocks.ConflictError('A workspace can send itself 5 test messages an hour. Try again later.'));
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('5 test messages an hour');
+});
+
+test('three fast clicks send one test message, all under one key, and the button says it is sending', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  let finish: (value: unknown) => void = () => undefined;
+  channelsApi.emailTestMessage.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  show(EMAIL);
+  const button = await screen.findByRole('button', { name: 'Send yourself a test message' });
+  button.click(); button.click(); button.click();
+  expect(await screen.findByRole('button', { name: 'Sending the test message…' })).toBeDisabled();
+  expect(channelsApi.emailTestMessage).toHaveBeenCalledTimes(1);
+  expect(channelsApi.emailTestMessage).toHaveBeenCalledWith(EMAIL, expect.stringMatching(/^[\x21-\x7e]{1,200}$/));
+  finish({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  const sent = await screen.findByText(/Test message sent from sam@example.com/);
+  await waitFor(() => expect(sent.closest('[role="status"]')).toHaveFocus());
+});
+
+test('a test message that fails without a reason says what to do next, and trying again reuses its key', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  channelsApi.emailTestMessage.mockRejectedValueOnce(new Error('API 500')).mockResolvedValueOnce({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('The test message could not be sent. Check your connection and select Send yourself a test message again.');
+  await waitFor(() => expect(alert).toHaveFocus());
+  fireEvent.click(screen.getByRole('button', { name: 'Send yourself a test message' }));
+  await screen.findByText(/Test message sent from sam@example.com/);
+  const [[, first], [, second]] = channelsApi.emailTestMessage.mock.calls as [string, string][];
+  expect(second).toBe(first);
+});
+
+test('before a support address is saved, the test button says what to do first instead of doing nothing', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'not_connected', reason_code: null, message: null } }), config: null });
+  channelsApi.email.mockResolvedValue({ ...withChannel, channel: null });
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('Save a support address first, then send the test message.');
+  expect(channelsApi.emailTestMessage).not.toHaveBeenCalled();
+});
+
+test('without an inbound secret, a test message that arrived says the inbox works and what customer email still needs', async () => {
+  const unsecured = { ...withChannel.channel, secret_set: false, secret_rotated_at: null };
+  channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'needs_attention', reason_code: 'no_inbound_secret', message: null } }), config: unsecured });
+  channelsApi.email.mockResolvedValue({ ...withChannel, channel: unsecured });
+  channelsApi.emailTestMessage.mockResolvedValue({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  show(EMAIL);
+  const notice = await screen.findByText(/inbound secret/, { selector: '.notice span' });
+  expect(notice).not.toHaveTextContent('no mail can arrive');
+  expect(notice).toHaveTextContent('Customer email sent to your support address cannot arrive yet');
+  expect(notice).toHaveTextContent('A test message works without it.');
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  const sent = await screen.findByText(/Test message sent from sam@example.com/);
+  expect(sent.closest('[role="status"]')).toHaveTextContent('Your inbox and replies work. Customer email arrives once your support mailbox forwards here with an inbound secret (below).');
+});
+
+test('the Connection tab opens the conversation its test message started, as the inbox action does, before any inbound secret', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), status: { ...channel('email').status, reason_code: 'no_inbound_secret' }, config: withChannel.channel });
+  channelsApi.email.mockResolvedValue({ ...withChannel, channel: { ...withChannel.channel, secret_set: false } });
+  channelsApi.emailTestMessage.mockResolvedValue({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  const navigate = show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/conversations/66666666-6666-4666-8666-666666666666'));
 });

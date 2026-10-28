@@ -18,6 +18,7 @@ import { SettingsNav } from '../settings-nav';
 import type { Shown } from '../settings-nav';
 import { channelsMessages as m } from './channels-messages';
 import './channels.css';
+import { useCreateAction } from '../../../api/use-create';
 
 // The pages under /settings/channels. Everything a type adds comes from the web registry
 // (src/channels/registry.ts); nothing here names a type.
@@ -92,9 +93,9 @@ function LoadFailed({ onRetry }: { onRetry: () => void }) {
 }
 
 const stateLabel: Record<Channel['status']['state'], string> = {
-  working: m.statusWorking, off: m.statusOff, needs_attention: m.statusNeedsAttention, not_connected: m.statusNotConnected, removed: m.statusRemoved,
+  working: m.statusWorking, waiting: m.statusWaiting, off: m.statusOff, needs_attention: m.statusNeedsAttention, not_connected: m.statusNotConnected, removed: m.statusRemoved,
 };
-const stateClass: Record<Channel['status']['state'], string> = { working: 'ch-st-ok', off: 'ch-st-off', needs_attention: 'ch-st-warn', not_connected: 'ch-st-off', removed: 'ch-st-off' };
+const stateClass: Record<Channel['status']['state'], string> = { working: 'ch-st-ok', waiting: 'ch-st-off', off: 'ch-st-off', needs_attention: 'ch-st-warn', not_connected: 'ch-st-off', removed: 'ch-st-off' };
 
 function StatePill({ channel }: { channel: Channel }) {
   return <span className={`status ${stateClass[channel.status.state]}`}>{stateLabel[channel.status.state]}</span>;
@@ -257,10 +258,11 @@ function TypeShortcut({ type, search, navigate }: PageProps & { type: string; se
 
 function NewChannel({ type, navigate, isAdmin, timezone }: PageProps & { type: string }) {
   const client = useQueryClient();
+  const createChannel = useCreateAction((input: Parameters<typeof channelsApi.create>[0], key: string) => channelsApi.create(input, key));
   const ui = channelUI(type);
   if (!ui) return <p role="alert" className="error-copy">{m.unknownType}</p>;
   const create: ConnectProps['create'] = async (input) => {
-    const created = await channelsApi.create({ type: ui.type, ...input });
+    const created = await createChannel.run({ type: ui.type, ...input });
     await client.invalidateQueries({ queryKey: ['channels'] });
     navigate(`${base}/${created.id}`, true);
     return created;
@@ -314,6 +316,7 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
         <div className="ch-row-actions"><StatePill channel={channel} />{isAdmin && <EnabledSwitch channel={channel} />}</div>
       </div>
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
+      {channel.status.state === 'waiting' && <p className="notice notice-plain" role="status"><span>{ui?.waitingHelp ?? m.waitingHelp}</span></p>}
       <ChannelIdentity channel={channel} label={ui.label} isAdmin={isAdmin} navigate={navigate} />
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
       {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
@@ -325,7 +328,7 @@ function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id:
         {open === 'history' ? <History timezone={timezone} channelID={channel.id} />
           : <Part part={ui.panels} failed={<PartUnavailable />} render={({ Tabs: panels }) => {
               const Panel = panels[open];
-              return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} /> : null;
+              return Panel ? <Panel channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} /> : null;
             }} />}
       </div>
       {isAdmin && <div className="button-row ch-remove">

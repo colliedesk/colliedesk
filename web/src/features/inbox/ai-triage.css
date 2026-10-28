@@ -36,7 +36,7 @@
 @media (prefers-reduced-motion: reduce) { .ai-triage-pulse { animation: none; } }
 .ai-triage-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .ai-triage-actions .ghost { border-color: transparent; background: transparent; box-shadow: none; }
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 30rem) {
   .ai-triage button, .ai-triage-actions a { min-height: var(--touch); }
   .ai-triage-row button { --control: var(--touch); min-width: var(--touch); }
 }
@@ -56,4 +56,4 @@
   .ai-triage-line { display: none; }
   .ai-triage-timeline { display: grid; }
 }
-@media (pointer: coarse) { .ai-triage-line button { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-triage-line button { min-height: var(--touch); } }

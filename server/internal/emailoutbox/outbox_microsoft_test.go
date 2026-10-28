@@ -169,7 +169,7 @@ func TestARefusedClientSecretKeepsTheConnectionAndTheReplyWaits(t *testing.T) {
 		clock = clock.Add(16 * time.Minute)
 	}
 	delivery := f.delivery(t, reply.ID)
-	if delivery.Status != "queued" || delivery.LastError == nil || !strings.Contains(*delivery.LastError, "MICROSOFT_OAUTH_CLIENT_SECRET") ||
+	if delivery.Status != "queued" || delivery.LastError == nil || !strings.Contains(*delivery.LastError, "whoever runs this server must replace its Microsoft app secret") || strings.Contains(*delivery.LastError, "MICROSOFT_OAUTH") ||
 		delivery.ReasonCode == nil || *delivery.ReasonCode != domain.MailboxServerConfigCode || delivery.Attempts != 0 {
 		t.Fatalf("delivery = %+v (reason %v)", delivery, delivery.ReasonCode)
 	}
@@ -344,6 +344,9 @@ func TestTwoSendsAtOnceLeaveAGrantThatStillWorks(t *testing.T) {
 		}
 	}
 	third := f.write(t, "outgoing", "Three")
+	// The worker's clock moves past the row just written: on a slow runner it was written more than a
+	// second after the clock was first read, and a row due later than the clock is not claimed yet.
+	clock = time.Now().UTC().Add(time.Second)
 	process(t, worker)
 	if delivery := f.delivery(t, third.ID); delivery.Status != "sent" {
 		t.Fatalf("a later reply after concurrent sends = %+v", delivery)

@@ -138,7 +138,7 @@ func (a *API) preflightWebForm(response http.ResponseWriter, request *http.Reque
 	header := response.Header()
 	header.Set("Access-Control-Allow-Origin", origin)
 	header.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	header.Set("Access-Control-Allow-Headers", "Content-Type")
+	header.Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
 	header.Set("Access-Control-Max-Age", webFormPreflightAge)
 	header.Set("Vary", "Origin")
 	response.WriteHeader(http.StatusNoContent)
@@ -183,6 +183,13 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 		return
 	}
 
+	// A page may name each press with an Idempotency-Key, so a retry of the same press stores one message.
+	press, ok := idempotencyKey(request)
+	if !ok {
+		writeInvalidIdempotencyKey(response)
+		return
+	}
+
 	var input struct {
 		Email   string `json:"email"`
 		Message string `json:"message"`
@@ -202,8 +209,13 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	submission, fields := validateWebForm(input.Email, input.Message, input.Source)
 	if len(fields) > 0 {
 		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": errorBody(response, map[string]any{
-			"code": "validation_failed", "message": "Check the highlighted fields.", "fields": fields})})
+			"code": "validation_failed", "message": webFormFieldsMessage(fields), "fields": fields})})
 		return
+	}
+	if press != "" {
+		// The key is the visitor's own, so it names a submission only together with its form and words: the
+		// same key with other words is a new submission, and nobody's key can drop another's message.
+		submission.Press = store.RequestFingerprint(form.ChannelID, press, submission.Email, submission.Message, submission.Source)
 	}
 	err = a.submitToWebForm(request, form, submission)
 	switch {
@@ -221,6 +233,18 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 }
 
 // validateWebForm checks the public input and returns the normalized submission, or one message per bad field.
+// webFormFieldsMessage says what to fix in one sentence a page can show as it is: each failing field's
+// own message, in the order of the form.
+func webFormFieldsMessage(fields map[string]string) string {
+	var parts []string
+	for _, name := range []string{"email", "message", "source"} {
+		if text := fields[name]; text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 func validateWebForm(emailAddress, message, source string) (store.WebFormSubmission, map[string]string) {
 	fields := map[string]string{}
 	emailAddress = strings.TrimSpace(emailAddress)
@@ -234,12 +258,12 @@ func validateWebForm(emailAddress, message, source string) (store.WebFormSubmiss
 	}
 	message = strings.ReplaceAll(message, "\x00", "")
 	if utf8.RuneCountInString(message) > maxWebFormMessage {
-		fields["message"] = fmt.Sprintf("Keep the message under %d characters.", maxWebFormMessage)
+		fields["message"] = "Message is too long: at most 5,000 characters."
 	}
 	// A subject is one line: collapse every run of whitespace, line breaks included.
 	source = strings.Join(strings.Fields(strings.ReplaceAll(source, "\x00", "")), " ")
 	if utf8.RuneCountInString(source) > maxWebFormSource {
-		fields["source"] = fmt.Sprintf("Keep the source under %d characters.", maxWebFormSource)
+		fields["source"] = fmt.Sprintf("Source is too long: at most %d characters.", maxWebFormSource)
 	}
 	if len(fields) > 0 {
 		return store.WebFormSubmission{}, fields
@@ -257,7 +281,7 @@ func (a *API) submitToWebForm(request *http.Request, form store.OpenForm, submis
 	if !channel.Live() {
 		return domain.ErrWebFormClosed
 	}
-	body, err := json.Marshal(webform.Submission{Email: submission.Email, Message: submission.Message, Source: submission.Source})
+	body, err := json.Marshal(webform.Submission{Email: submission.Email, Message: submission.Message, Source: submission.Source, Press: submission.Press})
 	if err != nil {
 		return err
 	}

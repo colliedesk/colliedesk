@@ -13,7 +13,7 @@ const api = vi.hoisted(() => ({
 }));
 const errors = vi.hoisted(() => {
   class InvalidRequestError extends Error {}
-  return { PlanLimitError: class extends Error {}, InvalidRequestError, ConflictError: class extends InvalidRequestError {}, UnauthorizedError: class extends Error {} };
+  return { PlanLimitError: class extends Error {}, InvalidRequestError, ConflictError: class extends InvalidRequestError {}, UnauthorizedError: class extends Error {}, ChangedElsewhereError: class extends InvalidRequestError {} };
 });
 vi.mock('../../api/client', () => ({ api, ...errors }));
 // The help center card has tests of its own (features/kb); here it stands for itself in the page.
@@ -129,7 +129,7 @@ test('a plain agent manages the shared saved replies and the list reloads after 
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
   fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
-  await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledWith('Closing', 'Thanks.'));
+  await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledWith('Closing', 'Thanks.', expect.stringMatching(/^[\x21-\x7e]{1,200}$/)));
   expect(await screen.findByText('Thanks.')).toBeInTheDocument();
   api.savedReplies.mockResolvedValue({ items: [] });
   fireEvent.click(screen.getByRole('button', { name: 'Delete Closing' }));
@@ -163,7 +163,7 @@ test('an agent creates an agent token above Sessions; the list reloads to show i
   fireEvent.change(within(card).getByRole('textbox', { name: 'Name' }), { target: { value: 'Claude Code' } });
   fireEvent.click(within(card).getByRole('button', { name: 'Create token' }));
   expect(await within(card).findByDisplayValue('cdk_agent_routetoken')).toBeInTheDocument();
-  expect(api.createAgentToken).toHaveBeenCalledWith('Claude Code', { scope: 'draft' });
+  expect(api.createAgentToken).toHaveBeenCalledWith('Claude Code', { scope: 'draft' }, expect.any(String));
   await waitFor(() => expect(api.sessions.mock.calls.length).toBeGreaterThan(before));
   expect(await within(screen.getByRole('region', { name: 'Sessions' })).findByTitle('Claude Code')).toBeInTheDocument();
   const cached = JSON.stringify([...client.getQueryCache().getAll().map((query) => query.state.data), ...client.getMutationCache().getAll().map((mutation) => mutation.state.data)]);
@@ -259,4 +259,38 @@ test('an old anchor opened while Settings is on screen opens its channel page to
   } finally {
     Object.defineProperty(window, 'location', { configurable: true, value: original });
   }
+});
+
+test('adding a saved reply again after a failed request names the same submit, so it is never stored twice', async () => {
+  const stored = { id: '88888888-8888-4888-8888-888888888888', title: 'Closing', body: 'Thanks.', created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z' };
+  show('agent');
+  api.createSavedReply.mockReset();
+  api.createSavedReply.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(stored);
+  await screen.findByRole('heading', { name: 'Saved replies' });
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
+  fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledTimes(2));
+  const [first, second] = api.createSavedReply.mock.calls as unknown as [string, string, string][];
+  expect(first[2]).toEqual(expect.any(String));
+  expect(second[2]).toBe(first[2]);
+});
+
+test('a burst of Create invite presses sends one invite under one key, and the button waits for it', async () => {
+  show('admin');
+  let answer!: (value: unknown) => void;
+  api.createInvite.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Invite email' }), { target: { value: 'new@example.com' } });
+  const create = screen.getByRole('button', { name: 'Create invite' });
+  fireEvent.click(create); fireEvent.click(create); fireEvent.click(create);
+  await waitFor(() => expect(api.createInvite).toHaveBeenCalled());
+  await new Promise((resolve) => { setTimeout(resolve, 20); });
+  expect(api.createInvite).toHaveBeenCalledTimes(1);
+  expect(api.createInvite).toHaveBeenCalledWith('new@example.com', 'agent', expect.stringMatching(/^[\x21-\x7e]{1,200}$/));
+  await waitFor(() => expect(create).toBeDisabled());
+  answer({ invite: { id: 'i1', email: 'new@example.com', role_ceiling: 'agent', created_by_email: 'sam@example.com', created_at: '2026-10-28T07:00:00Z', expires_at: '2026-11-04T07:00:00Z', used_at: null, revoked_at: null }, url: 'https://desk.example.com/invite#t' });
+  await waitFor(() => expect(create).toBeEnabled());
 });

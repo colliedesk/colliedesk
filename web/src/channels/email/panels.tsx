@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ConflictError, InvalidRequestError } from '../../api/client';
 import { channelsApi } from '../../api/channels';
+import { useCreateMutation } from '../../api/use-create';
 import { Dialog } from '../../ui/dialog';
 import { messages } from '../../messages';
 import { EmailChannelSection, gmailPart } from '../../features/settings/email-channel-section';
@@ -27,7 +28,7 @@ function useEmailSettings(channelID: string) {
 const conflictLink = (conflict: NonNullable<SaveState['conflict']>) =>
   <a href={`/settings/channels/${encodeURIComponent(conflict.channel_id)}`}>{emailMessages.openChannel(conflict.channel_name)}</a>;
 
-function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
+function Connection({ channel, canManage, timezone, navigate }: ChannelPanelProps) {
   const { settings, refresh } = useEmailSettings(channel.id);
   const saveEmail = useMutation({ mutationFn: (address: string) => channelsApi.update(channel.id, { config: { support_address: address } }), onSuccess: refresh });
   const rotateSecret = useMutation({ mutationFn: () => channelsApi.emailSecret(channel.id), onSuccess: refresh });
@@ -35,6 +36,8 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
   const [askingRotate, setAskingRotate] = useState(false);
   const secretSet = settings.data?.channel?.secret_set === true;
   return <>
+    {settings.data && <TestMessage channelID={channel.id} ready={Boolean(settings.data.channel) || Boolean(channel.config && 'support_address' in channel.config && channel.config.support_address)} navigate={navigate}
+      forwarding={secretSet || channel.status.reason_code !== 'no_inbound_secret'} />}
     {rotateSecret.isError && <p role="alert" className="error-copy">{rotateSecret.error instanceof InvalidRequestError ? rotateSecret.error.message : messages.settingsActionFailed}</p>}
     <EmailChannelSection part="connection" settings={settings.data} timezone={timezone} canManage={canManage}
       addressSave={saveState(saveEmail)} onSave={(address) => saveEmail.mutate(address)} addressConflictLink={conflictLink}
@@ -48,8 +51,48 @@ function Connection({ channel, canManage, timezone }: ChannelPanelProps) {
   </>;
 }
 
+// TestMessage sends the signed-in person a test email on this channel, the way a customer's arrives, and
+// opens the conversation it started, as the inbox's action does: the whole loop without a forwarder or a
+// terminal. Every press ends in something on screen: that conversation, why it could not, or what to do first.
+function TestMessage({ channelID, ready, forwarding, navigate }: { channelID: string; ready: boolean; forwarding: boolean; navigate?: (href: string) => void }) {
+  const client = useQueryClient();
+  const [notReady, setNotReady] = useState(false);
+  // A press while one is in flight sends nothing; one sent again after a failure goes under the same key.
+  const send = useCreateMutation({ create: (_nothing: void, key: string) => channelsApi.emailTestMessage(channelID, key),
+    onSuccess: (sent) => {
+      navigate?.(`/conversations/${encodeURIComponent(sent.conversation_id)}`);
+      return Promise.all(['conversations', 'channel', 'channels'].map((key) => client.invalidateQueries({ queryKey: [key] })));
+    } });
+  const result = useRef<HTMLParagraphElement>(null);
+  const shown = send.isSuccess || send.isError || notReady;
+  useEffect(() => { if (shown) result.current?.focus(); }, [shown, send.data, send.error]);
+  const press = () => {
+    if (!ready) { setNotReady(true); return; }
+    setNotReady(false);
+    send.mutate();
+  };
+  return <div className="email-channel-test">
+    <p><button type="button" className="primary-action" disabled={send.isPending} onClick={press}>{send.isPending ? emailMessages.testSending : emailMessages.testSend}</button></p>
+    <p className="muted-copy">{emailMessages.testHelp}</p>
+    {notReady && <p role="status" tabIndex={-1} ref={result}>{emailMessages.testNeedsAddress}</p>}
+    {send.data && !notReady && <p role="status" tabIndex={-1} ref={result}>{emailMessages.testSent(send.data.sent_to)}{' '}
+      {forwarding ? emailMessages.testWorks : emailMessages.testWorksForwardNext}{' '}
+      <a href={`/conversations/${encodeURIComponent(send.data.conversation_id)}`}>{emailMessages.testOpen}</a></p>}
+    {send.isError && !notReady && <p role="alert" className="error-copy" tabIndex={-1} ref={result}>{send.error instanceof InvalidRequestError ? send.error.message : emailMessages.testFailed}</p>}
+  </div>;
+}
+
 // Words of the email tabs that the Settings page never had.
 const emailMessages = {
+  testSend: 'Send yourself a test message',
+  testHelp: 'It arrives from your own address like a customer\'s email and opens a conversation. Answer it: the reply is emailed to you, so you see what customers receive.',
+  testSending: 'Sending the test message…',
+  testSent: (address: string) => `Test message sent from ${address}.`,
+  testWorks: 'Your inbox and replies work.',
+  testWorksForwardNext: 'Your inbox and replies work. Customer email arrives once your support mailbox forwards here with an inbound secret (below).',
+  testNeedsAddress: 'Save a support address first, then send the test message.',
+  testOpen: 'Open the test conversation',
+  testFailed: 'The test message could not be sent. Check your connection and select Send yourself a test message again.',
   rotateTitle: 'Rotate the inbound secret?',
   rotateBody: 'The current secret stops working at once: mail your forwarder sends with it is refused until you give it the new one, shown once after this.',
   rotateConfirm: 'Rotate secret',
