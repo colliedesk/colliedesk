@@ -185,3 +185,10 @@ test('a reply waiting because the server\'s Microsoft credentials were refused s
   render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'queued', attempts: 0, last_error: waiting, sent_at: null, reason_code: 'mailbox_server_config' } }} timezone="UTC" />);
   expect(screen.getByText(waiting)).toBeVisible();
 });
+
+test('the time names its timezone in its title, and on screen when it is not the browser\'s clock', () => {
+  render(<MessageItem item={{ ...base, created_at: '2026-10-28T05:42:00Z' }} timezone="Pacific/Kiritimati" />);
+  const time = document.querySelector('time') as HTMLElement;
+  expect(time).toHaveAttribute('title', 'Oct 28, 2026, 7:42 PM GMT+14');
+  expect(time).toHaveTextContent(/7:42\sPM GMT\+14$/);
+});

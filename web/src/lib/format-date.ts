@@ -46,3 +46,36 @@ export function formatListTime(value: string, timeZone: string, now = new Date()
     : formatDate(value, timeZone, now);
   return label.replace(/\s/g, ' ');
 }
+
+// The browser's own timezone, which the person reads their clock in.
+export function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
+// The short name of a timezone at a moment: UTC, GMT+7, EDT.
+function zoneName(date: Date, timeZone: string): string {
+  const part = (zone: string) => new Intl.DateTimeFormat('en', { timeZone: zone, timeZoneName: 'short' }).formatToParts(date).find((item) => item.type === 'timeZoneName')?.value ?? zone;
+  try {
+    return part(timeZone);
+  } catch {
+    return part('UTC');
+  }
+}
+
+// zoneSuffix names the timezone after a stamp (" UTC") only when the agent reads times in another zone
+// than the browser's clock at that moment, so a time that does not match the clock on the wall says why.
+export function zoneSuffix(value: string, timeZone: string, browser = browserTimeZone()): string {
+  const date = new Date(value);
+  const shown = zoneName(date, timeZone);
+  return shown === zoneName(date, browser) ? '' : ` ${shown}`;
+}
+
+// stampTitle is the full date and time with its timezone, for the title of a shorter stamp.
+export function stampTitle(value: string, timeZone: string): string {
+  const date = new Date(value);
+  return `${format(date, timeZone, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ${zoneName(date, timeZone)}`.replace(/\s/g, ' ');
+}

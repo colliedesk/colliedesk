@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import type { Conversation, ConversationViewer, OnboardingGoal } from '../../api/schemas';
-import { dayGroup, formatDate, formatListTime, formatShortDate } from '../../lib/format-date';
+import { dayGroup, formatDate, formatListTime, formatShortDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { Part } from '../../ui/lazy-part';
@@ -146,7 +146,8 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
       {items.map((item, index) => {
         const group = dayGroup(item.updated_at, timezone, now);
         const startsGroup = grouped && (index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now));
-        const full = formatDate(item.updated_at, timezone, now);
+        // The tooltip names the timezone when it is not the browser's, so 5:42 AM is never read as local time.
+        const full = formatDate(item.updated_at, timezone, now) + zoneSuffix(item.updated_at, timezone);
         const open = viewers?.get(item.id);
         return (
           <Fragment key={item.id}>
@@ -157,7 +158,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
           </label>
           <button className="conversation-row" aria-current={item.id === selectedId ? true : undefined} data-tip={full} onClick={() => onSelect?.(item.id)}>
             <span className="conversation-subject">{item.subject}</span>
-            <time dateTime={item.updated_at}>
+            <time dateTime={item.updated_at} title={stampTitle(item.updated_at, timezone)}>
               <span aria-hidden="true" className="time-short">{formatShortDate(item.updated_at, timezone, now)}</span>
               <span aria-hidden="true" className="time-touch">{formatListTime(item.updated_at, timezone, now)}</span>
               <span className="time-full">{full}</span>

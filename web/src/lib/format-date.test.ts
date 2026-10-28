@@ -1,4 +1,4 @@
-import { dayGroup, formatDate, formatListTime, formatShortDate } from './format-date';
+import { dayGroup, formatDate, formatListTime, formatShortDate, stampTitle, zoneSuffix } from './format-date';
 import { expect, test } from 'vitest';
 
 test('formats UTC timestamps in the agent effective IANA timezone', () => {
@@ -56,4 +56,16 @@ test('a list row from today shows only its time; an earlier one keeps its date, 
   // The same 06:30 instant is 23:30 on the 22nd in UTC, so there it keeps its date.
   expect(formatListTime('2026-10-22T23:30:00Z', 'UTC', now)).toBe('Oct 22, 11:30 PM');
   expect(formatListTime('2025-12-30T12:00:00Z', 'UTC', now)).toBe('Dec 30, 2025, 12:00 PM');
+});
+
+test('a stamp names its timezone when the agent reads times in another zone than the browser, and always in its title', () => {
+  const at = '2026-10-28T05:42:00Z';
+  expect(zoneSuffix(at, 'UTC', 'Asia/Ho_Chi_Minh')).toBe(' UTC');
+  expect(zoneSuffix(at, 'Asia/Ho_Chi_Minh', 'UTC')).toBe(' GMT+7');
+  expect(zoneSuffix(at, 'Asia/Ho_Chi_Minh', 'Asia/Ho_Chi_Minh')).toBe('');
+  // Two names for the same offset at that moment read the same: no label.
+  expect(zoneSuffix(at, 'Asia/Saigon', 'Asia/Ho_Chi_Minh')).toBe('');
+  expect(stampTitle(at, 'UTC')).toBe('Oct 28, 2026, 5:42 AM UTC');
+  expect(stampTitle(at, 'Asia/Ho_Chi_Minh')).toBe('Oct 28, 2026, 12:42 PM GMT+7');
+  expect(stampTitle(at, 'America/New_York')).toBe('Oct 28, 2026, 1:42 AM EDT');
 });
