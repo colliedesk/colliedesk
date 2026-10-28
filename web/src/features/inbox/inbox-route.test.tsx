@@ -1032,3 +1032,30 @@ test('a retried send carries the key of its first attempt, and the next message 
   expect(keys[1]).toBe(keys[0]);
   expect(keys[2]).not.toBe(keys[0]);
 });
+
+test('a reply that lands after the person opened another conversation reloads the timeline it was sent to', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  let land!: (value: unknown) => void;
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockResolvedValue({ items: [alpha, beta], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.createMessage.mockReturnValue(new Promise((resolve) => { land = resolve; }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'For Alpha' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(api.createMessage.mock.calls[0]?.[0]).toBe(alpha.id));
+  fireEvent.click(screen.getByRole('button', { name: /beta conversation/i }));
+  await waitFor(() => expect(api.messages).toHaveBeenCalledWith(beta.id));
+  api.messages.mockClear();
+  land({ id: 'm-1', conversation_id: alpha.id });
+  // Alpha's timeline is not on screen, so it is marked stale rather than read now: it is read when it opens.
+  await waitFor(() => expect(client.getQueryState(['messages', alpha.id])?.isInvalidated).toBe(true));
+  expect(api.messages).not.toHaveBeenCalledWith(beta.id);
+});

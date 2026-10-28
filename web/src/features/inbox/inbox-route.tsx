@@ -246,12 +246,13 @@ export function InboxRoute() {
     api.createMessage(conversationId, kind, body, files, cc, seen, aiDraft, key ?? pressKey));
   const testMessage = useCreateAction((_nothing: void, key: string) => api.sendTestMessage(undefined, key));
   const sent = useMutation({ mutationFn: message.run,
-    onSuccess: (_sent, { aiDraft }) => {
-      if (aiDraft) void client.invalidateQueries({ queryKey: ['ai-drafts', selected?.id] });
-      return client.invalidateQueries({ queryKey: ['messages', selected?.id] });
+    // The conversation the message went to, which the person may have left while it was sending.
+    onSuccess: (_sent, { conversationId, aiDraft }) => {
+      if (aiDraft) void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+      return client.invalidateQueries({ queryKey: ['messages', conversationId] });
     },
     // A reply refused for a newer one: the timeline shows it at once.
-    onError: (error) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', selected?.id] }); } });
+    onError: (error, { conversationId }) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', conversationId] }); } });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // The others see that this tab has the conversation open and whether a reply is being written; the first
