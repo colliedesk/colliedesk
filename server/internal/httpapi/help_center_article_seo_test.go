@@ -206,3 +206,34 @@ func TestHelpCenterPagesCarryStructuredData(t *testing.T) {
 		t.Fatalf("hostile article structured data = %v", hostileData)
 	}
 }
+
+// TestArticleSearchFieldsStayInTheirWorkspace: another workspace can neither read nor change an
+// article's search title by its id, and its help center never shows it.
+func TestArticleSearchFieldsStayInTheirWorkspace(t *testing.T) {
+	api, service := testAPI(t)
+	site := helpCenterSite(api)
+	owner := createSession(t, api, service, "SEO Owner", "admin@seo-owner.example.com")
+	other := createSession(t, api, service, "SEO Other", "admin@seo-other.example.com")
+	otherSlug := workspaceSlug(t, api, other)
+	enableHelpCenter(t, api, owner, "Owner help", true)
+	enableHelpCenter(t, api, other, "Other help", true)
+	collection := kbCollection(t, api, owner, map[string]any{"name": "Guides"})
+	var article seoArticleView
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Private", "body_md": "x", "status": "published",
+		"seo_title": "Owner search title", "seo_description": "Owner description"}, owner, http.StatusCreated, &article)
+
+	if response := request(t, api, http.MethodGet, "/api/v1/kb/articles/"+article.ID, nil, other, nil); response.Code != http.StatusNotFound {
+		t.Fatalf("other workspace read status=%d, want 404", response.Code)
+	}
+	change := map[string]any{"updated_at": article.UpdatedAt, "seo_title": "Taken over"}
+	if response := request(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, change, other, nil); response.Code != http.StatusNotFound {
+		t.Fatalf("other workspace patch status=%d, want 404", response.Code)
+	}
+	var unchanged seoArticleView
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+article.ID, nil, owner, http.StatusOK, &unchanged)
+	if unchanged.SEOTitle != "Owner search title" {
+		t.Fatalf("seo title after another workspace's patch = %q", unchanged.SEOTitle)
+	}
+	path := fmt.Sprintf("/help/%s/a/%d-%s", otherSlug, article.Number, article.Slug)
+	wantPage(t, visit(site, path, "192.0.2.140"), http.StatusNotFound, nil, []string{"Owner search title", "Owner description"})
+}
