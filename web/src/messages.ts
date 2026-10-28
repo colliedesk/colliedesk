@@ -375,6 +375,12 @@ export const messages = {
   senderFailedVerification: 'Failed sender verification',
   senderNotVerified: 'Sender not verified',
   webFormSender: 'Unverified sender (web form)',
+  // Each badge says what it means and what to do, as a tooltip and as hidden text for screen readers.
+  senderHelp: {
+    none: 'The email carried no proof of who sent it, so the address may be forged. Check the request before you share account details or follow a link in it.',
+    fail: 'The email failed the checks that prove who sent it, so the address is probably forged. Do not follow links or share account details; confirm with the person another way.',
+    web_form: 'Anyone can type any address into a web form, so it may not be the sender’s. Check the request before you share account details.',
+  },
   writtenByAgentToken: (agentName: string, tokenLabel: string) => `by ${agentName} via ${tokenLabel}`,
   attachmentsNotImported: (names: string[]) => `${names.length} attachment${names.length === 1 ? '' : 's'} not imported: ${names.join(', ')}`,
   dnsRecordName: 'TXT record name',

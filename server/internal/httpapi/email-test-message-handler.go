@@ -69,6 +69,8 @@ func (a *API) deliverTestMessage(ctx context.Context, response http.ResponseWrit
 	if err != nil {
 		return nil, fmt.Errorf("parse test message: %w", err)
 	}
+	// The product wrote this message for the signed-in agent; no sender check ran, and none is needed.
+	parsed.Authentication = email.AuthPass
 	channel, err := a.store.GetChannel(ctx, workspaceID, target.ChannelID)
 	if err != nil {
 		return nil, err

@@ -141,7 +141,7 @@ export const aiMessages = {
   addFirst: 'Add a provider first, then turn this on.',
   saving: 'Saving…',
   sends: 'A feature that is on sends its provider the ticket’s messages, the customer’s name, matching published KB articles, and excerpts of similar solved tickets with other customers’ names and emails removed.',
-  sendsStrong: 'Private notes are never sent; prompts are not stored.',
+  sendsStrong: 'Private notes are never sent. A draft keeps its text and your request for 90 days after it ended, and both are in the export.',
 
   kindAnthropic: 'Anthropic',
   kindOpenAI: 'OpenAI-compatible',

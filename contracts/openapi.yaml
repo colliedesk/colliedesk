@@ -3573,7 +3573,7 @@ paths:
           description: The body is not application/json
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '422':
-          description: Invalid input; `error.fields` names each bad field
+          description: 'Invalid input; `error.fields` names each bad field and `error.message` joins their sentences, for example "Message is too long: at most 5,000 characters."'
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '429':
           description: Too many submissions; retry after the `Retry-After` seconds
@@ -3642,7 +3642,7 @@ paths:
           description: The body is not application/json
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '422':
-          description: Invalid input; `error.fields` names each bad field
+          description: 'Invalid input; `error.fields` names each bad field and `error.message` joins their sentences, for example "Message is too long: at most 5,000 characters."'
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '429':
           description: Too many submissions; retry after the `Retry-After` seconds

@@ -9898,7 +9898,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid input; `error.fields` names each bad field */
+            /** @description Invalid input; `error.fields` names each bad field and `error.message` joins their sentences, for example "Message is too long: at most 5,000 characters." */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9995,7 +9995,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid input; `error.fields` names each bad field */
+            /** @description Invalid input; `error.fields` names each bad field and `error.message` joins their sentences, for example "Message is too long: at most 5,000 characters." */
             422: {
                 headers: {
                     [name: string]: unknown;

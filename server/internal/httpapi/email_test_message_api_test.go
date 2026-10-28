@@ -49,6 +49,14 @@ func TestTestMessageOpensAConversationFromTheAgentThatTheTrialMayAnswer(t *testi
 	}
 }
 
+func TestTheTestMessageIsNotMarkedAsAnUnverifiedSender(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	_, sent := sendTestMessage(t, f.api, f.adminA, "/api/v1/channels/email/test-message")
+	if got := queryString(t, f.pool, `SELECT email_meta->>'authentication' FROM messages WHERE workspace_id=$1 AND id=$2`, f.workspaceA, sent.MessageID); got != "pass" {
+		t.Fatalf("authentication of the test message = %q, want pass: the product made it for the signed-in agent", got)
+	}
+}
+
 func TestTrialAnswerToTheAgentsOwnTestMessageStillRefusesAnOutsideCc(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	_, sent := sendTestMessage(t, f.api, f.adminA, "/api/v1/channels/email/test-message")

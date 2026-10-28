@@ -358,6 +358,12 @@ test('saving the sender name sends only the trimmed name to this channel, never 
   await waitFor(() => expect(channelsApi.update).toHaveBeenCalledWith(EMAIL, { config: { sender_name: 'Colliedesk Support' } }));
 });
 
+test('a web form that lists no website says so in plain words', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form', { status: { state: 'needs_attention', reason_code: 'no_origins', message: null } }), config: webFormConfig });
+  show(FORM);
+  expect(await screen.findByText('No website can send messages through this form yet. Add your website address below.')).toBeInTheDocument();
+});
+
 test('the web form save shows Saved after it succeeds', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   channelsApi.update.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });

@@ -80,7 +80,7 @@ Answers:
 
 - `202 {"ok": true}`: stored (or dropped as spam).
 - `404`: unknown workspace or form, form off or removed, or workspace locked.
-- `422`: invalid input; `error.fields` names each field, for example `{"email": "Enter a valid email address."}`.
+- `422`: invalid input; `error.fields` names each field, for example `{"email": "Enter a valid email address."}`, and `error.message` joins those sentences, so a page can show it as it is. A message over the limit answers "Message is too long: at most 5,000 characters."
 - `429`: too many submissions (see Limits). `Retry-After` says how long to wait.
 - `415`: the body is not `application/json`.
 - `400`: the `Idempotency-Key` header is not 1 to 200 printable characters without spaces.
