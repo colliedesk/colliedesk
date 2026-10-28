@@ -632,3 +632,24 @@ func TestAChannelWaitsForItsFirstMessageBeforeItIsWorking(t *testing.T) {
 		t.Fatalf("after the first message: %+v, want working", after.Status)
 	}
 }
+
+// Mail the channel received but did not turn into a conversation (sent from the support address
+// itself, or an automatic reply) still proves the forwarding works, so the channel stops waiting.
+func TestAChannelThatReceivedOnlyDroppedMailIsWorking(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Dropped Desk", "admin@dropped-desk.example.com")
+	secret := connectEmail(t, api, admin, "support@dropped-desk.example.com")
+	inboundOK(t, api, secret, mail([]string{"From: support@dropped-desk.example.com", "To: support@dropped-desk.example.com",
+		"Subject: Test from ourselves", "Message-ID: <self-test@dropped-desk.example.com>"}, "Does it arrive?"))
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	if email.Status.State != "working" || email.Status.ReasonCode != nil {
+		t.Fatalf("after mail that was dropped as the desk's own address: %+v, want working", email.Status)
+	}
+	other := createSession(t, api, service, "Other Dropped Desk", "admin@other-dropped-desk.example.com")
+	connectEmail(t, api, other, "support@other-dropped-desk.example.com")
+	otherItems, _ := listChannels(t, api, other)
+	if got := channelOf(t, otherItems, "email"); got.Status.State != "waiting" {
+		t.Fatalf("another workspace's mail ended this workspace's wait: %+v", got.Status)
+	}
+}

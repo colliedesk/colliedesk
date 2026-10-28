@@ -501,10 +501,13 @@ func (s *Store) DescribeChannel(ctx context.Context, tx pgx.Tx, channel channels
 		(SELECT count(*) FROM channel_inbound_events WHERE workspace_id=$1 AND channel_id=$2 AND state='held' AND hold_reason=$3),
 		(SELECT count(*) FROM channel_outbox WHERE workspace_id=$1 AND channel_id=$2 AND status='failed' AND last_error_code=$4),
 		(SELECT to_char(max(received_at) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') FROM channel_inbound_events
-			WHERE workspace_id=$1 AND channel_id=$2 AND state IN ('processed','held'))`,
+			WHERE workspace_id=$1 AND channel_id=$2 AND state NOT IN ('received','failed'))`,
 		channel.WorkspaceID, channel.ID, channels.HoldChannelOff, DeliveryCodeChannelOff).Scan(&public.Held, &public.Unsent, &public.LastSeen); err != nil {
 		return public, fmt.Errorf("count channel messages: %w", err)
 	}
+	// Any event the channel received and decided on (made a message, held, dropped as the desk's own
+	// address or an automatic reply, discarded) proves the path into Colliedesk works; one still waiting
+	// for its first try or failing does not.
 	if public.Status.State == channels.StateWorking && public.LastSeen == nil {
 		var received bool
 		if err := tx.QueryRow(ctx, channelReceivedBefore, channel.WorkspaceID, channel.ID).Scan(&received); err != nil {

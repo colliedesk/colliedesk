@@ -18,7 +18,9 @@ the one your server uses:
   for that forwarder only (not your email password). See
   [On your own server: the inbound URL](#on-your-own-server-the-inbound-url).
 
-The channel reads **Waiting for first message** until a message has arrived, then **Working**.
+The channel reads **Waiting for first message** until a message has arrived, then **Working**. Send
+the test from a different address than the support address: mail from the support address itself is
+never turned into a conversation.
 
 ## Colliedesk Cloud: forward to your address
 

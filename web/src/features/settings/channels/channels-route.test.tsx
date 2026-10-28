@@ -118,6 +118,7 @@ test('a channel set up but with nothing received yet reads Waiting for first mes
   show(EMAIL);
   const notice = await screen.findByText(/Nothing has arrived yet/);
   expect(notice).toHaveTextContent('Send a test message to your support address');
+  expect(notice).toHaveTextContent('from a different address than the support address');
 });
 
 test('an agent reads the channels without switches or Add channel', async () => {
