@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
+import { newSubmitKey, SubmitKeys } from '../../api/submit-key';
 import { api, ReplyConflictError } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
@@ -240,11 +241,12 @@ export function InboxRoute() {
   // One key per message being sent, kept until the server accepts it: a retry of the same text reuses it, so
   // the server stores the message once however many times it is asked.
   const sendKeys = useRef(new Map<string, string>());
+  // A test message sent again after a failed request goes under the same key, so it arrives once.
+  const testKeys = useRef(new SubmitKeys());
   const message = useMutation({ mutationFn: ({ kind, body, files, cc, seen, aiDraft }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string }) => {
     const keys = sendKeys.current;
     const name = `${selected!.id} ${kind} ${body}`;
-    // randomUUID needs a secure page; a server reached over plain HTTP gets random hex instead.
-    const key = keys.get(name) ?? globalThis.crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const key = keys.get(name) ?? newSubmitKey();
     keys.set(name, key);
     return api.createMessage(selected!.id, kind, body, files, cc, seen, aiDraft, key).then((sent) => { keys.delete(name); return sent; });
   },
@@ -272,7 +274,11 @@ export function InboxRoute() {
   };
   return <><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} onboardingGoal={me.data?.onboarding_goal}
-    onTestMessage={mailboxes > 0 ? () => api.sendTestMessage().then((sent) => { void client.invalidateQueries({ queryKey: ['conversations'] }); openConversation(sent.conversation_id); }) : undefined}
+    onTestMessage={mailboxes > 0 ? () => api.sendTestMessage(undefined, testKeys.current.keyFor('test-message')).then((sent) => {
+      testKeys.current.done();
+      void client.invalidateQueries({ queryKey: ['conversations'] });
+      openConversation(sent.conversation_id);
+    }) : undefined}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} pageSize={conversations.data?.page_size ?? 50} onPage={setPage}
     onSelect={(id) => { track('conversation_opened', { source: 'list' }); openConversation(id); }}
     threadOpen={threadOpen} onBack={backToList}

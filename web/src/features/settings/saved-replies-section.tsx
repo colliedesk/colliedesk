@@ -51,7 +51,11 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
   const openPanel = (name: string, button: HTMLButtonElement) => { opener.current = button; setPanel(name); };
   const closePanel = () => { setPanel(null); opener.current?.focus(); };
   // run keeps the form open with the server's reason when an action is refused.
+  // Set from the press until the answer: clicks that land before the buttons turn disabled do nothing.
+  const running = useRef(false);
   const run = async (action: () => Promise<unknown>, done: () => void) => {
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setProblem(undefined);
     setStale(false);
@@ -62,6 +66,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
       setStale(error instanceof ChangedElsewhereError);
       setProblem(error instanceof InvalidRequestError ? error.message : messages.savedReplyActionFailed);
     } finally {
+      running.current = false;
       setBusy(false);
     }
   };

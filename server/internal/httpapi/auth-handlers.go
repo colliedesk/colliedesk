@@ -17,6 +17,8 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		RequestedRole string `json:"requested_role"`
 		Label         string `json:"label"`
 		SessionType   string `json:"session_type"`
+		// Timezone is the browser's IANA zone: a first sign-in starts the agent on it.
+		Timezone string `json:"timezone"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Token == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A one-time token is required.")
@@ -42,6 +44,7 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 	if _, err := a.imports.LinkByEmail(request.Context(), result.Workspace.ID, result.Agent.ID, result.Agent.Email); err != nil {
 		slog.Error("link imported Freshdesk agent", "workspace_id", result.Workspace.ID, "error", err)
 	}
+	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
 	if input.SessionType == "cookie" {
 		setSessionCookie(response, result.Token)
 		result.Token = ""

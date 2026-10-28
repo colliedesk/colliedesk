@@ -66,7 +66,7 @@ await fetch('https://desk.example.com/api/v1/public/forms/acme', {
 | `email` | Required, a plain valid address, at most 254 characters. |
 | `message` | Optional, at most 5000 characters. Empty shows as "(no message)". |
 | `source` | Optional, at most 100 characters. Becomes the subject `Web form: <source>`. Without it the subject is `Web form`. |
-| `website` | A hidden field that real visitors leave empty. If it holds text the request is treated as spam: it answers `202` like a success and stores nothing. |
+| `website` | A hidden trap for spam bots: keep it empty. A real visitor never sees it. If it holds text the message is thrown away: the answer is `202` like a success, so the bot does not learn it was caught, and nothing is stored. |
 
 Answers:
 

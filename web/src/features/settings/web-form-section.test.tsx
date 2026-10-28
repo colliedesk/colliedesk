@@ -132,3 +132,10 @@ test('a tried form that is refused says why', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Check the highlighted fields.');
   vi.unstubAllGlobals();
 });
+
+test('the code help explains the hidden website field in plain words', () => {
+  render(<WebFormSection part="embed" settings={on} canManage onSave={vi.fn()} />);
+  const code = screen.getByRole('region', { name: 'Code for your page' });
+  expect(code).toHaveTextContent('Keep the field named website empty. It is a trap for spam bots: a message with it filled in is thrown away.');
+  expect(code).not.toHaveTextContent('as if stored');
+});

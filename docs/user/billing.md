@@ -142,8 +142,9 @@ trial (or the subscription) has ended, instead of the inbox.
 4. You return to **Plan and billing**. The plan updates within a few moments, once the provider confirms
    the payment.
 
-If the window does not load within 15 seconds (for example a browser extension blocks it),
-Colliedesk opens the same checkout as a full page instead.
+If the window does not open within 3 seconds (for example a browser extension blocks it, or the
+payment provider refuses to show its page inside Colliedesk), Colliedesk says so and opens the same
+checkout as a full page in this tab instead.
 
 If the payment provider does not accept your account's email address (for example an address on a
 domain that receives no mail), the page shows the provider's reason instead of a generic failure. Sign

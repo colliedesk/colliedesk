@@ -27,7 +27,10 @@ never turned into a conversation.
 The quickest way to see the whole loop needs no forwarder and no terminal. Select **Send yourself a
 test message**: on the empty inbox, or on **Settings → Channels → Email → Connection**. Colliedesk
 delivers one email from your own address to the channel, the way a customer's email arrives. It opens
-a conversation, **Test message from Colliedesk**, and the Connection tab links to it.
+a conversation, **Test message from Colliedesk**, and the Connection tab links to it. The test works
+before forwarding is set up, so it shows that your inbox and replies work; customer email still needs
+your support mailbox to forward here. Before a support address is saved, the button says to save one
+first. Pressing it several times quickly sends one test message.
 
 Answer it like any customer. The reply is emailed to your own address, so you see what customers
 receive; on Colliedesk Cloud it arrives in your real mailbox. During the trial this reply is allowed,

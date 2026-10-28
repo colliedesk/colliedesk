@@ -361,15 +361,17 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.askUnlessHeld(response, request, kbArticleCreateRoute, who, auth.PermKBArticlesPublish, raw, nil) {
 		return
 	}
-	article, err := a.store.CreateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
-		store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status})
-	if err != nil {
-		writeKBError(response, err)
-		return
-	}
-	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
-	a.addressKBArticle(request, &article.KBArticleSummary)
-	writeJSON(response, http.StatusCreated, article)
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, input.Title, slug, *input.BodyMD, input.Status}, func(ctx context.Context) (any, error) {
+		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
+			store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status})
+		if err != nil {
+			writeKBError(response, err)
+			return nil, errAnswered
+		}
+		a.warnMissingKBMedia(ctx, who.Workspace.ID, &article)
+		a.addressKBArticle(request, &article.KBArticleSummary)
+		return article, nil
+	})
 }
 
 func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Request) {

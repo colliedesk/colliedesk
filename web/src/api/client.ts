@@ -5,6 +5,7 @@ import { OutboundRefusedError } from './outbound-error';
 import type { OutboundRefusalReason } from './outbound-error';
 import { requestExportLink } from './workspace-export';
 import { recordFailedCall } from '../lib/diagnostics';
+import { browserTimeZone } from '../lib/format-date';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
@@ -229,7 +230,8 @@ export class CloudWorkspaceChoiceError extends Error {
 
 async function exchangeCloudSession(token: string, workspaceSlug?: string) {
   // The user agent names this device in Settings → Sessions, as it does for a pairing link.
-  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}) };
+  // The browser's timezone starts a first-time agent on their own clock instead of UTC.
+  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}), timezone: browserTimeZone() };
   const response = await fetch('/api/v1/auth/cloud/exchange', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -257,7 +259,9 @@ export const api = {
   emailChannelOf: (id: string) => request(`/api/v1/channels/${encodeURIComponent(id)}/email`, emailChannelSettingsSchema),
   channelCounts: () => request('/api/v1/channels', channelCountsSchema),
   // A test email from the signed-in agent to an email channel (the default one without an id).
-  sendTestMessage: (channelId?: string) => request(channelId ? `/api/v1/channels/${channelId}/email/test-message` : '/api/v1/channels/email/test-message', testMessageResultSchema, { method: 'POST' }),
+  // key names this click (Idempotency-Key): a repeat with the same key returns the first test message.
+  sendTestMessage: (channelId?: string, key?: string) => request(channelId ? `/api/v1/channels/${channelId}/email/test-message` : '/api/v1/channels/email/test-message', testMessageResultSchema,
+    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined }),
   // Without sender_name the channel keeps its name; a new channel starts with the workspace name.
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
   // Only the name: the server keeps the address, so a stale page cannot move the channel.
@@ -278,7 +282,7 @@ export const api = {
   requestExportLink,
   logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }),
   redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {
-    method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie' }),
+    method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone() }),
   }),
   me: () => request('/api/v1/auth/me', meSchema),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),
@@ -318,7 +322,8 @@ export const api = {
   tags: () => request('/api/v1/tags', tagListSchema),
   createTag: (name: string) => request('/api/v1/tags', tagSchema, { method: 'POST', body: json<'createTag'>({ name }) }),
   savedReplies: () => request('/api/v1/saved-replies', savedReplyListSchema),
-  createSavedReply: (title: string, body: string) => request('/api/v1/saved-replies', savedReplySchema, { method: 'POST', body: json<'createSavedReply'>({ title, body }) }),
+  createSavedReply: (title: string, body: string, key?: string) => request('/api/v1/saved-replies', savedReplySchema,
+    { method: 'POST', headers: key ? { 'Idempotency-Key': key } : undefined, body: json<'createSavedReply'>({ title, body }) }),
   updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),
   // updatedAt is the version the person saw; the server refuses the delete if the reply was saved since.
   deleteSavedReply: (id: string, updatedAt: string) => requestNoContent(`/api/v1/saved-replies/${id}?${new URLSearchParams({ updated_at: updatedAt })}`, { method: 'DELETE' }),

@@ -35,7 +35,7 @@ export const channelsMessages = {
   defaultOf: (type: string) => `Default ${type} channel`,
   makeDefault: 'Make default',
   madeDefault: (name: string) => `${name} is now the default. A new conversation that names no channel, and the older links and addresses, use it.`,
-  defaultHelp: 'New conversations you start are sent from the default channel. Links and addresses made before you added a second channel still arrive on it.',
+  defaultHelp: 'A channel is an email address or web form where conversations come in and go out. New conversations you start go out from the default channel.',
   nameLabel: 'Name',
   saveName: 'Save name',
   nameSaved: 'Name saved.',
@@ -99,7 +99,7 @@ const reasons: Record<string, string> = {
   gmail_broken: 'The Gmail connection stopped working.',
   microsoft_broken: 'The Microsoft 365 connection stopped working.',
   domain_unverified: 'The domain is not verified yet.',
-  no_inbound_secret: 'No inbound secret is set (the password your mail forwarder uses to deliver mail here), so no mail can arrive.',
+  no_inbound_secret: 'Customer email sent to your support address cannot arrive yet: your mail forwarder needs an inbound secret (its password for this server). A test message works without it.',
   no_origins: 'No website is allowed to post to it yet.',
 };
 
