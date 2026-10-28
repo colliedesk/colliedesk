@@ -702,12 +702,12 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	// The custom domain's token is never exported: it is a credential of this server's check.
 	err = tx.QueryRow(ctx, `SELECT h.enabled,h.title,h.locale,h.content_version,h.last_article_number,h.updated_at,
 		h.logo_media_id::text,h.favicon_media_id::text,h.logo_alt,h.linkback_url,h.contact_url,h.contact_phone,h.color_primary,h.color_header,h.color_header_text,
-		h.color_background,h.color_text,h.color_link,h.color_footer,h.body_font,h.heading_font,h.custom_css,d.hostname,d.status,d.verified_at
+		h.color_background,h.color_text,h.color_link,h.color_footer,h.body_font,h.heading_font,h.custom_css,h.google_site_verification,h.bing_site_verification,d.hostname,d.status,d.verified_at
 		FROM help_centers h LEFT JOIN help_center_domains d ON d.workspace_id=h.workspace_id WHERE h.workspace_id=$1`, workspaceID).
 		Scan(&center.Enabled, &center.Title, &center.Locale, &center.ContentVersion, &center.LastArticleNumber, &center.UpdatedAt,
 			&center.LogoMediaID, &center.FaviconMediaID, &center.LogoAlt, &center.LinkbackURL, &center.ContactURL, &center.ContactPhone,
 			&center.ColorPrimary, &center.ColorHeader, &center.ColorHeaderText, &center.ColorBackground, &center.ColorText, &center.ColorLink,
-			&center.ColorFooter, &center.BodyFont, &center.HeadingFont, &center.CustomCSS, &center.CustomDomain, &center.CustomDomainStatus, &center.CustomDomainVerifiedAt)
+			&center.ColorFooter, &center.BodyFont, &center.HeadingFont, &center.CustomCSS, &center.GoogleSiteVerification, &center.BingSiteVerification, &center.CustomDomain, &center.CustomDomainStatus, &center.CustomDomainVerifiedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}

@@ -3163,6 +3163,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/help-center/search-console": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The verification tokens of the help center: the content of the `google-site-verification` (Google Search Console) and `msvalidate.01` (Bing Webmaster Tools) `<meta>` tags. A token is null until set. Each is served as a `<meta>` tag in the head of every page of this workspace's help center, on its own host or custom domain, and never on the app or another workspace. */
+        get: operations["getHelpCenterSearchConsole"];
+        /** @description Set or remove the verification tokens. A field left out stays as it is; null or an empty string removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to 100 letters, digits, `-` or `_`); anything else, such as the whole tag, is refused (422 `validation_failed`, with `fields`) and nothing is saved. The tags change every public page, so a save changes `content_version`. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. */
+        put: operations["putHelpCenterSearchConsole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/help-center/theme/check": {
         parameters: {
             query?: never;
@@ -5026,6 +5044,22 @@ export interface components {
          * @enum {string|null}
          */
         ThemeFont: "system-sans" | "humanist-sans" | "geometric-sans" | "classic-serif" | "transitional-serif" | "rounded-sans" | "mono" | null;
+        HelpCenterSearchConsoleInput: {
+            /** @description The content of Google Search Console's `google-site-verification` meta tag. Left out: unchanged. Null or empty: removed. */
+            google_site_verification?: string | null;
+            /** @description The content of Bing Webmaster Tools' `msvalidate.01` meta tag. Left out: unchanged. Null or empty: removed. */
+            bing_site_verification?: string | null;
+        };
+        HelpCenterSearchConsole: {
+            google_site_verification: string | null;
+            bing_site_verification: string | null;
+            content_version: number;
+            /**
+             * Format: date-time
+             * @description Null until the help center settings were first changed.
+             */
+            updated_at: string | null;
+        };
         HelpCenterThemeInput: {
             /**
              * Format: uuid
@@ -13636,6 +13670,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HelpCenterTheme"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    getHelpCenterSearchConsole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The verification tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterSearchConsole"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenterSearchConsole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterSearchConsoleInput"];
+            };
+        };
+        responses: {
+            /** @description The saved tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterSearchConsole"];
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];

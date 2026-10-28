@@ -94,8 +94,10 @@ type page struct {
 	// Markdown is the address of an article's Markdown, for AI assistants.
 	Markdown            string
 	NoIndex, HeroSearch bool
-	Query               string
-	Crumbs              []link
+	// GoogleVerification and BingVerification are the workspace's Search Console tokens.
+	GoogleVerification, BingVerification string
+	Query                                string
+	Crumbs                               []link
 
 	Collections []collectionCard
 
@@ -129,7 +131,8 @@ func (s *Site) page(v view, title string, crumbs []link) page {
 		full = title + " · " + siteTitle
 	}
 	data := page{Lang: v.site.Locale, Title: full, SiteTitle: siteTitle, Home: v.home, SearchURL: v.base + "/search",
-		Style: v.base + stylePath + s.pages.styleName, NoIndex: v.site.Trial, Crumbs: crumbs}
+		Style: v.base + stylePath + s.pages.styleName, NoIndex: v.site.Trial, Crumbs: crumbs,
+		GoogleVerification: v.site.SearchConsole.Google, BingVerification: v.site.SearchConsole.Bing}
 	v.brand.fill(&data, v)
 	return data
 }

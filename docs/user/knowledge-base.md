@@ -542,6 +542,29 @@ address, never the app's address or another workspace's:
 During a Colliedesk Cloud **trial**, `robots.txt` asks every crawler to stay away, and `sitemap.xml`
 and `llms.txt` list nothing. A paid plan lifts this at once.
 
+#### Search Console and Bing Webmaster Tools
+
+You can verify the help center's address in Google Search Console and Bing Webmaster Tools yourself.
+Both tools offer a verification by HTML tag. Copy only the `content` value of the tag:
+
+- Google: the tag is `<meta name="google-site-verification" content="…">`.
+- Bing: the tag is `<meta name="msvalidate.01" content="…">`.
+
+Open **Settings → Help center → Search Console**, paste each value into its field and press **Save**.
+The help center then puts the tag in the head of every page of this workspace, on its own address
+(its host or its custom domain). The app and every other workspace's help center never carry it.
+Then press **Verify** in Search Console or Bing.
+
+- Paste the value, not the whole tag. A value that is not 16 to 100 letters, digits, `-` or `_`
+  is refused and nothing is saved.
+- To remove a token, clear its field and save. A token you do not touch stays as it is.
+- Saving changes the public help center, so it needs the same permission as publishing: an admin
+  saves it at once, and an AI agent token needs `help_center:update` and `kb_articles:publish`
+  (without them, it files a request a person approves). The API is `GET` and `PUT
+  /api/v1/help-center/search-console`; AI agents use `colliedesk_help_center_search_console_get` and
+  `colliedesk_help_center_search_console_update`.
+- The tokens are in the [export](export.md) (`help-center.ndjson`), so a move away keeps them.
+
 ### Limits
 
 - One visitor address can load 600 pages and run 30 searches a minute; past that the page asks to
