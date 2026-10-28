@@ -2,6 +2,7 @@ import { ClerkProvider, SignIn, useAuth, useClerk } from '@clerk/clerk-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NotAnAgentError } from '../../api/cloud-signup';
 import type { SignupAnswers } from '../../api/cloud-signup';
+import { markSignInFormReady } from '../../lib/sign-in-ready';
 import { messages } from '../../messages';
 import { clerkAppearance } from './clerk-appearance';
 import { CloudSignup } from './cloud-signup';
@@ -39,6 +40,16 @@ function CloudSession({ onSessionToken, onSignUp, buying, endSession = false }: 
   // Checked once, when Clerk has loaded: a sign-in completed on this page afterwards is kept.
   const [ending, setEnding] = useState(endSession);
   const ended = useRef(false);
+  // Once Clerk's form shows (its UI loads after isLoaded), what the page held back (product analytics)
+  // may download.
+  useEffect(() => {
+    if (!isLoaded) return undefined;
+    const shown = () => document.querySelector('.cl-formButtonPrimary, .cl-socialButtonsBlockButton, .cl-formFieldInput') !== null;
+    if (shown()) { markSignInFormReady(); return undefined; }
+    const watch = new MutationObserver(() => { if (shown()) { watch.disconnect(); markSignInFormReady(); } });
+    watch.observe(document.body, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  }, [isLoaded]);
 
   const endOpenSession = useCallback(async () => {
     try {

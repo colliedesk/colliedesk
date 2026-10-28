@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { NotAnAgentError } from '../../api/cloud-signup';
-import { clerkAppearance, narrowViewport } from './clerk-appearance';
+import { clerkAppearance, clerkFrontendHost, narrowViewport } from './clerk-appearance';
 import { CloudSignIn } from './cloud-sign-in';
 import { answerSignupQuestions } from './test-signup-answers';
 
@@ -165,4 +165,11 @@ test('on a window 480 px wide or less, the sign-in form\'s buttons and fields ar
 	for (const element of ['formButtonPrimary', 'socialButtonsBlockButton', 'formFieldInput', 'otpCodeFieldInput']) {
 		expect(elements[element]?.[narrowViewport], element).toEqual(expect.objectContaining({ minHeight: '44px' }));
 	}
+});
+
+test('the Clerk host to warm up is read from the publishable key, and a malformed key gives none', () => {
+	// pk_live_ + base64("clerk.colliedesk.com$"), as Clerk issues it.
+	expect(clerkFrontendHost('pk_live_Y2xlcmsuY29sbGllZGVzay5jb20k')).toBe('clerk.colliedesk.com');
+	expect(clerkFrontendHost('pk_test_not-base64!')).toBeUndefined();
+	expect(clerkFrontendHost('')).toBeUndefined();
 });

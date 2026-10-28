@@ -28,3 +28,28 @@ export function clerkAppearance() {
     },
   };
 }
+
+// clerkFrontendHost reads the host of Clerk's Frontend API from a publishable key (pk_live_ or pk_test_
+// followed by base64 of "<host>$"), so the page can open the connection before Clerk's script asks.
+export function clerkFrontendHost(publishableKey: string): string | undefined {
+  const encoded = /^pk_(?:live|test)_([A-Za-z0-9+/=]+)$/.exec(publishableKey)?.[1];
+  if (!encoded) return undefined;
+  try {
+    const host = atob(encoded).replace(/\$$/, '');
+    return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host) ? host : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// preconnectClerk opens the TLS connection to Clerk's host once; on a slow line it saves the handshake
+// round trips before Clerk's script is requested.
+export function preconnectClerk(publishableKey: string): void {
+  const host = clerkFrontendHost(publishableKey);
+  if (!host || document.querySelector(`link[rel="preconnect"][href="https://${host}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'preconnect';
+  link.href = `https://${host}`;
+  link.crossOrigin = 'anonymous';
+  document.head.append(link);
+}

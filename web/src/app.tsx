@@ -21,6 +21,7 @@ import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
 import { inboxQueryFromSearch } from './lib/inbox-query';
+import { signInFormReady } from './lib/sign-in-ready';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
 // Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
@@ -57,7 +58,8 @@ function AppLayout() {
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
   useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
   // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
-  useProductAnalytics(config.data?.product_analytics, me.data);
+  // On a sign-in page the analytics library waits for the sign-in form, so a slow connection loads the form first.
+  useProductAnalytics(config.data?.product_analytics, me.data, onSignIn ? signInFormReady : undefined);
   // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
   // Sign-in pages have nowhere to navigate to yet.
