@@ -598,12 +598,16 @@ function Trash({ go, onChanged }: { go: Go; onChanged: () => void }) {
     try {
       const ids = selection.chosen.map((item) => item.id);
       let count = 0;
+      let kept = 0;
       for (let at = 0; at < ids.length; at += 100) {
         const chunk = ids.slice(at, at + 100);
         const { results } = action === 'restore' ? await mediaApi.restore({ ids: chunk }) : await mediaApi.purge(chunk);
         count += results.filter((result) => result.status === (action === 'restore' ? 'restored' : 'purged')).length;
+        // A purge answers in_use for the help center's logo or favicon, which stays in the trash.
+        if (action === 'purge') kept += results.filter((result) => result.status === 'in_use').length;
       }
-      setDone(action === 'restore' ? mediaMessages.restored(count) : mediaMessages.deleted(count));
+      setDone(action === 'restore' ? mediaMessages.restored(count)
+        : [mediaMessages.deleted(count), kept > 0 ? mediaMessages.keptForHelpCenter(kept) : ''].filter(Boolean).join(' '));
       selection.clear();
       onChanged();
     } catch (error) {
@@ -635,7 +639,7 @@ function Trash({ go, onChanged }: { go: Go; onChanged: () => void }) {
         {list.isSuccess && items.length === 0 && <p className="empty-copy">{mediaMessages.trashEmpty}</p>}
         {items.length > 0 && <ul className="media-grid" aria-label={mediaMessages.trashHeading}>
           {items.map((item) => <SelectCard key={item.id} item={item} checked={selection.ids.has(item.id)} onToggle={selection.toggle}
-            extra={item.deleted_at ? mediaMessages.goneOn(formatDate(new Date(Date.parse(item.deleted_at) + 30 * 86_400_000).toISOString(), timezone, now)) : undefined} />)}
+            extra={item.purge_at ? mediaMessages.goneOn(formatDate(item.purge_at, timezone, now)) : undefined} />)}
           {list.hasNextPage && <li className="media-more"><button type="button" className="kb-more" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{mediaMessages.loadMore}</button></li>}
         </ul>}
       </div>
