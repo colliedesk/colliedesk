@@ -5,6 +5,7 @@ import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import { useCreateAction } from '../../api/use-create';
 import { messages } from '../../messages';
+import { savedReplyMessages } from '../settings/saved-reply-messages';
 import { RouterLink } from '../../ui/router-link';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
@@ -665,9 +666,9 @@ function AltDialog({ image, library, onSave, onClose }: { image: MissingAlt; lib
 // versionChanges names what a version changed from the one before it.
 function versionChanges(version: KBArticleVersion, previous: KBArticleVersion): string[] {
   return [
-    ...(version.title !== previous.title ? [messages.savedReplyTitleChanged] : []),
+    ...(version.title !== previous.title ? [savedReplyMessages.savedReplyTitleChanged] : []),
     ...(version.slug !== previous.slug ? [kbMessages.slugChanged] : []),
-    ...(version.body_md !== previous.body_md ? [messages.savedReplyTextChanged] : []),
+    ...(version.body_md !== previous.body_md ? [savedReplyMessages.savedReplyTextChanged] : []),
     ...(version.status !== previous.status ? [version.status === 'published' ? kbMessages.published : kbMessages.draft] : []),
     ...(version.collection_id !== previous.collection_id ? [kbMessages.movedCollection] : []),
   ];

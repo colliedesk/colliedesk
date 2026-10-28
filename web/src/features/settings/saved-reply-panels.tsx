@@ -4,6 +4,8 @@ import type { Generated, SavedReplyChange } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
+import { savedReplyMessages } from './saved-reply-messages';
+import { settingsMessages } from './settings-messages';
 
 const day = 24 * 60 * 60 * 1000;
 // A version text longer than this is folded until the person asks for all of it.
@@ -55,7 +57,7 @@ function FoldedText({ text, label }: { text: string; label: string }) {
   return <>
     <span className="saved-reply-version-body">{open ? text : `${text.slice(0, foldAfter)}…`}</span>
     <button type="button" className="link-button" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}>
-      {open ? messages.showLessText : messages.showWholeText}</button>
+      {open ? settingsMessages.showLessText : settingsMessages.showWholeText}</button>
   </>;
 }
 
@@ -83,42 +85,42 @@ const replyText = (version: HistoryVersion) => ('body' in version && typeof vers
 
 // SavedReplyHistory lists the versions of one reply (or article), newest first, a page at a time, with
 // what each changed and Restore on the older ones.
-export function SavedReplyHistory<V extends HistoryVersion>({ title, timezone, load, onRestore, onClose, text = replyText, changes, failedMessage = messages.savedReplyActionFailed }: HistoryProps<V>) {
+export function SavedReplyHistory<V extends HistoryVersion>({ title, timezone, load, onRestore, onClose, text = replyText, changes, failedMessage = savedReplyMessages.savedReplyActionFailed }: HistoryProps<V>) {
   const { items, failed, reload, more } = usePages<V, number>(async (before) => {
     const page = await load(before);
     return { items: page.items, next: page.next_before_version ?? undefined };
   });
   const { busy, problem, run } = useAction(failedMessage);
   const changed = changes ?? ((version: V, previous: V) => [
-    ...(previous.title !== version.title ? [messages.savedReplyTitleChanged] : []),
-    ...(text(previous) !== text(version) ? [messages.savedReplyTextChanged] : []),
+    ...(previous.title !== version.title ? [savedReplyMessages.savedReplyTitleChanged] : []),
+    ...(text(previous) !== text(version) ? [savedReplyMessages.savedReplyTextChanged] : []),
   ]);
-  const name = messages.savedReplyHistoryOf(title);
+  const name = savedReplyMessages.savedReplyHistoryOf(title);
   return (
     <section className="saved-reply-panel" aria-label={name}>
       <div className="saved-reply-panel-head">
         <strong>{name}</strong>
-        <button type="button" onClick={onClose}>{messages.closeSavedReplyHistory}</button>
+        <button type="button" onClick={onClose}>{savedReplyMessages.closeSavedReplyHistory}</button>
       </div>
       {problem && <p role="alert" className="error-copy">{problem}</p>}
-      {failed && <p className="error-copy">{messages.savedReplyPanelFailed}</p>}
-      {!items ? !failed && <p className="muted-copy">{messages.loadingSavedReplyHistory}</p>
+      {failed && <p className="error-copy">{savedReplyMessages.savedReplyPanelFailed}</p>}
+      {!items ? !failed && <p className="muted-copy">{savedReplyMessages.loadingSavedReplyHistory}</p>
         : <ol className="saved-reply-versions">{items.map((version, index) => {
           const previous = items[index + 1];
           return (
             <li key={version.version}>
               <div className="saved-reply-text">
-                <strong>{messages.savedReplyVersion(version.version)} · {version.title}</strong>
+                <strong>{savedReplyMessages.savedReplyVersion(version.version)} · {version.title}</strong>
                 <span className="saved-reply-meta">{savedReplyChangeText(version)} · <time dateTime={version.created_at}>{formatDate(version.created_at, timezone)}</time>
                   {previous && changed(version, previous).map((change) => <span key={change} className="saved-reply-tag">{change}</span>)}</span>
-                <FoldedText text={text(version)} label={messages.showWholeVersion(version.version)} />
+                <FoldedText text={text(version)} label={settingsMessages.showWholeVersion(version.version)} />
               </div>
               {index > 0 && <button type="button" disabled={busy} onClick={() => void run(() => onRestore(version.version), reload)}>
-                {messages.restoreSavedReplyVersion(version.version)}</button>}
+                {savedReplyMessages.restoreSavedReplyVersion(version.version)}</button>}
             </li>
           );
         })}</ol>}
-      {more && <button type="button" className="saved-reply-more" onClick={more}>{messages.showOlderSavedReplyVersions}</button>}
+      {more && <button type="button" className="saved-reply-more" onClick={more}>{savedReplyMessages.showOlderSavedReplyVersions}</button>}
     </section>
   );
 }
@@ -156,9 +158,9 @@ const trashedReplyText = (item: TrashedItem) => ('body' in item && typeof item.b
 
 // SavedReplyTrash lists the deleted replies (or articles, or collections), a page at a time, with the
 // days left before they are deleted for good.
-export function SavedReplyTrash<T extends TrashedItem>({ timezone, now, load, onUndelete, onClose, heading = messages.savedReplyTrash,
-  description = messages.savedReplyTrashDescription, empty = messages.savedReplyTrashEmpty, closeLabel = messages.closeSavedReplyTrash,
-  text = trashedReplyText, failedMessage = messages.savedReplyActionFailed }: TrashProps<T>) {
+export function SavedReplyTrash<T extends TrashedItem>({ timezone, now, load, onUndelete, onClose, heading = savedReplyMessages.savedReplyTrash,
+  description = savedReplyMessages.savedReplyTrashDescription, empty = savedReplyMessages.savedReplyTrashEmpty, closeLabel = savedReplyMessages.closeSavedReplyTrash,
+  text = trashedReplyText, failedMessage = savedReplyMessages.savedReplyActionFailed }: TrashProps<T>) {
   const { items, failed, reload, more } = usePages<T, string>(async (cursor) => {
     const page = await load(cursor);
     return { items: page.items, next: page.next_cursor ?? undefined };
@@ -172,22 +174,22 @@ export function SavedReplyTrash<T extends TrashedItem>({ timezone, now, load, on
       </div>
       <p className="muted-copy">{description}</p>
       {problem && <p role="alert" className="error-copy">{problem}</p>}
-      {failed && <p className="error-copy">{messages.savedReplyPanelFailed}</p>}
-      {!items ? !failed && <p className="muted-copy">{messages.loadingSavedReplyHistory}</p>
+      {failed && <p className="error-copy">{savedReplyMessages.savedReplyPanelFailed}</p>}
+      {!items ? !failed && <p className="muted-copy">{savedReplyMessages.loadingSavedReplyHistory}</p>
         : items.length === 0 ? <p className="empty-copy">{empty}</p>
           : <ul className="saved-reply-versions">{items.map((reply) => (
             <li key={reply.id}>
               <div className="saved-reply-text">
                 <strong>{reply.title}</strong>
                 {text(reply) && <span>{text(reply)}</span>}
-                <span className="saved-reply-meta">{messages.savedReplyDeletedBy(reply.deleted_by?.name ?? messages.someone)} · <time dateTime={reply.deleted_at}>{formatDate(reply.deleted_at, timezone)}</time>
-                  {' · '}{messages.savedReplyDaysLeft(Math.max(0, Math.ceil((Date.parse(reply.purges_at) - now.getTime()) / day)))}</span>
+                <span className="saved-reply-meta">{savedReplyMessages.savedReplyDeletedBy(reply.deleted_by?.name ?? messages.someone)} · <time dateTime={reply.deleted_at}>{formatDate(reply.deleted_at, timezone)}</time>
+                  {' · '}{savedReplyMessages.savedReplyDaysLeft(Math.max(0, Math.ceil((Date.parse(reply.purges_at) - now.getTime()) / day)))}</span>
               </div>
-              <button type="button" disabled={busy} aria-label={messages.restoreSavedReplyName(reply.title)}
-                onClick={() => void run(() => onUndelete(reply.id, reply.updated_at), reload)}>{messages.restoreSavedReply}</button>
+              <button type="button" disabled={busy} aria-label={savedReplyMessages.restoreSavedReplyName(reply.title)}
+                onClick={() => void run(() => onUndelete(reply.id, reply.updated_at), reload)}>{savedReplyMessages.restoreSavedReply}</button>
             </li>
           ))}</ul>}
-      {more && <button type="button" className="saved-reply-more" onClick={more}>{messages.showMoreTrash}</button>}
+      {more && <button type="button" className="saved-reply-more" onClick={more}>{settingsMessages.showMoreTrash}</button>}
     </section>
   );
 }

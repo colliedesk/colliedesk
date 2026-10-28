@@ -1,4 +1,4 @@
-import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 import { disableNotifications, enableNotifications, useNotificationState } from '../shell/notification-preference';
 
 // NotificationsSetting is one checkbox; the choice belongs to this browser. The browser permission
@@ -10,8 +10,8 @@ export function NotificationsSetting() {
     <div className="field">
       <label className="field-inline"><input type="checkbox" checked={state === 'on'} disabled={state === 'blocked'}
         onChange={(event) => (event.target.checked ? void enableNotifications() : disableNotifications())} />
-        <span>{messages.notificationsLabel}</span></label>
-      {state === 'blocked' && <small className="muted-copy">{messages.notificationsBlocked}</small>}
+        <span>{settingsMessages.notificationsLabel}</span></label>
+      {state === 'blocked' && <small className="muted-copy">{settingsMessages.notificationsBlocked}</small>}
     </div>
   );
 }

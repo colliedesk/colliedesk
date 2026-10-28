@@ -3,14 +3,15 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { savedReplyMatches } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
+import { savedReplyMessages } from '../settings/saved-reply-messages';
 import { SearchIcon } from '../../ui/icons';
 
 // The names the picker shows: what the list is, its search box, its four states and the way to add some.
 export interface PickerTexts { label: string; search: string; loading: string; failed: string; none: string; noMatch: string; manage: string }
 
 const savedReplyTexts: PickerTexts = {
-  label: messages.savedReplies, search: messages.searchSavedReplies, loading: messages.loadingSavedReplies,
-  failed: messages.savedRepliesFailed, none: messages.noSavedReplies, noMatch: messages.noSavedRepliesMatch, manage: messages.manageSavedReplies,
+  label: messages.savedReplies, search: savedReplyMessages.searchSavedReplies, loading: savedReplyMessages.loadingSavedReplies,
+  failed: savedReplyMessages.savedRepliesFailed, none: savedReplyMessages.noSavedReplies, noMatch: savedReplyMessages.noSavedRepliesMatch, manage: savedReplyMessages.manageSavedReplies,
 };
 
 interface SavedReplyPickerProps<T extends { id: string; title: string }> {

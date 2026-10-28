@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { fallbackTimezones } from '../../lib/fallback-timezones';
-import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 
@@ -69,7 +69,7 @@ export function TimezoneSelect({ label, value, emptyOption, save, onChange }: Ti
           {emptyOption && <option value="">{emptyOption}</option>}
           {zones(draft).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
         </select>
-        {feedback.pending ? <span className="save-status">{messages.saving}</span> : feedback.status}
+        {feedback.pending ? <span className="save-status">{settingsMessages.saving}</span> : feedback.status}
       </span>
     </div>
   );

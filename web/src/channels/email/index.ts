@@ -1,4 +1,4 @@
-import { messages } from '../../messages';
+import { settingsMessages } from '../../features/settings/settings-messages';
 import { MailIcon } from '../../ui/icons';
 import { lazyPart } from '../../ui/lazy-part';
 import type { ChannelUI } from '../registry';
@@ -16,8 +16,8 @@ export const emailChannel: ChannelUI = {
   capabilityLabel: (code) => capabilities[code],
   tabs: [{ id: 'connection', label: 'Connection' }, { id: 'replies', label: 'Replies' }],
   panels: lazyPart(() => import('./panels')),
-  removal: { label: messages.disconnectEmail, title: messages.disconnectEmailQuestion, confirm: messages.confirmDisconnectEmail,
-    body: (channel) => messages.disconnectEmailConsequence(channel.summary) },
+  removal: { label: settingsMessages.disconnectEmail, title: settingsMessages.disconnectEmailQuestion, confirm: settingsMessages.confirmDisconnectEmail,
+    body: (channel) => settingsMessages.disconnectEmailConsequence(channel.summary) },
   caches: ['email-channel'],
   waitingHelp: 'Nothing has arrived yet. Press Send yourself a test message on the Connection tab, or email your support address from a different address than the support address (mail from the support address itself never opens a conversation): it opens a conversation in the inbox, and this channel then reads Working.',
   fieldLabel: (field) => ({ support_address: 'support address', sender_name: 'sender name', inbound_secret: 'inbound secret' })[field],
