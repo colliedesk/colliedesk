@@ -5,9 +5,11 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 )
 
 // themeFields are the fields a theme call takes; an agent request carrying any other is refused
@@ -116,4 +118,41 @@ func (a *API) checkHelpCenterTheme(response http.ResponseWriter, request *http.R
 	}
 	checks, fields := domain.ThemeContrast(cleaned.Colors)
 	writeJSON(response, http.StatusOK, map[string]any{"ok": len(fields) == 0, "checks": checks, "fields": fields})
+}
+
+// previewHelpCenterTheme renders a page of the help center with a candidate theme and saves nothing.
+// Each person's previews count against the help center's page budget, so an editor left typing cannot
+// load the server; a body the server cannot read counts too.
+func (a *API) previewHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
+	who := principal(request)
+	if allowed, wait := a.helpCenterPages.allow("preview "+who.Workspace.ID+" "+who.Agent.ID, a.now()); !allowed {
+		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		writeError(response, http.StatusTooManyRequests, "too_many_requests", "Too many previews in the last minute; try again in a moment.")
+		return
+	}
+	var input struct {
+		Page  string     `json:"page"`
+		Theme themeInput `json:"theme"`
+	}
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send page (home or article) and theme, with only the theme's fields: "+strings.Join(themeFields, ", ")+".")
+		return
+	}
+	if input.Page != helpcenter.PreviewHome && input.Page != helpcenter.PreviewArticle {
+		writeThemeError(response, &domain.ThemeError{Code: "validation_failed", Fields: map[string]string{"page": "Choose home or article."}})
+		return
+	}
+	cleaned, err := domain.CleanTheme(input.Theme.theme())
+	if err != nil {
+		writeThemeError(response, err)
+		return
+	}
+	// The logo and favicon are checked in the preview's own transaction.
+	html, err := a.helpCenter.Preview(request.Context(), who.Workspace.ID, cleaned, input.Page)
+	if err != nil {
+		writeThemeError(response, err)
+		return
+	}
+	checks, fields := domain.ThemeContrast(cleaned.Colors)
+	writeJSON(response, http.StatusOK, map[string]any{"html": string(html), "ok": len(fields) == 0, "checks": checks, "fields": fields})
 }

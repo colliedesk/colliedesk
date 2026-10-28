@@ -67,6 +67,7 @@ var postWithoutKey = map[string]string{
 	"POST /api/v1/ai/models":                               "Lists the models a key may use; nothing is saved.",
 	"POST /api/v1/ai/providers/{id}/check":                 "Checks one provider's key and stores its last result.",
 	"POST /api/v1/results/shared":                          "Reads the totals a share link shows; it stores nothing.",
+	"POST /api/v1/help-center/theme/preview":               "Renders a page with a candidate theme without saving it; it stores nothing.",
 	"POST /api/v1/help-center/theme/check":                 "Checks a candidate theme without saving it; it stores nothing.",
 	"POST /api/v1/export/link":                             "Stores no row: a short-lived signed link held in memory, to the same export.",
 	// Sessions opened at another service: nothing is stored here until it calls back.
@@ -83,7 +84,8 @@ var postWithoutKey = map[string]string{
 }
 
 // maxPostWithoutKey is the ceiling of postWithoutKey; lower it when a route leaves the list.
-const maxPostWithoutKey = 58
+// One read that stores nothing was added: the candidate theme preview.
+const maxPostWithoutKey = 59
 
 func takesIdempotencyKey(path *openapi3.PathItem, operation *openapi3.Operation) bool {
 	for _, parameters := range []openapi3.Parameters{path.Parameters, operation.Parameters} {

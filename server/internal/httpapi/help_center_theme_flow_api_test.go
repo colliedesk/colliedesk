@@ -29,6 +29,10 @@ func TestHelpCenterThemeSavesAgainWithTheLogoItAlreadyHasInTheTrash(t *testing.T
 	resent := map[string]any{"logo_media_id": *read.LogoMediaID, "favicon_media_id": *read.FaviconMediaID, "logo_alt": read.LogoAlt,
 		"colors": map[string]any{"primary": "#7a3e00"}}
 	kbCall(t, api, http.MethodPost, themePath+"/check", resent, admin, http.StatusOK, nil)
+	// The preview accepts it too, and leaves the trashed logo out as the public pages do.
+	if shown := preview(t, api, admin, "home", resent, http.StatusOK); strings.Contains(shown.HTML, logo.ID) || !strings.Contains(shown.HTML, "--accent:#7a3e00;") {
+		t.Fatalf("preview with the trashed logo:\n%.600s", shown.HTML)
+	}
 	var saved themeView
 	kbCall(t, api, http.MethodPut, themePath, resent, admin, http.StatusOK, &saved)
 	if *saved.Colors["primary"] != "#7a3e00" || *saved.LogoMediaID != logo.ID || saved.ContentVersion != 2 {
@@ -42,6 +46,10 @@ func TestHelpCenterThemeSavesAgainWithTheLogoItAlreadyHasInTheTrash(t *testing.T
 		refused := themeRefused(t, kbCall(t, api, http.MethodPut, themePath, body, admin, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
 		if !strings.Contains(refused.Error.Fields[field], "trash") || len(refused.Error.Fields) != 1 {
 			t.Fatalf("%s refusal fields = %v", field, refused.Error.Fields)
+		}
+		previewed := themeRefused(t, kbCall(t, api, http.MethodPost, previewPath, map[string]any{"page": "article", "theme": body}, admin, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
+		if previewed.Error.Fields[field] != refused.Error.Fields[field] || len(previewed.Error.Fields) != 1 {
+			t.Fatalf("%s preview refusal fields = %v", field, previewed.Error.Fields)
 		}
 	}
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+logo.ID+"/restore", nil, admin, http.StatusOK, nil)

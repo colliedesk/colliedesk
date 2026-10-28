@@ -424,6 +424,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/help-center/theme", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/help-center/theme/check", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/help-center/theme/preview", auth.PermissionConversationsRead},
 		{http.MethodGet, helpCenterTLSAskPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},

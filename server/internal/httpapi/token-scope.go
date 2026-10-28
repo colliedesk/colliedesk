@@ -186,6 +186,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST " + problemReportPath:               anyToken,
 	"GET /api/v1/help-center/theme":           grant(auth.PermHelpCenterRead),
 	"POST /api/v1/help-center/theme/check":    grant(auth.PermHelpCenterRead),
+	"POST /api/v1/help-center/theme/preview":  grant(auth.PermHelpCenterRead),
 
 	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
 	"PUT /api/v1/conversations/{id}/presence":               grant(auth.PermConversationsRead),

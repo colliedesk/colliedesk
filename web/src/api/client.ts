@@ -50,34 +50,28 @@ export class SeatPausedError extends PlanLimitError {
   }
 }
 
-// InvalidRequestError means the server refused the input (HTTP 400 or 422); its message says what to fix.
+// InvalidRequestError means the server refused the input (HTTP 400, 409 or 422); its message says what to fix.
+// detail (the whole error object, with its code) lets a caller read a refusal of its own, such as
+// contact_exists with the contact to use, or the message of each field of a form.
 export class InvalidRequestError extends Error {
-  constructor(message: string) {
+  readonly detail?: { code?: unknown; [field: string]: unknown };
+
+  constructor(message: string, detail?: { code?: unknown; [field: string]: unknown }) {
     super(message);
     this.name = 'InvalidRequestError';
+    this.detail = detail;
   }
 }
 
 // ConflictError is the same refusal for a resource whose state does not allow the action (HTTP 409),
 // for example removing the last admin.
-// detail (the whole error object, with its code) lets a caller read a conflict of its own, such as
-// contact_exists with the contact to use.
 export class ConflictError extends InvalidRequestError {
-  readonly detail?: { code?: unknown; [field: string]: unknown };
-
-  constructor(message: string, detail?: { code?: unknown; [field: string]: unknown }) {
-    super(message);
-    this.name = 'ConflictError';
-    this.detail = detail;
-  }
+  override name = 'ConflictError';
 }
 
 // ChangedElsewhereError means someone saved the same saved reply after this client read it (HTTP 409).
 export class ChangedElsewhereError extends ConflictError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ChangedElsewhereError';
-  }
+  override name = 'ChangedElsewhereError';
 }
 
 async function invalidRequest(response: Response): Promise<Error> {
@@ -90,9 +84,8 @@ async function invalidRequest(response: Response): Promise<Error> {
         const { latest_reply_number: latest, newer_replies: newer } = body.error as { latest_reply_number?: number; newer_replies?: Message[] };
         return new ReplyConflictError(body.error.message, latest ?? 0, newer ?? []);
       }
-      // A failed AI provider check carries why (check_error_code), which places the message under its field.
-      return response.status === 409 || body.error.code === 'ai_check_failed' ? new ConflictError(body.error.message, body.error)
-        : new InvalidRequestError(body.error.message);
+      // AI provider checks and form refusals both retain the server's field details.
+      return new (response.status === 409 || body.error.code === 'ai_check_failed' ? ConflictError : InvalidRequestError)(body.error.message, body.error);
     }
   } catch {
     // An unreadable body is an ordinary failure.

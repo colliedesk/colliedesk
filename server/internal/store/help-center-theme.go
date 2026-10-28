@@ -93,21 +93,32 @@ func checkThemeMedia(ctx context.Context, tx pgx.Tx, workspaceID string, theme d
 		var kind string
 		var trashed bool
 		err := tx.QueryRow(ctx, `SELECT kind, deleted_at IS NOT NULL FROM kb_media WHERE workspace_id=$1 AND id=$2`+itemLock, workspaceID, *item.id).Scan(&kind, &trashed)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			fields[item.field] = "No image with this id in the media library."
-		case err != nil:
+		found := !errors.Is(err, pgx.ErrNoRows)
+		if found && err != nil {
 			return nil, err
-		case kind != domain.KBMediaImage:
-			fields[item.field] = "This item is a video; choose an image."
-		case trashed && (item.stored == nil || !strings.EqualFold(*item.stored, *item.id)):
-			fields[item.field] = "This image is in the trash of the media library; restore it first."
+		}
+		if problem := themeMediaProblem(found, kind == domain.KBMediaImage, trashed, item.stored, *item.id); problem != "" {
+			fields[item.field] = problem
 		}
 	}
 	if len(fields) > 0 {
 		return nil, &domain.ThemeError{Code: "media_not_found", Fields: fields}
 	}
 	return previous, nil
+}
+
+// themeMediaProblem is why a theme field may not name the library item id ("" when it may): found in
+// this workspace's library, an image, in the trash; stored is the id the field names before the save.
+func themeMediaProblem(found, image, trashed bool, stored *string, id string) string {
+	switch {
+	case !found:
+		return "No image with this id in the media library."
+	case !image:
+		return "This item is a video; choose an image."
+	case trashed && (stored == nil || !strings.EqualFold(*stored, id)):
+		return "This image is in the trash of the media library; restore it first."
+	}
+	return ""
 }
 
 // PutHelpCenterTheme replaces the brand of the help center after domain.CheckTheme and the media

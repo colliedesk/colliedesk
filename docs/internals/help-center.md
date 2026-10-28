@@ -173,6 +173,45 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   delaying others' first visits to the 1 s fallback. Chosen over rendering on write, which still
   needs the same guard for older articles and would add a migration and a render to every write path.
 
+- **The brand preview is the real page, rendered by the server and shown without scripts.**
+  `POST /api/v1/help-center/theme/preview` runs `Site.Preview`: the same templates (`homeOf`,
+  `articleOf`) as the public pages, from the workspace's live collections and published articles
+  (lowest article number, or a fixed sample), with the candidate theme; nothing is stored, so there
+  is no draft table or token to clean up.
+  - *One transaction.* `Store.HelpCenterPreview` reads the site, the logo and favicon check (the
+    rule of a save, `themeMediaProblem`), the collections and the page's articles (home: the first
+    of each top collection; article: the text, its videos and its neighbours) in one workspace
+    transaction whose statements go out as one pgx batch. Before, a preview was five to seven
+    transactions in a row; the session's own read stays apart.
+  - *Style.* The document links `site.css` by its hashed, immutable address under `/help/_/` (the
+    browser keeps it between previews; it is not sent again in every answer) and carries only the
+    brand sheet inline, last in the head so it overrides the sheet's defaults (a theme not saved has
+    no hashed brand sheet). The home answer went from 22 KB to 6 KB. `vite.config.ts` proxies `/help/` so the sheet loads in development too.
+  - *Policy.* Its own meta policy comes first: `default-src 'none'; img-src <origin>/api/v1/kb/images/
+    <origin>/api/v1/kb/media/; style-src <origin>/help/_/ 'unsafe-inline'; script-src 'none';
+    form-action 'none'; base-uri 'none'` (`previewPolicy`, origin = `APP_ORIGIN`). The frame is
+    same-origin and sends the cookie, so it names paths, as the email frame does: a CSS `url()` cannot
+    reach any other route. A session's writes must come from `APP_ORIGIN` (CSRF check), so the web
+    app compares the policy with its own `location.origin` and refuses a document without exactly
+    this one. The templates keep no inline style; `'unsafe-inline'` covers the brand block only.
+  - *Links and media.* Links and media point below `/api/v1/kb` (images at `/api/v1/kb/images/<id>`,
+    the logo at `/api/v1/kb/media/<id>`), which serve the session's own workspace whether the help
+    center is on or off. Videos and players would be blocked boxes under this policy, and loosening
+    it for them is not worth it, so each becomes "Video shown on the live help center"
+    (`playerElement`: kbhtml writes both as an empty element with escaped attributes). The inline
+    block sets `pointer-events: none` on links and controls, so they are inert from the first paint;
+    the web app's capture listener, added on load, also holds a link opened from the keyboard.
+  - *Frame.* The web app shows it in `<iframe sandbox="allow-same-origin" srcdoc>`, never with
+    `allow-scripts`; same origin lets the images load with the session and lets the page stop link
+    clicks inside the frame. The e2e test runs the preview with CSP enforced (only the axe tests on
+    the public pages bypass it).
+  - *Requests.* Previews count against the help center page limiter under a per-person key (600 a
+    minute). The form asks for nothing until the saved theme is loaded, waits 300 ms after the last
+    change, keeps one request in flight, drops an answer for a theme that is no longer the latest and
+    sends nothing after it is gone. A link or phone number not yet of a shape the server accepts, like
+    a color being typed, goes to the preview as empty and its field says the shape; Save sends what
+    is written. An edit clears the refusal of the fields it changes.
+
 ## Traps
 
 - **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line
