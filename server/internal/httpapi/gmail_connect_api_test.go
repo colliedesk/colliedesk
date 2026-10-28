@@ -212,7 +212,7 @@ func TestAConnectionTheServerCanNoLongerUseFailsRepliesAtOnce(t *testing.T) {
 	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Olive", "email": "olive@customer.example"})
 	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hi"})
 	create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hello"})
-	if row := queryString(t, pool, `SELECT status||' '||last_error FROM channel_outbox`); !strings.HasPrefix(row, "failed ") || !strings.Contains(row, "GOOGLE_OAUTH_CLIENT_ID") {
+	if row := queryString(t, pool, `SELECT status||' '||last_error FROM channel_outbox`); !strings.HasPrefix(row, "failed ") || !strings.Contains(row, "ask whoever runs it") || strings.Contains(row, "GOOGLE_OAUTH") {
 		t.Fatalf("outbox row = %q, want failed with the missing settings", row)
 	}
 }

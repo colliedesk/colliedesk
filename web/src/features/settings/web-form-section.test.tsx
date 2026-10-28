@@ -102,3 +102,8 @@ test('the form with the workspace\'s older address also gives its own', () => {
   render(<WebFormSection settings={{ ...on, channel_id: '55555555-5555-4555-8555-555555555555', legacy_slug: true }} canManage onSave={vi.fn()} />);
   expect(screen.getByText(new RegExp(`also has its own, ${window.location.origin}/api/v1/public/web-forms/55555555-5555-4555-8555-555555555555`))).toBeInTheDocument();
 });
+
+test('Allowed origins says in plain words which websites it means, with an example', () => {
+  render(<WebFormSection settings={off} canManage onSave={vi.fn()} />);
+  expect(screen.getByRole('textbox', { name: /Allowed origins/i })).toHaveAccessibleDescription(/websites that may send this form.*https:\/\/www\.example\.com/i);
+});

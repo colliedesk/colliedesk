@@ -290,7 +290,7 @@ func TestAGmailOnlyServerQueuesAndSendsWithoutAnSMTPRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := f.write(t, "outgoing", "No way out")
-	if delivery := f.delivery(t, other.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "SMTP_HOST") {
+	if delivery := f.delivery(t, other.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "ask whoever runs it to set up outgoing email") || strings.Contains(*delivery.LastError, "SMTP_HOST") {
 		t.Fatalf("reply without any transport = %+v", delivery)
 	}
 }
@@ -312,7 +312,7 @@ func TestAGrantSealedForOneWorkspaceNeverSendsForAnother(t *testing.T) {
 		process(t, worker)
 		clock = clock.Add(2 * time.Hour)
 	}
-	if delivery := other.delivery(t, reply.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "MAILBOX_TOKEN_KEYS") {
+	if delivery := other.delivery(t, reply.ID); delivery.Status != "failed" || !strings.Contains(*delivery.LastError, "ask whoever runs it") || strings.Contains(*delivery.LastError, "MAILBOX_TOKEN_KEYS") {
 		t.Fatalf("delivery = %+v", delivery)
 	}
 	if len(fake.Messages()) != 0 {
@@ -345,7 +345,7 @@ func TestAGrantThatDoesNotOpenWaitsForTheRightKeyInsteadOfBreakingTheConnection(
 	wrong := gmailWorker(f, startSMTPServer(t), config, &clock, func(options *emailoutbox.Options) { options.Google = withKeys(t, config, keyTwo) })
 	reply := f.write(t, "outgoing", "Hello")
 	process(t, wrong)
-	if delivery := f.delivery(t, reply.ID); delivery.Status != "queued" || !strings.Contains(*delivery.LastError, "MAILBOX_TOKEN_KEYS") {
+	if delivery := f.delivery(t, reply.ID); delivery.Status != "queued" || !strings.Contains(*delivery.LastError, "its key for stored connections") || strings.Contains(*delivery.LastError, "MAILBOX_TOKEN_KEYS") {
 		t.Fatalf("delivery = %+v, want queued for a retry with the reason", delivery)
 	}
 	if connection := f.mailboxStatus(t); connection.Status != "connected" {

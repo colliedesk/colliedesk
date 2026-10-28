@@ -70,7 +70,7 @@ func (a *API) redirectURI(p mailboxProvider) string { return a.config.Origin + p
 func (a *API) connectMailbox(p mailboxProvider, response http.ResponseWriter, request *http.Request) {
 	if missing := p.missing(); len(missing) > 0 {
 		writeError(response, http.StatusConflict, p.notConfiguredCode(),
-			"This server cannot connect "+p.label()+" yet. The administrator must set "+strings.Join(missing, ", ")+".")
+			"This server cannot connect "+p.label()+" yet: it is not set up here, so ask whoever runs it.")
 		return
 	}
 	channel, ok := a.requestedEmailChannel(response, request)

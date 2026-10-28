@@ -174,6 +174,13 @@ test('the default channel of a type with two says Default; the other offers Make
   expect(screen.getAllByText('Default')).toHaveLength(1);
 });
 
+test('the channel name explains in plain words what the default channel does', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  show(EMAIL);
+  expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription(
+    /when you do not pick a channel.*a conversation you start is sent from it/i);
+});
+
 test('Make default makes the channel the default of its type and says so where the button was', async () => {
   const second = channel('email', { id: '99999999-9999-4999-8999-999999999999', name: 'Sales', is_default: false, summary: 'sales@example.com' });
   channelsApi.get.mockResolvedValue({ ...second, config: withChannel.channel });

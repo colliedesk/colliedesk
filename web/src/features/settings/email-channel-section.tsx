@@ -6,6 +6,7 @@ import { messages } from '../../messages';
 import { PartUnavailable } from '../../ui/lazy-part';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
 import { CopyButton } from './copy-button';
+import { InboundURLGuide } from './inbound-url-guide';
 import { NameForm } from './name-form';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
@@ -120,6 +121,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           ? messages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : messages.inboundSecretMissing}</p>}
         {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{messages.inboundSecret}</span>
           <input readOnly value={createdSecret} /><small>{messages.inboundSecretNotice}</small></label>}
+        {canManage && channel && settings && !hostedAddress && <InboundURLGuide inboundURL={settings.inbound_url} supportAddress={channel.support_address} secret={createdSecret} />}
         {canManage && channel && <span className="button-row">
           {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>}
           {!confirmingDisconnect && onDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{messages.disconnectEmail}</button>}

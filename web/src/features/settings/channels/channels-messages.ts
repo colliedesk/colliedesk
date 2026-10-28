@@ -37,7 +37,7 @@ export const channelsMessages = {
   defaultOf: (type: string) => `Default ${type} channel`,
   makeDefault: 'Make default',
   madeDefault: (name: string) => `${name} is now the default. A new conversation that names no channel, and the older links and addresses, use it.`,
-  defaultHelp: 'The default channel is the one a conversation started without choosing a channel leaves from, and the one older links and addresses reach.',
+  defaultHelp: 'The default channel is the one Colliedesk uses when you do not pick a channel: a conversation you start is sent from it, and links and addresses made before you had several channels still arrive on it.',
   nameLabel: 'Name',
   saveName: 'Save name',
   nameSaved: 'Name saved.',
@@ -101,7 +101,7 @@ const reasons: Record<string, string> = {
   gmail_broken: 'The Gmail connection stopped working.',
   microsoft_broken: 'The Microsoft 365 connection stopped working.',
   domain_unverified: 'The domain is not verified yet.',
-  no_inbound_secret: 'No inbound secret is set, so no mail can arrive.',
+  no_inbound_secret: 'No inbound secret is set (the password your mail forwarder uses to deliver mail here), so no mail can arrive.',
   no_origins: 'No website is allowed to post to it yet.',
 };
 

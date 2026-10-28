@@ -176,7 +176,6 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
       <div className="panel ai-way"><h3>{m.emptyOwnHeading}</h3><p>{m.emptyOwnBody}</p>
         {isAdmin && <div className="button-row"><button type="button" className="primary-action" onClick={props.onOpenAdd}><PlusIcon />{m.addProvider}</button></div>}</div>
       <div className="panel ai-way"><h3>{m.emptyOperatorHeading}</h3><p>{m.emptyOperatorBody}</p>
-        <pre>{'AI_SERVER_PROVIDER=anthropic\nAI_SERVER_API_KEY=…\nAI_SERVER_MODELS=triage=…,draft=…'}</pre>
         <div className="button-row"><a className="button" href="https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/environment-variables.md#ai-provider" target="_blank" rel="noopener noreferrer">{m.setupGuide}</a></div></div>
     </section>}
     <section className="panel ai-slots" aria-label={m.features}>

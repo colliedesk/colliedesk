@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
 import { messages } from '../../messages';
@@ -23,6 +23,7 @@ function parseOrigins(text: string): string[] {
 }
 
 export function WebFormSection({ settings, canManage, save, onSave, part = 'all', nameField }: WebFormSectionProps) {
+  const originsHelp = useId();
   const [enabled, setEnabled] = useState(settings?.enabled ?? false);
   const [origins, setOrigins] = useState((settings?.allowed_origins ?? []).join('\n'));
   useEffect(() => setEnabled(settings?.enabled ?? false), [settings?.enabled]);
@@ -37,8 +38,8 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
               {nameField}
               {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{messages.webFormAccept}</span></label>}
               <label className="field"><span>{messages.webFormOrigins}</span>
-                <textarea rows={3} value={origins} placeholder="https://example.com" onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-              <small className="muted-copy">{messages.webFormOriginsHelp}</small>
+                <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={originsHelp} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
+              <small id={originsHelp} className="muted-copy">{messages.webFormOriginsHelp}</small>
               <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveWebForm)}</button>
                 {feedback.status}</span>
             </form>

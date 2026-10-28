@@ -110,7 +110,7 @@ export const aiMessages = {
   emptyOwnHeading: 'Add an API key for this workspace',
   emptyOwnBody: 'Anthropic, or any OpenAI-compatible service: OpenAI, OpenRouter, vLLM, Ollama. Your workspace pays the provider directly.',
   emptyOperatorHeading: 'Or ask the server operator',
-  emptyOperatorBody: 'One provider for every workspace on this server. Set these and restart:',
+  emptyOperatorBody: 'One provider for every workspace on this server, set up by whoever runs it. The setup guide has the steps.',
   setupGuide: 'Setup guide',
 
   features: 'Features',
@@ -201,7 +201,7 @@ export const aiMessages = {
   modelsPick: 'Pick at least one model.',
   checkAndSave: 'Check and save',
   noKeysNotice: 'This server cannot store API keys yet.',
-  noKeysBody: 'The operator has not set MAILBOX_TOKEN_KEYS, which encrypts keys at rest. Ask them to set it and restart.',
+  noKeysBody: 'Its key that encrypts stored API keys is not set up: ask whoever runs this server. The setup guide has the steps.',
   labelMissing: 'Give the provider a name.',
   baseURLMissing: 'Enter the provider’s base URL.',
   keyMissing: 'Paste the API key.',

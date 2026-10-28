@@ -27,7 +27,7 @@ interface ProviderText {
   failureReasons: Record<string, string>;
   failureUnknown: string;
   addressMismatch: (address: string, support: string) => string;
-  notAvailable: (settings: string[]) => string;
+  notAvailable: string;
   notSetUpSummary: string;
   redirectUri: string;
   disconnect: string;
@@ -186,9 +186,8 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
   </details>;
   // What the operator must set for a provider; with no provider at all it stays open, as it always was.
   const setup = (provider: MailboxProvider, folded: boolean): ReactNode => {
-    const missing = provider === 'google' ? gmail.missing_settings : microsoft?.missing_settings ?? [];
     const body = <>
-      <p role="note" className="warning-note">{providers[provider].notAvailable(missing)}</p>
+      <p role="note" className="warning-note">{providers[provider].notAvailable}</p>
       {canManage && !connection && <label className="invite-link"><span className="field-label">{providers[provider].redirectUri}</span>
         <input readOnly value={provider === 'google' ? gmail.redirect_uri : microsoft!.redirect_uri} /></label>}
       {canManage && !connection && provider === 'microsoft' && <label className="invite-link"><span className="field-label">{messages.microsoftAdminConsentRedirectUri}</span>

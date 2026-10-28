@@ -140,7 +140,7 @@ export const resultsMessages = {
     weeklyOn: (next: string) => `On. Next email: ${next}.`,
     weeklyOff: 'Off. You can turn it on again at any time.',
     weeklyFailed: 'Your choice could not be saved. Try again.',
-    noMail: 'Weekly email needs outgoing mail settings. This server cannot send email yet. Ask whoever runs it to set SMTP_HOST and MAIL_FROM_DOMAIN.',
+    noMail: 'Weekly email needs outgoing mail settings. This server cannot send email yet. Ask whoever runs it to set up outgoing email.',
     noMailLink: 'How to set up outgoing email',
     noMailURL: 'https://colliedesk.com/docs/self-host/email',
   },

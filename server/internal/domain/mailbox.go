@@ -63,12 +63,13 @@ const (
 const MailboxServerConfigCode = "mailbox_server_config"
 
 // MailboxKeyNote is why a reply waits when this server's MAILBOX_TOKEN_KEYS cannot open the stored grant.
+// Screens show it, so it names no server variable; docs/self-host does.
 // It is about the server, not the grant, so the connection is not marked failed.
 func MailboxKeyNote(provider string) string {
 	if provider == MailboxMicrosoft {
-		return "This server cannot read the Microsoft 365 connection with its MAILBOX_TOKEN_KEYS; the reply is retried. Ask the administrator to check the keys, or reconnect Microsoft 365 in Settings."
+		return "This server cannot read the Microsoft 365 connection with its key for stored connections; the reply is retried. Reconnect Microsoft 365 in Settings, or ask whoever runs it to check that key."
 	}
-	return "This server cannot read the Gmail connection with its MAILBOX_TOKEN_KEYS; the reply is retried. Ask the administrator to check the keys, or reconnect Gmail in Settings."
+	return "This server cannot read the Gmail connection with its key for stored connections; the reply is retried. Reconnect Gmail in Settings, or ask whoever runs it to check that key."
 }
 
 // MailboxFailureText explains a failed connection to the admin and on every reply it stops.
@@ -99,9 +100,9 @@ func MailboxFailureText(provider, code string) string {
 // provider's settings.
 func MailboxNotConfiguredNote(provider string) string {
 	if provider == MailboxMicrosoft {
-		return "Microsoft 365 sending is not configured on this server. Ask the administrator to set MICROSOFT_OAUTH_CLIENT_ID, MICROSOFT_OAUTH_CLIENT_SECRET and MAILBOX_TOKEN_KEYS."
+		return "Microsoft 365 sending is not set up on this server: ask whoever runs it."
 	}
-	return "Gmail sending is not configured on this server. Ask the administrator to set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET and MAILBOX_TOKEN_KEYS."
+	return "Gmail sending is not set up on this server: ask whoever runs it."
 }
 
 // MailboxDisconnectedNote is the reason of a reply accepted for a mailbox whose connection was removed,
@@ -115,7 +116,7 @@ func MailboxDisconnectedNote(provider string) string {
 
 // MailboxServerConfigNote is why a reply for a Microsoft 365 mailbox waits when Microsoft refused this
 // server's client secret. It is retried until the operator fixes it; reconnecting does not help.
-const MailboxServerConfigNote = "Waiting: Microsoft refused this server's app credentials. The administrator must update MICROSOFT_OAUTH_CLIENT_SECRET; the reply is sent once it works. Reconnecting does not help."
+const MailboxServerConfigNote = "Waiting: Microsoft refused this server's app credentials, so whoever runs this server must replace its Microsoft app secret; the reply is sent once it works. Reconnecting does not help."
 
 // MailboxTooLargeNote is why a reply fails when Microsoft 365 refuses its size. Its files are kept.
 const MailboxTooLargeNote = "The reply is too large to send through Microsoft 365. Remove a file and retry."

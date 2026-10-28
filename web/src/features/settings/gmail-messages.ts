@@ -39,7 +39,7 @@ export const gmailMessages = {
   gmailOtherAddress: (gmail: string, support: string) => `Customers see ${gmail} as the sender. Their answers still go to ${support}, so keep forwarding it here.`,
   gmailFailedTitle: 'Gmail stopped sending',
   gmailFailedBody: (reason: string, when: string) => `${reason} Since ${when}, replies are not sent through Gmail and not sent any other way.`,
-  gmailNotAvailable: (settings: string[]) => `Gmail sending is not set up on this server. The administrator sets ${settings.join(', ')} (see the email channel guide).`,
+  gmailNotAvailable: 'Gmail sending is not set up on this server: ask whoever runs it. They find the steps in the self-hosting guide, under sending replies through Gmail.',
   gmailRedirectUri: 'Redirect URI to register in Google Cloud',
   gmailNotSetUpSummary: 'Gmail is not set up on this server',
   gmailJustConnected: 'Gmail is connected.',
