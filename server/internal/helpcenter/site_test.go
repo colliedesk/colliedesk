@@ -4,11 +4,21 @@ import (
 	"io/fs"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // The help center is the customer's own site (#125): no template or style may name the product, and
 // no page may carry a script or inline style.
 func TestTemplatesCarryNoBrandingScriptOrInlineStyle(t *testing.T) {
+	check := func(path string, data []byte) {
+		text := strings.ToLower(string(data))
+		for _, banned := range []string{"colliedesk", "hc labs", "powered by", "<script", "style=", "<style", "@import", "url("} {
+			if strings.Contains(text, banned) {
+				t.Errorf("%s holds %q", path, banned)
+			}
+		}
+	}
 	err := fs.WalkDir(files, ".", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
@@ -17,16 +27,17 @@ func TestTemplatesCarryNoBrandingScriptOrInlineStyle(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		text := strings.ToLower(string(data))
-		for _, banned := range []string{"colliedesk", "hc labs", "powered by", "<script", "style=", "<style", "@import", "url("} {
-			if strings.Contains(text, banned) {
-				t.Errorf("%s holds %q", path, banned)
-			}
-		}
+		check(path, data)
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The brand style sheet is generated from a theme, every font of it included.
+	for font := range domain.ThemeFontStacks {
+		theme := brandedTheme()
+		theme.BodyFont, theme.HeadingFont = &font, &font
+		check("brand style sheet with "+font, brandCSS(theme))
 	}
 	parsePages()
 }
@@ -69,7 +80,7 @@ func TestTouchTargetsAreAtLeast44Pixels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, selector := range []string{".brand {", ".crumbs a {", ".card-tab a {", ".card-list a {", ".chips a {", ".card-more {", ".index-rail a {", ".result-title {", ".foot a {", ".pager a {", ".meta a {"} {
+	for _, selector := range []string{".brand {", ".crumbs a {", ".card-tab a {", ".card-list a {", ".chips a {", ".card-more {", ".index-rail a {", ".result-title {", ".foot a {", ".pager a {", ".meta a {", ".site-link {"} {
 		start := strings.Index(string(style), selector)
 		if start < 0 {
 			t.Errorf("no rule %s", selector)

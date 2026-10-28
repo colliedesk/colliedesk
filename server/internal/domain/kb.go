@@ -292,6 +292,11 @@ type HelpCenterSite struct {
 	Locale         string
 	ContentVersion int64
 	Trial          bool
+	// Theme is the brand the pages show. A logo or favicon that is no longer an image of the library
+	// outside its trash is left out (nil), so a page never links an image it cannot serve.
+	Theme HelpCenterTheme
+	// LogoWidth and LogoHeight are the logo's size in pixels, 0 when unknown.
+	LogoWidth, LogoHeight int
 }
 
 // PublicKBCollection is a live collection as the help center lists it; Published counts its own

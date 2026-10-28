@@ -95,8 +95,11 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **No new privileged path.** The slug is resolved with `WorkspaceForMailSlug`
   (`PrivilegeWorkspaceBySlug`, already reviewed); everything after runs in the workspace's scope.
   `OpenHelpCenter` checks on, then lock, in one scoped transaction.
-- **ETag = slug, `content_version`, trial, title, locale, workspace name, base path, build version
-  and a hash of the templates.** It is computed only after the workspace is found open, so a locked
+- **ETag = slug, `content_version`, trial, title, locale, workspace name, base path, build version,
+  a hash of the templates and what the page shows of the brand** (brand sheet name, the logo and
+  favicon shown with the logo's size, logo text, links). The brand part counts what is shown, not
+  the saved theme: moving the logo to the library's trash changes no `content_version`, but the
+  page loses its logo. It is computed only after the workspace is found open, so a locked
   or turned-off help center never answers 304. `content_version` grows with every knowledge base
   write (`bumpKB`), so unpublishing an older article invalidates every page, which `max(updated_at)`
   would miss. Pages are `public, max-age=0, must-revalidate`; a 404 and a redirect are `no-store`.
@@ -114,6 +117,40 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   workspace (no index under row-level security).
 - **Trial pages ask not to be indexed** (`<meta name="robots">`, `X-Robots-Tag`, and `robots.txt`
   on a help center host). There is no sitemap.
+- **The brand is a second style sheet, not inline style** (`theme.go`). `style-src 'self'` refuses
+  inline style, and the CSP stays byte for byte as it is, so `brandCSS` writes the theme as custom
+  properties of `site.css` into `<base>/_/brand-<sha256[:6]>.css`, served after `OpenHelpCenter`,
+  `immutable` like `site.css`; any other `brand-*.css` name is the help center's 404, so a cache
+  never keeps an old look under a live name. It loads after `site.css`, so its `:root` also wins
+  over the dark palette: with any color set, it sets every color and `color-scheme: light` (owner
+  decision: brand colors are chosen for light; the `<meta name="color-scheme">` says `light` too).
+  A theme without colors or fonts has no sheet, so an untouched help center sends what it sent
+  before. Only validated `#rrggbb` colors and the fixed font stacks (system fonts, no `font-src`)
+  reach it; `TestTemplatesCarryNoBrandingScriptOrInlineStyle` checks it with every font.
+- **Every color pair the pages show reads (WCAG AA), not only the six the save checks.**
+  `domain.ThemeBrandPalette` derives surface, muted, rule and the accent tints from the saved
+  colors and falls back (surface to the background, muted to the text, tints to the surface) when
+  text or links would not read on them, so a derived color never refuses a save. The focus ring
+  (`--ring`) is drawn on the page, the cards and the tints: it is the primary color where that
+  reaches 3:1 on all of them, else the link color (4.5:1 on each by the fallbacks above); a primary
+  that passes the save on a dark page can still fade on its lighter cards. Header and footer each
+  get their own link hover and focus ring color: the link (or primary) color where it reads on the
+  band, 4.5:1 (3:1 for the ring), else the band's ink, which the save already checks. The skip
+  link, focused, sits on the header band and takes its ring; the header's search button draws its
+  ring inside itself in its own ink, since a ring around it would cross both the field and the band.
+  A button under the pointer (`--accent-hover`) moves the primary 12% away from its ink, so the
+  button text only gains contrast; a brightness filter took text near 4.5:1 below it. Proved by
+  `TestBrandPaletteKeepsEveryShownPairReadable` (with the default look's hover by
+  `TestDefaultLookKeepsButtonTextReadableOnHover`) and `web/e2e/help-center-branding.spec.ts`:
+  axe on every page with the default look in light and dark, with the brand in light (it is light
+  only; the test proves that under dark), the rings and hover color of the header, and no sideways
+  scroll at 320 px with a long website host (the link ends in an ellipsis, its `title` holds it).
+- **Logo and favicon are public only while the theme names them** (`brand-media.go`):
+  `<base>/_/logo/<id>` and `<base>/_/icon/<id>` serve the id the page's theme names in that field,
+  an image of the workspace's library outside its trash (`OpenHelpCenter` joins `kb_media`, and
+  `HelpCenterBrandImage` checks again that the help center names it), with the article images'
+  headers (`immutable`, `default-src 'none'; sandbox`, `nosniff`). The logo's `width` and
+  `height` come from `kb_media`, so the header does not move as it loads.
 - **No product name in the pages.** The templates and the style sheet never name Colliedesk (#125);
   `TestTemplatesCarryNoBrandingScriptOrInlineStyle` and the HTTP test check it.
 - **`tls-ask`** (`GET /api/v1/public/help-center/tls-ask?domain=`) answers Caddy's on-demand TLS

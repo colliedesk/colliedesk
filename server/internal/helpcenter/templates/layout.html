@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="{{if .LightOnly}}light{{else}}light dark{{end}}">
 {{- if .NoIndex}}
 <meta name="robots" content="noindex">
 {{- end}}
@@ -24,13 +24,22 @@
 {{- if .Style}}
 <link rel="stylesheet" href="{{.Style}}">
 {{- end}}
+{{- with .BrandStyle}}
+<link rel="stylesheet" href="{{.}}">
+{{- end}}
+{{- with .Favicon}}
+<link rel="icon" href="{{.}}">
+{{- end}}
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 {{- if .Home}}
 <header class="masthead">
 <div class="wrap masthead-row">
-<a class="brand" href="{{.Home}}">{{.SiteTitle}}</a>
+<a class="brand" href="{{.Home}}">{{with .Logo}}<img class="brand-logo" src="{{.URL}}" alt="{{.Alt}}"{{if and .Width .Height}} width="{{.Width}}" height="{{.Height}}"{{end}}>{{else}}{{.SiteTitle}}{{end}}</a>
+{{- with .Website}}
+<a class="site-link" href="{{.URL}}" title="{{.Name}}">{{.Name}}</a>
+{{- end}}
 {{- if not .HeroSearch}}
 <form class="search search-compact" role="search" action="{{.SearchURL}}" method="get">
 <label class="visually-hidden" for="q-top">Search articles</label>
@@ -48,7 +57,14 @@
 {{template "content" .}}
 </main>
 {{- if .Home}}
-<footer class="foot"><div class="wrap"><a href="{{.Home}}">{{.SiteTitle}}</a></div></footer>
+<footer class="foot"><div class="wrap foot-row"><a href="{{.Home}}">{{.SiteTitle}}</a>
+{{- with .Contact}}
+<a href="{{.URL}}">{{.Name}}</a>
+{{- end}}
+{{- with .Phone}}
+<a href="{{.URL}}">{{.Number}}</a>
+{{- end}}
+</div></footer>
 {{- end}}
 </body>
 </html>
