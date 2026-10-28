@@ -1,11 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import type { AIEvent, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
+import type { AIEvent, AIModelsInput, AIProvider, AIProviderInput, AISettings, AISlot, AISlotInput, AISlotName, AIUsage } from '../../api/ai';
 import { formatDate, formatDay } from '../../lib/format-date';
-import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
+import { Dialog as SharedDialog, Field } from '../../ui/dialog';
+import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiMessages as m } from './ai-messages';
 import { SettingsNav } from './settings-nav';
 import type { Shown } from './settings-nav';
+import { selfHostGuide } from '../../lib/self-host-guide';
 import './ai-settings.css';
 
 // Icons only this page uses stay in its chunk.
@@ -42,6 +44,8 @@ export interface AIPageProps {
   onCheck: (id: string) => void;
   // The dialogs' actions resolve to a refusal to show, or nothing when they worked.
   onAdd: (input: AIProviderInput) => Promise<FieldError | undefined>;
+  // The models a key may use, before the provider is saved, or why they could not be listed.
+  onListModels: (input: AIModelsInput) => Promise<string[] | FieldError>;
   onSetKey: (id: string, key: string) => Promise<FieldError | undefined>;
   onRemove: (id: string) => Promise<FieldError | undefined>;
   onSetAutomatic: (perDay: number, perMinute: number, draftPerDay?: number) => Promise<FieldError | undefined>;
@@ -106,23 +110,12 @@ export function AIPage(props: AIPageProps) {
           {props.loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
           {!settings ? (!props.loadFailed && <div className="ai-loading" aria-busy="true" />) : <>
             <div className="ai-tabs-row">
-              <div className="ai-tabs" role="tablist" aria-label={m.tabs}>
-                {tabs.map((item) => <button key={item.id} type="button" role="tab" id={`${ids.tabs}-${item.id}`} aria-selected={tab === item.id}
-                  aria-controls={`${ids.tabs}-${item.id}-panel`} tabIndex={tab === item.id ? 0 : -1} onClick={() => show(item.id)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
-                    const next = tabs[(tabs.findIndex((t) => t.id === tab) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-                    show(next.id);
-                    document.getElementById(`${ids.tabs}-${next.id}`)?.focus();
-                  }}>
-                  {item.label}{item.count !== undefined && <span className="ai-count">{item.count}</span>}
-                </button>)}
-              </div>
+              <Tabs label={m.tabs} tabs={tabs} value={tab} onChange={show} prefix={ids.tabs} />
               {isAdmin && <button type="button" className="ai-add" aria-label={m.addProvider} onClick={openAdd} disabled={full}
                 aria-describedby={full ? 'ai-limit-why' : undefined}><PlusIcon /><span className="ai-wide">{m.addProvider}</span><span className="ai-narrow">{m.addShort}</span></button>}
             </div>
             {props.error && <p role="alert" className="error-copy">{props.error}</p>}
-            <div role="tabpanel" id={`${ids.tabs}-${tab}-panel`} aria-labelledby={`${ids.tabs}-${tab}`} className="ai-panel-stack">
+            <div role="tabpanel" id={panelID(ids.tabs, tab)} aria-labelledby={tabID(ids.tabs, tab)} className="ai-panel-stack">
               {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })}
                 onConfirmAuto={(slot) => setDialog({ kind: slot.slot === 'draft' ? 'auto-draft' : 'auto-triage', slot })} onSetAuto={setSlot} />}
               {tab === 'usage' && <Usage usage={props.usage} failed={props.usageFailed} month={month} onMonth={(next) => { setMonth(next); props.onUsageMonth(next); }} />}
@@ -133,7 +126,7 @@ export function AIPage(props: AIPageProps) {
           </>}
         </div>
       </div>
-      {dialog?.kind === 'add' && settings && <AddDialog settings={settings} onClose={() => setDialog(undefined)} onAdd={props.onAdd} />}
+      {dialog?.kind === 'add' && settings && <AddDialog settings={settings} onClose={() => setDialog(undefined)} onAdd={props.onAdd} onListModels={props.onListModels} />}
       {dialog?.kind === 'key' && <KeyDialog provider={dialog.provider} onClose={() => setDialog(undefined)} onSetKey={props.onSetKey} />}
       {dialog?.kind === 'automatic' && settings && <AutomaticDialog settings={settings} onClose={() => setDialog(undefined)} onSave={props.onSetAutomatic} />}
       {dialog?.kind === 'delete' && settings && <DeleteDialog provider={dialog.provider} settings={settings} onClose={() => setDialog(undefined)} onRemove={props.onRemove} />}
@@ -153,17 +146,17 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
   const nothing = !server && settings.providers.length === 0;
   const models = (slot: AISlotName) => server?.models[slot]?.[0] ?? '';
   return <div className={`ai-panel-stack${nothing ? ' ai-nothing' : ''}`}>
-    {!isAdmin && <div className="ai-notice ai-notice-plain" role="note"><InfoIcon /><span><strong>{m.agentNotice}</strong> {m.agentNoticeMore}</span></div>}
+    {!isAdmin && <div className="notice notice-plain" role="note"><InfoIcon /><span><strong>{m.agentNotice}</strong> {m.agentNoticeMore}</span></div>}
     {props.isAdmin && <AutoMovedNotice settings={settings} slotName="triage" onTurnOn={props.onConfirmAuto} />}
     {props.isAdmin && <AutoMovedNotice settings={settings} slotName="draft" onTurnOn={props.onConfirmAuto} />}
-    {settings.automatic.paused_until && settings.slots.some((slot) => slot.slot === 'triage' && slot.enabled) && <div className="ai-notice" role="status">
+    {settings.automatic.paused_until && settings.slots.some((slot) => slot.slot === 'triage' && slot.enabled) && <div className="notice" role="status">
       <span><strong>{m.pausedHeading(formatDate(settings.automatic.paused_until, props.timezone))}</strong> {m.pausedBody(settings.automatic.per_day)}</span>
-      {isAdmin && <div className="ai-notice-actions"><button type="button" onClick={props.onOpenAutomatic}>{m.raiseLimit}</button></div>}
+      {isAdmin && <div className="notice-actions"><button type="button" onClick={props.onOpenAutomatic}>{m.raiseLimit}</button></div>}
     </div>}
     {settings.allowance && settings.allowance.used_micro_usd >= settings.allowance.limit_micro_usd && settings.slots.some((slot) => slot.source === 'server' && slot.enabled)
-      && <div className="ai-notice ai-notice-danger" role="alert">
+      && <div className="notice notice-danger" role="alert">
         <span><strong>{m.allowanceUsedHeading(server?.label ?? '')}</strong> {m.allowanceUsedBody(formatDay(settings.allowance.resets_at, 'UTC'))}</span>
-        {isAdmin && <div className="ai-notice-actions"><button type="button" className="primary-action" onClick={props.onOpenAdd}>{m.addProvider}</button></div>}
+        {isAdmin && <div className="notice-actions"><button type="button" className="primary-action" onClick={props.onOpenAdd}>{m.addProvider}</button></div>}
       </div>}
     {props.showConsent && server && isAdmin && <section className="panel ai-consent" aria-labelledby="ai-consent-heading">
       <div><h2 id="ai-consent-heading">{m.consentHeading(props.workspaceName)}</h2>
@@ -184,8 +177,7 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
       <div className="panel ai-way"><h3>{m.emptyOwnHeading}</h3><p>{m.emptyOwnBody}</p>
         {isAdmin && <div className="button-row"><button type="button" className="primary-action" onClick={props.onOpenAdd}><PlusIcon />{m.addProvider}</button></div>}</div>
       <div className="panel ai-way"><h3>{m.emptyOperatorHeading}</h3><p>{m.emptyOperatorBody}</p>
-        <pre>{'AI_SERVER_PROVIDER=anthropic\nAI_SERVER_API_KEY=…\nAI_SERVER_MODELS=triage=…,draft=…'}</pre>
-        <div className="button-row"><a className="button" href="https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/environment-variables.md#ai-provider" target="_blank" rel="noopener noreferrer">{m.setupGuide}</a></div></div>
+        <div className="button-row"><a className="button" href={selfHostGuide('environment-variables.md', 'ai-provider')} target="_blank" rel="noopener noreferrer">{m.setupGuide}</a></div></div>
     </section>}
     <section className="panel ai-slots" aria-label={m.features}>
       <div className="ai-slot-head" aria-hidden="true"><span>{m.columnFeature}</span><span>{m.columnProvider}</span><span>{m.columnModel}</span><span>{m.columnAutomatic}</span><span>{m.columnOn}</span></div>
@@ -261,7 +253,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
           {isAdmin && <button type="button" className="link-button" onClick={onOpenAutomatic} aria-label={m.changeAutomatic}>{m.change}</button>}</>
           : <span className="muted-copy">{m.noAutomatic}</span>}
       </div>
-      <label className="ai-switch"><input type="checkbox" role="switch" aria-label={m.switchFor(name)} checked={slot.enabled} disabled={locked || !choice}
+      <label className="switch"><input type="checkbox" role="switch" aria-label={m.switchFor(name)} checked={slot.enabled} disabled={locked || !choice}
         onChange={(event) => save({ enabled: event.target.checked })} /></label>
       {saving && <p className="ai-slot-why" role="status">{m.saving}</p>}
       {!saving && choices.length === 0 && <p className="ai-slot-why help">{m.addFirst}</p>}
@@ -300,7 +292,7 @@ function AutoTriage({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, on
         {on ? <span className="ai-auto-stat">{m.autoStat(settings.auto_triage.applied, settings.auto_triage.undone)} <span className="muted-copy">{m.autoStatWhen}</span></span>
           : isAdmin && <span className="ai-auto-stat muted-copy ai-long">{m.autoPickLater}</span>}
       </fieldset>}
-      <label className="ai-switch ai-auto-switch"><input type="checkbox" role="switch" id="ai-auto-triage" aria-label={m.autoTitle} checked={on} disabled={locked || !slot.enabled}
+      <label className="switch ai-auto-switch"><input type="checkbox" role="switch" id="ai-auto-triage" aria-label={m.autoTitle} checked={on} disabled={locked || !slot.enabled}
         aria-describedby={why ? `${id}-why` : undefined}
         onChange={(event) => (event.target.checked ? onTurnOn() : onSet({ automatic: false }))} /></label>
     </div>
@@ -333,7 +325,7 @@ function AutoDraft({ slot, settings, isAdmin, locked, hasProvider, onTurnOn, onO
         {pausedDay && isAdmin && <button type="button" onClick={onRaise}>{m.autoDraftRaise}</button>}
         {pausedHalf && isAdmin && <a className="button ai-link-button" href="/settings/ai?add=1">{m.autoDraftAddKey}</a>}
         {locked && !why && <span className="sr-only" id="ai-auto-draft-why">{m.autoAdminsOnly}</span>}
-        <label className="ai-switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
+        <label className="switch"><input type="checkbox" role="switch" id="ai-auto-draft" aria-label={m.autoDraftTitle} checked={on} disabled={locked || !slot.enabled}
           aria-describedby={why || locked ? 'ai-auto-draft-why' : undefined}
           onChange={(event) => (event.target.checked ? onTurnOn() : onOff())} /></label>
       </div>
@@ -374,7 +366,7 @@ function AutoMovedNotice({ settings, slotName, onTurnOn }: { settings: AISetting
   const detail = last?.detail as { from?: Record<string, unknown>; to?: Record<string, unknown> } | undefined;
   if (!slot || !slot.enabled || slot.automatic || !detail?.from?.automatic || detail.to?.automatic || detail.from.provider_label === detail.to?.provider_label) return null;
   const title = slotName === 'draft' ? m.autoDraftTitle : m.autoTitle;
-  return <div className="ai-notice" role="status"><span>{m.autoMovedNotice(title, slotLabel(slotName), String(detail.to?.provider_label ?? ''))}</span>
+  return <div className="notice" role="status"><span>{m.autoMovedNotice(title, slotLabel(slotName), String(detail.to?.provider_label ?? ''))}</span>
     <button type="button" onClick={() => onTurnOn(slot)}>{m.autoTurnOnAgain}</button></div>;
 }
 
@@ -566,55 +558,89 @@ function History({ events, timezone }: { events: AIEvent[]; timezone: string }) 
   </>;
 }
 
-// Dialog is the frame every dialog of this page shares: Escape closes, Tab stays inside, focus returns.
-function Dialog({ title, help, onClose, children, footer, onSubmit, alert }: { title: string; help?: string; onClose: () => void; children: ReactNode; footer: ReactNode; onSubmit?: (event: FormEvent) => void; alert?: boolean }) {
-  useReturnFocus();
-  const root = useRef<HTMLFormElement>(null);
-  const titleId = useId();
-  return (
-    <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>
-      <form className="dialog ai-dialog" role={alert ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby={titleId} ref={root}
-        onKeyDown={dialogKeys(root, onClose)} onSubmit={(event) => { event.preventDefault(); onSubmit?.(event); }} noValidate>
-        <header><div><h2 id={titleId}>{title}</h2>{help && <p>{help}</p>}</div>
-          {!alert && <button type="button" className="icon-button" aria-label={m.close} onClick={onClose}>×</button>}</header>
-        <div className="ai-dialog-body">{children}</div>
-        <footer className="button-row ai-dialog-footer">{footer}</footer>
-      </form>
-    </div>
-  );
+// Dialog is the shared form dialog with this page's close label.
+function Dialog(props: Omit<Parameters<typeof SharedDialog>[0], 'closeLabel'>) {
+  return <SharedDialog {...props} closeLabel={m.close} className="ai-dialog" />;
 }
 
-function Field({ label, error, help, children, id }: { label: string; error?: string; help?: string; children: (props: { id: string; 'aria-invalid'?: true; 'aria-describedby'?: string }) => ReactNode; id: string }) {
-  const note = `${id}-note`;
-  return <div className={`field${error ? ' ai-field-bad' : ''}`}><label className="field-label" htmlFor={id}>{label}</label>
-    {children({ id, ...(error ? { 'aria-invalid': true } : {}), ...(error || help ? { 'aria-describedby': note } : {}) })}
-    {error ? <span className="error-copy ai-field-note" id={note}>{error}</span> : help && <span className="help ai-field-note" id={note}>{help}</span>}
-  </div>;
-}
+// The most models a provider keeps (contracts/openapi.yaml, AIProviderInput).
+const maxProviderModels = 20;
+// Above this many listed models, the list gets a search box.
+const modelSearchFrom = 8;
 
-function AddDialog({ settings, onClose, onAdd }: { settings: AISettings; onClose: () => void; onAdd: AIPageProps['onAdd'] }) {
-  const [kind, setKind] = useState<'anthropic' | 'openai_compatible'>('anthropic');
+// What Add provider offers: Anthropic, two OpenAI-compatible services whose address is filled in, and
+// any other OpenAI-compatible server, whose address the person types.
+type Service = 'anthropic' | 'openai' | 'openrouter' | 'self_hosted';
+const services: Service[] = ['anthropic', 'openai', 'openrouter', 'self_hosted'];
+const serviceURL: Partial<Record<Service, string>> = { openai: 'https://api.openai.com/v1', openrouter: 'https://openrouter.ai/api/v1' };
+const serviceText: Record<Service, [string, string]> = {
+  anthropic: [m.kindAnthropic, m.kindAnthropicHelp], openai: [m.serviceOpenAI, m.serviceOpenAIHelp],
+  openrouter: [m.serviceOpenRouter, m.serviceOpenRouterHelp], self_hosted: [m.serviceSelfHosted, m.serviceSelfHostedHelp],
+};
+
+type ModelList = { state: 'idle' } | { state: 'loading' } | { state: 'loaded'; models: string[] } | { state: 'typing' };
+
+function AddDialog({ settings, onClose, onAdd, onListModels }: { settings: AISettings; onClose: () => void; onAdd: AIPageProps['onAdd']; onListModels: AIPageProps['onListModels'] }) {
+  const [service, setService] = useState<Service>('anthropic');
+  const kind = service === 'anthropic' ? 'anthropic' : 'openai_compatible';
   const [label, setLabel] = useState('');
-  const [baseURL, setBaseURL] = useState('');
+  const [typedURL, setTypedURL] = useState('');
+  const baseURL = serviceURL[service] ?? typedURL;
   const [key, setKey] = useState('');
-  const [models, setModels] = useState('');
+  // The models picked from the provider's list, in the order picked: the first is the default.
+  const [picked, setPicked] = useState<string[]>([]);
+  // The names typed when the provider keeps no list (or the person prefers to type).
+  const [typed, setTyped] = useState('');
+  const [list, setList] = useState<ModelList>({ state: 'idle' });
+  // Each load is numbered; an answer for a kind, address or key changed since is dropped.
+  const loads = useRef(0);
   const [error, setError] = useState<FieldError>();
   const [busy, setBusy] = useState(false);
   const id = useId();
-  const keyOptional = kind === 'openai_compatible' && settings.allow_private_base_urls;
+  const keyOptional = service === 'self_hosted' && settings.allow_private_base_urls;
   const noKeys = !settings.can_store_keys && !keyOptional;
   const left = settings.provider_limit - settings.providers.length;
   const focus = (field: FieldError['field']) => document.getElementById(`${id}-${field}`)?.focus();
+  const canLoad = (key.trim() !== '' || keyOptional) && (kind === 'anthropic' || baseURL.trim() !== '') && list.state !== 'loading';
+  // asked is true when the person pressed Load: only then does a refusal take the focus to its field.
+  const loadModels = async (asked: boolean) => {
+    if (!canLoad) return;
+    const load = ++loads.current;
+    setList({ state: 'loading' });
+    setError(undefined);
+    const answer = await onListModels({ kind, ...(key.trim() ? { api_key: key.trim() } : {}), ...(kind === 'openai_compatible' ? { base_url: baseURL.trim() } : {}) });
+    if (load !== loads.current) return;
+    if (Array.isArray(answer)) {
+      setList({ state: 'loaded', models: answer });
+      // Claude's newest Sonnet is a sound, middle-priced default; the newest model overall is often the
+      // dearest. Other lists are sorted by name, so nothing is ticked for the person.
+      const kept = picked.filter((model) => answer.includes(model));
+      const sonnet = kind === 'anthropic' ? answer.find((model) => model.startsWith('claude-sonnet-')) : undefined;
+      setPicked(kept.length > 0 ? kept : sonnet ? [sonnet] : []);
+      return;
+    }
+    // A provider that keeps no list: the names are typed instead, with the reason under the field.
+    setList(answer.field === 'models' ? { state: 'typing' } : { state: 'idle' });
+    setError(answer);
+    if (asked && answer.field !== 'form') focus(answer.field);
+  };
+  // A new kind, address or key makes the loaded list stale, and an answer still on its way with it.
+  const changed = (next: () => void) => {
+    next();
+    setError(undefined);
+    if (list.state === 'loaded' || list.state === 'loading') { loads.current += 1; setList({ state: 'idle' }); }
+  };
   const submit = async () => {
-    const list = models.split(',').map((model) => model.trim()).filter(Boolean);
+    // Only what is on screen is sent: models ticked in a list loaded for this kind, address and key, or the names typed.
+    const models = list.state === 'typing' ? typed.split(',').map((model) => model.trim()).filter(Boolean) : list.state === 'loaded' ? picked : [];
     const refuse = (field: FieldError['field'], text: string) => { setError({ field, text }); focus(field); };
     if (!label.trim()) return refuse('label', m.labelMissing);
     if (kind === 'openai_compatible' && !baseURL.trim()) return refuse('base_url', m.baseURLMissing);
     if (!key.trim() && !keyOptional) return refuse('api_key', m.keyMissing);
-    if (list.length === 0) return refuse('models', m.modelsMissing);
+    if (models.length === 0) return refuse('models', list.state === 'typing' ? m.modelsMissing : m.modelsPick);
     setBusy(true);
     setError(undefined);
-    const input: AIProviderInput = { kind, label: label.trim(), models: list, ...(key.trim() ? { api_key: key.trim() } : {}), ...(kind === 'openai_compatible' ? { base_url: baseURL.trim() } : {}) };
+    const input: AIProviderInput = { kind, label: label.trim(), models, ...(key.trim() ? { api_key: key.trim() } : {}), ...(kind === 'openai_compatible' ? { base_url: baseURL.trim() } : {}) };
     const refused = await onAdd(input);
     setBusy(false);
     if (!refused) { onClose(); return; }
@@ -626,21 +652,79 @@ function AddDialog({ settings, onClose, onAdd }: { settings: AISettings; onClose
     <Dialog title={m.addHeading} help={m.addHelp} onClose={onClose} onSubmit={() => void submit()}
       footer={<><span className="ai-dialog-left">{left > 0 ? m.providersFoot(left) : ''}</span><button type="button" onClick={onClose}>{m.cancel}</button>
         <button type="submit" className="primary-action" disabled={busy || noKeys}>{busy ? m.checking : m.checkAndSave}</button></>}>
-      {noKeys && <div className="ai-notice ai-notice-danger" role="alert"><span><strong>{m.noKeysNotice}</strong> {m.noKeysBody}</span></div>}
+      {noKeys && <div className="notice notice-danger" role="alert"><span><strong>{m.noKeysNotice}</strong> {m.noKeysBody}{' '}
+        <a href={selfHostGuide('environment-variables.md', 'variables')} target="_blank" rel="noopener noreferrer">{m.noKeysGuide}</a></span></div>}
       {error?.field === 'form' && <p role="alert" className="error-copy">{error.text}</p>}
       <fieldset className="ai-kind"><legend className="sr-only">{m.columnProvider}</legend>
-        {(['anthropic', 'openai_compatible'] as const).map((value) => <label key={value}>
-          <input type="radio" name={`${id}-kind`} value={value} checked={kind === value} onChange={() => { setKind(value); setError(undefined); }} />
-          <strong>{value === 'anthropic' ? m.kindAnthropic : m.kindOpenAI}</strong><span>{value === 'anthropic' ? m.kindAnthropicHelp : m.kindOpenAIHelp}</span></label>)}
+        {services.map((value) => <label key={value}>
+          <input type="radio" name={`${id}-kind`} value={value} checked={service === value} onChange={() => changed(() => setService(value))} />
+          <strong>{serviceText[value][0]}</strong><span>{serviceText[value][1]}</span></label>)}
       </fieldset>
       <Field label={m.labelField} id={`${id}-label`} error={fieldError('label')}>{(attrs) => <input {...attrs} value={label} maxLength={80} onChange={(event) => setLabel(event.target.value)} autoFocus />}</Field>
-      {kind === 'openai_compatible' && <Field label={m.baseURLField} id={`${id}-base_url`} error={fieldError('base_url')} help={m.baseURLHelp}>
-        {(attrs) => <input {...attrs} type="url" inputMode="url" value={baseURL} placeholder="https://openrouter.ai/api/v1" onChange={(event) => setBaseURL(event.target.value)} />}</Field>}
+      {service === 'self_hosted' && <Field label={m.baseURLField} id={`${id}-base_url`} error={fieldError('base_url')} help={m.baseURLHelp}>
+        {(attrs) => <input {...attrs} type="url" inputMode="url" value={typedURL} placeholder="http://localhost:11434/v1" onChange={(event) => changed(() => setTypedURL(event.target.value))} />}</Field>}
+      {service !== 'self_hosted' && fieldError('base_url') && <p role="alert" className="error-copy">{fieldError('base_url')}</p>}
       <Field label={keyOptional ? m.keyFieldOptional : m.keyField} id={`${id}-api_key`} error={fieldError('api_key')} help={m.keyHelpStored}>
-        {(attrs) => <input {...attrs} type="password" autoComplete="off" value={key} placeholder={keyOptional ? m.keyOptionalPlaceholder : undefined} onChange={(event) => setKey(event.target.value)} />}</Field>
-      <Field label={m.modelsField} id={`${id}-models`} error={fieldError('models')} help={m.modelsHelp}>
-        {(attrs) => <input {...attrs} value={models} placeholder={kind === 'anthropic' ? 'claude-sonnet-5-5, claude-haiku-5-5' : 'openai/gpt-5'} onChange={(event) => setModels(event.target.value)} />}</Field>
+        {(attrs) => <input {...attrs} type="password" autoComplete="off" value={key} placeholder={keyOptional ? m.keyOptionalPlaceholder : undefined}
+          onChange={(event) => changed(() => setKey(event.target.value))}
+          // Leaving the key with nothing loaded yet loads the list, so the next thing to do is pick.
+          onBlur={() => { if (list.state === 'idle' && key.trim() !== '') void loadModels(false); }} />}</Field>
+      {list.state === 'typing'
+        ? <Field label={m.modelsTyped} id={`${id}-models`} error={fieldError('models')} help={m.modelsHelp}>
+            {(attrs) => <input {...attrs} value={typed} placeholder={kind === 'anthropic' ? 'claude-sonnet-5-5, claude-haiku-5-5' : 'llama3.1, qwen3'}
+              onChange={(event) => { setTyped(event.target.value); if (error?.field === 'models') setError(undefined); }} />}</Field>
+        : <ModelPicker id={`${id}-models`} list={list} picked={picked} onPick={setPicked} error={fieldError('models')} canLoad={canLoad}
+            needsAddress={service === 'self_hosted'} onLoad={() => void loadModels(true)} />}
+      {list.state === 'typing'
+        ? <button type="button" className="link-button ai-models-switch" disabled={!canLoad} onClick={() => void loadModels(true)}>{m.modelsPickInstead}</button>
+        : <button type="button" className="link-button ai-models-switch" onClick={() => { setError(undefined); setTyped(picked.join(', ')); setList({ state: 'typing' }); }}>{m.modelsTypeInstead}</button>}
     </Dialog>
+  );
+}
+
+// modelMatches finds a model whatever the punctuation, spacing, case or word order typed:
+// "gpt5 mini", "GPT-5-mini" and "mini gpt5" all find gpt-5-mini; "sonnet 4.6" finds claude-sonnet-4-6.
+function modelMatches(model: string, query: string): boolean {
+  const compact = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  const name = compact(model);
+  const words = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return name.includes(compact(query)) || words.every((word) => name.includes(word));
+}
+
+// ModelPicker lists the models the provider offers this key, to tick instead of typing ids. The picked
+// ones stay on top in the order picked; the first is the default.
+function ModelPicker({ id, list, picked, onPick, error, canLoad, needsAddress, onLoad }: { id: string; list: ModelList; picked: string[]; onPick: (models: string[]) => void;
+  error?: string; canLoad: boolean; needsAddress: boolean; onLoad: () => void }) {
+  const [query, setQuery] = useState('');
+  const note = `${id}-note`;
+  const models = list.state === 'loaded' ? list.models : [];
+  const shown = models.filter((model) => modelMatches(model, query));
+  const full = picked.length >= maxProviderModels;
+  const toggle = (model: string) => onPick(picked.includes(model) ? picked.filter((item) => item !== model) : full ? picked : [...picked, model]);
+  return (
+    <fieldset className={`field ai-models${error ? ' field-bad' : ''}`} aria-describedby={note}>
+      <legend className="field-label">{m.modelsField}</legend>
+      <div className="ai-models-head">
+        {list.state === 'loaded' && models.length > modelSearchFrom
+          ? <input id={id} type="search" className="ai-models-search" aria-label={m.modelsSearch} placeholder={m.modelsSearch} value={query} onChange={(event) => setQuery(event.target.value)} />
+          : <span className="help">{list.state === 'loaded' ? '' : needsAddress ? m.modelsBeforeLoadAddress : m.modelsBeforeLoad}</span>}
+        <button type="button" id={list.state === 'loaded' && models.length > modelSearchFrom ? undefined : id} disabled={!canLoad} onClick={onLoad}>
+          {list.state === 'loading' ? m.loadingModels : list.state === 'loaded' ? m.reloadModels : m.loadModels}</button>
+      </div>
+      {list.state === 'loaded' && <ul className="ai-models-list">
+        {models.length === 0 && <li className="ai-models-empty">{m.modelsNone}</li>}
+        {models.length > 0 && shown.length === 0 && <li className="ai-models-empty">{m.modelsNoMatch}</li>}
+        {/* The picked models first, in the order picked, then the rest as the provider lists them. */}
+        {[...picked.filter((model) => shown.includes(model)), ...shown.filter((model) => !picked.includes(model))].map((model) => (
+          <li key={model}><label>
+            <input type="checkbox" checked={picked.includes(model)} disabled={!picked.includes(model) && full} onChange={() => toggle(model)} />
+            <span className="ai-mono" title={model}>{model}</span>{picked[0] === model && <span className="ai-models-default">{m.modelsDefault}</span>}
+          </label></li>
+        ))}
+      </ul>}
+      {error ? <span className="error-copy field-note" id={note} role="alert">{error}</span>
+        : <span className="help field-note" id={note}>{full ? m.modelsLimit(maxProviderModels) : list.state === 'loaded' ? m.modelsPicked(picked.length, maxProviderModels) : ''}</span>}
+    </fieldset>
   );
 }
 

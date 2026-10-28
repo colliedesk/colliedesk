@@ -515,6 +515,8 @@ test('an article is excluded from AI and let back without touching an edit in pr
   within(box).getByRole('button', { name: 'Exclude from AI' }).focus();
   fireEvent.click(within(box).getByRole('button', { name: 'Exclude from AI' }));
   expect(await within(box).findByText('Off for this article since Oct 22, 2026, by Mai Tran.')).toBeInTheDocument();
+  // The heading says the state too, so it never reads "Used by AI" above "Off for this article".
+  expect(box).toHaveAccessibleName('Not used by AI');
   // The keyboard stays where it was.
   expect(document.activeElement).toBe(within(box).getByRole('button', { name: 'Let AI use it again' }));
   expect(screen.getByText('AI does not read this article.')).toBeInTheDocument();
@@ -541,15 +543,47 @@ test('a refused change of AI use says so and keeps the state', async () => {
   expect(within(box).getByRole('button', { name: 'Exclude from AI' })).toBeEnabled();
 });
 
-test('on a phone the Used by AI box stands at the top of the page, not behind Details', async () => {
+test('on a phone the AI box stands at the top of the page, not behind Details', async () => {
   const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
   vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ ai_exclusion: { at: '2026-10-22T09:00:00Z', by: null } })) });
   open({ articleId: ids.article });
-  const box = await screen.findByRole('region', { name: 'Used by AI' });
+  const box = await screen.findByRole('region', { name: 'Not used by AI' });
   expect(within(box).getByRole('button', { name: 'Let AI use it again' })).toBeInTheDocument();
   // One way back on a phone: the box, not the note too.
   expect(screen.queryByText('AI does not read this article.')).not.toBeInTheDocument();
   fireEvent.click(within(screen.getByRole('region', { name: 'Article actions' })).getByRole('button', { name: /^Details/ }));
-  expect(within(screen.getByRole('dialog', { name: 'Details' })).queryByRole('region', { name: 'Used by AI' })).not.toBeInTheDocument();
+  expect(within(screen.getByRole('dialog', { name: 'Details' })).queryByRole('region', { name: /used by AI/i })).not.toBeInTheDocument();
+});
+
+test('three fast clicks on Save draft create one article, and every request names the same submit', async () => {
+  let answer: (response: Response) => void = () => undefined;
+  const calls = serve({ ...base, 'POST /api/v1/kb/articles': () => new Promise<Response>((resolve) => { answer = resolve; }) });
+  open({ collectionId: ids.setup });
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Reset your password' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: '# Steps' } });
+  const button = screen.getByRole('button', { name: 'Save draft' });
+  act(() => { button.click(); button.click(); button.click(); });
+  await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1));
+  const key = (calls.find((call) => call.method === 'POST')?.headers as Record<string, string>)['Idempotency-Key'];
+  expect(key).toMatch(/^[\x21-\x7e]{1,200}$/);
+  await act(async () => { answer(json(201, article({ title: 'Reset your password', body_md: '# Steps' }))); });
+  await waitFor(() => expect(navigate).toHaveBeenCalled());
+  expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+});
+
+test('a save that failed is retried under the same key, so a request that did arrive is not stored twice', async () => {
+  let attempt = 0;
+  const calls = serve({ ...base, 'POST /api/v1/kb/articles': () => (++attempt === 1 ? Promise.reject(new TypeError('Failed to fetch')) : json(200, article({ title: 'Reset your password', body_md: '# Steps' }))) });
+  open({ collectionId: ids.setup });
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Reset your password' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: '# Steps' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+  await waitFor(() => expect(navigate).toHaveBeenCalled());
+  const keys = calls.filter((call) => call.method === 'POST').map((call) => (call.headers as Record<string, string>)['Idempotency-Key']);
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toMatch(/^[\x21-\x7e]{1,200}$/);
+  expect(keys[1]).toBe(keys[0]);
 });

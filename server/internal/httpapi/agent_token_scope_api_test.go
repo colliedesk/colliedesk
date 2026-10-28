@@ -109,6 +109,11 @@ var routeTiers = map[string]string{
 	"PATCH /api/v1/agents/me/timezone":                                 "draft",
 	"PATCH /api/v1/agents/me/display-name":                             "draft",
 	"GET /api/v1/tags":                                                 "read",
+	"GET /api/v1/results":                                              "read",
+	"GET /api/v1/results/share-link":                                   "admin",
+	"POST /api/v1/results/share-link":                                  "approval",
+	"DELETE /api/v1/results/share-link":                                "admin",
+	"PATCH /api/v1/agents/me/results-email":                            "draft",
 	"POST /api/v1/tags":                                                "draft",
 	"PATCH /api/v1/tags/{id}":                                          "send",
 	"DELETE /api/v1/tags/{id}":                                         "send",
@@ -119,6 +124,8 @@ var routeTiers = map[string]string{
 	"POST /api/v1/channels/email/secret":                               "approval",
 	"POST /api/v1/channels/email/gmail":                                "approval",
 	"DELETE /api/v1/channels/email/gmail":                              "approval",
+	"POST /api/v1/channels/email/microsoft":                            "approval",
+	"DELETE /api/v1/channels/email/microsoft":                          "approval",
 	"GET /api/v1/billing":                                              "admin",
 	"POST /api/v1/billing/checkout":                                    "approval",
 	"POST /api/v1/billing/portal":                                      "approval",
@@ -126,6 +133,25 @@ var routeTiers = map[string]string{
 	"POST /api/v1/export/link":                                         "approval",
 	"GET /api/v1/channels/web-form":                                    "read",
 	"PUT /api/v1/channels/web-form":                                    "admin",
+	"GET /api/v1/channels":                                             "read",
+	"POST /api/v1/channels":                                            "admin",
+	"GET /api/v1/channels/events":                                      "read",
+	"GET /api/v1/channels/{id}":                                        "read",
+	"PATCH /api/v1/channels/{id}":                                      "admin",
+	"DELETE /api/v1/channels/{id}":                                     "approval",
+	"PUT /api/v1/channels/{id}/credentials":                            "admin",
+	"POST /api/v1/channels/{id}/check":                                 "admin",
+	"POST /api/v1/channels/{id}/held/replay":                           "admin",
+	"POST /api/v1/channels/{id}/held/discard":                          "approval",
+	"GET /api/v1/channels/{id}/email":                                  "read",
+	"POST /api/v1/channels/{id}/email/domain-verification":             "admin",
+	"POST /api/v1/channels/email/test-message":                         "draft",
+	"POST /api/v1/channels/{id}/email/test-message":                    "draft",
+	"POST /api/v1/channels/{id}/email/secret":                          "approval",
+	"POST /api/v1/channels/{id}/email/gmail":                           "approval",
+	"DELETE /api/v1/channels/{id}/email/gmail":                         "approval",
+	"POST /api/v1/channels/{id}/email/microsoft":                       "approval",
+	"DELETE /api/v1/channels/{id}/email/microsoft":                     "approval",
 	"GET /api/v1/agent-requests":                                       "read",
 	"GET /api/v1/agent-requests/{id}":                                  "read",
 	"POST /api/v1/agent-requests/{id}/cancel":                          "read",
@@ -146,6 +172,7 @@ var routeTiers = map[string]string{
 	"POST /api/v1/agent-requests/{id}/reject":                          "person",
 	"GET /api/v1/ai":                                                   "read",
 	"POST /api/v1/ai/providers":                                        "admin",
+	"POST /api/v1/ai/models":                                           "admin",
 	"PATCH /api/v1/ai/providers/{id}":                                  "admin",
 	"PUT /api/v1/ai/providers/{id}/key":                                "admin",
 	"POST /api/v1/ai/providers/{id}/check":                             "admin",
@@ -162,6 +189,11 @@ var routeTiers = map[string]string{
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  "draft",
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": "draft",
 	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    "draft",
+	"GET /api/v1/help-center/theme":                                    "read",
+	"PUT /api/v1/help-center/theme":                                    "admin",
+	"POST /api/v1/help-center/theme/check":                             "read",
+	"POST /api/v1/help-center/theme/preview":                           "read",
+	"PUT /api/v1/kb/order":                                             "send",
 }
 
 // kbFileRouteKeys carry video bytes; like an image upload, a lower tier is refused, not filed.
@@ -170,7 +202,8 @@ var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PU
 
 // credentialRouteKeys carry another service's API key; a lower tier is refused, not filed.
 var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true,
-	"POST /api/v1/ai/providers": true, "PUT /api/v1/ai/providers/{id}/key": true}
+	"POST /api/v1/ai/providers": true, "POST /api/v1/ai/models": true, "PUT /api/v1/ai/providers/{id}/key": true,
+	"PUT /api/v1/channels/{id}/credentials": true}
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)

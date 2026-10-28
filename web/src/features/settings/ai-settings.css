@@ -1,33 +1,14 @@
-/* Settings → AI. Loaded with its lazy part; scrollbars follow base.css. */
+/* Settings → Built-in AI. Loaded with its lazy part; scrollbars follow base.css. */
 .ai-page { display: grid; gap: var(--space-3); align-content: start; min-width: 0; }
 .ai-panel-stack { display: grid; gap: var(--space-3); min-width: 0; }
 .ai-loading { min-height: 12rem; }
 .ai-settings .badge { font-size: var(--fs-label); }
 .ai-mono { font-family: var(--font-mono); font-size: 0.95em; }
 
-/* Tabs and the head action share a row; on a narrow screen the tabs scroll sideways with no bar. */
-.ai-tabs-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; border-bottom: 1px solid var(--line); }
-.ai-tabs { display: flex; flex: 1; min-width: 0; gap: var(--space-5); overflow-x: auto; scrollbar-width: none;
-  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
-.ai-tabs::-webkit-scrollbar { display: none; }
-.ai-tabs button { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; margin-bottom: -1px; border: 0; border-radius: 0;
-  background: transparent; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; }
-.ai-tabs button:hover:not(:disabled) { background: transparent; color: var(--text-1); }
-.ai-tabs button[aria-selected="true"] { color: var(--text-1); box-shadow: inset 0 -2px var(--accent); }
-.ai-tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-@media (pointer: coarse) { .ai-tabs button { min-height: var(--touch); } }
-.ai-count { color: var(--text-3); font-weight: 400; font-variant-numeric: tabular-nums; }
-.ai-add { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; margin-bottom: var(--space-1); }
+.ai-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+.ai-add { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
 .ai-narrow { display: none; }
 
-/* Notices */
-.ai-notice { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; border: 1px solid var(--note-line); border-radius: var(--radius-lg);
-  background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
-.ai-notice > svg { flex: none; }
-.ai-notice > span { flex: 1 1 20rem; min-width: 0; }
-.ai-notice strong { font-weight: 600; }
-.ai-notice-plain { border-color: var(--line); background: var(--surface-0); color: var(--text-2); }
-.ai-notice-danger { border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: var(--danger-soft); color: var(--danger); }
 
 /* Consent banner and server card */
 .ai-consent { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3) var(--space-6); align-items: center; border-color: var(--line-strong);
@@ -65,7 +46,6 @@
 .ai-slot select { width: 100%; }
 .ai-cell-label { display: none; }
 .ai-slot-limit { display: grid; gap: 0; justify-items: start; font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
-.ai-notice-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-left: auto; }
 .ai-server-meter { grid-template-columns: auto minmax(0, 1fr) minmax(16rem, 22rem); }
 .ai-meter { display: grid; gap: 6px; min-width: 0; }
 .ai-meter-top { display: flex; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; font-size: var(--fs-small); }
@@ -89,18 +69,8 @@
 .ai-st-off { --dot: var(--line-control); }
 .ai-st-warn { --dot: var(--pending); }
 .ai-meter-none { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
-@media (pointer: coarse) { .ai-slot-limit .link-button { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-slot-limit .link-button { min-height: var(--touch); } }
 
-.ai-switch { justify-self: end; display: inline-flex; align-items: center; min-height: var(--touch); cursor: pointer; }
-.ai-switch input { appearance: none; position: relative; width: 34px; height: 20px; min-height: 0; margin: 0; border: 0; border-radius: var(--radius-full);
-  background: var(--line-control); cursor: pointer; transition: background-color var(--dur) var(--ease); }
-.ai-switch input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: var(--radius-full);
-  background: var(--surface-1); box-shadow: var(--shadow-1); transition: translate var(--dur) var(--ease); }
-.ai-switch input:checked { background: var(--accent); }
-.ai-switch input:checked::after { translate: 14px 0; }
-.ai-switch input:disabled { opacity: 0.5; cursor: not-allowed; }
-.ai-switch input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .ai-switch input, .ai-switch input::after { transition: none; } }
 
 .ai-sends { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3) var(--space-4); color: var(--text-2); font-size: var(--fs-small); }
 .ai-sends > svg { flex: none; margin-top: 2px; color: var(--text-3); }
@@ -131,23 +101,9 @@
 .ai-history b { color: var(--text-1); font-weight: 600; }
 .ai-help { margin: 0; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-small); }
 
-/* Dialogs: the footer stays in view, the fields scroll. */
-.ai-dialog { display: flex; flex-direction: column; width: min(34rem, 100%); max-height: calc(100dvh - 24px); overflow: hidden; }
-.ai-dialog > header, .ai-dialog > footer { flex: none; }
-.ai-dialog-body { min-height: 0; overflow-y: auto; margin: 0 calc(-1 * var(--space-1)); padding: 0 var(--space-1); }
-.ai-dialog > header { display: flex; gap: var(--space-3); align-items: flex-start; }
-.ai-dialog > header > div { flex: 1; display: grid; gap: var(--space-1); }
-.ai-dialog > header p { color: var(--text-3); font-size: var(--fs-small); }
-.ai-dialog-body { display: grid; gap: var(--space-3); }
-.ai-dialog-body p { color: var(--text-2); font-size: var(--fs-small); }
-.ai-dialog .field input { width: 100%; }
-.ai-field-note { font-size: var(--fs-label); }
-.field .ai-field-note.error-copy { color: var(--danger); }
-.ai-field-bad input { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
-.ai-dialog-footer { align-items: center; justify-content: flex-end; }
 .ai-dialog-left { margin-right: auto; color: var(--text-3); font-size: var(--fs-label); }
-.ai-kind { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin: 0; border: 0; padding: 0; }
-.ai-kind label { position: relative; display: grid; gap: 2px; border: 1px solid var(--line-control); border-radius: var(--radius); padding: var(--space-2) var(--space-3); cursor: pointer; }
+.ai-kind { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: 0; border: 0; padding: 0; }
+.ai-kind label { position: relative; display: grid; align-content: start; gap: 2px; border: 1px solid var(--line-control); border-radius: var(--radius); padding: var(--space-2) var(--space-3); cursor: pointer; }
 .ai-kind label:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .ai-kind label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ai-kind input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -169,7 +125,7 @@
   .ai-slot-what { grid-area: what; }
   .ai-slot-provider { grid-area: prov; }
   .ai-slot-model { grid-area: model; }
-  .ai-switch { grid-area: on; }
+  .ai-slot > .switch { grid-area: on; }
   .ai-cell-label { display: block; color: var(--text-3); font-size: var(--fs-label); }
   .ai-prov { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name actions" "state actions"; gap: 2px var(--space-4); }
   .ai-prov-name { grid-area: name; }
@@ -180,8 +136,8 @@
 @media (max-width: 44rem) {
   .ai-settings > header p { display: none; }
   .ai-nothing .ai-slots { display: none; }
-  .ai-tabs { gap: var(--space-3); }
-  .ai-count { display: none; }
+  .ai-tabs-row .seg-tabs { flex: 1 1 auto; }
+  .ai-tabs-row .seg-tabs button { flex: 1 0 auto; justify-content: center; padding: 0 var(--space-2); }
   .ai-wide, .ai-long { display: none; }
   .ai-narrow { display: inline; }
   .ai-consent { grid-template-columns: 1fr; padding: var(--space-3); }
@@ -201,9 +157,8 @@
   .ai-history li { grid-template-columns: 1fr; gap: 0; padding: var(--space-2) var(--space-3); }
   .ai-kind { grid-template-columns: 1fr; }
 }
-@media (max-width: 22rem) {
-  .ai-tabs { gap: var(--space-1); }
-  .ai-tabs button { padding: 0 2px; }
+/* On a phone the add button keeps only its icon (named by aria-label), so all four tabs fit beside it. */
+@media (max-width: 30rem) {
   .ai-narrow { display: none; }
   .ai-add { width: var(--touch); justify-content: center; padding: 0; }
 }
@@ -224,7 +179,7 @@
 .ai-pick input { margin: 0; }
 .ai-auto-stat { margin-left: auto; color: var(--text-2); font-size: var(--fs-small); }
 .ai-facts { display: grid; gap: var(--space-2); margin: 0; padding-left: var(--space-5); }
-@media (pointer: coarse) { .ai-pick { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-pick { min-height: var(--touch); } }
 @media (max-width: 44rem) {
   .ai-auto { grid-template-areas: "lead side" "desc desc" "parts parts"; padding: var(--space-2); gap: 2px var(--space-2); }
   .ai-auto-desc { font-size: var(--fs-label); }
@@ -241,4 +196,21 @@
 /* A link that does what a button does looks like one, and is a full touch target on a phone. */
 .ai-link-button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
   padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
-@media (pointer: coarse) { .ai-link-button { min-height: var(--touch); } }
+@media (pointer: coarse), (max-width: 30rem) { .ai-link-button { min-height: var(--touch); } }
+/* The models a key may use, ticked instead of typed: picked ones first, the first is the default. */
+.ai-models { margin: 0; border: 0; padding: 0; min-width: 0; }
+.ai-models legend { padding: 0; margin-bottom: var(--space-1); }
+.ai-models-head { display: flex; align-items: center; gap: var(--space-2); }
+.ai-models-head > :first-child { flex: 1; min-width: 0; }
+.ai-models-head .help { color: var(--text-3); font-size: var(--fs-label); }
+.ai-models-list { display: grid; max-height: 13rem; margin: var(--space-2) 0 0; padding: var(--space-1); overflow-y: auto; overscroll-behavior: contain; list-style: none;
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); }
+.ai-models-list label { display: flex; align-items: center; padding-block: var(--space-1); gap: var(--space-2); min-height: 32px; border-radius: var(--radius-sm); padding: 0 var(--space-2); cursor: pointer; }
+.ai-models-list label:hover { background: var(--surface-2); }
+.form-dialog .ai-models-list input[type="checkbox"] { width: var(--space-4); }
+.ai-models-list label:has(input:disabled) { cursor: not-allowed; color: var(--text-3); }
+.ai-models-list .ai-mono { min-width: 0; overflow-wrap: anywhere; }
+.ai-models-default { flex: none; margin-left: auto; border-radius: var(--radius-full); background: var(--surface-2); padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); font-weight: 600; }
+.ai-models-empty { padding: var(--space-2); color: var(--text-3); font-size: var(--fs-small); }
+.ai-models-switch { justify-self: start; font-size: var(--fs-label); }
+@media (pointer: coarse), (max-width: 30rem) { .ai-models-list label { min-height: var(--touch); } }

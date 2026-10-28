@@ -70,8 +70,8 @@ test('merging asks for the duplicate, says where replies will go, and only then 
   const dialog = screen.getByRole('dialog', { name: 'Merge a duplicate into Mai Linh' });
   fireEvent.change(within(dialog).getByLabelText('Search contacts by name or email'), { target: { value: 'mai' } });
   // The contact itself is never offered as its own duplicate.
-  const pick = await within(dialog).findByRole('button', { name: /Mai at home/ });
-  expect(within(dialog).queryByRole('button', { name: /mai@customer.example/ })).not.toBeInTheDocument();
+  const pick = await within(dialog).findByRole('option', { name: /Mai at home/ });
+  expect(within(dialog).queryByRole('option', { name: /mai@customer.example/ })).not.toBeInTheDocument();
   fireEvent.click(pick);
   expect(dialog).toHaveTextContent('replies on those conversations go to mai@customer.example');
   expect(onMerge).not.toHaveBeenCalled();

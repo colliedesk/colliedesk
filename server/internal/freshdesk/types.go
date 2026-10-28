@@ -65,8 +65,19 @@ type fdTicket struct {
 	CcEmails        []string       `json:"cc_emails"`
 	FwdEmails       []string       `json:"fwd_emails"`
 	ToEmails        []string       `json:"to_emails"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
+	// EmailConfigID is the Freshdesk mailbox the ticket came through (/api/v2/email_configs).
+	EmailConfigID *int64    `json:"email_config_id"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	// Stats comes only from the list (include=stats); the archived view has none.
+	Stats *fdStats `json:"stats"`
+}
+
+// fdStats holds the three ticket stats the public API documents for include=stats.
+type fdStats struct {
+	ResolvedAt       *time.Time `json:"resolved_at"`
+	FirstRespondedAt *time.Time `json:"first_responded_at"`
+	ClosedAt         *time.Time `json:"closed_at"`
 }
 
 type fdConversation struct {
@@ -78,8 +89,10 @@ type fdConversation struct {
 	UserID   int64  `json:"user_id"`
 	Source   int    `json:"source"`
 	// AutoResponse is Freshdesk's own flag for an automatic reply (out-of-office, a messenger or bot acknowledgement).
-	AutoResponse bool           `json:"auto_response"`
-	FromEmail    *string        `json:"from_email"`
+	AutoResponse bool    `json:"auto_response"`
+	FromEmail    *string `json:"from_email"`
+	// SupportEmail is the support address a reply was sent from.
+	SupportEmail *string        `json:"support_email"`
 	ToEmails     []string       `json:"to_emails"`
 	CcEmails     []string       `json:"cc_emails"`
 	BccEmails    []string       `json:"bcc_emails"`
@@ -112,4 +125,11 @@ type fdCannedResponse struct {
 	Content     string         `json:"content"`
 	ContentHTML string         `json:"content_html"`
 	Attachments []fdAttachment `json:"attachments"`
+}
+
+// fdEmailConfig is one of the account's mailboxes: where its mail arrives and the address it replies from.
+type fdEmailConfig struct {
+	ID         int64  `json:"id"`
+	ToEmail    string `json:"to_email"`
+	ReplyEmail string `json:"reply_email"`
 }

@@ -47,6 +47,23 @@ func aiSettingsGetSpec() Spec {
 	}
 }
 
+func aiModelsListSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_models_list",
+		Title: "List a provider's models",
+		Description: `List the models a key may use before adding the provider, to pick the models for colliedesk_ai_provider_add: anthropic (the Claude models, newest first) ` +
+			`or openai_compatible (GET {base_url}/models, sorted). Nothing is saved or billed. A provider that cannot list fails with ai_check_failed and check_error_code ` +
+			`(model_not_found when the server keeps no list: name the models yourself). The key passes through this conversation, so use a key you can revoke at the provider.` +
+			"\n\nTier: admin (a lower tier is refused, so the key never waits in a request).",
+		Tier: "admin", ReadOnly: true,
+		REST: []string{"POST /api/v1/ai/models"},
+		Input: `{"type":"object","additionalProperties":false,"required":["kind"],"properties":{` +
+			`"kind":{"type":"string","enum":["anthropic","openai_compatible"]},"base_url":{"type":"string","maxLength":500},"api_key":{"type":"string","maxLength":500}}}`,
+		Output: `{"type":"object","required":["models"],"properties":{"models":{"type":"array","items":{"type":"string"}}}}`,
+		run:    aiModelsList,
+	}
+}
+
 func aiProviderAddSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_provider_add",

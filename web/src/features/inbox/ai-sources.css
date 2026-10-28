@@ -12,6 +12,6 @@
 .ai-sources a { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
 .ai-sources a > svg { flex: none; width: 14px; height: 14px; }
 .ai-sources-none { color: var(--text-3); }
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 30rem) {
   .ai-sources a { min-height: var(--touch); }
 }

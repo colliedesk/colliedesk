@@ -2,7 +2,9 @@
 
 Colliedesk can use a language model to suggest how to sort a new ticket (tags, priority, assignee)
 and to draft a reply an agent edits and sends. A model only suggests and drafts: a person accepts each
-suggestion, and nothing reaches a customer until someone presses **Send**. **Settings > AI** decides
+suggestion, unless an admin turns on [Apply suggestions automatically](#apply-suggestions-automatically),
+which lets the picked parts (tags, priority, assignee) apply by themselves and can be undone. Nothing
+reaches a customer until someone presses **Send**. **Settings → Built-in AI** decides
 which model each feature uses and records who agreed to send data to it.
 
 ## Every feature starts off
@@ -10,7 +12,7 @@ which model each feature uses and records who agreed to send data to it.
 No AI feature runs until an admin turns it on, on Colliedesk Cloud too. Turning a feature on is your
 consent that its ticket data goes to the provider it uses; Colliedesk records who agreed and when,
 and asks again whenever the feature moves to another provider. Turn a feature off at any time in
-**Settings > AI > Features**.
+**Settings → Built-in AI → Features**.
 
 ## Where a feature runs
 
@@ -26,13 +28,26 @@ Each feature (**Triage suggestions**, **Reply drafts**) picks one of:
 
 ## Add your own provider
 
-In **Settings > AI > Providers**, admins choose **Add provider**:
+In **Settings → Built-in AI → Providers**, admins choose **Add provider**:
 
 1. **Anthropic**: an API key from console.anthropic.com. Requests go to the Claude API.
-2. **OpenAI-compatible**: OpenAI, OpenRouter, Groq, vLLM, Ollama, LM Studio. Enter the base URL with
-   its version path, for example `https://api.openai.com/v1` or `https://openrouter.ai/api/v1`.
+2. **OpenAI**: an API key from platform.openai.com. The address is filled in.
+3. **OpenRouter**: one OpenRouter key for hundreds of models. The address is filled in.
+4. **Other or self-hosted**: any OpenAI-compatible server (Groq, vLLM, Ollama, LM Studio). Enter the
+   base URL with its version path, for example `http://localhost:11434/v1`.
 
-List the models you want to use; the first is the default. Before anything is saved, Colliedesk sends
+After the key (and the address), choose **Load models**: Colliedesk asks the provider which models
+the key may use and lists them, so you tick the ones you want instead of typing names. The list holds
+only models that answer what Colliedesk sends (a JSON answer, and a reasoning effort): for Anthropic,
+the Claude models whose capabilities say so; for OpenAI, its reasoning models (GPT-5 and later, the o
+series), not the older GPT-4 and GPT-3.5 or the image, audio and embedding models; for OpenRouter, the
+models that take structured output, without the batch-only entries. A model the provider has retired
+or set to shut down is left out. If a check still refuses a model, the message names it. With many
+models, a search box finds one whatever the punctuation or spacing: `gpt5 mini` finds `gpt-5-mini`.
+Loading the list saves nothing and costs nothing. A server that keeps no list (some self-hosted ones) says so; type
+the model names then, separated by commas.
+
+Pick the models you want to use; the first is the default. Before anything is saved, Colliedesk sends
 one small request to the first model. If the provider refuses (a wrong key, a model it does not have,
 an account out of credit), nothing is saved and Settings says why. That request is billed by the
 provider like any other.
@@ -54,8 +69,9 @@ is accepted too.
 
 A feature that is on sends its provider the ticket's messages, the customer's name, matching published
 knowledge base articles, and short excerpts of similar solved tickets with other customers' names and
-emails removed. Private notes are never sent. Colliedesk does not store the prompts it sends or the
-provider's answers beyond the draft or suggestion itself. Each provider keeps data under its own
+emails removed. Private notes are never sent. Colliedesk does not keep what it sent the provider, nor the
+provider's answers, apart from the draft or suggestion itself. A draft keeps its text and the request
+that asked for it until 90 days after it ended, and both are in the export (`ai-drafts.ndjson`). Each provider keeps data under its own
 policy; read it before you add one, for example [Anthropic's](https://www.anthropic.com/legal/privacy).
 
 To keep data on your own servers, add an OpenAI-compatible provider on your network (vLLM, Ollama)
@@ -70,7 +86,7 @@ meanwhile is dropped without calling anyone. A locked workspace runs none.
 ## Reply drafts
 
 With **Reply drafts** on, the reply box of a conversation has **Draft with AI**; while they are off it
-says **Off**, and takes an admin to **Settings > AI** (others are told to ask an admin). Say what the reply
+says **Off**, and takes an admin to **Settings → Built-in AI** (others are told to ask an admin). Say what the reply
 should say (optional, up to 2,000 characters: "offer a refund", "ask for the order number"), or leave
 it empty for a reply to the customer's newest message. You keep working while it is written; the
 conversation never waits for the model.
@@ -97,13 +113,13 @@ Colliedesk keeps how each draft ended (sent nearly as written, sent edited, disc
 expired), so a team can see whether drafts help, and an article's **Used by AI** box says how many
 drafts used it this month. A reply sent from a draft says so on the timeline: **from an AI draft, sent as written** or
 **from an AI draft, edited**. A draft that failed says why, with **Try again** (the same prompt) and,
-when a setting is the cause (the provider's key or credit, the included AI), the way to Settings > AI.
+when a setting is the cause (the provider's key or credit, the included AI), the way to Settings → Built-in AI.
 A draft's text and prompt are erased 90 days after it ended; the numbers stay. At most 30 drafts a
 minute are asked for in a workspace.
 
 ### Write a draft when a customer writes
 
-Admins can let drafts write themselves: **Settings > AI**, under **Reply drafts**, turn on **Write a
+Admins can let drafts write themselves: **Settings → Built-in AI**, under **Reply drafts**, turn on **Write a
 draft when a customer writes**. A dialog says first what it would have meant in the last 30 days (how
 many customer messages, about what a draft costs, and how much of the included AI it may use, or that
 your own key is billed). It is off until an admin turns it on, and it turns off when drafts turn off
@@ -149,7 +165,7 @@ all** (or **Accept the rest**) takes what is left, and **Dismiss** drops it. Tag
 removed, and anything accepted is changed back like any other change. **Suggest again** asks by
 hand. When the automatic limit below is reached, the card says automatic suggestions are paused
 until the next midnight UTC (shown in your timezone) and **Suggest now** still asks for one. A
-failure says why and what to do next, for example to open **Settings > AI** when the included AI is
+failure says why and what to do next, for example to open **Settings → Built-in AI** when the included AI is
 used up.
 
 Imported tickets get no suggestion. A suggestion nobody used for 7 days expires; its reason is erased
@@ -157,7 +173,7 @@ Imported tickets get no suggestion. A suggestion nobody used for 7 days expires;
 
 ### Apply suggestions automatically
 
-Admins can let suggestions apply by themselves: **Settings > AI**, under **Triage suggestions**, turn on
+Admins can let suggestions apply by themselves: **Settings → Built-in AI**, under **Triage suggestions**, turn on
 **Apply suggestions automatically** (a dialog says what it does first). It is off until an admin turns
 it on, and it turns off when triage turns off or moves to another provider; it stays off until an admin
 turns it on again. Pick what applies by itself: **Tags** and **Priority** (the default) and
@@ -182,23 +198,23 @@ undone in the last 30 days. Restoring a workspace from a backup turns the automa
    draft for each customer message when that is on) stops at 300 a day (UTC) and 30 a minute in a
    workspace, of which 100 a day may be drafts, whichever provider runs it, so a flood of
    tickets cannot run up a bill. Past the daily limit automatic suggestions wait until 00:00 UTC; what
-   an agent asks for still runs. Admins change both numbers in **Settings > AI > Features**
+   an agent asks for still runs. Admins change both numbers in **Settings → Built-in AI → Features**
    (**Automatic runs**, **Change**). Each task counts once, however many times it is retried.
 2. **Included AI.** The server's provider can come with a monthly allowance (on Colliedesk Cloud,
    included in your plan). When it is used up, features on the server's provider stop until the first
-   day of the next month (UTC), and Settings says so; your own providers keep working. **Settings > AI >
+   day of the next month (UTC), and Settings says so; your own providers keep working. **Settings → Built-in AI →
    Usage** shows what is used. A call that starts sets aside the most it can cost, so calls running at
    the same time never spend more than is left; the last few cents of a month can stay unused.
 
 ## History and usage
 
-**Settings > AI > History** lists who added, changed or deleted a provider or a key, and who turned a
+**Settings → Built-in AI → History** lists who added, changed or deleted a provider or a key, and who turned a
 feature on, off or elsewhere, with keys shown only by their last 4 characters. Every call to a provider
 leaves one usage record (the feature, the model, tokens in and out, whether it failed, and for the
-server's provider its cost at that day's prices), never the text sent or received. **Settings > AI >
+server's provider its cost at that day's prices), never the text sent or received. **Settings → Built-in AI →
 Usage** sums a month per feature and provider. Both are in the [export](export.md).
 
-## Agents and AI agents
+## Agents and external AI agents
 
 Agents see these settings but only admins change them. An AI agent with a draft token asks for a
 reply draft, reads it and discards it like a person (`colliedesk_ai_draft_create`,

@@ -17,7 +17,7 @@ import (
 
 // A token sees only the requests it made; a person sees the workspace's.
 func requestScope(request *http.Request) string {
-	if who := principal(request); who.Scope != "" {
+	if who := principal(request); who.IsToken() {
 		return who.SessionID
 	}
 	return ""

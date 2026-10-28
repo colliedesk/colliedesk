@@ -4,14 +4,14 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { LockedRoute } from './locked-route';
 
 const api = vi.hoisted(() => ({ billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn(), logout: vi.fn() }));
-vi.mock('../../api/client', () => ({ api }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class InvalidRequestError extends Error {} }));
 const embed = vi.hoisted(() => ({ create: vi.fn() }));
 vi.mock('@polar-sh/checkout/embed', () => ({ PolarEmbedCheckout: { create: embed.create } }));
 
 const me = {
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'admin' as const, timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', scope: null, plan: null, ai_features: { triage: false, draft: false }, onboarding_goal: null,
+  timezone: 'UTC', scope: null, permissions: [], plan: null, ai_features: { triage: false, draft: false }, onboarding_goal: null,
 };
 const locked = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly'],

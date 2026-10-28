@@ -2,6 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
+	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
+	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"io"
 	"net"
 	"net/http"
@@ -21,6 +25,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -49,6 +54,9 @@ type Config struct {
 	// Google is the operator's OAuth client for connecting Gmail; with a setting missing, Gmail cannot be
 	// connected and the settings name what is missing.
 	Google google.Config
+	// Microsoft is the operator's app registration for connecting Microsoft 365; with a setting missing,
+	// Microsoft 365 cannot be connected and the settings name what is missing. It seals with Google.Keys.
+	Microsoft microsoft.Config
 	// ImportKeys holds the Freshdesk keys of in-app imports; the worker of the process shares it. Nil
 	// makes one from Google.Keys (tests).
 	ImportKeys *importjobs.Keys
@@ -146,6 +154,8 @@ type API struct {
 	auth    *auth.Service
 	cloud   *cloudauth.Verifier
 	store   *store.Store
+	// pipeline runs what channels receive into the store (internal/channels).
+	pipeline *pipeline.Pipeline
 	// exports admits workspace exports; see exportLimiter.
 	exports     *exportLimiter
 	exportLinks *exportLinks
@@ -166,7 +176,9 @@ type API struct {
 	providerChecks *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
-	polar          *polar.Client
+	// testMessages limits the test messages a workspace sends itself per hour.
+	testMessages *webFormLimiter
+	polar        *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
 	founding foundingState
@@ -205,17 +217,36 @@ func (s *Server) AI() *ai.Service { return s.api.ai }
 // does nothing when billing is off.
 func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refreshFounding(ctx) }
 
+// Outbound is the outbound email policy of a configuration: whether replies can be emailed now and
+// from which identity.
+func Outbound(config Config) store.OutboundPolicy {
+	return store.OutboundPolicy{
+		GmailEnabled:          config.Google.Enabled(),
+		MicrosoftEnabled:      config.Microsoft.Enabled(),
+		Enabled:               config.Email.SMTP.Configured(),
+		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
+		FallbackDomain:        config.Email.MailFromDomain,
+	}
+}
+
+// Channels is the registry of channel types a configuration runs. revoke, when given, revokes the
+// mailbox grant of a removed email channel at its provider.
+func Channels(config Config, outbound store.OutboundPolicy, revoke ...func(*store.SealedGrant, string, string)) *channels.Registry {
+	email := channelemail.Config{TrustedAuthServID: config.Email.TrustedAuthServID,
+		HostedMailDomain: config.Email.HostedMailDomain, PlatformForwarding: config.Email.PlatformInboundSecret != "",
+		Cloud: config.Billing.Enabled(), Outbound: outbound}
+	if len(revoke) > 0 {
+		email.RevokeGrant = revoke[0]
+	}
+	return registry.New(registry.Config{Email: email})
+}
+
 func New(pool *pgxpool.Pool, config Config) *Server {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	if config.LookupTXT == nil {
 		config.LookupTXT = net.DefaultResolver.LookupTXT
 	}
-	outbound := store.OutboundPolicy{
-		GmailEnabled:          config.Google.Enabled(),
-		Enabled:               config.Email.SMTP.Configured(),
-		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
-		FallbackDomain:        config.Email.MailFromDomain,
-	}
+	outbound := Outbound(config)
 	requestPool := config.RequestPool
 	if requestPool == nil {
 		requestPool = pool
@@ -230,9 +261,13 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
+		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
-		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
-		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
+		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
+		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
+			WithSealKeys(config.Google.Keys)}
+	api.store = api.store.WithChannels(Channels(config, outbound, api.revokeSealed))
+	api.pipeline = pipeline.New(api.store, clock)
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	importKeys := config.ImportKeys
 	if importKeys == nil {
@@ -268,7 +303,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api.helpCenter = api.newHelpCenter()
 	mux := http.NewServeMux()
 	api.mux = mux
-	for _, route := range api.routeSpecs() {
+	for _, route := range append(api.routeSpecs(), api.channelTypeRoutes()...) {
 		if billingRoute(route.Route) && api.polar == nil {
 			continue
 		}
@@ -279,6 +314,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
+	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
 	return &Server{Handler: withRequestID(mux), api: api}
 }
 
@@ -348,6 +384,7 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite},
 		{http.MethodDelete, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/kb/collections/{id}/restore", auth.PermissionConversationsWrite},
+		{http.MethodPut, "/api/v1/kb/order", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/kb/articles", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/kb/articles", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/kb/articles/trash", auth.PermissionConversationsRead},
@@ -385,6 +422,10 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/kb/media/{id}/thumbnail", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/help-center", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/help-center", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/help-center/theme", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/help-center/theme", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/help-center/theme/check", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/help-center/theme/preview", auth.PermissionConversationsRead},
 		{http.MethodGet, helpCenterTLSAskPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},
@@ -429,6 +470,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
 		{http.MethodGet, "/api/v1/ai", auth.PermissionAccessRead},
 		{http.MethodPost, "/api/v1/ai/providers", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/ai/models", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
 		{http.MethodPut, "/api/v1/ai/providers/{id}/key", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/ai/providers/{id}/check", auth.PermissionAccessWrite},
@@ -445,6 +487,39 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/results", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/results/share-link", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/results/share-link", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/results/share-link", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/results/shared", auth.PermissionPublic},
+		{http.MethodPatch, "/api/v1/agents/me/results-email", auth.PermissionAuthenticated},
+		{http.MethodGet, "/api/v1/channels", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/channels", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/channels/events", auth.PermissionAccessRead},
+		{http.MethodGet, "/api/v1/channels/{id}", auth.PermissionAccessRead},
+		{http.MethodPatch, "/api/v1/channels/{id}", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/channels/{id}", auth.PermissionAccessWrite},
+		{http.MethodPut, "/api/v1/channels/{id}/credentials", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/check", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/held/replay", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/held/discard", auth.PermissionAccessWrite},
+		// One email channel or web form of several; the routes above without an id act on the default one.
+		{http.MethodGet, "/api/v1/channels/{id}/email", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/channels/{id}/email/domain-verification", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/email/secret", auth.PermissionAccessWrite},
+		{http.MethodPost, channelGmailPath, auth.PermissionAccessWrite},
+		{http.MethodDelete, channelGmailPath, auth.PermissionAccessWrite},
+		{http.MethodPost, webFormChannelPattern, auth.PermissionPublic},
+		// Microsoft 365, beside Gmail: the default email channel, the callbacks, then one channel of several.
+		{http.MethodPost, microsoftPath, auth.PermissionAccessWrite},
+		{http.MethodDelete, microsoftPath, auth.PermissionAccessWrite},
+		{http.MethodGet, microsoftCallbackPath, auth.PermissionPublic},
+		{http.MethodGet, microsoftAdminConsentPath, auth.PermissionPublic},
+		{http.MethodPost, channelMicrosoftPath, auth.PermissionAccessWrite},
+		{http.MethodDelete, channelMicrosoftPath, auth.PermissionAccessWrite},
+		// A test message from the signed-in agent, on the default email channel or one of several.
+		{http.MethodPost, "/api/v1/channels/email/test-message", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/channels/{id}/email/test-message", auth.PermissionConversationsWrite},
 	}
 }
 

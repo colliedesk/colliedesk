@@ -18,6 +18,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -99,7 +100,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{pool: pool, db: database.New(pool), store: store.New(pool), disk: local, root: root, mailer: &recordingMailer{}, polar: &fakePolar{paid: map[string]bool{}}}
+	e := &env{pool: pool, db: database.New(pool), store: store.New(pool).WithChannels(registry.New(registry.Config{})), disk: local, root: root, mailer: &recordingMailer{}, polar: &fakePolar{paid: map[string]bool{}}}
 	e.service = e.serviceWith(nil)
 	return e
 }
@@ -135,7 +136,7 @@ func (e *env) workspace(t *testing.T, name string, trialEnd string, admins ...st
 	if err != nil {
 		t.Fatal(err)
 	}
-	conversation, err := e.store.CreateConversation(ctx, created.ID, contact.ID, "Where is my order")
+	conversation, err := e.store.CreateConversation(ctx, created.ID, contact.ID, "Where is my order", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -875,7 +876,9 @@ func TestDeactivatedAdminsAreNotNoticedAndNeverCountAsReached(t *testing.T) {
 func TestDeletingAWorkspaceKeepsItsProviderDomainsQueuedForDeletion(t *testing.T) {
 	e := newEnv(t)
 	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
-	e.exec(t, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,sender_name) VALUES($1,'support@alpha.example','token','dom_alpha_current','Alpha')`, a.ID)
+	e.exec(t, `WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'email','Email',true) RETURNING id),
+		d AS (INSERT INTO email_domains(workspace_id,domain,verification_token,provider_domain_id) VALUES($1,'alpha.example','token','dom_alpha_current') RETURNING 1)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT $1,c.id,'support@alpha.example','Alpha','support' FROM c,d`, a.ID)
 	e.exec(t, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) VALUES($1,'dom_alpha_earlier')`, a.ID)
 
 	e.run(t, "2027-10-02T00:00:00Z")

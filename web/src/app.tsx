@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Link, Navigate, Outlet, createRootRoute, redirect, rootRouteId, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
-import { RequestsRoute } from './features/requests/requests-route';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
@@ -15,12 +14,14 @@ import { AppShell } from './features/shell/app-shell';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { BookIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
+import { BookIcon, ChartIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
 import { kbPart } from './features/kb/kb-part';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
+import { forgetAllDrafts } from './features/inbox/reply-draft-storage';
 import { inboxQueryFromSearch } from './lib/inbox-query';
+import { signInFormReady } from './lib/sign-in-ready';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
 // Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
@@ -28,12 +29,19 @@ const settingsRoutePart = lazyPart(() => import('./features/settings/settings-ro
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
+const channelsRoutePart = lazyPart(() => import('./features/settings/channels/channels-route'));
+// Results is its own chunk too: the rail link starts loading it on hover and focus.
+const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
+// Agent requests are their own chunk too: the rail link starts loading it on hover and focus.
+const requestsRoutePart = lazyPart(() => import('./features/requests/requests-route'));
+const resultsSharePart = lazyPart(() => import('./features/results/results-share-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
-  const onSignIn = path === '/sign-in';
+  // The public page of a results share link has no session and no rail.
+  const onSignIn = path === '/sign-in' || path === '/r';
   // An address that matches no page is no rail destination either.
   const notFound = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === rootRouteId });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
@@ -41,7 +49,7 @@ function AppLayout() {
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   const client = useQueryClient();
   // After sign out /auth/me answers 401, which turns the view into the signed-out screen.
-  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); return client.invalidateQueries({ queryKey: ['me'] }); } });
+  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); forgetAllDrafts(); return client.invalidateQueries({ queryKey: ['me'] }); } });
   // A paused agent (more agents than the plan allows) gets the same treatment as a lock: nothing but why and sign out.
   const paused = me.data?.plan?.seat_paused === true;
   const locked = me.data?.plan?.locked === true || paused;
@@ -52,7 +60,8 @@ function AppLayout() {
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
   useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
   // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
-  useProductAnalytics(config.data?.product_analytics, me.data);
+  // On a sign-in page the analytics library waits for the sign-in form, so a slow connection loads the form first.
+  useProductAnalytics(config.data?.product_analytics, me.data, onSignIn ? signInFormReady : undefined);
   // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
   // Sign-in pages have nowhere to navigate to yet.
@@ -73,6 +82,7 @@ function AppLayout() {
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
   const inKnowledge = path.startsWith('/knowledge');
+  const inResults = path.startsWith('/results');
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
@@ -81,12 +91,14 @@ function AppLayout() {
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand}><LogoMark /></Link>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
+      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge || inResults || notFound ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
       <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
-        aria-current={inRequests ? 'page' : undefined}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
+        aria-current={inRequests ? 'page' : undefined} onPointerEnter={requestsRoutePart.preload} onFocus={requestsRoutePart.preload}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
       <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
+      <Link to="/results" className="rail-link" data-tip={messages.results} aria-label={messages.results} aria-current={inResults ? 'page' : undefined}
+        onPointerEnter={resultsRoutePart.preload} onFocus={resultsRoutePart.preload}><ChartIcon /><span className="rail-label" aria-hidden="true">{messages.results}</span></Link>
       <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}
         onPointerEnter={settingsRoutePart.preload} onFocus={settingsRoutePart.preload}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
     </>}>
@@ -97,8 +109,10 @@ function AppLayout() {
 // Settings sections link through the router, so moving between Settings and Plan and billing needs no reload.
 // exact + includeHash: otherwise every section link would count as current on any settings page.
 function settingsRouterLink(item: NavItem) {
-  return <Link to={item.to} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
-    aria-current={item.current ? 'page' : undefined}>{item.label}</Link>;
+  const preload = item.to === '/settings/channels' ? channelsRoutePart.preload : undefined;
+  // /settings/channels is the channels route with an empty splat, a path the route types do not list.
+  return <Link to={item.to as Exclude<NavItem['to'], '/settings/channels'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
+    aria-current={item.current ? 'page' : undefined} onPointerEnter={preload} onFocus={preload}>{item.label}</Link>;
 }
 
 // An unknown address inside the app says so and offers the way back, in the frame of every other page.
@@ -188,7 +202,11 @@ function SettingsPage() {
   </main>;
 }
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
-const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
+const requestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/requests',
+  component: () => <Part part={requestsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ RequestsRoute }) => <RequestsRoute />} />,
+});
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/billing',
@@ -229,6 +247,37 @@ const aiRoute = createRoute({
     return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute />} />;
   },
 });
+// Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).
+type ChannelsSearch = { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string };
+// Passed through as it is: the pages read only string values (channels-route.tsx), and the Gmail return
+// (gmail, gmail_error) and the Microsoft one (microsoft, microsoft_error) must survive the hop from type/email to the channel.
+const channelsSearch = (search: Record<string, unknown>) => search as ChannelsSearch;
+function ChannelsSettings({ path, search }: { path: string; search: ChannelsSearch }) {
+  const navigate = useNavigate();
+  const go = useCallback((href: string, replace?: boolean) => void navigate({ href, replace }), [navigate]);
+  return <Part part={channelsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ChannelsRoute }) => <ChannelsRoute path={path} search={search} navigate={go} />} />;
+}
+// /settings/channels itself is this route with an empty splat.
+const channelRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/settings/channels/$', validateSearch: channelsSearch,
+  component: function Channel() { return <ChannelsSettings path={channelRoute.useParams()._splat ?? ''} search={channelRoute.useSearch()} />; },
+});
+const resultsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/results',
+  validateSearch: (search: Record<string, unknown>): { window?: '7d' } => (search.window === '7d' ? { window: '7d' } : {}),
+  component: function Results() {
+    const { window } = resultsRoute.useSearch();
+    const navigate = useNavigate();
+    return <Part part={resultsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ResultsRoute }) => <ResultsRoute window={window ?? '30d'}
+      onWindow={(value) => void navigate({ to: '/results', search: value === '7d' ? { window: '7d' } : {}, replace: true })} />} />;
+  },
+});
+const resultsShareRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/r',
+  component: () => <Part part={resultsSharePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ResultsShareRoute }) => <ResultsShareRoute />} />,
+});
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
@@ -249,7 +298,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, channelRoute, resultsRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

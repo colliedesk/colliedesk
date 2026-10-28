@@ -42,7 +42,7 @@ test('an admin lets drafts write themselves; a customer email gets a draft the t
     const { id } = await provider.json() as { id: string };
     expect((await page.request.put(`${baseURL}/api/v1/ai/slots/draft`, { headers, data: { source: 'provider', provider_id: id, enabled: true } })).status()).toBe(200);
 
-    // Settings → AI: the switch asks first, with what it costs on the team's own key.
+    // Settings → Built-in AI: the switch asks first, with what it costs on the team's own key.
     await page.goto(`${baseURL}/settings/ai`);
     await page.getByRole('switch', { name: 'Write a draft when a customer writes' }).click();
     const dialog = page.getByRole('dialog', { name: 'Write a draft for every customer message?' });

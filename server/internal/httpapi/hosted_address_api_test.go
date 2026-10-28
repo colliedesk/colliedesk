@@ -74,7 +74,7 @@ func TestHostedAddressMailReachesOnlyItsOwnWorkspace(t *testing.T) {
 	if got := conversationList(t, api, adminB); len(got) != 0 {
 		t.Fatalf("mail leaked into workspace B: %+v", got)
 	}
-	if rows := queryString(t, pool, `SELECT count(*) FROM messages WHERE email_message_id='cross@customer.example'`); rows != "1" {
+	if rows := queryString(t, pool, `SELECT count(*) FROM messages WHERE external_id='email:cross@customer.example'`); rows != "1" {
 		t.Fatalf("stored %s copies", rows)
 	}
 }

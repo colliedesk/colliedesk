@@ -85,7 +85,7 @@ type Event struct {
 	CreatedAt     time.Time       `json:"created_at"`
 }
 
-// Settings is everything Settings → AI shows.
+// Settings is everything Settings → Built-in AI shows.
 type Settings struct {
 	Server    *Server    `json:"server"`
 	Providers []Provider `json:"providers"`
@@ -168,6 +168,11 @@ func (e *InUseError) Error() string {
 }
 
 // CheckError is a provider check that failed: nothing was saved. Code is the provider error code.
-type CheckError struct{ Code aiprovider.ErrorCode }
+// CheckError is a failed check; Model names the model it asked for, empty when no model was asked
+// (listing a provider's models, a refused address).
+type CheckError struct {
+	Code  aiprovider.ErrorCode
+	Model string
+}
 
 func (e *CheckError) Error() string { return "the provider check failed: " + string(e.Code) }

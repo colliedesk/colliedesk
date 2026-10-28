@@ -156,3 +156,39 @@ test('a reply or note written as a Markdown list keeps its numbers and bullets o
   const { container } = render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, body: '- one\n- two' }} timezone="UTC" />);
   expect(declared(container.querySelector('.markdown-body ul')!, 'list-style-type')).toBe('disc');
 });
+
+test('a reply saved while its channel was off reads as not sent yet, not as a failure, and can be retried', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 0, last_error: 'Email is off.', sent_at: null, reason_code: 'channel_off' } }} timezone="UTC" />);
+  expect(screen.getByText('Saved, not sent')).toHaveClass('badge-delivery-queued');
+  expect(screen.queryByText('Delivery failed')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
+});
+
+test('a reply whose channel was removed, or whose customer has no address on it, offers no retry', () => {
+  for (const code of ['channel_removed', 'no_recipient']) {
+    const { unmount } = render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 0, last_error: 'Cannot be sent.', sent_at: null, reason_code: code } }} timezone="UTC" />);
+    expect(screen.getByText('Not sent')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry delivery' })).toBeNull();
+    unmount();
+  }
+});
+
+test('a reply saved before any channel could carry it reads as not sent yet, with Retry for once it is connected', () => {
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 0, last_error: 'Email is not connected: this reply is saved but not sent. Connect it, then retry.', sent_at: null, reason_code: 'channel_not_connected' } }} timezone="UTC" />);
+  expect(screen.getByText('Saved, not sent')).toHaveClass('badge-delivery-queued');
+  expect(screen.getByText(/Connect it, then retry/)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
+});
+
+test('a reply waiting because the server\'s Microsoft credentials were refused says why on the timeline, not only in a tooltip', () => {
+  const waiting = 'Waiting: Microsoft refused this server\'s app credentials, so whoever runs this server must replace its Microsoft app secret; the reply is sent once it works. Reconnecting does not help.';
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'queued', attempts: 0, last_error: waiting, sent_at: null, reason_code: 'mailbox_server_config' } }} timezone="UTC" />);
+  expect(screen.getByText(waiting)).toBeVisible();
+});
+
+test('the time names its timezone in its title, and on screen when it is not the browser\'s clock', () => {
+  render(<MessageItem item={{ ...base, created_at: '2026-10-28T05:42:00Z' }} timezone="Pacific/Kiritimati" />);
+  const time = document.querySelector('time') as HTMLElement;
+  expect(time).toHaveAttribute('title', 'Oct 28, 2026, 7:42 PM GMT+14');
+  expect(time).toHaveTextContent(/7:42\sPM GMT\+14$/);
+});

@@ -1,6 +1,8 @@
 package httpapi_test
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -8,21 +10,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // TestHelpCenterPagesLatencyBudget holds every public help center page to the inbox budget, HTML
 // rendering included, at the article cap: the shared fixture of TestKnowledgeBaseSearchLatencyBudget,
 // two workspaces of domain.MaxKBArticles articles each (half published, 20 of them 100,000 characters
-// long), all in one collection, help centers on. It times the home page, the
-// first and last page of that collection, a short and a 100,000-character article, and searches.
+// long), all in one collection, help centers on, workspace A's with a full theme and close to the
+// largest custom CSS (read and hashed into the brand sheet's name on every page). It times the home
+// page, the first and last page of that collection, a short and a 100,000-character article,
+// searches, the brand style sheet and the logo.
 func TestHelpCenterPagesLatencyBudget(t *testing.T) {
-	api, pool, _, slug := sharedKBBudget(t)
+	_, pool, _, slug := sharedKBBudget(t)
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, _, _, _ := testAPIOnPool(t, pool, func(config *httpapi.Config) { config.Attachments = storage })
 	site := helpCenterSite(api)
 	word := queryString(t, pool, `SELECT substr(md5('1234'),1,6)`)
 	other := queryString(t, pool, `SELECT substr(md5('777'),1,5)`)
 	base := "/help/" + slug
+	logo := brandKBBudget(t, pool, storage, slug)
+	brand := brandSheet(t, visit(site, base, "198.51.100.1"))
+	if brand == "" {
+		t.Fatal("the themed help center links no brand style sheet")
+	}
 	paths := map[string]string{
+		"brand style sheet":  brand,
+		"logo":               base + "/_/logo/" + logo,
 		"home":               base,
 		"collection":         base + "/c/budget",
 		"collection last":    base + fmt.Sprintf("/c/budget?page=%d", domain.MaxKBArticles/2/50),
@@ -40,6 +59,43 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 			t.Errorf("help center %s p95 %s exceeds %s", name, p95, inboxLatencyBudget)
 		}
 	}
+}
+
+// brandColumns are the columns of help_centers brandKBBudget changes and puts back.
+const brandColumns = `logo_media_id, favicon_media_id, logo_alt, linkback_url, contact_url, contact_phone, color_primary, color_header,
+	color_header_text, color_background, color_text, color_link, color_footer, body_font, heading_font, custom_css, content_version`
+
+// brandKBBudget gives workspace A of the shared fixture a full theme whose logo and favicon are an
+// image of its own, with about 31 KiB of custom CSS, and returns that image's id. The cleanup removes the image and puts A's help
+// center back as it was, so the other gates on the fixture see it as seeded whatever order they run in.
+func brandKBBudget(t *testing.T, pool *pgxpool.Pool, storage attachments.Storage, slug string) string {
+	t.Helper()
+	ctx := context.Background()
+	workspaceID := queryString(t, pool, `SELECT id::text FROM workspaces WHERE slug=$1`, slug)
+	saved := queryString(t, pool, `SELECT to_jsonb(h)::text FROM help_centers h WHERE workspace_id=$1`, workspaceID)
+	object, err := storage.Put(ctx, workspaceID, bytes.NewReader(kbPNG), int64(len(kbPNG)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logo := queryString(t, pool, `INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type,name,width,height,inspected_at)
+		VALUES ($1,$2,$3,$4,'image/png','Budget logo',2,2,now()) RETURNING id::text`, workspaceID, object.Key, object.SHA256, object.Size)
+	t.Cleanup(func() {
+		if _, err := pool.Exec(ctx, `UPDATE help_centers SET (`+brandColumns+`) = (SELECT `+brandColumns+` FROM jsonb_populate_record(NULL::help_centers, $2::jsonb))
+			WHERE workspace_id=$1`, workspaceID, saved); err != nil {
+			t.Errorf("put the help center back: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `DELETE FROM kb_media WHERE id=$1`, logo); err != nil {
+			t.Errorf("remove the logo: %v", err)
+		}
+	})
+	if _, err := pool.Exec(ctx, `UPDATE help_centers SET logo_media_id=$2, favicon_media_id=$2, logo_alt='KB Budget', linkback_url='https://budget.example/',
+		contact_url='mailto:help@budget.example', contact_phone='+1 (555) 010-2030', color_primary='#0b5cad', color_header='#0b5cad',
+		color_header_text='#ffffff', color_background='#ffffff', color_text='#1f2328', color_link='#0b5cad', color_footer='#f6f8fa',
+		body_font='humanist-sans', heading_font='transitional-serif', custom_css=repeat(E'.budget-rule a:hover{border-bottom:2px solid #0b5cad}\n', 600),
+		content_version=content_version+1 WHERE workspace_id=$1`, workspaceID, logo); err != nil {
+		t.Fatal(err)
+	}
+	return logo
 }
 
 // TestHelpCenterHostileArticlesLatencyBudget holds an article page to the same budget, its first
@@ -134,4 +190,55 @@ func helpCenterPercentile(t *testing.T, site http.Handler, path string, visits i
 	}
 	sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
 	return durations[(visits*95+99)/100-1]
+}
+
+// TestHelpCenterThemePreviewLatencyBudget holds the preview a person waits for after each pause in
+// typing to the inbox budget on the shared fixture: workspace A's home page, and its first published
+// article (100,000 characters), with a full candidate brand. The article is timed cold (its first
+// render: the fixture's server is new and has rendered nothing) and warm.
+func TestHelpCenterThemePreviewLatencyBudget(t *testing.T) {
+	api, pool, token, slug := sharedKBBudget(t)
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	logo := brandKBBudget(t, pool, storage, slug)
+	theme := map[string]any{"logo_media_id": logo, "favicon_media_id": logo, "logo_alt": "KB Budget", "linkback_url": "https://budget.example/",
+		"contact_url": "mailto:help@budget.example", "contact_phone": "+1 (555) 010-2030",
+		"colors":    map[string]any{"primary": "#0b5cad", "header": "#0b5cad", "header_text": "#ffffff", "background": "#ffffff", "text": "#1f2328", "link": "#0b5cad", "footer": "#f6f8fa"},
+		"body_font": "humanist-sans", "heading_font": "transitional-serif"}
+	call := func(page string) (time.Duration, string) {
+		t.Helper()
+		started := time.Now()
+		response := request(t, api, http.MethodPost, previewPath, map[string]any{"page": page, "theme": theme}, token, nil)
+		elapsed := time.Since(started)
+		if response.Code != http.StatusOK {
+			t.Fatalf("preview %s status=%d body=%.300s", page, response.Code, response.Body.String())
+		}
+		return elapsed, response.Body.String()
+	}
+	// The first article preview renders the text cold: it is held to the budget, as the hostile
+	// articles' first visits are, and must be the rendered page, not the text shown while a render
+	// runs late.
+	cold, first := call("article")
+	t.Logf("help center preview article cold=%s (%d bytes)", cold, len(first))
+	if cold > inboxLatencyBudget || strings.Contains(first, `class="plain-note"`) {
+		t.Errorf("help center preview article rendered cold in %s (budget %s)", cold, inboxLatencyBudget)
+	}
+	for _, page := range []string{"home", "article"} {
+		call(page)
+		durations := make([]time.Duration, 50)
+		size := 0
+		for index := range durations {
+			var body string
+			durations[index], body = call(page)
+			size = len(body)
+		}
+		sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
+		p95 := durations[(len(durations)*95+99)/100-1]
+		t.Logf("help center preview %s p95=%s (%d bytes)", page, p95, size)
+		if p95 > inboxLatencyBudget {
+			t.Errorf("help center preview %s p95 %s exceeds %s", page, p95, inboxLatencyBudget)
+		}
+	}
 }

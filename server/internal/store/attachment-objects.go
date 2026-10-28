@@ -8,7 +8,9 @@ import (
 	"slices"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -43,8 +45,9 @@ func lockObjects(ctx context.Context, tx pgx.Tx, keys []string) error {
 	return nil
 }
 
-// DiscardObject deletes the object when no attachment, cached mail image or knowledge base media (its
-// bytes, thumbnail or poster) of the workspace references it. Objects are content-addressed, so one object can back several rows. The
+// DiscardObject deletes the object when no attachment, cached mail image, knowledge base media (its
+// bytes, thumbnail or poster) or channel event still waiting to become a message (held, collected,
+// failed) of the workspace references it. Objects are content-addressed, so one object can back several rows. The
 // reference check and the delete happen under the object's lock, so a request that stored the same
 // bytes and is about to commit its row is waited for, never undercut.
 func DiscardObject(ctx context.Context, db *database.DB, storage attachments.Storage, workspaceID, key string) error {
@@ -63,7 +66,10 @@ func DiscardObject(ctx context.Context, db *database.DB, storage attachments.Sto
 		OR EXISTS(SELECT 1 FROM mail_image_cache WHERE workspace_id=$1 AND storage_key=$2)
 		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND storage_key=$2)
 		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND thumb_storage_key=$2)
-		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND poster_storage_key=$2)`, workspaceID, key).Scan(&used); err != nil {
+		OR EXISTS(SELECT 1 FROM kb_media WHERE workspace_id=$1 AND poster_storage_key=$2)
+		OR EXISTS(SELECT 1 FROM channel_inbound_events WHERE workspace_id=$1 AND raw_object_key=$2 AND state IN ('received','pending','held','failed'))
+		OR EXISTS(SELECT 1 FROM channel_inbound_files WHERE workspace_id=$1 AND storage_key=$2 AND status='stored' AND NOT attached)`,
+		workspaceID, key).Scan(&used); err != nil {
 		return fmt.Errorf("check attachment key: %w", err)
 	}
 	if !used {
@@ -97,7 +103,9 @@ func VerifyObjects(ctx context.Context, tx pgx.Tx, storage attachments.Storage, 
 // CheckAttachmentAdmission refuses early what CreateMessage would refuse after the bytes were
 // written: no room left under the plan's storage cap, and a reply the trial does not allow. The checks
 // inside CreateMessage stay authoritative.
-func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conversationID, kind string, cc []string) error {
+// For a conversation not stored yet (it opens with these files) channelID is the channel it starts
+// from, empty for the default one.
+func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conversationID, channelID, kind string, cc []string) error {
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
 		if err := s.CheckStorage(ctx, tx, workspaceID, 1, s.now()); err != nil {
 			return struct{}{}, err
@@ -105,8 +113,32 @@ func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conve
 		if kind != "outgoing" {
 			return struct{}{}, nil
 		}
+		// The channel the reply leaves from: the conversation's, or the one a new conversation starts from.
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM conversations WHERE workspace_id=$1 AND id::text=$2)`, workspaceID, conversationID).Scan(&exists); err != nil {
+			return struct{}{}, err
+		}
+		if !exists {
+			// A channel it cannot start from is refused when the conversation is stored, with the reason.
+			channel, err := s.startingChannel(ctx, tx, workspaceID, channelID)
+			if errors.Is(err, domain.ErrEmailChannelMissing) || errors.Is(err, channels.ErrChannelOff) || errors.Is(err, channels.ErrNotFound) ||
+				errors.Is(err, channels.ErrChannelCannotSend) {
+				return struct{}{}, nil
+			}
+			if err != nil {
+				return struct{}{}, err
+			}
+			channelID = channel.ID
+		} else {
+			route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
+			if err != nil || route.Channel == nil {
+				return struct{}{}, err
+			}
+			channelID = route.Channel.ID
+		}
 		var verified bool
-		err := tx.QueryRow(ctx, `SELECT domain_verified_at IS NOT NULL FROM email_channels WHERE workspace_id=$1`, workspaceID).Scan(&verified)
+		err := tx.QueryRow(ctx, `SELECT d.verified_at IS NOT NULL FROM email_channels e`+emailDomainJoin+` WHERE e.workspace_id=$1 AND e.channel_id::text=$2`,
+			workspaceID, channelID).Scan(&verified)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return struct{}{}, nil
 		}

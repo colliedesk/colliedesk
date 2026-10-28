@@ -16,6 +16,7 @@ export function usageLabel(item: KBMedia) {
   const usage = item.usage;
   if (!usage) return undefined;
   if (usage.articles > 0) return mediaMessages.usedIn(usage.articles);
+  if (usage.help_center.length > 0) return mediaMessages.usedByHelpCenter(usage.help_center);
   if (usage.trashed_articles > 0) return mediaMessages.inTrashedArticles(usage.trashed_articles);
   if (usage.older_versions > 0) return mediaMessages.inOlderVersions(usage.older_versions);
   return mediaMessages.notUsed;
@@ -47,7 +48,7 @@ export function facts(item: KBMedia) {
 
 // A card shows only what is out of the ordinary: no alt text, not used, kept (a pin). The rest is in the panel.
 function Caption({ item, reason }: { item: KBMedia; reason?: string }) {
-  const unused = item.usage !== undefined && item.usage.articles === 0;
+  const unused = item.usage !== undefined && item.usage.articles === 0 && item.usage.help_center.length === 0;
   const noAlt = item.kind === 'image' && !item.alt.trim();
   return (
     <span className="media-caption">

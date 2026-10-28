@@ -317,10 +317,34 @@ type TrialOutboundError struct {
 	// ReplyTo is set when the customer wrote first, but from an address other than the contact's (a
 	// contact merged into this one): it is the address the reply would go to, which never wrote.
 	ReplyTo string
+	// Unverified is set when the customer did write, but the trial cannot count the mail: one of
+	// ReasonMailNotViaHostedAddress or ReasonSenderAuthenticationFailed.
+	Unverified string
 }
 
-// ReasonContactAddressDiffers is the reason of a refusal whose customer wrote from another address.
-const ReasonContactAddressDiffers = "contact_address_differs"
+// Reasons of a first-contact refusal whose customer did write.
+const (
+	// ReasonContactAddressDiffers: the customer wrote from another address, merged into this contact.
+	ReasonContactAddressDiffers = "contact_address_differs"
+	// ReasonMailNotViaHostedAddress: the mail was posted to the workspace's own inbound URL, whose
+	// admin writes the whole message, so it proves nothing about the sender.
+	ReasonMailNotViaHostedAddress = "mail_not_via_hosted_address"
+	// ReasonSenderAuthenticationFailed: the mail came through the platform forwarder but failed SPF,
+	// DKIM or DMARC.
+	ReasonSenderAuthenticationFailed = "sender_authentication_failed"
+)
+
+// Reason is the machine-readable reason of a first-contact refusal whose customer did write, "" when
+// nobody wrote or another rule refused.
+func (e *TrialOutboundError) Reason() string {
+	switch {
+	case e.Limited() || len(e.RefusedCC) > 0:
+		return ""
+	case e.ReplyTo != "":
+		return ReasonContactAddressDiffers
+	}
+	return e.Unverified
+}
 
 // Limited reports whether the daily cap, not the first-contact rule, refused the reply.
 func (e *TrialOutboundError) Limited() bool { return e.RetryAfter > 0 }
@@ -336,6 +360,15 @@ func (e *TrialOutboundError) Error() string {
 	if e.ReplyTo != "" {
 		return "During the trial, a reply goes only to an address that wrote to you first. This customer wrote from another address, merged into this contact, and the reply would go to " +
 			e.ReplyTo + ". Verify your sending domain in Settings or upgrade to reply."
+	}
+	switch e.Unverified {
+	case ReasonMailNotViaHostedAddress:
+		return "This customer's email came in through your inbound URL, so Colliedesk cannot confirm who sent it. " +
+			"During the trial, replies go only to mail that arrives at your forwarding address (Settings → Channels → Email). " +
+			"To reply to this customer now, verify your sending domain in Settings or choose a plan."
+	case ReasonSenderAuthenticationFailed:
+		return "This customer's email failed sender verification (SPF, DKIM or DMARC), so it may not come from that address. " +
+			"During the trial, Colliedesk does not reply to such mail. To reply anyway, verify your sending domain in Settings or choose a plan."
 	}
 	return "During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or upgrade to start new conversations."
 }

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
@@ -808,4 +808,292 @@ test('after Send and resolve the focus comes back to the box, since the button g
   fireEvent.click(screen.getByRole('button', { name: 'Send and resolve' }));
   await waitFor(() => expect(onResolve).toHaveBeenCalled());
   await waitFor(() => expect(body).toHaveFocus());
+});
+
+test('with no channel to carry replies the box opens on a private note, and a reply says it cannot be sent', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} noReplies />);
+  const box = screen.getByLabelText('Message body');
+  expect(box).toHaveAttribute('placeholder', 'Write a private note. Only your team sees it.');
+  fireEvent.click(screen.getByRole('button', { name: /^Reply/ }));
+  expect(box).toHaveAttribute('placeholder', 'Replies to this conversation cannot be sent. Write a private note instead (N).');
+  fireEvent.change(box, { target: { value: 'Hello' } });
+  expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled();
+  fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
+  expect(onSubmit).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: /Private note/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  expect(onSubmit.mock.calls[0]?.slice(0, 2)).toEqual(['note', 'Hello']);
+});
+
+test('an unsent reply survives the composer going away (a reload, Back) and comes back for the same conversation only', () => {
+  window.localStorage.clear();
+  const first = render(<ReplyComposer draftKey="ws-1:conv-1" onSubmit={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half a reply' } });
+  first.unmount();
+  const again = render(<ReplyComposer draftKey="ws-1:conv-1" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Half a reply');
+  again.unmount();
+  render(<ReplyComposer draftKey="ws-1:conv-2" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('');
+});
+
+test('a draft is cleared once its reply is sent, and kept when the send is refused', async () => {
+  window.localStorage.clear();
+  const refused = vi.fn().mockRejectedValue(new Error('network'));
+  const first = render(<ReplyComposer draftKey="ws-1:conv-3" onSubmit={refused} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Keep me' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  first.unmount();
+  const sent = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer draftKey="ws-1:conv-3" onSubmit={sent} />);
+  const restored = screen.getByLabelText('Message body');
+  expect(restored).toHaveValue('Keep me');
+  fireEvent.keyDown(restored, { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(restored).toHaveValue(''));
+  expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-3'))).toEqual([]);
+});
+
+test('a draft older than seven days is dropped when it is read, and a younger one comes back', () => {
+  window.localStorage.clear();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(new Date('2026-10-01T09:00:00Z'));
+    for (const id of ['conv-old', 'conv-young']) {
+      const view = render(<ReplyComposer draftKey={`ws-1:agent-1:${id}`} onSubmit={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText('Message body'), { target: { value: `Draft for ${id}` } });
+      view.unmount();
+    }
+    vi.setSystemTime(new Date('2026-10-07T21:00:00Z'));
+    const young = render(<ReplyComposer draftKey="ws-1:agent-1:conv-young" onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText('Message body')).toHaveValue('Draft for conv-young');
+    young.unmount();
+    vi.setSystemTime(new Date('2026-10-08T09:00:01Z'));
+    render(<ReplyComposer draftKey="ws-1:agent-1:conv-old" onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText('Message body')).toHaveValue('');
+    expect(Object.keys(window.localStorage).filter((key) => key.includes('conv-old'))).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('three fast clicks on Add private note send one note', () => {
+  const submit = vi.fn(() => new Promise(() => undefined));
+  render(<ReplyComposer onSubmit={submit} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Only once' } });
+  const button = screen.getByRole('button', { name: 'Add private note' });
+  act(() => { button.click(); button.click(); button.click(); });
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(button).toBeDisabled();
+});
+
+test('a send in flight keeps its text with its key, so a reload can ask the server, and a refused send keeps the text', async () => {
+  window.localStorage.clear();
+  const stored = () => Object.keys(window.localStorage).filter((key) => key.includes('conv-5'));
+  let refuse: (error: Error) => void = () => undefined;
+  const first = render(<ReplyComposer draftKey="ws-1:agent-1:conv-5" onSubmit={() => new Promise((_, reject) => { refuse = reject; })} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Sent before the reload' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(keptDraft('ws-1:agent-1:conv-5')).toMatchObject({ body: 'Sent before the reload', sendKey: expect.any(String) });
+  act(() => refuse(new Error('network')));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  expect(stored()).toHaveLength(1);
+  first.unmount();
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-5" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Sent before the reload');
+});
+
+test('a draft changed in another tab shows up in a box not edited here, with a notice', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-6';
+  window.localStorage.setItem(key, JSON.stringify({ kind: 'outgoing', body: 'Tab A text', saved_at: Date.now() }));
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-6" onSubmit={vi.fn()} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Tab A text');
+  const newer = JSON.stringify({ kind: 'outgoing', body: 'Tab B text', saved_at: Date.now() });
+  // The other tab has written the shared storage by the time this tab hears of it.
+  window.localStorage.setItem(key, newer);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: newer, storageArea: window.localStorage })); });
+  expect(screen.getByLabelText('Message body')).toHaveValue('Tab B text');
+  expect(screen.getByRole('status')).toHaveTextContent('Updated from another tab');
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'colliedesk.reply-draft:ws-1:agent-1:other', newValue: newer, storageArea: window.localStorage })); });
+  expect(screen.getByLabelText('Message body')).toHaveValue('Tab B text');
+});
+
+test('text typed in this tab is never replaced by another tab\'s different draft: the person chooses', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-8';
+  const other = (body: string) => {
+    const value = JSON.stringify({ kind: 'note', body, saved_at: Date.now() });
+    window.localStorage.setItem(key, value);
+    act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: value, storageArea: window.localStorage })); });
+  };
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-8" onSubmit={vi.fn()} />);
+  const box = screen.getByLabelText('Message body');
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(box, { target: { value: 'Tab A survives' } });
+  other('Tab B independent');
+  expect(box).toHaveValue('Tab A survives');
+  expect(screen.getByRole('status')).toHaveTextContent('Another tab has a different draft.');
+  fireEvent.click(screen.getByRole('button', { name: 'Keep mine' }));
+  expect(box).toHaveValue('Tab A survives');
+  expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ kind: 'note', body: 'Tab A survives' });
+  expect(screen.queryByRole('button', { name: 'Use it' })).not.toBeInTheDocument();
+  other('Tab B second');
+  expect(box).toHaveValue('Tab A survives');
+  fireEvent.click(screen.getByRole('button', { name: 'Use it' }));
+  expect(box).toHaveValue('Tab B second');
+  expect(screen.queryByRole('button', { name: 'Keep mine' })).not.toBeInTheDocument();
+});
+
+test('a draft another tab sent leaves this tab too when this tab held the same text', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-9';
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-9" onSubmit={vi.fn()} />);
+  const box = screen.getByLabelText('Message body');
+  fireEvent.change(box, { target: { value: 'Same words' } });
+  const before = window.localStorage.getItem(key);
+  window.localStorage.removeItem(key);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, oldValue: before, newValue: null, storageArea: window.localStorage })); });
+  expect(box).toHaveValue('');
+});
+
+test('a private note written in another tab arrives as a note, never as a reply to the customer', () => {
+  window.localStorage.clear();
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-7" onSubmit={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Reply', pressed: true })).toBeInTheDocument();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-7';
+  const note = JSON.stringify({ kind: 'note', body: 'Refund denied, customer flagged', saved_at: Date.now() });
+  window.localStorage.setItem(key, note);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: note, storageArea: window.localStorage })); });
+  expect(screen.getByLabelText('Message body')).toHaveValue('Refund denied, customer flagged');
+  expect(screen.getByRole('button', { name: 'Private note', pressed: true })).toBeInTheDocument();
+  expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ kind: 'note' });
+});
+
+const keptDraft = (key: string) => JSON.parse(window.localStorage.getItem(`colliedesk.reply-draft:${key}`) ?? 'null') as { body?: string; kind?: string; sendKey?: string } | null;
+
+// A reload while a send is in flight cuts the request off; whether the server stored it is a matter of timing.
+// The box keeps the send's key with the text, and the page that reads it back asks the server about that key.
+async function reloadDuringSend(draftKey: string, text: string) {
+  let abort: (error: Error) => void = () => undefined;
+  const onSubmit = vi.fn(() => new Promise((_, reject) => { abort = reject; }));
+  const first = render(<ReplyComposer draftKey={draftKey} agentId="agent-1" onSubmit={onSubmit} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: text } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  const sendKey = (onSubmit.mock.calls[0] as unknown[])[6] as string;
+  expect(sendKey).toMatch(/^[\x21-\x7e]{1,200}$/);
+  expect(keptDraft(draftKey)).toMatchObject({ kind: 'note', body: text, sendKey });
+  act(() => abort(new TypeError('Failed to fetch')));
+  await act(async () => undefined);
+  first.unmount();
+  return sendKey;
+}
+
+test('a note the server stored before a reload is dropped from the box, decided by its send key', async () => {
+  window.localStorage.clear();
+  const sendKey = await reloadDuringSend('ws-1:agent-1:conv-10', 'Marker r4');
+  const findSent = vi.fn().mockResolvedValue(true);
+  const onSubmit = vi.fn();
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-10" agentId="agent-1" onSubmit={onSubmit} findSent={findSent} />);
+  await waitFor(() => expect(screen.getByLabelText('Message body')).toHaveValue(''));
+  expect(findSent).toHaveBeenCalledWith(sendKey);
+  expect(keptDraft('ws-1:agent-1:conv-10')).toBeNull();
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+test('a note the server never stored comes back after a reload, unsent, and goes again under the same key', async () => {
+  window.localStorage.clear();
+  const sendKey = await reloadDuringSend('ws-1:agent-1:conv-11', 'Never arrived');
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-11" agentId="agent-1" onSubmit={onSubmit} findSent={vi.fn().mockResolvedValue(false)} />);
+  await act(async () => undefined);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Never arrived');
+  expect(screen.getByRole('button', { name: 'Private note', pressed: true })).toBeInTheDocument();
+  expect(onSubmit).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  expect(onSubmit).toHaveBeenCalledWith('note', 'Never arrived', undefined, undefined, undefined, undefined, sendKey);
+  await waitFor(() => expect(keptDraft('ws-1:agent-1:conv-11')).toBeNull());
+});
+
+test('a draft whose text changed after the cut-off send is a new message: it keeps the text and drops the old key', async () => {
+  window.localStorage.clear();
+  await reloadDuringSend('ws-1:agent-1:conv-12', 'First words');
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-12" agentId="agent-1" onSubmit={vi.fn()} findSent={vi.fn().mockResolvedValue(false)} />);
+  await act(async () => undefined);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Other words' } });
+  expect(keptDraft('ws-1:agent-1:conv-12')).toMatchObject({ body: 'Other words' });
+  expect(keptDraft('ws-1:agent-1:conv-12')?.sendKey).toBeUndefined();
+});
+
+test('another tab sending its own different text leaves the text typed here in the box and in storage', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-13';
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-13" onSubmit={vi.fn()} />);
+  const box = screen.getByLabelText('Message body');
+  fireEvent.change(box, { target: { value: 'Mine here' } });
+  const theirs = JSON.stringify({ kind: 'outgoing', body: 'Theirs there', saved_at: Date.now() });
+  window.localStorage.removeItem(key);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, oldValue: theirs, newValue: null, storageArea: window.localStorage })); });
+  expect(box).toHaveValue('Mine here');
+  expect(screen.queryByRole('button', { name: 'Use it' })).not.toBeInTheDocument();
+  expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ body: 'Mine here' });
+});
+
+// A send cut off before its answer, pressed again: the same text, files and copies go under the same key;
+// other files or other copies are another message, under a new key, never a replay that drops them.
+test('a failed send pressed again with other files or copies goes under a new key, with the same ones under the same key', async () => {
+  window.localStorage.clear();
+  const onSubmit = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-20" agentId="agent-1" onSubmit={onSubmit} attachmentLimits={limits} />);
+  const keyOfCall = (index: number) => (onSubmit.mock.calls[index] as unknown[])[6] as string;
+  const press = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  };
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Invoice attached' } });
+  const first = new File([new Uint8Array(100)], 'invoice.pdf', { lastModified: 1 });
+  attach(first);
+  await press();
+  await press();
+  expect(keyOfCall(1)).toBe(keyOfCall(0));
+  fireEvent.click(screen.getByRole('button', { name: 'Remove invoice.pdf' }));
+  attach(new File([new Uint8Array(120)], 'invoice.pdf', { lastModified: 2 }));
+  await press();
+  expect(keyOfCall(2)).not.toBe(keyOfCall(1));
+  fireEvent.click(screen.getByRole('button', { name: 'Cc' }));
+  typeCc('billing@example.com');
+  await press();
+  expect(onSubmit.mock.calls[3]).toEqual(['outgoing', 'Invoice attached', expect.any(Array), ['billing@example.com'], undefined, undefined, expect.any(String)]);
+  expect(keyOfCall(3)).not.toBe(keyOfCall(2));
+});
+
+test('a tab sending the text another tab is already sending goes under that tab\'s key', async () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-21';
+  window.localStorage.setItem(key, JSON.stringify({ kind: 'note', body: 'Shared words', saved_at: Date.now() }));
+  const onSubmit = vi.fn(() => new Promise(() => undefined));
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-21" agentId="agent-1" onSubmit={onSubmit} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Shared words');
+  // The other tab presses Add private note: its draft now holds its send's key.
+  const sending = JSON.stringify({ kind: 'note', body: 'Shared words', sendKey: 'tab-a-key', saved_at: Date.now() });
+  window.localStorage.setItem(key, sending);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: sending, storageArea: window.localStorage })); });
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  expect((onSubmit.mock.calls[0] as unknown[])[6]).toBe('tab-a-key');
+});
+
+test('taking over another tab\'s draft keeps the key of the send it has in flight', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-22';
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-22" agentId="agent-1" onSubmit={vi.fn()} />);
+  const sending = JSON.stringify({ kind: 'note', body: 'From tab A', sendKey: 'tab-a-key', saved_at: Date.now() });
+  window.localStorage.setItem(key, sending);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: sending, storageArea: window.localStorage })); });
+  expect(screen.getByLabelText('Message body')).toHaveValue('From tab A');
+  expect(keptDraft('ws-1:agent-1:conv-22')).toMatchObject({ body: 'From tab A', sendKey: 'tab-a-key' });
 });

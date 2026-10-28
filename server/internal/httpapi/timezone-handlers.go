@@ -1,10 +1,14 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 	_ "time/tzdata"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
 func (a *API) updateWorkspaceTimezone(response http.ResponseWriter, request *http.Request) {
@@ -52,4 +56,21 @@ func validTimezone(value string) bool {
 	}
 	_, err := time.LoadLocation(value)
 	return err == nil
+}
+
+// startOnBrowserTimezone gives an agent signing in for the first time the timezone of their browser (the
+// timezone field of the sign-in request), so times match their clock instead of the UTC default. An
+// unknown or missing zone changes nothing, and nothing here ever fails a sign-in.
+func (a *API) startOnBrowserTimezone(ctx context.Context, signedIn *auth.Redeemed, timezone string) {
+	if timezone == "" || timezone == "UTC" || timezone == "Etc/UTC" || !validTimezone(timezone) {
+		return
+	}
+	set, err := a.store.StartOnBrowserTimezone(ctx, signedIn.Workspace.ID, signedIn.Agent.ID, timezone)
+	if err != nil {
+		slog.Error("start agent on browser timezone", "workspace_id", signedIn.Workspace.ID, "error", err)
+		return
+	}
+	if set {
+		signedIn.Agent.TimezoneOverride = &timezone
+	}
 }

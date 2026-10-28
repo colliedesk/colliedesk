@@ -69,6 +69,9 @@ func splitGuide(page, markdown string) []docSection {
 		if strings.HasPrefix(line, "```") {
 			inFence = !inFence
 		}
+		if !inFence && strings.HasPrefix(line, "<!--") && strings.HasSuffix(line, "-->") {
+			continue // the markers around generated parts are not text to search or quote
+		}
 		level := headingLevel(line)
 		if inFence || level == 0 {
 			body = append(body, line)

@@ -133,7 +133,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, slug, 
 		return
 	}
 	if sub == stylePath+s.pages.styleName || base == pathPrefix+"_" && sub == "/"+s.pages.styleName {
-		s.writeStyle(response, request)
+		s.writeStyle(response, request, s.pages.style)
 		return
 	}
 	if !slugShape.MatchString(slug) {
@@ -182,6 +182,8 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, slug, 
 		s.image(response, request, view, strings.TrimPrefix(sub, "/images/"))
 	case strings.HasPrefix(sub, "/media/"):
 		s.video(response, request, view, strings.TrimPrefix(sub, "/media/"))
+	case strings.HasPrefix(sub, stylePath):
+		s.brandAsset(response, request, view, strings.TrimPrefix(sub, stylePath))
 	case sub == "/robots.txt" && base == "":
 		s.robots(response, request, view)
 	default:
@@ -197,6 +199,7 @@ type view struct {
 	etag string
 	// address is the help center's public address, for canonical links.
 	address string
+	brand   brand
 }
 
 func (s *Site) newView(site domain.HelpCenterSite, base string) view {
@@ -205,10 +208,13 @@ func (s *Site) newView(site domain.HelpCenterSite, base string) view {
 		home = "/"
 	}
 	// Everything a page shows besides the knowledge base itself: the build, the trial (noindex), the
-	// title, language and name the header uses, and the address.
+	// title, language and name the header uses, the address and the brand. The brand counts what is
+	// shown, not only the saved theme: a logo moved to the trash changes no content version.
+	brand := newBrand(site)
 	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
-		site.Title, site.Locale, site.Name, base, s.config.Version, s.pages.fingerprint}, "\x00")))
-	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: URL(s.config.Origin, s.config.Domain, site.Slug)}
+		site.Title, site.Locale, site.Name, base, s.config.Version, s.pages.fingerprint, brand.key}, "\x00")))
+	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: URL(s.config.Origin, s.config.Domain, site.Slug),
+		brand: brand}
 }
 
 func (v view) title() string {
@@ -311,16 +317,17 @@ func (s *Site) writeError(response http.ResponseWriter, err error) {
 	http.Error(response, "Something went wrong. Try again in a moment.", http.StatusInternalServerError)
 }
 
-func (s *Site) writeStyle(response http.ResponseWriter, request *http.Request) {
+// writeStyle sends a style sheet: site.css or a brand sheet.
+func (s *Site) writeStyle(response http.ResponseWriter, request *http.Request, style []byte) {
 	header := response.Header()
 	header.Set("Content-Type", "text/css; charset=utf-8")
 	header.Set("X-Content-Type-Options", "nosniff")
 	// The name holds the content's hash, so it never changes under the same address.
 	header.Set("Cache-Control", "public, max-age=31536000, immutable")
-	header.Set("Content-Length", strconv.Itoa(len(s.pages.style)))
+	header.Set("Content-Length", strconv.Itoa(len(style)))
 	response.WriteHeader(http.StatusOK)
 	if request.Method != http.MethodHead {
-		_, _ = response.Write(s.pages.style)
+		_, _ = response.Write(style)
 	}
 }
 
@@ -413,25 +420,5 @@ func (s *Site) image(response http.ResponseWriter, request *http.Request, v view
 		s.writeError(response, err)
 		return
 	}
-	body, err := s.config.Objects.Open(request.Context(), image.StorageKey)
-	if err != nil {
-		log.Printf("help center image %s: open stored bytes: %v", image.ID, err)
-		s.writeSiteNotFound(response, v)
-		return
-	}
-	defer body.Close()
-	header := response.Header()
-	header.Set("Content-Type", image.ContentType)
-	header.Set("Content-Length", strconv.FormatInt(image.Size, 10))
-	header.Set("X-Content-Type-Options", "nosniff")
-	// Nothing the image holds may run or load, even if a browser opened it as a page.
-	header.Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	header.Set("Cache-Control", "public, max-age=31536000, immutable")
-	response.WriteHeader(http.StatusOK)
-	if request.Method == http.MethodHead {
-		return
-	}
-	if _, err := io.Copy(response, body); err != nil {
-		log.Printf("help center image %s: stream: %v", image.ID, err)
-	}
+	s.streamImage(response, request, v, image)
 }

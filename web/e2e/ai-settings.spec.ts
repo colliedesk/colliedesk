@@ -7,13 +7,18 @@ import { createWorkspaceWithSlug } from './support/workspace';
 const baseURL = servers.main;
 
 // fakeModelServer stands in for an OpenAI-compatible provider (a vLLM or Ollama on the operator's network):
-// it answers every chat completion with JSON, except for the model "missing".
+// it answers every chat completion with JSON, except for the model "missing", and keeps no model list.
 async function fakeModelServer() {
   const calls: string[] = [];
   const server = createServer((request, response) => {
     let body = '';
     request.on('data', (chunk: Buffer) => { body += chunk.toString(); });
     request.on('end', () => {
+      if (request.method === 'GET') {
+        response.statusCode = 404;
+        response.end('{"error":{"message":"not found"}}');
+        return;
+      }
       const model = (JSON.parse(body || '{}') as { model?: string }).model ?? '';
       calls.push(model);
       response.setHeader('Content-Type', 'application/json');
@@ -40,20 +45,23 @@ test('a self-hosted admin adds a provider on the network, turns reply drafts on,
     await expect(page).toHaveURL(`${baseURL}/`);
 
     await page.goto(`${baseURL}/settings`);
-    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'AI', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Built-in AI', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'No AI provider on this server yet' })).toBeVisible();
     await expect(page.getByRole('switch', { name: 'Reply drafts on' })).toBeDisabled();
 
     await page.getByRole('button', { name: 'Add provider' }).first().click();
     const dialog = page.getByRole('dialog', { name: 'Add a provider' });
-    await dialog.getByText('OpenAI-compatible', { exact: true }).click();
+    await dialog.getByText('Other or self-hosted', { exact: true }).click();
     await dialog.getByLabel('Name', { exact: true }).fill('Office model');
     await dialog.getByLabel('Base URL', { exact: true }).fill(model.url);
-    await dialog.getByLabel('Models', { exact: true }).fill('missing');
+    // This server keeps no model list: loading one says so and asks for the names.
+    await dialog.getByRole('button', { name: 'Load models' }).click();
+    await expect(dialog.getByText('This provider does not list its models. Type the model names instead.')).toBeVisible();
+    await dialog.getByLabel('Model names', { exact: true }).fill('missing');
     await dialog.getByRole('button', { name: 'Check and save' }).click();
-    await expect(dialog.getByText(/has no model with that name/)).toBeVisible();
+    await expect(dialog.getByText(/has no model "missing", or this key may not use it/)).toBeVisible();
 
-    await dialog.getByLabel('Models', { exact: true }).fill('llama-4-scout, qwen-3');
+    await dialog.getByLabel('Model names', { exact: true }).fill('llama-4-scout, qwen-3');
     await dialog.getByRole('button', { name: 'Check and save' }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByText('Office model')).toBeVisible();

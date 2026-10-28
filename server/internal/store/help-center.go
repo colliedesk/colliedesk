@@ -29,9 +29,25 @@ func (s *Store) OpenHelpCenter(ctx context.Context, slug string) (domain.HelpCen
 	}
 	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (state, error) {
 		got := state{site: domain.HelpCenterSite{WorkspaceID: workspaceID}}
-		err := tx.QueryRow(ctx, `SELECT w.slug, w.name, COALESCE(h.enabled, false), COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0)
-			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id WHERE w.id=$1`, workspaceID).
-			Scan(&got.site.Slug, &got.site.Name, &got.enabled, &got.site.Title, &got.site.Locale, &got.site.ContentVersion)
+		site, theme := &got.site, &got.site.Theme
+		colors := &theme.Colors
+		var logoWidth, logoHeight *int
+		// The logo and favicon count only while they are images of the library outside its trash.
+		err := tx.QueryRow(ctx, `SELECT w.slug, w.name, COALESCE(h.enabled, false), COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
+				logo.id::text, logo.width, logo.height, icon.id::text, COALESCE(h.logo_alt, ''), h.linkback_url, h.contact_url, h.contact_phone,
+				h.color_primary, h.color_header, h.color_header_text, h.color_background, h.color_text, h.color_link, h.color_footer, h.body_font, h.heading_font,
+				COALESCE(h.custom_css, '')
+			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id
+			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=h.logo_media_id AND logo.kind='image' AND logo.deleted_at IS NULL
+			LEFT JOIN kb_media icon ON icon.workspace_id=w.id AND icon.id=h.favicon_media_id AND icon.kind='image' AND icon.deleted_at IS NULL
+			WHERE w.id=$1`, workspaceID).
+			Scan(&site.Slug, &site.Name, &got.enabled, &site.Title, &site.Locale, &site.ContentVersion,
+				&theme.LogoMediaID, &logoWidth, &logoHeight, &theme.FaviconMediaID, &theme.LogoAlt, &theme.LinkbackURL, &theme.ContactURL, &theme.ContactPhone,
+				&colors.Primary, &colors.Header, &colors.HeaderText, &colors.Background, &colors.Text, &colors.Link, &colors.Footer, &theme.BodyFont, &theme.HeadingFont,
+				&theme.CustomCSS)
+		if logoWidth != nil && logoHeight != nil {
+			site.LogoWidth, site.LogoHeight = *logoWidth, *logoHeight
+		}
 		if err != nil || !got.enabled || !s.limits {
 			return got, err
 		}
@@ -48,25 +64,31 @@ func (s *Store) OpenHelpCenter(ctx context.Context, slug string) (domain.HelpCen
 	return got.site, true, nil
 }
 
+// helpCenterCollectionsSQL lists the live collections of workspace $1 with the published articles each
+// holds itself, by position and name.
+const helpCenterCollectionsSQL = `SELECT c.id::text, COALESCE(c.parent_id::text, ''), c.name, c.slug, c.description, COALESCE(n.published, 0)
+	FROM kb_collections c
+	LEFT JOIN (SELECT a.collection_id, count(*) AS published FROM kb_articles a WHERE ` + publishedKBArticle + ` GROUP BY a.collection_id) n
+		ON n.collection_id=c.id
+	WHERE c.workspace_id=$1 AND c.deleted_at IS NULL
+	ORDER BY c.position, lower(c.name), c.id`
+
+func scanPublicKBCollection(row pgx.CollectableRow) (domain.PublicKBCollection, error) {
+	var collection domain.PublicKBCollection
+	err := row.Scan(&collection.ID, &collection.ParentID, &collection.Name, &collection.Slug, &collection.Description, &collection.Published)
+	return collection, err
+}
+
 // HelpCenterCollections returns the live collections of the workspace with the number of published
 // articles each holds itself, by position and name. The caller hides the ones with nothing published
 // below them, so a collection of drafts never shows its name.
 func (s *Store) HelpCenterCollections(ctx context.Context, workspaceID string) ([]domain.PublicKBCollection, error) {
 	collections, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBCollection, error) {
-		rows, err := tx.Query(ctx, `SELECT c.id::text, COALESCE(c.parent_id::text, ''), c.name, c.slug, c.description, COALESCE(n.published, 0)
-			FROM kb_collections c
-			LEFT JOIN (SELECT a.collection_id, count(*) AS published FROM kb_articles a WHERE `+publishedKBArticle+` GROUP BY a.collection_id) n
-				ON n.collection_id=c.id
-			WHERE c.workspace_id=$1 AND c.deleted_at IS NULL
-			ORDER BY c.position, lower(c.name), c.id`, workspaceID)
+		rows, err := tx.Query(ctx, helpCenterCollectionsSQL, workspaceID)
 		if err != nil {
 			return nil, err
 		}
-		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.PublicKBCollection, error) {
-			var collection domain.PublicKBCollection
-			err := row.Scan(&collection.ID, &collection.ParentID, &collection.Name, &collection.Slug, &collection.Description, &collection.Published)
-			return collection, err
-		})
+		return pgx.CollectRows(rows, scanPublicKBCollection)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list help center collections: %w", err)
@@ -83,7 +105,17 @@ func scanPublicKBArticle(row pgx.Row, extra ...any) (domain.PublicKBArticle, err
 
 const publicKBArticleColumns = `a.number, a.slug, a.title, a.collection_id::text, a.published_at, a.updated_at`
 
-// HelpCenterArticles returns, for each of the collections, its published articles by title, skipping
+// helpCenterArticlesSQL lists, for each collection of workspace $1 that collections (an SQL array
+// of ids) names, its published articles in their order (position, then title), skipping the first $2
+// and keeping at most $3.
+func helpCenterArticlesSQL(collections string) string {
+	return `SELECT ` + publicKBArticleColumns + ` FROM (
+			SELECT a.*, row_number() OVER (PARTITION BY a.collection_id ORDER BY a.position, lower(a.title), a.number) AS place
+			FROM kb_articles a WHERE ` + publishedKBArticle + ` AND a.collection_id = ANY(` + collections + `)) a
+		WHERE a.place > $2 AND a.place <= $2 + $3 ORDER BY a.collection_id, a.place`
+}
+
+// HelpCenterArticles returns, for each of the collections, its published articles in order, skipping
 // the first offset and keeping at most limit; the text is left out.
 func (s *Store) HelpCenterArticles(ctx context.Context, workspaceID string, collectionIDs []string, offset, limit int) ([]domain.PublicKBArticle, error) {
 	for _, id := range collectionIDs {
@@ -92,10 +124,7 @@ func (s *Store) HelpCenterArticles(ctx context.Context, workspaceID string, coll
 		}
 	}
 	articles, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.PublicKBArticle, error) {
-		rows, err := tx.Query(ctx, `SELECT `+publicKBArticleColumns+` FROM (
-				SELECT a.*, row_number() OVER (PARTITION BY a.collection_id ORDER BY lower(a.title), a.number) AS place
-				FROM kb_articles a WHERE `+publishedKBArticle+` AND a.collection_id = ANY($2::uuid[])) a
-			WHERE a.place > $3 AND a.place <= $3 + $4 ORDER BY a.collection_id, a.place`, workspaceID, collectionIDs, offset, limit)
+		rows, err := tx.Query(ctx, helpCenterArticlesSQL(`$4::uuid[]`), workspaceID, offset, limit, collectionIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -105,6 +134,21 @@ func (s *Store) HelpCenterArticles(ctx context.Context, workspaceID string, coll
 		return nil, fmt.Errorf("list help center articles: %w", err)
 	}
 	return articles, nil
+}
+
+// articleVideosSQL lists the live library videos the current text of an article of workspace $1 links;
+// article is an SQL expression of the article's id.
+func articleVideosSQL(article string) string {
+	return `SELECT m.id::text, COALESCE(m.width,0), COALESCE(m.height,0), COALESCE(right(m.poster_storage_key,8),'')
+		FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
+		WHERE l.workspace_id=$1 AND l.article_id=` + article + ` AND l.current AND m.kind='video' AND m.deleted_at IS NULL
+		ORDER BY m.id`
+}
+
+func scanPublicKBVideo(row pgx.CollectableRow) (domain.PublicKBVideo, error) {
+	var video domain.PublicKBVideo
+	err := row.Scan(&video.ID, &video.Width, &video.Height, &video.PosterVersion)
+	return video, err
 }
 
 // HelpCenterArticle returns the published article with number and its text, or
@@ -120,18 +164,11 @@ func (s *Store) HelpCenterArticle(ctx context.Context, workspaceID string, numbe
 			return article, err
 		}
 		// The videos its current text links, in the same transaction: the page shows their poster and size.
-		rows, err := tx.Query(ctx, `SELECT m.id::text, COALESCE(m.width,0), COALESCE(m.height,0), COALESCE(right(m.poster_storage_key,8),'')
-			FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
-			WHERE l.workspace_id=$1 AND l.article_id=$2 AND l.current AND m.kind='video' AND m.deleted_at IS NULL
-			ORDER BY m.id`, workspaceID, id)
+		rows, err := tx.Query(ctx, articleVideosSQL(`$2::uuid`), workspaceID, id)
 		if err != nil {
 			return article, err
 		}
-		article.Videos, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.PublicKBVideo, error) {
-			var video domain.PublicKBVideo
-			err := row.Scan(&video.ID, &video.Width, &video.Height, &video.PosterVersion)
-			return video, err
-		})
+		article.Videos, err = pgx.CollectRows(rows, scanPublicKBVideo)
 		return article, err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {

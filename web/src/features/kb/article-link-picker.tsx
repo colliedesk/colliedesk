@@ -48,8 +48,9 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
   const off = center.data?.enabled === false && !center.isFetching;
   // The list is asked for beside the help center, not after it; only a help center known to be off skips it.
   const list = useQuery({
-    queryKey: ['kb-articles', { q: q || undefined, status: 'published', for: 'reply' }],
-    queryFn: ({ signal }) => kbApi.articles({ q: q || undefined, status: 'published' }, signal),
+    // Without a search, the help center's order: the one the team set by hand.
+    queryKey: ['kb-articles', { q: q || undefined, status: 'published', sort: 'manual', for: 'reply' }],
+    queryFn: ({ signal }) => kbApi.articles({ q: q || undefined, status: 'published', sort: 'manual' }, signal),
     enabled: !off, placeholderData: keepPreviousData, refetchOnMount: 'always',
   });
   const items = enabled ? list.data?.items ?? [] : [];
@@ -81,7 +82,8 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
       setQueued(true);
     }}>
       <SavedReplyPicker replies={items} onPick={insert} onClose={onClose} state={state} texts={texts}
-        onQueryChange={off ? undefined : (value) => { setText(value); setQueued(false); }} onManage={off && canManage ? openHelpCenterSettings : undefined} />
+        onQueryChange={off ? undefined : (value) => { setText(value); setQueued(false); }} onManage={off && canManage ? openHelpCenterSettings : undefined}
+        detail={(article) => article.url.replace(/^https?:\/\//, '')} />
     </div>
   );
 }

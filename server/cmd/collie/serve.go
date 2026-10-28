@@ -4,6 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
+	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
+	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"io"
 	"log/slog"
 	"net/http"
@@ -27,12 +31,15 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
+	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
+	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 	"github.com/colliedesk/colliedesk/server/internal/webui"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -42,6 +49,10 @@ var importJobNetwork func(*freshdesk.Options)
 
 // googleBaseURL replaces Google's addresses with a local stand-in; only end-to-end builds set it.
 var googleBaseURL = ""
+
+// microsoftBaseURL replaces Microsoft's sign-in and Graph addresses with a local stand-in; only
+// end-to-end builds set it.
+var microsoftBaseURL = ""
 
 func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -104,6 +115,11 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
+	// Microsoft 365 seals its grants with the same ring (MAILBOX_TOKEN_KEYS), parsed once above.
+	microsoftConfig, err := microsoft.ConfigFromEnv(os.Getenv, googleConfig.Keys)
+	if err != nil {
+		return err
+	}
 	helpCenterDomain, err := helpcenter.DomainFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -116,16 +132,32 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		slog.Warn("AI_SERVER_MONTHLY_ALLOWANCE holds only while the OpenAI-compatible server reports token usage; calls without usage cost nothing against it")
 	}
 	googleConfig.Base = googleBaseURL
-	if emailConfig.SMTP.Configured() || googleConfig.Enabled() {
-		// A server with Gmail and no relay still runs the worker; replies that need SMTP fail with the reason.
-		var sender emailoutbox.Sender
-		if emailConfig.SMTP.Configured() {
-			sender = email.SMTPSender{Config: emailConfig.SMTP}
-		}
-		worker := emailoutbox.New(store.NewWithDB(db), sender,
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig})
-		go worker.Run(ctx, 5*time.Second)
+	microsoftConfig.Base = microsoftBaseURL
+	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
+	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
+	// replies that need them fail with the reason. The journal worker processes what Async channels received.
+	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing}
+	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig))).
+		WithSealKeys(googleConfig.Keys).WithPlanLimits(billing.Enabled())
+	var sender emailoutbox.Sender
+	if emailConfig.SMTP.Configured() {
+		sender = email.SMTPSender{Config: emailConfig.SMTP}
 	}
+	if emailConfig.SMTP.Configured() || googleConfig.Enabled() || microsoftConfig.Enabled() {
+		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
+		worker := emailoutbox.New(channelStore, sender,
+			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig})
+		go worker.Run(ctx, 5*time.Second)
+		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly
+		// and shows a revoked one before a customer waits for a reply.
+		if microsoftConfig.Enabled() {
+			go worker.RunKeepAlive(ctx, time.Hour)
+		}
+	} else {
+		// Without either, email waits for a server that can send it; every other channel is sent here.
+		go outbox.New(channelStore, outbox.Options{Skip: []channels.Type{channelemail.Type}}).Run(ctx, 5*time.Second)
+	}
+	go pipeline.New(channelStore, nil).Run(ctx, 2*time.Second)
 	if emailConfig.ResendAPIKey != "" {
 		// Provider domains a workspace stopped using, or left behind by being deleted, free their slots here.
 		client := &resend.Client{APIKey: emailConfig.ResendAPIKey, Base: emailConfig.ResendAPIBase}
@@ -151,6 +183,20 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
 	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
 	go sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage))
+	// The results page only reads numbers this worker computes (docs/internals/results.md). It also sends
+	// the weekly email to admins, from the platform address, when the server can send mail.
+	resultsWorker := results.NewWorker(db)
+	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
+		resultsWorker.WithMail(results.Mail{Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain, Origin: origin,
+			Locked: func(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error) {
+				if !billing.Enabled() {
+					return false, nil
+				}
+				access, err := store.WorkspaceAccess(ctx, tx, workspaceID, now)
+				return access.Locked, err
+			}})
+	}
+	go resultsWorker.Run(ctx)
 	mailImageCacheBytes, err := mailImageCacheBytesFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -172,7 +218,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
 	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1", PlanLimits: billing.Enabled()}
-	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.

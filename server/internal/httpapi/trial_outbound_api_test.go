@@ -30,7 +30,7 @@ func (f limitsFixture) wantReplyQueued(t *testing.T, conversation, what string) 
 
 func (f limitsFixture) outboxCount(t *testing.T, workspace string) string {
 	t.Helper()
-	return queryString(t, f.pool, `SELECT count(*)::text FROM email_outbox WHERE workspace_id=$1`, workspace)
+	return queryString(t, f.pool, `SELECT count(*)::text FROM channel_outbox WHERE workspace_id=$1`, workspace)
 }
 
 // agentStarted creates a contact and a conversation the way an agent does: no customer message.
@@ -48,8 +48,8 @@ func (f limitsFixture) seedOutbox(t *testing.T, workspace string, count int, sta
 		WITH conv AS (SELECT id FROM conversations WHERE workspace_id=$1 ORDER BY created_at LIMIT 1),
 		m AS (INSERT INTO messages(workspace_id,conversation_id,kind,body)
 			SELECT $1,conv.id,'outgoing','seeded '||n FROM conv, generate_series(1,$2::int) n RETURNING id)
-		INSERT INTO email_outbox(workspace_id,message_id,status,created_at)
-		SELECT $1,id,$3,$4 FROM m`, workspace, count, status, createdAt)
+		INSERT INTO channel_outbox(workspace_id,message_id,channel_type,channel_id,status,created_at)
+		SELECT $1,id,'email',(SELECT id FROM channels WHERE workspace_id=$1 AND type='email' ORDER BY is_default DESC,created_at LIMIT 1),$3,$4 FROM m`, workspace, count, status, createdAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func (f limitsFixture) seedOutbox(t *testing.T, workspace string, count int, sta
 
 func (f limitsFixture) verifyDomain(t *testing.T, workspace string) {
 	t.Helper()
-	if _, err := f.pool.Exec(context.Background(), `UPDATE email_channels SET domain_verified_at=$2 WHERE workspace_id=$1`, workspace, f.clock.Now()); err != nil {
+	if _, err := f.pool.Exec(context.Background(), `UPDATE email_domains SET verified_at=$2 WHERE workspace_id=$1`, workspace, f.clock.Now()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -73,7 +73,7 @@ func TestTrialRepliesToCustomersWhoWroteFirst(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	conversation := f.conversationA(t)
 	f.wantReplyQueued(t, conversation, "reply to inbound mail with auth none")
-	if got := queryString(t, f.pool, `SELECT status FROM email_outbox WHERE workspace_id=$1`, f.workspaceA); got != "queued" {
+	if got := queryString(t, f.pool, `SELECT status FROM channel_outbox WHERE workspace_id=$1`, f.workspaceA); got != "queued" {
 		t.Fatalf("outbox status=%q, want queued", got)
 	}
 }
@@ -202,7 +202,7 @@ func TestRepliesQueuedBeforeTheLockStillSend(t *testing.T) {
 	if got := f.outboxCount(t, f.workspaceA); got != "1" {
 		t.Fatalf("outbox=%s: the lock must not remove queued deliveries", got)
 	}
-	if status := queryString(t, f.pool, `SELECT status FROM email_outbox WHERE workspace_id=$1`, f.workspaceA); status != "queued" {
+	if status := queryString(t, f.pool, `SELECT status FROM channel_outbox WHERE workspace_id=$1`, f.workspaceA); status != "queued" {
 		t.Fatalf("status=%q, want queued (the worker still sends it)", status)
 	}
 }
@@ -281,11 +281,11 @@ func TestTrialCapCountStaysFastOnALargeOutbox(t *testing.T) {
 	f.seedOutbox(t, f.workspaceB, 100000, "sent", f.clock.Now().Add(-48*time.Hour))
 	f.seedOutbox(t, f.workspaceA, 100000, "sent", f.clock.Now().Add(-72*time.Hour))
 	f.seedOutbox(t, f.workspaceA, 150, "sent", f.clock.Now().Add(-time.Hour))
-	if _, err := f.pool.Exec(context.Background(), `ANALYZE email_outbox`); err != nil {
+	if _, err := f.pool.Exec(context.Background(), `ANALYZE channel_outbox`); err != nil {
 		t.Fatal(err)
 	}
 	var plan strings.Builder
-	rows, err := f.pool.Query(context.Background(), `EXPLAIN SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'`,
+	rows, err := f.pool.Query(context.Background(), `EXPLAIN SELECT count(*) FROM channel_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'`,
 		f.workspaceA, f.clock.Now().Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
@@ -361,14 +361,14 @@ func TestTrialRetryOfAFailedDeliveryRespectsTheCap(t *testing.T) {
 		t.Fatalf("setup reply: %+v", response)
 	}
 	decode(t, &httptest.ResponseRecorder{Code: response.Code, Body: bytes.NewBufferString(response.Body)}, &failed)
-	if _, err := f.pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, failed.ID); err != nil {
+	if _, err := f.pool.Exec(context.Background(), `UPDATE channel_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, failed.ID); err != nil {
 		t.Fatal(err)
 	}
 	f.wantReplyQueued(t, conversation, "the freed slot")
 	f.wantReplyQueued(t, conversation, "the 200th counted reply")
 	got := f.retry(t, conversation, failed.ID)
 	wantStatus(t, got, http.StatusTooManyRequests, limitCode, "retry at the cap")
-	if status := queryString(t, f.pool, `SELECT status FROM email_outbox WHERE message_id=$1`, failed.ID); status != "failed" {
+	if status := queryString(t, f.pool, `SELECT status FROM channel_outbox WHERE message_id=$1`, failed.ID); status != "failed" {
 		t.Fatalf("refused retry changed the delivery to %q", status)
 	}
 	// Once a counted reply leaves the window there is room again.

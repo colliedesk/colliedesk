@@ -233,3 +233,41 @@ test('j and k are text while typing, and nothing with a modifier key held', () =
   fireEvent.keyDown(document.body, { key: 'j', isComposing: true });
   expect(onSelect).not.toHaveBeenCalled();
 });
+
+test('in a brand-new workspace the first onboarding step is the primary action and every step is a full-size button', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} />);
+  const links = within(screen.getByRole('region', { name: 'Get started' })).getAllByRole('link');
+  expect(links[0]).toHaveTextContent('Connect your support email');
+  expect(links[0]).toHaveClass('button', 'primary-action');
+  for (const link of links.slice(1)) {
+    expect(link).toHaveClass('button');
+    expect(link).not.toHaveClass('primary-action');
+  }
+});
+
+test('a brand-new workspace with an email channel offers a test message it can send without leaving the app', async () => {
+  vi.useRealTimers();
+  let finish: () => void = () => undefined;
+  const send = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} onTestMessage={send} />);
+  const button = within(screen.getByRole('region', { name: 'Get started' })).getByRole('button', { name: 'Send yourself a test message' });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(button).toBeDisabled();
+  await act(async () => finish());
+  expect(button).toBeEnabled();
+});
+
+test('a test message that fails says why under the button', async () => {
+  vi.useRealTimers();
+  const send = vi.fn().mockRejectedValue(new Error('A workspace can send itself 5 test messages an hour. Try again later.'));
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} onTestMessage={send} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Send yourself a test message' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('5 test messages an hour');
+});
+
+test('without an email channel the get-started guide offers no test message', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} />);
+  expect(screen.queryByRole('button', { name: 'Send yourself a test message' })).not.toBeInTheDocument();
+});

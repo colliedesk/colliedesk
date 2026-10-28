@@ -12,11 +12,15 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/mcpbridge"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // stderr receives hints meant for the person at the terminal; stdout stays machine-readable.
 var stderr io.Writer = os.Stderr
+
+// stdin is what `collie mcp` reads its host's messages from; tests replace it.
+var stdin io.Reader = os.Stdin
 
 // version is stamped at image build time with -ldflags "-X main.version=..."; see server/Dockerfile.
 var version = "dev"
@@ -26,10 +30,10 @@ var clock = func() time.Time { return time.Now().UTC() }
 
 func run(ctx context.Context, args []string, output io.Writer, databaseURL, origin string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, token, import, trial, plan, billing, email, retention, healthcheck, or version")
+		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, token, import, trial, plan, billing, email, retention, healthcheck, mcp, or version")
 	}
 	if args[0] == "--help" || args[0] == "help" {
-		_, err := fmt.Fprintln(output, "Usage: collie <serve|migrate|create-workspace|pair|token|import|trial|plan|billing|email|retention|healthcheck|version>")
+		_, err := fmt.Fprintln(output, "Usage: collie <serve|migrate|create-workspace|pair|token|import|trial|plan|billing|email|retention|healthcheck|mcp|version>")
 		return err
 	}
 	if args[0] == "version" {
@@ -38,6 +42,10 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 	}
 	if args[0] == "healthcheck" {
 		return healthcheck(ctx, args[1:], databaseURL)
+	}
+	// mcp runs on a person's computer next to their AI host: no database, and stdout carries MCP only.
+	if args[0] == "mcp" {
+		return mcpbridge.Main(ctx, args[1:], version, stdin, output, stderr)
 	}
 	if databaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")

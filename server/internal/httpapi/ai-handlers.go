@@ -1,13 +1,16 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
 // AI settings (docs/user/ai.md). The handlers read and change the workspace's providers and features;
@@ -16,7 +19,7 @@ import (
 func aiActor(request *http.Request) ai.Actor {
 	who := principal(request)
 	actor := ai.Actor{AgentID: who.Agent.ID}
-	if who.Scope != "" {
+	if who.IsToken() {
 		actor.TokenID = who.SessionID
 	}
 	return actor
@@ -43,13 +46,58 @@ func (a *API) addAIProvider(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), label, models, api_key and, for openai_compatible, base_url.")
 		return
 	}
-	provider, err := a.ai.AddProvider(request.Context(), principal(request).Workspace.ID, aiActor(request),
-		ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
+	// The provider's key never enters the fingerprint (it is a secret, and a fingerprint is a plain hash): a
+	// label is unique in the workspace, so the label, kind, address and models already name one provider.
+	a.createOnce(response, request, addAIProviderOperation, append([]string{input.Kind, input.Label, input.BaseURL}, input.Models...), func(ctx context.Context) (any, error) {
+		provider, err := a.ai.AddProvider(ctx, principal(request).Workspace.ID, aiActor(request),
+			ai.ProviderInput{Kind: input.Kind, Label: input.Label, BaseURL: input.BaseURL, APIKey: input.APIKey, Models: input.Models})
+		if err != nil {
+			writeAIError(response, err)
+			return nil, errAnswered
+		}
+		return provider, nil
+	})
+}
+
+// listAIModels lists the models a provider's key may use, before the provider is saved, so a person
+// picks them instead of typing ids. Nothing is stored.
+func (a *API) listAIModels(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		Kind    string `json:"kind"`
+		BaseURL string `json:"base_url"`
+		APIKey  string `json:"api_key"`
+	}
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send kind (anthropic or openai_compatible), api_key and, for openai_compatible, base_url.")
+		return
+	}
+	models, err := a.ai.ListModels(request.Context(), principal(request).Workspace.ID, ai.ModelsInput{Kind: input.Kind, BaseURL: input.BaseURL, APIKey: input.APIKey})
+	var check *ai.CheckError
+	if errors.As(err, &check) {
+		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": errorBody(response, map[string]any{
+			"code": "ai_check_failed", "check_error_code": string(check.Code), "message": aiModelsMessage(check),
+		})})
+		return
+	}
 	if err != nil {
 		writeAIError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusCreated, provider)
+	writeJSON(response, http.StatusOK, map[string]any{"models": models})
+}
+
+// aiModelsMessage says why the models could not be listed. A server that keeps no list is common
+// (some OpenAI-compatible servers), so the way on is to type the model names.
+func aiModelsMessage(check *ai.CheckError) string {
+	switch check.Code {
+	case "model_not_found", "bad_request", "invalid_response":
+		return "This provider does not list its models. Type the model names instead."
+	case "auth":
+		return "The provider refused this key. Copy it again from the provider's console."
+	case "permission":
+		return "This key may not list the provider's models. Type the model names instead."
+	}
+	return strings.Replace(aiCheckMessage(check), " Nothing was saved.", "", 1)
 }
 
 func (a *API) updateAIProvider(response http.ResponseWriter, request *http.Request) {
@@ -155,7 +203,8 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No AI provider or feature with that name in this workspace.")
 	case errors.Is(err, ai.ErrKeysMissing):
-		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot store API keys yet: the operator has not set MAILBOX_TOKEN_KEYS, which encrypts them at rest. Nothing was saved.")
+		logMissingSettings("ai_provider_keys", "MAILBOX_TOKEN_KEYS")
+		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot store API keys yet: its key that encrypts them is not set up, so ask whoever runs it. Nothing was saved.")
 	case errors.Is(err, ai.ErrLimit):
 		writeError(response, http.StatusConflict, "ai_provider_limit", "A workspace can have 5 AI providers. Delete one to add another.")
 	case errors.Is(err, ai.ErrLabelTaken):
@@ -163,7 +212,7 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrNoServerProvider):
 		writeError(response, http.StatusConflict, "no_server_provider", "This server has no AI provider for that feature. Add your own provider, or ask the server operator.")
 	case errors.Is(err, ai.ErrFeatureOff):
-		writeError(response, http.StatusConflict, "ai_feature_off", "This AI feature is off in this workspace, or its provider is gone. An admin turns it on in Settings → AI.")
+		writeError(response, http.StatusConflict, "ai_feature_off", "This AI feature is off in this workspace, or its provider is gone. An admin turns it on in Settings → Built-in AI.")
 	case errors.Is(err, ai.ErrDraftsRateLimited):
 		response.Header().Set("Retry-After", "60")
 		writeError(response, http.StatusTooManyRequests, "ai_drafts_rate_limited", "At most 30 AI drafts a minute in a workspace; try again shortly.")
@@ -182,7 +231,7 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrDraftDecided):
 		writeError(response, http.StatusConflict, "ai_draft_decided", "This AI draft was already sent, discarded or replaced.")
 	case errors.Is(err, ai.ErrAllowanceReached):
-		writeError(response, http.StatusPaymentRequired, "ai_allowance_reached", "This month's included AI is used up. Add your own provider in Settings → AI, or move to a larger plan.")
+		writeError(response, http.StatusPaymentRequired, "ai_allowance_reached", "This month's included AI is used up. Add your own provider in Settings → Built-in AI, or move to a larger plan.")
 	case errors.Is(err, ai.ErrCheckRateLimited):
 		response.Header().Set("Retry-After", "60")
 		writeError(response, http.StatusTooManyRequests, "ai_checks_rate_limited", "At most 10 provider checks a minute in a workspace; try again shortly.")
@@ -197,9 +246,9 @@ func aiCheckMessage(check *ai.CheckError) string {
 	case "auth":
 		return "The provider refused this key. Copy it again from the provider's console. Nothing was saved."
 	case "permission":
-		return "The key works but may not use this model. Nothing was saved."
+		return "The key works but may not use " + checkedModel(check) + ". Tick another model first. Nothing was saved."
 	case "model_not_found":
-		return "The provider has no model with that name; check the first model in the list. Nothing was saved."
+		return "The provider has no model " + checkedModel(check) + ", or this key may not use it. Tick another model first. Nothing was saved."
 	case "blocked_address":
 		return "This address is on a private network, which this server does not call for workspaces. Use a public https address, or ask the server operator to allow private addresses."
 	case "quota_exhausted":
@@ -209,7 +258,7 @@ func aiCheckMessage(check *ai.CheckError) string {
 	case "rate_limited", "overloaded":
 		return "The provider is busy right now. Try again in a minute. Nothing was saved."
 	case "bad_request", "too_large":
-		return "The provider refused the request; it may not support structured output for this model. Nothing was saved."
+		return "The provider refused the request for " + checkedModel(check) + "; it may not support structured output. Tick another model first. Nothing was saved."
 	}
 	return "The provider could not be reached or did not answer properly. Check the address and try again. Nothing was saved."
 }
@@ -320,8 +369,18 @@ func (a *API) createAITriage(response http.ResponseWriter, request *http.Request
 
 // acceptAITriage applies what the person accepts of an open suggestion (the rest of it without a
 // body, or with one naming nothing) to the conversation, as a person's change, and records it.
+// Accepting or undoing a suggestion changes the conversation's tags, priority and assignee, as
+// PATCH /api/v1/conversations/{id} does: a token also needs conversations:update for it.
+var (
+	aiTriageAcceptRoute = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept", auth.PermissionConversationsWrite}
+	aiTriageUndoRoute   = Route{http.MethodPost, "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo", auth.PermissionConversationsWrite}
+)
+
 func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request) {
 	identity := principal(request)
+	if a.askUnlessHeld(response, request, aiTriageAcceptRoute, identity, auth.PermConversationsUpdate, nil, nil) {
+		return
+	}
 	var want ai.TriageSet
 	// A call from MCP without arguments has no body at all.
 	if request.Body == nil {
@@ -342,6 +401,9 @@ func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request
 // undoAITriage takes back what AI applied of a suggestion by itself: the parts named (tags, priority,
 // assignee), or all of it without a body.
 func (a *API) undoAITriage(response http.ResponseWriter, request *http.Request) {
+	if a.askUnlessHeld(response, request, aiTriageUndoRoute, principal(request), auth.PermConversationsUpdate, nil, nil) {
+		return
+	}
 	var input struct {
 		Parts []string `json:"parts"`
 	}
@@ -367,4 +429,12 @@ func (a *API) dismissAITriage(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	writeJSON(response, http.StatusOK, triage)
+}
+
+// checkedModel names the model a check asked for, as people read it in Settings.
+func checkedModel(check *ai.CheckError) string {
+	if check.Model == "" {
+		return "the default model"
+	}
+	return `"` + check.Model + `"`
 }

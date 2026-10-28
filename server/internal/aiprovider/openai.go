@@ -25,6 +25,8 @@ type openAIProvider struct {
 	apiKey     string
 	http       *http.Client
 	openAIHost bool
+	// openRouterHost: OpenRouter routes each request to one of several providers of the model.
+	openRouterHost bool
 }
 
 // NewOpenAICompatible returns the OpenAI-compatible adapter.
@@ -38,10 +40,11 @@ func NewOpenAICompatible(config OpenAIConfig) (Provider, error) {
 		httpClient = NewHTTPClient(HTTPOptions{Guarded: true})
 	}
 	return &openAIProvider{
-		endpoint:   base.String() + "/chat/completions",
-		apiKey:     config.APIKey,
-		http:       httpClient,
-		openAIHost: strings.EqualFold(base.Hostname(), "api.openai.com"),
+		endpoint:       base.String() + "/chat/completions",
+		apiKey:         config.APIKey,
+		http:           httpClient,
+		openAIHost:     strings.EqualFold(base.Hostname(), "api.openai.com"),
+		openRouterHost: strings.EqualFold(base.Hostname(), "openrouter.ai"),
 	}, nil
 }
 
@@ -102,6 +105,11 @@ func (p *openAIProvider) Complete(ctx context.Context, request Request) (Respons
 		body["response_format"] = map[string]any{
 			"type":        "json_schema",
 			"json_schema": map[string]any{"name": "answer", "strict": true, "schema": request.Schema},
+		}
+		// By default OpenRouter may route to a provider that ignores response_format; this keeps the
+		// request on the providers that take every parameter it carries.
+		if p.openRouterHost {
+			body["provider"] = map[string]any{"require_parameters": true}
 		}
 	}
 	encoded, err := json.Marshal(body)

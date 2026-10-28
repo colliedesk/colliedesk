@@ -1,10 +1,36 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { InvalidRequestError } from '../../api/client';
+import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { messages } from '../../messages';
 import { useSaveFeedback } from '../settings/save-feedback';
 import { kbApi } from './kb-api';
 import { kbMessages } from './kb-messages';
+
+// The brand settings are a chunk of their own (with their styles and the preview), asked for as soon as this
+// card's chunk runs, so the card's switch and title never wait for them. A plain import rather than
+// ui/lazy-part, which the first bundle would then have to export.
+type ThemeSection = typeof import('./help-center-theme-form').HelpCenterThemeSection;
+let themeSection: Promise<ThemeSection> | undefined;
+const loadThemeSection = () => (themeSection ??= import('./help-center-theme-form').then((module) => module.HelpCenterThemeSection, (error: unknown) => {
+  themeSection = undefined;
+  throw error;
+}));
+
+function Brand({ canManage }: { canManage: boolean }) {
+  const [Section, setSection] = useState<ThemeSection>();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    loadThemeSection().then((loaded) => { if (alive) setSection(() => loaded); }, (error: unknown) => {
+      console.warn('A part of the page could not be loaded', error);
+      if (alive) setFailed(true);
+    });
+    return () => { alive = false; };
+  }, []);
+  if (failed) return <p role="alert" className="error-copy">{messages.partNotLoaded} <button type="button" className="link-action" onClick={() => window.location.reload()}>{messages.reloadPage}</button></p>;
+  return Section ? <Section canManage={canManage} /> : null;
+}
 
 // HelpCenterSettings is the body of the Help center card in Settings: whether the public pages are on and
 // their title. Every agent sees the state; only admins change it, as the server requires.
@@ -21,10 +47,8 @@ export function HelpCenterSettings({ canManage, workspaceName }: { canManage: bo
   useEffect(() => setEnabled(settings.data?.enabled ?? false), [settings.data?.enabled]);
   useEffect(() => setTitle(settings.data?.title ?? ''), [settings.data?.title]);
   // The reply box's articles list opens Settings at #help-center-heading. This card is a chunk of its own,
-  // so the browser looked for the heading before the card was there; once it is, go to it.
-  useEffect(() => {
-    if (settings.isSuccess && window.location.hash === '#help-center-heading') document.getElementById('help-center-heading')?.scrollIntoView();
-  }, [settings.isSuccess]);
+  // so Settings may be drawn before the card is; once the card is, go to it.
+  useScrollToHashWhenReady(settings.isSuccess, 'help-center-heading');
   const feedback = useSaveFeedback({ pending: save.isPending, saved: save.isSuccess,
     error: save.isError ? (save.error instanceof InvalidRequestError ? save.error.message : messages.settingsActionFailed) : undefined });
   if (settings.isError) return <p role="alert" className="error-copy">{kbMessages.helpCenterFailed}</p>;
@@ -43,5 +67,6 @@ export function HelpCenterSettings({ canManage, workspaceName }: { canManage: bo
             {feedback.status}</span>
         </form>
       : <p className="muted-copy">{kbMessages.helpCenterAdminsOnly}</p>}
+    <Brand canManage={canManage} />
   </>;
 }

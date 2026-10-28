@@ -23,7 +23,7 @@ const trashedCollectionSchema = z.object({
   ...collectionFields, deleted_at: z.string().datetime(), deleted_by: personSchema.nullable(), purges_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TrashedKBCollection'>>;
 const summaryFields = {
-  id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), title: z.string(), slug: z.string(), status: statusSchema,
+  id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), position: z.number().int(), title: z.string(), slug: z.string(), status: statusSchema,
   published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   last_change: changeSchema.nullable(), url: z.string(),
 };
@@ -49,6 +49,9 @@ const helpCenterSchema = z.object({
   enabled: z.boolean(), title: z.string(), locale: z.string(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
 }) satisfies z.ZodType<Generated<'HelpCenter'>>;
 
+const orderSchema = z.object({
+  parent_id: z.string().uuid().nullable(), collection_ids: z.array(z.string().uuid()), article_ids: z.array(z.string().uuid()),
+}) satisfies z.ZodType<Generated<'KBOrder'>>;
 const collectionListSchema = z.object({ items: z.array(kbCollectionSchema) }) satisfies z.ZodType<JsonResponse<'listKBCollections', 200>>;
 const trashedCollectionListSchema = z.object({ items: z.array(trashedCollectionSchema) }) satisfies z.ZodType<JsonResponse<'listTrashedKBCollections', 200>>;
 const articlePageSchema = z.object({ items: z.array(summarySchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<JsonResponse<'listKBArticles', 200>>;
@@ -66,21 +69,24 @@ export type HelpCenter = z.infer<typeof helpCenterSchema>;
 export type KBArticleStatus = z.infer<typeof statusSchema>;
 export type KBCollectionChange = Omit<RequestBody<'updateKBCollection'>, 'updated_at'>;
 export type KBArticleChange = Omit<RequestBody<'updateKBArticle'>, 'updated_at'>;
+export type KBOrder = z.infer<typeof orderSchema>;
 
 type Operation = 'createKBCollection' | 'updateKBCollection' | 'restoreKBCollection' | 'createKBArticle' | 'updateKBArticle' | 'restoreKBArticle'
-  | 'restoreKBArticleVersion' | 'putHelpCenter';
+  | 'restoreKBArticleVersion' | 'putHelpCenter' | 'setKBOrder';
 const json = <O extends Operation>(value: RequestBody<O>): string => JSON.stringify(value);
 
 // The calls that answer 204 carry no body.
 const noContent = z.undefined();
 
-export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; cursor?: string };
+// sort is the order without q: recent (the default without collection_id) or manual, the help center's.
+// limit is the page size, 1 to 200 (50 when left out).
+export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string };
 
 // query is called with a variable, never an object literal, inside a path: the gate that checks every path
 // the web app calls is a route (web_routes_test.go) reads a path up to its first closing brace.
-function query(values: Record<string, string | undefined>): string {
+function query(values: Record<string, string | number | undefined>): string {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(values)) if (value) params.set(key, value);
+  for (const [key, value] of Object.entries(values)) if (value) params.set(key, String(value));
   const text = params.toString();
   return text ? `?${text}` : '';
 }
@@ -92,7 +98,7 @@ const before = (beforeVersion?: number) => query({ before_version: beforeVersion
 export const kbApi = {
   collections: () => request('/api/v1/kb/collections', collectionListSchema),
   trashedCollections: () => request('/api/v1/kb/collections/trash', trashedCollectionListSchema),
-  createCollection: (value: RequestBody<'createKBCollection'>) => request('/api/v1/kb/collections', kbCollectionSchema, { method: 'POST', body: json<'createKBCollection'>(value) }),
+  createCollection: (value: RequestBody<'createKBCollection'>, key: string) => request('/api/v1/kb/collections', kbCollectionSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBCollection'>(value) }),
   updateCollection: (id: string, value: RequestBody<'updateKBCollection'>) => request(`/api/v1/kb/collections/${id}`, kbCollectionSchema, { method: 'PATCH', body: json<'updateKBCollection'>(value) }),
   // updatedAt is the version the person saw; the server refuses the delete if it was saved since.
   deleteCollection: (id: string, updatedAt: string) => request(`/api/v1/kb/collections/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
@@ -101,7 +107,9 @@ export const kbApi = {
   articles: (filter: ArticleQuery, signal?: AbortSignal) => request(`/api/v1/kb/articles${query(filter)}`, articlePageSchema, { signal }),
   trashedArticles: (cursor?: string) => request(`/api/v1/kb/articles/trash${page(cursor)}`, trashedArticlePageSchema),
   article: (id: string) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema),
-  createArticle: (value: RequestBody<'createKBArticle'>) => request('/api/v1/kb/articles', kbArticleSchema, { method: 'POST', body: json<'createKBArticle'>(value) }),
+  // key names this save (Idempotency-Key): a retry with the same key returns the article the first stored.
+  createArticle: (value: RequestBody<'createKBArticle'>, key: string) => request('/api/v1/kb/articles', kbArticleSchema,
+    { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createKBArticle'>(value) }),
   updateArticle: (id: string, value: RequestBody<'updateKBArticle'>) => request(`/api/v1/kb/articles/${id}`, kbArticleSchema, { method: 'PATCH', body: json<'updateKBArticle'>(value) }),
   deleteArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}${version(updatedAt)}`, noContent, { method: 'DELETE' }),
   restoreArticle: (id: string, updatedAt: string) => request(`/api/v1/kb/articles/${id}/restore`, kbArticleSchema, { method: 'POST', body: json<'restoreKBArticle'>({ updated_at: updatedAt }) }),
@@ -113,6 +121,9 @@ export const kbApi = {
     { method: 'POST', body: json<'restoreKBArticleVersion'>({ updated_at: updatedAt }) }),
   // The body is the image itself; its own type replaces the JSON one request() sets.
   uploadImage: (file: Blob) => request('/api/v1/kb/images', imageSchema, { method: 'POST', body: file, headers: { 'Content-Type': file.type } }),
+  // The lists name everything directly under parent_id, first to last; a stale pair is a ConflictError
+  // whose detail holds the lists as they are (order_stale).
+  setOrder: (value: KBOrder) => request('/api/v1/kb/order', orderSchema, { method: 'PUT', body: json<'setKBOrder'>(value) }),
   helpCenter: () => request('/api/v1/help-center', helpCenterSchema),
   saveHelpCenter: (value: RequestBody<'putHelpCenter'>) => request('/api/v1/help-center', helpCenterSchema, { method: 'PUT', body: json<'putHelpCenter'>(value) }),
 };

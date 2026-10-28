@@ -17,7 +17,7 @@ interface AIDraftPanelProps {
   agentId?: string;
   // Whether the reply box holds text: then the draft can replace it or go below it.
   hasText: boolean;
-  // An admin is offered Settings → AI when a draft fails for a setting; others are told to ask one.
+  // An admin is offered Settings → Built-in AI when a draft fails for a setting; others are told to ask one.
   canManage?: boolean;
   // Told whether a draft is being written, so the button that opens the panel can say so.
   onWriting?: (writing: boolean) => void;

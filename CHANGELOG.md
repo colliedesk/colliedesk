@@ -34,6 +34,20 @@ API changes in the email view (the full notes will be on the releases page):
 - New operator command `collie email sender-name [--by <name>] <workspace slug> <name>` sets a sender
   name that the brand check of Colliedesk Cloud refuses through the API, for the brand's owner. It
   checks the name as the API does and skips only the brand check.
+- New route `PUT /kb/order` (`send` tier; MCP `colliedesk_kb_order_set`) sets the order of the collections
+  and articles directly under one parent; a list that is not exactly the parent's live children is 409
+  `order_stale` with the current lists. Article answers have a new required field, `position`.
+  `GET /kb/articles` takes `sort` (`recent` or `manual`); with `collection_id` and no `q` it now lists the
+  collection's articles in their order (by title until ordered by hand) instead of most recently updated first.
+- The help center theme takes `custom_css` (`PUT /help-center/theme`, `/check`, `/preview`; MCP
+  `colliedesk_help_center_theme_update` and `_check`), served after the brand on every public page;
+  CSS that could load anything is 422 `custom_css_refused` with its line and column. `HelpCenterTheme`
+  answers have a new required field, `custom_css`, and the export's `help-center.ndjson` carries it.
+  `PUT /help-center/theme` requires `custom_css` (null or `""` clears it): a save without it is 422
+  `validation_failed` and an agent request without it is not filed, so an older client cannot clear it.
+  The brand sheet's name is now `brand-<32 hex digits>.css`.
+  Under a parent ordered by hand, `POST /kb/collections` without `position` or with 0 puts the collection
+  last (an explicit 0 used to be kept); a created, moved, imported or restored article or collection goes last too.
 
 ## 0.0.1
 

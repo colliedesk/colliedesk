@@ -95,8 +95,11 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **No new privileged path.** The slug is resolved with `WorkspaceForMailSlug`
   (`PrivilegeWorkspaceBySlug`, already reviewed); everything after runs in the workspace's scope.
   `OpenHelpCenter` checks on, then lock, in one scoped transaction.
-- **ETag = slug, `content_version`, trial, title, locale, workspace name, base path, build version
-  and a hash of the templates.** It is computed only after the workspace is found open, so a locked
+- **ETag = slug, `content_version`, trial, title, locale, workspace name, base path, build version,
+  a hash of the templates and what the page shows of the brand** (brand sheet name, the logo and
+  favicon shown with the logo's size, logo text, links). The brand part counts what is shown, not
+  the saved theme: moving the logo to the library's trash changes no `content_version`, but the
+  page loses its logo. It is computed only after the workspace is found open, so a locked
   or turned-off help center never answers 304. `content_version` grows with every knowledge base
   write (`bumpKB`), so unpublishing an older article invalidates every page, which `max(updated_at)`
   would miss. Pages are `public, max-age=0, must-revalidate`; a 404 and a redirect are `no-store`.
@@ -104,8 +107,9 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   and below `/help/`), and `_` is never a slug.
 - **Collections are hidden unless something published is in or below them**, so a collection of
   drafts never shows its name. Collection addresses are the slug path (`/c/billing/cards`): a slug
-  is unique only among siblings. Articles in a collection are ordered by title; there is no manual
-  order yet.
+  is unique only among siblings. Collections and the articles of a collection follow the order set by
+  hand (`position`, then name or title; see `knowledge-base.md`); a reorder bumps `content_version`,
+  so cached pages and their neighbours list move with it.
 - **Search** reuses the knowledge base search (`kbQuery` and the title `ILIKE`), published only,
   best 25, and reads the first 600 characters of only those 25 for the excerpt; no `ts_headline`.
   The query is cut at 200 characters.
@@ -114,6 +118,76 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   workspace (no index under row-level security).
 - **Trial pages ask not to be indexed** (`<meta name="robots">`, `X-Robots-Tag`, and `robots.txt`
   on a help center host). There is no sitemap.
+- **The brand is a second style sheet, not inline style** (`theme.go`). `style-src 'self'` refuses
+  inline style, and the CSP stays byte for byte as it is, so `brandCSS` writes the theme as custom
+  properties of `site.css` into `<base>/_/brand-<sha256[:16]>.css`, served after `OpenHelpCenter`,
+  `immutable` like `site.css`; any other `brand-*.css` name is the help center's 404, so a cache
+  never keeps an old look under a live name. The name keeps 128 bits because an admin writes every
+  byte of the custom CSS: with 48 bits, a second sheet with the name of the current one is a few
+  seconds of brute force, and caches would serve it for a year after the owner restored the first. It loads after `site.css`, so its `:root` also wins
+  over the dark palette: with any color set, it sets every color and `color-scheme: light` (owner
+  decision: brand colors are chosen for light; the `<meta name="color-scheme">` says `light` too).
+  A theme without colors, fonts or custom CSS has no sheet, so an untouched help center sends what
+  it sent before. Only validated `#rrggbb` colors, the fixed font stacks (system fonts, no
+  `font-src`) and checked custom CSS (below) reach it; `TestTemplatesCarryNoBrandingScriptOrInlineStyle`
+  checks it with every font.
+- **Custom CSS is the end of the brand sheet, not a sheet of its own** (`custom-css.go`). Appended
+  after the `:root` variables, it overrides them, its bytes are in the sheet's hash (a new text is a
+  new immutable name, the old one the help center's 404) and it costs no extra request or route;
+  the CSP stays byte for byte. It is stored and served exactly as the admin wrote it (reject, never
+  rewrite), so the export round-trips. `CheckCustomCSS` runs in the theme handlers (save, check,
+  preview) before anything else sees the text; the column only bounds its size (32 KiB, `octet_length`),
+  since the store cannot import the checker. It reads the text with gorilla/css's tokenizer and
+  refuses, at a line and column: a URL token or a function that takes an address or an image
+  (`url`, `image`, `image-set`, `cross-fade`, `element`, `src`, `paint`, `image-rect`, vendor prefix
+  dropped) and `expression()`; the properties `behavior` and `-moz-binding` (the name followed by `:`,
+  not after `.` or `:`, so the class `.behavior` stays); a control character other than tab and line
+  ends; at-rules other than `@media`,
+  `@supports`, `@keyframes`, `@layer`, `@container` (an allowlist, so a new at-rule is refused); a
+  backslash outside a string token, so no escape spells a refused name; an unbalanced bracket, an
+  unclosed string or comment, `<!--`/`-->`. Two checks do not trust the tokenizer: `</` anywhere
+  (the preview inlines the sheet in a `<style>` element), and, after decoding escapes and
+  lowercasing, `url(`, `@import`, `image-set(`, `image(`, `cross-fade(`, `element(`, `src(`, `paint(`,
+  `expression(`, `javascript:`, `vbscript:` or `</` anywhere, strings and comments included. The
+  image functions are in that list because the tokenizer's names are not the browser's: it reads
+  `U+0-image(` as a unicode range and a function `-image(`, which no vendor prefix explains. The
+  tokenizer follows CSS 2.1 and is stricter than a browser; the one difference people hit, a raw tab
+  in a string (an unclosed string to it), is read as a space before tokenizing (same length, so every
+  line and column stays). Any other difference refuses rather than lets through;
+  `FuzzCheckCustomCSS` holds the property, and the browser's `img-src 'self'` and
+  `default-src 'none'` are the second gate. Contrast is not checked: the docs and the field say so.
+  A 32 KiB text takes 7–57 ms to check (the regex tokenizer), once per save or preview. The limit
+  is 32,768 bytes of UTF-8, not characters: the contract and the MCP schema carry no `maxLength`
+  (a JSON schema counts characters) and the settings field counts bytes.
+- **A save must name `custom_css`** (`HelpCenterThemeSave`, `customCSSRequired`). The save replaces the
+  whole theme, so a body without the field, from a web bundle loaded before it existed or an agent
+  request filed before it, would clear the CSS silently. It is 422 `validation_failed` instead, an
+  agent request without it is not filed, and one stored earlier fails on approval with the same 422;
+  null or `""` clears it. The check and the preview save nothing and keep it optional.
+- **Every color pair the pages show reads (WCAG AA), not only the six the save checks.**
+  `domain.ThemeBrandPalette` derives surface, muted, rule and the accent tints from the saved
+  colors and falls back (surface to the background, muted to the text, tints to the surface) when
+  text or links would not read on them, so a derived color never refuses a save. The focus ring
+  (`--ring`) is drawn on the page, the cards and the tints: it is the primary color where that
+  reaches 3:1 on all of them, else the link color (4.5:1 on each by the fallbacks above); a primary
+  that passes the save on a dark page can still fade on its lighter cards. Header and footer each
+  get their own link hover and focus ring color: the link (or primary) color where it reads on the
+  band, 4.5:1 (3:1 for the ring), else the band's ink, which the save already checks. The skip
+  link, focused, sits on the header band and takes its ring; the header's search button draws its
+  ring inside itself in its own ink, since a ring around it would cross both the field and the band.
+  A button under the pointer (`--accent-hover`) moves the primary 12% away from its ink, so the
+  button text only gains contrast; a brightness filter took text near 4.5:1 below it. Proved by
+  `TestBrandPaletteKeepsEveryShownPairReadable` (with the default look's hover by
+  `TestDefaultLookKeepsButtonTextReadableOnHover`) and `web/e2e/help-center-branding.spec.ts`:
+  axe on every page with the default look in light and dark, with the brand in light (it is light
+  only; the test proves that under dark), the rings and hover color of the header, and no sideways
+  scroll at 320 px with a long website host (the link ends in an ellipsis, its `title` holds it).
+- **Logo and favicon are public only while the theme names them** (`brand-media.go`):
+  `<base>/_/logo/<id>` and `<base>/_/icon/<id>` serve the id the page's theme names in that field,
+  an image of the workspace's library outside its trash (`OpenHelpCenter` joins `kb_media`, and
+  `HelpCenterBrandImage` checks again that the help center names it), with the article images'
+  headers (`immutable`, `default-src 'none'; sandbox`, `nosniff`). The logo's `width` and
+  `height` come from `kb_media`, so the header does not move as it loads.
 - **No product name in the pages.** The templates and the style sheet never name Colliedesk (#125);
   `TestTemplatesCarryNoBrandingScriptOrInlineStyle` and the HTTP test check it.
 - **`tls-ask`** (`GET /api/v1/public/help-center/tls-ask?domain=`) answers Caddy's on-demand TLS
@@ -135,6 +209,54 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   workspaces with slow texts can hold every slot for as long as one render takes (about 0.7 s now),
   delaying others' first visits to the 1 s fallback. Chosen over rendering on write, which still
   needs the same guard for older articles and would add a migration and a render to every write path.
+
+- **The brand preview is the real page, rendered by the server and shown without scripts.**
+  `POST /api/v1/help-center/theme/preview` runs `Site.Preview`: the same templates (`homeOf`,
+  `articleOf`) as the public pages, from the workspace's live collections and published articles
+  (lowest article number, or a fixed sample), with the candidate theme; nothing is stored, so there
+  is no draft table or token to clean up.
+  - *One transaction.* `Store.HelpCenterPreview` reads the site, the logo and favicon check (the
+    rule of a save, `themeMediaProblem`), the collections and the page's articles (home: the first
+    of each top collection; article: the text, its videos and its neighbours) in one workspace
+    transaction whose statements go out as one pgx batch. Before, a preview was five to seven
+    transactions in a row; the session's own read stays apart.
+  - *Style.* The document links `site.css` by its hashed, immutable address under `/help/_/` (the
+    browser keeps it between previews; it is not sent again in every answer) and carries only the
+    brand sheet inline, last in the head so it overrides the sheet's defaults (a theme not saved has
+    no hashed brand sheet). The custom CSS ends that block, alone in its `<style>` element, so text
+    that leaves a selector or an at-rule open (`x`, `@media print`, accepted since its brackets
+    balance) runs into the end of the element instead of into the next rule. The home answer went from 22 KB to 6 KB. `vite.config.ts` proxies `/help/` so the sheet loads in development too.
+  - *Policy.* Its own meta policy comes first: `default-src 'none'; img-src <origin>/api/v1/kb/images/
+    <origin>/api/v1/kb/media/; style-src <origin>/help/_/ 'unsafe-inline'; script-src 'none';
+    form-action 'none'; base-uri 'none'` (`previewPolicy`, origin = `APP_ORIGIN`). The frame is
+    same-origin and sends the cookie, so it names paths, as the email frame does: a CSS `url()` cannot
+    reach any other route. A session's writes must come from `APP_ORIGIN` (CSRF check), so the web
+    app compares the policy with its own `location.origin` and refuses a document without exactly
+    this one. The templates keep no inline style; `'unsafe-inline'` covers the brand block only.
+  - *Links and media.* Links and media point below `/api/v1/kb` (images at `/api/v1/kb/images/<id>`,
+    the logo at `/api/v1/kb/media/<id>`), which serve the session's own workspace whether the help
+    center is on or off. Videos and players would be blocked boxes under this policy, and loosening
+    it for them is not worth it, so each becomes "Video shown on the live help center"
+    (`playerElement`: kbhtml writes both as an empty element with escaped attributes).
+  - *Inert links.* The first `<style>` element, right after the policy, sets `pointer-events: none
+    !important` on links, buttons, inputs, labels and summaries, everything inside them and their
+    `::before`/`::after` boxes, inside an anonymous `@layer`. For `!important` the first-declared layer
+    wins over every later layer and unlayered rule whatever their specificity or order, and no sheet
+    can add to a layer without a name, so custom CSS cannot hand a link its pointer back (specificity,
+    `@layer x`, `a *`, a `::before` box over the frame, `all: unset`). A rule placed after the custom
+    CSS was beaten all those ways; the e2e test clicks each one in a frame without the app's listener.
+    The web app keeps the frame `inert` until its document has loaded and its capture listener (which
+    also holds a link opened from the keyboard) is attached, again on every new preview.
+  - *Frame.* The web app shows it in `<iframe sandbox="allow-same-origin" srcdoc>`, never with
+    `allow-scripts`; same origin lets the images load with the session and lets the page stop link
+    clicks inside the frame. The e2e test runs the preview with CSP enforced (only the axe tests on
+    the public pages bypass it).
+  - *Requests.* Previews count against the help center page limiter under a per-person key (600 a
+    minute). The form asks for nothing until the saved theme is loaded, waits 300 ms after the last
+    change, keeps one request in flight, drops an answer for a theme that is no longer the latest and
+    sends nothing after it is gone. A link or phone number not yet of a shape the server accepts, like
+    a color being typed, goes to the preview as empty and its field says the shape; Save sends what
+    is written. An edit clears the refusal of the fields it changes.
 
 ## Traps
 

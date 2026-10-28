@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -50,7 +51,10 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	var database *pgconn.PgError
 	switch {
 	case errors.As(err, &database) && (database.Code == "40P01" || database.Code == "40001"):
-		writeError(response, http.StatusConflict, "conflict", "Another change was in progress on the same conversations. Nothing was changed; try again.")
+		writeError(response, http.StatusConflict, "conflict", "Another change was in progress at the same time. Nothing was changed; try again.")
+		return
+	case errors.Is(err, domain.ErrResultsRefreshed):
+		writeError(response, http.StatusGone, "results_refreshed", "These numbers were refreshed. Open Results again.")
 		return
 	case errors.Is(err, domain.ErrAIDraftNotReady):
 		writeError(response, http.StatusConflict, "ai_draft_not_ready", "That AI draft is not ready to send from this conversation: it is still being written, or it was already sent, discarded or replaced. Send the reply without ai_draft_id, or ask for a new draft.")
@@ -72,6 +76,15 @@ func writeStoreError(response http.ResponseWriter, err error) {
 		return
 	case errors.Is(err, domain.ErrMergeUndone):
 		writeError(response, http.StatusConflict, "merge_undone", "This merge was undone already. Nothing was changed.")
+		return
+	case errors.Is(err, channels.ErrNotFound):
+		writeError(response, http.StatusNotFound, "channel_not_found", "No channel of this workspace has that id.")
+		return
+	case errors.Is(err, channels.ErrChannelCannotSend):
+		writeError(response, http.StatusBadRequest, "channel_cannot_send", "A conversation cannot start on this channel: choose an email channel.")
+		return
+	case errors.Is(err, channels.ErrChannelOff):
+		writeError(response, http.StatusConflict, "channel_off", "This channel is off: turn it on, or start from another channel. Nothing was stored.")
 		return
 	case errors.Is(err, domain.ErrEmailChannelMissing):
 		writeError(response, http.StatusConflict, "email_channel_missing", "Connect the email channel in Settings before starting a conversation by email. Nothing was stored.")
@@ -116,8 +129,10 @@ func writeTrialOutbound(response http.ResponseWriter, refusal *domain.TrialOutbo
 		if len(refusal.RefusedCC) > 0 {
 			body["refused_cc"] = refusal.RefusedCC
 		}
+		if reason := refusal.Reason(); reason != "" {
+			body["reason"] = reason
+		}
 		if refusal.ReplyTo != "" {
-			body["reason"] = domain.ReasonContactAddressDiffers
 			body["reply_to"] = refusal.ReplyTo
 		}
 		writeJSON(response, http.StatusForbidden, map[string]any{"error": errorBody(response, body)})

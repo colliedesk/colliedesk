@@ -11,6 +11,8 @@ import { TimeEntriesSection } from './time-entries-section';
 
 interface TimelinePanelProps {
   conversation?: Conversation;
+  // The conversation's channel, named where the workspace has two of its type.
+  channelLabel?: string;
   items: Message[];
   // Shown after the first customer message: what AI suggested or applied for it.
   afterFirstCustomerMessage?: ReactNode;
@@ -58,7 +60,7 @@ function StatusButton({ status, onSetStatus }: { status: Conversation['status'];
   </>;
 }
 
-export function TimelinePanel({ conversation, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [], onSetStatus, onBack }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [], onSetStatus, onBack }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
@@ -67,6 +69,7 @@ export function TimelinePanel({ conversation, items, afterFirstCustomerMessage, 
         <div>
           <h2>{conversation?.subject ?? messages.selectConversation}</h2>
           {conversation && <div className="timeline-meta"><StatusLabel status={conversation.status} /><PriorityLabel priority={conversation.priority} />
+            {channelLabel && <span className="channel-pill">{channelLabel}</span>}
             {/* A plain click opens the page in the app; a new tab or a copied address still works. */}
             <a className="timeline-contact" href={`/contacts/${conversation.contact_id}`} aria-label={messages.openContact(conversation.contact_name)}
               onClick={(event) => { if (onOpenContact && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); onOpenContact(conversation.contact_id); } }}>

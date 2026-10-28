@@ -656,3 +656,92 @@ func TestSolutionsKeepYouTubeAndVimeoPlayers(t *testing.T) {
 		t.Fatalf("source_html = %q", articles["101"].SourceHTML)
 	}
 }
+
+// kbPlaces lists the live collections under parent (nil: the top) or the live articles of a collection
+// as "name:position", in the order the help center shows them.
+func (e *importEnv) kbPlaces(t *testing.T, sql string, args ...any) []string {
+	t.Helper()
+	rows, err := e.pool.Query(context.Background(), sql, append([]any{e.workspaceID}, args...)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var name string
+		var position int
+		if err := rows.Scan(&name, &position); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, fmt.Sprintf("%s:%d", name, position))
+	}
+	return out
+}
+
+func (e *importEnv) collectionID(t *testing.T, name string) string {
+	t.Helper()
+	var id string
+	if err := e.pool.QueryRow(context.Background(), `SELECT id::text FROM kb_collections WHERE workspace_id=$1 AND name=$2`, e.workspaceID, name).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// Once a team orders its knowledge base by hand, what a later import adds goes last: a new category at
+// the top, a new article in its folder, and an article Freshdesk moved to another folder in that folder.
+func TestSolutionsRerunPutsNewAndMovedItemsLastInAnOrderSetByHand(t *testing.T) {
+	ctx := context.Background()
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(func(fixture map[string]any) {
+		fixture["categories"] = fixture["categories"].([]any)[:1]
+		articles := fixture["articles"].(map[string]any)
+		articles["11"] = articles["11"].([]any)[:1]
+	})
+	env.mustRun(t)
+	s := store.New(env.pool)
+	faq, err := s.CreateKBCollection(ctx, env.workspaceID, store.Actor{}, store.KBCollectionInput{Name: "Zeta FAQ"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	basics := env.collectionID(t, "Basics")
+	note, err := s.CreateKBArticle(ctx, env.workspaceID, store.Actor{}, store.KBArticleInput{CollectionID: basics, Title: "Aaa team note", BodyMD: "n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reset := env.kbArticles(t, env.workspaceID)["101"].ID
+	if _, err := s.SetKBOrder(ctx, env.workspaceID, domain.KBOrder{CollectionIDs: []string{faq.ID, env.collectionID(t, "Getting started")}, ArticleIDs: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	inside, err := s.ListKBCollections(ctx, env.workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	children := []string{}
+	for _, collection := range inside {
+		if collection.ParentID != nil && *collection.ParentID == basics {
+			children = append(children, collection.ID)
+		}
+	}
+	if _, err := s.SetKBOrder(ctx, env.workspaceID, domain.KBOrder{ParentID: &basics, CollectionIDs: children, ArticleIDs: []string{reset, note.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	// Freshdesk now has the Billing category and article 102 again, and 104 moved from Advanced to Basics.
+	env.editSolutions(func(fixture map[string]any) {
+		articles := fixture["articles"].(map[string]any)
+		moved := articles["111"].([]any)[0].(map[string]any)
+		moved["folder_id"], moved["updated_at"] = 11.0, "2024-06-01T10:00:00Z"
+		articles["11"], articles["111"] = append(articles["11"].([]any), moved), []any{}
+	})
+	// 104 names an image Freshdesk no longer has, which keeps the run UNVERIFIED; nothing failed to import.
+	if kb := env.mustRun(t).KnowledgeBase; kb.Collections.Failed != 0 || kb.Articles.Failed != 0 || kb.Articles.Imported != 6 {
+		t.Fatalf("rerun knowledge base = %+v", kb)
+	}
+	top := env.kbPlaces(t, `SELECT name, position FROM kb_collections WHERE workspace_id=$1 AND parent_id IS NULL AND deleted_at IS NULL ORDER BY position, lower(name), id`)
+	if !slices.Equal(top, []string{"Zeta FAQ:1", "Getting started:2", "Billing:3"}) {
+		t.Fatalf("top after the rerun = %v, want the imported category last", top)
+	}
+	inBasics := env.kbPlaces(t, `SELECT title, position FROM kb_articles WHERE workspace_id=$1 AND collection_id=$2 AND deleted_at IS NULL ORDER BY position, lower(title), number`, basics)
+	if !slices.Equal(inBasics, []string{"Reset your password:1", "Aaa team note:2", "Upcoming feature:3", "Use the API:4"}) {
+		t.Fatalf("Basics after the rerun = %v, want the new and the moved article last", inBasics)
+	}
+}

@@ -19,7 +19,7 @@ const maxOAuthStates = 5
 // ErrOAuthStateNotFound means the consent state is unknown in this workspace, used already or expired.
 var ErrOAuthStateNotFound = errors.New("consent state not found")
 
-// ErrEmailChannelMissing means Gmail cannot be connected because the workspace has no email channel.
+// ErrEmailChannelMissing means a mailbox cannot be connected because the workspace has no such email channel.
 var ErrEmailChannelMissing = errors.New("email channel is not connected")
 
 // SealedGrant is a provider grant as stored: sealed by the caller, with the id of the sealing key.
@@ -28,14 +28,20 @@ type SealedGrant struct {
 	Sealed []byte
 	// Address is the account the grant belongs to, set on grants read back from storage.
 	Address string
+	// Provider is who issued the grant (domain.MailboxGoogle); it chooses how it is opened and revoked.
+	Provider string
+	// AccountID is the provider's own id of the account (Microsoft: the user's object id), stored when the
+	// grant is saved; empty when the provider names none.
+	AccountID string
 }
 
-// OAuthState is a consent in flight: the state the provider sends back and the PKCE verifier. Only the
-// state's SHA-256 is stored.
+// OAuthState is a consent in flight: the state the provider sends back, the PKCE verifier and the
+// email channel it connects. Only the state's SHA-256 is stored, with the provider it was started for.
 type OAuthState struct {
-	State    string
-	AgentID  string
-	Verifier string
+	State     string
+	AgentID   string
+	Verifier  string
+	ChannelID string
 }
 
 func oauthStateHash(state string) []byte {
@@ -43,9 +49,10 @@ func oauthStateHash(state string) []byte {
 	return sum[:]
 }
 
-// CreateOAuthState starts a consent for the agent: a random state and PKCE verifier (RFC 7636: 43 to 128
-// characters; 64 random bytes give 86). Expired states of the workspace are removed on the way.
-func (s *Store) CreateOAuthState(ctx context.Context, workspaceID, agentID string, now, expires time.Time) (OAuthState, error) {
+// CreateOAuthState starts a consent at provider for the agent to connect an email channel: a random state
+// and PKCE verifier (RFC 7636: 43 to 128 characters; 64 random bytes give 86). Expired states of the
+// workspace are removed on the way.
+func (s *Store) CreateOAuthState(ctx context.Context, workspaceID, channelID, agentID, provider string, now, expires time.Time) (OAuthState, error) {
 	state, err := randomURLToken(32)
 	if err != nil {
 		return OAuthState{}, err
@@ -60,14 +67,14 @@ func (s *Store) CreateOAuthState(ctx context.Context, workspaceID, agentID strin
 			return struct{}{}, err
 		}
 		var channel bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM email_channels WHERE workspace_id=$1)`, workspaceID).Scan(&channel); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM email_channels WHERE workspace_id=$1 AND channel_id::text=$2)`, workspaceID, channelID).Scan(&channel); err != nil {
 			return struct{}{}, err
 		}
 		if !channel {
 			return struct{}{}, ErrEmailChannelMissing
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO mailbox_oauth_states(state_hash,workspace_id,agent_id,provider,code_verifier,expires_at,created_at)
-			VALUES($1,$2,$3,'google',$4,$5,$6)`, stateHash, workspaceID, agentID, verifier, expires, now); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO mailbox_oauth_states(state_hash,workspace_id,agent_id,provider,code_verifier,expires_at,created_at,channel_id)
+			VALUES($1,$2,$3,$8,$4,$5,$6,$7::uuid)`, stateHash, workspaceID, agentID, verifier, expires, now, channelID, provider); err != nil {
 			return struct{}{}, err
 		}
 		// A person keeps at most maxOAuthStates consents in flight: the new one and the newest others.
@@ -82,12 +89,14 @@ func (s *Store) CreateOAuthState(ctx context.Context, workspaceID, agentID strin
 	if err != nil {
 		return OAuthState{}, fmt.Errorf("record consent state: %w", err)
 	}
-	return OAuthState{State: state, AgentID: agentID, Verifier: verifier}, nil
+	return OAuthState{State: state, AgentID: agentID, Verifier: verifier, ChannelID: channelID}, nil
 }
 
-// TakeOAuthState uses up a consent state of this workspace; an expired one is removed and refused. It is
-// looked up inside the workspace, so a state started in another workspace is not found.
-func (s *Store) TakeOAuthState(ctx context.Context, workspaceID, state string, now time.Time) (OAuthState, error) {
+// TakeOAuthState uses up a consent state of this workspace started at provider; an expired one is removed
+// and refused. It is looked up inside the workspace and the provider, so a state started in another
+// workspace, or at another provider, is not found (and stays for its own callback). A state of a
+// workspace that had no email channel at the upgrade names no channel (ChannelID ""): it cannot finish.
+func (s *Store) TakeOAuthState(ctx context.Context, workspaceID, provider, state string, now time.Time) (OAuthState, error) {
 	stateHash := oauthStateHash(state)
 	type taken struct {
 		state OAuthState
@@ -95,8 +104,9 @@ func (s *Store) TakeOAuthState(ctx context.Context, workspaceID, state string, n
 	}
 	result, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (taken, error) {
 		var result taken
-		err := tx.QueryRow(ctx, `DELETE FROM mailbox_oauth_states WHERE workspace_id=$1 AND state_hash=$2 RETURNING agent_id::text,code_verifier,expires_at>$3`,
-			workspaceID, stateHash, now).Scan(&result.state.AgentID, &result.state.Verifier, &result.live)
+		err := tx.QueryRow(ctx, `DELETE FROM mailbox_oauth_states WHERE workspace_id=$1 AND state_hash=$2 AND provider=$4
+			RETURNING agent_id::text,code_verifier,expires_at>$3,COALESCE(channel_id::text,'')`,
+			workspaceID, stateHash, now, provider).Scan(&result.state.AgentID, &result.state.Verifier, &result.live, &result.state.ChannelID)
 		return result, err
 	})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !result.live) {
@@ -110,13 +120,16 @@ func (s *Store) TakeOAuthState(ctx context.Context, workspaceID, state string, n
 
 const mailboxColumns = `provider,address,status,error_code,failed_at,connected_at`
 
+// grantColumns are a SealedGrant's columns, in its field order.
+const grantColumns = `token_key_id,refresh_token_sealed,address,provider`
+
 func scanMailbox(row pgx.Row) (domain.MailboxConnection, error) {
 	var connection domain.MailboxConnection
 	if err := row.Scan(&connection.Provider, &connection.Address, &connection.Status, &connection.ErrorCode, &connection.FailedAt, &connection.ConnectedAt); err != nil {
 		return domain.MailboxConnection{}, err
 	}
 	if connection.ErrorCode != nil {
-		text := domain.MailboxFailureText(*connection.ErrorCode)
+		text := domain.MailboxFailureText(connection.Provider, *connection.ErrorCode)
 		connection.Error = &text
 	}
 	connection.FailedAt = domain.UTCOptional(connection.FailedAt)
@@ -124,10 +137,10 @@ func scanMailbox(row pgx.Row) (domain.MailboxConnection, error) {
 	return connection, nil
 }
 
-// GetMailboxConnection returns the workspace's connected Gmail account, or nil.
-func (s *Store) GetMailboxConnection(ctx context.Context, workspaceID string) (*domain.MailboxConnection, error) {
+// GetMailboxConnection returns the mailbox connected to an email channel, or nil.
+func (s *Store) GetMailboxConnection(ctx context.Context, workspaceID, channelID string) (*domain.MailboxConnection, error) {
 	connection, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.MailboxConnection, error) {
-		return scanMailbox(tx.QueryRow(ctx, `SELECT `+mailboxColumns+` FROM mailbox_connections WHERE workspace_id=$1`, workspaceID))
+		return scanMailbox(tx.QueryRow(ctx, `SELECT `+mailboxColumns+` FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2`, workspaceID, channelID))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -138,9 +151,10 @@ func (s *Store) GetMailboxConnection(ctx context.Context, workspaceID string) (*
 	return &connection, nil
 }
 
-// SaveMailboxConnection connects the account, replacing any earlier grant. It returns the grant it
-// replaced (nil for none) so the caller can revoke it at the provider once this is committed.
-func (s *Store) SaveMailboxConnection(ctx context.Context, workspaceID, agentID, address, scopes string, grant SealedGrant, now time.Time) (domain.MailboxConnection, *SealedGrant, error) {
+// SaveMailboxConnection connects the account to an email channel through grant.Provider, replacing any
+// earlier grant of it, of the same provider or another. It returns the grant it replaced (nil for none)
+// so the caller can revoke it at its provider once this is committed.
+func (s *Store) SaveMailboxConnection(ctx context.Context, workspaceID, channelID, agentID, address, scopes string, grant SealedGrant, now time.Time) (domain.MailboxConnection, *SealedGrant, error) {
 	type saved struct {
 		connection domain.MailboxConnection
 		replaced   *SealedGrant
@@ -148,23 +162,24 @@ func (s *Store) SaveMailboxConnection(ctx context.Context, workspaceID, agentID,
 	result, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (saved, error) {
 		var result saved
 		var old SealedGrant
-		err := tx.QueryRow(ctx, `SELECT token_key_id,refresh_token_sealed,address FROM mailbox_connections WHERE workspace_id=$1 FOR UPDATE`, workspaceID).Scan(&old.KeyID, &old.Sealed, &old.Address)
+		err := tx.QueryRow(ctx, `SELECT `+grantColumns+` FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2 FOR UPDATE`,
+			workspaceID, channelID).Scan(&old.KeyID, &old.Sealed, &old.Address, &old.Provider)
 		switch {
 		case err == nil:
 			result.replaced = &old
 		case !errors.Is(err, pgx.ErrNoRows):
 			return result, err
 		}
-		result.connection, err = scanMailbox(tx.QueryRow(ctx, `INSERT INTO mailbox_connections(workspace_id,provider,address,scopes,token_key_id,refresh_token_sealed,connected_by_agent_id,connected_at,updated_at)
-			VALUES($1,'google',lower($2),$3,$4,$5,NULLIF($6,'')::uuid,$7,$7)
-			ON CONFLICT(workspace_id) DO UPDATE SET provider=EXCLUDED.provider,address=EXCLUDED.address,scopes=EXCLUDED.scopes,token_key_id=EXCLUDED.token_key_id,
+		result.connection, err = scanMailbox(tx.QueryRow(ctx, `INSERT INTO mailbox_connections(workspace_id,provider,address,scopes,token_key_id,refresh_token_sealed,connected_by_agent_id,connected_at,updated_at,channel_id,account_id)
+			VALUES($1,$9,lower($2),$3,$4,$5,NULLIF($6,'')::uuid,$7,$7,$8::uuid,NULLIF($10,''))
+			ON CONFLICT(channel_id) DO UPDATE SET provider=EXCLUDED.provider,address=EXCLUDED.address,scopes=EXCLUDED.scopes,token_key_id=EXCLUDED.token_key_id,account_id=EXCLUDED.account_id,
 				refresh_token_sealed=EXCLUDED.refresh_token_sealed,status='connected',error_code=NULL,failed_at=NULL,
 				connected_by_agent_id=EXCLUDED.connected_by_agent_id,connected_at=EXCLUDED.connected_at,updated_at=EXCLUDED.updated_at
-			RETURNING `+mailboxColumns, workspaceID, address, scopes, grant.KeyID, grant.Sealed, agentID, now))
+			RETURNING `+mailboxColumns, workspaceID, address, scopes, grant.KeyID, grant.Sealed, agentID, now, channelID, grant.Provider, grant.AccountID))
 		return result, err
 	})
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "mailbox_connections_workspace_id_fkey" {
+	if errors.As(err, &pgErr) && (pgErr.Code == "23503" && pgErr.ConstraintName == "mailbox_connections_channel_fkey" || pgErr.Code == "22P02") {
 		return domain.MailboxConnection{}, nil, ErrEmailChannelMissing
 	}
 	if err != nil {
@@ -173,11 +188,13 @@ func (s *Store) SaveMailboxConnection(ctx context.Context, workspaceID, agentID,
 	return result.connection, result.replaced, nil
 }
 
-// MailboxGrant returns the stored grant, for revoking it before the connection or channel is removed.
-func (s *Store) MailboxGrant(ctx context.Context, workspaceID string) (*SealedGrant, error) {
+// MailboxGrant returns the grant stored for an email channel, for revoking it before the connection or
+// channel is removed.
+func (s *Store) MailboxGrant(ctx context.Context, workspaceID, channelID string) (*SealedGrant, error) {
 	grant, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (SealedGrant, error) {
 		var grant SealedGrant
-		err := tx.QueryRow(ctx, `SELECT token_key_id,refresh_token_sealed,address FROM mailbox_connections WHERE workspace_id=$1`, workspaceID).Scan(&grant.KeyID, &grant.Sealed, &grant.Address)
+		err := tx.QueryRow(ctx, `SELECT `+grantColumns+` FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2`,
+			workspaceID, channelID).Scan(&grant.KeyID, &grant.Sealed, &grant.Address, &grant.Provider)
 		return grant, err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -189,11 +206,13 @@ func (s *Store) MailboxGrant(ctx context.Context, workspaceID string) (*SealedGr
 	return &grant, nil
 }
 
-// DeleteMailboxConnection disconnects Gmail and returns the grant it removed (nil when none was connected).
-func (s *Store) DeleteMailboxConnection(ctx context.Context, workspaceID string) (*SealedGrant, error) {
+// DeleteMailboxConnection disconnects the mailbox an email channel holds through the provider and returns
+// the grant it removed (nil when none was connected through it).
+func (s *Store) DeleteMailboxConnection(ctx context.Context, workspaceID, channelID, provider string) (*SealedGrant, error) {
 	grant, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (SealedGrant, error) {
 		var grant SealedGrant
-		err := tx.QueryRow(ctx, `DELETE FROM mailbox_connections WHERE workspace_id=$1 RETURNING token_key_id,refresh_token_sealed,address`, workspaceID).Scan(&grant.KeyID, &grant.Sealed, &grant.Address)
+		err := tx.QueryRow(ctx, `DELETE FROM mailbox_connections WHERE workspace_id=$1 AND channel_id::text=$2 AND provider=$3 RETURNING `+grantColumns,
+			workspaceID, channelID, provider).Scan(&grant.KeyID, &grant.Sealed, &grant.Address, &grant.Provider)
 		return grant, err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -205,18 +224,76 @@ func (s *Store) DeleteMailboxConnection(ctx context.Context, workspaceID string)
 	return &grant, nil
 }
 
-// MailboxAddressHeldElsewhere reports whether a workspace other than this one holds a Gmail connection for
-// the address, connected or failed. Call it only after this workspace's own row is gone and committed: two
-// workspaces dropping the address together then cannot both see the other and both skip the revoke.
-func (s *Store) MailboxAddressHeldElsewhere(ctx context.Context, workspaceID, address string) (bool, error) {
+// MailboxChannelFor returns the email channel of the workspace whose mailbox connection is the account,
+// connected or failed, at any provider; "" when none.
+func (s *Store) MailboxChannelFor(ctx context.Context, workspaceID, address string) (string, error) {
+	id, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (string, error) {
+		var id string
+		err := tx.QueryRow(ctx, `SELECT channel_id::text FROM mailbox_connections WHERE workspace_id=$1 AND address=lower($2)`, workspaceID, address).Scan(&id)
+		return id, err
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("find mailbox account: %w", err)
+	}
+	return id, nil
+}
+
+// MailboxAddressHeldElsewhere reports whether another email channel, of this workspace or another, holds a
+// connection of the provider for the address, connected or failed: Google revokes the whole grant, so
+// revoking would cut that channel off too. Call it only after this channel's own row is gone and
+// committed: two channels dropping the address together then cannot both see the other and both skip
+// the revoke.
+func (s *Store) MailboxAddressHeldElsewhere(ctx context.Context, channelID, provider, address string) (bool, error) {
 	var held bool
 	err := s.db.Privileged(ctx, database.PrivilegeMailboxGrantShared, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM mailbox_connections WHERE address=lower($1) AND workspace_id<>$2)`, address, workspaceID).Scan(&held)
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM mailbox_connections WHERE address=lower($1) AND provider=$3 AND channel_id::text<>$2)`,
+			address, channelID, provider).Scan(&held)
 	})
 	if err != nil {
 		return false, fmt.Errorf("check shared mailbox grant: %w", err)
 	}
 	return held, nil
+}
+
+// MailboxWaitsForServer reports whether a reply of the channel waits because the provider refused this
+// server's own app credentials (domain.MailboxServerConfigCode): the connection is fine, the operator
+// must fix the server.
+func (s *Store) MailboxWaitsForServer(ctx context.Context, workspaceID, channelID string) (bool, error) {
+	waits, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		var waits bool
+		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM channel_outbox WHERE workspace_id=$1 AND channel_id::text=$2 AND status='queued' AND last_error_code=$3)`,
+			workspaceID, channelID, domain.MailboxServerConfigCode).Scan(&waits)
+		return waits, err
+	})
+	if err != nil {
+		return false, fmt.Errorf("check replies waiting for the server: %w", err)
+	}
+	return waits, nil
+}
+
+// MailboxRef names one channel's mailbox connection.
+type MailboxRef struct{ WorkspaceID, ChannelID string }
+
+// MailboxesToKeepAlive lists, in every workspace, up to limit connected mailboxes of the provider whose
+// grant was last stored before the given time (a send stores the rotated grant), oldest first.
+func (s *Store) MailboxesToKeepAlive(ctx context.Context, provider string, before time.Time, limit int) ([]MailboxRef, error) {
+	var due []MailboxRef
+	err := s.db.Privileged(ctx, database.PrivilegeMailboxKeepAlive, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text,channel_id::text FROM mailbox_connections
+			WHERE provider=$1 AND status='connected' AND updated_at<$2 ORDER BY updated_at LIMIT $3`, provider, before, limit)
+		if err != nil {
+			return err
+		}
+		due, err = pgx.CollectRows(rows, pgx.RowToStructByPos[MailboxRef])
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list mailboxes to keep alive: %w", err)
+	}
+	return due, nil
 }
 
 // MarkMailboxFailed records why the connection stopped working, only while it still holds the grant the

@@ -102,7 +102,7 @@ const countedDelivery = `(status <> 'failed' OR sent_at IS NOT NULL)`
 
 // recipientsInWindow sums the people reached by the counted deliveries in the window: the contact plus
 // every Cc address of each reply.
-const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND ` + countedDelivery
+const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM channel_outbox WHERE workspace_id=$1 AND channel_type='email' AND created_at > $2 AND ` + countedDelivery
 
 // customerWroteFirst is true for a conversation that holds a message from the customer: an
 // imported one, or inbound mail that came through the platform forwarder and whose authentication
@@ -147,6 +147,11 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 		if err := tx.QueryRow(ctx, customerWroteFirst, workspaceID, conversationID).Scan(&wrote); err != nil {
 			return fmt.Errorf("check first contact: %w", err)
 		}
+		if !wrote && recipients == 1 {
+			if err := tx.QueryRow(ctx, contactIsProvenAgent, workspaceID, conversationID).Scan(&wrote); err != nil {
+				return fmt.Errorf("check agent recipient: %w", err)
+			}
+		}
 		if !wrote {
 			return trialFirstContactRefusal(ctx, tx, workspaceID, conversationID)
 		}
@@ -154,26 +159,52 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 	return s.checkTrialCap(ctx, tx, workspaceID, now, recipients)
 }
 
-// customerWroteFromAnotherAddress is true for a conversation holding trusted customer mail from an
-// address that is not the contact's: a contact merged into this one wrote it.
-const customerWroteFromAnotherAddress = `SELECT k.email, EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
-	AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail')
+// contactIsProvenAgent is the one exception to the first-contact rule: a reply whose only recipient is an
+// active agent of the same workspace (the test message a person sends themselves) reaches nobody who did
+// not ask for it. The address must be proven: the agent signed in through a pairing link, which only the
+// server operator (the CLI) or a verified Cloud identity issues. An invite link proves nothing, because the
+// admin who made it can open it, so an agent who only ever used one does not count. A Cc is another
+// recipient: the caller applies this only to a reply without one.
+const contactIsProvenAgent = `SELECT EXISTS(SELECT 1 FROM conversations c
+	JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
+	JOIN agents a ON a.workspace_id=c.workspace_id AND lower(a.email)=lower(k.email) AND a.deactivated_at IS NULL
+	WHERE c.workspace_id=$1 AND c.id=$2 AND EXISTS(SELECT 1 FROM pairing_links p
+		WHERE p.workspace_id=a.workspace_id AND p.agent_id=a.id AND p.kind='pairing' AND p.used_at IS NOT NULL))`
+
+// customerMailThatDidNotCount reads, for a conversation the first-contact rule refused, the contact's
+// address and which customer mail it holds that the rule did not count: trusted mail from another
+// address (a contact merged into this one wrote it), platform mail that failed sender verification, and
+// mail posted to the workspace's own inbound URL.
+const customerMailThatDidNotCount = `SELECT COALESCE(k.email,''),
+	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+		AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail'),
+	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+		AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND m.email_meta->>'authentication'='fail'),
+	EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+		AND m.kind='incoming' AND m.email_meta->>'via'='workspace')
 	FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`
 
-// trialFirstContactRefusal says why the first-contact rule refused a reply: nobody wrote, or the customer
-// wrote from another address than the one the reply goes to.
+// trialFirstContactRefusal says why the first-contact rule refused a reply: nobody wrote, the customer
+// wrote from another address than the one the reply goes to, their mail failed sender verification, or
+// it was posted to the workspace's own inbound URL. The rule itself is customerWroteFirst; this only
+// names the reason.
 func trialFirstContactRefusal(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) error {
 	var contactEmail string
-	var wroteElsewhere bool
-	err := tx.QueryRow(ctx, customerWroteFromAnotherAddress, workspaceID, conversationID).Scan(&contactEmail, &wroteElsewhere)
+	var wroteElsewhere, failedVerification, postedToWorkspace bool
+	err := tx.QueryRow(ctx, customerMailThatDidNotCount, workspaceID, conversationID).Scan(&contactEmail, &wroteElsewhere, &failedVerification, &postedToWorkspace)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &domain.TrialOutboundError{}
 	}
 	if err != nil {
 		return fmt.Errorf("check first contact address: %w", err)
 	}
-	if wroteElsewhere {
+	switch {
+	case wroteElsewhere:
 		return &domain.TrialOutboundError{ReplyTo: contactEmail}
+	case failedVerification:
+		return &domain.TrialOutboundError{Unverified: domain.ReasonSenderAuthenticationFailed}
+	case postedToWorkspace:
+		return &domain.TrialOutboundError{Unverified: domain.ReasonMailNotViaHostedAddress}
 	}
 	return &domain.TrialOutboundError{}
 }
@@ -201,7 +232,7 @@ func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string
 	var frees time.Time
 	if err := tx.QueryRow(ctx, `SELECT created_at FROM (
 			SELECT created_at, sum(recipients) OVER (ORDER BY created_at DESC, id ROWS UNBOUNDED PRECEDING) AS total
-			FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND `+countedDelivery+`) counted
+			FROM channel_outbox WHERE workspace_id=$1 AND channel_type='email' AND created_at > $2 AND `+countedDelivery+`) counted
 		WHERE total > $3 ORDER BY total LIMIT 1`, workspaceID, windowStart, room).Scan(&frees); err != nil {
 		return fmt.Errorf("find next free slot: %w", err)
 	}

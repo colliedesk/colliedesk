@@ -139,9 +139,82 @@ func (s *Service) check(ctx context.Context, call Call, spec Spec, model string)
 	_, err = s.meteredCheck(ctx, call, provider, model)
 	var providerErr *aiprovider.Error
 	if errors.As(err, &providerErr) {
-		return &CheckError{Code: providerErr.Code}
+		return &CheckError{Code: providerErr.Code, Model: model}
 	}
 	return err
+}
+
+// workspaceSpec checks what a person typed for a provider of their own: the kind, its address and
+// its key. Adding a provider and listing its models refuse the same input the same way.
+func (s *Service) workspaceSpec(kindName, baseURLText, keyText string) (Spec, error) {
+	key := strings.TrimSpace(keyText)
+	if len(key) > maxKeyLength {
+		return Spec{}, invalid("The API key is longer than %d characters.", maxKeyLength)
+	}
+	kind := aiprovider.Kind(kindName)
+	var baseURL string
+	switch kind {
+	case aiprovider.KindAnthropic:
+		if strings.TrimSpace(baseURLText) != "" {
+			return Spec{}, invalid("An Anthropic provider always uses the Claude API; leave the base URL empty.")
+		}
+		if key == "" {
+			return Spec{}, invalid("Paste an Anthropic API key (console.anthropic.com, API keys).")
+		}
+	case aiprovider.KindOpenAICompatible:
+		var err error
+		if baseURL, err = s.cleanBaseURL(baseURLText); err != nil {
+			return Spec{}, err
+		}
+		if key == "" && !s.config.AllowPrivateBaseURLs {
+			return Spec{}, invalid("Paste the provider's API key. A provider without a key is only for a server on the operator's own network.")
+		}
+	default:
+		return Spec{}, invalid("The kind is anthropic or openai_compatible.")
+	}
+	return Spec{Kind: kind, BaseURL: baseURL, APIKey: key}, nil
+}
+
+// ModelsInput is a provider not saved yet, whose models a person wants to pick from.
+type ModelsInput struct {
+	Kind    string
+	BaseURL string
+	APIKey  string
+}
+
+// ListModels asks a provider which models its key may use, before anything is saved, so a person
+// picks a model instead of typing its id. Nothing is stored and nothing is metered (listing costs no
+// tokens); it counts against the workspace's checks a minute, since it calls out with a typed key.
+func (s *Service) ListModels(ctx context.Context, workspaceID string, input ModelsInput) ([]string, error) {
+	spec, err := s.workspaceSpec(input.Kind, input.BaseURL, input.APIKey)
+	if err != nil {
+		return nil, err
+	}
+	if !s.checks.allow(workspaceID, s.now()) {
+		return nil, ErrCheckRateLimited
+	}
+	provider, err := s.build(spec)
+	if err != nil {
+		return nil, invalid("%s", err.Error())
+	}
+	lister, ok := provider.(aiprovider.ModelLister)
+	if !ok {
+		return nil, &CheckError{Code: aiprovider.ErrorBadRequest}
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.config.CheckTimeout)
+	defer cancel()
+	models, err := lister.Models(ctx)
+	var providerErr *aiprovider.Error
+	if errors.As(err, &providerErr) {
+		return nil, &CheckError{Code: providerErr.Code}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if models == nil {
+		models = []string{}
+	}
+	return models, nil
 }
 
 // ProviderInput adds a provider.
@@ -286,30 +359,11 @@ func (s *Service) AddProvider(ctx context.Context, workspaceID string, actor Act
 	if err != nil {
 		return Provider{}, err
 	}
-	key := strings.TrimSpace(input.APIKey)
-	if len(key) > maxKeyLength {
-		return Provider{}, invalid("The API key is longer than %d characters.", maxKeyLength)
+	spec, err := s.workspaceSpec(input.Kind, input.BaseURL, input.APIKey)
+	if err != nil {
+		return Provider{}, err
 	}
-	kind := aiprovider.Kind(input.Kind)
-	var baseURL string
-	switch kind {
-	case aiprovider.KindAnthropic:
-		if strings.TrimSpace(input.BaseURL) != "" {
-			return Provider{}, invalid("An Anthropic provider always uses the Claude API; leave the base URL empty.")
-		}
-		if key == "" {
-			return Provider{}, invalid("Paste an Anthropic API key (console.anthropic.com, API keys).")
-		}
-	case aiprovider.KindOpenAICompatible:
-		if baseURL, err = s.cleanBaseURL(input.BaseURL); err != nil {
-			return Provider{}, err
-		}
-		if key == "" && !s.config.AllowPrivateBaseURLs {
-			return Provider{}, invalid("Paste the provider's API key. A provider without a key is only for a server on the operator's own network.")
-		}
-	default:
-		return Provider{}, invalid("The kind is anthropic or openai_compatible.")
-	}
+	kind, baseURL, key := spec.Kind, spec.BaseURL, spec.APIKey
 	if key != "" && !s.config.Keys.Configured() {
 		return Provider{}, ErrKeysMissing
 	}

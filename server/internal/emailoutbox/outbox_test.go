@@ -21,6 +21,7 @@ type fixture struct {
 	store          *store.Store
 	pool           *pgxpool.Pool
 	workspaceID    string
+	emailChannelID string
 	agentID        string
 	conversationID string
 	incomingID     string
@@ -44,8 +45,9 @@ func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fix
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := store.New(pool).WithOutbound(store.OutboundPolicy{Enabled: true, GmailEnabled: true})
-	if _, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@"+domainName, nil); err != nil {
+	st := channelStore(t, pool).WithOutbound(store.OutboundPolicy{Enabled: true, GmailEnabled: true, MicrosoftEnabled: true})
+	channel, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@"+domainName, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
 	parsed, err := email.Parse([]byte("From: Olive Customer <olive@customer.example>\r\nTo: support@"+domainName+"\r\n"+
@@ -54,7 +56,7 @@ func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fix
 		t.Fatal(err)
 	}
 	parsed.Platform = true // customer mail arrives through the platform forwarder
-	result, err := st.IngestEmail(ctx, workspace.ID, parsed, time.Now().UTC(), nil)
+	result, err := ingestEmail(t, ctx, st, workspace.ID, parsed)
 	if err != nil || result.ConversationID == nil {
 		t.Fatalf("ingest: %+v %v", result, err)
 	}
@@ -62,7 +64,7 @@ func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fix
 	if err := pool.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1`, workspace.ID).Scan(&agentID); err != nil {
 		t.Fatal(err)
 	}
-	return fixture{store: st, pool: pool, workspaceID: workspace.ID, agentID: agentID, conversationID: *result.ConversationID, incomingID: *result.MessageID}
+	return fixture{store: st, pool: pool, workspaceID: workspace.ID, emailChannelID: channel.ChannelID, agentID: agentID, conversationID: *result.ConversationID, incomingID: *result.MessageID}
 }
 
 func (f fixture) write(t *testing.T, kind, body string) domain.Message {
@@ -142,7 +144,7 @@ func TestOutboundRetriesWithBackoffThenSendsThreadedReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stored, token string
-	if err := f.pool.QueryRow(context.Background(), `SELECT m.email_message_id,c.email_reply_token FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.id=$1`, reply.ID).Scan(&stored, &token); err != nil {
+	if err := f.pool.QueryRow(context.Background(), `SELECT substr(m.external_id,7),substr(k.key,13) FROM messages m JOIN conversation_thread_keys k ON k.conversation_id=m.conversation_id AND k.channel_type='email' WHERE m.id=$1`, reply.ID).Scan(&stored, &token); err != nil {
 		t.Fatal(err)
 	}
 	header := parsed.Header
@@ -237,9 +239,13 @@ func TestExpiredLeaseIsResentWithTheSameMessageID(t *testing.T) {
 	clock := time.Now().UTC().Add(time.Second)
 	worker := newWorker(f, server, &clock)
 	f.write(t, "outgoing", "At least once.")
-	claimed, err := f.store.ClaimDueDeliveries(context.Background(), clock, 10, time.Minute)
+	claimed, err := f.store.ClaimDueOutbox(context.Background(), clock, 10, time.Minute)
 	if err != nil || len(claimed) != 1 {
 		t.Fatalf("claim: %d %v", len(claimed), err)
+	}
+	leased, err := f.store.EmailDelivery(context.Background(), claimed[0].WorkspaceID, claimed[0].OutboxID, claimed[0].Attempts)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if process(t, worker) != 0 {
 		t.Fatal("a leased delivery must not be sent twice concurrently")
@@ -249,8 +255,8 @@ func TestExpiredLeaseIsResentWithTheSameMessageID(t *testing.T) {
 		t.Fatal("an expired lease must be picked up again")
 	}
 	received := server.mail()
-	if len(received) != 1 || !strings.Contains(received[0].Data, "Message-ID: <"+claimed[0].EmailMessageID+">") {
-		t.Fatalf("resend must reuse the Message-ID %s: %+v", claimed[0].EmailMessageID, received)
+	if len(received) != 1 || !strings.Contains(received[0].Data, "Message-ID: <"+leased.EmailMessageID+">") {
+		t.Fatalf("resend must reuse the Message-ID %s: %+v", leased.EmailMessageID, received)
 	}
 }
 
@@ -269,7 +275,7 @@ func (f fixture) secondConversationReply(t *testing.T, contactEmail, body string
 	if err != nil {
 		t.Fatal(err)
 	}
-	conversation, err := f.store.CreateConversation(ctx, f.workspaceID, contact.ID, "Second thread")
+	conversation, err := f.store.CreateConversation(ctx, f.workspaceID, contact.ID, "Second thread", "")
 	if err != nil {
 		t.Fatal(err)
 	}

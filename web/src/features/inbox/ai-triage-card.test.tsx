@@ -139,7 +139,7 @@ test('a failure a setting causes offers only the way to the setting, not another
   serve(() => ({ suggestion: suggestion({ status: 'failed', error_code: 'auth', ...empty, ready_at: null }), auto_applied: null }));
   show(vi.fn(), false);
   expect(await screen.findByText(/refused its key/)).toBeInTheDocument();
-  expect(screen.getByText('Ask an admin to check Settings → AI.')).toBeInTheDocument();
+  expect(screen.getByText('Ask an admin to check Settings → Built-in AI.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
 });
 

@@ -64,3 +64,12 @@ test('attachmentProblem is empty without files or limits and set when over', () 
   expect(attachmentProblem([file('x', 11 * MiB)])).toBeUndefined();
   expect(attachmentProblem([file('x', 11 * MiB)], limits)).toMatch(/10\.0 MiB/);
 });
+
+test('a reply through Microsoft 365 with large files is warned, not stopped', () => {
+  const warn = { bytes: 3 * MiB, text: 'Microsoft 365 may refuse attachments this large.' };
+  const { rerender } = render(<AttachmentPicker files={[file('small.pdf', 2 * MiB)]} onChange={vi.fn()} limits={{ ...limits, warn }} />);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  rerender(<AttachmentPicker files={[file('large.pdf', 4 * MiB)]} onChange={vi.fn()} limits={{ ...limits, warn }} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Microsoft 365 may refuse attachments this large.');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});

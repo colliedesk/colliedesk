@@ -8,6 +8,7 @@
   --rule: #dcdcdc;
   --accent: #171717;
   --accent-ink: #ffffff;
+  --accent-hover: #333333;
   --accent-soft: #efefef;
   --tab: #f4f4f4;
   --thumb: rgba(23, 23, 23, 0.22);
@@ -16,6 +17,19 @@
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   --radius: 10px;
+  /* A help center's brand sheet sets these; their defaults are the look above, in light and dark. */
+  --link: var(--accent);
+  --ring: var(--accent);
+  --header: var(--surface);
+  --header-ink: var(--ink);
+  --header-hover: var(--accent);
+  --header-ring: var(--accent);
+  --footer: var(--surface);
+  --footer-ink: var(--muted);
+  --footer-hover: var(--accent);
+  --footer-ring: var(--accent);
+  --font-body: var(--sans);
+  --font-head: var(--serif);
   color-scheme: light dark;
 }
 
@@ -28,6 +42,7 @@
     --rule: #2e2e2e;
     --accent: #fafafa;
     --accent-ink: #0a0a0a;
+    --accent-hover: #e5e5e5;
     --accent-soft: #222222;
     --tab: #1c1c1c;
     --thumb: rgba(250, 250, 250, 0.2);
@@ -43,7 +58,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font: 400 1rem/1.6 var(--sans);
+  font: 400 1rem/1.6 var(--font-body);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -62,10 +77,10 @@ main { flex: 1; }
   * { scrollbar-width: thin; scrollbar-color: var(--thumb) transparent; }
 }
 
-a { color: var(--accent); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+a { color: var(--link); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
 a:hover { text-decoration-thickness: 2px; }
 
-:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
 
 .wrap { width: 100%; max-width: 72rem; margin: 0 auto; padding: 0 1rem; }
 
@@ -78,17 +93,28 @@ a:hover { text-decoration-thickness: 2px; }
   position: absolute; left: 1rem; top: -3rem; z-index: 10;
   background: var(--accent); color: var(--accent-ink); padding: 0.5rem 0.875rem; border-radius: 6px;
 }
-.skip:focus { top: 0.75rem; }
+/* Focused, it sits on the header band, so it takes the header's ring. */
+.skip:focus { top: 0.75rem; --ring: var(--header-ring); }
 
-/* Header */
-.masthead { background: var(--surface); border-bottom: 1px solid var(--rule); }
+/* Header and footer: links, hover and the focus ring take colors that read on their band. */
+.masthead { background: var(--header); border-bottom: 1px solid var(--rule); --ring: var(--header-ring); }
 .masthead-row { display: flex; align-items: center; gap: 1rem; min-height: 4rem; }
 .brand {
-  font: 600 1.25rem/1.2 var(--serif); color: var(--ink); text-decoration: none;
+  font: 600 1.25rem/1.2 var(--font-head); color: var(--header-ink); text-decoration: none;
   display: inline-flex; align-items: center; min-height: 2.75rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
 }
-.brand:hover { color: var(--accent); }
+.brand:hover { color: var(--header-hover); }
+/* The logo stands in for the title, at most 40 px tall; its width and height keep its place as it loads. */
+.brand-logo { display: block; width: auto; max-height: 2.5rem; max-width: 12rem; object-fit: contain; }
+/* A long host name ends in an ellipsis rather than widening a narrow page; its title holds it whole. */
+.site-link {
+  margin-left: auto; color: var(--header-ink); text-decoration: none; font-weight: 600;
+  display: block; min-height: 2.75rem; line-height: 2.75rem; min-width: 0; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.site-link:hover { color: var(--header-hover); text-decoration: underline; }
+.site-link + .search-compact { margin-left: 0; }
 
 /* Search */
 .search input {
@@ -96,13 +122,13 @@ a:hover { text-decoration-thickness: 2px; }
   border: 1px solid var(--rule); border-radius: 999px; min-width: 0;
 }
 .search input::placeholder { color: var(--muted); opacity: 1; }
-.search input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.search input:focus-visible { outline: 3px solid var(--ring); outline-offset: 1px; border-color: transparent; }
 .search button {
-  font: 600 1rem/1 var(--sans); cursor: pointer; border: 0;
+  font: 600 1rem/1 var(--font-body); cursor: pointer; border: 0;
   background: var(--accent); color: var(--accent-ink); border-radius: 999px;
-  transition: filter 150ms ease;
+  transition: background-color 150ms ease;
 }
-.search button:hover { filter: brightness(1.08); }
+.search button:hover { background: var(--accent-hover); }
 
 .search-compact { margin-left: auto; display: flex; align-items: center; position: relative; flex: 0 1 20rem; }
 .search-compact input { width: 100%; height: 3rem; padding: 0 3.5rem 0 1rem; background: var(--paper); }
@@ -110,11 +136,14 @@ a:hover { text-decoration-thickness: 2px; }
   position: absolute; right: 0.125rem; width: 2.75rem; height: 2.75rem;
   display: grid; place-items: center; padding: 0;
 }
+/* Around the button the ring would cross both the field and the header band; inside it, it is the
+   button's own ink on the button. */
+.search-compact button:focus-visible { outline-color: var(--accent-ink); outline-offset: -6px; }
 
 .hero { padding: 3.5rem 0 2.5rem; max-width: 46rem; }
 .hero-search { padding-bottom: 1.5rem; }
 .hero-title {
-  font: 600 clamp(2.125rem, 5vw, 3.25rem)/1.08 var(--serif);
+  font: 600 clamp(2.125rem, 5vw, 3.25rem)/1.08 var(--font-head);
   letter-spacing: -0.015em; margin: 0 0 1.5rem; overflow-wrap: anywhere;
 }
 .hero-label { display: block; font-weight: 600; color: var(--muted); margin-bottom: 0.5rem; }
@@ -129,10 +158,10 @@ a:hover { text-decoration-thickness: 2px; }
 .crumbs li { display: flex; align-items: center; color: var(--muted); }
 .crumbs li + li::before { content: "/"; margin: 0 0.5rem; color: var(--rule); }
 .crumbs a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; min-height: 2.75rem; }
-.crumbs a:hover { color: var(--accent); text-decoration: underline; }
+.crumbs a:hover { color: var(--link); text-decoration: underline; }
 
 .section-label {
-  font: 600 0.8125rem/1.4 var(--sans); text-transform: uppercase; letter-spacing: 0.08em;
+  font: 600 0.8125rem/1.4 var(--font-body); text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--muted); margin: 2.5rem 0 1rem;
 }
 .quiet { text-transform: none; letter-spacing: 0; font-weight: 400; }
@@ -147,13 +176,13 @@ a:hover { text-decoration-thickness: 2px; }
   position: absolute; top: 0; left: 0; max-width: calc(100% - 2rem); margin: 0;
   background: var(--tab); border: 1px solid var(--rule); border-bottom: 0;
   border-radius: var(--radius) var(--radius) 0 0;
-  font: 600 1.125rem/1.3 var(--serif);
+  font: 600 1.125rem/1.3 var(--font-head);
 }
 .card-tab a {
   display: flex; align-items: center; min-height: 2.75rem; padding: 0.25rem 1rem; color: var(--ink); text-decoration: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.card-tab a:hover { color: var(--accent); }
+.card-tab a:hover { color: var(--link); }
 .card-body {
   flex: 1; display: flex; flex-direction: column; gap: 0.75rem;
   background: var(--surface); border: 1px solid var(--rule);
@@ -166,13 +195,13 @@ a:hover { text-decoration-thickness: 2px; }
 .card-list li { border-top: 1px solid var(--rule); }
 .card-list li:first-child { border-top: 0; }
 .card-list a { display: flex; align-items: center; min-height: 2.75rem; padding: 0.375rem 0; color: var(--ink); text-decoration: none; }
-.card-list a:hover { color: var(--accent); text-decoration: underline; }
+.card-list a:hover { color: var(--link); text-decoration: underline; }
 .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .chips a {
   display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0 0.875rem; border-radius: 999px; font-size: 0.9375rem;
   background: var(--accent-soft); color: var(--ink); text-decoration: none;
 }
-.chips a:hover { color: var(--accent); }
+.chips a:hover { color: var(--link); }
 .card-more { margin-top: auto; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.375rem; min-height: 2.75rem; align-self: flex-start; }
 .card-more:hover { text-decoration: underline; }
 .cards-compact { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
@@ -180,7 +209,7 @@ a:hover { text-decoration-thickness: 2px; }
 /* Page heads */
 .page-head { margin: 1rem 0 0; max-width: 46rem; }
 .page-head h1 {
-  font: 600 clamp(1.875rem, 4vw, 2.625rem)/1.15 var(--serif);
+  font: 600 clamp(1.875rem, 4vw, 2.625rem)/1.15 var(--font-head);
   letter-spacing: -0.01em; margin: 0 0 0.75rem; overflow-wrap: anywhere;
 }
 .lede { font-size: 1.125rem; color: var(--muted); margin: 0; }
@@ -194,7 +223,7 @@ a:hover { text-decoration-thickness: 2px; }
   display: block; padding: 0.875rem 0.25rem; color: var(--ink); text-decoration: none;
   font-size: 1.0625rem; transition: color 150ms ease;
 }
-.index a:hover { color: var(--accent); text-decoration: underline; }
+.index a:hover { color: var(--link); text-decoration: underline; }
 
 .pager { display: flex; justify-content: space-between; gap: 1rem; max-width: 46rem; margin: 1.5rem 0 0; }
 .pager a {
@@ -208,7 +237,7 @@ a:hover { text-decoration-thickness: 2px; }
 .article { min-width: 0; }
 .prose { max-width: 42rem; margin-top: 2rem; font-size: 1.0625rem; line-height: 1.75; overflow-wrap: break-word; }
 .prose > :first-child { margin-top: 0; }
-.prose h1, .prose h2, .prose h3, .prose h4 { font-family: var(--serif); line-height: 1.25; margin: 2.25rem 0 0.75rem; scroll-margin-top: 1rem; }
+.prose h1, .prose h2, .prose h3, .prose h4 { font-family: var(--font-head); line-height: 1.25; margin: 2.25rem 0 0.75rem; scroll-margin-top: 1rem; }
 .prose h1 { font-size: 1.75rem; }
 .prose h2 { font-size: 1.5rem; }
 .prose h3 { font-size: 1.25rem; }
@@ -257,7 +286,7 @@ a:hover { text-decoration-thickness: 2px; }
 .results { list-style: none; margin: 0; padding: 0; max-width: 46rem; }
 .results li { padding: 1.125rem 0; border-bottom: 1px solid var(--rule); }
 .results li:first-child { padding-top: 0; }
-.result-title { font: 600 1.1875rem/1.35 var(--serif); text-decoration: none; display: inline-flex; align-items: center; min-height: 2.75rem; }
+.result-title { font: 600 1.1875rem/1.35 var(--font-head); text-decoration: none; display: inline-flex; align-items: center; min-height: 2.75rem; }
 .result-title:hover { text-decoration: underline; }
 .result-where { display: block; color: var(--muted); font-size: 0.875rem; margin-top: 0.125rem; }
 .results p { margin: 0.375rem 0 0; color: var(--muted); }
@@ -265,15 +294,16 @@ a:hover { text-decoration-thickness: 2px; }
 .empty { color: var(--muted); max-width: 40rem; margin: 2rem 0; }
 
 .notice { max-width: 40rem; padding: 4rem 0 2rem; }
-.notice-code { font: 600 0.875rem/1 var(--mono); color: var(--accent); letter-spacing: 0.1em; margin: 0 0 0.75rem; }
-.notice h1 { font: 600 clamp(1.875rem, 4vw, 2.5rem)/1.15 var(--serif); margin: 0 0 1rem; }
+.notice-code { font: 600 0.875rem/1 var(--mono); color: var(--link); letter-spacing: 0.1em; margin: 0 0 0.75rem; }
+.notice h1 { font: 600 clamp(1.875rem, 4vw, 2.5rem)/1.15 var(--font-head); margin: 0 0 1rem; }
 .notice p { color: var(--muted); }
 .notice .search-hero { margin-top: 2rem; }
 
-.foot { margin-top: 4rem; border-top: 1px solid var(--rule); background: var(--surface); }
+.foot { margin-top: 4rem; border-top: 1px solid var(--rule); background: var(--footer); --ring: var(--footer-ring); }
 .foot .wrap { padding-top: 1rem; padding-bottom: 1.5rem; }
-.foot a { color: var(--muted); text-decoration: none; font-family: var(--serif); display: inline-flex; align-items: center; min-height: 2.75rem; }
-.foot a:hover { color: var(--accent); }
+.foot-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.5rem; }
+.foot a { color: var(--footer-ink); text-decoration: none; font-family: var(--font-head); display: inline-flex; align-items: center; min-height: 2.75rem; }
+.foot a:hover { color: var(--footer-hover); text-decoration: underline; }
 
 @media (max-width: 40rem) {
   .masthead-row { flex-wrap: wrap; padding-top: 0.75rem; padding-bottom: 0.75rem; gap: 0.75rem; }

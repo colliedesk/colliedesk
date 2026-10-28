@@ -48,6 +48,15 @@ const (
 	PrivilegeRequestLogin Privilege = "request-login"
 	// PrivilegeOutboxClaim leases due outbox rows of every workspace for the email worker.
 	PrivilegeOutboxClaim Privilege = "outbox-claim"
+	// PrivilegeChannelRoute resolves the live channel that is an account outside (a chat account), from
+	// an event a channel's webhook received, or that a public address names by its random id (a web
+	// form's own address). Accounts are unique on the server; only the workspace and channel ids leave
+	// the transaction.
+	PrivilegeChannelRoute Privilege = "channel-route"
+	// PrivilegeChannelInboundClaim leases due events of the channel journal of every workspace (received,
+	// failed, or collected until their flush time) for the inbound worker; each is then processed in its
+	// own workspace.
+	PrivilegeChannelInboundClaim Privilege = "channel-inbound-claim"
 	// PrivilegeImportJobClaim leases due in-app import jobs of every workspace for the import worker,
 	// and discards previews nobody started within the hour.
 	PrivilegeImportJobClaim Privilege = "import-job-claim"
@@ -76,6 +85,10 @@ const (
 	// address, after a workspace dropped its own. Google revokes an account's whole grant to the project, so
 	// the grant is revoked only when no workspace holds it. Only a yes or no leaves the transaction.
 	PrivilegeMailboxGrantShared Privilege = "mailbox-grant-shared"
+	// PrivilegeMailboxKeepAlive lists, in every workspace, the connected mailboxes of a provider whose grant
+	// was not renewed for a week, so a quiet Microsoft 365 grant is refreshed before it expires unused. Only
+	// workspace and channel ids leave the transaction; each grant is read and renewed in its own workspace.
+	PrivilegeMailboxKeepAlive Privilege = "mailbox-keep-alive"
 	// PrivilegeAIJobClaim leases due AI tasks of every workspace for the AI worker; closes the usage rows
 	// a dead process left started; expires AI drafts and triage suggestions nobody decided on for a week and erases the text of
 	// drafts that ended 90 days ago. Only task ids, workspace ids and claim tokens leave the claim; each
@@ -85,4 +98,10 @@ const (
 	// queued for AI retrieval to build. Only workspace ids leave the transaction; each is built in its
 	// own scope.
 	PrivilegeAIRetrievalQueue Privilege = "ai-retrieval-queue"
+	// PrivilegeResultsClaim adds a results_state row for every workspace without one and leases the
+	// workspaces whose results page numbers are due. Only workspace ids leave the transaction; each is
+	// computed and stored in its own scope.
+	PrivilegeResultsClaim Privilege = "results-claim"
+	// PrivilegeResultsShareToken resolves the workspace of a results share link from its token hash.
+	PrivilegeResultsShareToken Privilege = "results-share-token"
 )

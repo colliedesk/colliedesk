@@ -79,6 +79,19 @@ test('moves between conversation pages', () => {
   expect(onPage.mock.calls).toEqual([[1], [3]]);
 });
 
+test('the count beside Inbox is the conversations of this page, a range when there are more pages', () => {
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ ...conversation, id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}` }));
+  const heading = () => screen.getByRole('heading', { level: 1, name: 'Inbox' }).parentElement as HTMLElement;
+  const { rerender } = render(<InboxPage conversations={rows(3)} />);
+  expect(heading()).toHaveTextContent(/^Inbox3/);
+  // A full first page with more after it: never a bare 50 that reads as the total.
+  rerender(<InboxPage conversations={rows(50)} hasNextPage pageSize={50} />);
+  expect(within(heading()).getByText('Conversations 1 to 50 on this page')).toBeInTheDocument();
+  expect(heading()).not.toHaveTextContent(/^Inbox50/);
+  rerender(<InboxPage conversations={rows(25)} page={2} pageSize={50} />);
+  expect(within(heading()).getByText('Conversations 51 to 75 on this page')).toBeInTheDocument();
+});
+
 test('renders message Markdown in the timeline', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} timeline={[{
     id: '44444444-4444-4444-8444-444444444444',
@@ -208,7 +221,7 @@ test('an empty new workspace explains the next steps instead of a filter message
   render(<InboxPage conversations={[]} canManage />);
   const start = screen.getByRole('region', { name: /get started/i });
   expect(start).toHaveTextContent('No conversations yet');
-  expect(within(start).getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings');
+  expect(within(start).getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings/channels/type/email');
   // An admin imports in the app.
   expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', '/settings/import-freshdesk');
   expect(within(start).getByRole('link', { name: 'Invite your team' })).toHaveAttribute('href', '/settings');
@@ -258,6 +271,16 @@ test('a list that failed to load says so and offers a retry, never "Get started"
   expect(screen.getByRole('alert')).toHaveTextContent('Conversations could not be loaded.');
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
   expect(onRetry).toHaveBeenCalled();
+});
+
+test('the list of a results number that was refreshed says so and leads back to Results', () => {
+  const onQuery = vi.fn();
+  render(<InboxPage conversations={[]} failed="results_refreshed" query={{ status: 'all', result: '11111111-1111-4111-8111-111111111111:30d.first_response' }} onQuery={onQuery} filtered />);
+  expect(screen.getByRole('alert')).toHaveTextContent('These numbers were refreshed. Open Results again.');
+  expect(screen.getByRole('link', { name: 'Open Results' })).toHaveAttribute('href', '/results');
+  expect(screen.queryByText('Conversations could not be loaded.')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+  expect(onQuery).toHaveBeenCalled();
 });
 
 test('get-started links open Settings inside the app and hide admin-only steps from agents', () => {
@@ -386,4 +409,33 @@ test('on the hosted cloud the reply box offers no Cc from mail the workspace pos
   }];
   render(<InboxPage hosted selected={conversation} conversations={[conversation]} timeline={posted} />);
   expect(screen.queryByRole('list', { name: 'Cc' })).not.toBeInTheDocument();
+});
+
+test('an unsent reply belongs to the agent who wrote it: another agent signed in on the same browser starts empty', () => {
+  window.localStorage.clear();
+  const workspace = '33333333-3333-4333-8333-333333333333';
+  const first = render(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Private to agent A' } });
+  first.unmount();
+  const other = render(<InboxPage workspaceId={workspace} currentAgentId="agent-b" selected={conversation} conversations={[conversation]} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('');
+  other.unmount();
+  render(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Private to agent A');
+});
+
+test('an unsent reply comes back after a reload in which the conversation loads before the workspace, and stays stored', () => {
+  window.localStorage.clear();
+  const workspace = '44444444-4444-4444-8444-444444444444';
+  const first = render(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Typed before the reload' } });
+  first.unmount();
+  const kept = () => Object.entries(window.localStorage).map(([key, value]) => [key, (JSON.parse(value) as { body: string }).body]);
+  const stored = kept();
+  expect(stored).toHaveLength(1);
+  const reloaded = render(<InboxPage selected={conversation} conversations={[conversation]} />);
+  expect(kept()).toEqual(stored);
+  reloaded.rerender(<InboxPage workspaceId={workspace} currentAgentId="agent-a" selected={conversation} conversations={[conversation]} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Typed before the reload');
+  expect(kept()).toEqual(stored);
 });

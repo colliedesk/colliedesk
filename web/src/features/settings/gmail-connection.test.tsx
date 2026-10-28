@@ -69,7 +69,7 @@ test('analytics that name the realm decide, like the server does', () => {
 test('an admin connects Gmail from the email channel', () => {
   const onConnect = vi.fn();
   render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage onConnect={onConnect} />);
-  expect(screen.getByRole('heading', { name: 'Send from Gmail' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Send from your mailbox' })).toBeInTheDocument();
   expect(screen.getByText(/cannot read the mailbox/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Connect Gmail' }));
   expect(onConnect).toHaveBeenCalled();
@@ -116,17 +116,20 @@ test('agents see the state but no buttons', () => {
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
-test('a server without Google settings names them and the redirect URI to register', () => {
+test('a server without Google settings says whom to ask, not the variable names, and the redirect URI to register', () => {
   const missing: GmailSettings = { ...available, available: false, missing_settings: ['GOOGLE_OAUTH_CLIENT_ID', 'MAILBOX_TOKEN_KEYS'] };
   render(<GmailConnection gmail={missing} supportAddress="support@example.com" timezone="UTC" canManage />);
-  expect(screen.getByText(/GOOGLE_OAUTH_CLIENT_ID, MAILBOX_TOKEN_KEYS/)).toBeInTheDocument();
-  expect(screen.getByRole('textbox', { name: 'Redirect URI to register in Google Cloud' })).toHaveValue(available.redirect_uri);
+  expect(screen.getByText(/Gmail sending is not set up on this server.*ask whoever runs it/)).toBeInTheDocument();
+  expect(screen.queryByText(/GOOGLE_OAUTH_CLIENT_ID|MAILBOX_TOKEN_KEYS/)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Self-hosting guide: send replies through Gmail' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/email.md#send-replies-through-gmail');
+  const details = screen.getByText('Server details').closest('details')!;
+  expect(within(details).getByRole('textbox', { name: 'Redirect URI to register in Google Cloud' })).toHaveValue(available.redirect_uri);
   expect(screen.queryByRole('button', { name: 'Connect Gmail' })).not.toBeInTheDocument();
 });
 
 test('a connection the server can no longer use says why instead of claiming replies go through Gmail', () => {
   render(<GmailConnection gmail={{ ...connected, available: false, missing_settings: ['MAILBOX_TOKEN_KEYS'] }} supportAddress="support@example.com" timezone="UTC" canManage />);
-  expect(screen.getByText(/not set up on this server.*MAILBOX_TOKEN_KEYS/)).toBeInTheDocument();
+  expect(screen.getByText(/not set up on this server.*ask whoever runs it/)).toBeInTheDocument();
   expect(screen.queryByText(/Replies are sent through Gmail/)).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Disconnect Gmail' })).toBeInTheDocument();
 });
@@ -172,4 +175,28 @@ test('Escape closes the disconnect question like Cancel', () => {
 test('the outcome is shown in the block', () => {
   render(<GmailConnection gmail={connected} supportAddress="support@example.com" timezone="UTC" canManage returned={{ kind: 'connected' }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Gmail is connected.');
+});
+
+test('a Gmail account that is not the support address keeps sending and says to connect the matching one', () => {
+  render(<GmailConnection gmail={{ ...connected, address_matches: false, connection: { ...connected.connection!, address: 'old@example.com' } }} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.getByRole('note')).toHaveTextContent('old@example.com is not this channel\'s support address. Replies still leave through it; connect Gmail again with support@example.com to match.');
+});
+
+test('an account another channel sends through is refused, with a link to that channel', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage
+    returned={{ kind: 'error', reason: 'account_in_use', channel: '99999999-9999-4999-8999-999999999999' }} />);
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('another email channel of this workspace already sends through this account');
+  expect(within(alert).getByRole('link')).toHaveAttribute('href', '/settings/channels/99999999-9999-4999-8999-999999999999?tab=replies');
+});
+
+test('the channel a refused account belongs to is read from the address and cleaned from it', () => {
+  window.history.replaceState(null, '', '/settings/channels/abc?tab=replies&gmail_error=account_in_use&gmail_channel=def');
+  expect(gmailReturn()).toEqual({ kind: 'error', reason: 'account_in_use', channel: 'def' });
+  expect(window.location.search).toBe('?tab=replies');
+});
+
+test('Google signing in another account says which account to choose', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage returned={{ kind: 'error', reason: 'address_mismatch' }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Google signed in another account. A channel sends as its own support address. Select Connect Gmail and choose support@example.com at Google.');
 });

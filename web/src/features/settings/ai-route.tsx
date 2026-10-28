@@ -6,6 +6,7 @@ import type { AIProviderInput, AISettings, AISlotInput, AISlotName } from '../..
 import { aiMessages as m } from './ai-messages';
 import { AIPage } from './ai-page';
 import type { FieldError } from './ai-page';
+import { useCreateAction } from '../../api/use-create';
 
 const consentKey = 'colliedesk.ai-consent-dismissed';
 
@@ -72,6 +73,7 @@ export function AIRoute() {
     mutationFn: aiApi.check, onMutate: (id) => setBusyProvider(id), onSettled: () => { setBusyProvider(undefined); void refresh(); },
   });
   // Dialog actions answer the dialog, which shows a refusal under its field.
+  const addProvider = useCreateAction((input: AIProviderInput, key: string) => aiApi.add(input, key));
   const run = async (action: () => Promise<unknown>): Promise<FieldError | undefined> => {
     try {
       await action();
@@ -87,7 +89,7 @@ export function AIRoute() {
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   const error = failed ? refusal(failed).text : undefined;
   return <AIPage isAdmin={isAdmin} workspaceName={me.data.workspace.name} timezone={me.data.timezone ?? 'UTC'}
-    shown={{ general: isAdmin, team: isAdmin, email: isAdmin, webForm: isAdmin, savedReplies: true, exportData: isAdmin,
+    shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
       billing: isAdmin && config.data?.billing.enabled === true, importData: isAdmin, ai: true }}
     settings={settings.data} loadFailed={settings.isError} showConsent={!dismissed && neverSet(settings.data)}
     busySlot={busySlot} busyProvider={busyProvider} error={error}
@@ -95,7 +97,15 @@ export function AIRoute() {
     onConsent={() => { slot.reset(); check.reset(); consent.mutate(); }}
     onDismissConsent={() => { writeDismissed(workspaceID); setDismissed(true); }}
     onCheck={(id) => { slot.reset(); consent.reset(); check.mutate(id); }}
-    onAdd={(input: AIProviderInput) => run(() => aiApi.add(input))}
+    onAdd={(input: AIProviderInput) => run(() => addProvider.run(input))}
+    onListModels={async (input) => {
+      try { return (await aiApi.models(input)).models; } catch (error) {
+        // A provider that keeps no list (or will not show it to this key) is answered by typing the names.
+        const why = error instanceof ConflictError && error.detail?.code === 'ai_check_failed' ? error.detail.check_error_code : undefined;
+        return why && ['model_not_found', 'bad_request', 'invalid_response', 'permission'].includes(String(why))
+          ? { field: 'models', text: (error as ConflictError).message } : refusal(error);
+      }
+    }}
     onSetKey={(id, key) => run(() => aiApi.setKey(id, key))}
     onRemove={(id) => run(() => aiApi.remove(id))}
     onSetAutomatic={(perDay, perMinute, draftPerDay) => run(() => aiApi.setAutomatic(perDay, perMinute, draftPerDay))}

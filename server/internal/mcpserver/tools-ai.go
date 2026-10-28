@@ -31,6 +31,16 @@ func aiProviderAnswer(c *call, method, path string, body any) (any, error) {
 	return map[string]any{"provider": provider}, nil
 }
 
+func aiModelsList(c *call, arguments map[string]any) (any, error) {
+	var list struct {
+		Models []string `json:"models"`
+	}
+	if err := c.send(http.MethodPost, "/api/v1/ai/models", arguments, &list); err != nil {
+		return nil, err
+	}
+	return map[string]any{"models": list.Models}, nil
+}
+
 func aiProviderAdd(c *call, arguments map[string]any) (any, error) {
 	return aiProviderAnswer(c, http.MethodPost, "/api/v1/ai/providers", arguments)
 }

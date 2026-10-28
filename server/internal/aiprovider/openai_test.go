@@ -41,7 +41,7 @@ func TestOpenAICompatibleRequestAndAnswer(t *testing.T) {
 		t.Fatalf("response_format = %v", format)
 	}
 	// Not api.openai.com: max_tokens, and no reasoning field the server may refuse.
-	if hit.body["max_tokens"] != float64(1024) || hit.body["reasoning_effort"] != nil || hit.body["max_completion_tokens"] != nil {
+	if hit.body["max_tokens"] != float64(1024) || hit.body["reasoning_effort"] != nil || hit.body["max_completion_tokens"] != nil || hit.body["provider"] != nil {
 		t.Fatalf("body = %v", hit.body)
 	}
 	for _, refused := range []string{"temperature", "top_p"} {
@@ -67,6 +67,23 @@ func TestOpenAIHostGetsItsOwnParameterNames(t *testing.T) {
 	}
 	body := fake.recorded(t)[0].body
 	if body["max_completion_tokens"] != float64(1024) || body["reasoning_effort"] != "low" || body["max_tokens"] != nil {
+		t.Fatalf("body = %v", body)
+	}
+}
+
+func TestOpenRouterKeepsAJSONSchemaOnProvidersThatTakeIt(t *testing.T) {
+	fake := newFakeAPI(t, http.StatusOK, openAIReplyText)
+	transport := &rewriteTransport{target: fake.server.URL, next: fake.server.Client().Transport}
+	provider, err := NewOpenAICompatible(OpenAIConfig{BaseURL: "https://openrouter.ai/api/v1", APIKey: "k", HTTPClient: &http.Client{Transport: transport}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.Complete(context.Background(), draftRequest()); err != nil {
+		t.Fatal(err)
+	}
+	body := fake.recorded(t)[0].body
+	routing, _ := body["provider"].(map[string]any)
+	if routing["require_parameters"] != true || body["max_tokens"] != float64(1024) || body["reasoning_effort"] != nil {
 		t.Fatalf("body = %v", body)
 	}
 }
