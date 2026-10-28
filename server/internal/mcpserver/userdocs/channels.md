@@ -20,7 +20,8 @@ and its state:
 - **Needs attention**: it works only in part, and says why with a link to fix it. Email: sending is
   paused after spam complaints, the server cannot send (no SMTP relay and no Gmail), the Gmail
   connection broke, the support address domain is not verified yet, or (on your own server) no
-  inbound secret is set so no mail can arrive. Web form: it is on but lists no website origin, so no
+  inbound secret is set, so customer email forwarded from your mailbox cannot arrive yet. A test
+  message works without it. Web form: it is on but lists no website origin, so no
   page can post to it.
 
 ## Add a channel

@@ -110,7 +110,7 @@ function TryForm({ path }: { path: string }) {
 const embedMessages = {
   copyUrl: 'Copy submit URL',
   code: 'Code for your page',
-  codeHelp: 'Send it from a page on an allowed origin, with the visitor\'s email and message. Leave website empty: a bot that fills it is answered as if stored, and nothing is.',
+  codeHelp: 'Send it from a page on an allowed origin, with the visitor\'s email and message. Keep the field named website empty. It is a trap for spam bots: a message with it filled in is thrown away.',
   copyCode: 'Copy code',
   codeCopied: 'Code copied',
 };

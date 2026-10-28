@@ -179,9 +179,9 @@ test('the channel name explains in plain words what the default channel does', a
   channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   show(EMAIL);
   const name = await screen.findByRole('textbox', { name: 'Name' });
-  expect(name).toHaveAccessibleDescription(/^New conversations you start are sent from the default channel\. /);
+  expect(name).toHaveAccessibleDescription(/^A channel is an email address or web form where conversations come in and go out\. /);
   const sentences = (name.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ')
-    .split(/(?<=\.) /).filter((sentence) => /default channel|still arrive/.test(sentence));
+    .split(/(?<=\.) /).filter((sentence) => /channel/.test(sentence));
   expect(sentences).toHaveLength(2);
   for (const sentence of sentences) expect(sentence.split(' ').length).toBeLessThanOrEqual(16);
 });
@@ -666,7 +666,7 @@ test('the Connection tab sends a test message in one click and links to the conv
   show(EMAIL);
   const button = await screen.findByRole('button', { name: 'Send yourself a test message' });
   fireEvent.click(button);
-  await waitFor(() => expect(channelsApi.emailTestMessage).toHaveBeenCalledWith(EMAIL));
+  await waitFor(() => expect(channelsApi.emailTestMessage).toHaveBeenCalledWith(EMAIL, expect.any(String)));
   const sent = await screen.findByRole('status', { name: '' });
   expect(sent).toHaveTextContent('from sam@example.com');
   expect(within(sent).getByRole('link', { name: 'Open the test conversation' })).toHaveAttribute('href', '/conversations/66666666-6666-4666-8666-666666666666');
@@ -681,4 +681,57 @@ test('a refused test message shows the server message', async () => {
   show(EMAIL);
   fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('5 test messages an hour');
+});
+
+test('three fast clicks send one test message, all under one key, and the button says it is sending', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  let finish: (value: unknown) => void = () => undefined;
+  channelsApi.emailTestMessage.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  show(EMAIL);
+  const button = await screen.findByRole('button', { name: 'Send yourself a test message' });
+  button.click(); button.click(); button.click();
+  expect(await screen.findByRole('button', { name: 'Sending the test message…' })).toBeDisabled();
+  expect(channelsApi.emailTestMessage).toHaveBeenCalledTimes(1);
+  expect(channelsApi.emailTestMessage).toHaveBeenCalledWith(EMAIL, expect.stringMatching(/^[\x21-\x7e]{1,200}$/));
+  finish({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  const sent = await screen.findByText(/Test message sent from sam@example.com/);
+  await waitFor(() => expect(sent.closest('[role="status"]')).toHaveFocus());
+});
+
+test('a test message that fails without a reason says what to do next, and trying again reuses its key', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
+  channelsApi.emailTestMessage.mockRejectedValueOnce(new Error('API 500')).mockResolvedValueOnce({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('The test message could not be sent. Check your connection and select Send yourself a test message again.');
+  await waitFor(() => expect(alert).toHaveFocus());
+  fireEvent.click(screen.getByRole('button', { name: 'Send yourself a test message' }));
+  await screen.findByText(/Test message sent from sam@example.com/);
+  const [[, first], [, second]] = channelsApi.emailTestMessage.mock.calls as [string, string][];
+  expect(second).toBe(first);
+});
+
+test('before a support address is saved, the test button says what to do first instead of doing nothing', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'not_connected', reason_code: null, message: null } }), config: null });
+  channelsApi.email.mockResolvedValue({ ...withChannel, channel: null });
+  show(EMAIL);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('Save a support address first, then send the test message.');
+  expect(channelsApi.emailTestMessage).not.toHaveBeenCalled();
+});
+
+test('without an inbound secret, a test message that arrived says the inbox works and what customer email still needs', async () => {
+  const unsecured = { ...withChannel.channel, secret_set: false, secret_rotated_at: null };
+  channelsApi.get.mockResolvedValue({ ...channel('email', { status: { state: 'needs_attention', reason_code: 'no_inbound_secret', message: null } }), config: unsecured });
+  channelsApi.email.mockResolvedValue({ ...withChannel, channel: unsecured });
+  channelsApi.emailTestMessage.mockResolvedValue({ conversation_id: '66666666-6666-4666-8666-666666666666', message_id: '77777777-7777-4777-8777-777777777777', sent_to: 'sam@example.com' });
+  show(EMAIL);
+  const notice = await screen.findByText(/inbound secret/, { selector: '.notice span' });
+  expect(notice).not.toHaveTextContent('no mail can arrive');
+  expect(notice).toHaveTextContent('Customer email sent to your support address cannot arrive yet');
+  expect(notice).toHaveTextContent('A test message works without it.');
+  fireEvent.click(await screen.findByRole('button', { name: 'Send yourself a test message' }));
+  const sent = await screen.findByText(/Test message sent from sam@example.com/);
+  expect(sent.closest('[role="status"]')).toHaveTextContent('Your inbox and replies work. Customer email arrives once your support mailbox forwards here with an inbound secret (below).');
 });
