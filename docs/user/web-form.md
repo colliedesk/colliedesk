@@ -14,22 +14,44 @@ It works the same on self-hosted installs and on Colliedesk Cloud.
 
 ## Turn it on
 
-1. Open **Settings → Web form** (admins only; agents see the state).
+1. Open **Settings → Channels**, select **Add a web form** (or **Add channel → Add a web form**)
+   (admins only; agents see the state).
 2. Under **Allowed origins** list every site that hosts the form, one per line, for example
    `https://example.com`. An origin is scheme, host and optional port, exactly as the browser shows
    it. No path, no trailing slash, no wildcard. `https://example.com` and `https://www.example.com`
    are two origins. At most 20.
-3. Select **Accept web form submissions** and **Save web form**. The button reads "Saving…" and
-   stays disabled until the save ends. Then "Saved" appears next to it, or the reason the save failed.
+3. Select **Save web form**. The button reads "Saving…" and stays disabled until the save ends. The
+   form is added and on; its page opens on the **Embed** tab, where you change the origins later.
 
-The form is **off** until you do this. Clear the checkbox and save to turn it off again; your
-origins stay saved. While it is off, the form answers `404`, the same as a workspace that does not
+The form is **off** until you add it. Turn it off and on again with its switch in **Settings →
+Channels** (see [Channels](channels.md#turn-a-channel-off)); your origins stay saved. While it is off, the form answers `404`, the same as a workspace that does not
 exist. A locked workspace (trial over, nothing paid) answers the same way.
+
+## Several forms
+
+A workspace can have several web forms, for example one on the shop and one on the careers page: add
+another with **Settings → Channels → Add channel → Add a web form**. Each form has its own Submit URL
+and its own allowed origins (two forms may list the same site), and a submission opens its
+conversation in the form it was posted to, so the inbox can filter by form. Replies to a form
+conversation are emailed from the default mailbox, and keep leaving from the mailbox of the first
+reply.
+
+The older slug address belongs to the form that had it, whichever form is the default; removing that
+form leaves the older address answering `404`.
+
+## Try it
+
+The **Embed** tab explains the form in plain words and has a small **Try the form**: enter an email
+address and a message and select **Try the form**. It sends one submission from that page, the way a
+visitor's browser would, and says when the conversation is in your inbox. The form must be on; the
+test needs no allowed origin, because it comes from Colliedesk's own page.
 
 ## Send a submission
 
-The settings page shows the **Submit URL**: `<your Colliedesk address>/api/v1/public/forms/<workspace slug>`.
-Post JSON from a page on an allowed origin:
+The settings page shows the form's **Submit URL**: `<your Colliedesk address>/api/v1/public/web-forms/<form id>`.
+A workspace's first form also keeps the older address, `<your Colliedesk address>/api/v1/public/forms/<workspace slug>`,
+so sites that embed it keep working; its **Embed** tab shows that address and says the form also has
+its own. Post JSON from a page on an allowed origin:
 
 ```js
 await fetch('https://desk.example.com/api/v1/public/forms/acme', {
@@ -44,12 +66,12 @@ await fetch('https://desk.example.com/api/v1/public/forms/acme', {
 | `email` | Required, a plain valid address, at most 254 characters. |
 | `message` | Optional, at most 5000 characters. Empty shows as "(no message)". |
 | `source` | Optional, at most 100 characters. Becomes the subject `Web form: <source>`. Without it the subject is `Web form`. |
-| `website` | A hidden field that real visitors leave empty. If it holds text the request is treated as spam: it answers `202` like a success and stores nothing. |
+| `website` | A hidden trap for spam bots: keep it empty. A real visitor never sees it. If it holds text the message is thrown away: the answer is `202` like a success, so the bot does not learn it was caught, and nothing is stored. |
 
 Answers:
 
 - `202 {"ok": true}`: stored (or dropped as spam).
-- `404`: unknown workspace, form off, or workspace locked.
+- `404`: unknown workspace or form, form off or removed, or workspace locked.
 - `422`: invalid input; `error.fields` names each field, for example `{"email": "Enter a valid email address."}`.
 - `429`: too many submissions (see Limits). `Retry-After` says how long to wait.
 - `415`: the body is not `application/json`.

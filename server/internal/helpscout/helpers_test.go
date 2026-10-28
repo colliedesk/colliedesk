@@ -3,8 +3,6 @@ package helpscout_test
 import (
 	"context"
 	"fmt"
-	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +11,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/helpscout"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -113,35 +112,10 @@ func (e *importEnv) target(t *testing.T, entity, helpScoutID string) string {
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL import test")
-	}
-	schema := "test_hs_" + regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(t.Name()), "_") + fmt.Sprint(time.Now().UnixNano())
-	admin, err := pgxpool.New(context.Background(), databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := admin.Exec(context.Background(), "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
 	// A non-UTC session proves timestamps do not depend on the server timezone.
-	config.ConnConfig.RuntimeParams["timezone"] = "Asia/Ho_Chi_Minh"
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE")
-		admin.Close()
+	return databasetest.PoolWith(t, func(config *pgxpool.Config) {
+		config.ConnConfig.RuntimeParams["timezone"] = "Asia/Ho_Chi_Minh"
 	})
-	return pool
 }
 
 // assertLastPublic checks every conversation's last_public_* against its newest message that is not a note.

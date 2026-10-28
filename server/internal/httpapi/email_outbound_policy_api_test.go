@@ -63,10 +63,16 @@ func TestDomainVerificationLifecycle(t *testing.T) {
 		t.Fatalf("verified domain must send as the support address: %+v %v", settings.Channel, settings.SendingFrom)
 	}
 
+	// The verification belongs to the domain: another address on it keeps it, another domain starts over.
 	_ = request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "help@verify.example.com"}, admin, nil)
 	settings = domainState(t, api, admin)
-	if settings.Channel.DomainVerifiedAt != nil || settings.Channel.DNSRecordValue == channel.DNSRecordValue {
-		t.Fatalf("changing the address must reset verification with a new token: %+v", settings.Channel)
+	if settings.Channel.DomainVerifiedAt == nil || settings.Channel.DNSRecordValue != channel.DNSRecordValue {
+		t.Fatalf("another address on the verified domain lost its verification: %+v", settings.Channel)
+	}
+	_ = request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "help@verify-two.example.com"}, admin, nil)
+	settings = domainState(t, api, admin)
+	if settings.Channel.DomainVerifiedAt != nil || settings.Channel.DNSRecordValue == channel.DNSRecordValue || settings.Channel.DNSRecordName != "_colliedesk.verify-two.example.com" {
+		t.Fatalf("an address on another domain must start a new verification: %+v", settings.Channel)
 	}
 }
 

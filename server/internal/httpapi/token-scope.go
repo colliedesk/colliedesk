@@ -9,20 +9,24 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 )
 
-// gatedByHandler marks a route whose tier depends on the request body. Any token passes the route
-// check; the handler refuses it by what the body asks for.
+// gatedByHandler marks a route whose permission depends on the request body. Any token passes the
+// route check; the handler refuses it by what the body asks for (Permission is the least it needs).
 const gatedByHandler = "handler"
 
-// TokenAccess classifies one route of Routes() for agent tokens. Tier is the lowest tier that may
-// call it (read, draft, send, admin, or gatedByHandler); a token below that tier gets an agent request
-// a person approves (202) instead of a refusal. Approval marks a route no tier may call directly: every
-// token gets an agent request. Otherwise the route is closed to every token, and Closed says why; Why
-// is the reason a PersonOnly route stays with people.
+// TokenAccess classifies one route of Routes() for agent tokens. Permission is what a token must hold
+// to call it (auth.Perm…); Tier is that permission's preset, the lowest tier that holds it (or
+// gatedByHandler), kept for the tables people read. A token without the permission gets an agent
+// request a person approves (202) instead of a refusal. Approval marks a route no token may call
+// directly: every token gets an agent request, whatever it holds (Permission names the matrix cell).
+// A route with a Tier and no Permission is open to every token (signing out, who am I). Otherwise
+// the route is closed to every token, and Closed says why; Why is the reason a PersonOnly route stays
+// with people.
 type TokenAccess struct {
-	Tier     string
-	Approval bool
-	Closed   string
-	Why      string
+	Tier       string
+	Permission string
+	Approval   bool
+	Closed     string
+	Why        string
 }
 
 // Why a route is closed to every token.
@@ -34,15 +38,26 @@ const (
 	NotForPeople = "not_for_people"
 )
 
-func tier(name string) TokenAccess { return TokenAccess{Tier: name} }
+func grant(permission string) TokenAccess {
+	return TokenAccess{Tier: auth.PermissionPreset(permission), Permission: permission}
+}
+
+func byHandler(permission string) TokenAccess {
+	return TokenAccess{Tier: gatedByHandler, Permission: permission}
+}
+
+// alwaysAsk: risky whatever the token holds (new credentials, money, data leaving); every token's call
+// becomes an agent request a person approves.
+func alwaysAsk(permission string) TokenAccess {
+	return TokenAccess{Approval: true, Permission: permission}
+}
 
 func personOnly(why string) TokenAccess { return TokenAccess{Closed: PersonOnly, Why: why} }
 
 var (
-	// approvalRequired: risky for any tier (new credentials, money, data leaving); every token's call
-	// becomes an agent request a person approves.
-	approvalRequired = TokenAccess{Approval: true}
-	notForPeople     = TokenAccess{Closed: NotForPeople}
+	// anyToken: the token's own session (who am I, sign out) and a problem report; every token may.
+	anyToken     = TokenAccess{Tier: auth.ScopeRead}
+	notForPeople = TokenAccess{Closed: NotForPeople}
 )
 
 // tokenTiers classifies every route in Routes(), keyed "METHOD pattern". gateToken lets a token
@@ -75,155 +90,223 @@ var (
 // leaving), gets an agent request a person approves instead of a refusal. Deciding a request is
 // PersonOnly; routes no session reaches are NotForPeople. No other route is closed to tokens.
 var tokenTiers = map[string]TokenAccess{
-	"POST /api/v1/auth/logout":                                   tier(auth.ScopeRead),
-	"GET /api/v1/auth/me":                                        tier(auth.ScopeRead),
-	"GET /api/v1/conversations":                                  tier(auth.ScopeRead),
-	"PATCH /api/v1/conversations":                                tier(auth.ScopeDraft),
-	"GET /api/v1/inbox/activity":                                 tier(auth.ScopeRead),
-	"GET /api/v1/saved-replies":                                  tier(auth.ScopeRead),
-	"GET /api/v1/saved-replies/trash":                            tier(auth.ScopeRead),
-	"GET /api/v1/saved-replies/{id}/versions":                    tier(auth.ScopeRead),
-	"POST /api/v1/saved-replies":                                 tier(auth.ScopeSend),
-	"PATCH /api/v1/saved-replies/{id}":                           tier(auth.ScopeSend),
-	"DELETE /api/v1/saved-replies/{id}":                          tier(auth.ScopeSend),
-	"POST /api/v1/saved-replies/{id}/restore":                    tier(auth.ScopeSend),
-	"POST /api/v1/saved-replies/{id}/versions/{version}/restore": tier(auth.ScopeSend),
-	"GET /api/v1/saved-views":                                    tier(auth.ScopeRead),
-	"GET /api/v1/saved-views/trash":                              tier(auth.ScopeRead),
-	"POST /api/v1/saved-views":                                   tier(auth.ScopeDraft),
-	"PATCH /api/v1/saved-views/{id}":                             tier(auth.ScopeDraft),
-	"DELETE /api/v1/saved-views/{id}":                            tier(auth.ScopeDraft),
-	"POST /api/v1/saved-views/{id}/restore":                      tier(auth.ScopeDraft),
-	"GET /api/v1/kb/collections":                                 tier(auth.ScopeRead),
-	"GET /api/v1/kb/collections/trash":                           tier(auth.ScopeRead),
-	"POST /api/v1/kb/collections":                                tier(auth.ScopeSend),
-	"PATCH /api/v1/kb/collections/{id}":                          tier(auth.ScopeSend),
-	"DELETE /api/v1/kb/collections/{id}":                         tier(auth.ScopeSend),
-	"POST /api/v1/kb/collections/{id}/restore":                   tier(auth.ScopeSend),
-	"GET /api/v1/kb/articles":                                    tier(auth.ScopeRead),
-	"GET /api/v1/kb/articles/trash":                              tier(auth.ScopeRead),
-	"GET /api/v1/kb/articles/{id}":                               tier(auth.ScopeRead),
-	"GET /api/v1/kb/articles/{id}/versions":                      tier(auth.ScopeRead),
-	"POST /api/v1/kb/articles":                                   tier(auth.ScopeSend),
-	"PATCH /api/v1/kb/articles/{id}":                             tier(auth.ScopeSend),
-	"DELETE /api/v1/kb/articles/{id}":                            tier(auth.ScopeSend),
-	"POST /api/v1/kb/articles/{id}/restore":                      tier(auth.ScopeSend),
-	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":   tier(auth.ScopeSend),
-	"POST /api/v1/kb/images":                                     tier(auth.ScopeSend),
-	"GET /api/v1/kb/images/{id}":                                 tier(auth.ScopeRead),
-	"GET /api/v1/kb/media":                                       tier(auth.ScopeRead),
-	"PATCH /api/v1/kb/media/{id}":                                tier(auth.ScopeSend),
-	"GET /api/v1/kb/media/trash":                                 tier(auth.ScopeRead),
-	"POST /api/v1/kb/media/trash":                                tier(auth.ScopeSend),
+	"POST /api/v1/auth/logout":                                   anyToken,
+	"GET /api/v1/auth/me":                                        anyToken,
+	"GET /api/v1/conversations":                                  grant(auth.PermConversationsRead),
+	"PATCH /api/v1/conversations":                                grant(auth.PermConversationsUpdate),
+	"GET /api/v1/inbox/activity":                                 grant(auth.PermConversationsRead),
+	"GET /api/v1/saved-replies":                                  grant(auth.PermSavedRepliesRead),
+	"GET /api/v1/saved-replies/trash":                            grant(auth.PermSavedRepliesRead),
+	"GET /api/v1/saved-replies/{id}/versions":                    grant(auth.PermSavedRepliesRead),
+	"POST /api/v1/saved-replies":                                 grant(auth.PermSavedRepliesCreate),
+	"PATCH /api/v1/saved-replies/{id}":                           grant(auth.PermSavedRepliesUpdate),
+	"DELETE /api/v1/saved-replies/{id}":                          grant(auth.PermSavedRepliesDelete),
+	"POST /api/v1/saved-replies/{id}/restore":                    grant(auth.PermSavedRepliesDelete),
+	"POST /api/v1/saved-replies/{id}/versions/{version}/restore": grant(auth.PermSavedRepliesUpdate),
+	"GET /api/v1/saved-views":                                    grant(auth.PermSavedViewsRead),
+	"GET /api/v1/saved-views/trash":                              grant(auth.PermSavedViewsRead),
+	"POST /api/v1/saved-views":                                   grant(auth.PermSavedViewsCreate),
+	"PATCH /api/v1/saved-views/{id}":                             grant(auth.PermSavedViewsUpdate),
+	"DELETE /api/v1/saved-views/{id}":                            grant(auth.PermSavedViewsDelete),
+	"POST /api/v1/saved-views/{id}/restore":                      grant(auth.PermSavedViewsDelete),
+	"GET /api/v1/kb/collections":                                 grant(auth.PermKBArticlesRead),
+	"GET /api/v1/kb/collections/trash":                           grant(auth.PermKBArticlesRead),
+	"POST /api/v1/kb/collections":                                grant(auth.PermKBArticlesCreate),
+	"PATCH /api/v1/kb/collections/{id}":                          grant(auth.PermKBArticlesUpdate),
+	"DELETE /api/v1/kb/collections/{id}":                         grant(auth.PermKBArticlesDelete),
+	"POST /api/v1/kb/collections/{id}/restore":                   grant(auth.PermKBArticlesDelete),
+	"GET /api/v1/kb/articles":                                    grant(auth.PermKBArticlesRead),
+	"GET /api/v1/kb/articles/trash":                              grant(auth.PermKBArticlesRead),
+	"GET /api/v1/kb/articles/{id}":                               grant(auth.PermKBArticlesRead),
+	"GET /api/v1/kb/articles/{id}/versions":                      grant(auth.PermKBArticlesRead),
+	"POST /api/v1/kb/articles":                                   grant(auth.PermKBArticlesCreate),
+	"PATCH /api/v1/kb/articles/{id}":                             grant(auth.PermKBArticlesUpdate),
+	"DELETE /api/v1/kb/articles/{id}":                            grant(auth.PermKBArticlesDelete),
+	"POST /api/v1/kb/articles/{id}/restore":                      grant(auth.PermKBArticlesDelete),
+	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":   grant(auth.PermKBArticlesUpdate),
+	"POST /api/v1/kb/articles/{id}/ai-exclusion":                 grant(auth.PermKBArticlesUpdate),
+	"DELETE /api/v1/kb/articles/{id}/ai-exclusion":               grant(auth.PermKBArticlesUpdate),
+	"POST /api/v1/kb/images":                                     grant(auth.PermKBMediaCreate),
+	"GET /api/v1/kb/images/{id}":                                 grant(auth.PermKBMediaRead),
+	"GET /api/v1/kb/media":                                       grant(auth.PermKBMediaRead),
+	"PATCH /api/v1/kb/media/{id}":                                grant(auth.PermKBMediaUpdate),
+	"GET /api/v1/kb/media/trash":                                 grant(auth.PermKBMediaRead),
+	"POST /api/v1/kb/media/trash":                                grant(auth.PermKBMediaDelete),
 	// A lower tier's request names the ids it would move (proposeTrashOfUnusedKBMedia), never "all unused".
-	"POST /api/v1/kb/media/trash-unused":                         tier(gatedByHandler),
-	"POST /api/v1/kb/media/restore":                              tier(auth.ScopeSend),
-	"POST /api/v1/kb/media/purge":                                tier(auth.ScopeAdmin),
-	"DELETE /api/v1/kb/media/{id}":                               tier(auth.ScopeSend),
-	"POST /api/v1/kb/media/{id}/restore":                         tier(auth.ScopeSend),
-	"POST /api/v1/kb/media/{id}/replace":                         tier(auth.ScopeSend),
-	"POST /api/v1/kb/media-replacements/{id}/undo":               tier(auth.ScopeSend),
-	"POST /api/v1/kb/media-uploads":                              tier(auth.ScopeSend),
-	"GET /api/v1/kb/media-uploads":                               tier(auth.ScopeRead),
-	"GET /api/v1/kb/media-uploads/{id}":                          tier(auth.ScopeRead),
-	"PUT /api/v1/kb/media-uploads/{id}":                          tier(auth.ScopeSend),
-	"DELETE /api/v1/kb/media-uploads/{id}":                       tier(auth.ScopeSend),
-	"POST /api/v1/kb/media-uploads/{id}/complete":                tier(auth.ScopeSend),
-	"GET /api/v1/kb/media/{id}":                                  tier(auth.ScopeRead),
-	"PUT /api/v1/kb/media/{id}/poster":                           tier(auth.ScopeSend),
-	"GET /api/v1/kb/media/{id}/poster/{version}":                 tier(auth.ScopeRead),
-	"GET /api/v1/kb/media/{id}/details":                          tier(auth.ScopeRead),
-	"GET /api/v1/kb/media/{id}/thumbnail":                        tier(auth.ScopeRead),
-	"GET /api/v1/help-center":                                    tier(auth.ScopeRead),
-	"GET /api/v1/help-center/theme":                              tier(auth.ScopeRead),
-	"POST /api/v1/help-center/theme/check":                       tier(auth.ScopeRead),
-	"POST /api/v1/help-center/theme/preview":                     tier(auth.ScopeRead),
-	"POST /api/v1/conversations":                                 tier(auth.ScopeSend),
-	"GET /api/v1/conversations/{id}":                             tier(auth.ScopeRead),
-	"PATCH /api/v1/conversations/{id}":                           tier(auth.ScopeDraft),
-	"PUT /api/v1/conversations/{id}/tags/{tagId}":                tier(auth.ScopeDraft),
-	"DELETE /api/v1/conversations/{id}/tags/{tagId}":             tier(auth.ScopeDraft),
-	"GET /api/v1/conversations/{id}/messages":                    tier(auth.ScopeRead),
-	"POST /api/v1/conversations/{id}/messages":                   tier(gatedByHandler),
-	"GET /api/v1/conversations/{id}/time-entries":                tier(auth.ScopeRead),
-	"POST /api/v1/conversations/{id}/messages/{messageId}/retry": tier(auth.ScopeSend),
-	"GET /api/v1/attachments/{id}":                               tier(auth.ScopeRead),
-	"GET /api/v1/contacts":                                       tier(auth.ScopeRead),
-	"POST /api/v1/contacts":                                      tier(auth.ScopeSend),
-	"GET /api/v1/contacts/{id}":                                  tier(auth.ScopeRead),
-	"PATCH /api/v1/contacts/{id}":                                tier(auth.ScopeSend),
-	"POST /api/v1/contacts/{id}/merges":                          tier(auth.ScopeSend),
-	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":              tier(auth.ScopeSend),
-	"GET /api/v1/agents":                                         tier(auth.ScopeRead),
-	"GET /api/v1/tags":                                           tier(auth.ScopeRead),
-	"POST /api/v1/tags":                                          tier(auth.ScopeDraft),
-	"PATCH /api/v1/tags/{id}":                                    tier(auth.ScopeSend),
-	"DELETE /api/v1/tags/{id}":                                   tier(auth.ScopeSend),
-	"GET /api/v1/agent-requests":                                 tier(auth.ScopeRead),
-	"GET /api/v1/agent-requests/{id}":                            tier(auth.ScopeRead),
-	"POST /api/v1/agent-requests/{id}/cancel":                    tier(auth.ScopeRead),
-	"POST " + problemReportPath:                                  tier(auth.ScopeRead),
+	"POST /api/v1/kb/media/trash-unused":                         byHandler(auth.PermKBMediaDelete),
+	"POST /api/v1/kb/media/restore":                              grant(auth.PermKBMediaDelete),
+	"POST /api/v1/kb/media/purge":                                grant(auth.PermKBMediaPurge),
+	"DELETE /api/v1/kb/media/{id}":                               grant(auth.PermKBMediaDelete),
+	"POST /api/v1/kb/media/{id}/restore":                         grant(auth.PermKBMediaDelete),
+	"POST /api/v1/kb/media/{id}/replace":                         grant(auth.PermKBMediaUpdate),
+	"POST /api/v1/kb/media-replacements/{id}/undo":               grant(auth.PermKBMediaUpdate),
+	"POST /api/v1/kb/media-uploads":                              grant(auth.PermKBMediaCreate),
+	"GET /api/v1/kb/media-uploads":                               grant(auth.PermKBMediaRead),
+	"GET /api/v1/kb/media-uploads/{id}":                          grant(auth.PermKBMediaRead),
+	"PUT /api/v1/kb/media-uploads/{id}":                          grant(auth.PermKBMediaCreate),
+	"DELETE /api/v1/kb/media-uploads/{id}":                       grant(auth.PermKBMediaCreate),
+	"POST /api/v1/kb/media-uploads/{id}/complete":                grant(auth.PermKBMediaCreate),
+	"GET /api/v1/kb/media/{id}":                                  grant(auth.PermKBMediaRead),
+	"PUT /api/v1/kb/media/{id}/poster":                           grant(auth.PermKBMediaUpdate),
+	"GET /api/v1/kb/media/{id}/poster/{version}":                 grant(auth.PermKBMediaRead),
+	"GET /api/v1/kb/media/{id}/details":                          grant(auth.PermKBMediaRead),
+	"GET /api/v1/kb/media/{id}/thumbnail":                        grant(auth.PermKBMediaRead),
+	"GET /api/v1/help-center":                                    grant(auth.PermHelpCenterRead),
+	"POST /api/v1/conversations":                                 grant(auth.PermMessagesSend),
+	"GET /api/v1/conversations/{id}":                             grant(auth.PermConversationsRead),
+	"PATCH /api/v1/conversations/{id}":                           grant(auth.PermConversationsUpdate),
+	"PUT /api/v1/conversations/{id}/tags/{tagId}":                grant(auth.PermConversationsUpdate),
+	"DELETE /api/v1/conversations/{id}/tags/{tagId}":             grant(auth.PermConversationsUpdate),
+	"GET /api/v1/conversations/{id}/messages":                    grant(auth.PermMessagesRead),
+	"POST /api/v1/conversations/{id}/messages":                   byHandler(auth.PermMessagesNote),
+	"GET /api/v1/conversations/{id}/time-entries":                grant(auth.PermConversationsRead),
+	"POST /api/v1/conversations/{id}/messages/{messageId}/retry": grant(auth.PermMessagesSend),
+	"GET /api/v1/attachments/{id}":                               grant(auth.PermMessagesRead),
+	"GET /api/v1/contacts":                                       grant(auth.PermContactsRead),
+	"POST /api/v1/contacts":                                      grant(auth.PermContactsCreate),
+	"GET /api/v1/contacts/{id}":                                  grant(auth.PermContactsRead),
+	"PATCH /api/v1/contacts/{id}":                                grant(auth.PermContactsUpdate),
+	"POST /api/v1/contacts/{id}/merges":                          grant(auth.PermContactsUpdate),
+	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":              grant(auth.PermContactsUpdate),
+	"GET /api/v1/agents":                                         grant(auth.PermTeamRead),
+	"GET /api/v1/tags":                                           grant(auth.PermTagsRead),
+	"GET /api/v1/results":                                        grant(auth.PermResultsRead),
+	"GET /api/v1/results/share-link":                             grant(auth.PermResultsShare),
+	// A share link puts the numbers outside sign-in: data leaving, so a person approves every token's call.
+	"POST /api/v1/results/share-link":         alwaysAsk(auth.PermResultsShare),
+	"DELETE /api/v1/results/share-link":       grant(auth.PermResultsShare),
+	"POST /api/v1/results/shared":             notForPeople,
+	"PATCH /api/v1/agents/me/results-email":   grant(auth.PermProfileUpdate),
+	"POST /api/v1/tags":                       grant(auth.PermTagsCreate),
+	"PATCH /api/v1/tags/{id}":                 grant(auth.PermTagsUpdate),
+	"DELETE /api/v1/tags/{id}":                grant(auth.PermTagsDelete),
+	"GET /api/v1/agent-requests":              grant(auth.PermAgentRequestsRead),
+	"GET /api/v1/agent-requests/{id}":         grant(auth.PermAgentRequestsRead),
+	"POST /api/v1/agent-requests/{id}/cancel": grant(auth.PermAgentRequestsCancel),
+	"POST " + problemReportPath:               anyToken,
+	"GET /api/v1/help-center/theme":           grant(auth.PermHelpCenterRead),
+	"POST /api/v1/help-center/theme/check":    grant(auth.PermHelpCenterRead),
+	"POST /api/v1/help-center/theme/preview":  grant(auth.PermHelpCenterRead),
 
 	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
-	"PUT /api/v1/conversations/{id}/presence":               tier(auth.ScopeRead),
-	"DELETE /api/v1/conversations/{id}/presence/{clientId}": tier(auth.ScopeRead),
+	"PUT /api/v1/conversations/{id}/presence":               grant(auth.PermConversationsRead),
+	"DELETE /api/v1/conversations/{id}/presence/{clientId}": grant(auth.PermConversationsRead),
 
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
 	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),
 	"POST /api/v1/agent-requests/{id}/reject":  personOnly("deciding an agent's request is a person's call"),
 
-	"GET /api/v1/auth/sessions":                       tier(auth.ScopeRead),
-	"GET /api/v1/auth/invites":                        tier(auth.ScopeRead),
-	"GET /api/v1/channels/email":                      tier(auth.ScopeRead),
-	"GET /api/v1/channels/web-form":                   tier(auth.ScopeRead),
-	"PATCH /api/v1/agents/me/timezone":                tier(auth.ScopeDraft),
-	"PATCH /api/v1/agents/me/display-name":            tier(auth.ScopeDraft),
-	"GET /api/v1/billing":                             tier(auth.ScopeAdmin),
-	"PATCH /api/v1/workspace/timezone":                tier(auth.ScopeAdmin),
-	"PATCH /api/v1/workspace/name":                    tier(auth.ScopeAdmin),
-	"PATCH /api/v1/agents/{id}":                       tier(auth.ScopeAdmin),
-	"DELETE /api/v1/auth/invites/{id}":                tier(auth.ScopeAdmin),
-	"PUT /api/v1/channels/web-form":                   tier(auth.ScopeAdmin),
-	"PUT /api/v1/help-center":                         tier(auth.ScopeAdmin),
-	"PUT /api/v1/help-center/theme":                   tier(auth.ScopeAdmin),
-	"PUT /api/v1/channels/email":                      tier(auth.ScopeAdmin),
-	"POST /api/v1/channels/email/domain-verification": tier(auth.ScopeAdmin),
-	"DELETE /api/v1/auth/sessions/{id}":               tier(auth.ScopeAdmin),
+	"GET /api/v1/auth/sessions":              grant(auth.PermTeamRead),
+	"GET /api/v1/auth/invites":               grant(auth.PermTeamRead),
+	"GET /api/v1/channels":                   grant(auth.PermChannelsRead),
+	"GET /api/v1/channels/events":            grant(auth.PermChannelsRead),
+	"GET /api/v1/channels/{id}":              grant(auth.PermChannelsRead),
+	"POST /api/v1/channels":                  grant(auth.PermChannelsUpdate),
+	"PATCH /api/v1/channels/{id}":            grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/check":       grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/held/replay": grant(auth.PermChannelsUpdate),
+	// A channel's secret is a credential route (credentialRoutes): an admin token stores it, a lower one
+	// is refused, so it never waits in a request. Removing a channel is what DELETE /channels/email
+	// already is: a person approves every token's call. Discarding held messages cannot be undone.
+	"PUT /api/v1/channels/{id}/credentials":   grant(auth.PermChannelsManageCredentials),
+	"DELETE /api/v1/channels/{id}":            alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST /api/v1/channels/{id}/held/discard": alwaysAsk(auth.PermChannelsUpdate),
+	// One email channel of several: the same tiers as the routes of the default one.
+	"GET /api/v1/channels/{id}/email":                      grant(auth.PermChannelsRead),
+	"POST /api/v1/channels/{id}/email/domain-verification": grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/email/secret":              alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST " + channelGmailPath:                             alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + channelGmailPath:                           alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST " + channelMicrosoftPath:                         alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + channelMicrosoftPath:                       alwaysAsk(auth.PermChannelsManageCredentials),
+	"GET /api/v1/channels/email":                           grant(auth.PermChannelsRead),
+	// A test message reaches nobody but the token's own agent: it opens a conversation, like a change
+	// that never reaches a customer (draft). Answering it is a reply, which needs send as always.
+	"POST /api/v1/channels/email/test-message":        grant(auth.PermConversationsUpdate),
+	"POST /api/v1/channels/{id}/email/test-message":   grant(auth.PermConversationsUpdate),
+	"GET /api/v1/channels/web-form":                   grant(auth.PermChannelsRead),
+	"PATCH /api/v1/agents/me/timezone":                grant(auth.PermProfileUpdate),
+	"PATCH /api/v1/agents/me/display-name":            grant(auth.PermProfileUpdate),
+	"GET /api/v1/billing":                             grant(auth.PermBillingRead),
+	"PATCH /api/v1/workspace/timezone":                grant(auth.PermWorkspaceUpdate),
+	"PATCH /api/v1/workspace/name":                    grant(auth.PermWorkspaceUpdate),
+	"PATCH /api/v1/agents/{id}":                       grant(auth.PermTeamManageRoles),
+	"DELETE /api/v1/auth/invites/{id}":                grant(auth.PermTeamRevoke),
+	"PUT /api/v1/channels/web-form":                   grant(auth.PermChannelsUpdate),
+	"PUT /api/v1/help-center":                         grant(auth.PermHelpCenterUpdate),
+	"PUT /api/v1/channels/email":                      grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/email/domain-verification": grant(auth.PermChannelsUpdate),
+	"DELETE /api/v1/auth/sessions/{id}":               grant(auth.PermTeamRevoke),
+	"PUT /api/v1/help-center/theme":                   grant(auth.PermHelpCenterUpdate),
 
-	"POST /api/v1/auth/tokens":           approvalRequired,
-	"POST /api/v1/auth/invites":          approvalRequired,
-	"GET /api/v1/export":                 approvalRequired,
-	"POST /api/v1/export/link":           approvalRequired,
-	"POST /api/v1/billing/checkout":      approvalRequired,
-	"POST /api/v1/billing/portal":        approvalRequired,
-	"DELETE /api/v1/channels/email":      approvalRequired,
-	"POST /api/v1/channels/email/secret": approvalRequired,
-	"PATCH /api/v1/workspace/slug":       approvalRequired,
+	"POST /api/v1/auth/tokens":           alwaysAsk(auth.PermTeamCreateTokens),
+	"POST /api/v1/auth/invites":          alwaysAsk(auth.PermTeamInvite),
+	"GET /api/v1/export":                 alwaysAsk(auth.PermWorkspaceExport),
+	"POST /api/v1/export/link":           alwaysAsk(auth.PermWorkspaceExport),
+	"POST /api/v1/billing/checkout":      alwaysAsk(auth.PermBillingManage),
+	"POST /api/v1/billing/portal":        alwaysAsk(auth.PermBillingManage),
+	"DELETE /api/v1/channels/email":      alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST /api/v1/channels/email/secret": alwaysAsk(auth.PermChannelsManageCredentials),
+	"PATCH /api/v1/workspace/slug":       alwaysAsk(auth.PermWorkspaceUpdate),
 	// Connecting Gmail grants Colliedesk a sending identity (and the consent address is for a person's
 	// browser); disconnecting changes the address customers get replies from.
-	"POST " + gmailPath:   approvalRequired,
-	"DELETE " + gmailPath: approvalRequired,
+	"POST " + gmailPath:   alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + gmailPath: alwaysAsk(auth.PermChannelsManageCredentials),
+	// Microsoft 365 the same way: the sign-in address is for a person's browser.
+	"POST " + microsoftPath:   alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + microsoftPath: alwaysAsk(auth.PermChannelsManageCredentials),
 
 	// Imports read and write the whole workspace: admin. An undo deletes what an import brought in, so
 	// every token asks a person. The two routes that take a Freshdesk key are refused below admin
 	// (credentialRoutes) rather than filed: an agent request keeps its body.
-	"GET /api/v1/imports":              tier(auth.ScopeAdmin),
-	"POST /api/v1/imports":             tier(auth.ScopeAdmin),
-	"GET /api/v1/imports/{id}":         tier(auth.ScopeAdmin),
-	"POST /api/v1/imports/{id}/start":  tier(auth.ScopeAdmin),
-	"POST /api/v1/imports/{id}/cancel": tier(auth.ScopeAdmin),
-	"PUT /api/v1/imports/{id}/key":     tier(auth.ScopeAdmin),
-	"GET /api/v1/imports/{id}/report":  tier(auth.ScopeAdmin),
-	"POST /api/v1/imports/{id}/undo":   approvalRequired,
+	"GET /api/v1/imports":              grant(auth.PermImportsRead),
+	"POST /api/v1/imports":             grant(auth.PermImportsManageCredentials),
+	"GET /api/v1/imports/{id}":         grant(auth.PermImportsRead),
+	"POST /api/v1/imports/{id}/start":  grant(auth.PermImportsRun),
+	"POST /api/v1/imports/{id}/cancel": grant(auth.PermImportsRun),
+	"PUT /api/v1/imports/{id}/key":     grant(auth.PermImportsManageCredentials),
+	"GET /api/v1/imports/{id}/report":  grant(auth.PermImportsRead),
+	"POST /api/v1/imports/{id}/undo":   alwaysAsk(auth.PermImportsUndo),
 	// A link only changes who wrote imported replies and holds imported tickets, and is taken back
 	// the same way.
-	"GET /api/v1/imports/{id}/people":                      tier(auth.ScopeAdmin),
-	"PUT /api/v1/imports/{id}/people/{externalId}/link":    tier(auth.ScopeAdmin),
-	"DELETE /api/v1/imports/{id}/people/{externalId}/link": tier(auth.ScopeAdmin),
+	"GET /api/v1/imports/{id}/people":                      grant(auth.PermImportsRead),
+	"PUT /api/v1/imports/{id}/people/{externalId}/link":    grant(auth.PermImportsRun),
+	"DELETE /api/v1/imports/{id}/people/{externalId}/link": grant(auth.PermImportsRun),
+	// AI settings show no key, so reading them is read. Providers are admin; the three routes that carry
+	// a provider key (add, list its models, new key) are credential routes. Setting a feature decides whether ticket data leaves for a
+	// provider, so every token's call waits for a person.
+	"GET /api/v1/ai":                       grant(auth.PermAISettingsRead),
+	"POST /api/v1/ai/providers":            grant(auth.PermAISettingsManageCredentials),
+	"POST /api/v1/ai/models":               grant(auth.PermAISettingsManageCredentials),
+	"PATCH /api/v1/ai/providers/{id}":      grant(auth.PermAISettingsUpdate),
+	"PUT /api/v1/ai/providers/{id}/key":    grant(auth.PermAISettingsManageCredentials),
+	"POST /api/v1/ai/providers/{id}/check": grant(auth.PermAISettingsUpdate),
+	"DELETE /api/v1/ai/providers/{id}":     grant(auth.PermAISettingsUpdate),
+	"PUT /api/v1/ai/slots/{slot}":          alwaysAsk(auth.PermAISettingsUpdate),
+	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or
+	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
+	"GET /api/v1/ai/usage":            grant(auth.PermBillingRead),
+	"PUT /api/v1/ai/automatic-limits": grant(auth.PermAISettingsUpdate),
+	// An AI draft never reaches a customer: a person edits and sends it, like a note, so asking for one
+	// and discarding one are draft; reading them is read.
+	"POST /api/v1/conversations/{id}/ai-drafts":                   grant(auth.PermAIAssistCreate),
+	"GET /api/v1/conversations/{id}/ai-drafts":                    grant(auth.PermAIAssistRead),
+	"GET /api/v1/conversations/{id}/ai-drafts/{draftId}":          grant(auth.PermAIAssistRead),
+	"POST /api/v1/conversations/{id}/ai-drafts/{draftId}/discard": grant(auth.PermAIAssistCreate),
+	// A triage suggestion changes nothing until accepted; accepting changes tags, priority and assignee,
+	// like PATCH /api/v1/conversations/{id} (draft).
+	"GET /api/v1/conversations/{id}/ai-triage":                         grant(auth.PermAIAssistRead),
+	"POST /api/v1/conversations/{id}/ai-triage":                        grant(auth.PermAIAssistCreate),
+	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept":  grant(auth.PermAIAssistCreate),
+	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": grant(auth.PermAIAssistCreate),
+	"POST /api/v1/conversations/{id}/ai-triage/{suggestionId}/undo":    grant(auth.PermAIAssistCreate),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
-	"GET " + gmailCallbackPath:                      notForPeople,
+	"GET " + gmailCallbackPath: notForPeople,
+	// Microsoft's redirects: the consent finishes like Gmail's; the admin consent stores nothing.
+	"GET " + microsoftCallbackPath:                  notForPeople,
+	"GET " + microsoftAdminConsentPath:              notForPeople,
 	"POST /api/v1/auth/cloud/exchange":              notForPeople,
 	"POST " + cloudSignupPath:                       notForPeople,
 	"POST /api/v1/auth/redeem":                      notForPeople,
@@ -234,6 +317,7 @@ var tokenTiers = map[string]TokenAccess{
 	"GET " + foundingPath:                           notForPeople,
 	"GET " + helpCenterTLSAskPath:                   notForPeople,
 	"POST " + webFormSubmitPattern:                  notForPeople,
+	"POST " + webFormChannelPattern:                 notForPeople,
 	"GET " + exportLinkPath + "{token}":             notForPeople,
 }
 
@@ -242,10 +326,10 @@ var tokenTiers = map[string]TokenAccess{
 func TokenAccessTable() map[string]TokenAccess { return maps.Clone(tokenTiers) }
 
 // gateToken answers for an agent token whose call may not run as it is and reports true when it did:
-// a call above the token's tier, or on an Approval route, becomes an agent request (202); a PersonOnly
-// or closed route is refused (403). A full session is never stopped here.
+// a call the token holds no permission for, or on an Approval route, becomes an agent request (202);
+// a PersonOnly or closed route is refused (403). A full session is never stopped here.
 func (a *API) gateToken(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal) bool {
-	if who.Scope == "" {
+	if !who.IsToken() {
 		return false
 	}
 	access := tokenTiers[route.Method+" "+route.Pattern]
@@ -253,7 +337,7 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 	case access.Approval:
 	case access.Tier == gatedByHandler:
 		return false
-	case access.Tier != "" && auth.ScopeAllows(who.Scope, access.Tier):
+	case access.Tier != "" && (access.Permission == "" || who.Allows(access.Permission)):
 		return false
 	case access.Tier != "":
 	case access.Closed == PersonOnly:
@@ -269,18 +353,24 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 	}
 	if credentialRoutes[route.Method+" "+route.Pattern] {
 		writeError(response, http.StatusForbidden, "credentials_need_admin_token",
-			"This call carries another helpdesk's API key, which must never be kept in an agent request for approval. Use an agent token of the admin tier, or let an admin do it in Settings.")
+			"This call carries another service's API key, which must never be kept in an agent request for approval. Use an agent token that holds "+access.Permission+" (the admin tier does), or let an admin do it in Settings.")
 		return true
 	}
 	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil, "")
 	return true
 }
 
-// credentialRoutes carry another helpdesk's API key: a token below their tier is refused, never filed,
-// because an agent request stores the call's body (and the export carries it).
+// credentialRoutes carry another service's API key (a helpdesk to import from, an AI provider, a channel's
+// account): a token
+// below their tier is refused, never filed, because an agent request stores the call's body (and the
+// export carries it).
 var credentialRoutes = map[string]bool{
-	"POST /api/v1/imports":         true,
-	"PUT /api/v1/imports/{id}/key": true,
+	"POST /api/v1/imports":                  true,
+	"PUT /api/v1/imports/{id}/key":          true,
+	"POST /api/v1/ai/providers":             true,
+	"POST /api/v1/ai/models":                true,
+	"PUT /api/v1/ai/providers/{id}/key":     true,
+	"PUT /api/v1/channels/{id}/credentials": true,
 }
 
 // kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits

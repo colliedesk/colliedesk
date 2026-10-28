@@ -170,8 +170,8 @@ func TestWebFormAcceptsSubmissionAndOpensAConversation(t *testing.T) {
 	if len(messages.Items) != 1 || messages.Items[0].Kind != "incoming" || messages.Items[0].Body != "Please keep me posted." {
 		t.Fatalf("messages=%+v, want one incoming message with the text", messages.Items)
 	}
-	if outbox := f.count(t, "email_outbox", f.workspaceA); outbox != "0" {
-		t.Fatalf("email_outbox rows=%s: the form must not send mail to the submitter", outbox)
+	if outbox := f.count(t, "channel_outbox", f.workspaceA); outbox != "0" {
+		t.Fatalf("channel_outbox rows=%s: the form must not send mail to the submitter", outbox)
 	}
 }
 

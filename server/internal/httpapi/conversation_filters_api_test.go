@@ -89,12 +89,17 @@ func seedFilterDesk(t *testing.T, api http.Handler, token string, pool *pgxpool.
 	// started: the team answered last; its reply could not be delivered.
 	message("started", "incoming", base.Add(24*time.Hour))
 	failed := message("started", "outgoing", base.Add(48*time.Hour))
-	if _, err := pool.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,attempts,last_error) VALUES($1,$2,'failed',5,'mailbox full')`, desk.workspace, failed); err != nil {
+	// The desk's replies went out by email; its email channel was removed since.
+	if _, err := pool.Exec(ctx, `INSERT INTO channels(workspace_id,type,name,enabled,disabled_at,deleted_at) VALUES($1,'email','Old mail',false,now(),now())`, desk.workspace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO channel_outbox(workspace_id,message_id,channel_type,channel_id,status,attempts,last_error)
+		VALUES($1,$2,'email',(SELECT id FROM channels WHERE workspace_id=$1 AND type='email' LIMIT 1),'failed',5,'mailbox full')`, desk.workspace, failed); err != nil {
 		t.Fatal(err)
 	}
 	// report has a reply that went out.
 	sent := message("report", "outgoing", base.Add(24*time.Hour))
-	if _, err := pool.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,sent_at) VALUES($1,$2,'sent',now())`, desk.workspace, sent); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO channel_outbox(workspace_id,message_id,channel_type,channel_id,status,sent_at) VALUES($1,$2,'email',(SELECT id FROM channels WHERE workspace_id=$1 AND type='email' LIMIT 1),'sent',now())`, desk.workspace, sent); err != nil {
 		t.Fatal(err)
 	}
 	// form has a reply draft waiting; imported has one that expired before anyone looked.

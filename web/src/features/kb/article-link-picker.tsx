@@ -81,7 +81,8 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
       setQueued(true);
     }}>
       <SavedReplyPicker replies={items} onPick={insert} onClose={onClose} state={state} texts={texts}
-        onQueryChange={off ? undefined : (value) => { setText(value); setQueued(false); }} onManage={off && canManage ? openHelpCenterSettings : undefined} />
+        onQueryChange={off ? undefined : (value) => { setText(value); setQueued(false); }} onManage={off && canManage ? openHelpCenterSettings : undefined}
+        detail={(article) => article.url.replace(/^https?:\/\//, '')} />
     </div>
   );
 }

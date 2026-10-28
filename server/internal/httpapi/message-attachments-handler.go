@@ -48,10 +48,14 @@ type messageFields struct {
 	// subject; it is always an outgoing reply.
 	opening            bool
 	contactID, subject string
+	// channelID is the channel a new conversation starts from; empty for the default one.
+	channelID string
 	// contactName and contactEmail add a customer with the conversation, instead of contactID.
 	contactName, contactEmail string
 	// seen is the seen_reply_number field: the latest reply the sender had seen; nil when not sent.
 	seen *int
+	// aiDraft is the ai_draft_id field: the AI draft the reply was written from.
+	aiDraft string
 }
 
 // newContact is the customer the fields add, or nil when they name a contact of the workspace.
@@ -90,10 +94,15 @@ func (f messageFields) validate() error {
 func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http.Request) {
 	identity := principal(request)
 	workspaceID, conversationID := identity.Workspace.ID, request.PathValue("id")
+	key, ok := idempotencyKey(request)
+	if !ok {
+		writeInvalidIdempotencyKey(response)
+		return
+	}
 	// A token that may not write any message is refused before a byte is stored; the kind, and so
-	// whether a reply needs the send tier, is known only once the fields are read. Files cannot wait
+	// whether a reply needs messages:send, is known only once the fields are read. Files cannot wait
 	// days for a person's approval, so such a call is refused with the way forward.
-	if !auth.ScopeAllows(identity.Scope, auth.ScopeDraft) {
+	if !identity.Allows(auth.PermMessagesNote) && !identity.Allows(auth.PermMessagesSend) {
 		writeFilesNeedApproval(response)
 		return
 	}
@@ -133,13 +142,14 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		writeFilesNeedApproval(response)
 		return
 	}
+	actor.AIDraftID = fields.aiDraft
 	cc, refusal := a.cleanCC(request.Context(), workspaceID, fields.kind, fields.cc)
 	if refusal != nil {
 		a.writeUploadError(response, refusal)
 		return
 	}
-	item, err := a.store.CreateReply(request.Context(), workspaceID, conversationID, actor, fields.kind, fields.body, cc, fields.seen, files...)
-	if a.writeReplyConflict(response, identity, err) {
+	item, replayed, err := a.store.CreateReplyOnce(request.Context(), workspaceID, conversationID, key, actor, fields.kind, fields.body, cc, fields.seen, files...)
+	if a.writeReplyConflict(response, identity, err) || writeKeyReused(response, err) {
 		return
 	}
 	if errors.Is(err, store.ErrObjectMissing) {
@@ -148,6 +158,11 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 	}
 	if err != nil {
 		writeStoreError(response, err)
+		return
+	}
+	if replayed {
+		// The earlier request's files are the message's; the ones this repeat sent are discarded.
+		writeJSON(response, http.StatusOK, item)
 		return
 	}
 	a.recordReply(identity, fields.kind)
@@ -199,7 +214,8 @@ func (a *API) startConversationWithFiles(response http.ResponseWriter, request *
 	if added != nil {
 		newContactProblem(added, true) // trims what validate checked
 	}
-	item, err := a.store.StartConversation(request.Context(), workspaceID, store.NewConversation{ContactID: fields.contactID, NewContact: added, Subject: fields.subject},
+	item, err := a.store.StartConversation(request.Context(), workspaceID, store.NewConversation{ContactID: fields.contactID, NewContact: added, Subject: fields.subject,
+		ChannelID: fields.channelID},
 		actor, fields.body, cc, files...)
 	if errors.Is(err, store.ErrObjectMissing) {
 		writeError(response, http.StatusInternalServerError, "internal_error", "A file was lost while the conversation was saved. Nothing was sent; try again.")
@@ -255,7 +271,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			return fields, nil, invalidUpload(err)
 		}
 		switch name := part.FormName(); {
-		case name == "kind" && !fields.opening, name == "body", name == "cc", name == "seen_reply_number" && !fields.opening,
+		case name == "kind" && !fields.opening, name == "body", name == "cc", name == "seen_reply_number" && !fields.opening, name == "ai_draft_id" && !fields.opening,
 			fields.opening && (name == "contact_id" || name == "subject" || name == "contact_name" || name == "contact_email"):
 			text, err := readField(part)
 			if err != nil {
@@ -268,12 +284,16 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				fields.contactID = text
 			case "subject":
 				fields.subject = text
+			case "channel_id":
+				fields.channelID = text
 			case "contact_name":
 				fields.contactName = text
 			case "contact_email":
 				fields.contactEmail = text
 			case "body":
 				fields.body = text
+			case "ai_draft_id":
+				fields.aiDraft = text
 			case "seen_reply_number":
 				seen, err := strconv.Atoi(text)
 				if err != nil {
@@ -298,7 +318,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				if refusal != nil {
 					return fields, nil, refusal
 				}
-				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.kind, cc); err != nil {
+				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.channelID, fields.kind, cc); err != nil {
 					return fields, nil, err
 				}
 				// A reply that would be refused for a newer one is refused before its files are stored.

@@ -180,6 +180,6 @@ func TestTrialRepliesToWebFormConversationsAreRefused(t *testing.T) {
 	// Anyone can submit any address, so the form must not turn the trial's mail relay into a way to write to it.
 	wantStatus(t, f.reply(t, f.adminA, page.Items[0].ID), http.StatusForbidden, restrictedCode, "trial reply to a web form conversation")
 	if n := f.outboxCount(t, f.workspaceA); n != "0" {
-		t.Fatalf("email_outbox rows=%s, want 0", n)
+		t.Fatalf("channel_outbox rows=%s, want 0", n)
 	}
 }

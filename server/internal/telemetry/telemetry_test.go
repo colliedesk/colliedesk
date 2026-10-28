@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -19,9 +17,9 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestConfigFromEnv(t *testing.T) {
@@ -238,7 +236,7 @@ func TestOneReportPerDayAndTheInstallIDStays(t *testing.T) {
 	}
 
 	execSQL(t, db, `UPDATE instance SET last_reported_at = now() - interval '24 hours'`)
-	execSQL(t, db, `UPDATE web_form_channels SET enabled = true`)
+	execSQL(t, db, `UPDATE channels SET enabled = true, disabled_at = NULL WHERE type = 'web_form'`)
 	if err := telemetry.New(db, config, server.Client()).SendOnce(ctx); err != nil {
 		t.Fatalf("next-day SendOnce: %v", err)
 	}
@@ -353,35 +351,7 @@ func TestRejectedReportIsAnError(t *testing.T) {
 
 func newDB(t *testing.T) *database.DB {
 	t.Helper()
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL telemetry test")
-	}
-	schema := "test_telemetry_" + regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(t.Name()), "_") + fmt.Sprint(time.Now().UnixNano())
-	admin, err := pgxpool.New(context.Background(), databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := admin.Exec(context.Background(), "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
-	}
-	config, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		pool.Close()
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE")
-		admin.Close()
-	})
-	if err := database.Migrate(context.Background(), pool); err != nil {
-		t.Fatal(err)
-	}
+	pool := databasetest.Pool(t)
 	return database.New(pool)
 }
 
@@ -455,8 +425,11 @@ func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	exec(`INSERT INTO workspace_billing(workspace_id,plan,polar_subscription_id,polar_customer_id,status,current_period_end,source_modified_at)
 		VALUES($1,'team','sub_beta','cus_beta','active',now() + interval '20 days',now())`, b.ID)
 
-	exec(`INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name) VALUES($1,'support@beta.example','token','Beta')`, b.ID)
-	exec(`INSERT INTO web_form_channels(workspace_id,enabled) VALUES($1,false)`, a.ID)
+	exec(`WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default) VALUES($1,'email','Email',true) RETURNING id),
+		d AS (INSERT INTO email_domains(workspace_id,domain,verification_token) VALUES($1,'beta.example','token') RETURNING 1)
+		INSERT INTO email_channels(workspace_id,channel_id,support_address,sender_name,hosted_local) SELECT $1,c.id,'support@beta.example','Beta','support' FROM c,d`, b.ID)
+	exec(`WITH c AS (INSERT INTO channels(workspace_id,type,name,is_default,enabled,disabled_at) VALUES($1,'web_form','Web form',true,false,now()) RETURNING id)
+		INSERT INTO web_form_channels(workspace_id,channel_id,legacy_slug) SELECT $1,id,true FROM c`, a.ID)
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
 	// Acme's first import report was ready 1 hour 30 minutes 20 seconds after sign-up; a later import
 	// does not move it. A preview, a failed import, an import still running, a report being retried
@@ -514,7 +487,7 @@ func (c *capture) bodyAt(t *testing.T, path string) []byte {
 func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 	db := newDB(t)
 	acme, beta := fixture(t, db)
-	execSQL(t, db, `UPDATE web_form_channels SET enabled = true WHERE workspace_id = $1`, acme)
+	execSQL(t, db, `UPDATE channels SET enabled = true, disabled_at = NULL WHERE type = 'web_form' AND workspace_id = $1`, acme)
 	// Gamma signed up and has imported nothing yet.
 	gamma, _, err := auth.NewWithDB(db, "https://help.acme.com").CreateWorkspace(context.Background(), "Gamma Desk", "owner-g@example.com")
 	if err != nil {

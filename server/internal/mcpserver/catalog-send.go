@@ -62,7 +62,8 @@ func conversationCreateSpec() Spec {
 		Tier: "send",
 		REST: []string{"POST /api/v1/conversations"},
 		Input: `{"type":"object","additionalProperties":false,"required":["contact_id","subject"],"properties":{` +
-			`"contact_id":{"type":"string",` + uuid + `},"subject":{"type":"string","minLength":1,"maxLength":500}}}`,
+			`"contact_id":{"type":"string",` + uuid + `},"subject":{"type":"string","minLength":1,"maxLength":500},` +
+			`"channel_id":{"type":"string",` + uuid + `,"description":"The email channel it starts from (colliedesk_channels_list), which its replies keep leaving from. Leave out for the default one."}}}`,
 		Output: `{"type":"object","required":["conversation"],"properties":{"conversation":` + stateSchema + `}}`,
 		run:    conversationCreate,
 	}

@@ -2,10 +2,10 @@ import { useState } from 'react';
 import Markdown from 'react-markdown';
 import type { Attachment, Message, MessageOrigin } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
-import { formatDate } from '../../lib/format-date';
+import { formatDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
-import { LockIcon, PaperclipIcon } from '../../ui/icons';
+import { LockIcon, PaperclipIcon, SparklesIcon } from '../../ui/icons';
 import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
 
@@ -33,7 +33,7 @@ function AutomatedResponse(props: MessageItemProps) {
         onClick={() => setOpen(!open)}>
         <span className="message-event-chevron" aria-hidden="true">›</span>
         <span>{messages.automatedResponse(from)}</span>
-        <time dateTime={item.created_at}>{formatDate(item.created_at, props.timezone)}</time>
+        <time dateTime={item.created_at} title={stampTitle(item.created_at, props.timezone)}>{formatDate(item.created_at, props.timezone)}{zoneSuffix(item.created_at, props.timezone)}</time>
       </button>
       {open && <FullMessage {...props} />}
     </div>
@@ -64,8 +64,10 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageIte
             ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
+          {item.ai_draft_id && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
+            {item.ai_draft_outcome === 'sent_edited' ? messages.fromAIDraftEdited : item.ai_draft_outcome === 'sent_unchanged' ? messages.fromAIDraftUnchanged : messages.fromAIDraft}</span>}
         </div>
-        <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time>
+        <time dateTime={item.created_at} title={stampTitle(item.created_at, timezone)}>{formatDate(item.created_at, timezone)}{zoneSuffix(item.created_at, timezone)}</time>
       </header>
       {item.email && <EmailEnvelope email={item.email} storedFiles={stored.length} />}
       {item.origin && <OriginLine origin={item.origin} />}
@@ -108,12 +110,17 @@ function EmailEnvelope({ email, storedFiles }: { email: NonNullable<Message['ema
 
 function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId: string) => void }) {
   if (!item.delivery) return null;
-  const { status, last_error: lastError } = item.delivery;
+  const { status, last_error: lastError, reason_code: code } = item.delivery;
+  // A reply saved while its channel was off, or before one was connected, waits to be retried; one with no channel or no address
+  // to go to cannot be retried at all. Neither is a failed delivery.
+  const off = status === 'failed' && (code === 'channel_off' || code === 'channel_not_connected');
+  const never = status === 'failed' && (code === 'channel_removed' || code === 'no_recipient');
   return (
     <div className="message-envelope">
-      <span className={`badge badge-delivery-${status}`} title={lastError ?? undefined}>{messages.deliveryStatuses[status]}</span>
-      {status === 'failed' && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
-      {(status === 'sent' || status === 'failed') && lastError && <span className="delivery-reason">{lastError}</span>}
+      <span className={`badge badge-delivery-${off || never ? 'queued' : status}`} title={lastError ?? undefined}>{off ? messages.deliverySavedNotSent : never ? messages.deliveryNotSent : messages.deliveryStatuses[status]}</span>
+      {status === 'failed' && !never && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
+      {/* A reply waiting because the server's mailbox credentials were refused says so: it may wait long. */}
+      {(status === 'sent' || status === 'failed' || code === 'mailbox_server_config') && lastError && <span className="delivery-reason">{lastError}</span>}
     </div>
   );
 }

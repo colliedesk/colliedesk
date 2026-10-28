@@ -68,7 +68,7 @@ func TestInboundReplyThreadsByInReplyToAndReopens(t *testing.T) {
 	}, "I cannot sign in."))
 	conversationID := *first.ConversationID
 	_ = create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Try the new link."})
-	ourMessageID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE conversation_id=$1 AND kind='outgoing'`, conversationID)
+	ourMessageID := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE conversation_id=$1 AND kind='outgoing'`, conversationID)
 	resolved := request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversationID, map[string]any{"status": "resolved"}, admin, nil)
 	if resolved.Code != http.StatusOK {
 		t.Fatalf("resolve status=%d", resolved.Code)
@@ -111,7 +111,7 @@ func TestInboundReplyThreadsByReplyToken(t *testing.T) {
 	conversationID := *first.ConversationID
 	_ = request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversationID, map[string]any{"status": "closed"}, admin, nil)
 	_ = create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Done."})
-	token := queryString(t, pool, `SELECT email_reply_token FROM conversations WHERE id=$1`, conversationID)
+	token := queryString(t, pool, `SELECT substr(key,13) FROM conversation_thread_keys WHERE conversation_id=$1 AND channel_type='email'`, conversationID)
 
 	reply := inboundOK(t, api, secret, mail([]string{
 		"From: eli@customer.example", "To: support+r-" + token + "@token.example.com",
@@ -153,7 +153,7 @@ func TestInboundLoopAndAutoReplyMailIsDropped(t *testing.T) {
 	secret := connectEmail(t, api, admin, "support@loop.example.com")
 	first := inboundOK(t, api, secret, mail([]string{"From: gus@customer.example", "Subject: Real", "Message-ID: <real@customer.example>"}, "Real mail."))
 	_ = create(t, api, admin, "/api/v1/conversations/"+*first.ConversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Answer."})
-	ourMessageID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE kind='outgoing'`)
+	ourMessageID := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE kind='outgoing'`)
 
 	cases := map[string][]string{
 		"auto_submitted": {"From: gus@customer.example", "Subject: Out of office", "Message-ID: <ooo@customer.example>", "Auto-Submitted: auto-replied", "In-Reply-To: <" + ourMessageID + ">"},
@@ -217,8 +217,8 @@ func TestInboundSecretOfWorkspaceACannotWriteIntoWorkspaceB(t *testing.T) {
 		"From: ivy@customer.example", "To: support@beta.example.com", "Subject: Beta thread", "Message-ID: <beta-1@customer.example>",
 	}, "Beta only."))
 	_ = create(t, api, adminB, "/api/v1/conversations/"+*threadB.ConversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Beta answer."})
-	tokenB := queryString(t, pool, `SELECT email_reply_token FROM conversations WHERE id=$1`, *threadB.ConversationID)
-	outgoingB := queryString(t, pool, `SELECT email_message_id FROM messages WHERE conversation_id=$1 AND kind='outgoing'`, *threadB.ConversationID)
+	tokenB := queryString(t, pool, `SELECT substr(key,13) FROM conversation_thread_keys WHERE conversation_id=$1 AND channel_type='email'`, *threadB.ConversationID)
+	outgoingB := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE conversation_id=$1 AND kind='outgoing'`, *threadB.ConversationID)
 
 	attack := inboundOK(t, api, secretA, mail([]string{
 		"From: ivy@customer.example", "To: support+r-" + tokenB + "@beta.example.com", "Subject: Re: Beta thread",
