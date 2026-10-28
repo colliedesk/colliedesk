@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/media"
@@ -113,16 +114,26 @@ func (a *API) createKBCollection(response http.ResponseWriter, request *http.Req
 		slug = *input.Slug
 	}
 	who := principal(request)
-	collection, err := a.store.CreateKBCollection(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
-		store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position})
-	if err != nil {
-		writeKBError(response, err)
-		return
+	parent := ""
+	if input.ParentID != nil {
+		parent = *input.ParentID
 	}
-	writeJSON(response, http.StatusCreated, collection)
+	a.createOnce(response, request, createKBCollectionOperation, []string{input.Name, slug, input.Description, parent, strconv.Itoa(input.Position)}, func(ctx context.Context) (any, error) {
+		collection, err := a.store.CreateKBCollection(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
+			store.KBCollectionInput{Name: input.Name, Slug: slug, Description: input.Description, ParentID: input.ParentID, Position: input.Position})
+		if err != nil {
+			writeKBError(response, err)
+			return nil, errAnswered
+		}
+		return collection, nil
+	})
 }
 
 func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Request) {
+	// A collection's name, slug and place are the help center's navigation.
+	if a.askUnlessHeld(response, request, kbCollectionUpdateRoute, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+		return
+	}
 	var input struct {
 		UpdatedAt   *time.Time      `json:"updated_at"`
 		Name        *string         `json:"name"`
@@ -157,6 +168,9 @@ func (a *API) updateKBCollection(response http.ResponseWriter, request *http.Req
 }
 
 func (a *API) deleteKBCollection(response http.ResponseWriter, request *http.Request) {
+	if a.askUnlessHeld(response, request, kbCollectionDeleteRoute, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+		return
+	}
 	seen, ok := seenAt(response, request)
 	if !ok {
 		return
@@ -170,6 +184,9 @@ func (a *API) deleteKBCollection(response http.ResponseWriter, request *http.Req
 }
 
 func (a *API) restoreKBCollection(response http.ResponseWriter, request *http.Request) {
+	if a.askUnlessHeld(response, request, kbCollectionUndeleteRoute, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+		return
+	}
 	seen, ok := seenInBody(response, request)
 	if !ok {
 		return
@@ -189,6 +206,10 @@ func (a *API) restoreKBCollection(response http.ResponseWriter, request *http.Re
 
 // setKBOrder puts the collections and articles directly under one parent in the order given.
 func (a *API) setKBOrder(response http.ResponseWriter, request *http.Request) {
+	// The order is public navigation, like a collection's name and place.
+	if a.askUnlessHeld(response, request, Route{http.MethodPut, "/api/v1/kb/order", auth.PermissionConversationsWrite}, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+		return
+	}
 	var input struct {
 		ParentID      json.RawMessage `json:"parent_id"`
 		CollectionIDs *[]string       `json:"collection_ids"`
@@ -301,10 +322,77 @@ func (a *API) getKBArticle(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	a.addressKBArticle(request, &article.KBArticleSummary)
+	drafts, err := a.ai.ArticleDraftsThisMonth(request.Context(), principal(request).Workspace.ID, article.ID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	article.AIDraftsThisMonth = &drafts
 	writeJSON(response, http.StatusOK, article)
 }
 
+// Publishing changes what the public help center shows, which reaches customers: a token without
+// kb_articles:publish may write drafts, and a change to what the help center shows (a published
+// article, the media in one, a collection) waits for a person (an agent request), however the route
+// itself is classified.
+var (
+	kbArticleCreateRoute        = Route{http.MethodPost, "/api/v1/kb/articles", auth.PermissionConversationsWrite}
+	kbArticleUpdateRoute        = Route{http.MethodPatch, "/api/v1/kb/articles/{id}", auth.PermissionConversationsWrite}
+	kbArticleVersionRoute       = Route{http.MethodPost, "/api/v1/kb/articles/{id}/versions/{version}/restore", auth.PermissionConversationsWrite}
+	kbArticleDeleteRoute        = Route{http.MethodDelete, "/api/v1/kb/articles/{id}", auth.PermissionConversationsWrite}
+	kbArticleUndeleteRoute      = Route{http.MethodPost, "/api/v1/kb/articles/{id}/restore", auth.PermissionConversationsWrite}
+	kbCollectionUpdateRoute     = Route{http.MethodPatch, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite}
+	kbCollectionDeleteRoute     = Route{http.MethodDelete, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite}
+	kbCollectionUndeleteRoute   = Route{http.MethodPost, "/api/v1/kb/collections/{id}/restore", auth.PermissionConversationsWrite}
+	kbMediaReplaceRoute         = Route{http.MethodPost, "/api/v1/kb/media/{id}/replace", auth.PermissionConversationsWrite}
+	kbMediaReplacementUndoRoute = Route{http.MethodPost, "/api/v1/kb/media-replacements/{id}/undo", auth.PermissionConversationsWrite}
+)
+
+// askUnlessHeld files the call as an agent request and reports true when the token lacks permission
+// and the change applies (public reports whether it would alter what people outside see). body is
+// the call as it came, nil to read it now. A failed check is answered and reported true.
+func (a *API) askUnlessHeld(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, permission string, body json.RawMessage,
+	public func() (bool, error)) bool {
+	if who.Allows(permission) {
+		return false
+	}
+	if public != nil {
+		applies, err := public()
+		if err != nil {
+			writeKBError(response, err)
+			return true
+		}
+		if !applies {
+			return false
+		}
+	}
+	if body == nil {
+		body = keepBody(request)
+	}
+	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, body, "")
+	return true
+}
+
+// articleIsPublished is the check askUnlessHeld runs for a change to one article.
+func (a *API) articleIsPublished(request *http.Request, who auth.Principal) func() (bool, error) {
+	return func() (bool, error) {
+		return a.store.KBArticlePublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+	}
+}
+
+// keepBody reads the request body so a handler can both decode it and, when it must wait for a
+// person, file it as it came.
+func keepBody(request *http.Request) json.RawMessage {
+	if request.Body == nil {
+		return json.RawMessage{}
+	}
+	raw, _ := io.ReadAll(io.LimitReader(request.Body, 1<<20))
+	request.Body = io.NopCloser(bytes.NewReader(raw))
+	return raw
+}
+
 func (a *API) createKBArticle(response http.ResponseWriter, request *http.Request) {
+	raw := keepBody(request)
 	var input struct {
 		CollectionID string  `json:"collection_id"`
 		Title        string  `json:"title"`
@@ -325,18 +413,24 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		slug = *input.Slug
 	}
 	who := principal(request)
-	article, err := a.store.CreateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
-		store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status})
-	if err != nil {
-		writeKBError(response, err)
+	if input.Status == "published" && a.askUnlessHeld(response, request, kbArticleCreateRoute, who, auth.PermKBArticlesPublish, raw, nil) {
 		return
 	}
-	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
-	a.addressKBArticle(request, &article.KBArticleSummary)
-	writeJSON(response, http.StatusCreated, article)
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, input.Title, slug, *input.BodyMD, input.Status}, func(ctx context.Context) (any, error) {
+		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
+			store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status})
+		if err != nil {
+			writeKBError(response, err)
+			return nil, errAnswered
+		}
+		a.warnMissingKBMedia(ctx, who.Workspace.ID, &article)
+		a.addressKBArticle(request, &article.KBArticleSummary)
+		return article, nil
+	})
 }
 
 func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Request) {
+	raw := keepBody(request)
 	var input struct {
 		UpdatedAt    *time.Time `json:"updated_at"`
 		Title        *string    `json:"title"`
@@ -351,6 +445,16 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	who := principal(request)
+	// Making an article published, or changing one that is, changes the help center.
+	publishes := func() (bool, error) {
+		if input.Status != nil && *input.Status == "published" {
+			return true, nil
+		}
+		return a.store.KBArticlePublished(request.Context(), who.Workspace.ID, request.PathValue("id"))
+	}
+	if a.askUnlessHeld(response, request, kbArticleUpdateRoute, who, auth.PermKBArticlesPublish, raw, publishes) {
+		return
+	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
 		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: input.CollectionID, Status: input.Status})
 	if err != nil {
@@ -363,6 +467,10 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 }
 
 func (a *API) deleteKBArticle(response http.ResponseWriter, request *http.Request) {
+	// Trashing a published article takes it off the help center.
+	if a.askUnlessHeld(response, request, kbArticleDeleteRoute, principal(request), auth.PermKBArticlesPublish, nil, a.articleIsPublished(request, principal(request))) {
+		return
+	}
 	seen, ok := seenAt(response, request)
 	if !ok {
 		return
@@ -376,6 +484,10 @@ func (a *API) deleteKBArticle(response http.ResponseWriter, request *http.Reques
 }
 
 func (a *API) restoreKBArticle(response http.ResponseWriter, request *http.Request) {
+	// A published article back from the trash is back on the help center.
+	if a.askUnlessHeld(response, request, kbArticleUndeleteRoute, principal(request), auth.PermKBArticlesPublish, nil, a.articleIsPublished(request, principal(request))) {
+		return
+	}
 	seen, ok := seenInBody(response, request)
 	if !ok {
 		return
@@ -386,6 +498,25 @@ func (a *API) restoreKBArticle(response http.ResponseWriter, request *http.Reque
 		writeError(response, http.StatusNotFound, "not_found", "No article with this id is in the trash.")
 		return
 	}
+	if err != nil {
+		writeKBError(response, err)
+		return
+	}
+	a.addressKBArticle(request, &article.KBArticleSummary)
+	writeJSON(response, http.StatusOK, article)
+}
+
+func (a *API) excludeKBArticleFromAI(response http.ResponseWriter, request *http.Request) {
+	a.setKBArticleAIExcluded(response, request, true)
+}
+
+func (a *API) includeKBArticleInAI(response http.ResponseWriter, request *http.Request) {
+	a.setKBArticleAIExcluded(response, request, false)
+}
+
+func (a *API) setKBArticleAIExcluded(response http.ResponseWriter, request *http.Request, excluded bool) {
+	who := principal(request)
+	article, err := a.store.SetKBArticleAIExcluded(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), excluded)
 	if err != nil {
 		writeKBError(response, err)
 		return
@@ -426,11 +557,16 @@ func (a *API) restoreKBArticleVersion(response http.ResponseWriter, request *htt
 		writeError(response, http.StatusNotFound, "not_found", "The article has no version with that number.")
 		return
 	}
+	raw := keepBody(request)
 	seen, ok := seenInBody(response, request)
 	if !ok {
 		return
 	}
 	who := principal(request)
+	// Restoring a version of a published article changes what the help center shows.
+	if a.askUnlessHeld(response, request, kbArticleVersionRoute, who, auth.PermKBArticlesPublish, raw, a.articleIsPublished(request, who)) {
+		return
+	}
 	article, err := a.store.RestoreKBArticleVersion(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), version, seen)
 	if err != nil {
 		writeKBError(response, err)

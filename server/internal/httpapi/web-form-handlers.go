@@ -8,26 +8,28 @@ import (
 	"mime"
 	"net/http"
 	"net/mail"
-	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/channels/webform"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 const (
-	webFormPathPrefix    = "/api/v1/public/forms/"
+	webFormPathPrefix    = webform.SubmitPathPrefix
 	webFormSubmitPattern = webFormPathPrefix + "{workspace_slug}"
-	maxWebFormBody       = 64 << 10
-	maxWebFormMessage    = 5000
-	maxWebFormSource     = 100
-	maxWebFormEmail      = 254
-	maxWebFormOrigins    = 20
-	webFormPreflightAge  = "600"
+	// webFormChannelPattern is one form's own address, by its channel id.
+	webFormChannelPattern = webform.ChannelSubmitPathPrefix + "{channel_id}"
+	maxWebFormBody        = 64 << 10
+	maxWebFormMessage     = 5000
+	maxWebFormSource      = 100
+	maxWebFormEmail       = 254
+	webFormPreflightAge   = "600"
 )
 
 // slugShape is the shape the workspaces table enforces; anything else cannot be a workspace.
@@ -40,7 +42,10 @@ func (a *API) getWebForm(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
-	form.SubmitPath = webFormPathPrefix + who.Workspace.Slug
+	form.SubmitPath = webform.SubmitPath(form, who.Workspace.Slug)
+	if form.ChannelID == "" {
+		form.SubmitPath = webFormPathPrefix + who.Workspace.Slug
+	}
 	writeJSON(response, http.StatusOK, form)
 }
 
@@ -64,43 +69,12 @@ func (a *API) putWebForm(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
-	form.SubmitPath = webFormPathPrefix + who.Workspace.Slug
+	form.SubmitPath = webform.SubmitPath(form, who.Workspace.Slug)
 	writeJSON(response, http.StatusOK, form)
 }
 
 // normalizeOrigins lowercases, validates and de-duplicates the allowed origins, keeping their order.
-func normalizeOrigins(values []string) ([]string, error) {
-	origins := make([]string, 0, len(values))
-	for _, value := range values {
-		origin, ok := normalizeOrigin(value)
-		if !ok {
-			return nil, fmt.Errorf("Invalid origin %q: use an exact origin such as https://example.com, with no path, wildcard or credentials.", value)
-		}
-		if !slices.Contains(origins, origin) {
-			origins = append(origins, origin)
-		}
-	}
-	if len(origins) > maxWebFormOrigins {
-		return nil, fmt.Errorf("At most %d origins are allowed.", maxWebFormOrigins)
-	}
-	return origins, nil
-}
-
-func normalizeOrigin(value string) (string, bool) {
-	if value == "" || strings.ContainsAny(value, "*\\ \t\r\n") {
-		return "", false
-	}
-	parsed, err := url.Parse(value)
-	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" ||
-		parsed.Fragment != "" || parsed.Opaque != "" || parsed.ForceQuery || strings.HasSuffix(value, "/") {
-		return "", false
-	}
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return "", false
-	}
-	return scheme + "://" + strings.ToLower(parsed.Host), true
-}
+func normalizeOrigins(values []string) ([]string, error) { return webform.NormalizeOrigins(values) }
 
 // allowedOrigin reports whether the request's Origin header is on the workspace's list.
 func allowedOrigin(request *http.Request, origins []string) (string, bool) {
@@ -124,23 +98,39 @@ func (a *API) refuseBusyAddress(response http.ResponseWriter, client string) boo
 	return true
 }
 
+// openRequestedForm reads the form a public request names, after wellFormedFormName: by the workspace
+// slug (its default form) or by its channel id.
+func (a *API) openRequestedForm(request *http.Request) (store.OpenForm, bool, error) {
+	if slug := request.PathValue("workspace_slug"); slug != "" {
+		return a.store.OpenWebForm(request.Context(), slug)
+	}
+	return a.store.OpenWebFormChannel(request.Context(), request.PathValue("channel_id"))
+}
+
+// wellFormedFormName reports whether the request names a form in a shape one can have, before any lookup.
+func wellFormedFormName(request *http.Request) bool {
+	if slug := request.PathValue("workspace_slug"); slug != "" {
+		return len(slug) <= 63 && slugShape.MatchString(slug)
+	}
+	return uuidShape.MatchString(request.PathValue("channel_id"))
+}
+
 // preflightWebForm answers the browser's CORS preflight. Every refusal is the same 404 as a
 // missing form, so an origin that is not listed learns nothing about the workspace.
 func (a *API) preflightWebForm(response http.ResponseWriter, request *http.Request) {
-	slug := request.PathValue("workspace_slug")
-	if len(slug) > 63 || !slugShape.MatchString(slug) {
+	if !wellFormedFormName(request) {
 		writeFormNotFound(response)
 		return
 	}
 	if a.refuseBusyAddress(response, clientAddress(request, a.config.TrustedProxies)) {
 		return
 	}
-	_, origins, open, err := a.store.OpenWebForm(request.Context(), slug)
+	form, open, err := a.openRequestedForm(request)
 	if err != nil {
 		writeInternalError(response, err)
 		return
 	}
-	origin, listed := allowedOrigin(request, origins)
+	origin, listed := allowedOrigin(request, form.Origins)
 	if !open || !listed {
 		writeFormNotFound(response)
 		return
@@ -148,7 +138,7 @@ func (a *API) preflightWebForm(response http.ResponseWriter, request *http.Reque
 	header := response.Header()
 	header.Set("Access-Control-Allow-Origin", origin)
 	header.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	header.Set("Access-Control-Allow-Headers", "Content-Type")
+	header.Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
 	header.Set("Access-Control-Max-Age", webFormPreflightAge)
 	header.Set("Vary", "Origin")
 	response.WriteHeader(http.StatusNoContent)
@@ -157,8 +147,7 @@ func (a *API) preflightWebForm(response http.ResponseWriter, request *http.Reque
 // submitWebForm opens a conversation from a public website form. It sends nothing to the submitter.
 // A form that is unknown, off or locked answers one and the same 404.
 func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request) {
-	slug := request.PathValue("workspace_slug")
-	if len(slug) > 63 || !slugShape.MatchString(slug) {
+	if !wellFormedFormName(request) {
 		writeFormNotFound(response)
 		return
 	}
@@ -166,7 +155,7 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	if a.refuseBusyAddress(response, client) {
 		return
 	}
-	workspaceID, origins, open, err := a.store.OpenWebForm(request.Context(), slug)
+	form, open, err := a.openRequestedForm(request)
 	if err != nil {
 		writeInternalError(response, err)
 		return
@@ -177,11 +166,12 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	}
 	header := response.Header()
 	header.Add("Vary", "Origin")
-	if origin, listed := allowedOrigin(request, origins); listed {
+	if origin, listed := allowedOrigin(request, form.Origins); listed {
 		header.Set("Access-Control-Allow-Origin", origin)
 	}
-	// Only a form that exists is charged to the address-and-workspace bucket, so junk slugs cannot fill it.
-	if allowed, wait := a.webForms.allow(client+"|"+slug, a.now()); !allowed {
+	// Only a form that exists is charged to the address-and-form bucket, so junk names cannot fill it;
+	// both addresses of the default form share one bucket.
+	if allowed, wait := a.webForms.allow(client+"|"+form.ChannelID, a.now()); !allowed {
 		header.Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many submissions. Try again in a minute.")
 		return
@@ -190,6 +180,13 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	// answers for listed origins alone. text/plain would skip that check.
 	if media, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err != nil || media != "application/json" {
 		writeError(response, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send the form as application/json.")
+		return
+	}
+
+	// A page may name each press with an Idempotency-Key, so a retry of the same press stores one message.
+	press, ok := idempotencyKey(request)
+	if !ok {
+		writeInvalidIdempotencyKey(response)
 		return
 	}
 
@@ -212,12 +209,17 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	submission, fields := validateWebForm(input.Email, input.Message, input.Source)
 	if len(fields) > 0 {
 		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": errorBody(response, map[string]any{
-			"code": "validation_failed", "message": "Check the highlighted fields.", "fields": fields})})
+			"code": "validation_failed", "message": webFormFieldsMessage(fields), "fields": fields})})
 		return
 	}
-	err = a.store.SubmitWebForm(request.Context(), workspaceID, submission)
+	if press != "" {
+		// The key is the visitor's own, so it names a submission only together with its form and words: the
+		// same key with other words is a new submission, and nobody's key can drop another's message.
+		submission.Press = store.RequestFingerprint(form.ChannelID, press, submission.Email, submission.Message, submission.Source)
+	}
+	err = a.submitToWebForm(request, form, submission)
 	switch {
-	case errors.Is(err, domain.ErrWebFormClosed):
+	case errors.Is(err, domain.ErrWebFormClosed), errors.Is(err, channels.ErrChannelOff), errors.Is(err, domain.ErrMailboxClosed):
 		header.Del("Access-Control-Allow-Origin")
 		writeFormNotFound(response)
 	case errors.Is(err, store.ErrRateLimited):
@@ -231,6 +233,18 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 }
 
 // validateWebForm checks the public input and returns the normalized submission, or one message per bad field.
+// webFormFieldsMessage says what to fix in one sentence a page can show as it is: each failing field's
+// own message, in the order of the form.
+func webFormFieldsMessage(fields map[string]string) string {
+	var parts []string
+	for _, name := range []string{"email", "message", "source"} {
+		if text := fields[name]; text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 func validateWebForm(emailAddress, message, source string) (store.WebFormSubmission, map[string]string) {
 	fields := map[string]string{}
 	emailAddress = strings.TrimSpace(emailAddress)
@@ -244,15 +258,33 @@ func validateWebForm(emailAddress, message, source string) (store.WebFormSubmiss
 	}
 	message = strings.ReplaceAll(message, "\x00", "")
 	if utf8.RuneCountInString(message) > maxWebFormMessage {
-		fields["message"] = fmt.Sprintf("Keep the message under %d characters.", maxWebFormMessage)
+		fields["message"] = "Message is too long: at most 5,000 characters."
 	}
 	// A subject is one line: collapse every run of whitespace, line breaks included.
 	source = strings.Join(strings.Fields(strings.ReplaceAll(source, "\x00", "")), " ")
 	if utf8.RuneCountInString(source) > maxWebFormSource {
-		fields["source"] = fmt.Sprintf("Keep the source under %d characters.", maxWebFormSource)
+		fields["source"] = fmt.Sprintf("Source is too long: at most %d characters.", maxWebFormSource)
 	}
 	if len(fields) > 0 {
 		return store.WebFormSubmission{}, fields
 	}
 	return store.WebFormSubmission{Email: strings.ToLower(emailAddress), Message: strings.TrimSpace(message), Source: source}, nil
+}
+
+// submitToWebForm hands a submission to the form's channel. A form turned off, removed or a workspace
+// locked since it was opened answers like a form that does not exist.
+func (a *API) submitToWebForm(request *http.Request, form store.OpenForm, submission store.WebFormSubmission) error {
+	channel, err := a.store.GetChannel(request.Context(), form.WorkspaceID, form.ChannelID)
+	if err != nil {
+		return err
+	}
+	if !channel.Live() {
+		return domain.ErrWebFormClosed
+	}
+	body, err := json.Marshal(webform.Submission{Email: submission.Email, Message: submission.Message, Source: submission.Source, Press: submission.Press})
+	if err != nil {
+		return err
+	}
+	_, err = a.pipeline.Receive(request.Context(), channel, []channels.Raw{{JSON: body, ReceivedAt: a.now()}})
+	return err
 }

@@ -215,7 +215,7 @@ func TestACopiedPersonsReplyAllThreadsAndKeepsTheContact(t *testing.T) {
 	if err := json.Unmarshal([]byte(reply.Body), &sent); err != nil {
 		t.Fatal(err)
 	}
-	ourID := queryString(t, d.pool, `SELECT email_message_id FROM messages WHERE id=$1`, sent.ID)
+	ourID := queryString(t, d.pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, sent.ID)
 	result := inboundOK(t, d.api, d.secret, mail([]string{
 		"From: Boss <boss@customer.example>", "To: support@cc.example.com, ada@customer.example", "Subject: Re: Invoice",
 		"Message-ID: <boss-reply-all@customer.example>", "In-Reply-To: <" + ourID + ">", "References: <cc-start@customer.example> <" + ourID + ">",

@@ -110,7 +110,7 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 	}
 	created, err := a.store.CreateAgentRequest(request.Context(), who.Workspace.ID, store.NewAgentRequest{
 		TokenID: who.SessionID, AgentID: who.Agent.ID, Kind: kind, Method: route.Method, Route: route.Pattern, Path: path,
-		Body: body, Summary: clip(summary), ConversationID: conversationID, SavedReply: savedReply,
+		Body: body, Summary: clip(summary), ConversationID: conversationID, SavedReply: savedReply, TokenPermissions: who.HeldPermissions(),
 	})
 	var rate *domain.AgentRequestRateError
 	if errors.As(err, &rate) {
@@ -161,10 +161,23 @@ var requestTitles = map[string]string{
 	"POST /api/v1/channels/email/secret":                         "Rotate the inbound email secret",
 	"POST " + gmailPath:                                          "Connect Gmail for sending replies",
 	"DELETE " + gmailPath:                                        "Disconnect Gmail",
+	"POST /api/v1/channels/{id}/email/secret":                    "Rotate the inbound secret of an email channel",
+	"POST " + channelGmailPath:                                   "Connect Gmail to an email channel",
+	"DELETE " + channelGmailPath:                                 "Disconnect Gmail from an email channel",
+	"POST " + microsoftPath:                                      "Connect Microsoft 365 for sending replies",
+	"DELETE " + microsoftPath:                                    "Disconnect Microsoft 365",
+	"POST " + channelMicrosoftPath:                               "Connect Microsoft 365 to an email channel",
+	"DELETE " + channelMicrosoftPath:                             "Disconnect Microsoft 365 from an email channel",
+	"DELETE /api/v1/channels/{id}":                               "Remove a channel",
+	"POST /api/v1/channels/{id}/held/discard":                    "Discard the held messages of a channel",
 	"PATCH /api/v1/workspace/slug":                               "Change the workspace address",
 	"PATCH /api/v1/workspace/timezone":                           "Change the workspace timezone",
 	"PATCH /api/v1/workspace/name":                               "Rename the workspace",
 	"PATCH /api/v1/agents/me/timezone":                           "Change my timezone",
+	"PATCH /api/v1/agents/me/results-email":                      "Turn my weekly results email on or off",
+	"GET /api/v1/results/share-link":                             "Show the results share link",
+	"POST /api/v1/results/share-link":                            "Create a share link of the results page",
+	"DELETE /api/v1/results/share-link":                          "Turn off the results share link",
 	"PATCH /api/v1/agents/me/display-name":                       "Change my display name",
 	"PATCH /api/v1/agents/{id}":                                  "Change a team member",
 	"POST /api/v1/auth/invites":                                  "Invite a team member",
@@ -175,6 +188,7 @@ var requestTitles = map[string]string{
 	"PUT /api/v1/kb/order":                                       "Reorder knowledge base collections and articles",
 	"PUT /api/v1/channels/email":                                 "Change the email channel",
 	"POST /api/v1/channels/email/domain-verification":            "Verify the email domain",
+	"POST /api/v1/channels/{id}/email/domain-verification":       "Verify the domain of an email channel",
 	"GET /api/v1/billing":                                        "Read the plan and billing status",
 	"POST /api/v1/saved-replies":                                 "Create a saved reply",
 	"PATCH /api/v1/saved-replies/{id}":                           "Edit a saved reply",
@@ -216,13 +230,13 @@ func (a *API) summarizeConversationStart(response http.ResponseWriter, request *
 			writeStoreError(response, err)
 			return "", false
 		}
-		to = contact.Email
+		to = contact.EmailOf()
 	default:
 		writeError(response, http.StatusBadRequest, "invalid_request", "A subject and either contact_id or a new contact are required.")
 		return "", false
 	}
-	if len(call.CC) > 0 && !auth.ScopeAllows(who.Scope, auth.ScopeSend) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A token below send cannot copy anyone on a new conversation; a person can add copies on a later reply.")
+	if len(call.CC) > 0 && !who.Allows(auth.PermMessagesSend) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "A token without messages:send cannot copy anyone on a new conversation; a person can add copies on a later reply.")
 		return "", false
 	}
 	return "Start a conversation by email (to " + to + "): " + strings.Join(strings.Fields(call.Subject), " ") + ": " +

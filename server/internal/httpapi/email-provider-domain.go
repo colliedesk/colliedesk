@@ -44,9 +44,8 @@ func (a *API) ownsDomain(ctx context.Context, channel domain.EmailChannel) (bool
 // recorded when the provider cannot be reached, so a failed call never looks like a verification.
 func (a *API) verifyProviderDomain(response http.ResponseWriter, request *http.Request) {
 	ctx, workspace := request.Context(), principal(request).Workspace
-	channel, err := a.store.GetEmailChannel(ctx, workspace.ID)
-	if err != nil {
-		writeInternalError(response, err)
+	channel, ok := a.requestedEmailChannel(response, request)
+	if !ok {
 		return
 	}
 	if channel == nil {
@@ -71,7 +70,7 @@ func (a *API) verifyProviderDomain(response http.ResponseWriter, request *http.R
 	provider, current, err := a.checkProviderDomain(ctx, workspace.ID, *channel)
 	if err == nil {
 		var saved domain.EmailChannel
-		if saved, err = a.store.SaveProviderDomain(ctx, workspace.ID, current.SupportAddress, providerDomain(provider), time.Now().UTC()); err == nil {
+		if saved, err = a.store.SaveProviderDomain(ctx, workspace.ID, current.ChannelID, current.SupportAddress, providerDomain(provider), time.Now().UTC()); err == nil {
 			if !provider.Verified() {
 				writeError(response, http.StatusConflict, "dns_record_not_verified", unverifiedMessage(saved.DNSRecords))
 				return
@@ -117,7 +116,7 @@ func (a *API) checkProviderDomain(ctx context.Context, workspaceID string, chann
 			if err != nil {
 				return resend.Domain{}, channel, err
 			}
-			attached, ok, err := a.store.AttachProviderDomain(ctx, workspaceID, channel.SupportAddress, stored, providerDomain(created), time.Now().UTC())
+			attached, ok, err := a.store.AttachProviderDomain(ctx, workspaceID, channel.ChannelID, channel.SupportAddress, stored, providerDomain(created), time.Now().UTC())
 			if err != nil || !ok {
 				if queueErr := a.store.QueueProviderDomainDeletion(context.WithoutCancel(ctx), workspaceID, created.ID); queueErr != nil {
 					slog.Error("queue email provider domain that was not stored", "workspace", workspaceID, "domain", created.ID, "error", queueErr)
@@ -126,7 +125,7 @@ func (a *API) checkProviderDomain(ctx context.Context, workspaceID string, chann
 					return resend.Domain{}, channel, err
 				}
 				// Another request stored a domain first, or the address changed: read it again.
-				fresh, err := a.store.GetEmailChannel(ctx, workspaceID)
+				fresh, err := a.store.GetEmailChannelByID(ctx, workspaceID, channel.ChannelID)
 				if err != nil {
 					return resend.Domain{}, channel, err
 				}

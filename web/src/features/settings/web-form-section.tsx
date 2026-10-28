@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { z } from 'zod';
+import { InvalidRequestError, request } from '../../api/client';
+import { useCreateAction } from '../../api/use-create';
+import type { ReactNode } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
 import { messages } from '../../messages';
+import { channelSetupMessages } from './channel-setup-messages';
+import { CopyButton } from './copy-button';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 
@@ -9,37 +15,136 @@ interface WebFormSectionProps {
   canManage: boolean;
   save?: SaveState;
   onSave?: (enabled: boolean, origins: string[]) => void;
+  // part 'embed' is the form as a channel tab shows it: no section frame, and no on/off checkbox, since the
+  // channel's own switch turns it on and off.
+  part?: 'all' | 'embed';
+  // nameField is the form's name, first, where the form is being added.
+  nameField?: ReactNode;
 }
 
 function parseOrigins(text: string): string[] {
   return text.split('\n').map((line) => line.trim()).filter(Boolean);
 }
 
-export function WebFormSection({ settings, canManage, save, onSave }: WebFormSectionProps) {
+export function WebFormSection({ settings, canManage, save, onSave, part = 'all', nameField }: WebFormSectionProps) {
+  const originsHelp = useId();
   const [enabled, setEnabled] = useState(settings?.enabled ?? false);
   const [origins, setOrigins] = useState((settings?.allowed_origins ?? []).join('\n'));
   useEffect(() => setEnabled(settings?.enabled ?? false), [settings?.enabled]);
   useEffect(() => setOrigins((settings?.allowed_origins ?? []).join('\n')), [settings?.allowed_origins]);
   const feedback = useSaveFeedback(save);
   const state = settings?.enabled ? messages.webFormOn : messages.webFormOff;
-  return (
-    <section className="settings-card" aria-labelledby="web-form-heading">
-      <div className="section-heading"><h2 id="web-form-heading">{messages.webForm}</h2><p>{messages.webFormDescription}</p></div>
-      <div className="settings-body">
-        <p role="status" className="saved-state" data-on={settings?.enabled ? 'true' : 'false'}>{state}</p>
+  const embed = part === 'embed';
+  // A form that also answers the workspace's older address shows its own address, the one a new site uses;
+  // the older one stays under a detail for a site that already sends to it.
+  const ownPath = settings?.legacy_slug && settings.channel_id ? `/api/v1/public/web-forms/${settings.channel_id}` : settings?.submit_path;
+  const submitURL = `${window.location.origin}${ownPath ?? ''}`;
+  const older = ownPath !== settings?.submit_path && settings ? `${window.location.origin}${settings.submit_path}` : undefined;
+  const body = <div className="settings-body">
+        {!embed && <p role="status" className="saved-state" data-on={settings?.enabled ? 'true' : 'false'}>{state}</p>}
         {canManage
           ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(enabled, parseOrigins(origins)); }}>
-              <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{messages.webFormAccept}</span></label>
+              {nameField}
+              {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{messages.webFormAccept}</span></label>}
               <label className="field"><span>{messages.webFormOrigins}</span>
-                <textarea rows={3} value={origins} placeholder="https://example.com" onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-              <small className="muted-copy">{messages.webFormOriginsHelp}</small>
+                <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={originsHelp} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
+              <small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
               <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveWebForm)}</button>
                 {feedback.status}</span>
             </form>
           : <ul className="muted-copy">{(settings?.allowed_origins ?? []).map((origin) => <li key={origin}>{origin}</li>)}</ul>}
+        {settings && <p>{tryMessages.what}</p>}
+        {settings && <TryForm path={settings.submit_path} />}
         {settings && <label className="invite-link"><span className="field-label">{messages.webFormSubmitUrl}</span>
-          <input readOnly value={`${window.location.origin}${settings.submit_path}`} /><small>{messages.webFormSubmitHelp}</small></label>}
-      </div>
+          <input readOnly value={submitURL} /><small>{messages.webFormSubmitHelp}{' '}
+            <a href={tryMessages.guideURL} target="_blank" rel="noreferrer">{tryMessages.guide}</a></small></label>}
+        {settings && embed && <EmbedCode url={submitURL} />}
+        {older && <details className="muted-copy"><summary>{olderMessages.summary}</summary><p>{olderMessages.body(older)}</p></details>}
+      </div>;
+  if (embed) return body;
+  return (
+    <section className="settings-card" aria-labelledby="web-form-heading">
+      <div className="section-heading"><h2 id="web-form-heading">{messages.webForm}</h2><p>{messages.webFormDescription}</p></div>
+      {body}
     </section>
   );
 }
+
+const tryMessages = {
+  what: 'Your website\'s contact form sends each visitor\'s email and message here, and each one opens a conversation in your inbox. Try it below to see one arrive.',
+  guide: 'Read the web form guide',
+  guideURL: 'https://colliedesk.com/docs/web-form',
+  heading: 'Try the form',
+  email: 'Your email',
+  message: 'Message',
+  messageDefault: 'Hello, this is a test of our web form.',
+  send: 'Try the form',
+  sending: 'Sending…',
+  source: 'Test from Colliedesk',
+  arrived: (email: string) => `It arrived: a conversation from ${email} is in your inbox.`,
+  openInbox: 'Open the inbox',
+  failed: 'The test did not arrive. Check that the form is on, then try again.',
+};
+
+// TryForm sends one submission to the form from this page, the way a visitor's browser would, so a team
+// sees it work before anyone touches their website. This page is on Colliedesk's own origin, which the
+// allowed origins do not need to list.
+function TryForm({ path }: { path: string }) {
+  const [email, setEmail] = useState('');
+  const [message, setMessage] = useState(tryMessages.messageDefault);
+  const [state, setState] = useState<{ sending?: boolean; arrived?: string; failed?: string }>({});
+  // A press sent again after a lost answer goes under the same key, so the inbox gets one test message.
+  const submit = useCreateAction(({ from, text }: { from: string; text: string }, key: string) =>
+    request(path, z.object({ ok: z.boolean() }), { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ email: from, message: text, source: tryMessages.source, website: '' }) }));
+  const send = () => {
+    if (submit.pending) return;
+    const from = email.trim();
+    setState({ sending: true });
+    submit.run({ from, text: message })
+      .then(() => setState({ arrived: from }), (error: unknown) => setState({ failed: error instanceof InvalidRequestError ? error.message : tryMessages.failed }));
+  };
+  return <section className="embed-code" aria-labelledby="try-form-heading">
+    <h3 id="try-form-heading" className="field-label">{tryMessages.heading}</h3>
+    <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); send(); }}>
+      <label className="field"><span>{tryMessages.email}</span><input type="text" inputMode="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+      <label className="field"><span>{tryMessages.message}</span><textarea rows={2} value={message} onChange={(event) => setMessage(event.target.value)} /></label>
+      <span className="button-row"><button type="submit" disabled={state.sending}>{state.sending ? tryMessages.sending : tryMessages.send}</button></span>
+    </form>
+    {state.arrived && <p role="status">{tryMessages.arrived(state.arrived)} <a href="/">{tryMessages.openInbox}</a></p>}
+    {state.failed && <p role="alert" className="error-copy">{state.failed}</p>}
+  </section>;
+}
+
+// The words of the Embed tab, which the Settings page never had; they load with the channel pages.
+const embedMessages = {
+  copyUrl: 'Copy submit URL',
+  code: 'Code for your page',
+  codeHelp: 'Send it from a page on an allowed origin, with the visitor\'s email and message. Keep the field named website empty. It is a trap for spam bots: a message with it filled in is thrown away.',
+  copyCode: 'Copy code',
+  codeCopied: 'Code copied',
+};
+
+// EmbedCode is the submit URL and the request a page sends to it, each with its copy button.
+function EmbedCode({ url }: { url: string }) {
+  const code = `// One key per press of the button: send the same key again if the page retries that press.
+const key = crypto.randomUUID();
+await fetch('${url}', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+  body: JSON.stringify({ email, message, source: 'contact-page', website: '' }),
+});`;
+  return <>
+    <span className="button-row"><CopyButton value={url} copiedText={messages.urlCopied}>{embedMessages.copyUrl}</CopyButton></span>
+    <section className="embed-code" aria-labelledby="embed-code-heading">
+      <h3 id="embed-code-heading" className="field-label">{embedMessages.code}</h3>
+      <pre><code>{code}</code></pre>
+      <p className="muted-copy">{embedMessages.codeHelp}</p>
+      <span className="button-row"><CopyButton value={code} copiedText={embedMessages.codeCopied}>{embedMessages.copyCode}</CopyButton></span>
+    </section>
+  </>;
+}
+
+const olderMessages = {
+  summary: 'Older address',
+  body: (address: string) => `This form also answers ${address}. Use it only if your website already sends to it; it keeps working. A new website uses the Submit URL above.`,
+};

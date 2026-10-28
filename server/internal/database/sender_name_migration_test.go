@@ -40,8 +40,13 @@ func TestSenderNameMigrationKeepsTheWorkspaceNameCustomersAlreadySee(t *testing.
 		t.Fatal(err)
 	}
 
-	if err := Migrate(ctx, pool); err != nil {
-		t.Fatalf("upgrade: %v", err)
+	// Up to the release before channels, which an older image could still run on after a rollback.
+	for _, name := range upMigrations(t) {
+		if name >= senderNameMigration && name < channelsMigration {
+			if err := applyMigration(ctx, pool, name); err != nil {
+				t.Fatalf("upgrade: %v", err)
+			}
+		}
 	}
 	want := map[string]string{
 		"plain":    "HC Labs",
@@ -73,6 +78,15 @@ func TestSenderNameMigrationKeepsTheWorkspaceNameCustomersAlreadySee(t *testing.
 		if got != expected {
 			t.Errorf("%s: sender_name=%q, want %q", slug, got, expected)
 		}
+	}
+	// The channels migration keeps every name.
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("upgrade to channels: %v", err)
+	}
+	var kept int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM email_channels ch JOIN workspaces w ON w.id=ch.workspace_id
+		WHERE (w.slug,ch.sender_name) IN (('plain','HC Labs'),('no-channel','No Channel'),('tab-name','Tab Desk'))`).Scan(&kept); err != nil || kept != 3 {
+		t.Fatalf("sender names kept through the channels migration: %d (%v)", kept, err)
 	}
 	for _, bad := range []string{"", strings.Repeat("x", 101), "Line\nbreak"} {
 		if _, err := pool.Exec(ctx, `UPDATE email_channels SET sender_name=$1 WHERE workspace_id=(SELECT id FROM workspaces WHERE slug='plain')`, bad); err == nil {

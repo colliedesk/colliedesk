@@ -25,16 +25,24 @@ const (
 	kbUpdatedAtProperty    = `"updated_at":{"type":"string","format":"date-time","maxLength":40,"description":"The updated_at as you last read it. If someone saved it since, nothing changes and you are told to read it again."}`
 	kbSlugProperty         = `"slug":{"type":"string","minLength":1,"maxLength":120,"description":"Lowercase letters and digits of any script joined by hyphens. Changing it changes the help center address; old addresses are not redirected."}`
 
+	// kbArticleChangeSchema is a saved reply change with the kinds only articles have: written by an
+	// import, a library item replaced in the text, AI kept away from the article or let read it again.
+	kbArticleChangeSchema = `{"type":["object","null"],"properties":{"version":{"type":"integer"},"kind":{"type":"string","enum":["create","edit","delete","restore","undelete","import","media_replace","ai_exclude","ai_include"]},` +
+		`"restored_from_version":{"type":["integer","null"]},"by":{"type":["string","null"],"description":"The person who made the change or approved the request that made it."},` +
+		`"via_token":{"type":["string","null"],"description":"Label of the agent token that made or asked for it; null when a person made it in the web app."},` +
+		`"agent_request_id":{"type":["string","null"]},"at":{"type":"string"}}}`
+
 	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","position","status","slug","published_at","updated_at","last_change","url","team_text"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` +
 		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
-		`"last_change":` + savedReplyChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
+		`"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
 
-	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","status","slug","published_at","updated_at","last_change","url","team_text","in_trash","translations"],"properties":{` +
+	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","status","slug","published_at","updated_at","last_change","url","team_text","in_trash","ai_exclusion","translations"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
-		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},"last_change":` + savedReplyChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + teamTextSchema + `,` +
+		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},"last_change":` + kbArticleChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + teamTextSchema + `,` +
 		`"in_trash":{"type":"boolean"},"has_source_html":{"type":"boolean","description":"An import kept the original HTML; it is in the workspace export."},` +
+		`"ai_exclusion":{"type":["object","null"],"description":"Set while AI may not read the article (colliedesk_kb_article_ai_exclude); null while it may.","required":["at","by"],"properties":{"at":{"type":"string"},"by":{"type":["string","null"]}}},` +
 		`"translations":{"type":"array","description":"Locales of translations an import brought in; the help center does not show them yet.","items":{"type":"string"}}}}`
 
 	kbArticleOutput = `{"type":"object","required":["article"],"properties":{"article":` + kbArticleSchema + `}}`
@@ -282,6 +290,34 @@ func kbArticleVersionRestoreSpec() Spec {
 			`"version":{"type":"integer","minimum":1}}}`,
 		Output: kbArticleOutput,
 		run:    kbArticleVersionRestore,
+	}
+}
+
+func kbArticleAIExcludeSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_kb_article_ai_exclude",
+		Title: "Keep a knowledge base article away from AI",
+		Description: `Stop reply drafts and triage suggestions from reading or quoting an article, in every language, from now on (ai_exclusion says since when and by whom). ` +
+			`People and the help center still see it; the text and updated_at do not change. Undo with colliedesk_kb_article_ai_include. Calling it again changes nothing. ` + kbProposeBelowSend + "\n\n" + kbTextNotice + "\n\nTier: send.",
+		Tier: "send", Idempotent: true,
+		REST:   []string{"POST /api/v1/kb/articles/{id}/ai-exclusion"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["article_id"],"properties":{` + kbArticleIDProperty + `}}`,
+		Output: kbArticleOutput,
+		run:    kbArticleAIExclude,
+	}
+}
+
+func kbArticleAIIncludeSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_kb_article_ai_include",
+		Title: "Let AI read a knowledge base article again",
+		Description: `Undo colliedesk_kb_article_ai_exclude: reply drafts and triage suggestions may read and quote the article again once it is published. Calling it again changes nothing. ` +
+			kbProposeBelowSend + "\n\n" + kbTextNotice + "\n\nTier: send.",
+		Tier: "send", Idempotent: true,
+		REST:   []string{"DELETE /api/v1/kb/articles/{id}/ai-exclusion"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["article_id"],"properties":{` + kbArticleIDProperty + `}}`,
+		Output: kbArticleOutput,
+		run:    kbArticleAIInclude,
 	}
 }
 

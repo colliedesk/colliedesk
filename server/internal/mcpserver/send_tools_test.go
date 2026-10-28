@@ -77,7 +77,7 @@ func TestReplyRetryRequeuesAFailedDelivery(t *testing.T) {
 	f := seedInbox(t, e)
 	e.rest(http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "help@inbox.example.com"}, f.w.admin)
 	reply := e.created("/api/v1/conversations/"+f.c2+"/messages", map[string]any{"kind": "outgoing", "body": "First try"}, f.w.admin)
-	if _, err := e.pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, reply); err != nil {
+	if _, err := e.pool.Exec(context.Background(), `UPDATE channel_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, reply); err != nil {
 		t.Fatal(err)
 	}
 	args := map[string]any{"conversation_id": f.c2, "message_id": reply}

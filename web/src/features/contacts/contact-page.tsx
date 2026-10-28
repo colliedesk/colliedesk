@@ -3,7 +3,7 @@ import { ConflictError } from '../../api/client';
 import type { Contact, ContactDetail, ContactMerge, Conversation } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { contactMessages } from './contact-messages';
+import { contactAddress, contactMessages } from './contact-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
 import { RouterLink } from '../../ui/router-link';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
@@ -50,11 +50,11 @@ export function ContactPage({ contact, conversations = [], page, pageSize, onPag
   const merged = contact.merged_into;
   const merge = onMerge && (async (duplicate: Contact) => {
     await onMerge(duplicate);
-    setNotice(contactMessages.mergedNotice(duplicate.email));
+    setNotice(contactMessages.mergedNotice(contactAddress(duplicate)));
   });
   const undo = onUndoMerge && (async (item: ContactMerge) => {
     await onUndoMerge(item);
-    setNotice(contactMessages.mergeUndoneNotice(item.merged_contact.email));
+    setNotice(contactMessages.mergeUndoneNotice(contactAddress(item.merged_contact)));
     // The undone row is gone with its button; the merge button is where merging starts again.
     mergeButton.current?.focus();
   });
@@ -64,12 +64,14 @@ export function ContactPage({ contact, conversations = [], page, pageSize, onPag
       <header className="contact-header">
         <ContactName contact={contact} onRename={merged ? undefined : onRename} onSaved={() => setNotice(contactMessages.nameSavedNotice)} />
         <dl className="contact-facts">
-          <div><dt>{contactMessages.contactEmail}</dt><dd>{contact.email}</dd></div>
+          <div><dt>{contactMessages.contactEmail}</dt><dd>{contact.email ?? contactMessages.noEmail}</dd></div>
+          {contact.identities?.map((identity) => <div key={`${identity.channel_id}:${identity.kind}:${identity.value}`}>
+            <dt>{contactMessages.contactOnChannel}</dt><dd>{identity.display_name ? `${identity.display_name} · ${identity.value}` : identity.value}</dd></div>)}
           {contact.organization && <div><dt>{contactMessages.contactOrganization}</dt><dd>{contact.organization}</dd></div>}
           <div><dt>{contactMessages.contactSince}</dt><dd><time dateTime={contact.created_at}>{formatDate(contact.created_at, timezone)}</time></dd></div>
         </dl>
       </header>
-      {merged && <p role="status" className="contact-merged-notice">{contactMessages.mergedIntoNotice(merged.name, merged.email)}{' '}
+      {merged && <p role="status" className="contact-merged-notice">{contactMessages.mergedIntoNotice(merged.name, contactAddress(merged))}{' '}
         <RouterLink href={`/contacts/${merged.id}`} onFollow={onOpenContact && (() => onOpenContact(merged.id))}>{contactMessages.openMergedInto}</RouterLink></p>}
       {!merged && onMerge && <div className="button-row">
         <button type="button" ref={mergeButton} data-opens="merge-dialog" onClick={() => setMerging(true)}>{contactMessages.mergeDuplicate}</button>
@@ -174,9 +176,9 @@ function MergeList({ merges, timezone, onUndo, onOpenContact }: { merges: Contac
         {merges.map((merge) => (
           <li key={merge.id}>
             <span><RouterLink href={`/contacts/${merge.merged_contact.id}`} onFollow={onOpenContact && (() => onOpenContact(merge.merged_contact.id))}>{merge.merged_contact.name}</RouterLink>{' '}
-              {contactMessages.mergedLine(merge.merged_contact.email, merge.conversation_ids.length)}{' '}
+              {contactMessages.mergedLine(contactAddress(merge.merged_contact), merge.conversation_ids.length)}{' '}
               <time className="muted-copy" dateTime={merge.merged_at}>{formatDate(merge.merged_at, timezone)}</time></span>
-            {onUndo && <button type="button" aria-label={contactMessages.undoMergeLabel(merge.merged_contact.email)} disabled={busy !== undefined}
+            {onUndo && <button type="button" aria-label={contactMessages.undoMergeLabel(contactAddress(merge.merged_contact))} disabled={busy !== undefined}
               onClick={() => void undo(merge)}>{contactMessages.undoMerge}</button>}
             {failed === merge.id && <p role="alert" className="error-copy">{contactMessages.undoMergeFailed}</p>}
           </li>
@@ -208,7 +210,7 @@ function MergeDialog({ contact, onMerge, onClose }: { contact: ContactDetail; on
   };
   return (
     <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={dialogKeys(root, onClose)}>
+      <div className="dialog merge-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={dialogKeys(root, onClose)}>
         <h2 id={titleId}>{contactMessages.mergeTitle(contact.name)}</h2>
         {!duplicate && <>
           <p className="muted-copy">{contactMessages.mergeIntro}</p>
@@ -216,7 +218,7 @@ function MergeDialog({ contact, onMerge, onClose }: { contact: ContactDetail; on
           <div className="button-row"><button type="button" onClick={onClose}>{messages.cancel}</button></div>
         </>}
         {duplicate && <>
-          <p>{contactMessages.mergeConfirm(`${duplicate.name} (${duplicate.email})`, contact.name, contact.email)}</p>
+          <p>{contactMessages.mergeConfirm(`${duplicate.name} (${contactAddress(duplicate)})`, contact.name, contactAddress(contact))}</p>
           {problem && <p role="alert" className="error-copy">{problem}</p>}
           <div className="button-row">
             <button type="button" className="primary-action" autoFocus disabled={sending} onClick={() => void merge()}>{sending ? contactMessages.merging : contactMessages.mergeAction}</button>

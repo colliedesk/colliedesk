@@ -48,10 +48,34 @@ To release one of those commits, re-run CI for it first or tag a later commit.
      failure there leaves a tag without an image or a GitHub release; delete the tag or fix and run
      Release again;
    - publishes `X.Y.Z` and `X.Y`, plus `latest` only when the tag is the highest stable version;
-   - creates a GitHub release with generated notes.
+   - builds the client files (below) before publishing anything, and attests them;
+   - creates a GitHub release with generated notes and attaches the client files.
 
 A tag with a hyphen (`v0.2.0-rc.1`) is a prerelease: it gets `X.Y.Z` only and the GitHub release is
 marked prerelease. Local and `go run` builds report `dev`.
 
 `install.sh` still defaults to `edge`. Switch its default to `latest` after the first stable release
 exists.
+
+## Client files
+
+Besides the image, a release carries what a person installs on their own computer to connect an
+AI host (`docs/user/connect-*.md`). `.github/scripts/client-assets.txt` names them, and both
+`.github/scripts/client-release.sh` (which builds them) and the tests read it:
+
+- `collie_<system>_<machine>.tar.gz` (`.zip` on Windows): `cmd/collie-client`, the about 6 MB
+  `collie` that only has `mcp`, `version` and `help`. Names follow `uname -s`/`uname -m` (and
+  PowerShell's `PROCESSOR_ARCHITECTURE`), so a guide's install command picks its file:
+  `Darwin_arm64`, `Darwin_x86_64`, `Linux_x86_64`, `Linux_aarch64`, `Windows_AMD64`, `Windows_ARM64`.
+- `colliedesk.mcpb`: the Claude Desktop extension, a ZIP of `cmd/collie-client/mcpb-manifest.json`
+  (its version set to the tag) and the binaries. The format picks a command per platform, not per
+  CPU, so macOS gets one universal binary, joined on Linux by `internal/release/universal` (lipo
+  is macOS only); Windows gets the x64 binary, which Windows on Arm also runs. The token is passed
+  only in `env` (`TestTheExtensionPassesTheTokenOnlyThroughTheEnvironment`).
+- `SHA256SUMS` of the files above. `actions/attest-build-provenance` attests every file, so
+  `gh attestation verify <file> -R colliedesk/colliedesk` proves it was built here.
+
+The guides link `releases/latest/download/<name>`, so a renamed file breaks them at the next
+release: change the name in `client-assets.txt` and the guides together. Try a build on a Mac with
+`sh .github/scripts/client-release.sh v0.0.0 <dir>` (needs Go, `jq` and `zip`). The binaries are not
+signed with an Apple or Windows certificate.

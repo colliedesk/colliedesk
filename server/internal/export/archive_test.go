@@ -117,7 +117,7 @@ func TestManifestListsCountsAndEveryAttachmentFile(t *testing.T) {
 	storage := memoryStorage{workspaceID + "/2c/" + helloSHA: "hello"}
 	var buf bytes.Buffer
 	writer := newWriter(t, &buf, storage)
-	if err := writer.Contact(export.Contact{ID: "k1", Name: "K", Email: "k@example.com"}); err != nil {
+	if err := writer.Contact(export.Contact{ID: "k1", Name: "K", Email: ptr("k@example.com")}); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.Conversation(conversationWith(attachment("a1", "hello.txt", "hello", helloSHA))); err != nil {
@@ -202,7 +202,7 @@ func TestRecordsMustArriveInArchiveOrder(t *testing.T) {
 	if err := writer.Conversation(conversationWith()); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.Contact(export.Contact{ID: "k1", Email: "k@example.com"}); err == nil {
+	if err := writer.Contact(export.Contact{ID: "k1", Email: ptr("k@example.com")}); err == nil {
 		t.Fatal("a contact after the conversations was accepted")
 	}
 }
@@ -227,7 +227,7 @@ func TestConversationCanBeStreamedMessageByMessage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := writer.EndConversation([]domain.TimeEntry{{ID: "e1", ConversationID: "c1", Minutes: 5}}); err != nil {
+	if err := writer.EndConversation([]domain.TimeEntry{{ID: "e1", ConversationID: "c1", Minutes: 5}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.Finish(context.Background()); err != nil {
@@ -291,3 +291,5 @@ func TestCloseRemovesTheSpillFileOfAnAbortedExport(t *testing.T) {
 		t.Fatalf("temp file left behind after Close: %v", entries)
 	}
 }
+
+func ptr(value string) *string { return &value }

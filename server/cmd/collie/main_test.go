@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -49,11 +50,7 @@ func TestVersionPrintsBuildVersionWithoutDatabase(t *testing.T) {
 }
 
 func TestCreateWorkspaceAndPairPrintFreshOneTimeURLs(t *testing.T) {
-	baseURL := os.Getenv("TEST_DATABASE_URL")
-	if baseURL == "" {
-		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL CLI test")
-	}
-	databaseURL := isolatedDatabaseURL(t, baseURL)
+	databaseURL := databasetest.URL(t)
 	var first, hint bytes.Buffer
 	stderr = &hint
 	t.Cleanup(func() { stderr = os.Stderr })
@@ -91,7 +88,7 @@ func TestMigrateCreatesTheRequestLoginFromDatabaseRequestURL(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL CLI test")
 	}
 	ctx := context.Background()
-	databaseURL := isolatedDatabaseURL(t, baseURL)
+	databaseURL := databasetest.EmptySchema(t) // `collie migrate` applies every migration
 	user := fmt.Sprintf("colliedesk_test_cli_request_%d", time.Now().UnixNano())
 	parsed, err := url.Parse(databaseURL)
 	if err != nil {
@@ -127,29 +124,4 @@ func TestMigrateCreatesTheRequestLoginFromDatabaseRequestURL(t *testing.T) {
 	if sessionUser != user || super {
 		t.Fatalf("request login = %q superuser=%v", sessionUser, super)
 	}
-}
-
-func isolatedDatabaseURL(t *testing.T, baseURL string) string {
-	t.Helper()
-	ctx := context.Background()
-	admin, err := pgxpool.New(ctx, baseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	schema := fmt.Sprintf("test_cli_%d", time.Now().UnixNano())
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_, _ = admin.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE")
-		admin.Close()
-	})
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	query := parsed.Query()
-	query.Set("search_path", schema)
-	parsed.RawQuery = query.Encode()
-	return parsed.String()
 }

@@ -8,6 +8,43 @@ On Colliedesk Cloud every workspace has a ready-made address; you only forward y
 On your own server, the person who runs it first connects a mail forwarder and an SMTP relay: see
 [configuring email](../self-host/email.md).
 
+Two words name where mail enters Colliedesk, and **Settings → Channels → Email → Connection** shows
+the one your server uses:
+
+- **Forwarding address** (Colliedesk Cloud): an email address, `support@<workspace>.colliedesk.com`.
+  Your mailbox forwards to it like to any other address.
+- **Inbound URL** (your own server): a web address, not an email address. Ask whoever manages your
+  email to send a copy of every message to it, with the **inbound secret**: a password for that only,
+  not your email password. Technical details: your mailbox cannot send to it by itself; a mail
+  forwarder (a Cloudflare Email Worker, Postmark, Amazon SES or a pipe on your mail server) posts each
+  message to it. See
+  [On your own server: the inbound URL](#on-your-own-server-the-inbound-url).
+
+The channel reads **Waiting for first message** until a message has arrived, then **Working**. Send
+the test from a different address than the support address: mail from the support address itself is
+never turned into a conversation.
+
+## Send yourself a test message
+
+The quickest way to see the whole loop needs no forwarder and no terminal. Select **Send yourself a
+test message**: on the empty inbox, or on **Settings → Channels → Email → Connection**. Colliedesk
+delivers one email from your own address to the channel, the way a customer's email arrives. It opens
+a conversation, **Test message from Colliedesk**, and opens it, from either place. The test works
+before forwarding is set up, so it shows that your inbox and replies work; customer email still needs
+your support mailbox to forward here. Before a support address is saved, the button says to save one
+first. Pressing it several times quickly sends one test message.
+
+Answer it like any customer. The reply is emailed to your own address, so you see what customers
+receive; on Colliedesk Cloud it arrives in your real mailbox. During the trial this reply is allowed,
+because it reaches only you: its only recipient is you, an agent of the workspace who signed in with a
+verified address (a Colliedesk Cloud sign-in, or a sign-in link from whoever runs the server). A Cc to
+anyone else is still refused, and the reply counts toward the trial's daily limit. An agent who joined
+only with an invite link has no verified address yet, so a reply to their test message waits until
+they sign in that way.
+
+A workspace can send itself five test messages an hour. Agent tokens do the same with the MCP tool
+`colliedesk_email_test_message_send`.
+
 ## Colliedesk Cloud: forward to your address
 
 On Colliedesk Cloud every workspace has a ready-made address, `support@<workspace>.colliedesk.com`.
@@ -15,7 +52,8 @@ You do not run a forwarder or a Worker. A workspace started from the sign-up pag
 that address at once: its Support address is set to it. To keep your own address for customers,
 change where your mailbox forwards:
 
-1. Open **Settings → Email channel** and enter your **Support address**, for example
+1. Open **Settings → Channels**, select **Connect your support email** (or **Email** when it is
+   already connected) and enter your **Support address**, for example
    `support@example.com`. Select **Save support address**. A workspace created another way accepts
    mail only after this step. The button reads "Saving…" until the save ends, then "Saved" appears
    next to it.
@@ -26,6 +64,17 @@ change where your mailbox forwards:
      in Colliedesk; open it and select the confirmation link. Then choose **Forward a copy of
      incoming mail** and save.
    - **Outlook:** Settings → Mail → Forwarding, enter the address and select **Start forwarding**.
+     In Microsoft 365, forwarding outside your organization is often blocked: the sender gets a bounce
+     with `5.7.520 Access denied, Your organization does not allow external forwarding`. Your Microsoft
+     365 admin allows it for the support mailbox only:
+     1. Open the [Microsoft Defender portal anti-spam policies](https://security.microsoft.com/antispam)
+        (role Security Administrator or Organization Management).
+     2. Select **Create policy** → **Outbound** and name it, for example `Colliedesk forwarding`.
+     3. Under **Users, groups, and domains**, add only the support mailbox.
+     4. Under **Protection settings**, set **Automatic forwarding rules** to **On - Forwarding is
+        enabled**, then select **Create**.
+     5. If mail still bounces, a remote domain setting or a mail flow rule of the organization may also
+        block forwarding, and a block wins; your admin checks those too.
 4. Send a test message to your support address. It opens a conversation.
 
 Forwarded mail keeps its original sender, so the conversation is with your customer, not with your
@@ -37,6 +86,25 @@ address stops receiving mail at once, so change the forwarding in your mailbox a
 A name is 1 to 63 lowercase letters, digits or hyphens; names such as `app`, `www` and `mail` are
 reserved. Do not set the Support address to a `colliedesk.com` address of another workspace.
 
+## On your own server: the inbound URL
+
+A server without a hosted mail domain shows the **Inbound URL** instead of a forwarding address.
+
+1. Open **Settings → Channels → Email → Connection** and save your **Support address**.
+2. Select **Create inbound secret**. Copy the secret now: it is shown once.
+3. Give the inbound URL and the secret to the person who runs the server. They connect a forwarder
+   (a Cloudflare Email Worker, Postmark, Amazon SES or a pipe on your mail server) as described in
+   [forward mail to Colliedesk](../self-host/email.md#3-forward-mail-to-colliedesk).
+4. To see a conversation arrive before the forwarder is ready, select **Send yourself a test
+   message** (see [above](#send-yourself-a-test-message)). Whoever runs the server can also check the
+   URL itself: open **Test from a terminal instead**, copy the **Test request** (**Copy test request**)
+   and run it in a terminal. It posts one message from `customer@example.com`, which opens a
+   conversation in the inbox. The channel then reads **Working**.
+
+On Colliedesk Cloud, mail posted to the inbound URL does not count as a customer who wrote first
+during the trial, because whoever holds the secret can write any sender; see
+[Plan and billing](billing.md#the-free-trial).
+
 ## Sender name
 
 The **Sender name** is the name customers see in the From line of every reply, for example
@@ -45,7 +113,7 @@ renaming the workspace does not change it.
 
 A new channel starts with the workspace name. To change it:
 
-1. Open **Settings → Email channel**. The field appears once a support address is saved.
+1. Open **Settings → Channels → Email → Replies**. The field appears once a support address is saved.
 2. Enter the name in **Sender name** and select **Save sender name**.
 
 The next reply uses the new name, on every way a reply leaves: your own domain, the
@@ -76,20 +144,23 @@ requirements, with a link to the [privacy policy](https://colliedesk.com/privacy
 A self-hosted server shows no such link: it sends through your own Google OAuth client (see below).
 
 1. Connect the email channel first (a saved Support address).
-2. Open **Settings → Email channel → Send from Gmail** and select **Connect Gmail**.
+2. Open **Settings → Channels → Email → Replies → Send from your mailbox** and select **Connect Gmail**.
 3. Google asks you to choose the account and allow **Send email on your behalf**. Leave that box
    ticked. Google then brings you back to Settings, which says whether Gmail is connected and, if not,
    why.
-4. **Send from Gmail** now shows the account. Replies, including copies (Cc), attached files and
+4. **Send from your mailbox** now shows the account. Replies, including copies (Cc), attached files and
    **Retry delivery**, go out through it with the same threading headers, so customer answers join
    the same conversation.
 
-Connect the account of your support address. If you connect another one (for example
-`acme.help@gmail.com` while customers write to `support@example.com`), customers see that account as
-the sender, and their answers still go to the support address. Settings says so.
+Connect the account of your support address: a channel sends as its own address. Google bringing back
+another account (for example `acme.help@gmail.com` while customers write to `support@example.com`)
+connects nothing, and Settings says to sign in with the support address. An account another email
+channel of the workspace already sends through is refused too, with a link to that channel. A
+connection made before this rule with another account keeps sending; **Send from your mailbox** warns that
+it does not match and suggests connecting the right one.
 
 **When Gmail stops working.** If the access is removed in the Google account, the password changes,
-or Google refuses to send, **Send from Gmail** turns into an alert with the reason. Replies are then
+or Google refuses to send, **Send from your mailbox** turns into an alert with the reason. Replies are then
 marked **Delivery failed** with the same reason. They are never sent another way without you knowing.
 Select **Reconnect Gmail**, then **Retry delivery** on the failed replies.
 
@@ -108,16 +179,113 @@ page. On Colliedesk Cloud the request card shows the same note on Google data fi
 On a server you run, Gmail sending needs your own Google OAuth client. See
 [send replies through Gmail](../self-host/email.md#send-replies-through-gmail).
 
+## Send replies from Microsoft 365
+
+If your support address is a Microsoft 365 mailbox (a work or school account) or an Outlook.com mailbox
+(a personal Microsoft account), an admin can connect it. Replies are then sent through Microsoft from
+that address, and a copy of each reply stays in the mailbox's **Sent Items**. Incoming mail still
+arrives by forwarding, as set up above. Colliedesk asks Microsoft only for permission to send email and
+to read the account's address (`Mail.Send`, `User.Read`, `offline_access`, `openid`); it cannot read
+the mailbox.
+
+1. Connect the email channel first (a saved Support address).
+2. Open **Settings → Channels → Email → Replies → Send from your mailbox** and select **Connect
+   Microsoft 365**.
+3. Microsoft asks you to sign in. Choose the mailbox of your support address and select **Accept**.
+   Microsoft then brings you back to Settings, which says whether Microsoft 365 is connected and, if
+   not, why.
+4. **Send from your mailbox** now shows the mailbox. Replies, including copies (Cc), attached files and
+   **Retry delivery**, go out through it with the same threading headers, so customer answers join the
+   same conversation.
+
+**Admin approval.** Many organizations only let an admin approve apps that send email. If Microsoft says
+you need admin approval, open **Work account? Your IT admin may need to approve Colliedesk first** under
+**Connect Microsoft 365**, select **Copy link** and send the link to your Microsoft 365 admin. After they
+approve, select **Connect Microsoft 365** again. Microsoft may keep you on its "Need admin approval"
+page instead of bringing you back to Colliedesk; come back to Settings yourself once your admin
+approved.
+
+Connect the mailbox of your support address: a channel sends as its own address. Microsoft signing in
+another mailbox connects nothing, and Settings says which mailbox to choose. If your support address is
+an alias or a shared mailbox in Microsoft 365, it cannot be connected yet. A Microsoft account created
+with another provider's address (for example a Gmail address) has no Outlook mailbox to send from and is
+refused too. An account another email channel of the workspace already sends through is refused, with a
+link to that channel.
+
+**When Microsoft 365 stops working.** If access is removed in the Microsoft account, the password is
+reset, a sign-in policy of your organization now blocks Colliedesk, or the mailbox loses its license,
+**Send from your mailbox** turns into an alert with the reason. Replies are then marked **Delivery
+failed** with the same reason; they are never sent another way without you knowing. Select **Reconnect
+Microsoft 365**, then **Retry delivery** on the failed replies. If the server's own Microsoft settings
+stop working (its client secret expired), the connection stays, replies wait with a note for the
+administrator, and reconnecting does not help.
+
+**Disconnect Microsoft 365** asks first, then deletes Colliedesk's access to the mailbox. Microsoft has no
+way for Colliedesk to remove itself from your account, so Colliedesk stays listed among the account's
+apps until you remove it there: at [My Apps](https://myapps.microsoft.com) for a work or school account,
+or at [Microsoft account permissions](https://account.live.com/consent/Manage) for a personal account.
+Replies then go out the way they did before Microsoft 365 was connected; a reply that was still waiting
+for Microsoft 365 fails with a note and can be retried.
+
+A channel sends through one mailbox. Selecting **Use Gmail instead** or **Use Microsoft 365 instead**
+asks first, then replaces the connection; replies still waiting for the old one fail and can be
+retried.
+
+**Large attachments.** Microsoft may refuse a reply with large files. When the files of a reply are
+larger than 3 MB and it goes through Microsoft 365, the reply box warns you. If Microsoft refuses the
+reply, it is marked **Delivery failed** with the reason and keeps its files: remove a file and retry.
+
+Agents (AI) cannot connect or disconnect Microsoft 365 themselves: `colliedesk_microsoft_connect_request`
+and `colliedesk_microsoft_disconnect_request` file a request, and the admin who approves it gets
+Microsoft's sign-in page. See [Agent requests](agent-requests.md).
+
+On a server you run, Microsoft 365 sending needs your own app registration in Microsoft Entra. See
+[send replies through Microsoft 365](../self-host/email.md#send-replies-through-microsoft-365).
+
+## Several mailboxes
+
+A workspace can have several email channels, one per support address: `support@example.com` and
+`billing@example.com`, or a second domain. Add one with **Settings → Channels → Add channel → Connect
+your support email**: give it a **Name** (left empty, it is called by its address) and its **Support
+address**. Two channels never share a mailbox: `support+billing@example.com` is the same mailbox as
+`support@example.com`, so it is refused, with a link to the channel that has it.
+
+Each mailbox has its own settings, on its own page:
+
+- **Forwarding.** On Colliedesk Cloud each mailbox has its own forwarding address: the first one is
+  `support@<workspace>.colliedesk.com`, a later one is named after its support address
+  (`billing@<workspace>.colliedesk.com`, with `-2` added when that is taken). Forward each mailbox to
+  its own forwarding address. On your own server each mailbox has its own inbound secret: give each
+  forwarder the secret of its mailbox. Mail that reaches a mailbox opens its conversation in that
+  channel.
+- **Sender name, Gmail and sending pause** belong to the mailbox.
+- **Domain verification belongs to the domain.** Two mailboxes on `example.com` share it: verify
+  once, and a later mailbox on the domain is verified at once. **Replies** says so.
+
+The **Workspace address name** sits on **Settings → Channels**, above the list: it is part of every
+mailbox's forwarding address, so changing it changes them all.
+
+Replies leave from the mailbox the conversation came through; see
+[channels](channels.md#several-mailboxes-in-the-inbox) for the default, starting a conversation from
+a chosen mailbox and filtering by one. A conversation imported from Freshdesk or Help Scout keeps the
+mailbox it was sent to (`origin.mailboxes`), and its replies leave from the channel with that support
+address when there is one.
+
+Through the API each mailbox's settings and actions are under `/api/v1/channels/{id}/email`
+(`/secret`, `/domain-verification`, `/gmail`), and `PATCH /api/v1/channels/{id}` with `config`
+changes its address or sender name. `/api/v1/channels/email` and the MCP tools without `channel_id`
+act on the default mailbox, as before.
+
 ## Send from your own domain
 
 Until your domain is verified, replies are sent as **"<sender name> via Colliedesk"** from a
 `reply+…@` address on the server's sending domain, with `Reply-To` set to your support address.
-Customer replies still reach you and thread. **Settings → Email channel** shows **Replies are sent
+Customer replies still reach you and thread. **Settings → Channels → Email → Replies** shows **Replies are sent
 from …** with the current address. Verify the domain to send as your support address.
 
 **Colliedesk Cloud** verifies in two steps:
 
-1. Publish the TXT record shown in **Settings → Email channel** (**TXT record name**, for example
+1. Publish the TXT record shown in **Settings → Channels → Email → Replies** (**TXT record name**, for example
    `_colliedesk.example.com`, and **TXT record value**). It proves you control the domain. Select
    **Verify domain**; until the TXT record is found, Colliedesk asks for it and does nothing else.
 2. Colliedesk then lists a table **DNS records to publish** (DKIM, SPF and an MX record for bounces),
@@ -140,7 +308,7 @@ address until you verify it again.
 
 **Your own server** verifies with one TXT record, unless its operator set it up like Cloud:
 
-1. In **Settings → Email channel**, copy the **TXT record name** (for example
+1. In **Settings → Channels → Email → Replies**, copy the **TXT record name** (for example
    `_colliedesk.example.com`) and the **TXT record value**.
 2. Add that TXT record at your DNS provider.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
@@ -156,7 +324,7 @@ Colliedesk counts spam complaints per workspace. A workspace is
 paused when it has **3 or more complaints in the last 7 days and they are more than 0.3% of the
 replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does not pause; 4 does).
 
-- **Settings → Email channel** shows **Email sending is paused** with the counts. Admins cannot lift it.
+- **Settings → Channels → Email → Replies** shows **Email sending is paused** with the counts. Admins cannot lift it.
 - Replies written during the pause stay **Queued** with the note "Email sending is paused after spam
   complaints; contact support." Nothing is failed and no attempt is used up. They are sent after
   the pause ends.
@@ -270,4 +438,4 @@ send one `cc` field per address before the files. See `createMessage` in `contra
 - Text longer than 5 MiB is cut and marked. Subjects longer than 250 characters are shortened in
   replies.
 - Replies are plain text. Markdown is sent as written.
-- One support address per workspace.
+- One support address per email channel. For more addresses, add more channels (see [Several mailboxes](#several-mailboxes)).

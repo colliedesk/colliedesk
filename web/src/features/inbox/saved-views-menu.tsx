@@ -11,6 +11,7 @@ import type { InboxQuery } from '../../lib/inbox-query';
 import { messages } from '../../messages';
 import { savedViewMessages } from './filter-messages';
 import { BookmarkIcon } from '../../ui/icons';
+import { useCreateMutation } from '../../api/use-create';
 
 export interface SavedViewChange {
   name?: string;
@@ -20,6 +21,8 @@ export interface SavedViewChange {
 
 interface SavedViewsMenuProps {
   views: SavedView[];
+  // loading: the views are on their way, so the menu does not say there are none yet.
+  loading?: boolean;
   trash?: SavedView[];
   // The filters on screen: the view they match is current, and saving stores them.
   query: InboxQuery;
@@ -105,13 +108,13 @@ export function SavedViewsMenu({ query, timezone, onApply }: Pick<SavedViewsMenu
   const views = useQuery({ queryKey: ['saved-views'], queryFn: savedViewsApi.list, enabled: opened });
   const trash = useQuery({ queryKey: ['saved-views', 'trash'], queryFn: savedViewsApi.trash, enabled: trashOpened });
   const changed = () => client.invalidateQueries({ queryKey: ['saved-views'] });
-  const create = useMutation({ mutationFn: (view: Parameters<typeof savedViewsApi.create>[0]) => savedViewsApi.create(view), onSettled: changed });
+  const create = useCreateMutation({ create: (view: Parameters<typeof savedViewsApi.create>[0], key: string) => savedViewsApi.create(view, key), onSettled: changed });
   // A change carries the version it was made on; someone else's save since is refused (409), not overwritten.
   const update = useMutation({ mutationFn: ({ view, change }: { view: SavedView; change: SavedViewChange }) => savedViewsApi.update(view.id, { ...change, updated_at: view.updated_at }),
     onSettled: changed });
   const remove = useMutation({ mutationFn: (view: SavedView) => savedViewsApi.remove(view.id), onSettled: changed });
   const restore = useMutation({ mutationFn: (view: SavedView) => savedViewsApi.restore(view.id), onSettled: changed });
-  return <SavedViewsMenuView views={views.data?.items ?? []} trash={trash.data?.items} query={query} timezone={timezone}
+  return <SavedViewsMenuView views={views.data?.items ?? []} loading={views.isPending} trash={trash.data?.items} query={query} timezone={timezone}
     onApply={(next) => { trackFilterChanges(query, next); onApply?.(next); }}
     onOpen={() => setOpened(true)} onOpenTrash={() => setTrashOpened(true)}
     onCreate={(view) => create.mutateAsync(view)} onUpdate={(view, change) => update.mutateAsync({ view, change })}
@@ -120,7 +123,7 @@ export function SavedViewsMenu({ query, timezone, onApply }: Pick<SavedViewsMenu
 
 // SavedViewsMenuView keeps named sets of inbox filters: the team's shared views and the person's own.
 // Choosing one sets its filters, which the address then carries.
-export function SavedViewsMenuView({ views, trash, query, timezone, onApply, onCreate, onUpdate, onDelete, onRestore, onOpen, onOpenTrash }: SavedViewsMenuProps) {
+export function SavedViewsMenuView({ views, loading = false, trash, query, timezone, onApply, onCreate, onUpdate, onDelete, onRestore, onOpen, onOpenTrash }: SavedViewsMenuProps) {
   const menu = useRef<HTMLDetailsElement>(null);
   const [name, setName] = useState('');
   const [scope, setScope] = useState<SavedView['scope']>('personal');
@@ -179,7 +182,7 @@ export function SavedViewsMenuView({ views, trash, query, timezone, onApply, onC
         onToggle={(event) => { if (event.currentTarget.open) onOpen?.(); }}>
         <summary><BookmarkIcon /><span>{text.title}</span></summary>
         <div className="filter-popover views-popover" role="group" aria-label={text.title}>
-          {views.length === 0 && <p className="filter-hint">{text.none}</p>}
+          {views.length === 0 && <p className="filter-hint" role="status">{loading ? text.loading : text.none}</p>}
           {groups.map(([group, label]) => {
             const items = views.filter((view) => view.scope === group);
             return items.length > 0 && (

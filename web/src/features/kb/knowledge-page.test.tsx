@@ -97,7 +97,7 @@ test('the trash restores an article with the version it shows', async () => {
   const calls = serve({ ...base,
     'GET /api/v1/kb/articles/trash': () => json(200, { items: [trashed], next_cursor: null }),
     'GET /api/v1/kb/collections/trash': () => json(200, { items: [] }),
-    'POST /api/v1/kb/articles/00000000-0000-4000-8000-000000000009/restore': () => json(200, { ...trashed, body_md: '', has_source_html: false, translations: [], deleted_at: null }) });
+    'POST /api/v1/kb/articles/00000000-0000-4000-8000-000000000009/restore': () => json(200, { ...trashed, body_md: '', has_source_html: false, translations: [], deleted_at: null, ai_exclusion: null }) });
   open();
   fireEvent.click(await screen.findByRole('button', { name: 'Trash' }));
   const panel = await screen.findByRole('region', { name: 'Deleted articles' });
@@ -209,4 +209,13 @@ test('a row moved down past the loaded page is loaded and keeps the focus', asyn
   expect(await screen.findByText('Moved Article 2 to place 3 of 3.')).toBeInTheDocument();
   expect(sent).toEqual([{ parent_id: ids.setup, collection_ids: [ids.deep], article_ids: [rows[0].id, rows[2].id, rows[1].id] }]);
   await waitFor(() => expect(screen.getByRole('button', { name: 'Move Article 2 up' })).toHaveFocus());
+});
+
+// Every page shows its title (design.md: IBM Plex Serif page titles); the Knowledge page hid its h1.
+test('the Knowledge page shows its title, not only to screen readers', async () => {
+  serve(base);
+  open();
+  const title = await screen.findByRole('heading', { level: 1, name: 'Knowledge base' });
+  expect(title).not.toHaveClass('sr-only');
+  expect(title).toHaveClass('kb-page-title');
 });

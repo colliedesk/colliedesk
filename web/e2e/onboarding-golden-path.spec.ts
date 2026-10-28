@@ -9,7 +9,6 @@ import { signUp } from './support/signup';
 // It signs up, imports the account in the app, sees the reconcile report OK and answers its first
 // conversation by email. The stand-ins are the identity provider, the Freshdesk API v2 and Mailpit as the
 // SMTP relay. Later steps extend this test, never a copy of it:
-//   #100: the results page shows the baseline, after the reconcile report.
 //   #99: the AI backtest is ready, after the baseline (with its own time-to-backtest usage field).
 const baseURL = servers.cloud;
 const apiKey = 'fd-e2e-golden-path-key-never-shown';
@@ -43,11 +42,26 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     const imports = await (await page.request.get(`${baseURL}/api/v1/imports`)).json() as { items: Array<{ kind: string; status: string | null }> };
     expect(imports.items.filter((job) => job.kind === 'import').map((job) => job.status)).toEqual(['OK']);
 
+    // The results page shows the baseline measured from the import (#100). Every ticket of the fixture got
+    // its first reply 20 minutes after the customer's first message (not after the follow-up at 10), and
+    // the resolved and closed ones were resolved at 40 minutes (Freshdesk stats, read with the list).
+    await page.getByRole('link', { name: 'Results' }).click();
+    await expect(page).toHaveURL(`${baseURL}/results`);
+    const firstResponse = page.getByRole('region', { name: 'First response time' });
+    await expect(firstResponse.getByRole('link', { name: '20 min' }).first()).toBeVisible({ timeout: 60_000 });
+    await expect(firstResponse.getByRole('link', { name: `${fixture.tickets} answered` })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Time to resolve' }).getByRole('link', { name: '40 min' }).first()).toBeVisible();
+    await expect(page.getByText('Freshdesk, before you moved')).toBeVisible();
+
     // Connect the support address: replies now go out by email.
     const support = `support-${suffix}@acme.example`;
     await page.getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Channels' }).click();
+    await page.getByRole('link', { name: 'Connect your support email' }).click();
     await page.getByRole('textbox', { name: 'Support address' }).fill(support);
     await page.getByRole('button', { name: 'Save support address' }).click();
+    // The channel's page opens on its Connection tab; how replies leave is on Replies.
+    await page.getByRole('tab', { name: 'Replies' }).click();
     await expect(page.getByText(`Replies are sent from ${support}.`)).toBeVisible();
 
     // Answer a first conversation: a customer who wrote in Freshdesk (ticket 296, open, an active contact)

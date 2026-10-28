@@ -3,6 +3,7 @@ import type { ConversationViewer, Message } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { keepInView } from '../../lib/keep-in-view';
 import { Avatar } from '../../ui/avatar';
+import { ClockIcon } from '../../ui/icons';
 
 // Who else has a conversation open: the marks on the inbox list, the lines under the open conversation's
 // title, and the announces of this tab. A part of its own (presenceViewPart), loaded once a conversation is
@@ -138,12 +139,13 @@ export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { rep
     <section className="reply-conflict" aria-label={text.newReplies} ref={panel}>
       {/* Only the fact is read out at once; the replies are there to read, not to be read aloud whole. */}
       {/* Replies a re-run import added are not someone answering now: the title says so when they are all there is. */}
-      <p role="alert" className="reply-conflict-title">{replies.length > 0 && replies.every((reply) => reply.origin)
+      <p role="alert" className="reply-conflict-title"><ClockIcon />{replies.length > 0 && replies.every((reply) => reply.origin)
         ? text.importedTitle(replies.length, replies[0].origin!.system) : text.conflictTitle(replies.length)}</p>
       <ul tabIndex={0} aria-label={text.newReplies}>
         {replies.map((reply) => <li key={reply.id}>
-          <p className="reply-conflict-by">{reply.author_name ?? text.teammate} · <time dateTime={reply.created_at}>{formatDate(reply.created_at, timezone)}</time>
-            {reply.origin && <> · {text.imported(reply.origin.system)}</>}</p>
+          <p className="reply-conflict-by"><Avatar name={reply.author_name ?? text.teammate} size="xs" />
+            <span><strong>{reply.author_name ?? text.teammate}</strong> · <time dateTime={reply.created_at}>{formatDate(reply.created_at, timezone)}</time>
+            {reply.origin && <> · {text.imported(reply.origin.system)}</>}</span></p>
           <p className="reply-conflict-text">{reply.body}</p>
         </li>)}
       </ul>

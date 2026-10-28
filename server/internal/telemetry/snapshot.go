@@ -84,11 +84,11 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 	if err != nil {
 		return nil, fmt.Errorf("count conversations: %w", err)
 	}
-	emailChannels, err := workspaceSet(ctx, tx, `SELECT workspace_id::text FROM email_channels`)
+	emailChannels, err := workspaceSet(ctx, tx, `SELECT DISTINCT workspace_id::text FROM email_channels`)
 	if err != nil {
 		return nil, fmt.Errorf("read email channels: %w", err)
 	}
-	webForms, err := workspaceSet(ctx, tx, `SELECT workspace_id::text FROM web_form_channels WHERE enabled`)
+	webForms, err := workspaceSet(ctx, tx, `SELECT DISTINCT f.workspace_id::text FROM web_form_channels f JOIN channels c ON c.workspace_id=f.workspace_id AND c.id=f.channel_id WHERE c.enabled`)
 	if err != nil {
 		return nil, fmt.Errorf("read web forms: %w", err)
 	}

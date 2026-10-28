@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError } from '../../api/client';
+import { useCreateMutation } from '../../api/use-create';
 import { importReportSchema, importsApi, undoReportSchema } from '../../api/imports';
 import type { ImportJob } from '../../api/imports';
 import { importMessages } from './import-messages';
@@ -45,7 +46,7 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const [connecting, setConnecting] = useState(false);
   const refresh = () => client.invalidateQueries({ queryKey: ['imports'] });
   const after = { onSuccess: () => { setConnecting(false); void refresh(); } };
-  const preview = useMutation({ mutationFn: ({ domain, key }: { domain: string; key: string }) => importsApi.preview(domain, key),
+  const preview = useCreateMutation({ create: ({ domain, key }: { domain: string; key: string }, submitKey: string) => importsApi.preview(domain, key, submitKey),
     onSuccess: (created) => { setJustAsked(created.id); after.onSuccess(); } });
   const start = useMutation({ mutationFn: importsApi.start, ...after });
   // A discarded preview gives the page back to the import before it.
@@ -74,7 +75,7 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const unlink = useMutation({ mutationFn: (externalId: string) => importsApi.unlink(peopleJob?.id ?? '', externalId), ...peopleChanged });
   // Each invite's one-time link shows in its person's row: the server never shows it again.
   const [createdInvites, setCreatedInvites] = useState<CreatedInvite[]>([]);
-  const invite = useMutation({ mutationFn: (email: string) => api.createInvite(email, 'agent'), onSuccess: (created) => {
+  const invite = useCreateMutation({ create: (email: string, key: string) => api.createInvite(email, 'agent', key), onSuccess: (created) => {
     setCreatedInvites((links) => [...links.filter((link) => link.inviteId !== created.invite.id),
       { inviteId: created.invite.id, email: created.invite.email, url: created.url, expiresAt: created.invite.expires_at }]);
     void client.invalidateQueries({ queryKey: ['invites'] });

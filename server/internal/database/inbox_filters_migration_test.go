@@ -41,9 +41,19 @@ func TestInboxFiltersMigrationBackfillsChannelAndWaitingStateWithoutLosingRows(t
 	}
 	message := func(conversationID, kind, meta, emailID string, minute int) {
 		t.Helper()
-		if _, err := pool.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,email_meta,email_message_id,created_at)
-			VALUES($1,$2,$3,'text',NULLIF($4,'')::jsonb,NULLIF($5,''),'2026-10-01T08:00:00Z'::timestamptz+make_interval(mins=>$6))`,
-			workspace, conversationID, kind, meta, emailID, minute); err != nil {
+		// The Message-ID is email_message_id before the channels migration, external_id after it.
+		column, prefix := "email_message_id", ""
+		var moved bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
+			AND table_name='messages' AND column_name='external_id')`).Scan(&moved); err != nil {
+			t.Fatal(err)
+		}
+		if moved {
+			column, prefix = "external_id", "email:"
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,email_meta,`+column+`,created_at)
+			VALUES($1,$2,$3,'text',NULLIF($4,'')::jsonb,NULLIF($7||$5,$7),'2026-10-01T08:00:00Z'::timestamptz+make_interval(mins=>$6))`,
+			workspace, conversationID, kind, meta, emailID, minute, prefix); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -114,7 +124,7 @@ func TestInboxFiltersMigrationBackfillsChannelAndWaitingStateWithoutLosingRows(t
 		t.Fatalf("updated_at moved from %s to %s (%v)", updatedBefore, updatedAfter, err)
 	}
 
-	if _, err := pool.Exec(ctx, `DELETE FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND email_message_id='<f@x>'`, workspace, email); err != nil {
+	if _, err := pool.Exec(ctx, `DELETE FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND external_id='email:<f@x>'`, workspace, email); err != nil {
 		t.Fatal(err)
 	}
 	want[email] = [3]string{"email", "outgoing", "2026-10-01T08:02"}

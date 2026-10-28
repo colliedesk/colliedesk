@@ -155,6 +155,7 @@ const selfHosted: PublicConfig = {
   cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null },
+  ai: { server_provider: false },
 };
 const cloud: PublicConfig = { ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true }, signup: { enabled: true } };
 const gmailConnect = agentRequest({ summary: 'Connect Gmail for sending', method: 'POST', route: '/api/v1/channels/email/gmail', path: '/api/v1/channels/email/gmail', body: null, approvable_by: 'admin' });
@@ -183,4 +184,23 @@ test('a self-hosted server approving a Gmail connection does not point to the pr
   expect(screen.getByRole('link', { name: /accounts\.google\.com/ })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Privacy policy' })).not.toBeInTheDocument();
   expect(screen.queryByText(/Limited Use/)).not.toBeInTheDocument();
+});
+
+test('a custom token\'s request lists what the token held when it asked', () => {
+  const base = agentRequest();
+  render(<RequestCard item={agentRequest({ requested_by: { ...base.requested_by, token_scope: 'custom', token_permissions: ['kb_articles:read', 'kb_articles:update'] } })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('What the token may do (2 permissions)')).toBeInTheDocument();
+  expect(screen.getByText('Knowledge base articles: Edit')).toBeInTheDocument();
+});
+
+test('approving Microsoft 365 for a channel says a work account may need its admin first; Gmail for a channel keeps Google\'s statement', async () => {
+  const microsoftConnect = agentRequest({ summary: 'Connect Microsoft 365 to the channel', method: 'POST', route: '/api/v1/channels/{id}/email/microsoft',
+    path: '/api/v1/channels/11111111-1111-4111-8111-111111111111/email/microsoft', body: null, approvable_by: 'admin' });
+  const { unmount } = renderWithConfig(<RequestCard item={microsoftConnect} timezone="UTC" {...actions()} />, cloud);
+  expect(await screen.findByText(/A work account may need its Microsoft 365 admin's approval first/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', 'https://colliedesk.com/privacy#microsoft-user-data');
+  unmount();
+  const gmailForChannel = { ...gmailConnect, route: '/api/v1/channels/{id}/email/gmail', path: '/api/v1/channels/11111111-1111-4111-8111-111111111111/email/gmail' };
+  renderWithConfig(<RequestCard item={gmailForChannel} timezone="UTC" {...actions()} />, cloud);
+  expect(await screen.findByText(/including the Limited Use requirements/)).toBeInTheDocument();
 });

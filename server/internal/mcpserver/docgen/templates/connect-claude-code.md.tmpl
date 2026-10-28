@@ -1,0 +1,48 @@
+# Connect Claude Code
+
+Connect [Claude Code](https://code.claude.com) to Colliedesk with the Colliedesk plugin: one
+install adds the Colliedesk MCP server and the [agent skills](agent-skills.md). Claude Code keeps
+the token in your system's credential store, not in a settings file.
+
+{{template "before" .}}
+## Connect
+
+1. Install the plugin with your address:
+
+   ```sh
+   {{index .Snippets "claudeCodePlugin"}}
+   ```
+
+2. Start `claude` and give it the token: run
+
+   ```text
+   {{index .Snippets "claudeCodeToken"}}
+   ```
+
+   and paste the token when it asks. Restart Claude Code.
+
+`/mcp` in Claude Code lists `{{.ServerName}}` as connected.
+
+### Without the plugin
+
+The MCP server alone, with the token in an environment variable. Put the `export` line in your
+shell profile (`~/.zshrc` or `~/.bashrc`) so every new terminal has it:
+
+```sh
+{{index .Snippets "tokenEnv"}}
+{{index .Snippets "claudeCodeCLI"}}
+```
+
+Keep the single quotes: Claude Code then stores `${{"{"}}{{.TokenEnv}}{{"}"}}` and reads the variable each time
+it starts, so the token is not written into `~/.claude.json`. Add `--scope user` to use it in every
+project.
+
+{{template "try" .}}
+{{template "tiers" .}}
+## Remove it
+
+- Plugin: `claude plugin uninstall {{.PluginID}}`
+- Without the plugin: `claude mcp remove {{.ServerName}}`
+
+{{template "revoke" .}}
+{{template "others" .}}

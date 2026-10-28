@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -46,7 +47,7 @@ func resumeEmail(ctx context.Context, pool *pgxpool.Pool, slug string, output io
 	if err != nil {
 		return err
 	}
-	resumed, err := store.New(pool).ResumeEmailSending(ctx, workspaceID)
+	resumed, err := channelStore(pool).ResumeEmailSending(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
@@ -75,7 +76,7 @@ func releaseDomain(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	if err != nil {
 		return err
 	}
-	released, err := store.New(pool).ReleaseVerifiedDomain(ctx, name, clock().UTC())
+	released, err := channelStore(pool).ReleaseVerifiedDomain(ctx, name, clock().UTC())
 	if err != nil {
 		return err
 	}
@@ -112,7 +113,7 @@ func setSenderName(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	if err != nil {
 		return err
 	}
-	data := store.New(pool)
+	data := channelStore(pool)
 	before, err := data.GetEmailChannel(ctx, workspaceID)
 	if err != nil {
 		return err
@@ -132,4 +133,10 @@ func setSenderName(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	_, err = fmt.Fprintf(output, "Sender name of %s changed from %q to %q (by %s). The next reply uses it.\n",
 		slug, before.SenderName, channel.SenderName, operator)
 	return err
+}
+
+// channelStore is the store of the operator commands, with the server's channel types: email settings
+// change through the channel frame.
+func channelStore(pool *pgxpool.Pool) *store.Store {
+	return store.New(pool).WithChannels(registry.New(registry.Config{}))
 }

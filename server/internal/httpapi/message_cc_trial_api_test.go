@@ -183,11 +183,11 @@ func TestABouncedReplyStillCountsOnTheTrialCap(t *testing.T) {
 		}
 		last = created.ID
 	}
-	if _, err := f.pool.Exec(context.Background(), `UPDATE email_outbox SET status='sent',sent_at=$2,attempts=1 WHERE workspace_id=$1`,
+	if _, err := f.pool.Exec(context.Background(), `UPDATE channel_outbox SET status='sent',sent_at=$2,attempts=1 WHERE workspace_id=$1`,
 		f.workspaceA, f.clock.Now()); err != nil {
 		t.Fatal(err)
 	}
-	ourID := queryString(t, f.pool, `SELECT email_message_id FROM messages WHERE id=$1`, last)
+	ourID := queryString(t, f.pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, last)
 	inboundOK(t, f.api, f.secretA, mail([]string{
 		"From: Mail Delivery System <MAILER-DAEMON@mx.customer.example>", "Subject: Undelivered Mail Returned to Sender",
 		"Message-ID: <forged-dsn@mx.customer.example>", "MIME-Version: 1.0",
@@ -195,7 +195,7 @@ func TestABouncedReplyStillCountsOnTheTrialCap(t *testing.T) {
 	}, "--r1\nContent-Type: message/delivery-status\n\nReporting-MTA: dns; mx.customer.example\n\n"+
 		"Final-Recipient: rfc822; customer1@customer.example\nAction: failed\nStatus: 5.1.1\n"+
 		"--r1\nContent-Type: text/rfc822-headers\n\nMessage-ID: <"+ourID+">\n--r1--\n"))
-	if status := queryString(t, f.pool, `SELECT status FROM email_outbox WHERE message_id=$1`, last); status != "failed" {
+	if status := queryString(t, f.pool, `SELECT status FROM channel_outbox WHERE message_id=$1`, last); status != "failed" {
 		t.Fatalf("fixture: the forged report must fail the reply, status=%s", status)
 	}
 	if usage := f.usage(t, f.adminA); usage.Usage.RepliesLast24h != 198 {
@@ -221,7 +221,7 @@ func TestARetriedReplyCountsAgainFromItsOwnSendTime(t *testing.T) {
 	}
 	bounce := func() {
 		t.Helper()
-		if _, err := f.pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed',sent_at=$2,last_error='bounced' WHERE message_id=$1`,
+		if _, err := f.pool.Exec(context.Background(), `UPDATE channel_outbox SET status='failed',sent_at=$2,last_error='bounced' WHERE message_id=$1`,
 			created.ID, f.clock.Now()); err != nil {
 			t.Fatal(err)
 		}

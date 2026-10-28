@@ -16,21 +16,22 @@ type AgentToken struct {
 	Session domain.Session `json:"session"`
 }
 
-// CreateAgentToken gives the signed-in agent a token of the given tier. A read, draft or send token
-// carries the agent role ceiling whatever the creator's role is; an admin token carries the admin
-// ceiling and only an admin (as this session acts now) may create one.
-func (s *Service) CreateAgentToken(ctx context.Context, principal Principal, label, scope string) (AgentToken, error) {
-	label, err := checkTokenRequest(label, scope)
+// CreateAgentToken gives the signed-in agent a token of a tier or of its own permissions. A token
+// that holds nothing admin-only carries the agent role ceiling whatever the creator's role is; an
+// admin token, and a custom token with an admin-only permission, carry the admin ceiling and only an
+// admin (as this session acts now) may create one.
+func (s *Service) CreateAgentToken(ctx context.Context, principal Principal, request TokenRequest) (AgentToken, error) {
+	request, err := checkTokenRequest(request)
 	if err != nil {
 		return AgentToken{}, err
 	}
-	if scope == ScopeAdmin && principal.Agent.Role != "admin" {
+	if NeedsAdmin(request.Scope, request.Permissions) && principal.Agent.Role != "admin" {
 		return AgentToken{}, ErrAdminTokenNeedsAdmin
 	}
 	var created AgentToken
 	err = s.db.InWorkspace(ctx, principal.Workspace.ID, func(tx pgx.Tx) error {
 		var err error
-		created, err = s.insertAgentToken(ctx, tx, principal.Workspace.ID, principal.Agent.ID, label, scope)
+		created, err = s.insertAgentToken(ctx, tx, principal.Workspace.ID, principal.Agent.ID, request)
 		return err
 	})
 	return created, err
@@ -38,8 +39,8 @@ func (s *Service) CreateAgentToken(ctx context.Context, principal Principal, lab
 
 // IssueAgentToken is the operator path of CreateAgentToken: it names the workspace by slug and the
 // agent by email, for installs where nobody can sign in yet.
-func (s *Service) IssueAgentToken(ctx context.Context, workspaceSlug, email, label, scope string) (AgentToken, error) {
-	label, err := checkTokenRequest(label, scope)
+func (s *Service) IssueAgentToken(ctx context.Context, workspaceSlug, email string, request TokenRequest) (AgentToken, error) {
+	request, err := checkTokenRequest(request)
 	if err != nil {
 		return AgentToken{}, err
 	}
@@ -57,16 +58,16 @@ func (s *Service) IssueAgentToken(ctx context.Context, workspaceSlug, email, lab
 		if err != nil {
 			return fmt.Errorf("find agent: %w", err)
 		}
-		if scope == ScopeAdmin && role != "admin" {
+		if NeedsAdmin(request.Scope, request.Permissions) && role != "admin" {
 			return fmt.Errorf("%w: %s has the %s role", ErrAdminTokenNeedsAdmin, email, role)
 		}
-		created, err = s.insertAgentToken(ctx, tx, workspaceID, agentID, label, scope)
+		created, err = s.insertAgentToken(ctx, tx, workspaceID, agentID, request)
 		return err
 	})
 	return created, err
 }
 
-func (s *Service) insertAgentToken(ctx context.Context, tx pgx.Tx, workspaceID, agentID, label, scope string) (AgentToken, error) {
+func (s *Service) insertAgentToken(ctx context.Context, tx pgx.Tx, workspaceID, agentID string, request TokenRequest) (AgentToken, error) {
 	raw, hash, err := newAgentToken()
 	if err != nil {
 		return AgentToken{}, err
@@ -74,10 +75,10 @@ func (s *Service) insertAgentToken(ctx context.Context, tx pgx.Tx, workspaceID, 
 	// created_at comes from the service clock: the one-year limit is counted from it.
 	now := s.now()
 	session, err := scanSession(tx.QueryRow(ctx, `WITH s AS (
-			INSERT INTO sessions(workspace_id,agent_id,token_hash,role_ceiling,scope,label,created_at,last_seen_at,expires_at)
-			VALUES($1,$2,$3,$8,$4,$5,$6,$6,$7) RETURNING *)
+			INSERT INTO sessions(workspace_id,agent_id,token_hash,role_ceiling,scope,permissions,label,created_at,last_seen_at,expires_at)
+			VALUES($1,$2,$3,$8,$4,$9,$5,$6,$6,$7) RETURNING *)
 		SELECT `+sessionColumns+` FROM s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id`,
-		workspaceID, agentID, hash, scope, label, now, now.Add(sessionLifetime), tokenRoleCeiling(scope)))
+		workspaceID, agentID, hash, request.Scope, request.Label, now, now.Add(sessionLifetime), tokenRoleCeiling(request.Scope, request.Permissions), request.Permissions))
 	if err != nil {
 		return AgentToken{}, fmt.Errorf("create agent token: %w", err)
 	}

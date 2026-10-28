@@ -4,6 +4,10 @@ import { expect, test, vi } from 'vitest';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { InboxFilters } from './inbox-filters';
 
+// The workspace's channels, read once the menu opens or a channel is filtered on: one of each type unless a test says more.
+const channelList = vi.hoisted(() => ({ listAll: vi.fn(async (): Promise<unknown> => ({ items: [], types: [] })) }));
+vi.mock('../../api/channels', () => ({ channelsApi: channelList }));
+
 const billing = { id: '33333333-3333-4333-8333-333333333333', name: 'Billing', color: '#64748b' };
 const vip = { id: '44444444-4444-4444-8444-444444444444', name: 'VIP', color: '#64748b' };
 const tags = [billing, vip];
@@ -208,4 +212,30 @@ test('typing a word sends one search after the pause, not one per key', async ()
   } finally {
     vi.useRealTimers();
   }
+});
+
+const support = { id: '55555555-5555-4555-8555-555555555555', type: 'email', name: 'Support', enabled: true };
+const sales = { id: '66666666-6666-4666-8666-666666666666', type: 'email', name: 'Sales', enabled: true };
+const careers = { id: '77777777-7777-4777-8777-777777777777', type: 'email', name: 'Careers', enabled: true, deleted_at: '2026-10-20T00:00:00Z' };
+const form = { id: '88888888-8888-4888-8888-888888888888', type: 'web_form', name: 'Contact form', enabled: true };
+const twoMailboxes = { items: [support, sales, careers, form], types: [{ type: 'email' }, { type: 'web_form' }] };
+
+test('a type with two channels lists each of them, so one mailbox can be chosen; a type with one does not', async () => {
+  channelList.listAll.mockResolvedValue(twoMailboxes);
+  const onChange = vi.fn();
+  render(<Harness onChange={onChange} />);
+  const menu = await openMenu();
+  const mailboxes = await within(menu).findByRole('group', { name: 'Email channels' });
+  // A removed channel is offered only once it is chosen.
+  expect(within(mailboxes).getAllByRole('checkbox').map((box) => (box as HTMLInputElement).labels?.[0]?.textContent)).toEqual(['Support', 'Sales']);
+  expect(within(menu).queryByRole('group', { name: 'Web form channels' })).not.toBeInTheDocument();
+  fireEvent.click(within(mailboxes).getByRole('checkbox', { name: 'Sales' }));
+  expect(onChange).toHaveBeenLastCalledWith({ channel_id: sales.id });
+});
+
+test('the chip of a channel names it, and says when it was removed', async () => {
+  channelList.listAll.mockResolvedValue(twoMailboxes);
+  render(<Harness initial={{ channel_id: `${sales.id},${careers.id}` }} />);
+  const chips = await screen.findByRole('list', { name: 'Active filters' });
+  await waitFor(() => expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Channel: Sales', 'Channel: Careers (removed)']));
 });

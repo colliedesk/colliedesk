@@ -65,10 +65,10 @@ func (s *Service) remove(ctx context.Context, tx pgx.Tx, st state, now time.Time
 		// the wrong place. Deleting the row now would leave the real files behind for good.
 		return ActionNone, false, nil, fmt.Errorf("the database lists %d attachment(s) but the workspace directory is missing from the attachment storage; check ATTACHMENTS_DIR; workspace kept", files)
 	}
-	// The channel row goes with the workspace, so the provider domain it names is queued first; the
-	// queue outlives the workspace, and a sweep deletes the domain at the provider.
+	// The domain rows go with the workspace, so the provider domains they name are queued first; the
+	// queue outlives the workspace, and a sweep deletes the domains at the provider.
 	if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
-		SELECT workspace_id,provider_domain_id FROM email_channels WHERE workspace_id=$1 AND provider_domain_id IS NOT NULL
+		SELECT workspace_id,provider_domain_id FROM email_domains WHERE workspace_id=$1 AND provider_domain_id IS NOT NULL
 		ON CONFLICT DO NOTHING`, st.WorkspaceID); err != nil {
 		return ActionNone, false, undo, err
 	}

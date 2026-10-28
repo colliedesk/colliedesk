@@ -146,7 +146,7 @@ func TestProviderDomainVerificationFollowsTheProviderStatus(t *testing.T) {
 	if fake.called("POST /domains/"+fake.idOf("provider-verify.example.com")+"/verify") == 0 {
 		t.Fatal("an unverified domain must ask the provider to check its records")
 	}
-	if got := queryString(t, pool, `SELECT COALESCE(domain_verified_at::text,'') FROM email_channels`); got != "" {
+	if got := queryString(t, pool, `SELECT COALESCE(verified_at::text,'') FROM email_domains`); got != "" {
 		t.Fatalf("domain recorded as verified while the provider says failed: %q", got)
 	}
 
@@ -178,7 +178,7 @@ func TestProviderDomainVerificationWhenTheProviderIsUnreachableRecordsNothing(t 
 	if response := verify(t, api, fake, admin); response.Code != http.StatusBadGateway {
 		t.Fatalf("unreachable provider status=%d body=%s, want 502", response.Code, response.Body.String())
 	}
-	if got := queryString(t, pool, `SELECT COALESCE(domain_verified_at::text,'')||COALESCE(provider_domain_id,'') FROM email_channels`); got != "" {
+	if got := queryString(t, pool, `SELECT COALESCE(verified_at::text,'')||COALESCE(provider_domain_id,'') FROM email_domains`); got != "" {
 		t.Fatalf("nothing may be recorded while the provider is down: %q", got)
 	}
 }
@@ -247,7 +247,7 @@ func TestProviderDomainsAreWorkspaceScoped(t *testing.T) {
 	if settingsA.Channel.DNSRecords[0].Value == settingsB.Channel.DNSRecords[0].Value {
 		t.Fatal("two workspaces must hold different DKIM keys for the same name")
 	}
-	if count := queryString(t, pool, `SELECT count(DISTINCT provider_domain_id)::text FROM email_channels WHERE provider_domain_id IS NOT NULL`); count != "2" {
+	if count := queryString(t, pool, `SELECT count(DISTINCT provider_domain_id)::text FROM email_domains WHERE provider_domain_id IS NOT NULL`); count != "2" {
 		t.Fatalf("each workspace needs its own provider domain, got %s", count)
 	}
 }
@@ -308,7 +308,7 @@ func TestTwoVerifiesAtOnceLeaveOneProviderDomain(t *testing.T) {
 	if err := newSweeper(pool, server.URL, &clock).Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if live := fake.live(); len(live) != 1 || live[0] != queryString(t, pool, `SELECT provider_domain_id FROM email_channels`) {
+	if live := fake.live(); len(live) != 1 || live[0] != queryString(t, pool, `SELECT provider_domain_id FROM email_domains`) {
 		t.Fatalf("two simultaneous verifies left %d provider domains: %v", len(live), live)
 	}
 }
@@ -327,7 +327,7 @@ func TestAProviderDomainDeletedOutsideTheAppIsCreatedAgain(t *testing.T) {
 		t.Fatalf("status=%d body=%s, want a normal pending answer, not 502", response.Code, response.Body.String())
 	}
 	second := fake.idOf("gone-desk.example.com")
-	if second == first || queryString(t, pool, `SELECT provider_domain_id FROM email_channels`) != second || len(fake.live()) != 1 {
+	if second == first || queryString(t, pool, `SELECT provider_domain_id FROM email_domains`) != second || len(fake.live()) != 1 {
 		t.Fatalf("the domain must be created again and stored: first=%s second=%s live=%v", first, second, fake.live())
 	}
 }

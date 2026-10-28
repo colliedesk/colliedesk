@@ -19,7 +19,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listSavedViews, a.createSavedView, a.listDeletedSavedViews, a.updateSavedView, a.deleteSavedView, a.restoreSavedView,
 		a.listKBCollections, a.createKBCollection, a.listTrashedKBCollections, a.updateKBCollection, a.deleteKBCollection, a.restoreKBCollection, a.setKBOrder,
 		a.listKBArticles, a.createKBArticle, a.listTrashedKBArticles, a.getKBArticle, a.updateKBArticle, a.deleteKBArticle, a.restoreKBArticle,
-		a.listKBArticleVersions, a.restoreKBArticleVersion, a.uploadKBImage, a.getKBImage,
+		a.listKBArticleVersions, a.restoreKBArticleVersion, a.excludeKBArticleFromAI, a.includeKBArticleInAI, a.uploadKBImage, a.getKBImage,
 		a.listKBMedia, a.updateKBMedia,
 		a.listTrashedKBMedia, a.trashKBMedia, a.trashUnusedKBMedia, a.restoreKBMediaBatch, a.purgeKBMedia, a.trashOneKBMedia, a.restoreKBMedia, a.replaceKBMedia, a.undoKBMediaReplacement,
 		a.createKBMediaUpload, a.listKBMediaUploads, a.getKBMediaUpload, a.putKBMediaUploadPart, a.cancelKBMediaUpload, a.completeKBMediaUpload, a.getKBMediaFile, a.putKBVideoPoster, a.getKBVideoPoster,
@@ -36,6 +36,17 @@ func (a *API) routeSpecs() []routeSpec {
 		a.createProblemReport,
 		a.listImports, a.getImport, a.setImportKey, a.cancelImport, a.startImport, a.previewImport, a.getImportReport, a.undoImport,
 		a.listImportPeople, a.linkImportPerson, a.unlinkImportPerson,
+		a.getAISettings, a.addAIProvider, a.listAIModels, a.updateAIProvider, a.setAIProviderKey, a.checkAIProvider, a.setAISlot, a.removeAIProvider,
+		a.getAIUsage, a.setAIAutomaticLimits,
+		a.createAIDraft, a.listAIDrafts, a.getAIDraft, a.discardAIDraft,
+		a.getAITriage, a.createAITriage, a.acceptAITriage, a.dismissAITriage, a.undoAITriage,
+		a.getResults, a.getResultsShareLink, a.createResultsShareLink, a.revokeResultsShareLink, a.getSharedResults, a.setResultsEmail,
+		a.listChannels, a.createChannel, a.listChannelEvents, a.getChannel, a.updateChannel, a.removeChannel, a.setChannelCredential, a.checkChannel,
+		a.replayHeldChannelMessages, a.discardHeldChannelMessages,
+		a.getEmailChannel, a.verifyEmailDomain, a.rotateEmailSecret, a.connectGmail, a.disconnectGmail, a.submitWebForm,
+		a.connectMicrosoft, a.disconnectMicrosoft, a.finishMicrosoftConnect, a.finishMicrosoftAdminConsent,
+		a.connectMicrosoft, a.disconnectMicrosoft,
+		a.sendTestMessage, a.sendTestMessage,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

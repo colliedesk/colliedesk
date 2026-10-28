@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -27,7 +28,7 @@ func storedFiles(t *testing.T, root string) int {
 func TestUndoRemovesWhatTheImportCreatedAndKeepsWorkSinceThen(t *testing.T) {
 	env := newImportEnv(t)
 	ctx := context.Background()
-	data := store.New(env.pool)
+	data := store.New(env.pool).WithChannels(registry.New(registry.Config{}))
 	if _, err := data.CreateContact(ctx, env.workspaceID, "Carol (existing)", "carol@globex.example"); err != nil {
 		t.Fatal(err)
 	}

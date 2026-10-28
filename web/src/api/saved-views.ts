@@ -13,6 +13,7 @@ export const conversationFiltersSchema = z.object({
   tag: z.array(z.string().uuid()).optional(), tag_match: z.enum(['any', 'all']).optional(), contact: z.string().uuid().optional(),
   organization: z.string().optional(), awaiting: z.enum(['team', 'customer']).optional(), has_pending_draft: z.boolean().optional(),
   delivery_failed: z.boolean().optional(), source: z.enum(['imported', 'native']).optional(), channel: z.array(channelSchema).optional(),
+  channel_id: z.array(z.string().uuid()).optional(),
   created_after: z.string().datetime({ offset: true }).optional(), created_before: z.string().datetime({ offset: true }).optional(),
   updated_after: z.string().datetime({ offset: true }).optional(), updated_before: z.string().datetime({ offset: true }).optional(),
   sort: conversationSortSchema.optional(), search: z.string().optional(),
@@ -29,7 +30,7 @@ const json = <Operation extends 'createSavedView' | 'updateSavedView'>(value: Re
 export const savedViewsApi = {
   list: () => request('/api/v1/saved-views', savedViewListSchema),
   trash: () => request('/api/v1/saved-views/trash', savedViewListSchema),
-  create: (value: RequestBody<'createSavedView'>) => request('/api/v1/saved-views', savedViewSchema, { method: 'POST', body: json<'createSavedView'>(value) }),
+  create: (value: RequestBody<'createSavedView'>, key: string) => request('/api/v1/saved-views', savedViewSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: json<'createSavedView'>(value) }),
   update: (id: string, value: RequestBody<'updateSavedView'>) => request(`/api/v1/saved-views/${id}`, savedViewSchema, { method: 'PATCH', body: json<'updateSavedView'>(value) }),
   remove: (id: string) => request(`/api/v1/saved-views/${id}`, savedViewSchema, { method: 'DELETE' }),
   restore: (id: string) => request(`/api/v1/saved-views/${id}/restore`, savedViewSchema, { method: 'POST' }),
