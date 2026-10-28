@@ -4,6 +4,7 @@ import { NotAnAgentError } from '../../api/cloud-signup';
 import type { SignupAnswers } from '../../api/cloud-signup';
 import { markSignInFormReady } from '../../lib/sign-in-ready';
 import { messages } from '../../messages';
+import { signupMessages } from './signup-messages';
 import { clerkAppearance } from './clerk-appearance';
 import { CloudSignup } from './cloud-signup';
 
@@ -94,7 +95,7 @@ function CloudSession({ onSessionToken, onSignUp, buying, endSession = false }: 
   if (ending) return signOutFailed ? <div className="cloud-signup">
     <p role="alert" className="error-copy">{messages.signOutFailed}</p>
     <button type="button" onClick={() => void endOpenSession()}>{messages.tryAgain}</button>
-  </div> : <p>{messages.signingOut}</p>;
+  </div> : <p>{signupMessages.signingOut}</p>;
   if (noWorkspace && onSignUp) {
     // Clerk session tokens live for about a minute, so the token is fetched when the form is sent.
     const create = async (name: string, answers: SignupAnswers) => {
@@ -108,12 +109,12 @@ function CloudSession({ onSessionToken, onSignUp, buying, endSession = false }: 
     </>;
   }
   if (noWorkspace) return <div className="cloud-signup">
-    <p role="alert" className="error-copy">{messages.noWorkspaceForEmail}</p>
-    <button type="button" onClick={leave}>{messages.useAnotherAccount}</button>
+    <p role="alert" className="error-copy">{signupMessages.noWorkspaceForEmail}</p>
+    <button type="button" onClick={leave}>{signupMessages.useAnotherAccount}</button>
     {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
   </div>;
-  if (failed) return <button type="button" onClick={() => setFailed(false)}>{messages.retryCloudSignIn}</button>;
-  if (!isLoaded || isSignedIn) return <p>{messages.cloudSigningIn}</p>;
+  if (failed) return <button type="button" onClick={() => setFailed(false)}>{signupMessages.retryCloudSignIn}</button>;
+  if (!isLoaded || isSignedIn) return <p>{signupMessages.cloudSigningIn}</p>;
   // Stay on this page after sign-in (Clerk would otherwise go to "/" and unmount this component
   // before the exchange). withSignUp lets an agent who has no Clerk identity yet sign in with a
   // code; the server still admits only emails that belong to an agent.

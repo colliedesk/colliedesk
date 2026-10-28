@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { ConflictError, InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 
 // SaveState is what a section is told about its latest save request.
 export interface SaveState {
@@ -43,7 +44,7 @@ export function useSaveFeedback(save: SaveState = {}, errorID?: string, field?: 
     pending,
     // invalid marks the field the error is about: until the person edits it, or while it holds the refused value.
     invalid: value === undefined ? Boolean(error) && !edited : Boolean(shown),
-    saveLabel: (label: string) => (pending ? messages.saving : label),
+    saveLabel: (label: string) => (pending ? settingsMessages.saving : label),
     status: <SaveStatus saved={Boolean(save.saved) && !pending && !edited} error={shown} id={errorID} />,
     touch: () => setEdited(true),
   };
@@ -51,6 +52,6 @@ export function useSaveFeedback(save: SaveState = {}, errorID?: string, field?: 
 
 function SaveStatus({ saved, error, id }: { saved: boolean; error?: string; id?: string }) {
   if (error) return <span role="alert" id={id} className="error-copy save-status">{error}</span>;
-  if (saved) return <span role="status" className="save-status">{messages.saved}</span>;
+  if (saved) return <span role="status" className="save-status">{settingsMessages.saved}</span>;
   return null;
 }

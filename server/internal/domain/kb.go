@@ -318,6 +318,8 @@ type HelpCenterSite struct {
 	Theme HelpCenterTheme
 	// LogoWidth and LogoHeight are the logo's size in pixels, 0 when unknown.
 	LogoWidth, LogoHeight int
+	// SearchConsole are the verification tokens the pages carry as <meta> tags.
+	SearchConsole SearchConsole
 	// CustomHost is the workspace's active custom domain, "" when it has none or is on its trial: the
 	// help center serves there and its other addresses redirect there.
 	CustomHost string

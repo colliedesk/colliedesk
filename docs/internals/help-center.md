@@ -192,6 +192,14 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   request filed before it, would clear the CSS silently. It is 422 `validation_failed` instead, an
   agent request without it is not filed, and one stored earlier fails on approval with the same 422;
   null or `""` clears it. The check and the preview save nothing and keep it optional.
+- **Search Console tokens are their own resource** (`/api/v1/help-center/search-console`), not theme
+  fields. A field left out stays, because two optional tokens in a whole-replace body would let a
+  client that knows only one erase the other, and losing a token breaks a verified property. The
+  tag goes in the `layout.html` head from `domain.HelpCenterSite.SearchConsole`, so it exists only
+  where a workspace's pages are rendered (never on the 404 of an unknown host). The token is held
+  to `[A-Za-z0-9_-]{16,100}` in the domain, the SQL check and the template's attribute escaping;
+  any one of the three keeps a quote or angle bracket out of the head. A save bumps
+  `content_version`, which is in every page's ETag.
 - **Every color pair the pages show reads (WCAG AA), not only the six the save checks.**
   `domain.ThemeBrandPalette` derives surface, muted, rule and the accent tints from the saved
   colors and falls back (surface to the background, muted to the text, tints to the surface) when

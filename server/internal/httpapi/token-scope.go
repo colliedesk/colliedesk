@@ -190,6 +190,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/agent-requests/{id}/cancel": grant(auth.PermAgentRequestsCancel),
 	"POST " + problemReportPath:               anyToken,
 	"GET /api/v1/help-center/theme":           grant(auth.PermHelpCenterRead),
+	"GET /api/v1/help-center/search-console":  grant(auth.PermHelpCenterRead),
 	"POST /api/v1/help-center/theme/check":    grant(auth.PermHelpCenterRead),
 	"POST /api/v1/help-center/theme/preview":  grant(auth.PermHelpCenterRead),
 
@@ -243,6 +244,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/channels/email/domain-verification": grant(auth.PermChannelsUpdate),
 	"DELETE /api/v1/auth/sessions/{id}":               grant(auth.PermTeamRevoke),
 	"PUT /api/v1/help-center/theme":                   grant(auth.PermHelpCenterUpdate),
+	"PUT /api/v1/help-center/search-console":          grant(auth.PermHelpCenterUpdate),
 
 	"POST /api/v1/auth/tokens":           alwaysAsk(auth.PermTeamCreateTokens),
 	"POST /api/v1/auth/invites":          alwaysAsk(auth.PermTeamInvite),

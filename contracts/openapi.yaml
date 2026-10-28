@@ -5693,6 +5693,45 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/ThemeInvalid'}
+  /api/v1/help-center/search-console:
+    get:
+      operationId: getHelpCenterSearchConsole
+      x-permission: conversations:read
+      description: >
+        The verification tokens of the help center: the content of the `google-site-verification`
+        (Google Search Console) and `msvalidate.01` (Bing Webmaster Tools) `<meta>` tags. A token is
+        null until set. Each is served as a `<meta>` tag in the head of every page of this workspace's
+        help center, on its own host or custom domain, and never on the app or another workspace.
+      responses:
+        '200':
+          description: The verification tokens
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSearchConsole'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    put:
+      operationId: putHelpCenterSearchConsole
+      x-permission: access:write
+      description: >
+        Set or remove the verification tokens. A field left out stays as it is; null or an empty string
+        removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to
+        100 letters, digits, `-` or `_`); anything else, such as the whole tag, is refused (422
+        `validation_failed`, with `fields`) and nothing is saved. The tags change every public page, so
+        a save changes `content_version`. Admins only; an agent token needs `help_center:update` and
+        `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an
+        agent request (202) and changes no public page.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterSearchConsoleInput'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The saved tokens
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSearchConsole'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ThemeInvalid'}
   /api/v1/help-center/theme/check:
     post:
       operationId: checkHelpCenterTheme
@@ -7842,6 +7881,20 @@ components:
       description: >-
         A font stack of the reader's own system: nothing is downloaded. Null is the default (system-sans
         for text, classic-serif for headings).
+    HelpCenterSearchConsoleInput:
+      type: object
+      additionalProperties: false
+      properties:
+        google_site_verification: {type: [string, 'null'], maxLength: 100, description: 'The content of Google Search Console''s `google-site-verification` meta tag. Left out: unchanged. Null or empty: removed.'}
+        bing_site_verification: {type: [string, 'null'], maxLength: 100, description: 'The content of Bing Webmaster Tools'' `msvalidate.01` meta tag. Left out: unchanged. Null or empty: removed.'}
+    HelpCenterSearchConsole:
+      type: object
+      required: [google_site_verification, bing_site_verification, content_version, updated_at]
+      properties:
+        google_site_verification: {type: [string, 'null']}
+        bing_site_verification: {type: [string, 'null']}
+        content_version: {type: integer, minimum: 0}
+        updated_at: {type: [string, 'null'], format: date-time, description: Null until the help center settings were first changed.}
     HelpCenterThemeInput:
       type: object
       additionalProperties: false

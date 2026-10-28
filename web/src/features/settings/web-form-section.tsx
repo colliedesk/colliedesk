@@ -4,7 +4,7 @@ import { InvalidRequestError, request } from '../../api/client';
 import { useCreateAction } from '../../api/use-create';
 import type { ReactNode } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
-import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 import { channelSetupMessages } from './channel-setup-messages';
 import { CopyButton } from './copy-button';
 import { useSaveFeedback } from './save-feedback';
@@ -33,7 +33,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   useEffect(() => setEnabled(settings?.enabled ?? false), [settings?.enabled]);
   useEffect(() => setOrigins((settings?.allowed_origins ?? []).join('\n')), [settings?.allowed_origins]);
   const feedback = useSaveFeedback(save);
-  const state = settings?.enabled ? messages.webFormOn : messages.webFormOff;
+  const state = settings?.enabled ? settingsMessages.webFormOn : settingsMessages.webFormOff;
   const embed = part === 'embed';
   // A form that also answers the workspace's older address shows its own address, the one a new site uses;
   // the older one stays under a detail for a site that already sends to it.
@@ -45,18 +45,18 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
         {canManage
           ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(enabled, parseOrigins(origins)); }}>
               {nameField}
-              {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{messages.webFormAccept}</span></label>}
-              <label className="field"><span>{messages.webFormOrigins}</span>
+              {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{settingsMessages.webFormAccept}</span></label>}
+              <label className="field"><span>{settingsMessages.webFormOrigins}</span>
                 <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={originsHelp} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
               <small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
-              <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveWebForm)}</button>
+              <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(settingsMessages.saveWebForm)}</button>
                 {feedback.status}</span>
             </form>
           : <ul className="muted-copy">{(settings?.allowed_origins ?? []).map((origin) => <li key={origin}>{origin}</li>)}</ul>}
         {settings && <p>{tryMessages.what}</p>}
         {settings && <TryForm path={settings.submit_path} />}
-        {settings && <label className="invite-link"><span className="field-label">{messages.webFormSubmitUrl}</span>
-          <input readOnly value={submitURL} /><small>{messages.webFormSubmitHelp}{' '}
+        {settings && <label className="invite-link"><span className="field-label">{settingsMessages.webFormSubmitUrl}</span>
+          <input readOnly value={submitURL} /><small>{settingsMessages.webFormSubmitHelp}{' '}
             <a href={tryMessages.guideURL} target="_blank" rel="noreferrer">{tryMessages.guide}</a></small></label>}
         {settings && embed && <EmbedCode url={submitURL} />}
         {older && <details className="muted-copy"><summary>{olderMessages.summary}</summary><p>{olderMessages.body(older)}</p></details>}
@@ -64,7 +64,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
   if (embed) return body;
   return (
     <section className="settings-card" aria-labelledby="web-form-heading">
-      <div className="section-heading"><h2 id="web-form-heading">{messages.webForm}</h2><p>{messages.webFormDescription}</p></div>
+      <div className="section-heading"><h2 id="web-form-heading">{settingsMessages.webForm}</h2><p>{settingsMessages.webFormDescription}</p></div>
       {body}
     </section>
   );
@@ -134,7 +134,7 @@ await fetch('${url}', {
   body: JSON.stringify({ email, message, source: 'contact-page', website: '' }),
 });`;
   return <>
-    <span className="button-row"><CopyButton value={url} copiedText={messages.urlCopied}>{embedMessages.copyUrl}</CopyButton></span>
+    <span className="button-row"><CopyButton value={url} copiedText={settingsMessages.urlCopied}>{embedMessages.copyUrl}</CopyButton></span>
     <section className="embed-code" aria-labelledby="embed-code-heading">
       <h3 id="embed-code-heading" className="field-label">{embedMessages.code}</h3>
       <pre><code>{code}</code></pre>
