@@ -68,7 +68,7 @@ test('the old help center address typed in the form goes with the preview', asyn
   fireEvent.change(screen.getByLabelText('API key of a Freshdesk admin'), { target: { value: 'k' } });
   fireEvent.change(screen.getByLabelText('Old help center address (optional)'), { target: { value: 'support.acme.com' } });
   fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
-  await waitFor(() => expect(imports.preview).toHaveBeenCalledWith('acme.freshdesk.com', 'k', 'support.acme.com'));
+  await waitFor(() => expect(imports.preview).toHaveBeenCalledWith('acme.freshdesk.com', 'k', expect.any(String), 'support.acme.com'));
 });
 
 test('a later people action clears what an earlier one said', async () => {
