@@ -163,7 +163,7 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/help-center":                                  {"/api/v1/help-center", nil, admin, 200, ""},
 		"PUT /api/v1/help-center":                                  {"/api/v1/help-center", map[string]any{"enabled": true, "title": "Contract help", "locale": "en"}, admin, 200, ""},
 		"GET /api/v1/help-center/theme":                            {path: "/api/v1/help-center/theme", token: admin, status: 200},
-		"PUT /api/v1/help-center/theme":                            {"/api/v1/help-center/theme", map[string]any{"logo_media_id": kb.imageID, "colors": map[string]any{"primary": "#0b5cad"}}, admin, 200, ""},
+		"PUT /api/v1/help-center/theme":                            {"/api/v1/help-center/theme", map[string]any{"logo_media_id": kb.imageID, "colors": map[string]any{"primary": "#0b5cad"}, "custom_css": ""}, admin, 200, ""},
 		"POST /api/v1/help-center/theme/check":                     {"/api/v1/help-center/theme/check", map[string]any{"colors": map[string]any{"text": "#999999"}}, admin, 200, ""},
 		"POST /api/v1/help-center/theme/preview":                   {"/api/v1/help-center/theme/preview", map[string]any{"page": "article", "theme": map[string]any{"colors": map[string]any{"text": "#999999"}}}, admin, 200, ""},
 		// The contract server has no HELP_CENTER_DOMAIN, so every host name is refused.

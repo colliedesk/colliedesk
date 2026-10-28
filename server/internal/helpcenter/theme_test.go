@@ -15,6 +15,7 @@ func brandedTheme() domain.HelpCenterTheme {
 		Colors: domain.ThemeColors{Primary: themeValue("#0b5cad"), Header: themeValue("#ffffff"), HeaderText: themeValue("#16201c"), Background: themeValue("#ffffff"),
 			Text: themeValue("#1f2328"), Link: themeValue("#0b5cad"), Footer: themeValue("#f6f8fa")},
 		BodyFont: themeValue("humanist-sans"), HeadingFont: themeValue("transitional-serif"),
+		CustomCSS: "@media (max-width:600px){.masthead{border-bottom:2px solid #0b5cad}}",
 	}
 }
 
@@ -44,8 +45,13 @@ func TestBrandStyleSheetSetsTheThemeAndNothingForTheDefault(t *testing.T) {
 func TestBrandStyleSheetIsNamedByItsContent(t *testing.T) {
 	theme := brandedTheme()
 	name := brandSheetName(brandCSS(theme))
-	if !regexp.MustCompile(`^brand-[0-9a-f]{12}\.css$`).MatchString(name) || name != brandSheetName(brandCSS(brandedTheme())) {
+	if !regexp.MustCompile(`^brand-[0-9a-f]{32}\.css$`).MatchString(name) || name != brandSheetName(brandCSS(brandedTheme())) {
 		t.Fatalf("brand style sheet name %q", name)
+	}
+	// 128 bits of SHA-256: an admin chooses every byte of the sheet, and a name cached for a year must not
+	// be reachable by a second sheet found by brute force (sha256sum of "a{color:red}", first 32 digits).
+	if got := brandSheetName([]byte("a{color:red}")); got != "brand-ea159630e705fa625eb1224662198ada.css" {
+		t.Fatalf("brand style sheet name of a{color:red} = %q", got)
 	}
 	theme.Colors.Link = themeValue("#0a4f94")
 	if brandSheetName(brandCSS(theme)) == name {

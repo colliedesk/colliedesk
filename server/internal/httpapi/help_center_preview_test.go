@@ -17,14 +17,33 @@ const previewCSP = `<meta http-equiv="Content-Security-Policy" content="default-
 	`/api/v1/kb/media/; style-src ` + testOrigin + `/help/_/ 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'">`
 
 // previewStyle is the inline block of a preview document: the candidate brand only, with links inert.
-func previewStyle(t *testing.T, html string) string {
+// previewStyles is the text of each inline <style> element of a preview, in order.
+func previewStyles(t *testing.T, html string) []string {
 	t.Helper()
-	start, end := strings.Index(html, "<style>"), strings.Index(html, "</style>")
-	if start < 0 || end < start {
+	var styles []string
+	for rest := html; ; {
+		start := strings.Index(rest, "<style>")
+		if start < 0 {
+			break
+		}
+		rest = rest[start+len("<style>"):]
+		end := strings.Index(rest, "</style>")
+		if end < 0 {
+			t.Fatalf("a <style> element of the preview is never closed:\n%.500s", html)
+		}
+		styles, rest = append(styles, rest[:end]), rest[end+len("</style>"):]
+	}
+	if len(styles) == 0 {
 		t.Fatalf("the preview has no inline style:\n%.500s", html)
 	}
-	return html[start:end]
+	return styles
 }
+
+// previewInert is the preview's first inline style, written out from the cascade rules it relies on:
+// an anonymous layer declared before any other wins over every later !important declaration, whatever
+// its layer or specificity, and no other style sheet can add a rule to it.
+const previewInert = "@layer{a,a *,a::before,a::after,a *::before,a *::after,button,button *,button::before,button::after," +
+	"input,label,label *,summary,summary *,summary::before,summary::after{pointer-events:none!important}}"
 
 type previewView struct {
 	HTML   string            `json:"html"`
@@ -98,15 +117,19 @@ func TestHelpCenterThemePreviewShowsTheCandidateOnTheWorkspacesOwnPages(t *testi
 	if strings.Index(home.HTML, previewCSP) > strings.Index(home.HTML, "<style>") || strings.Index(home.HTML, previewCSP) > strings.Index(home.HTML, "<link rel=\"stylesheet\"") {
 		t.Error("the policy must come before the style it governs")
 	}
-	// The brand overrides the sheet's defaults, as the brand sheet does on the public pages: it comes after.
-	if strings.Index(home.HTML, "<style>") < strings.Index(home.HTML, `<link rel="stylesheet" href="/help/_/site-`) {
-		t.Error("the inline brand must come after the help center's sheet")
+	// Links are inert from the first paint, by a rule that comes first so that its layer is the first
+	// one: nothing in the frame follows a pointer before the app can hold its links. The brand overrides
+	// the sheet's defaults, as the brand sheet does on the public pages: it comes after.
+	styles := previewStyles(t, home.HTML)
+	if len(styles) != 2 || !strings.HasPrefix(styles[0], previewInert+"\n") || strings.Contains(styles[1], "pointer-events") {
+		t.Errorf("preview inline styles = %q", styles)
 	}
-	// The inline block is the brand, not the help center's sheet, and makes links inert from the first
-	// paint: nothing in the frame follows a pointer before the app can hold its links.
-	style := previewStyle(t, home.HTML)
-	if strings.Contains(style, ".masthead") || !strings.Contains(style, "pointer-events:none") {
-		t.Errorf("preview inline style = %.400s", style)
+	if strings.Index(home.HTML, "<style>") > strings.Index(home.HTML, `<link rel="stylesheet" href="/help/_/site-`) ||
+		strings.LastIndex(home.HTML, "<style>") < strings.Index(home.HTML, `<link rel="stylesheet" href="/help/_/site-`) {
+		t.Error("the inert rule must come before the help center's sheet and the inline brand after it")
+	}
+	if strings.Contains(styles[len(styles)-1], ".masthead") {
+		t.Errorf("the inline brand holds the help center's sheet: %.400s", styles[len(styles)-1])
 	}
 
 	article := preview(t, api, admin, "article", theme, http.StatusOK)
@@ -134,7 +157,7 @@ func TestHelpCenterThemePreviewShowsTheCandidateOnTheWorkspacesOwnPages(t *testi
 func TestHelpCenterThemePreviewShowsAContrastFailureThatSaveRefuses(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Preview Contrast", "admin@preview-contrast.example.com")
-	theme := map[string]any{"colors": map[string]any{"text": "#999999"}}
+	theme := map[string]any{"colors": map[string]any{"text": "#999999"}, "custom_css": ""}
 	got := preview(t, api, admin, "home", theme, http.StatusOK)
 	if got.OK || !strings.Contains(got.Fields["colors.text"], "4.5:1") || !strings.Contains(got.HTML, "--ink:#999999;") {
 		t.Fatalf("preview of a failing theme = ok %v fields %v", got.OK, got.Fields)

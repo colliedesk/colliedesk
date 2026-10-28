@@ -43,3 +43,8 @@
 .theme-settings { display: grid; gap: var(--space-3); border-top: 1px solid var(--line); padding-top: var(--space-4); }
 .theme-settings > h3 { margin: 0; font-size: var(--fs-ui); font-weight: 600; }
 .theme-settings > p { margin: 0; }
+
+/* Advanced: custom CSS, folded unless the saved brand has some. */
+.theme-advanced { display: grid; gap: var(--space-3); border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.theme-advanced > summary { cursor: pointer; width: fit-content; color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; }
+.theme-advanced textarea { width: 100%; min-height: 10rem; resize: vertical; font-family: var(--font-mono); font-size: var(--fs-small); tab-size: 2; }

@@ -27,6 +27,7 @@ type themeView struct {
 	Colors         map[string]*string `json:"colors"`
 	BodyFont       *string            `json:"body_font"`
 	HeadingFont    *string            `json:"heading_font"`
+	CustomCSS      string             `json:"custom_css"`
 	ContentVersion int64              `json:"content_version"`
 	UpdatedAt      *string            `json:"updated_at"`
 	Checks         []themeCheckView   `json:"checks"`
@@ -46,7 +47,7 @@ func fullTheme(logoID string) map[string]any {
 		"linkback_url": "https://acme.example/", "contact_url": "mailto:help@acme.example", "contact_phone": "+1 (555) 010-2030",
 		"colors": map[string]any{"primary": "#0B5CAD", "header": "#ffffff", "header_text": "#16201c", "background": "#ffffff",
 			"text": "#1f2328", "link": "#0b5cad", "footer": "#f6f8fa"},
-		"body_font": "humanist-sans", "heading_font": "transitional-serif",
+		"body_font": "humanist-sans", "heading_font": "transitional-serif", "custom_css": "h2{letter-spacing:.01em}",
 	}
 }
 
@@ -76,7 +77,7 @@ func TestHelpCenterThemeRoundTripBumpsTheContentVersion(t *testing.T) {
 	var saved themeView
 	kbCall(t, api, http.MethodPut, themePath, fullTheme(logo.ID), admin, http.StatusOK, &saved)
 	if saved.LogoMediaID == nil || *saved.LogoMediaID != logo.ID || *saved.Colors["primary"] != "#0b5cad" || *saved.ContactPhone != "+1 (555) 010-2030" ||
-		*saved.HeadingFont != "transitional-serif" || saved.ContentVersion != 1 || saved.UpdatedAt == nil {
+		*saved.HeadingFont != "transitional-serif" || saved.CustomCSS != "h2{letter-spacing:.01em}" || saved.ContentVersion != 1 || saved.UpdatedAt == nil {
 		t.Fatalf("saved theme = %+v", saved)
 	}
 	var read themeView
@@ -85,8 +86,8 @@ func TestHelpCenterThemeRoundTripBumpsTheContentVersion(t *testing.T) {
 		t.Fatalf("read theme = %+v", read)
 	}
 	var reset themeView
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{}, admin, http.StatusOK, &reset)
-	if reset.LogoMediaID != nil || reset.Colors["primary"] != nil || reset.BodyFont != nil || reset.ContentVersion != 2 {
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": ""}, admin, http.StatusOK, &reset)
+	if reset.LogoMediaID != nil || reset.Colors["primary"] != nil || reset.BodyFont != nil || reset.CustomCSS != "" || reset.ContentVersion != 2 {
 		t.Fatalf("reset theme = %+v", reset)
 	}
 	var center struct {
@@ -101,14 +102,14 @@ func TestHelpCenterThemeRoundTripBumpsTheContentVersion(t *testing.T) {
 func TestHelpCenterThemeRefusesLowContrastAndSavesNothing(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Theme Contrast", "admin@theme-contrast.example.com")
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{"colors": map[string]any{"link": "#0b5cad"}}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "colors": map[string]any{"link": "#0b5cad"}}, admin, http.StatusOK, nil)
 
-	low := map[string]any{"colors": map[string]any{"text": "#999999", "background": "#ffffff"}}
+	low := map[string]any{"colors": map[string]any{"text": "#999999", "background": "#ffffff"}, "custom_css": ""}
 	refused := themeRefused(t, kbCall(t, api, http.MethodPut, themePath, low, admin, http.StatusUnprocessableEntity, nil).Body, "contrast_too_low")
 	if !strings.HasPrefix(refused.Error.Fields["colors.text"], "Text on the background is 2.85:1; it needs 4.5:1. #") || len(refused.Error.Checks) != 6 {
 		t.Fatalf("refusal = %+v", refused.Error)
 	}
-	shape := map[string]any{"linkback_url": "javascript:alert(1)", "colors": map[string]any{"text": "red"}}
+	shape := map[string]any{"linkback_url": "javascript:alert(1)", "colors": map[string]any{"text": "red"}, "custom_css": ""}
 	// A color of the wrong shape breaks the contract's pattern, so the request is sent unvalidated.
 	shaped := request(t, api, http.MethodPut, themePath, shape, admin, nil)
 	if shaped.Code != http.StatusUnprocessableEntity {
@@ -155,7 +156,7 @@ func TestHelpCenterThemeStaysInItsWorkspace(t *testing.T) {
 		if strings.HasSuffix(path, "/check") {
 			method = http.MethodPost
 		}
-		refused := themeRefused(t, kbCall(t, api, method, path, map[string]any{"logo_media_id": logo.ID}, beta, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
+		refused := themeRefused(t, kbCall(t, api, method, path, map[string]any{"logo_media_id": logo.ID, "custom_css": ""}, beta, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
 		if refused.Error.Fields["logo_media_id"] == "" {
 			t.Fatalf("%s fields = %v", path, refused.Error.Fields)
 		}
@@ -177,7 +178,7 @@ func TestHelpCenterThemeTokenTiers(t *testing.T) {
 	read := issueToken(t, api, admin, "Reader", "read").Token
 	send := issueToken(t, api, admin, "Writer", "send").Token
 	adminToken := issueToken(t, api, admin, "Admin", "admin").Token
-	body := map[string]any{"colors": map[string]any{"primary": "#0b5cad"}}
+	body := map[string]any{"colors": map[string]any{"primary": "#0b5cad"}, "custom_css": ""}
 
 	if response := request(t, api, http.MethodPut, themePath, body, send, nil); response.Code != http.StatusAccepted {
 		t.Fatalf("send token put status=%d body=%s, want 202", response.Code, response.Body.String())

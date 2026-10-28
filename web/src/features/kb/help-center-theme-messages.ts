@@ -56,6 +56,13 @@ export const themeMessages = {
     'transitional-serif': 'Transitional serif', 'rounded-sans': 'Rounded sans', mono: 'Monospace',
   } as Record<string, string>,
   fontsHelp: 'Fonts already on the reader\'s device: nothing is downloaded.',
+  advanced: 'Advanced',
+  customCSS: 'Custom CSS',
+  customCSSHelp: 'Added after the brand on every public page, for details the fields above do not cover. '
+    + 'Nothing may load from elsewhere: url(), @import and @font-face are refused. The contrast checks above do not cover it, so check the preview.',
+  customCSSPending: (reason: string) => `Not in the preview yet: ${reason}`,
+  customCSSSize: (bytes: number, max: number) => `${bytes.toLocaleString('en-US')} of ${max.toLocaleString('en-US')} bytes`,
+  previewCustomCSS: 'The preview keeps the last custom CSS it could show.',
   save: 'Save brand',
   saving: 'Saving…',
   saved: 'Saved. Live on the next page load.',

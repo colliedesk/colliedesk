@@ -325,6 +325,7 @@ type HelpCenter struct {
 	ColorFooter       *string   `json:"color_footer"`
 	BodyFont          *string   `json:"body_font"`
 	HeadingFont       *string   `json:"heading_font"`
+	CustomCSS         string    `json:"custom_css"`
 }
 
 // AgentRequest is a call an agent token asked a person to approve, and what became of it. The answer

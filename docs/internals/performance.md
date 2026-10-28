@@ -113,7 +113,9 @@ page 50 times, HTML rendering included: the home page, the first and last page o
 (1,000 published articles, 50 a page), a 9,000- and a 100,000-character article, and searches with two
 words, a short prefix, no match and a title. Each must stay at or below 100 ms p95 (6–16 ms locally).
 A page is five short scoped transactions at most (slug lookup, settings and lock, collections,
-articles, neighbours); a 304 stops after the second.
+articles, neighbours); a 304 stops after the second. Workspace A carries a full theme with about
+31 KiB of custom CSS, the worst case of what every page reads and hashes into the brand sheet's name
+(page p95 unchanged, and the gate took 0.4 s longer locally).
 
 `TestHelpCenterHostileArticlesLatencyBudget` holds an article page to the same 100 ms when its
 100,000 characters are built to be slow to parse: one line of quote or list markers (`>`, `> `,

@@ -34,10 +34,17 @@ func previewPolicy(origin string) string {
 		strings.TrimPrefix(stylePath, "/") + " 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'"
 }
 
-// previewStyle follows the brand in the preview's inline block. Links and controls take no pointer from
-// the first paint, so a click before the app holds the frame's links cannot navigate it; a video or
-// player, which the policy would block, is a plain box saying where it plays.
-const previewStyle = "a,button,input,label,summary{pointer-events:none}" +
+// previewStyle is the preview's first <style> element, right after the policy and before every other
+// style. Links and controls, what they hold and their ::before and ::after boxes take no pointer from the
+// first paint, so a click before the app holds the frame's links cannot navigate it. The rule is
+// !important inside an anonymous cascade layer declared before any other: for !important declarations
+// the first layer wins over later layers and unlayered rules, whatever their specificity or order, and
+// no style sheet can add a rule to a layer without a name. The custom CSS (body a{pointer-events:auto
+// !important}, @layer x{…}, a *{…}, a::before{…;inset:0}, all:unset!important) therefore cannot give a
+// link back its pointer. A video or player, which the policy would block, is a plain box saying where
+// it plays.
+const previewStyle = "@layer{a,a *,a::before,a::after,a *::before,a *::after,button,button *,button::before,button::after," +
+	"input,label,label *,summary,summary *,summary::before,summary::after{pointer-events:none!important}}\n" +
 	".preview-video{display:flex;align-items:center;justify-content:center;aspect-ratio:16/9;margin:0 0 1.25rem;padding:1rem;" +
 	"border:1px dashed var(--rule);border-radius:8px;background:var(--surface);color:var(--muted);text-align:center}"
 
@@ -48,8 +55,10 @@ const previewVideo = `<span class="preview-video">Video shown on the live help c
 
 var playerElement = regexp.MustCompile(`<(?:video|iframe)\b[^<>]*></(?:video|iframe)>`)
 
-// The policy goes right after the charset, before anything loads; the brand goes last in the head,
-// after the help center's sheet whose defaults it overrides (as the brand sheet does on public pages).
+// The policy and the inert rule go right after the charset, before anything loads; the brand goes last
+// in the head, after the help center's sheet whose defaults it overrides (as the brand sheet does on
+// public pages), in a <style> element of its own: custom CSS that leaves a selector or an at-rule open
+// ends with its element instead of running into a rule after it.
 var previewHead, headEnd = []byte("<meta charset=\"utf-8\">\n"), []byte("</head>")
 
 // sampleArticle is the text an article preview shows when nothing is published yet.
@@ -102,10 +111,11 @@ func (s *Site) Preview(ctx context.Context, workspaceID string, theme domain.Hel
 	out.Grow(len(body) + len(v.brand.sheet) + len(previewStyle) + 400)
 	out.Write(body[:at])
 	out.WriteString(`<meta http-equiv="Content-Security-Policy" content="` + previewPolicy(s.config.Origin) + "\">\n")
+	out.WriteString("<style>" + previewStyle + "\n</style>\n")
 	out.Write(body[at:end])
 	out.WriteString("<style>\n")
 	out.Write(v.brand.sheet)
-	out.WriteString(previewStyle + "\n</style>\n")
+	out.WriteString("\n</style>\n")
 	out.Write(body[end:])
 	return out.Bytes(), nil
 }

@@ -45,7 +45,7 @@ func TestMediaLibraryShowsWhatTheHelpCenterUses(t *testing.T) {
 	logo := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
 	icon := uploadKBImage(t, api, admin, pngImage(13), http.StatusCreated)
 	loose := uploadKBImage(t, api, admin, pngImage(14), http.StatusCreated)
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{"logo_media_id": logo.ID, "favicon_media_id": icon.ID}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "logo_media_id": logo.ID, "favicon_media_id": icon.ID}, admin, http.StatusOK, nil)
 
 	inUse := helpCenterUsage(t, api, admin, "/api/v1/kb/media?usage=in_use")
 	if got := usedByHelpCenter(inUse[logo.ID]); !slices.Equal(got, []string{"logo"}) {
@@ -89,15 +89,15 @@ func TestImageTheHelpCenterLetsGoOfCanBeRemovedAsUnused(t *testing.T) {
 	for _, id := range []string{first.ID, icon.ID, second.ID} {
 		kbCall(t, api, http.MethodPatch, "/api/v1/kb/media/"+id, map[string]any{"kept": false, "updated_at": itemUpdatedAt(t, api, admin, id)}, admin, http.StatusOK, nil)
 	}
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{"logo_media_id": first.ID, "favicon_media_id": first.ID}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "logo_media_id": first.ID, "favicon_media_id": first.ID}, admin, http.StatusOK, nil)
 	marked := itemUpdatedAt(t, api, admin, first.ID)
 	// The logo moves to another image, but the favicon still shows the first one: it stays kept.
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{"logo_media_id": second.ID, "favicon_media_id": first.ID}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "logo_media_id": second.ID, "favicon_media_id": first.ID}, admin, http.StatusOK, nil)
 	if !itemKept(t, api, admin, first.ID) {
 		t.Fatal("an image the favicon still shows lost its kept mark")
 	}
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{"logo_media_id": second.ID, "favicon_media_id": icon.ID}, admin, http.StatusOK, nil)
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{"logo_media_id": second.ID}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "logo_media_id": second.ID, "favicon_media_id": icon.ID}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "logo_media_id": second.ID}, admin, http.StatusOK, nil)
 	if itemKept(t, api, admin, first.ID) || itemKept(t, api, admin, icon.ID) || !itemKept(t, api, admin, second.ID) {
 		t.Fatalf("kept: first %v, icon %v, second %v; want only the logo in use", itemKept(t, api, admin, first.ID), itemKept(t, api, admin, icon.ID), itemKept(t, api, admin, second.ID))
 	}

@@ -89,7 +89,7 @@ func TestHelpCenterPagesShowTheBrand(t *testing.T) {
 		[]string{`<a href="https://acme.example/contact">Contact us</a>`, `alt="Brand Answers"`}, []string{"tel:", "mailto:"})
 
 	// Fonts alone keep the visitor's light or dark setting.
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{"body_font": "rounded-sans"}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "body_font": "rounded-sans"}, admin, http.StatusOK, nil)
 	fontsOnly := visit(site, base, "192.0.2.60")
 	wantPage(t, fontsOnly, http.StatusOK, []string{brandLink, `<meta name="color-scheme" content="light dark">`}, []string{"/_/logo/", `rel="icon"`})
 	if sheet := visit(site, brandSheet(t, fontsOnly), "192.0.2.60").Body.String(); strings.Contains(sheet, "--accent") || !strings.Contains(sheet, "--font-body:ui-rounded") {
@@ -123,7 +123,7 @@ func TestHelpCenterBrandStyleSheetIsImmutableAndOnlyTheCurrentOne(t *testing.T) 
 	theme := fullTheme("")
 	theme["colors"].(map[string]any)["link"] = "#0a4f94"
 	kbCall(t, api, http.MethodPut, themePath, theme, admin, http.StatusOK, nil)
-	for _, stale := range []string{sheet, "/_/brand-000000000000.css", "/_/brand-.css"} {
+	for _, stale := range []string{sheet, "/_/brand-00000000000000000000000000000000.css", "/_/brand-.css"} {
 		if response := visit(site, stale, "192.0.2.61", "Host", host); response.Code != http.StatusNotFound || response.Header().Get("Cache-Control") != "no-store" {
 			t.Errorf("%s status=%d cache=%q, want 404 no-store", stale, response.Code, response.Header().Get("Cache-Control"))
 		}

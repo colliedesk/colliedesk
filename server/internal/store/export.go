@@ -698,11 +698,11 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	var center export.HelpCenter
 	err = tx.QueryRow(ctx, `SELECT enabled,title,locale,content_version,last_article_number,updated_at,
 		logo_media_id::text,favicon_media_id::text,logo_alt,linkback_url,contact_url,contact_phone,color_primary,color_header,color_header_text,
-		color_background,color_text,color_link,color_footer,body_font,heading_font FROM help_centers WHERE workspace_id=$1`, workspaceID).
+		color_background,color_text,color_link,color_footer,body_font,heading_font,custom_css FROM help_centers WHERE workspace_id=$1`, workspaceID).
 		Scan(&center.Enabled, &center.Title, &center.Locale, &center.ContentVersion, &center.LastArticleNumber, &center.UpdatedAt,
 			&center.LogoMediaID, &center.FaviconMediaID, &center.LogoAlt, &center.LinkbackURL, &center.ContactURL, &center.ContactPhone,
 			&center.ColorPrimary, &center.ColorHeader, &center.ColorHeaderText, &center.ColorBackground, &center.ColorText, &center.ColorLink,
-			&center.ColorFooter, &center.BodyFont, &center.HeadingFont)
+			&center.ColorFooter, &center.BodyFont, &center.HeadingFont, &center.CustomCSS)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
