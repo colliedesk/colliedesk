@@ -344,6 +344,9 @@ func TestTwoSendsAtOnceLeaveAGrantThatStillWorks(t *testing.T) {
 		}
 	}
 	third := f.write(t, "outgoing", "Three")
+	// The worker's clock moves past the row just written: on a slow runner it was written more than a
+	// second after the clock was first read, and a row due later than the clock is not claimed yet.
+	clock = time.Now().UTC().Add(time.Second)
 	process(t, worker)
 	if delivery := f.delivery(t, third.ID); delivery.Status != "sent" {
 		t.Fatalf("a later reply after concurrent sends = %+v", delivery)
