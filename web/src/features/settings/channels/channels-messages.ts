@@ -26,9 +26,7 @@ export const channelsMessages = {
   statusWorking: 'Working',
   statusWaiting: 'Waiting for first message',
   // A waiting channel's page says how to prove the way in works.
-  waitingHelp: (type: string) => type === 'email'
-    ? 'Nothing has arrived yet. Send a test message to your support address (on your own server, post one as the Connection tab shows): it opens a conversation in the inbox, and this channel then reads Working.'
-    : 'Nothing has arrived yet. Send a test message through it: it opens a conversation in the inbox, and this channel then reads Working.',
+  waitingHelp: 'Nothing has arrived yet. Send a test message through it: it opens a conversation in the inbox, and this channel then reads Working.',
   statusOff: 'Off',
   statusNeedsAttention: 'Needs attention',
   statusNotConnected: 'Not connected',

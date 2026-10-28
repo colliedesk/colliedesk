@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { WebFormSettings } from '../../api/schemas';
 import { messages } from '../../messages';
+import { channelSetupMessages } from './channel-setup-messages';
 import { CopyButton } from './copy-button';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
@@ -39,7 +40,7 @@ export function WebFormSection({ settings, canManage, save, onSave, part = 'all'
               {!embed && <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{messages.webFormAccept}</span></label>}
               <label className="field"><span>{messages.webFormOrigins}</span>
                 <textarea rows={3} value={origins} placeholder="https://www.example.com" aria-describedby={originsHelp} onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-              <small id={originsHelp} className="muted-copy">{messages.webFormOriginsHelp}</small>
+              <small id={originsHelp} className="muted-copy">{channelSetupMessages.webFormOriginsHelp}</small>
               <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveWebForm)}</button>
                 {feedback.status}</span>
             </form>
