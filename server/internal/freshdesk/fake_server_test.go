@@ -43,17 +43,25 @@ type fakeFreshdesk struct {
 	remainingZeroAgents  bool
 	foreignNextLink      bool
 	archiveForbidden     bool
-	allArchived          bool
-	noTickets            bool
-	failSearch           bool
-	searchTicketTotal    int
-	failAttachment       string
-	redirectFile         string
-	stallFile            string
-	archiveError         string
-	stallPath            string
-	extraReplyOnTicket6  bool
-	ticket1Updated       bool
+	// emailConfigs is what /api/v2/email_configs lists (emailConfigsStatus answers instead when set);
+	// ticketEmailConfig gives a ticket its email_config_id.
+	emailConfigs        []map[string]any
+	emailConfigsStatus  int
+	ticketEmailConfig   map[string]int64
+	allArchived         bool
+	noTickets           bool
+	failSearch          bool
+	searchTicketTotal   int
+	failAttachment      string
+	redirectFile        string
+	stallFile           string
+	archiveError        string
+	stallPath           string
+	extraReplyOnTicket6 bool
+	ticket1Updated      bool
+	// stats are the ticket stats the list returns with include=stats, by ticket id; a listed ticket
+	// without an entry gets stats whose fields are all null.
+	stats map[string]map[string]any
 	// canned serves the canned response fixtures; without it the account has no canned responses.
 	canned bool
 	// cannedExtra are responses added to folder 801; cannedCountBoost is added to its responses_count.
@@ -222,7 +230,19 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 			f.newestTickets(w, r)
 			return
 		}
-		f.page(w, r, f.ticketList(r.URL.Query().Get("updated_since")))
+		items := f.ticketList(r.URL.Query().Get("updated_since"))
+		if r.URL.Query().Get("include") == "stats" {
+			f.mu.Lock()
+			for _, item := range items {
+				stats := f.stats[fmt.Sprint(item["id"])]
+				if stats == nil {
+					stats = map[string]any{"resolved_at": nil, "first_responded_at": nil, "closed_at": nil}
+				}
+				item["stats"] = stats
+			}
+			f.mu.Unlock()
+		}
+		f.page(w, r, items)
 	case f.noTickets && parts[0] == "tickets":
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "not found"})
 	case len(parts) == 3 && parts[1] == "archived":
@@ -246,6 +266,12 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 				"user_id": 299, "source": 0, "ticket_id": 6, "attachments": []any{}, "created_at": "2025-04-05T10:00:00Z", "updated_at": "2025-04-05T10:00:00Z"})
 		}
 		f.page(w, r, f.withFiles(items, n))
+	case r.URL.Path == "/api/v2/email_configs":
+		if f.emailConfigsStatus != 0 {
+			writeJSON(w, f.emailConfigsStatus, map[string]string{"message": "You are not authorized to perform this action."})
+			return
+		}
+		f.page(w, r, f.emailConfigs)
 	case r.URL.Path == "/api/v2/canned_response_folders":
 		f.page(w, r, f.cannedFolders())
 	case len(parts) == 3 && parts[0] == "canned_response_folders" && parts[2] == "responses":
@@ -387,6 +413,9 @@ func (f *fakeFreshdesk) archived(w http.ResponseWriter, id string, n int) {
 func (f *fakeFreshdesk) listedTicket(id string) map[string]any {
 	for _, item := range f.list("tickets.json") {
 		if fmt.Sprint(item["id"]) == id {
+			if config, ok := f.ticketEmailConfig[id]; ok {
+				item["email_config_id"] = config
+			}
 			if (id == "6" && f.extraReplyOnTicket6) || (id == "1" && f.ticket1Updated) {
 				item["updated_at"] = "2025-04-05T10:00:00Z"
 			}

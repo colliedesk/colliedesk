@@ -18,6 +18,7 @@ finished items are never copied twice. Your Freshdesk account is not changed.
 | Ticket description, replies, incoming replies, private and public notes, forwards | Timeline messages with the original author, time, from/to/cc/bcc and Freshdesk kind. A forward to a third party and a public note become notes, never replies to the customer |
 | Automatic replies Freshdesk flagged (an out-of-office, a messenger or bot acknowledgement) | Shown as one line, "<sender> sent an automated response", with a chevron that opens the message. Tickets imported before this was added keep those replies as ordinary messages; import them again to fold them |
 | Ticket type, channel, due dates, cc and forwarded-to addresses | Shown in the conversation details |
+| The Freshdesk mailbox a ticket was sent to | Kept with the conversation (`origin.mailboxes`). With [several email channels](email-channel.md#several-mailboxes), replies leave from the channel with that support address, otherwise from the default one. If Freshdesk does not list its mailboxes, the report warns `email_configs_unavailable` and the ticket's other addresses are used |
 | Original message HTML | Shown formatted on the message in a locked frame that runs no scripts; **Show plain text** switches to the text. Remote images load through the Colliedesk image proxy |
 | Attachments | Files stored by Colliedesk, each with a SHA-256 checksum |
 | Images inside a message that Freshdesk hosts | Stored by Colliedesk with a SHA-256 checksum, embedded in the formatted message, and also listed as files in the plain-text view. See "Images inside messages" below |
@@ -226,6 +227,12 @@ Options:
 
 The import respects Freshdesk's rate limit. It waits when Freshdesk says the limit is used up,
 so a large account can take hours. You can stop it at any time with Ctrl+C.
+
+The ticket list also asks for each ticket's resolve, first response and close times (Freshdesk
+`stats`, two more API credits per page of 100 tickets). They are kept with the ticket and read for
+the "before" numbers of the [results page](results.md). Once the first full import has finished, the times read
+stay: running the import again only adds them to tickets that have none (an import from before they
+were read), so the before numbers do not move. Archived tickets come without them.
 
 While it runs, the command prints progress lines to stderr, for example
 `progress: importing tickets 120/400, elapsed 4m10s`: one line when each step starts, one line at

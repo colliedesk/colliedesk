@@ -130,7 +130,7 @@ func (a *API) recordReply(identity auth.Principal, kind string) {
 		return
 	}
 	by := "person"
-	if identity.Scope != "" {
+	if identity.IsToken() {
 		by = "ai_agent"
 	}
 	a.recordFunnel("reply_sent", identity.Workspace.ID, map[string]any{"by": by})

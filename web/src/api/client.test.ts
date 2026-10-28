@@ -67,7 +67,7 @@ test('sign-up sends the onboarding answers with the workspace name', async () =>
   }));
   await api.signUpCloud('jwt', 'Acme', { goal: 'shared_inbox', role: 'support_lead', source: 'github' });
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme', goal: 'shared_inbox', role: 'support_lead', source: 'github' });
+  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme', goal: 'shared_inbox', role: 'support_lead', source: 'github', timezone: 'UTC' });
 });
 
 test('sign-up sends the bearer token and the workspace name and returns the session', async () => {
@@ -79,7 +79,7 @@ test('sign-up sends the bearer token and the workspace name and returns the sess
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(url).toBe('/api/v1/auth/cloud/signup');
   expect((init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
-  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme' });
+  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme', timezone: 'UTC' });
   expect(redeemed.workspace.slug).toBe('acme');
 });
 
@@ -196,7 +196,18 @@ test('a reply with files and copies sends one cc field per address, before the f
 test('the cloud exchange names this device by its user agent, like a pairing link', async () => {
   fetchMock.mockResolvedValueOnce(reply(403, apiError('forbidden')));
   await api.exchangeCloudSession('t', 'acme').catch(() => {});
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ label: navigator.userAgent, workspace_slug: 'acme' });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ label: navigator.userAgent, workspace_slug: 'acme', timezone: 'UTC' });
+});
+
+test('a sign-in link sends the browser\'s timezone, which a first sign-in starts the agent on', async () => {
+  process.env.TZ = 'America/Denver';
+  try {
+    fetchMock.mockResolvedValueOnce(reply(401, apiError('invalid_link')));
+    await api.redeem('link-token', 'Firefox').catch(() => {});
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ token: 'link-token', label: 'Firefox', session_type: 'cookie', timezone: 'America/Denver' });
+  } finally {
+    process.env.TZ = 'UTC';
+  }
 });
 
 
@@ -207,10 +218,31 @@ test('a trial refusal for a merged address carries the address the reply would g
   expect((error as OutboundRefusedError).replyTo).toBe('dana@work.example');
 });
 
+test('a trial refusal of mail the trial cannot count carries its reason', async () => {
+  fetchMock.mockResolvedValue(reply(403, { error: { code: 'trial_outbound_restricted', message: 'Not counted.', reason: 'sender_authentication_failed' } }));
+  const error = await api.createMessage('33333333-3333-4333-8333-333333333333', 'outgoing', 'Hi').catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(OutboundRefusedError);
+  expect((error as OutboundRefusedError).reason).toBe('sender_authentication_failed');
+});
+
 test('402 seat_paused becomes a SeatPausedError with the server\'s explanation', async () => {
   fetchMock.mockResolvedValue(reply(402, apiError('seat_paused', 'Your access is paused.')));
   const error = await api.tags().catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(SeatPausedError);
   expect(error).not.toBeInstanceOf(WorkspaceLockedError);
   expect((error as Error).message).toBe('Your access is paused.');
+});
+
+test('an agent token is created with its label and tier; an agent refused an admin token gets the reason', async () => {
+  const session = { id: '66666666-6666-4666-8666-666666666666', agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Claude Code',
+    scope: 'draft', permissions: [], current: false, created_at: '2026-10-23T00:00:00Z', last_seen_at: '2026-10-23T00:00:00Z', expires_at: '2026-11-22T00:00:00Z', revoked_at: null };
+  fetchMock.mockResolvedValueOnce(reply(201, { token: 'cdk_agent_secret', session }));
+  expect(await api.createAgentToken('Claude Code', { scope: 'draft' }, 'press-1')).toEqual({ token: 'cdk_agent_secret', session });
+  const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect([path, init.method, JSON.parse(String(init.body))]).toEqual(['/api/v1/auth/tokens', 'POST', { label: 'Claude Code', scope: 'draft' }]);
+
+  fetchMock.mockResolvedValueOnce(reply(403, apiError('admin_token_needs_admin', 'Only a workspace admin can create an admin token. Choose read, draft or send.')));
+  const error = await api.createAgentToken('Ops', { scope: 'admin' }, 'press-1').catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(InvalidRequestError);
+  expect((error as Error).message).toMatch(/Only a workspace admin/);
 });

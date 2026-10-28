@@ -1,0 +1,71 @@
+/* Settings → External AI agents: create a token, then the steps of each AI host. */
+.agent-step { display: grid; gap: var(--space-3); min-width: 0; }
+.agent-step + .agent-step { border-top: 1px solid var(--line); padding-top: var(--space-5); }
+.step-title { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: inherit; font-weight: 600; }
+.step-no { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--surface-3); color: var(--text-1); font-size: var(--fs-label); font-weight: 600; }
+.token-form { display: grid; gap: var(--space-3); max-width: 34rem; }
+.token-form > p { margin: 0; }
+.tier-field { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; min-width: 0; }
+.tier-field p { margin: 0; }
+.tier-picker { flex-wrap: wrap; }
+.tier-picker label:has(input:disabled) { color: var(--text-3); cursor: not-allowed; text-decoration: line-through; }
+.tier-picker input:disabled { cursor: not-allowed; }
+.token-created { display: grid; gap: var(--space-3); max-width: 40rem; }
+/* The token wraps, so the whole of it shows on a phone too. */
+.token-value { font-family: var(--font-mono); font-size: var(--fs-small); word-break: break-all; resize: none; }
+.token-hidden-note { margin: 0; }
+/* The host tabs fade only at their right edge: the first tab starts flush with the card. */
+.host-tabs { margin: 0; border-bottom: 1px solid var(--line);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--space-6)), transparent); mask-image: linear-gradient(to right, #000 calc(100% - var(--space-6)), transparent); }
+.host-panel { display: grid; gap: var(--space-3); min-width: 0; }
+.host-steps { display: grid; gap: var(--space-4); margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.host-steps > li { display: grid; gap: var(--space-2); min-width: 0; counter-increment: step; }
+.host-steps > li > p:first-child::before, .host-steps > li > .snippet:first-child .field-label::before { content: counter(step) '. '; color: var(--text-3); font-weight: 600; }
+.host-steps p { margin: 0; }
+.snippet { display: grid; gap: var(--space-1); min-width: 0; }
+.snippet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.snippet-head .button-row { flex-wrap: nowrap; align-items: center; }
+.snippet-head button { --control: 28px; font-size: var(--fs-label); }
+/* A command is read before it is pasted, so a long one wraps instead of hiding its end. */
+.snippet pre { margin: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
+  padding: var(--space-2) var(--space-3); font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.snippet pre:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.agent-tokens .copied { align-self: center; color: var(--ok); font-size: var(--fs-label); font-weight: 600; }
+.agent-tokens .copied:empty { display: none; }
+.host-alt summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+.host-alt[open] summary { margin-bottom: var(--space-3); }
+.host-foot, .check-it { margin: 0; font-size: var(--fs-small); }
+.host-foot a { color: var(--accent-text); }
+.agent-tokens code { font-family: var(--font-mono); font-size: 0.92em; overflow-wrap: anywhere; }
+.deeplink { display: grid; gap: var(--space-2); justify-items: start; }
+.deeplink p { margin: 0; }
+.agent-tokens a.button { color: var(--text-1); background: var(--surface-1); }
+.agent-tokens a.button.primary-action { background: var(--accent); color: var(--on-accent); }
+.agent-tokens [aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+@media (pointer: coarse), (max-width: 30rem) { .snippet-head button { --control: var(--touch); } }
+.agent-tokens .button-row > .link-button { align-self: center; font-size: var(--fs-small); }
+.agent-tokens .primary-action[aria-disabled="true"]:hover { border-color: var(--accent); background: var(--accent); }
+/* The permissions of a token: one row per resource, a chip per action. A tier ticks its own; changing one makes the token custom. */
+.permissions-toggle { justify-self: start; font-size: var(--fs-small); }
+.permission-matrix { display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-3); }
+.permission-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin: 0; color: var(--text-3); font-size: var(--fs-label); }
+.permission-legend > span { display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
+.permission-matrix ul { display: grid; margin: 0; padding: 0; list-style: none; }
+.permission-matrix li { display: grid; grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr); align-items: start; gap: var(--space-2) var(--space-3); border-top: 1px solid var(--line); padding: var(--space-2) 0; }
+.permission-matrix li:first-child { border-top: 0; }
+.permission-resource { padding-top: 5px; color: var(--text-1); font-size: var(--fs-small); font-weight: 500; }
+.permission-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.permission-chip { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px; border: 1px solid var(--line-control); border-radius: var(--radius-full);
+  background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-label); cursor: pointer; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
+.permission-chip input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
+.permission-chip:hover { border-color: var(--text-3); }
+.permission-chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.permission-chip:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.permission-chip:has(input:disabled) { border-style: dashed; color: var(--text-3); cursor: not-allowed; }
+.permission-chip:has(input:disabled) input { cursor: not-allowed; }
+.permission-mark { flex: none; display: inline-block; width: 7px; height: 7px; border-radius: var(--radius-full); }
+.permission-mark.outside { background: var(--warn); }
+.permission-mark.asks { border: 1.5px solid var(--text-3); background: transparent; }
+.permission-mark.locked { width: 14px; height: 9px; border: 1px dashed var(--text-3); border-radius: var(--radius-full); }
+@media (max-width: 40rem) { .permission-matrix li { grid-template-columns: 1fr; gap: var(--space-1); } .permission-resource { padding-top: 0; } }
+@media (pointer: coarse), (max-width: 30rem) { .permission-chip { min-height: var(--touch); } }

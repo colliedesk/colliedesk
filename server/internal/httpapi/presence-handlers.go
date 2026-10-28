@@ -43,7 +43,7 @@ func presenceConversation(response http.ResponseWriter, request *http.Request) (
 
 func presenceCaller(request *http.Request) store.PresenceCaller {
 	who := principal(request)
-	return store.PresenceCaller{AgentID: who.Agent.ID, SessionID: who.SessionID, Token: who.Scope != ""}
+	return store.PresenceCaller{AgentID: who.Agent.ID, SessionID: who.SessionID, Token: who.IsToken()}
 }
 
 // presenceTiming is how long the caller's row lives and when it should call again: a token is not

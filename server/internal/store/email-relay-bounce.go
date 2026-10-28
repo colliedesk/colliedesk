@@ -61,8 +61,8 @@ func (s *Store) WorkspacesForVerifiedSender(ctx context.Context, senderDomain st
 	}
 	var ids []string
 	err := s.db.Privileged(ctx, database.PrivilegeVerifiedSender, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM email_channels
-			WHERE provider_domain_id IS NOT NULL AND domain_verified_at IS NOT NULL AND split_part(support_address,'@',2)=lower($1)
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM email_domains
+			WHERE provider_domain_id IS NOT NULL AND verified_at IS NOT NULL AND domain=lower($1)
 			ORDER BY workspace_id LIMIT 20`, senderDomain)
 		if err != nil {
 			return err
@@ -98,8 +98,8 @@ func (s *Store) MarkRelayBounce(ctx context.Context, workspaceID string, bounce 
 		err := tx.QueryRow(ctx, `SELECT m.id::text,lower(ct.email),COALESCE(m.cc,'{}') FROM messages m
 			JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 			JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
-			WHERE m.workspace_id=$1 AND m.kind='outgoing' AND ($5 OR c.email_reply_token=$2)
-				AND (($3<>'' AND left(m.email_message_id,15)='cd.'||$3) OR (($3='' OR $5) AND $4<>'' AND m.email_message_id=$4))`,
+			WHERE m.workspace_id=$1 AND m.kind='outgoing' AND ($5 OR `+replyTokenOf+`=$2)
+				AND (($3<>'' AND left(m.external_id,21)='email:cd.'||$3) OR (($3='' OR $5) AND $4<>'' AND m.external_id='email:'||$4))`,
 			workspaceID, bounce.ReplyToken, bounce.ReplyID, bounce.MessageID, bounce.SenderDomain).Scan(&messageID, &contactEmail, &cc)
 		if errors.Is(err, pgx.ErrNoRows) && bounce.SenderDomain && bounce.Complaint {
 			return countComplaint(ctx, tx, workspaceID, bounce)
@@ -126,11 +126,11 @@ func (s *Store) MarkRelayBounce(ctx context.Context, workspaceID string, bounce 
 			return RelayBounceDuplicate, nil
 		}
 		if copies {
-			_, err := tx.Exec(ctx, `UPDATE email_outbox SET last_error=concat_ws('; ',last_error,$3||array_to_string($4::text[],', ')),updated_at=now()
+			_, err := tx.Exec(ctx, `UPDATE channel_outbox SET last_error=concat_ws('; ',last_error,$3||array_to_string($4::text[],', ')),updated_at=now()
 				WHERE workspace_id=$1 AND message_id=$2`, workspaceID, messageID, copyNote(bounce.Complaint), recipients)
 			return RelayBounceCopy, err
 		}
-		failed, err := tx.Exec(ctx, `UPDATE email_outbox SET status='failed',
+		failed, err := tx.Exec(ctx, `UPDATE channel_outbox SET status='failed',
 				last_error=CASE WHEN status='sent' THEN concat_ws('; ',$3::text,last_error) ELSE $3 END,
 				locked_until=NULL,claim_token=NULL,updated_at=now()
 			WHERE workspace_id=$1 AND message_id=$2 AND status IN ('sent','queued')`, workspaceID, messageID, reason)

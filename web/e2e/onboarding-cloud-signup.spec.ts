@@ -31,10 +31,14 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   });
   expect(unverified.status()).toBe(401);
 
-  const created = await signUp(page, provider, email, name);
+  const created = await page.request.post(`${baseURL}/api/v1/auth/cloud/signup`, {
+    headers: { Origin: baseURL, Authorization: `Bearer ${provider.token({ email })}`, 'X-Forwarded-For': newClientAddress() },
+    data: { workspace_name: name, goal: 'leave_helpdesk', role: 'support_lead', source: 'ai_claude' },
+  });
   expect(created.status()).toBe(201);
   const body = await created.json() as { workspace: { slug: string; name: string }; agent: { email: string; role: string } };
   expect(body.agent).toMatchObject({ email, role: 'admin' });
+  expect(psql(`SELECT source FROM workspace_onboarding JOIN workspaces ON workspaces.id=workspace_onboarding.workspace_id WHERE slug='${body.workspace.slug}'`).trim()).toBe('ai_claude');
 
   // The session cookie from the sign-up opens the new workspace with its trial banner.
   await page.goto(baseURL);
@@ -90,8 +94,9 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   await expect(page.getByRole('alert')).toContainText('already used or has expired');
   await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
 
-  // Signing out ends the session.
+  // Signing out ends the session and lands on the sign-in page.
   await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(`${baseURL}/sign-in?signed_out=true`);
   await expect(page.getByRole('alert')).toContainText('You are signed out');
   expect((await page.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
 });

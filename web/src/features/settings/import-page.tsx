@@ -54,7 +54,7 @@ export function ImportPage(props: ImportPageProps) {
     <main className="settings-page panel import-page">
       <header><h1>{m.heading}</h1><p>{m.description}</p></header>
       <div className="settings-layout">
-        <SettingsNav page="/settings/import-freshdesk" shown={{ general: isAdmin, team: isAdmin, email: isAdmin, webForm: isAdmin, savedReplies: true, exportData: isAdmin, billing: Boolean(props.showBilling), importData: isAdmin }} />
+        <SettingsNav page="/settings/import-freshdesk" shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: Boolean(props.showBilling), importData: isAdmin, ai: true }} />
         <div className="settings-sections">
           {!isAdmin ? <p className="muted-copy">{m.adminsOnly}</p> : <>
             {loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}

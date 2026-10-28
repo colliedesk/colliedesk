@@ -70,7 +70,8 @@ func fillerSent(t *testing.T, pool *pgxpool.Pool, workspaceID string, n int) {
 	if _, err := pool.Exec(ctx, `WITH conv AS (SELECT id FROM conversations WHERE workspace_id=$1 LIMIT 1),
 			added AS (INSERT INTO messages(workspace_id,conversation_id,kind,body)
 				SELECT $1,conv.id,'outgoing','filler' FROM conv,generate_series(1,$2) RETURNING id)
-		INSERT INTO email_outbox(workspace_id,message_id,status,sent_at,attempts) SELECT $1,id,'sent',now(),1 FROM added`, workspaceID, n); err != nil {
+		INSERT INTO channel_outbox(workspace_id,message_id,channel_type,channel_id,status,sent_at,attempts)
+		SELECT $1,id,'email',(SELECT id FROM channels WHERE workspace_id=$1 AND type='email' ORDER BY is_default DESC,created_at LIMIT 1),'sent',now(),1 FROM added`, workspaceID, n); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -184,7 +185,7 @@ func TestComplaintsInOneWorkspaceNeverPauseAnother(t *testing.T) {
 // verifyThroughProvider makes the workspace's support domain verified in the way the hosted cloud does.
 func verifyThroughProvider(t *testing.T, pool *pgxpool.Pool, workspaceID, providerID string) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET provider_domain_id=$2,domain_verified_at=now() WHERE workspace_id=$1`, workspaceID, providerID); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE email_domains SET provider_domain_id=$2,verified_at=now() WHERE workspace_id=$1`, workspaceID, providerID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -203,7 +204,7 @@ func TestComplaintsAboutAVerifiedSupportAddressCountTowardThePause(t *testing.T)
 	replies := sentReplies(t, api, pool, admin, secret, "verified", 4)
 	verifyThroughProvider(t, pool, workspaceID(t, api, admin), "dom_pause_verified")
 	from := `"Pause Verified" <support@pause-verified.example.com>`
-	stored := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, replies[0])
+	stored := queryString(t, pool, `SELECT substr(external_id,7) FROM messages WHERE id=$1`, replies[0])
 
 	// The first complaint names the reply by the Message-ID we stored; the others carry an id we never saw.
 	if status := complainFrom(t, api, from, "<"+stored+">", "msg_verified_1"); status != "applied" {
@@ -232,7 +233,7 @@ func TestAComplaintFromADomainNoOneHasProvenThroughTheProviderChangesNothing(t *
 	secret := connectEmail(t, api, admin, "support@pause-txt.example.com")
 	_ = sentReplies(t, api, pool, admin, secret, "txt", 3)
 	// Verified by the TXT record only: no provider domain, so a Resend From at that name is not attributable.
-	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET domain_verified_at=now()`); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE email_domains SET verified_at=now()`); err != nil {
 		t.Fatal(err)
 	}
 	for i := range 4 {

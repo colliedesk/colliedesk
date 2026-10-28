@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { InvalidRequestError } from '../../api/client';
+import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { messages } from '../../messages';
 import { useSaveFeedback } from '../settings/save-feedback';
 import { kbApi } from './kb-api';
@@ -46,10 +47,8 @@ export function HelpCenterSettings({ canManage, workspaceName }: { canManage: bo
   useEffect(() => setEnabled(settings.data?.enabled ?? false), [settings.data?.enabled]);
   useEffect(() => setTitle(settings.data?.title ?? ''), [settings.data?.title]);
   // The reply box's articles list opens Settings at #help-center-heading. This card is a chunk of its own,
-  // so the browser looked for the heading before the card was there; once it is, go to it.
-  useEffect(() => {
-    if (settings.isSuccess && window.location.hash === '#help-center-heading') document.getElementById('help-center-heading')?.scrollIntoView();
-  }, [settings.isSuccess]);
+  // so Settings may be drawn before the card is; once the card is, go to it.
+  useScrollToHashWhenReady(settings.isSuccess, 'help-center-heading');
   const feedback = useSaveFeedback({ pending: save.isPending, saved: save.isSuccess,
     error: save.isError ? (save.error instanceof InvalidRequestError ? save.error.message : messages.settingsActionFailed) : undefined });
   if (settings.isError) return <p role="alert" className="error-copy">{kbMessages.helpCenterFailed}</p>;

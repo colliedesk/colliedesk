@@ -68,3 +68,8 @@ test('an admin of a workspace over its agent cap is told on every page; an agent
   rerender(<PlanBanner plan={over} isAdmin={false} />);
   expect(container).toBeEmptyDOMElement();
 });
+
+test('Choose a plan is a plain button, never the filled primary action that would outrank the first onboarding step', () => {
+  render(<PlanBanner plan={trial} isAdmin now={at('2026-10-02T09:00:00Z')} onChoosePlan={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Choose a plan' })).not.toHaveClass('primary-action');
+});

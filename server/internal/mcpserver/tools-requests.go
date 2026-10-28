@@ -258,16 +258,24 @@ func emailChannelDisconnectRequest(c *call, _ map[string]any) (any, error) {
 	return ask(c, http.MethodDelete, "/api/v1/channels/email", nil)
 }
 
-func emailSecretRotateRequest(c *call, _ map[string]any) (any, error) {
-	return ask(c, http.MethodPost, "/api/v1/channels/email/secret", nil)
+func emailSecretRotateRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodPost, emailChannelPath(c, arguments, "/secret"), nil)
 }
 
-func gmailConnectRequest(c *call, _ map[string]any) (any, error) {
-	return ask(c, http.MethodPost, "/api/v1/channels/email/gmail", nil)
+func gmailConnectRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodPost, emailChannelPath(c, arguments, "/gmail"), nil)
 }
 
-func gmailDisconnectRequest(c *call, _ map[string]any) (any, error) {
-	return ask(c, http.MethodDelete, "/api/v1/channels/email/gmail", nil)
+func gmailDisconnectRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodDelete, emailChannelPath(c, arguments, "/gmail"), nil)
+}
+
+func microsoftConnectRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodPost, emailChannelPath(c, arguments, "/microsoft"), nil)
+}
+
+func microsoftDisconnectRequest(c *call, arguments map[string]any) (any, error) {
+	return ask(c, http.MethodDelete, emailChannelPath(c, arguments, "/microsoft"), nil)
 }
 
 func workspaceSlugRequest(c *call, arguments map[string]any) (any, error) {

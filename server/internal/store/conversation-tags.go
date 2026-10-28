@@ -17,9 +17,15 @@ func (s *Store) RemoveConversationTag(ctx context.Context, workspaceID, conversa
 	return s.setConversationTag(ctx, workspaceID, conversationID, tagID, false)
 }
 
+// SetConversationTagIn adds or removes a tag of a conversation in the caller's transaction, as a
+// person's change does (an AI triage suggestion accepted or applied, or undone).
+func SetConversationTagIn(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, tagID string, add bool) (domain.Conversation, error) {
+	return setConversationTag(ctx, tx, workspaceID, conversationID, tagID, add)
+}
+
 func (s *Store) setConversationTag(ctx context.Context, workspaceID, conversationID, tagID string, add bool) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
-		return setConversationTag(ctx, tx, workspaceID, conversationID, tagID, add)
+		return s.withChannelRef(ctx, tx, workspaceID)(setConversationTag(ctx, tx, workspaceID, conversationID, tagID, add))
 	})
 }
 

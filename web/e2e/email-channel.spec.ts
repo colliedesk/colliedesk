@@ -21,11 +21,15 @@ test('connects email, receives a customer email and shows why the reply is not e
   await expect(page).toHaveURL(`${baseURL}/`);
 
   await page.goto(`${baseURL}/settings`);
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Channels' }).click();
+  await page.getByRole('link', { name: 'Connect your support email' }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@example.com`);
   await page.getByRole('button', { name: 'Save support address' }).click();
   await page.getByRole('button', { name: 'Create inbound secret' }).click();
   const secret = await page.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
   expect(secret).toContain('.');
+  // How replies leave is on the channel's Replies tab.
+  await page.getByRole('tab', { name: 'Replies' }).click();
   await expect(page.getByText(/Outgoing email is not configured/)).toBeVisible();
   await expect(page.getByText(/Replies cannot be emailed yet/)).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'TXT record name' })).toHaveValue(`_colliedesk.example.com`);

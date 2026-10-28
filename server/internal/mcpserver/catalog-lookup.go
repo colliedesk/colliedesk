@@ -10,7 +10,7 @@ func whoamiSpec() Spec {
 		Tier: "any", ReadOnly: true,
 		REST:   []string{"GET /api/v1/auth/me"},
 		Input:  noArguments,
-		Output: `{"type":"object","required":["workspace","agent","token_tier","workspace_locked","tools_you_can_use"],"properties":{"workspace":{"type":"object"},"agent":{"type":"object"},"token_tier":{"type":"string","enum":["read","draft","send","admin"]},"tier_meaning":{"type":"string"},"workspace_locked":{"type":"boolean"},"tools_you_can_use":{"type":"array","items":{"type":"string"}}}}`,
+		Output: `{"type":"object","required":["workspace","agent","token_tier","workspace_locked","tools_you_can_use"],"properties":{"workspace":{"type":"object"},"agent":{"type":"object"},"token_tier":{"type":"string","enum":["read","draft","send","admin","custom"]},"tier_meaning":{"type":"string"},"permissions":{"type":"array","items":{"type":"string"}},"workspace_locked":{"type":"boolean"},"tools_you_can_use":{"type":"array","items":{"type":"string"}}}}`,
 		run:    whoami,
 	}
 }

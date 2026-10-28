@@ -33,14 +33,19 @@ func approvalOf(ctx context.Context) (approval, bool) {
 // page. The approver sees it once in the approve answer; the request keeps only the status, so the
 // token (or anyone reading the request later) never receives it.
 var withheldResults = map[string]bool{
-	"POST /api/v1/auth/tokens":           true,
-	"POST /api/v1/auth/invites":          true,
-	"POST /api/v1/channels/email/secret": true,
-	"POST " + gmailPath:                  true,
-	"GET /api/v1/export":                 true,
-	"POST /api/v1/export/link":           true,
-	"POST /api/v1/billing/checkout":      true,
-	"POST /api/v1/billing/portal":        true,
+	"POST /api/v1/auth/tokens":                true,
+	"POST /api/v1/auth/invites":               true,
+	"POST /api/v1/channels/email/secret":      true,
+	"POST " + gmailPath:                       true,
+	"POST /api/v1/channels/{id}/email/secret": true,
+	"POST " + channelGmailPath:                true,
+	"POST " + microsoftPath:                   true,
+	"POST " + channelMicrosoftPath:            true,
+	"GET /api/v1/export":                      true,
+	"POST /api/v1/export/link":                true,
+	"POST /api/v1/billing/checkout":           true,
+	"POST /api/v1/billing/portal":             true,
+	"POST /api/v1/results/share-link":         true,
 }
 
 // approvalRunsAs replays a route as another one with the same effect. A whole export streamed into a
@@ -94,13 +99,15 @@ func (a *API) replayApproved(ctx context.Context, approver auth.Principal, item 
 	return answer.status, answer.body.Bytes(), !answer.overflow
 }
 
-// requestedScope is the scope a token creation call asks for.
-func requestedScope(call json.RawMessage) string {
+// requestsAdminToken reports whether a token creation call asks for a token that acts as an admin:
+// the admin tier, or a list of permissions with an admin-only one.
+func requestsAdminToken(call json.RawMessage) bool {
 	var fields struct {
-		Scope string `json:"scope"`
+		Scope       string   `json:"scope"`
+		Permissions []string `json:"permissions"`
 	}
 	_ = json.Unmarshal(call, &fields)
-	return fields.Scope
+	return auth.NeedsAdmin(fields.Scope, fields.Permissions)
 }
 
 // replyText is the text of a reply draft's call; empty for anything else.
@@ -127,8 +134,9 @@ var routePermissions = func() map[string]string {
 // runs on.
 func approvalPermission(item domain.AgentRequest) string {
 	key := item.Method + " " + item.Route
-	// Only an admin can create an admin token, so only an admin can approve asking for one.
-	if key == "POST /api/v1/auth/tokens" && requestedScope(item.Body) == auth.ScopeAdmin {
+	// Only an admin can create a token that acts as an admin, so only an admin can approve asking for
+	// one: the approver holds every permission the token asks for.
+	if key == "POST /api/v1/auth/tokens" && requestsAdminToken(item.Body) {
 		return auth.PermissionAccessWrite
 	}
 	if replacement, ok := approvalRunsAs[key]; ok {

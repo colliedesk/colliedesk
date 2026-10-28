@@ -3,9 +3,9 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 
-	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 )
 
@@ -30,11 +30,7 @@ func (a *API) cleanCC(ctx context.Context, workspaceID, kind string, raw []strin
 	case len(raw) > maxCC:
 		return nil, a.invalidCC("A reply can be copied to at most 10 addresses.")
 	}
-	channel, err := a.store.GetEmailChannel(ctx, workspaceID)
-	if err != nil {
-		return nil, &uploadError{http.StatusInternalServerError, "internal_error", "The reply could not be checked. Nothing was sent."}
-	}
-	mailbox, err := a.store.GetMailboxConnection(ctx, workspaceID)
+	support, gmail, err := a.store.OwnEmailAddresses(ctx, workspaceID)
 	if err != nil {
 		return nil, &uploadError{http.StatusInternalServerError, "internal_error", "The reply could not be checked. Nothing was sent."}
 	}
@@ -45,11 +41,11 @@ func (a *API) cleanCC(ctx context.Context, workspaceID, kind string, raw []strin
 			return nil, a.invalidCC("Every copied address must be a plain email address such as name@example.com.")
 		}
 		address := strings.ToLower(value)
-		if a.isOwnAddress(address, channel) {
+		if a.isOwnAddress(address, support) {
 			return nil, a.invalidCC("A reply cannot be copied to this workspace's own support or forwarding address.")
 		}
-		if mailbox != nil && email.SameMailbox(address, mailbox.Address) {
-			return nil, a.invalidCC("A reply cannot be copied to the Gmail address it is sent from.")
+		if slices.ContainsFunc(gmail, func(sender string) bool { return email.SameMailbox(address, sender) }) {
+			return nil, a.invalidCC("A reply cannot be copied to the mailbox address it is sent from.")
 		}
 		if !seen[address] {
 			seen[address] = true
@@ -59,10 +55,10 @@ func (a *API) cleanCC(ctx context.Context, workspaceID, kind string, raw []strin
 	return clean, nil
 }
 
-// isOwnAddress reports whether mail to the address would arrive back in a workspace: the support
-// address or a plus form of it, or anything on the hosted forwarding or platform sending domains.
-func (a *API) isOwnAddress(address string, channel *domain.EmailChannel) bool {
-	if channel != nil && email.SameMailbox(address, channel.SupportAddress) {
+// isOwnAddress reports whether mail to the address would arrive back in a workspace: one of its support
+// addresses or a plus form of one, or anything on the hosted forwarding or platform sending domains.
+func (a *API) isOwnAddress(address string, support []string) bool {
+	if slices.ContainsFunc(support, func(own string) bool { return email.SameMailbox(address, own) }) {
 		return true
 	}
 	config := a.config.Email

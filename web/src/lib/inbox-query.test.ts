@@ -52,3 +52,21 @@ test('the default view is Open, newest activity first, nothing else', () => {
   expect(isDefaultQuery({ status: 'all' })).toBe(false);
   expect(isDefaultQuery({ awaiting: 'team' })).toBe(false);
 });
+
+test('a results number opens its conversations in any status, and is never saved in a view', () => {
+  const result = '11111111-1111-4111-8111-111111111111:30d.first_response';
+  const query = inboxQueryFromSearch({ status: 'all', result });
+  expect(query).toEqual({ status: 'all', result });
+  expect(apiQuery(query, 1)).toBe(`result=${encodeURIComponent(result)}&page=1&page_size=50`);
+  expect(inboxQueryFromSearch({ result: 'not-a-number' })).toEqual({});
+  expect(filtersOf(query)).toEqual({});
+  expect(queryOf({ result } as never)).toEqual({ status: 'all' });
+});
+
+test('a channel filter keeps channel ids only, goes to the API, and is saved in a view as a list', () => {
+  const id = '55555555-5555-4555-8555-555555555555';
+  expect(inboxQueryFromSearch({ channel_id: `${id},nope` })).toEqual({ channel_id: id });
+  expect(apiQuery({ channel_id: id }, 1)).toBe(`channel_id=${id}&status=open&page=1&page_size=50`);
+  expect(filtersOf({ status: 'all', channel_id: id })).toEqual({ channel_id: [id] });
+  expect(queryOf({ channel_id: [id] })).toEqual({ status: 'all', channel_id: id });
+});

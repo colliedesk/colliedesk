@@ -46,6 +46,9 @@ const (
 	KBArticleImported  = "import"
 	// KBArticleMediaReplaced: a library item was replaced in the text, or the replacement undone.
 	KBArticleMediaReplaced = "media_replace"
+	// KBArticleAIExcluded, KBArticleAIIncluded: AI was kept away from the article, or let read it again.
+	KBArticleAIExcluded = "ai_exclude"
+	KBArticleAIIncluded = "ai_include"
 )
 
 // Article statuses.
@@ -111,9 +114,20 @@ type KBArticle struct {
 	HasSourceHTML bool                   `json:"has_source_html"`
 	Translations  []KBArticleTranslation `json:"translations"`
 	DeletedAt     *time.Time             `json:"deleted_at"`
+	// AIExclusion is set while AI may not read the article, in any language.
+	AIExclusion *KBAIExclusion `json:"ai_exclusion"`
 	// MissingMedia is set only in the answer to a save: media ids the text names that the library
 	// does not have.
 	MissingMedia []string `json:"missing_media,omitempty"`
+	// AIDraftsThisMonth is set only when one article is read: the AI reply drafts this UTC month that
+	// used it as a source.
+	AIDraftsThisMonth *int `json:"ai_drafts_this_month,omitempty"`
+}
+
+// KBAIExclusion is since when, and by whom, an article is kept away from AI.
+type KBAIExclusion struct {
+	At time.Time         `json:"at"`
+	By *SavedReplyPerson `json:"by"`
 }
 
 // TrashedKBArticle is a deleted article, restorable until PurgesAt.

@@ -1,0 +1,27 @@
+{
+  "name": "colliedesk",
+  "description": "Work your Colliedesk inbox from Claude Code: the Colliedesk MCP server and skills to triage, draft replies and chase pending conversations.",
+  "author": {
+    "name": "HC Labs",
+    "url": "https://colliedesk.com"
+  },
+  "homepage": "https://colliedesk.com/docs/agent-skills",
+  "repository": "https://github.com/colliedesk/colliedesk",
+  "license": "AGPL-3.0-only",
+  "keywords": ["helpdesk", "support", "mcp"],
+  "userConfig": {
+    "url": {
+      "type": "string",
+      "title": "Colliedesk MCP address",
+      "description": "Your Colliedesk address followed by /mcp, for example https://acme.colliedesk.com/mcp",
+      "required": true
+    },
+    "token": {
+      "type": "string",
+      "title": "Agent token",
+      "description": "Create one in Colliedesk under Settings → Sessions. It starts with cdk_agent_.",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

@@ -78,6 +78,7 @@ func helpCenterThemeUpdateSpec() Spec {
 			themeContrastRule + `A failing pair is refused with the nearest passing color; colliedesk_help_center_theme_check tries a theme first. ` +
 			`The logo and favicon must be images of the media library outside its trash; one the theme already has may stay while it is in the trash, so sending the theme back whole still saves. They are kept while the help center names them and kept no more once it names another. Fonts are stacks of the reader's own system fonts. ` +
 			`Custom CSS follows the theme on every page; one that could load anything is refused with its line and column. custom_css is required: send the CSS to keep, or null or "" to clear it. ` +
+			`A custom token needs help_center:update and kb_articles:publish; without either it files a request for a person to approve. ` +
 			`It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
 		REST:   []string{"PUT /api/v1/help-center/theme"},

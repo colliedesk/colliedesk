@@ -6,7 +6,8 @@ import { messages } from '../../messages';
 import { importMessages as m } from './import-messages';
 
 // CreatedInvite is the one-time link of an invite just made: the server shows it once.
-export interface CreatedInvite { inviteId: string; email: string; url: string; expiresAt: string }
+// url is missing when a repeat of the press came back without the link, which is shown once.
+export interface CreatedInvite { inviteId: string; email: string; url?: string; expiresAt: string }
 
 export interface ImportPeopleProps {
   people: ImportPerson[];
@@ -77,12 +78,14 @@ function Person({ person, active, invite, member, createdInvites = [], imported,
 function InviteLink({ invite, timezone }: { invite: CreatedInvite; timezone: string }) {
   const [copied, setCopied] = useState<'yes' | 'failed'>();
   const id = useId();
+  const url = invite.url;
+  if (!url) return <p role="status" className="import-invite-link">{messages.inviteLinkShownOnce}</p>;
   return <div className="import-invite-link">
     <label htmlFor={id} className="field-label">{messages.inviteLink}</label>
     <div className="button-row">
-      <input id={id} readOnly value={invite.url} onFocus={(event) => event.target.select()} />
+      <input id={id} readOnly value={url} onFocus={(event) => event.target.select()} />
       <button type="button" onClick={() => {
-        const write = navigator.clipboard?.writeText(invite.url) ?? Promise.reject(new Error('no clipboard'));
+        const write = navigator.clipboard?.writeText(url) ?? Promise.reject(new Error('no clipboard'));
         void write.then(() => setCopied('yes'), () => setCopied('failed'));
       }}>{copied === 'yes' ? m.copied : m.copyLink}</button>
     </div>

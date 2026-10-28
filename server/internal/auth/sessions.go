@@ -49,12 +49,12 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 	}
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,
-			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at,`+countAgents+`
+			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),s.permissions,w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at,`+countAgents+`
 			FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id JOIN workspaces w ON w.id=s.workspace_id
 			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2 AND a.deactivated_at IS NULL`, hash, now, workspaceID).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
 				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName, &principal.Agent.Role,
-				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt, &principal.Scope, &trialExtended, &createdAt, &lastSeenAt, &activeAgents)
+				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt, &principal.Scope, &principal.Permissions, &trialExtended, &createdAt, &lastSeenAt, &activeAgents)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: session revoked, expired or not found", ErrInvalidCredential)
 		}
@@ -130,17 +130,24 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 }
 
 // sessionColumns is the select list scanSession reads; the query joins sessions s to agents a.
-const sessionColumns = `s.id::text,s.agent_id::text,a.email,s.label,s.scope,s.created_at,s.last_seen_at,s.expires_at,s.revoked_at`
+const sessionColumns = `s.id::text,s.agent_id::text,a.email,s.label,s.scope,s.permissions,s.created_at,s.last_seen_at,s.expires_at,s.revoked_at`
 
 func scanSession(row pgx.Row) (domain.Session, error) {
 	var session domain.Session
-	if err := row.Scan(&session.ID, &session.AgentID, &session.AgentEmail, &session.Label, &session.Scope, &session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt); err != nil {
+	if err := row.Scan(&session.ID, &session.AgentID, &session.AgentEmail, &session.Label, &session.Scope, &session.Permissions, &session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt); err != nil {
 		return domain.Session{}, fmt.Errorf("scan session: %w", err)
 	}
 	session.CreatedAt = domain.UTC(session.CreatedAt)
 	session.LastSeenAt = domain.UTC(session.LastSeenAt)
 	session.ExpiresAt = domain.UTC(session.ExpiresAt)
 	session.RevokedAt = domain.UTCOptional(session.RevokedAt)
+	// A preset token lists the permissions its tier holds today; a person's session lists none.
+	if session.Scope != nil && *session.Scope != ScopeCustom {
+		session.Permissions = PresetPermissions(*session.Scope)
+	}
+	if session.Permissions == nil {
+		session.Permissions = []string{}
+	}
 	return session, nil
 }
 

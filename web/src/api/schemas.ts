@@ -24,6 +24,7 @@ export const publicConfigSchema = z.object({
   signup: z.object({ enabled: z.boolean() }),
   limits: z.object({ outgoing_attachments_bytes: z.number().int(), outgoing_attachments_files: z.number().int() }),
   product_analytics: z.object({ enabled: z.boolean(), key: z.string().nullable(), host: z.string().nullable(), realm: z.enum(['cloud', 'self-hosted']).nullable() }),
+  ai: z.object({ server_provider: z.boolean() }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const checkoutPlanSchema = z.enum(['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
 export const planSchema = z.enum(['trial', 'solo', 'small', 'team', 'team25', 'founding', 'none']);
@@ -65,14 +66,19 @@ export const trashedSavedReplySchema = z.object({
 }) satisfies z.ZodType<Generated<'TrashedSavedReply'>>;
 export const savedReplyVersionSchema = z.object({ ...savedReplyChangeFields, title: z.string(), body: z.string() }) satisfies z.ZodType<Generated<'SavedReplyVersion'>>;
 export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
+export const contactIdentitySchema = z.object({
+  channel_id: z.string().uuid(), kind: z.string(), value: z.string(), display_name: z.string().nullable(),
+}) satisfies z.ZodType<Generated<'ContactIdentity'>>;
+// A customer known only on a channel has no email: the whole response must still parse.
 export const contactSchema = z.object({
-  id: z.string().uuid(), name: z.string(), email: z.string().email(), organization: z.string().nullable(),
+  id: z.string().uuid(), name: z.string(), email: z.string().email().nullable(), organization: z.string().nullable(),
   merged_into_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  identities: z.array(contactIdentitySchema).optional(),
 }) satisfies z.ZodType<Generated<'Contact'>>;
 const stringList = z.array(z.string());
 export const conversationOriginSchema = z.object({
   system: z.string(), external_id: z.string(), type: z.string().nullable(), source: z.string().nullable(),
-  due_at: nullableDate, first_response_due_at: nullableDate, cc: stringList, forwarded_to: stringList,
+  due_at: nullableDate, first_response_due_at: nullableDate, cc: stringList, forwarded_to: stringList, mailboxes: stringList.optional(),
 }) satisfies z.ZodType<Generated<'ConversationOrigin'>>;
 export const messageOriginSchema = z.object({
   system: z.string(), external_id: z.string(),
@@ -88,10 +94,13 @@ export const conversationSchema = z.object({
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
   latest_reply_number: z.number().int().nonnegative(),
+  channel_ref: z.object({ id: z.string(), type: z.string(), name: z.string(), enabled: z.boolean(), deleted: z.boolean(),
+    replies_via: z.object({ id: z.string(), name: z.string(), enabled: z.boolean(),
+      instead_of: z.object({ id: z.string(), name: z.string() }).nullable().optional() }).nullable() }).nullable().optional(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
 export const messageDeliverySchema = z.object({
-  status: deliveryStatusSchema, attempts: z.number().int().min(0), last_error: z.string().nullable(), sent_at: nullableDate,
+  status: deliveryStatusSchema, attempts: z.number().int().min(0), last_error: z.string().nullable(), sent_at: nullableDate, reason_code: z.string().nullable().optional(),
 }) satisfies z.ZodType<Generated<'MessageDelivery'>>;
 export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
 export const incomingEmailSchema = z.object({
@@ -104,12 +113,20 @@ export const attachmentSchema = z.object({
   id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),
   size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), inline: z.boolean(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Attachment'>>;
+// A token holds a tier (a preset) or, as custom, its own list of permissions.
+export const tokenScopeSchema = z.enum(['read', 'draft', 'send', 'admin', 'custom']) satisfies z.ZodType<Generated<'TokenScope'>>;
+export type TokenScope = Generated<'TokenScope'>;
+export type TokenPreset = Generated<'TokenPreset'>;
+export type TokenPermission = Generated<'TokenPermission'>;
 export const messageAgentTokenSchema = z.object({
-  id: z.string().uuid(), label: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']), agent_name: z.string(),
+  id: z.string().uuid(), label: z.string(), scope: tokenScopeSchema, agent_name: z.string(),
 }) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
   author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), agent_request_id: z.string().uuid().nullable(),
+  // An older server sends no draft id.
+  ai_draft_id: z.string().uuid().nullable().catch(null),
+  ai_draft_outcome: z.enum(['sent_unchanged', 'sent_edited']).nullable().catch(null),
   kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
@@ -119,35 +136,46 @@ export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
 }) satisfies z.ZodType<Generated<'EmailDNSRecord'>>;
 export const emailChannelSchema = z.object({
-  support_address: z.string().email(), sender_name: z.string(), secret_set: z.boolean(), secret_rotated_at: nullableDate,
+  channel_id: z.string().uuid().optional(), support_address: z.string().email(), sender_name: z.string(), secret_set: z.boolean(), secret_rotated_at: nullableDate,
   domain: z.string(), domain_verified_at: nullableDate, dns_record_name: z.string(), dns_record_value: z.string(),
   dns_records: z.array(emailDnsRecordSchema), dns_records_expired_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'EmailChannel'>>;
 export const mailboxConnectionSchema = z.object({
-  provider: z.enum(['google']), address: z.string().email(), status: z.enum(['connected', 'failed']),
-  error_code: z.enum(['revoked', 'permission']).nullable(), error: z.string().nullable(),
+  provider: z.enum(['google', 'microsoft']), address: z.string().email(), status: z.enum(['connected', 'failed']),
+  error_code: z.enum(['revoked', 'permission', 'mailbox_unavailable']).nullable(), error: z.string().nullable(),
   failed_at: nullableDate, connected_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'MailboxConnection'>>;
 export const gmailSettingsSchema = z.object({
   available: z.boolean(),
   missing_settings: z.array(z.enum(['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
-  redirect_uri: z.string().url(), connection: mailboxConnectionSchema.nullable(),
+  redirect_uri: z.string().url(), connection: mailboxConnectionSchema.nullable(), address_matches: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'GmailSettings'>>;
+export const microsoftSettingsSchema = z.object({
+  available: z.boolean(),
+  missing_settings: z.array(z.enum(['MICROSOFT_OAUTH_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
+  redirect_uri: z.string().url(), admin_consent_redirect_uri: z.string().url(), admin_consent_url: z.string().url().nullable(),
+  large_attachment_bytes: z.number().int().nonnegative(), server_credentials_refused: z.boolean(),
+  connection: mailboxConnectionSchema.nullable(), address_matches: z.boolean().optional(),
+}) satisfies z.ZodType<Generated<'MicrosoftSettings'>>;
 export const consentLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'connectGmail', 200>>;
+// How many live channels each type has: the inbox says which mailbox a reply leaves from once there are two.
+// The whole list and its schemas load with Settings, not with the inbox.
+export const channelCountsSchema = z.object({ types: z.array(z.object({ type: z.string(), count: z.number() })) });
 export const emailChannelSettingsSchema = z.object({
-  channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema,
+  channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema, microsoft: microsoftSettingsSchema,
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
   domain_verification: z.enum(['txt', 'provider']),
   sending_pause: z.object({ paused_at: z.string().datetime(), reason: z.string() }).nullable(),
   smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),
 }) satisfies z.ZodType<Generated<'EmailChannelSettings'>>;
 export const webFormSettingsSchema = z.object({
-  enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(),
+  channel_id: z.string().uuid().optional(), enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(), legacy_slug: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'WebFormSettings'>>;
+export const testMessageResultSchema = z.object({ conversation_id: z.string(), message_id: z.string(), sent_to: z.string() }) satisfies z.ZodType<JsonResponse<'sendEmailTestMessage', 201>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
-  scope: z.enum(['read', 'draft', 'send', 'admin']).nullable(), current: z.boolean(),
+  scope: tokenScopeSchema.nullable(), permissions: z.array(z.string()), current: z.boolean(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Session'>>;
 export const inviteSchema = z.object({
@@ -158,14 +186,20 @@ export const errorSchema = z.object({ error: z.object({ code: z.string(), messag
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
 export const meSchema = z.object({
-  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']).nullable(),
+  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: tokenScopeSchema.nullable(), permissions: z.array(z.string()).catch([]),
   // An older server sends no goal; a goal this client does not know yet orders nothing.
   onboarding_goal: onboardingGoalSchema.nullable().catch(null),
+  // An older server offers no AI feature.
+  ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
+// The raw token is in this answer only; the client keeps it in no cache. A repeat of the same press (200)
+// answers the session without it.
+export const agentTokenSchema = z.object({ token: z.string().startsWith('cdk_agent_').optional(), session: sessionSchema }) satisfies z.ZodType<JsonResponse<'createAgentToken', 201> | JsonResponse<'createAgentToken', 200>>;
 export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satisfies z.ZodType<JsonResponse<'listInvites', 200>>;
-export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createInvite', 201>>;
+// A repeat of the same press (200) answers the invite without its one-time link.
+export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url().optional() }) satisfies z.ZodType<JsonResponse<'createInvite', 201> | JsonResponse<'createInvite', 200>>;
 export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
 export const conversationViewerSchema = z.object({
   agent_id: z.string().uuid(), name: z.string(), writing: z.boolean(), writing_since: z.string().datetime().nullable(), edited_at: z.string().datetime().nullable(),
@@ -174,7 +208,7 @@ export const conversationViewerSchema = z.object({
 export const inboxActivitySchema = z.object({
   now: z.string().datetime(),
   new_conversations: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), created_at: z.string().datetime() })),
-  assigned_to_me: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assigned_at: z.string().datetime() })),
+  assigned_to_me: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assigned_at: z.string().datetime(), by_ai: z.boolean().catch(false) })),
   updated: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assignee_id: z.string().uuid().nullable(), updated_at: z.string().datetime(), incoming_at: z.string().datetime().nullable() })),
   viewing: z.array(z.object({ conversation_id: z.string().uuid(), viewers: z.array(conversationViewerSchema) })),
 }) satisfies z.ZodType<Generated<'InboxActivity'>>;
@@ -209,8 +243,11 @@ export type Message = Generated<'Message'>;
 export type EmailChannelSettings = Generated<'EmailChannelSettings'>;
 export type EmailDnsRecord = Generated<'EmailDNSRecord'>;
 export type GmailSettings = Generated<'GmailSettings'>;
+export type MicrosoftSettings = Generated<'MicrosoftSettings'>;
+export type MailboxConnection = Generated<'MailboxConnection'>;
 export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
+export type AgentToken = Generated<'AgentToken'>;
 export type Tag = Generated<'Tag'>;
 export type SavedReply = Generated<'SavedReply'>;
 export type SavedView = Generated<'SavedView'>;
@@ -236,7 +273,7 @@ export const agentRequestSchema = z.object({
     restores: z.object({ version: z.number().int(), title: z.string(), body: z.string() }).nullable(),
   }).nullable(),
   requested_by: z.object({
-    token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: z.enum(['read', 'draft', 'send', 'admin']), token_revoked: z.boolean(),
+    token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: tokenScopeSchema, token_permissions: z.array(z.string()).catch([]), token_revoked: z.boolean(),
     agent_id: z.string().uuid().nullable(), agent_name: z.string().nullable(),
   }),
   decided_by: z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }).nullable(),

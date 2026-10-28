@@ -5,7 +5,7 @@ import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
 
 const typed: Message = {
-  id: '77777777-7777-4777-8777-777777777777', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, agent_token: null, agent_request_id: null,
+  id: '77777777-7777-4777-8777-777777777777', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
   kind: 'incoming', body: 'Keep me posted.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, reply_number: null,
   email: { from: 'reader@example.com', authentication: 'none', via: 'web_form', attachments: [], original_attachment_id: null },
 };
@@ -24,4 +24,13 @@ test('labels a web form message as an unverified sender', () => {
   expect(screen.getByText('reader@example.com')).toBeInTheDocument();
   expect(screen.getByText('Unverified sender (web form)')).toBeInTheDocument();
   expect(screen.queryByText('Sender not verified')).not.toBeInTheDocument();
+});
+
+test('a sender that could not be verified explains what it means and what to do', () => {
+  const mail: Message = { ...typed, email: { from: 'reader@example.com', authentication: 'none', via: 'platform', attachments: [], original_attachment_id: null } };
+  render(<TimelinePanel items={[mail]} timezone="UTC" />);
+  const badge = screen.getByText('Sender not verified');
+  const help = 'The email carried no proof of who sent it, so the address may be forged. Check the request before you share account details or follow a link in it.';
+  expect(badge).toHaveAttribute('title', help);
+  expect(badge).toHaveTextContent(help);
 });

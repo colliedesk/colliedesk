@@ -122,13 +122,19 @@ func tagNames(tags []hsTag) []string {
 
 var conversationSources = map[string]string{"email": "email", "phone": "phone", "chat": "chat"}
 
-func conversationOrigin(ref hsConversation) *domain.ConversationOrigin {
+// conversationOrigin keeps the mailbox the conversation was sent to, so its replies leave from the email
+// channel of that address when the workspace has it.
+func conversationOrigin(ref hsConversation, mailbox hsMailbox) *domain.ConversationOrigin {
 	source := "other"
 	if name, ok := conversationSources[ref.Type]; ok {
 		source = name
 	}
-	return &domain.ConversationOrigin{System: "helpscout", ExternalID: strconv.FormatInt(ref.Number, 10), Source: &source,
+	origin := &domain.ConversationOrigin{System: "helpscout", ExternalID: strconv.FormatInt(ref.Number, 10), Source: &source,
 		CC: list(ref.CC), ForwardedTo: []string{}}
+	if address := strings.ToLower(strings.TrimSpace(mailbox.Email)); address != "" {
+		origin.Mailboxes = []string{address}
+	}
+	return origin
 }
 
 func list(values []string) []string {

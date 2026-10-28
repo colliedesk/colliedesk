@@ -240,6 +240,8 @@ test('while Founding is open, a trial workspace is offered only Founding at $99 
   const founding = screen.getByRole('article', { name: 'Founding' });
   expect(founding).toHaveTextContent('$99per quarter');
   expect(founding).toHaveTextContent('$396 a year, the price never changes');
+  expect(within(founding).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+    'Up to 10 agents', '20 GiB attachment storage', 'Free Freshdesk migration, done for you', '30-day money-back guarantee']);
   expect(founding).not.toHaveTextContent('$33');
   expect(founding).not.toHaveTextContent('per month');
   expect(screen.queryByRole('radio')).not.toBeInTheDocument();

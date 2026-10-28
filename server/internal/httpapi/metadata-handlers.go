@@ -87,7 +87,7 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 	}
 	// A change that grants, keeps or takes the admin role waits for a person whatever the token's tier:
 	// promoting, reactivating an admin (it keeps the role), demoting or deactivating an admin.
-	if who := principal(request); who.Scope != "" {
+	if who := principal(request); who.IsToken() {
 		touchesAdmin, err := a.touchesAdmin(request, input.Role, input.Active)
 		if err != nil {
 			writeStoreError(response, err)

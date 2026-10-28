@@ -22,6 +22,7 @@ import { buildTree, flatten, indent, maxDepth, reason } from './kb-tree';
 import type { TreeNode } from './kb-tree';
 import { OrderAnnouncement, OrderButtons, allArticleIds, useOrderMoves } from './order-buttons';
 import type { Step } from './order-buttons';
+import { useCreateAction } from '../../api/use-create';
 
 export interface KnowledgeSearch {
   collection?: string;
@@ -40,6 +41,7 @@ export function useRefreshKB() {
 export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const navigate = useNavigate();
   const refresh = useRefreshKB();
+  const createCollection = useCreateAction((value: Parameters<typeof kbApi.createCollection>[0], key: string) => kbApi.createCollection(value, key));
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const timezone = me.data?.timezone ?? 'UTC';
   const collections = useQuery({ queryKey: ['kb-collections'], queryFn: kbApi.collections });
@@ -90,7 +92,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
       setForm(null);
       return;
     }
-    const created = await kbApi.createCollection({ name: values.name, ...(values.description ? { description: values.description } : {}), parent_id: values.parent_id });
+    const created = await createCollection.run({ name: values.name, ...(values.description ? { description: values.description } : {}), parent_id: values.parent_id });
     await refresh();
     setForm(null);
     setSearch({ collection: created.id });

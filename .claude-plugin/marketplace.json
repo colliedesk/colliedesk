@@ -1,0 +1,15 @@
+{
+  "name": "colliedesk",
+  "description": "The Colliedesk plugin for Claude Code.",
+  "owner": {
+    "name": "HC Labs",
+    "url": "https://colliedesk.com"
+  },
+  "plugins": [
+    {
+      "name": "colliedesk",
+      "source": "./plugins/colliedesk",
+      "description": "The Colliedesk MCP server and skills to triage, draft replies and chase pending conversations."
+    }
+  ]
+}

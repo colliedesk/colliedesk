@@ -124,6 +124,11 @@ what you need first ([Export all your data](../user/export.md)).
    rm .env.bak
    ```
 
+A release older than several channels of a type (two mailboxes, two web forms) does not run on a
+database upgraded past it: the backup is the only way back to it, even when nobody added a second
+channel yet. A second mailbox or form added since the backup is gone with everything else written
+since then.
+
 Sessions come back as they were at the backup. If you revoked a session or an agent token after the
 backup, revoke it again ([Sessions and devices](../user/sessions.md)). An install rolled back to `v0.0.1`
 cannot restore one workspace (below), only the whole install as above.
@@ -157,7 +162,8 @@ script on its own schema and on a backup of the release before. It:
 Without `--replace` it refuses to overwrite a workspace that still exists. Running it again gives
 the same result. The workspace's sessions, agent tokens and unused invite links come back revoked:
 everyone in it signs in again (an admin prints a link with `collie pair`), and AI agents need new
-tokens. Anything that workspace wrote after the backup is gone.
+tokens. An AI feature's automatic mode (suggestions applied by themselves) comes back off; an admin turns it
+on again. Anything that workspace wrote after the backup is gone.
 
 ## From a clone
 

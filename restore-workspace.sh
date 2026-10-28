@@ -8,7 +8,8 @@
 # The backup is loaded into a scratch database next to yours and brought to the schema of the image
 # in .env with `collie migrate`; then the workspace's rows are copied in one transaction that checks
 # every table against the backup before it commits. Sessions, agent tokens and unused links come
-# back revoked: everyone in the workspace signs in again. --replace replaces a workspace that still
+# back revoked: everyone in the workspace signs in again, and queued AI tasks are dropped, not run
+# again. --replace replaces a workspace that still
 # exists; without it the script refuses. Running it twice with --replace gives the same result.
 set -eu
 
@@ -106,6 +107,15 @@ DO \$\$
 BEGIN
     IF to_regclass('mailbox_oauth_states') IS NOT NULL THEN
         DELETE FROM mailbox_oauth_states WHERE workspace_id = '$wid';
+    END IF;
+    -- AI tasks never come back: a queued task would call a provider (and spend) again after a restore.
+    IF to_regclass('ai_tasks') IS NOT NULL THEN
+        DELETE FROM ai_tasks WHERE workspace_id = '$wid';
+    END IF;
+    -- Nor does an automatic mode: AI applying suggestions or writing drafts by itself is turned on
+    -- again by an admin, not by a restore.
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'ai_slots' AND column_name = 'automatic') THEN
+        UPDATE ai_slots SET automatic = false WHERE workspace_id = '$wid';
     END IF;
 END
 \$\$;

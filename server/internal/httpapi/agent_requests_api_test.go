@@ -37,10 +37,11 @@ type agentRequestView struct {
 	EditedBody     json.RawMessage `json:"edited_body"`
 	ApprovableBy   string          `json:"approvable_by"`
 	RequestedBy    struct {
-		TokenLabel   string  `json:"token_label"`
-		TokenScope   string  `json:"token_scope"`
-		TokenRevoked bool    `json:"token_revoked"`
-		AgentName    *string `json:"agent_name"`
+		TokenLabel       string   `json:"token_label"`
+		TokenScope       string   `json:"token_scope"`
+		TokenPermissions []string `json:"token_permissions"`
+		TokenRevoked     bool     `json:"token_revoked"`
+		AgentName        *string  `json:"agent_name"`
 	} `json:"requested_by"`
 	DecidedBy *struct {
 		Name string `json:"name"`
