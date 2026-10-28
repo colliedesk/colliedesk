@@ -397,7 +397,8 @@ func TestCustomDomainChangesEveryAddressTheServerHandsOut(t *testing.T) {
 	if !strings.HasPrefix(created.URL, home+"/a/") {
 		t.Errorf("created url=%q", created.URL)
 	}
-	wantPage(t, visit(site, "/", "192.0.2.85", "Host", host), http.StatusOK, []string{`<link rel="canonical" href="` + home + `">`}, nil)
+	// The home page of a host of its own is its "/".
+	wantPage(t, visit(site, "/", "192.0.2.85", "Host", host), http.StatusOK, []string{`<link rel="canonical" href="` + home + `/">`}, nil)
 	wantPage(t, visit(site, "/c/guides", "192.0.2.85", "Host", host), http.StatusOK, []string{`<link rel="canonical" href="` + home + `/c/guides">`}, nil)
 	articlePage := visit(site, fmt.Sprintf("/a/%d-%s", article.Number, article.Slug), "192.0.2.85", "Host", host)
 	wantPage(t, articlePage, http.StatusOK, []string{`<link rel="canonical" href="` + articleURL + `">`}, nil)
