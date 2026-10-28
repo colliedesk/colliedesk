@@ -20,6 +20,7 @@ import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
+import { autofixPreviewOn } from '../autofix/autofix-preview';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -287,7 +288,7 @@ export function InboxRoute() {
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc, seen, aiDraft, key) => sent.mutateAsync({ conversationId: selected!.id, kind, body, files, cc, seen, aiDraft, key })}
     onFindSent={(conversationId, key) => api.sentUnderKey(conversationId, key)} aiDrafts={me.data?.ai_features?.draft}
-    autofix={config?.autofix?.available} aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
+    autofix={autofixPreviewOn() && config?.autofix?.available} aiTriage={me.data?.ai_features?.triage} onTriageApplied={() => void refresh()}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.

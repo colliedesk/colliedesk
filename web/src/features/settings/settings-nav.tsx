@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { track } from '../../lib/product-analytics';
 import type { SettingsSection } from '../../lib/product-analytics';
 import { messages } from '../../messages';
+import { autofixPreviewOn } from '../autofix/autofix-preview';
 
 export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai' | '/settings/autofix' | '/settings/channels';
 export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean }
@@ -41,7 +42,8 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...section(messages.invites, 'invites-heading'),
       ...(shown.ai ? [{ label: messages.aiSettings, to: '/settings/ai' as const, current: page === '/settings/ai' }] : []),
       // Autofix shows even on a server without its GitHub App: the page names the settings the operator still needs.
-      ...(shown.autofix !== false ? [{ label: messages.autofix, to: '/settings/autofix' as const, current: page === '/settings/autofix' }] : []),
+      // While in preview it shows only in a browser that turned it on (autofix-preview.ts).
+      ...(shown.autofix !== false && autofixPreviewOn() ? [{ label: messages.autofix, to: '/settings/autofix' as const, current: page === '/settings/autofix' }] : []),
       ...section(messages.aiAgents, 'agents-heading', shown.agents),
       ...section(messages.sessions, 'sessions-heading'),
       ...(shown.channels ? [{ label: messages.channels, to: '/settings/channels' as const, current: page === '/settings/channels' }] : []),

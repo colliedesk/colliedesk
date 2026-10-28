@@ -11,6 +11,11 @@ always a person's: sending a conversation, merging the pull request, and replyin
 On a self-hosted server Autofix appears once the operator has set up its GitHub App (see
 [Autofix: the GitHub App](../self-host/github-app.md)).
 
+Autofix is in preview. Its screens (Fixes, Settings → Autofix and the block on a conversation) show
+only in a browser that turned it on: open the browser console on Colliedesk and run
+`localStorage.setItem('colliedesk.autofix', 'on')`, then reload. `localStorage.removeItem('colliedesk.autofix')`
+hides them again. The API and the MCP tools are not affected.
+
 ## Set up: Settings → Autofix
 
 An admin sets Autofix up in three steps; everyone else sees them. Every step can be undone.

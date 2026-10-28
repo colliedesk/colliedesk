@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import { autofixApi, keys } from './autofix-api';
 import type { FixConnector, FixGroup } from './autofix-api';
@@ -41,4 +41,17 @@ export function FixesRoute({ repoId, connector, onFilter }: FixesRouteProps) {
   return <FixesPage groups={groups} counts={status.data} repos={settings.data?.repos ?? []} repoId={repoId} connector={connector} onFilter={onFilter}
     timezone={me.data?.timezone ?? 'UTC'} now={Date.now()} conversationLink={conversationLink} settingsLink={settingsLink} inboxLink={inboxLink}
     onRetry={() => { for (const rows of Object.values(groups)) rows.refetch(); }} />;
+}
+
+const fixAgents: readonly FixConnector[] = ['claude_issue', 'copilot_issue', 'cursor_api'];
+
+// FixesScreen is the /fixes page: its filters are in the address, and one that is not a repository id or a
+// coding agent is left out.
+export function FixesScreen() {
+  const search = useSearch({ from: '/fixes' });
+  const navigate = useNavigate();
+  const repoId = typeof search.repo === 'string' && /^[0-9a-f-]{36}$/.test(search.repo) ? search.repo : undefined;
+  const connector = fixAgents.find((agent) => agent === search.agent);
+  return <FixesRoute repoId={repoId} connector={connector}
+    onFilter={(repo, agent) => void navigate({ to: '/fixes', search: { ...(repo ? { repo } : {}), ...(agent ? { agent } : {}) }, replace: true })} />;
 }

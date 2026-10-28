@@ -8,6 +8,8 @@ const vendor = (connector: FixConnector) => vendors[connector];
 export const autofixMessages = {
   vendor,
   heading: 'Autofix',
+  railFixes: 'Fixes',
+  railFixesWaiting: (count: number) => `Fixes, ${count} need a person`,
   attempt: (short: string, n: number) => `#${short} · attempt ${n}`,
   loading: 'Loading Autofix',
   loadFailed: 'Autofix did not load. The fix itself is not affected.',

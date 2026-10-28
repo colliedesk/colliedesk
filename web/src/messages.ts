@@ -67,8 +67,6 @@ export const messages = {
   openResults: 'Open Results',
   clearFilter: 'Clear filter',
   results: 'Results',
-  fixes: 'Fixes',
-  fixesWaiting: (count: number) => `Fixes, ${count} need a person`,
   autofix: 'Autofix',
   tryAgain: 'Try again',
   signIn: 'Sign in',

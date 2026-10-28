@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import { formatShortDate } from '../../lib/format-date';
@@ -111,10 +111,14 @@ export function AutofixConversation({ conversationId, customerName, timezone }: 
     onSuccess: () => { setOpen(undefined); return refresh(); },
     onError: (error) => { setNotice(undefined); setProblem(problemOf(error)); return refresh(); },
   });
+  // The reply box listening is this conversation's only while this block is on screen: a draft that comes back after
+  // the person moved to another conversation is not put in.
+  const shown = useRef(true);
+  useEffect(() => { shown.current = true; return () => { shown.current = false; }; }, []);
   const draftReply = async (current: Fix) => {
     const released = formatShortDate(current.deployed_at ?? current.state_changed_at, timezone);
     const put = (text: string, aiDraftId?: string) =>
-      window.dispatchEvent(new CustomEvent('colliedesk:insert-reply', { detail: { conversationId, text, ...(aiDraftId ? { aiDraftId } : {}) } }));
+      shown.current && window.dispatchEvent(new CustomEvent('colliedesk:insert-reply', { detail: { conversationId, text, ...(aiDraftId ? { aiDraftId } : {}) } }));
     if (!me.data?.ai_features.draft) {
       put(m.draftPlain(customerName));
       setNotice(m.draftInserted);

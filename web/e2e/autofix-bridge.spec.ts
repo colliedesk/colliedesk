@@ -26,6 +26,11 @@ test.beforeAll(async () => {
   server = await startServer(port, { DATABASE_URL: autofixURL, MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWF1dG9maXgtYnJpZGdlLWtleS0zMi1ieXRlcyE=', ...autofixEnv() }, 'e2e');
 });
 
+// Autofix is in preview: its screens show only in a browser that turned it on (features/autofix/autofix-preview.ts).
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem('colliedesk.autofix', 'on'));
+});
+
 test.afterAll(async () => {
   await stopServer(server);
   for (const child of standIns) child.kill('SIGTERM');

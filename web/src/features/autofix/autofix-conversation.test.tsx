@@ -20,8 +20,8 @@ function mount(fix: Fix, aiDraft = false, extra: Parameters<typeof serve>[0] = {
     'GET /api/v1/autofix/settings': () => json(200, settingsOf()),
     ...extra,
   });
-  render(<QueryClientProvider client={client}><AutofixConversation conversationId={conversationId} customerName="Tomás Vidal" timezone="UTC" /></QueryClientProvider>);
-  return calls;
+  const view = render(<QueryClientProvider client={client}><AutofixConversation conversationId={conversationId} customerName="Tomás Vidal" timezone="UTC" /></QueryClientProvider>);
+  return Object.assign(calls, { unmount: view.unmount });
 }
 
 describe('AutofixConversation', () => {
@@ -58,6 +58,23 @@ describe('AutofixConversation', () => {
     expect((put.mock.calls[0][0] as CustomEvent<{ aiDraftId?: string }>).detail.aiDraftId).toBe(draft.id);
     expect(await screen.findByText('The reply draft is in the reply box.')).toBeInTheDocument();
     expect(screen.queryByText(/is being written/)).not.toBeInTheDocument();
+    window.removeEventListener('colliedesk:insert-reply', put);
+  });
+
+  it('puts nothing in a reply box once the person moved to another conversation before the AI draft came back', async () => {
+    const put = vi.fn();
+    window.addEventListener('colliedesk:insert-reply', put);
+    let answer: (response: Response) => void = () => undefined;
+    const draft = { id: '99999999-9999-4999-8999-999999999999', status: 'ready', text: 'Hi Tomás, it is fixed.' };
+    const view = mount(fixOf({ state: 'deployed', ...withPR, deployed_at: '2026-10-27T11:05:00Z' }), true, {
+      [`POST /api/v1/conversations/${conversationId}/ai-drafts`]: () => new Promise<Response>((resolve) => { answer = resolve; }),
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Draft reply' }));
+    await waitFor(() => expect(view.some((call) => call.path.endsWith('/ai-drafts'))).toBe(true));
+    view.unmount();
+    answer(json(201, aiDraft(draft)));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(put).not.toHaveBeenCalled();
     window.removeEventListener('colliedesk:insert-reply', put);
   });
 

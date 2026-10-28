@@ -60,8 +60,6 @@ interface ReplyComposerProps {
   // Sets the conversation Resolved. With it a reply offers Send and resolve (Ctrl/Cmd+Shift+Enter), which
   // calls it only after the reply was accepted. A private note never resolves.
   onResolve?: () => Promise<unknown>;
-  // The conversation the box writes to: a reply put in for it from elsewhere (colliedesk:insert-reply) lands here.
-  conversationId?: string;
   // Where this browser keeps the unsent text (workspace, agent and conversation); without it nothing is kept.
   draftKey?: string;
 }
@@ -92,7 +90,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, draftKey, findSent, conversationId }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, latestCustomerMessage, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId, onResolve, draftKey, findSent }: ReplyComposerProps) {
   // With no channel to carry replies the box opens on a private note, the one thing that can be sent.
   const [stored] = useState(() => readDraft(draftKey));
   const [kind, setKind] = useState<Kind>(noReplies ? 'note' : stored?.kind ?? 'outgoing');
@@ -235,11 +233,12 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     caret.current = null;
   }, [body, picking]);
   useEffect(() => { if (disabled) { setPicking(null); setAssist(false); } }, [disabled]);
-  // Another part of the app (Autofix's Draft reply) puts a reply in this conversation's box, below what is there.
+  // Another part of the app (Autofix's Draft reply) puts a reply in the box, below what is there. It sends one only
+  // while its conversation is open, so the box is that conversation's.
   useEffect(() => {
     const put = (event: Event) => {
-      const detail = (event as CustomEvent<{ conversationId: string; text: string; aiDraftId?: string }>).detail;
-      if (!conversationId || detail?.conversationId !== conversationId || disabled) return;
+      const detail = (event as CustomEvent<{ text: string; aiDraftId?: string }>).detail;
+      if (!detail || disabled) return;
       if (detail.aiDraftId) return applyDraft(detail.text, 'below', detail.aiDraftId);
       setKind('outgoing');
       insertText(detail.text);

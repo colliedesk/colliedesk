@@ -826,14 +826,12 @@ test('with no channel to carry replies the box opens on a private note, and a re
   expect(onSubmit.mock.calls[0]?.slice(0, 2)).toEqual(['note', 'Hello']);
 });
 
-test('a reply another part of the app puts in goes into this conversation’s box only, as a reply', () => {
-  render(<ReplyComposer conversationId="c1" />);
+test('a reply another part of the app puts in goes into the box as a reply', () => {
+  render(<ReplyComposer />);
   fireEvent.keyDown(document.body, { key: 'n' });
-  const put = (conversationId: string, text: string) =>
-    act(() => { window.dispatchEvent(new CustomEvent('colliedesk:insert-reply', { detail: { conversationId, text } })); });
-  put('c2', 'Not for this one');
-  expect(screen.getByLabelText('Message body')).toHaveValue('');
-  put('c1', 'The fix is out.');
+  const put = (text: string) =>
+    act(() => { window.dispatchEvent(new CustomEvent('colliedesk:insert-reply', { detail: { conversationId: 'c1', text } })); });
+  put('The fix is out.');
   expect(screen.getByLabelText('Message body')).toHaveValue('The fix is out.');
   expect(screen.getByRole('button', { name: 'Reply', pressed: true })).toBeInTheDocument();
 });

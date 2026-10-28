@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { formatShortDate } from '../../lib/format-date';
-import { WrenchIcon } from '../../ui/icons';
 import type { FixConnector, FixDetail, FixEvent, Repo } from './autofix-api';
-import { ExternalIcon, ReleaseIcon, RetryIcon } from './autofix-icons';
+import { ExternalIcon, ReleaseIcon, RetryIcon, WrenchIcon } from './autofix-icons';
 import { autofixMessages as m } from './autofix-messages';
 import { fixView, minutesIn, reachedVendor, safeHref, shortId, waitsForAssignment, waitsOnGitHub } from './fix-view';
 import type { FixAction, Stop, Tone } from './fix-view';

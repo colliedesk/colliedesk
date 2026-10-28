@@ -116,6 +116,7 @@ const sessionBase = { agent_id: '55555555-5555-4555-8555-555555555555', agent_em
   last_seen_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), revoked_at: null, current: false };
 
 test('settings is split into your account and the workspace, with a link to every section', () => {
+  localStorage.setItem('colliedesk.autofix', 'on');
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace canCreateInvites
     teamSection={<section aria-labelledby="team-heading"><h2 id="team-heading">Team</h2></section>} exportSection={<p>export</p>}
     agentsSection={<section aria-labelledby="agents-heading"><h2 id="agents-heading">External AI agents</h2></section>} />);
@@ -128,6 +129,18 @@ test('settings is split into your account and the workspace, with a link to ever
   ]);
   // Built-in AI, Channels and the import have their own pages; every other link is a section of this one.
   for (const [, href] of links.filter(([, href]) => href!.startsWith('#'))) expect(document.getElementById(href!.slice(1))).not.toBeNull();
+  localStorage.removeItem('colliedesk.autofix');
+});
+
+test('Autofix is in preview: its link shows only in a browser that turned it on', () => {
+  localStorage.removeItem('colliedesk.autofix');
+  const off = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace canCreateInvites />);
+  expect(within(screen.getByRole('navigation', { name: 'Settings sections' })).queryByRole('link', { name: 'Autofix' })).not.toBeInTheDocument();
+  off.unmount();
+  localStorage.setItem('colliedesk.autofix', 'on');
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace canCreateInvites />);
+  expect(within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('link', { name: 'Autofix' })).toHaveAttribute('href', '/settings/autofix');
+  localStorage.removeItem('colliedesk.autofix');
 });
 
 test('an agent gets no workspace-only sections or links', () => {
