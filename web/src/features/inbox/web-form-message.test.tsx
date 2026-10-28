@@ -25,3 +25,12 @@ test('labels a web form message as an unverified sender', () => {
   expect(screen.getByText('Unverified sender (web form)')).toBeInTheDocument();
   expect(screen.queryByText('Sender not verified')).not.toBeInTheDocument();
 });
+
+test('a sender that could not be verified explains what it means and what to do', () => {
+  const mail: Message = { ...typed, email: { from: 'reader@example.com', authentication: 'none', via: 'platform', attachments: [], original_attachment_id: null } };
+  render(<TimelinePanel items={[mail]} timezone="UTC" />);
+  const badge = screen.getByText('Sender not verified');
+  const help = 'The email carried no proof of who sent it, so the address may be forged. Check the request before you share account details or follow a link in it.';
+  expect(badge).toHaveAttribute('title', help);
+  expect(badge).toHaveTextContent(help);
+});

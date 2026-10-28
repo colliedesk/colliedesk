@@ -69,8 +69,9 @@ is accepted too.
 
 A feature that is on sends its provider the ticket's messages, the customer's name, matching published
 knowledge base articles, and short excerpts of similar solved tickets with other customers' names and
-emails removed. Private notes are never sent. Colliedesk does not store the prompts it sends or the
-provider's answers beyond the draft or suggestion itself. Each provider keeps data under its own
+emails removed. Private notes are never sent. Colliedesk does not keep what it sent the provider, nor the
+provider's answers, apart from the draft or suggestion itself. A draft keeps its text and the request
+that asked for it until 90 days after it ended, and both are in the export (`ai-drafts.ndjson`). Each provider keeps data under its own
 policy; read it before you add one, for example [Anthropic's](https://www.anthropic.com/legal/privacy).
 
 To keep data on your own servers, add an OpenAI-compatible provider on your network (vLLM, Ollama)

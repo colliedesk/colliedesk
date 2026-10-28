@@ -284,6 +284,26 @@ func TestWebFormRejectsInvalidInputWithFieldErrors(t *testing.T) {
 	}
 }
 
+func TestWebFormNamesTheFieldAndTheLimitInTheErrorMessage(t *testing.T) {
+	f := newWebFormFixture(t, nil)
+	f.enable(t, f.adminA)
+	response := f.submit(f.slugA, `{"email":"a@example.com","message":"`+strings.Repeat("a", 5001)+`"}`, "", "192.0.2.77:1")
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status=%d body=%s, want 422", response.Code, response.Body.String())
+	}
+	var body struct {
+		Error struct {
+			Message string            `json:"message"`
+			Fields  map[string]string `json:"fields"`
+		} `json:"error"`
+	}
+	decode(t, response, &body)
+	const want = "Message is too long: at most 5,000 characters."
+	if body.Error.Message != want || body.Error.Fields["message"] != want {
+		t.Fatalf("error message=%q fields=%v, want %q in both", body.Error.Message, body.Error.Fields, want)
+	}
+}
+
 func TestWebFormRefusesBodiesThatAreNotJSON(t *testing.T) {
 	f := newWebFormFixture(t, nil)
 	f.enable(t, f.adminA)

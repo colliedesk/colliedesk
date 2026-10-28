@@ -94,14 +94,16 @@ function kindLabel(kind: Message['kind']) {
 
 function EmailEnvelope({ email, storedFiles }: { email: NonNullable<Message['email']>; storedFiles: number }) {
   // Anyone can type any address into a web form, so that label replaces the generic one.
-  const warning = email.via === 'web_form' ? messages.webFormSender
-    : email.authentication === 'fail' ? messages.senderFailedVerification
-    : email.authentication === 'none' ? messages.senderNotVerified : undefined;
+  const kind = email.via === 'web_form' ? 'web_form' : email.authentication;
+  const warning = kind === 'web_form' ? messages.webFormSender
+    : kind === 'fail' ? messages.senderFailedVerification
+    : kind === 'none' ? messages.senderNotVerified : undefined;
+  const help = kind === 'pass' ? undefined : messages.senderHelp[kind];
   return (
     <div className="message-envelope">
       <span>{email.from}</span>
       {email.cc && email.cc.length > 0 && <span>{messages.ccLine(email.cc)}</span>}
-      {warning && <span className={`badge badge-${email.authentication}`}>{warning}</span>}
+      {warning && <span className={`badge badge-${email.authentication}`} title={help}>{warning}<span className="sr-only"> {help}</span></span>}
       {email.attachments.length > 0 && storedFiles === 0 && <span>{messages.attachmentsNotImported(email.attachments.map((item) => item.filename))}</span>}
       {email.original_attachment_id && <a href={`/api/v1/attachments/${email.original_attachment_id}`} download="original-message.eml.gz">{messages.downloadOriginalEmail}</a>}
     </div>

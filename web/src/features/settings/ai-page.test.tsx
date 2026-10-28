@@ -439,3 +439,10 @@ test('where the page says a person accepts each suggestion, it names the admin e
     expect(screen.getAllByText(claim)[0]).toHaveTextContent(/unless an admin turns on Apply suggestions automatically/);
   }
 });
+
+test('the data notice says what a draft keeps, for how long, and that it is exported', () => {
+  page({ settings: settings({ server }) });
+  const notice = document.querySelector('.ai-sends');
+  expect(notice).toHaveTextContent('Private notes are never sent. A draft keeps its text and your request for 90 days after it ended, and both are in the export.');
+  expect(notice).not.toHaveTextContent('prompts are not stored');
+});
