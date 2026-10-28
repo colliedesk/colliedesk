@@ -59,6 +59,11 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "A reply or note body is required.")
 		return
 	}
+	key, ok := idempotencyKey(request)
+	if !ok {
+		writeInvalidIdempotencyKey(response)
+		return
+	}
 	identity := principal(request)
 	if input.Draft && (!identity.IsToken() || input.Kind != "outgoing") {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Only an agent token drafts a reply for a person to review; a note or a person's reply is written directly.")
@@ -85,16 +90,52 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		a.writeUploadError(response, refusal)
 		return
 	}
-	item, err := a.store.CreateReply(request.Context(), identity.Workspace.ID, request.PathValue("id"), actor, input.Kind, input.Body, cc, input.SeenReplyNumber)
-	if a.writeReplyConflict(response, identity, err) {
+	item, replayed, err := a.store.CreateReplyOnce(request.Context(), identity.Workspace.ID, request.PathValue("id"), key, actor, input.Kind, input.Body, cc, input.SeenReplyNumber)
+	if a.writeReplyConflict(response, identity, err) || writeKeyReused(response, err) {
 		return
 	}
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
+	if replayed {
+		writeJSON(response, http.StatusOK, item)
+		return
+	}
 	a.recordReply(identity, input.Kind)
 	writeJSON(response, http.StatusCreated, item)
+}
+
+// maxIdempotencyKey bounds the Idempotency-Key header; a UUID is 36 characters.
+const maxIdempotencyKey = 200
+
+// idempotencyKey reads the optional Idempotency-Key header of a new message: the client's name for one
+// submit, the same on every retry of it. ok is false for a key that is too long or not printable ASCII.
+func idempotencyKey(request *http.Request) (string, bool) {
+	key := request.Header.Get("Idempotency-Key")
+	if len(key) > maxIdempotencyKey {
+		return "", false
+	}
+	for index := 0; index < len(key); index++ {
+		if key[index] < 0x21 || key[index] > 0x7e {
+			return "", false
+		}
+	}
+	return key, true
+}
+
+func writeInvalidIdempotencyKey(response http.ResponseWriter) {
+	writeError(response, http.StatusBadRequest, "invalid_request", "Idempotency-Key must be 1 to 200 printable ASCII characters without spaces.")
+}
+
+// writeKeyReused answers a key that already names another message.
+func writeKeyReused(response http.ResponseWriter, err error) bool {
+	if !errors.Is(err, store.ErrIdempotencyKeyReused) {
+		return false
+	}
+	writeError(response, http.StatusUnprocessableEntity, "idempotency_key_reused",
+		"This Idempotency-Key was already used for another message. Send a new key for a new message.")
+	return true
 }
 
 // fileMessageRequest turns a message the token may not write into an agent request: a reply becomes a
