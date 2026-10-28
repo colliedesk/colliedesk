@@ -121,6 +121,7 @@ test('a server without Google settings says whom to ask, not the variable names,
   render(<GmailConnection gmail={missing} supportAddress="support@example.com" timezone="UTC" canManage />);
   expect(screen.getByText(/Gmail sending is not set up on this server.*ask whoever runs it/)).toBeInTheDocument();
   expect(screen.queryByText(/GOOGLE_OAUTH_CLIENT_ID|MAILBOX_TOKEN_KEYS/)).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Self-hosting guide: send replies through Gmail' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/email.md#send-replies-through-gmail');
   expect(screen.getByRole('textbox', { name: 'Redirect URI to register in Google Cloud' })).toHaveValue(available.redirect_uri);
   expect(screen.queryByRole('button', { name: 'Connect Gmail' })).not.toBeInTheDocument();
 });

@@ -184,8 +184,10 @@ func TestAServerWithoutGoogleSettingsSaysWhatIsMissing(t *testing.T) {
 	if view.Gmail.Available || strings.Join(view.Gmail.MissingSettings, ",") != "GOOGLE_OAUTH_CLIENT_ID,GOOGLE_OAUTH_CLIENT_SECRET,MAILBOX_TOKEN_KEYS" {
 		t.Fatalf("gmail = %+v", view.Gmail)
 	}
+	logs := captureLogs(t)
 	response := request(t, api, http.MethodPost, "/api/v1/channels/email/gmail", nil, admin, nil)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "gmail_not_configured") {
+	wantMissingSettingsLogged(t, logs, "google", "GOOGLE_OAUTH_CLIENT_ID,GOOGLE_OAUTH_CLIENT_SECRET,MAILBOX_TOKEN_KEYS")
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "gmail_not_configured") || strings.Contains(response.Body.String(), "GOOGLE_OAUTH") {
 		t.Fatalf("start without settings: %d %s", response.Code, response.Body.String())
 	}
 }

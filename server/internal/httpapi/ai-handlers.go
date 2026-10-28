@@ -198,6 +198,7 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No AI provider or feature with that name in this workspace.")
 	case errors.Is(err, ai.ErrKeysMissing):
+		logMissingSettings("ai_provider_keys", "MAILBOX_TOKEN_KEYS")
 		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot store API keys yet: its key that encrypts them is not set up, so ask whoever runs it. Nothing was saved.")
 	case errors.Is(err, ai.ErrLimit):
 		writeError(response, http.StatusConflict, "ai_provider_limit", "A workspace can have 5 AI providers. Delete one to add another.")

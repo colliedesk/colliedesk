@@ -344,7 +344,9 @@ func TestAServerWithoutMicrosoftSettingsSaysWhatIsMissing(t *testing.T) {
 	api, service, _, _ := testAPIWithConfig(t, nil)
 	admin := createSession(t, api, service, "No Microsoft", "admin@no-microsoft.example.com")
 	connectEmail(t, api, admin, "support@no-microsoft.example.com")
+	logs := captureLogs(t)
 	response := request(t, api, http.MethodPost, "/api/v1/channels/email/microsoft", nil, admin, nil)
+	wantMissingSettingsLogged(t, logs, "microsoft", "MICROSOFT_OAUTH_CLIENT_ID,MICROSOFT_OAUTH_CLIENT_SECRET,MAILBOX_TOKEN_KEYS")
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "microsoft_not_configured") || !strings.Contains(response.Body.String(), "ask whoever runs it") || strings.Contains(response.Body.String(), "MICROSOFT_OAUTH") {
 		t.Fatalf("connect without settings: %d %s", response.Code, response.Body.String())
 	}

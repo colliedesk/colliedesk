@@ -225,6 +225,7 @@ test('a server that cannot store keys says so before anyone types one', () => {
   const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
   expect(within(dialog).getByRole('alert')).toHaveTextContent('ask whoever runs this server');
   expect(within(dialog).getByRole('alert')).not.toHaveTextContent('MAILBOX_TOKEN_KEYS');
+  expect(within(within(dialog).getByRole('alert')).getByRole('link', { name: 'Self-hosting guide: the key that encrypts stored secrets' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/environment-variables.md#variables');
   expect(within(dialog).getByRole('button', { name: 'Check and save' })).toBeDisabled();
 });
 

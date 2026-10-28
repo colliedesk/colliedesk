@@ -126,6 +126,7 @@ func writeChannelError(response http.ResponseWriter, err error) {
 	case errors.Is(err, channels.ErrUnknownType):
 		writeError(response, http.StatusBadRequest, "invalid_request", "This server runs no channel of that type.")
 	case errors.Is(err, store.ErrSealKeysMissing):
+		logMissingSettings("channel_secrets", "MAILBOX_TOKEN_KEYS")
 		writeError(response, http.StatusConflict, "secret_keys_missing", "This server cannot keep a channel secret yet: its key that encrypts them is not set up, so ask whoever runs it.")
 	case errors.Is(err, store.ErrRateLimited):
 		response.Header().Set("Retry-After", strconv.Itoa(int(store.InboundRateWindow.Seconds())))

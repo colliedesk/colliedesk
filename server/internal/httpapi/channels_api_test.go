@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -652,4 +653,37 @@ func TestAChannelThatReceivedOnlyDroppedMailIsWorking(t *testing.T) {
 	if got := channelOf(t, otherItems, "email"); got.Status.State != "waiting" {
 		t.Fatalf("another workspace's mail ended this workspace's wait: %+v", got.Status)
 	}
+}
+
+// A server without its key ring refuses a channel secret without naming the variable to the person,
+// and tells whoever runs it which one to set in its log.
+func TestAChannelSecretWithoutKeysNamesTheMissingSettingOnlyInTheLog(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Secret Desk", "admin@secret-desk.example.com")
+	connectEmail(t, api, admin, "support@secret-desk.example.com")
+	items, _ := listChannels(t, api, admin)
+	email := channelOf(t, items, "email")
+	logs := captureLogs(t)
+	response := request(t, api, http.MethodPut, "/api/v1/channels/"+email.ID+"/credentials", map[string]any{"name": "token", "value": "s3cret"}, admin, nil)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "secret_keys_missing") || strings.Contains(response.Body.String(), "MAILBOX_TOKEN_KEYS") {
+		t.Fatalf("channel secret without keys: %d %s", response.Code, response.Body.String())
+	}
+	wantMissingSettingsLogged(t, logs, "channel_secrets", "MAILBOX_TOKEN_KEYS")
+}
+
+// wantMissingSettingsLogged checks that a refusal for want of server settings logged which ones, for
+// whoever runs the server.
+func wantMissingSettingsLogged(t *testing.T, logs *bytes.Buffer, feature, missing string) {
+	t.Helper()
+	for _, line := range logLines(t, logs, "server settings missing") {
+		names, _ := line["missing"].([]any)
+		got := make([]string, 0, len(names))
+		for _, name := range names {
+			got = append(got, fmt.Sprint(name))
+		}
+		if line["level"] == "WARN" && line["feature"] == feature && strings.Join(got, ",") == missing {
+			return
+		}
+	}
+	t.Fatalf("no warning names the missing settings %s for %s; logs:\n%s", missing, feature, logs.String())
 }

@@ -68,6 +68,7 @@ test('a provider the server lacks is folded away for the admin, with whom to ask
   const fold = screen.getByText('Microsoft 365 is not set up on this server').closest('details')!;
   expect(fold).toHaveTextContent('ask whoever runs it');
   expect(fold).not.toHaveTextContent('MICROSOFT_OAUTH');
+  expect(within(fold).getByRole('link', { name: 'Self-hosting guide: send replies through Microsoft 365' })).toHaveAttribute('href', 'https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/email.md#send-replies-through-microsoft-365');
   expect(within(fold).getByRole('textbox', { name: 'Redirect URI to register in Microsoft Entra' })).toHaveValue(microsoft.redirect_uri);
   expect(within(fold).getByRole('textbox', { name: /Second redirect URI/ })).toHaveValue(microsoft.admin_consent_redirect_uri);
   expect(screen.getByRole('button', { name: 'Connect Gmail' })).toBeInTheDocument();

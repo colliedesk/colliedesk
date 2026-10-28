@@ -7,6 +7,7 @@ import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiMessages as m } from './ai-messages';
 import { SettingsNav } from './settings-nav';
 import type { Shown } from './settings-nav';
+import { selfHostGuide } from '../../lib/self-host-guide';
 import './ai-settings.css';
 
 // Icons only this page uses stay in its chunk.
@@ -176,7 +177,7 @@ function Features(props: AIPageProps & FeatureActions & { settings: AISettings; 
       <div className="panel ai-way"><h3>{m.emptyOwnHeading}</h3><p>{m.emptyOwnBody}</p>
         {isAdmin && <div className="button-row"><button type="button" className="primary-action" onClick={props.onOpenAdd}><PlusIcon />{m.addProvider}</button></div>}</div>
       <div className="panel ai-way"><h3>{m.emptyOperatorHeading}</h3><p>{m.emptyOperatorBody}</p>
-        <div className="button-row"><a className="button" href="https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/environment-variables.md#ai-provider" target="_blank" rel="noopener noreferrer">{m.setupGuide}</a></div></div>
+        <div className="button-row"><a className="button" href={selfHostGuide('environment-variables.md', 'ai-provider')} target="_blank" rel="noopener noreferrer">{m.setupGuide}</a></div></div>
     </section>}
     <section className="panel ai-slots" aria-label={m.features}>
       <div className="ai-slot-head" aria-hidden="true"><span>{m.columnFeature}</span><span>{m.columnProvider}</span><span>{m.columnModel}</span><span>{m.columnAutomatic}</span><span>{m.columnOn}</span></div>
@@ -651,7 +652,8 @@ function AddDialog({ settings, onClose, onAdd, onListModels }: { settings: AISet
     <Dialog title={m.addHeading} help={m.addHelp} onClose={onClose} onSubmit={() => void submit()}
       footer={<><span className="ai-dialog-left">{left > 0 ? m.providersFoot(left) : ''}</span><button type="button" onClick={onClose}>{m.cancel}</button>
         <button type="submit" className="primary-action" disabled={busy || noKeys}>{busy ? m.checking : m.checkAndSave}</button></>}>
-      {noKeys && <div className="notice notice-danger" role="alert"><span><strong>{m.noKeysNotice}</strong> {m.noKeysBody}</span></div>}
+      {noKeys && <div className="notice notice-danger" role="alert"><span><strong>{m.noKeysNotice}</strong> {m.noKeysBody}{' '}
+        <a href={selfHostGuide('environment-variables.md', 'variables')} target="_blank" rel="noopener noreferrer">{m.noKeysGuide}</a></span></div>}
       {error?.field === 'form' && <p role="alert" className="error-copy">{error.text}</p>}
       <fieldset className="ai-kind"><legend className="sr-only">{m.columnProvider}</legend>
         {services.map((value) => <label key={value}>
