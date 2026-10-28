@@ -56,6 +56,26 @@ test('redeems a CLI pairing link and completes the inbox workflow', async ({ pag
   await status.selectOption('open');
   await expect.poll(async () => (await currentConversation()).status).toBe('open');
 
+  // Send and resolve: the reply goes out first, then the conversation is resolved, without the details pane.
+  await page.getByRole('button', { name: 'Reply', exact: true }).click();
+  await composer.fill('E2E reply that resolves');
+  await page.getByRole('button', { name: 'Send and resolve' }).click();
+  await expect(page.getByText('E2E reply that resolves')).toBeVisible();
+  await expect.poll(async () => (await currentConversation()).status).toBe('resolved');
+  // The thread header offers the way back, and Resolve again, one press each.
+  await page.getByRole('button', { name: 'Reopen' }).click();
+  await expect.poll(async () => (await currentConversation()).status).toBe('open');
+  await composer.fill('E2E reply sent with the keyboard');
+  await composer.press('ControlOrMeta+Shift+Enter');
+  await expect(page.getByText('E2E reply sent with the keyboard')).toBeVisible();
+  await expect.poll(async () => (await currentConversation()).status).toBe('resolved');
+  await page.getByRole('button', { name: 'Reopen' }).click();
+  await expect.poll(async () => (await currentConversation()).status).toBe('open');
+  await page.getByRole('button', { name: 'Resolve', exact: true }).click();
+  await expect.poll(async () => (await currentConversation()).status).toBe('resolved');
+  await page.getByRole('button', { name: 'Reopen' }).click();
+  await expect.poll(async () => (await currentConversation()).status).toBe('open');
+
   const meResponse = await page.request.get(`${baseURL}/api/v1/auth/me`);
   const me = await meResponse.json() as { agent: { id: string } };
   const assignee = details.getByLabel('Assignee');

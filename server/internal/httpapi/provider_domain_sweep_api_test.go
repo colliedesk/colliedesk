@@ -107,7 +107,7 @@ func TestAFailedProviderDeleteIsKeptAndRetriedAndAnAlreadyGoneDomainIsForgotten(
 	}
 
 	// A domain removed in the Resend dashboard answers 404 and counts as gone.
-	if _, err := pool.Exec(context.Background(), `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) SELECT workspace_id,'dom_already_gone' FROM email_channels`); err != nil {
+	if _, err := pool.Exec(context.Background(), `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) SELECT workspace_id,'dom_already_gone' FROM email_domains`); err != nil {
 		t.Fatal(err)
 	}
 	if err := sweeper.Sweep(context.Background()); err != nil {
@@ -132,7 +132,7 @@ func TestAProviderDomainThatStaysUnverifiedForAWeekIsReleasedAndTheTenantIsToldT
 	fake.setStatus("expire-done.example.com", "verified")
 	_ = verify(t, api, fake, done)
 	slowDomain, doneDomain := fake.idOf("expire-slow.example.com"), fake.idOf("expire-done.example.com")
-	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET provider_domain_created_at=now()-interval '8 days'`); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE email_domains SET provider_domain_created_at=now()-interval '8 days'`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -213,7 +213,7 @@ func TestADomainThatWasVerifiedOnceIsNeverReleasedByTheUnverifiedTimeout(t *test
 	if providerState(t, api, admin).Channel.DomainVerifiedAt != nil {
 		t.Fatal("setup: the domain should read as not verified now")
 	}
-	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET provider_domain_created_at=now()-interval '30 days'`); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE email_domains SET provider_domain_created_at=now()-interval '30 days'`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -224,7 +224,7 @@ func TestADomainThatWasVerifiedOnceIsNeverReleasedByTheUnverifiedTimeout(t *test
 	if live := fake.live(); len(live) != 1 || live[0] != id {
 		t.Fatalf("a domain that was verified once must stay at the provider: %v", live)
 	}
-	if trashCount(t, pool) != "0" || queryString(t, pool, `SELECT COALESCE(provider_domain_id,'') FROM email_channels`) != id {
+	if trashCount(t, pool) != "0" || queryString(t, pool, `SELECT COALESCE(provider_domain_id,'') FROM email_domains`) != id {
 		t.Fatal("the channel must keep its provider domain and nothing may be queued")
 	}
 

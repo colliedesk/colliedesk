@@ -36,18 +36,19 @@ async function refusal(response: Response): Promise<Error> {
 
 // sendProblemReport files the report and answers its reference. With screenshots the body is multipart,
 // otherwise JSON.
-export async function sendProblemReport(description: string, diagnostics: Diagnostics, screenshots: File[]): Promise<string> {
+export async function sendProblemReport(description: string, diagnostics: Diagnostics, screenshots: File[], key: string): Promise<string> {
   let init: RequestInit;
   if (screenshots.length > 0) {
     const form = new FormData();
     form.set('description', description);
     form.set('diagnostics', JSON.stringify(diagnostics));
     for (const file of screenshots) form.append('screenshots', file, file.name);
-    init = { method: 'POST', body: form };
+    init = { method: 'POST', headers: { 'Idempotency-Key': key }, body: form };
   } else {
-    init = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description, diagnostics }) };
+    init = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify({ description, diagnostics }) };
   }
   const response = await fetch('/api/v1/support/problem-reports', { credentials: 'same-origin', ...init });
-  if (response.status !== 201) throw await refusal(response);
+  // 200 answers a repeat of the same press: the report the first one sent.
+  if (response.status !== 201 && response.status !== 200) throw await refusal(response);
   return createdSchema.parse(await response.json()).reference;
 }

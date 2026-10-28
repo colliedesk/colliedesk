@@ -121,6 +121,14 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		slog.Warn("polar customer email already in use; retrying with a workspace-tagged address", "workspace_id", who.Workspace.ID)
 		customerID, err = a.polar.EnsureCustomer(request.Context(), who.Workspace.ID, billingEmail(who.Agent.Email, who.Workspace.ID), who.Workspace.Name)
 	}
+	var refused *polar.CustomerRejectedError
+	if errors.As(err, &refused) {
+		slog.Warn("polar refused the billing customer", "workspace_id", who.Workspace.ID, "detail", refused.Detail)
+		writeError(response, http.StatusUnprocessableEntity, "billing_email_refused",
+			"Polar, our payment provider, did not accept the address "+who.Agent.Email+": "+refused.Detail+
+				" Change your account email to an address that receives mail, or contact us at support@colliedesk.com.")
+		return
+	}
 	if err != nil {
 		writeBillingProviderError(response, err)
 		return

@@ -66,7 +66,7 @@ func TestAVerifyThatOutlivesAnAddressChangeCannotBringBackADeletedDomain(t *test
 	if response.Code == http.StatusOK {
 		t.Fatalf("a check that raced an address change must not report success: %s", response.Body.String())
 	}
-	if got := queryString(t, pool, `SELECT COALESCE(provider_domain_id,'')||COALESCE(domain_verified_at::text,'') FROM email_channels`); got != "" {
+	if got := queryString(t, pool, `SELECT COALESCE(provider_domain_id,'')||COALESCE(verified_at::text,'') FROM email_domains`); got != "" {
 		t.Fatalf("the stale check wrote back %q", got)
 	}
 	if queryString(t, pool, `SELECT count(*)::text FROM email_provider_domain_trash WHERE provider_domain_id=$1`, first) != "1" {
@@ -159,10 +159,10 @@ func TestAnAmbiguousVerifiedSenderCountsTheComplaintForEveryMatch(t *testing.T) 
 	_ = sentReplies(t, api, pool, adminA, secretA, "bothA", 3)
 	_ = sentReplies(t, api, pool, adminB, secretB, "bothB", 3)
 	// Rows verified before the one-holder rule existed: remove the index to build that state.
-	if _, err := pool.Exec(context.Background(), `DROP INDEX IF EXISTS email_channels_provider_verified_domain_key`); err != nil {
+	if _, err := pool.Exec(context.Background(), `DROP INDEX IF EXISTS email_domains_provider_verified_key`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET provider_domain_id='dom_'||workspace_id::text,domain_verified_at=now()`); err != nil {
+	if _, err := pool.Exec(context.Background(), `UPDATE email_domains SET provider_domain_id='dom_'||workspace_id::text,verified_at=now()`); err != nil {
 		t.Fatal(err)
 	}
 	for i := range 3 {

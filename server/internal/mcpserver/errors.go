@@ -67,8 +67,8 @@ func (c *call) scopeText(failure *restError) string {
 	if found := scopeMessage.FindStringSubmatch(failure.Message); found != nil {
 		have, need = "`"+found[1]+"`", found[2]
 	}
-	return fmt.Sprintf("This token has the %s tier, but %s needs the `%s` tier. Ask a workspace admin to create an agent token with the `%s` tier "+
-		"(Settings, Sessions and devices) and connect again with it.", have, c.spec.Name, need, need)
+	return fmt.Sprintf("This token has the %s tier, but %s needs the `%s` tier or the permissions of its routes. Ask a workspace admin to create an agent token with the `%s` tier, "+
+		"or a custom token with those permissions (Settings, External AI agents), and connect again with it.", have, c.spec.Name, need, need)
 }
 
 // failureText is what the model reads when a tool failed. A tool that changed data before it failed

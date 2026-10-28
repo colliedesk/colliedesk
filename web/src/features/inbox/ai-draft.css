@@ -1,0 +1,74 @@
+/* The AI draft panel under the reply box. Loaded with its lazy part; scrollbars follow base.css. */
+.ai-draft { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0 var(--space-2) var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--accent-soft);
+  padding: var(--space-2) var(--space-3) 0; min-width: 0; max-height: min(24rem, 45dvh); overflow-y: auto; overscroll-behavior: contain; }
+/* The buttons stay at the panel's foot while its content scrolls. */
+.ai-draft-actions, .ai-draft-form .ai-draft-row { position: sticky; bottom: 0; z-index: 1; background: var(--accent-soft); padding-block: var(--space-2); }
+.ai-draft > :last-child:not(.ai-draft-ready):not(.ai-draft-form) { margin-bottom: var(--space-2); }
+.ai-draft-head { display: flex; align-items: center; gap: var(--space-2); }
+.ai-draft-head > svg { flex: none; color: var(--text-3); }
+.ai-draft-head h3 { flex: 1; margin: 0; font-size: var(--fs-small); font-weight: 600; }
+.ai-draft-form { display: grid; gap: var(--space-1); }
+.ai-draft-form label { color: var(--text-2); font-size: var(--fs-small); }
+.ai-draft-form textarea { min-height: 3.5rem; resize: vertical; background: var(--surface-1); }
+.ai-draft-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.ai-draft-count { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+.ai-draft-writing > span { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
+.ai-draft-pulse { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); animation: ai-draft-pulse 1.2s ease-in-out infinite; }
+@keyframes ai-draft-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .ai-draft-pulse { animation: none; } }
+.ai-draft-problem { flex: 1 1 16rem; margin: 0; color: var(--danger); font-size: var(--fs-small); }
+.ai-draft-ready { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; }
+.ai-draft-text { max-height: 6.5rem; margin: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1);
+  padding: var(--space-2) var(--space-3); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-draft-text:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ai-draft-missing { margin: 0; color: var(--text-2); font-size: var(--fs-small); }
+.ai-draft-check { display: grid; gap: 2px; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text);
+  padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.ai-draft-check ul { margin: 0; padding-left: var(--space-4); }
+.ai-draft-check code { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.ai-draft-quiet { margin: 0; color: var(--text-3); font-size: var(--fs-small); }
+.ai-draft-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ai-draft-again { margin-left: auto; }
+@media (pointer: coarse), (max-width: 30rem) {
+  .ai-draft button { min-height: var(--touch); }
+}
+/* A phone: the panel is a sheet at the foot of the screen, its buttons always in view. */
+@media (max-width: 44rem) {
+  .ai-draft { position: fixed; inset: auto 0 0 0; z-index: 30; margin: 0; max-height: 70dvh; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: var(--shadow-2); padding-bottom: env(safe-area-inset-bottom); }
+  .ai-draft-again { margin-left: 0; }
+}
+/* The automatic draft above the reply box: for the whole team, never in the box until someone uses it. */
+.ai-auto-draft { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0 var(--space-2) var(--space-2); border: 1px dashed var(--line-strong);
+  border-radius: var(--radius); background: var(--accent-soft); padding: var(--space-2) var(--space-3); min-width: 0; }
+.ai-auto-draft-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); color: var(--text-2); font-size: var(--fs-small); }
+.ai-auto-draft-strip > span:not(.ai-chip):not(.ai-draft-pulse):not(.ai-auto-draft-acts) { flex: 1 1 16rem; min-width: 0; overflow-wrap: anywhere; }
+.ai-auto-draft-strip b { color: var(--text-1); font-weight: 600; }
+.ai-auto-draft-strip.note { border: 1px solid var(--note-line); background: var(--note-bg); color: var(--note-text); }
+.ai-auto-draft-strip.note b { color: var(--note-text); }
+.ai-auto-draft-strip.danger { border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); }
+.ai-auto-draft-strip.danger b { color: var(--danger); }
+.ai-auto-draft-acts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-left: auto; }
+.ai-auto-draft-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--fs-small); min-width: 0; }
+.ai-auto-draft-head b { font-weight: 600; }
+.ai-auto-draft-head .muted-copy { font-size: var(--fs-label); }
+.ai-auto-draft-text { max-height: 7.5rem; margin: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1);
+  padding: var(--space-2) var(--space-3); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-small); }
+.ai-auto-draft-text:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ai-auto-draft-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.ai-auto-draft-row > .muted-copy { flex: 1 1 12rem; font-size: var(--fs-label); }
+@media (pointer: coarse), (max-width: 30rem) { .ai-auto-draft button, .ai-auto-draft a { min-height: var(--touch); } }
+@media (max-width: 44rem) {
+  .ai-auto-draft { margin: 0 0 var(--space-2); }
+  .ai-auto-draft-text { max-height: 5.5rem; }
+  .ai-auto-draft-row button, .ai-auto-draft-acts > * { flex: 1; }
+  .ai-auto-draft-acts { width: 100%; margin-left: 0; }
+}
+/* A notice about a newer message inside the card of the draft still to use: one line, no box of its own. */
+.ai-auto-draft > .ai-auto-draft-strip { font-size: var(--fs-label); margin: 0; border: 0; border-radius: 0; padding: 0 0 var(--space-2); border-bottom: 1px solid var(--line); background: transparent; }
+.ai-auto-draft > .ai-auto-draft-strip.note, .ai-auto-draft > .ai-auto-draft-strip.note b { color: var(--note-text); }
+/* A short screen keeps the conversation in view: the draft shows fewer lines (it scrolls). */
+@media (max-height: 820px) { .ai-auto-draft-text { max-height: 4.5rem; } }
+/* In the card of a draft to use, Draft with AI is not the way on. */
+.ai-auto-draft > .ai-auto-draft-strip .ai-auto-draft-rest { display: none; }
+.ai-auto-draft-hide { margin-left: auto; --control: 24px; padding: 0 var(--space-2); font-size: var(--fs-label); }

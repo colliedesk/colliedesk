@@ -9,3 +9,14 @@
 
 kb_images	*	20261020180000-kb-media-library.up.sql	Renamed to kb_media with every row and column kept (image_id rows become media rows of kind image); the old name holds nothing any more
 kb_article_images	*	20261020180000-kb-media-library.up.sql	Renamed to kb_article_media with every row kept and image_id renamed media_id; the old name holds nothing any more
+email_outbox	*	20261025090000-channels.up.sql	Renamed to channel_outbox with every row and column kept
+email_channels	domain_verification_token	20261025090000-channels.up.sql	Moved to email_domains.verification_token (one row per workspace and domain), values kept
+email_channels	domain_verified_at	20261025090000-channels.up.sql	Moved to email_domains.verified_at, values kept
+email_channels	provider_domain_id	20261025090000-channels.up.sql	Moved to email_domains.provider_domain_id, values kept
+email_channels	provider_domain_records	20261025090000-channels.up.sql	Moved to email_domains.provider_domain_records, values kept
+email_channels	provider_domain_created_at	20261025090000-channels.up.sql	Moved to email_domains.provider_domain_created_at, values kept
+email_channels	provider_domain_expired_at	20261025090000-channels.up.sql	Moved to email_domains.provider_domain_expired_at, values kept
+email_channels	provider_domain_first_verified_at	20261025090000-channels.up.sql	Moved to email_domains.provider_domain_first_verified_at, values kept
+messages	email_message_id	20261025090000-channels.up.sql	Moved to messages.external_id as email:<Message-ID>, values kept
+conversations	email_reply_token	20261025090000-channels.up.sql	Moved to conversation_thread_keys as reply-token:<token> (channel_type email), values kept
+web_form_channels	enabled	20261025090000-channels.up.sql	Moved to channels.enabled and channels.disabled_at of the form's channel, values kept

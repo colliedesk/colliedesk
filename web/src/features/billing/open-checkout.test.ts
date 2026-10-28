@@ -43,19 +43,21 @@ test('closing the overlay leaves the page alone', async () => {
   expect(assign).not.toHaveBeenCalled();
 });
 
-test('an overlay that never loads falls back to the hosted checkout after 15 seconds', async () => {
+test('an overlay that does not answer within 3 seconds (a frame the provider refuses, a blocker) opens the hosted checkout in this tab and says so', async () => {
   vi.useFakeTimers();
   try {
     sdk.create.mockReturnValue(new Promise(() => {}));
     const opened = openCheckout('https://polar.example/checkout/1');
-    await vi.advanceTimersByTimeAsync(14_999);
+    await vi.advanceTimersByTimeAsync(2_999);
     expect(assign).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     await opened;
     expect(assign).toHaveBeenCalledTimes(1);
     expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/1');
+    expect(document.querySelector('[role="status"]')).toHaveTextContent('The checkout could not open inside Colliedesk, so it opens in this tab instead.');
   } finally {
     vi.useRealTimers();
+    document.querySelectorAll('[role="status"]').forEach((node) => node.remove());
   }
 });
 
@@ -65,12 +67,16 @@ test('the timeout removes the frame the embed left on the page', async () => {
     const frame = document.createElement('iframe');
     frame.src = 'https://polar.example/checkout/1?embed=true';
     document.body.append(frame);
+    const spinner = document.createElement('div');
+    spinner.append(Object.assign(document.createElement('div'), { className: 'polar-loader-spinner' }));
+    document.body.append(spinner);
     document.body.classList.add('polar-no-scroll');
     sdk.create.mockReturnValue(new Promise(() => {}));
     const opened = openCheckout('https://polar.example/checkout/1');
-    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(3_000);
     await opened;
     expect(document.body.contains(frame)).toBe(false);
+    expect(document.body.contains(spinner)).toBe(false);
     expect(document.body.classList.contains('polar-no-scroll')).toBe(false);
   } finally {
     vi.useRealTimers();
@@ -81,4 +87,22 @@ test('an embed script that cannot be loaded falls back to the hosted checkout', 
   sdk.create.mockImplementation(() => { throw new Error('boom'); });
   await openCheckout('https://polar.example/checkout/2');
   expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/2');
+});
+
+test('an overlay that loads after the fallback started is closed, so it never covers the page that is leaving', async () => {
+  vi.useFakeTimers();
+  try {
+    const close = vi.fn();
+    let finish: (value: unknown) => void = () => undefined;
+    sdk.create.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const opened = openCheckout('https://polar.example/checkout/3');
+    await vi.advanceTimersByTimeAsync(3_000);
+    await opened;
+    finish({ addEventListener: vi.fn(), close });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(close).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+    document.querySelectorAll('[role="status"]').forEach((node) => node.remove());
+  }
 });

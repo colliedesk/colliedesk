@@ -42,10 +42,12 @@ export default defineConfig({
   use: { trace: 'retain-on-failure', launchOptions: { executablePath: localChrome } },
   webServer: [
     // The main server also imports in the app from the fake Freshdesk (-tags e2e lets it reach a loopback
-    // address), with a key ring as a fresh install has one.
-    // It also reads DNS from a file a journey writes, for the help center's custom domain check.
-    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', COLLIEDESK_E2E_DNS_FILE: dnsFile }, 'e2e'),
-    server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any' }),
+    // address), with a key ring as a fresh install has one. Its operator lets workspaces use an AI
+    // provider on the local network, where the AI settings journey runs its fake model server. Every
+    // server shares the database and runs an AI worker, and a task queued by the database (triage on a
+    // new ticket) goes to whichever worker claims it first, so all of them allow that network.
+    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', AI_ALLOW_PRIVATE_BASE_URLS: '1', COLLIEDESK_E2E_DNS_FILE: dnsFile }, 'e2e'),
+    server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any', AI_ALLOW_PRIVATE_BASE_URLS: '1' }),
     // The cloud server also imports in the app and sends replies by SMTP, for the golden path. Every server
     // with a relay runs an outbox worker that sends any workspace's queued reply, and the worker picks the
     // From line, so it uses the mail server's policy: either worker sends a reply the same way. Its key
@@ -59,7 +61,7 @@ export default defineConfig({
       // The Polar values are never called; the journeys stop before checkout.
       POLAR_ACCESS_TOKEN: 'polar_oat_e2e', POLAR_WEBHOOK_SECRET: 'whsec_e2e', POLAR_API_URL: 'http://127.0.0.1:9',
       POLAR_PRODUCT_TEAM_MONTHLY: 'e2e-monthly', POLAR_PRODUCT_TEAM_YEARLY: 'e2e-yearly', POLAR_PRODUCT_FOUNDING: 'e2e-founding',
-      SIGNUP_HASH_KEY: 'e2e-signup-hash-key-0123456789abcdef', TRUSTED_PROXIES: '127.0.0.1/32,::1/128',
+      SIGNUP_HASH_KEY: 'e2e-signup-hash-key-0123456789abcdef', TRUSTED_PROXIES: '127.0.0.1/32,::1/128', AI_ALLOW_PRIVATE_BASE_URLS: '1',
     }, 'e2e'),
   ],
 });

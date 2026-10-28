@@ -16,6 +16,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -125,12 +126,12 @@ func connectHostedEmailTx(ctx context.Context, tx pgx.Tx, workspace domain.Works
 	if address == "" {
 		return nil
 	}
-	token, err := email.NewToken()
+	channelID, err := store.AddChannelRow(ctx, tx, workspace.ID, domain.ChannelEmail, "Email", map[string]any{"source": "signup"})
 	if err != nil {
-		return err
+		return fmt.Errorf("connect hosted email: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name) VALUES($1,$2,$3,$4)`,
-		workspace.ID, address, token, domain.DefaultSenderName(workspace.Name, workspace.Slug)); err != nil {
+	sender := domain.DefaultSenderName(workspace.Name, workspace.Slug)
+	if err := store.SaveEmailChannel(ctx, tx, workspace.ID, channelID, address, &sender); err != nil {
 		return fmt.Errorf("connect hosted email: %w", err)
 	}
 	return nil

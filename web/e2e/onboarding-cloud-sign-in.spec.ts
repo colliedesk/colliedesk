@@ -41,12 +41,16 @@ test('cloud sign-in: a verified identity of an existing agent gets a Colliedesk 
   expect((await exchange(provider.token({ email }), 'https://evil.example')).status(), 'foreign origin').toBe(403);
   expect((await page.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
 
-  // A visitor whose cloud session ended gets a way back in, not a self-host pairing hint.
+  // A visitor whose cloud session ended lands on the sign-in page, not on a self-host pairing hint,
+  // from the inbox address and from one that matches no page alike.
   const visitor = await page.context().browser()!.newPage();
-  await visitor.goto(baseURL);
-  await expect(visitor.getByRole('alert')).toContainText('You are signed out');
-  await expect(visitor.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
-  await expect(visitor.getByText(/collie pair/)).toHaveCount(0);
+  for (const path of ['/', '/no-such-route']) {
+    await visitor.goto(`${baseURL}${path}`);
+    await expect(visitor).toHaveURL(`${baseURL}/sign-in?signed_out=true`);
+    await expect(visitor.getByRole('alert')).toContainText('You are signed out');
+    await expect(visitor.getByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeVisible();
+    await expect(visitor.getByText(/collie pair/)).toHaveCount(0);
+  }
   await visitor.close();
 
   const accepted = await exchange(provider.token({ email: email.toUpperCase() }));

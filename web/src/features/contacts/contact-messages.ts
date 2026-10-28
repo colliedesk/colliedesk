@@ -1,10 +1,22 @@
 // Strings of the customer page, the contact picker, merging and the window that starts a conversation.
 // They are only needed once one of those opens, so they live in its chunk and not in the inbox bundle.
+import type { Contact } from '../../api/schemas';
+
+/** How a contact is reached, for every place that names one: its email, else who it is on a channel, else that it has none. */
+export function contactAddress(contact: Pick<Contact, 'email' | 'identities'>): string {
+  if (contact.email) return contact.email;
+  const identity = contact.identities?.[0];
+  return identity ? (identity.display_name ?? identity.value) : contactMessages.noEmail;
+}
+
 export const contactMessages = {
+  noEmail: 'No email',
+  noEmailReplies: 'No email: replies to this customer cannot be sent by email.',
   contactMatches: 'Customers',
   contactOf: (name: string) => `Customer: ${name}`,
   contactNotLoaded: 'This customer could not be loaded.',
   contactEmail: 'Email',
+  contactOnChannel: 'On a channel',
   contactOrganization: 'Company',
   contactSince: 'Customer since',
   renameContact: 'Rename',
@@ -47,10 +59,13 @@ export const contactMessages = {
   newConversationSubject: 'Subject',
   newConversationBody: 'Message',
   newConversationSend: 'Send',
+  newConversationFrom: 'Send from',
+  newConversationFromOff: (name: string) => `${name} (off)`,
+  newConversationChannelGone: 'This channel was removed. Choose another one; your text is still here.',
   newConversationSending: 'Sending…',
   newConversationNotSent: 'The conversation was not started. Your text is still here; try again.',
   newConversationNeedsChannel: 'A new conversation is emailed to the customer, so the workspace needs its email channel first.',
-  newConversationTrial: 'During the trial, email goes only to customers who wrote to you first, so a new conversation cannot be sent yet.',
+  newConversationTrial: 'During the trial, Colliedesk does not email someone who has not written to you, so you cannot start a conversation yet. You can still reply to customers who email your support address. To start one yourself, verify your sending domain (the domain of your support address, such as example.com) or choose a plan:',
   newConversationRefused: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan to start new conversations. Your text is still here.',
   newConversationContactInvalid: 'Enter a valid email address, such as name@example.com.',
   newConversationMissing: (fields: string[]) => `To send, add ${fields.join(', ')}.`,

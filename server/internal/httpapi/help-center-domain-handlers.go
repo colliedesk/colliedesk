@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 )
@@ -66,7 +67,7 @@ func (a *API) lookUpDomain(ctx context.Context, host string, timeout time.Durati
 // checkClaim reports whether the evidence proves the workspace's claim. What DNS answered stays in the
 // server's log: the error the workspace sees only says what to set.
 func checkClaim(evidence helpcenter.DomainEvidence, workspaceID string, claim domain.HelpCenterDomain) error {
-	failure := evidence.Check(claim.Claim, claim.Token)
+	failure := evidence.CheckClaim(claim.Claim, claim.Token)
 	if failure != nil {
 		slog.Info("help center domain not proven", "workspace_id", workspaceID, "hostname", claim.Hostname, "dns", evidence.Detail())
 	}
@@ -96,6 +97,7 @@ func (a *API) getHelpCenterDomain(response http.ResponseWriter, request *http.Re
 }
 
 func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
+	raw := keepBody(request)
 	var input struct {
 		Hostname *string `json:"hostname"`
 	}
@@ -108,6 +110,9 @@ func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Re
 		reason := sentence(err) + "."
 		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": errorBody(response, map[string]any{
 			"code": "validation_failed", "message": reason + " Nothing was saved.", "fields": map[string]string{"hostname": reason}})})
+		return
+	}
+	if a.askUnlessHeld(response, request, Route{http.MethodPut, "/api/v1/help-center/domain", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, raw, nil) {
 		return
 	}
 	// Another workspace active on host does not refuse the claim: it waits, pending, and takes the host
@@ -131,6 +136,9 @@ func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Re
 }
 
 func (a *API) deleteHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
+	if a.askUnlessHeld(response, request, Route{http.MethodDelete, "/api/v1/help-center/domain", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+		return
+	}
 	workspaceID := principal(request).Workspace.ID
 	removed, found, err := a.store.DeleteHelpCenterDomain(request.Context(), workspaceID)
 	if err != nil {
@@ -147,6 +155,9 @@ func (a *API) deleteHelpCenterDomain(response http.ResponseWriter, request *http
 // makes the server ask DNS, so one workspace's checks share the hourly bound of the email domain
 // check, whether a person or an agent token asks.
 func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
+	if a.askUnlessHeld(response, request, Route{http.MethodPost, "/api/v1/help-center/domain/check", auth.PermissionAccessWrite}, principal(request), auth.PermKBArticlesPublish, nil, nil) {
+		return
+	}
 	who := principal(request)
 	if allowed, wait := a.domainChecks.allow("help-center "+who.Workspace.ID, a.now()); !allowed {
 		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))

@@ -72,7 +72,7 @@ func TestResumingSendingDeliversTheHeldReplyAtOnce(t *testing.T) {
 func nextAttempt(t *testing.T, f fixture, messageID string) time.Time {
 	t.Helper()
 	var at time.Time
-	if err := f.pool.QueryRow(context.Background(), `SELECT next_attempt_at FROM email_outbox WHERE message_id=$1`, messageID).Scan(&at); err != nil {
+	if err := f.pool.QueryRow(context.Background(), `SELECT next_attempt_at FROM channel_outbox WHERE message_id=$1`, messageID).Scan(&at); err != nil {
 		t.Fatal(err)
 	}
 	return at

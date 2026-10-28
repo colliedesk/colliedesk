@@ -73,7 +73,8 @@ func init() {
 	// Inbound email bodies are raw RFC 5322 bytes; validate them as an opaque string.
 	openapi3filter.RegisterBodyDecoder("message/rfc822", openapi3filter.FileBodyDecoder)
 	// Knowledge base images arrive as their raw bytes.
-	for _, mediaType := range []string{"image/png", "image/jpeg", "image/gif", "image/webp"} {
+	// The page an organization's admin sees after approving Microsoft 365 is HTML.
+	for _, mediaType := range []string{"image/png", "image/jpeg", "image/gif", "image/webp", "text/html"} {
 		openapi3filter.RegisterBodyDecoder(mediaType, openapi3filter.FileBodyDecoder)
 	}
 }

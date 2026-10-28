@@ -174,12 +174,12 @@ interface HeadProps {
   actions?: ReactNode;
 }
 
-// KBHead is the one row at the top of the knowledge base pages: Articles | Media, and the page's actions.
+// KBHead is the one row at the top of the knowledge base pages: the page title, Articles | Media, and the page's actions.
 export function KBHead({ current, heading, articles, actions }: HeadProps) {
   const navigate = useNavigate();
   return (
     <header className="kb-head">
-      <h1 id="kb-heading" className="sr-only">{heading}</h1>
+      <h1 id="kb-heading" className="kb-page-title">{heading}</h1>
       <nav className="kb-sections" aria-label={mediaMessages.sections}>
         <RouterLink href="/knowledge" current={current === 'articles'} onFollow={() => void navigate({ to: '/knowledge' })}>
           {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</RouterLink>

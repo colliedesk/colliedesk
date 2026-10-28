@@ -147,7 +147,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent. A `read`, `draft` or `send` token has the agent role whatever the creator's role is. An `admin` token acts with the creator's role, checked on every call; only an admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent, with a tier (`scope`) or its own list of `permissions` (resource:action), never both. A tier is a preset: its permissions are worked out on every call. A token that holds nothing admin-only has the agent role whatever the creator's role is. An `admin` token, and a custom token with an admin-only permission (`TokenPermission`, preset admin), act with the creator's role, checked on every call; only an admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
         post: operations["createAgentToken"];
         delete?: never;
         options?: never;
@@ -203,7 +203,9 @@ export interface paths {
         /**
          * @description Open a conversation with a contact. With only `contact_id` and `subject` it is empty and nothing is sent. With `body` it starts with an outgoing reply that is emailed to the contact (and `cc`), in the same transaction: when the reply is refused (trial rules, Cc rules, attachment limits, no email channel) nothing is stored, not even the conversation. The email carries the subject as written (no "Re:") and a Message-ID and reply address that thread the customer's answer back into this conversation.
          *
-         *     Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, one `cc` field per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`. `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is verified or a plan is chosen. A workspace without an email channel answers 409 `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer added with the conversation (`contact`) is written in the same transaction; an address that is already a customer answers 409 `contact_exists` with the `contact` to use.
+         *     `channel_id` is the channel it starts from, which its replies keep leaving from; without it, the default email channel. 404 `channel_not_found` for no live channel of the workspace, 400 `channel_cannot_send` for a channel a conversation cannot start on (a web form), 409 `channel_off` when the channel (or the default, when none is given) is off. An empty conversation keeps the channel too; without one its first reply takes the default.
+         *
+         *     Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, `channel_id`, one `cc` field per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`. `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is verified or a plan is chosen. A workspace without an email channel answers 409 `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer added with the conversation (`contact`) is written in the same transaction; an address that is already a customer answers 409 `contact_exists` with the `contact` to use.
          */
         post: operations["createConversation"];
         delete?: never;
@@ -262,6 +264,7 @@ export interface paths {
             };
             cookie?: never;
         };
+        /** @description The conversation's timeline. With `idempotency_key`, only the message a send with that Idempotency-Key stored in this conversation, or no item when none did: a page reloaded while a send was in flight asks whether it arrived before offering the text again. A send under that key still running is waited for, so the answer is final. */
         get: operations["listMessages"];
         put?: never;
         /**
@@ -270,6 +273,8 @@ export interface paths {
          *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (customer mail through the platform forwarder that did not fail authentication, or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
          *
          *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
+         *
+         *     Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a repeated request returns the message the first one created (200) instead of storing and sending it again. Keys belong to the workspace; the same key with another conversation, kind, body, author, `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft or a call filed as an agent request (202) does not use it.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -298,6 +303,254 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Lists the workspace's channels, oldest first, with their state, and the channel types this server runs: whether a type can be added (`available`), how many of it the workspace has and which is its default (`default_channel_id`). A workspace may have several channels of every type (two support mailboxes, two web forms); one of each is its default (`is_default`), which the routes without a channel id act on, a conversation started without choosing a channel leaves from, and the next oldest becomes when it is removed. Removed channels are left out unless `include_removed=true` (they come last, with `deleted_at` and state `removed`, for naming the channel of older conversations). Every member of the team may read it; changing a channel needs an admin. */
+        get: operations["listChannels"];
+        put?: never;
+        /** @description Adds a channel of a type with its configuration (`config`, the type's schema in ChannelConfigInput). The type validates it and the channel is stored only when it passes (400 with `fields`). A workspace may add several channels of a type; give each a `name` that tells them apart. An outside account another channel already is answers 409 `channel_account_taken`. A name another live channel of the type has (whatever its case) answers 409 `channel_name_taken`, a support address whose mailbox another email channel of the workspace has (support+vip@ is support@) 409 `support_address_taken`; both with `fields` and `conflict` naming that channel. Without a name the first channel of a type is called as its type, a later one by its address (email) or with a number. The first channel of a type is its default; `is_default: true` makes a later one the default. The first email channel is what `PUT /api/v1/channels/email` connects. */
+        post: operations["createChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The history of the workspace's channels, newest first: who added, renamed, turned on or off, changed, removed a channel, changed a secret (only its last four characters are recorded), and opened or discarded messages a channel held. `channel_id` keeps one channel's; `cursor` is the `next_cursor` of the page before. */
+        get: operations["listChannelEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description A channel with its configuration as its type shows it (never a secret). A removed channel answers 404. */
+        get: operations["getChannel"];
+        put?: never;
+        post?: never;
+        /** @description Removes a channel: its configuration and secrets are deleted, its conversations and their messages stay and keep its name (`channel_ref.deleted`). Adding the type again makes a new channel. Removing email is disconnecting it, as `DELETE /api/v1/channels/email` does. A channel that holds messages that arrived while it was off is not removed (409 `channel_has_held` with `held_count`): open or discard them first. An agent token's call is an agent request a person approves. */
+        delete: operations["removeChannel"];
+        options?: never;
+        head?: never;
+        /** @description Renames a channel, turns it on or off, or changes its configuration (`config`, validated by its type) or its rules (`settings`: join policy, default tags, priority and assignee, rate limits, commands; the type's defaults apply to what is left out). A channel that is off receives nothing: what arrives meanwhile is kept for an admin to open or discard (`held_count`), or, for a type that refuses mail while off (the web form), answered as if the channel did not exist. A reply while it is off is saved and its delivery fails with `channel_off`; retry it once the channel is on. Secrets go through `PUT /api/v1/channels/{id}/credentials`, never here. */
+        patch: operations["updateChannel"];
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Stores a secret the channel's type declares (sealed with MAILBOX_TOKEN_KEYS; 409 `secret_keys_missing` without them). Only its last four characters are shown again. An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: a secret never waits in an agent request. */
+        put: operations["setChannelCredential"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Reads the channel's state again and returns it; it changes nothing. */
+        post: operations["checkChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/held/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Opens messages the channel held (all, or those of `event_ids`) as conversations, as they would have been had the channel been on, or adds them to `conversation_id` (a conversation of this workspace; 404 otherwise). It works while the channel is still off, and the ceiling on new conversations does not apply. Messages open one by one: one that cannot be opened stops the replay there, the ones opened before it are recorded in the channel's history, the rest stay held. */
+        post: operations["replayHeldChannelMessages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/held/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Throws away messages the channel held (all, or those of `event_ids`). It cannot be undone; the history keeps how many. An agent token's call is an agent request a person approves. */
+        post: operations["discardHeldChannelMessages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The settings of one email channel of the workspace, as `GET /api/v1/channels/email` shows the default one: its address, sender name, forwarding address (`hosted_address`), inbound secret state, domain verification and Gmail connection. 404 `channel_not_found` when the id names no email channel of this workspace. */
+        get: operations["getEmailChannelByID"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email/domain-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description `POST /api/v1/channels/email/domain-verification` for one email channel. The verification belongs to the domain: once one channel of the workspace verified it, every channel on it is verified. */
+        post: operations["verifyEmailDomainByID"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Create or replace the inbound secret of one email channel. Mail a forwarder sends with it arrives on that channel. The raw secret is returned once; the previous one stops working. */
+        post: operations["rotateEmailInboundSecretByID"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email/test-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on this email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel; 409 `own_address` when the agent signs in with the support address itself, whose mail never opens a conversation. */
+        post: operations["sendEmailTestMessageByID"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email/gmail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description `POST /api/v1/channels/email/gmail` for one email channel: its replies, and only its, are then sent through that Gmail account. The consent finishes at the same callback, which returns to this channel's settings. */
+        post: operations["connectGmailByID"];
+        /** @description `DELETE /api/v1/channels/email/gmail` for one email channel. The grant is revoked at Google only when no other channel holds the same account. A locked workspace may disconnect. */
+        delete: operations["disconnectGmailByID"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{id}/email/microsoft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description `POST /api/v1/channels/email/microsoft` for one email channel: its replies, and only its, are then sent through that Microsoft 365 or Outlook.com mailbox. The consent finishes at the same callback, which returns to this channel's settings. */
+        post: operations["connectMicrosoftByID"];
+        /** @description `DELETE /api/v1/channels/email/microsoft` for one email channel. A locked workspace may disconnect. */
+        delete: operations["disconnectMicrosoftByID"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/email": {
         parameters: {
             query?: never;
@@ -305,11 +558,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description The settings of the workspace's default email channel (`is_default`); `channel` is null while email is not connected. Other email channels are read with `GET /api/v1/channels/{id}/email`. */
         get: operations["getEmailChannel"];
-        /** @description Connect the email channel, change its support address, change its sender name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its domain verification and its sending domain stay as they are. */
+        /** @description Connect email (the first email channel), or change the default channel's support address, its sender name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its domain verification and its sending domain stay as they are. Add another mailbox with `POST /api/v1/channels` and change it with `PATCH /api/v1/channels/{id}`. */
         put: operations["putEmailChannel"];
         post?: never;
-        /** @description Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. */
+        /** @description Disconnect the default email channel (`DELETE /api/v1/channels/{id}` removes any channel). Conversations and messages stay; the inbound secret stops working; the next oldest email channel becomes the default. Mail held while the channel was off must be opened or discarded first (409 `channel_has_held`). */
         delete: operations["deleteEmailChannel"];
         options?: never;
         head?: never;
@@ -342,8 +596,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Create or replace the inbound secret. The raw secret is returned once; the previous one stops working. */
+        /** @description Create or replace the inbound secret of the default email channel. The raw secret is returned once; the previous one stops working. */
         post: operations["rotateEmailInboundSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/test-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send yourself a test message: an incoming email from the signed-in agent's own address arrives on the default email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only recipient is an agent of this workspace whose address is proven (the agent signed in through a pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused. Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when the workspace has no such email channel; 409 `own_address` when the agent signs in with the support address itself, whose mail never opens a conversation. */
+        post: operations["sendEmailTestMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -359,7 +630,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting the workspace's Gmail account, so replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an agent request; the person who approves receives the consent address. */
+        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an agent request; the person who approves receives the consent address. */
         post: operations["connectGmail"];
         /** @description Disconnect Gmail: the grant is removed here and revoked at Google. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Gmail fails with the reason and can be retried. A locked workspace may disconnect. */
         delete: operations["disconnectGmail"];
@@ -377,9 +648,67 @@ export interface paths {
         };
         /**
          * Google's redirect after the consent screen
-         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to `/settings`: `?gmail=connected`, or `?gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `email_channel_missing` and `google_unavailable`. Google's own error text is never echoed.
+         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&gmail=connected`, or `?tab=replies&gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `address_mismatch` (the account is not the channel's support address mailbox), `account_in_use` (another email channel of the workspace sends through it, named by `&gmail_channel=<id>`), `email_channel_missing` and `google_unavailable`. A refused grant is revoked unless a channel holds the account. Google's own error text is never echoed.
          */
         get: operations["finishGmailConnect"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/microsoft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Start connecting a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to the default email channel, so its replies are sent through Microsoft Graph from that address and kept in its Sent Items. Incoming mail still arrives by forwarding. Answers Microsoft's sign-in address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Microsoft then sends that browser to `GET /api/v1/channels/email/microsoft/callback`, which finishes only for the same signed-in person. Microsoft is asked for `Mail.Send`, `User.Read`, `offline_access` and `openid`, and nothing that reads mail. The mailbox must be the channel's support address, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting replaces the channel's earlier connection, Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when the server lacks its Microsoft settings (`microsoft.missing_settings` names them). An agent token gets an agent request; the person who approves receives the sign-in address. */
+        post: operations["connectMicrosoft"];
+        /** @description Disconnect Microsoft 365: the grant is deleted here. Microsoft has no API that revokes one app's grant, so Colliedesk stays listed in the account's apps until the person removes it there (My Apps for a work or school account, account.live.com/consent/Manage for a personal one); the deleted token is useless without this server's client secret. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Microsoft 365 fails with the reason and can be retried. A locked workspace may disconnect. 404 when the channel has no Microsoft 365 connection. */
+        delete: operations["disconnectMicrosoft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/microsoft/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Microsoft's redirect after the sign-in and consent pages
+         * @description Opened by the browser Microsoft redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start, started for Microsoft 365; the state is looked up in that person's workspace only. Every outcome is a 303 to the Replies tab of the email channel the consent was for (`/settings/channels/<channel id>`, or `/settings/channels/type/email` while the state is not known): `?tab=replies&microsoft=connected`, or `?tab=replies&microsoft_error=<reason>` with `signed_out`, `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or provider, or older than 10 minutes), `wrong_person`, `denied` (cancelled at Microsoft, or the organization needs an admin's approval), `send_not_granted`, `no_refresh_token`, `mailbox_unavailable` (the account has no Exchange Online mailbox), `address_mismatch` (the mailbox is not the channel's support address; aliases and shared mailboxes are not supported yet), `account_in_use` (named by `&microsoft_channel=<id>`), `email_channel_missing`, `server_misconfigured` (Microsoft refused this server's client secret) and `microsoft_unavailable`. Microsoft's own error text is never echoed.
+         */
+        get: operations["finishMicrosoftConnect"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/microsoft/admin-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Microsoft's redirect after an organization's admin approved Colliedesk
+         * @description Opened by the browser of the organization's admin, who often has no Colliedesk session. Microsoft answers `admin_consent=True` (or `error`) and a `tenant` that is not trusted for anything; there is no code and nothing is stored. With a Colliedesk session it is a 303 to the Replies tab of the email channel named by `state` (when it is one of the session's workspace) with `?microsoft=admin_consent_done` or `?microsoft_error=admin_consent_failed`; without one it is a short page telling the admin to ask their Colliedesk admin to select Connect Microsoft 365 again.
+         */
+        get: operations["finishMicrosoftAdminConsent"];
         put?: never;
         post?: never;
         delete?: never;
@@ -397,7 +726,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient. On the hosted cloud (HOSTED_MAIL_DOMAIN set) the same secret also carries mail for `<local>@<workspace slug>.<HOSTED_MAIL_DOMAIN>`: the workspace is taken from the topmost `X-Original-To` header, which the forwarder writes from the envelope recipient; To and Cc are never used. A recipient under the hosted domain that matches no workspace with a connected email channel is answered 404 so the forwarder rejects the message. Attachments, inline images and the gzip-compressed raw message are stored with the message; a storage failure returns 500 and stores nothing. */
+        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by an email channel's inbound secret, not by a session: the message arrives on that channel. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient, the channel from the one that conversation's replies leave through. On the hosted cloud (HOSTED_MAIL_DOMAIN set) the same secret also carries mail for `<local>@<workspace slug>.<HOSTED_MAIL_DOMAIN>`: the workspace is taken from the topmost `X-Original-To` header, which the forwarder writes from the envelope recipient, and the channel from the local part (each channel's `hosted_address`; another local part reaches the default channel); To and Cc are never used. A recipient under the hosted domain that matches no workspace with a connected email channel is answered 404 so the forwarder rejects the message. Attachments, inline images and the gzip-compressed raw message are stored with the message; a storage failure returns 500 and stores nothing. */
         post: operations["receiveInboundEmail"];
         delete?: never;
         options?: never;
@@ -980,7 +1309,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats (agents and pending invites) than the plan allows, or more stored attachment bytes, imported files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them. */
+        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats (agents and pending invites) than the plan allows, or more stored attachment bytes, imported files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them. 422 `billing_email_refused` when the payment provider does not accept the admin's address (a domain that receives no mail, for example); the message gives the provider's reason and what to do. */
         post: operations["createBillingCheckout"];
         delete?: never;
         options?: never;
@@ -1248,6 +1577,378 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's AI settings: the server's provider (set by the operator; null when the server has none), the providers the workspace added (never a key, only its last four characters), each feature ("slot": `triage`, `draft`) with its provider, model and whether it is on and can run, and the newest 50 changes. Every feature starts off; turning one on is an admin's consent to send that feature's ticket data to its provider. Agents can read this; only admins change it. */
+        get: operations["getAISettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Adds a provider with the workspace's own key. The server sends one small request to the first model and saves the provider only when it answers (`422 ai_check_failed` with `check_error_code` otherwise: auth, permission, model_not_found, blocked_address, quota_exhausted…; nothing is saved). An Idempotency-Key used before with other input is also refused with 422, code `idempotency_key_reused`. The key is sealed and never returned. At most 5 providers (409 `ai_provider_limit`); a name is unique in the workspace (409 `ai_provider_name_taken`). Without `MAILBOX_TOKEN_KEYS` the server cannot store a key (409 `secret_keys_missing`). An OpenAI-compatible base URL must be public https unless the operator set `AI_ALLOW_PRIVATE_BASE_URLS=1`. At most 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        post: operations["addAIProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Lists the models a provider's key may use, before the provider is added, so a person picks them instead of typing ids. Anthropic lists the Claude models (newest first); an OpenAI-compatible server lists `GET {base_url}/models` (sorted, at most 1000). Nothing is saved or metered. A provider that cannot list answers `422 ai_check_failed` with `check_error_code` (auth, permission, model_not_found when the server keeps no list, blocked_address…); type the model names then. Same input rules as adding a provider, and it counts against the 10 checks a minute per workspace (429 `ai_checks_rate_limited`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`: an agent request would keep the key. */
+        post: operations["listAIModels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/providers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Deletes a provider and erases its key now. The features that used it turn off and stay off (`turned_off`): switching them to another provider would change who receives the data. To undo, add the provider again. Its usage history stays. */
+        delete: operations["removeAIProvider"];
+        options?: never;
+        head?: never;
+        /** @description Renames a provider or changes its models. A new first model is checked before it is saved (422 `ai_check_failed`, nothing changes). A model a feature uses cannot be removed (409 `ai_model_in_use`). The base URL never changes: the stored key and the features' data would go to a new address without anyone entering the key or turning the features on again. Add the new address as another provider instead. */
+        patch: operations["updateAIProvider"];
+        trace?: never;
+    };
+    "/api/v1/ai/providers/{id}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Replaces a provider's key. The new key is checked first; when the check fails nothing changes and the old key keeps working (422 `ai_check_failed`). An agent token below the admin tier is refused with 403 `credentials_need_admin_token`. */
+        put: operations["setAIProviderKey"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/providers/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Sends one small request to the provider's first model and records the result on the provider (`check_status` ok or failing with `check_error_code`). The call is billed by the provider and counted in usage as a check. At most 10 checks a minute per workspace. */
+        post: operations["checkAIProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/slots/{slot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slot: components["schemas"]["AISlotName"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Sets one feature: where it runs (`server`, `provider` with `provider_id`, or `none`), the model (the provider's first when left out), effort, and on or off. Turning a feature on, or moving it to another provider while it is on, records the person's consent: that feature's ticket data goes to that provider from now on. Every agent token's call becomes an agent request a person approves. */
+        put: operations["setAISlot"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The results page (docs/user/results.md): the team's numbers in Colliedesk next to the baseline of the history it imported, for the last 30 and 7 days. Nothing is computed on the request: the numbers are the newest a background worker stored (`computed_at`). Every count names, through its snapshot id, the conversations behind it (the `result` filter of `GET /conversations`). Every role reads it; the compute error is shown to admins only. */
+        get: operations["getResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/results/share-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's active share link of the results page: who made it, when, and when it was last opened. Never the link itself: only its hash is stored, so it is shown once, when it is created. Admins only. */
+        get: operations["getResultsShareLink"];
+        put?: never;
+        /** @description Creates a link that shows the results page's totals to anyone who has it, without signing in: no conversation ids, customer or team names, subjects or message text. The old link, if any, stops working. The address is returned once (`/r#<token>`; the token is in the fragment, so it never reaches a server log). An agent token's call becomes a request a person approves: the numbers leave sign-in. Admins only. */
+        post: operations["createResultsShareLink"];
+        /** @description Turns the share link off; anyone who opens it then reads "This link was turned off". Repeating it changes nothing. Admins only. */
+        delete: operations["revokeResultsShareLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/results/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description The totals a share link shows, for the public page `/r#<token>`. The token is sent in the body, never in the address. Only totals, medians and sample sizes: no ids, names, subjects or text. A link that was turned off or replaced, an unknown one, and a locked workspace's all answer the same 404. */
+        post: operations["getSharedResults"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/results-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Turns the weekly results email on or off for the caller. It goes to admins only, every Monday at 8:00 in the workspace's timezone, when the server can send email. */
+        patch: operations["setResultsEmail"];
+        trace?: never;
+    };
+    "/api/v1/ai/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One UTC calendar month of the workspace's AI calls, summed per feature and provider: calls, failed calls, automatic calls, tokens in and out, and for the server's provider its cost in micro-dollars (a workspace key's calls are billed by that provider). The current month also carries the allowance of the server's provider when the server sets one. Admins only. */
+        get: operations["getAIUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/automatic-limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Sets how many automatic AI tasks (started by the server, such as a triage suggestion for a new ticket) the workspace runs a UTC day and a minute; the defaults are 300 and 30. Past the daily limit automatic tasks wait for the next day; tasks a person asks for are never limited this way. */
+        put: operations["setAIAutomaticLimits"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The conversation's newest AI drafts (at most 20), newest first, with how each ended. */
+        get: operations["listAIDrafts"];
+        put?: never;
+        /** @description Asks for an AI draft of a reply, with an optional prompt (what the reply should say). The draft is written in the background (202, `status` queued); read it with `GET …/ai-drafts/{draftId}?wait=`. It uses the conversation (never its private notes), matching knowledge base articles and similar solved tickets, and is plain text a person edits and sends: the AI never sends. The person's earlier draft on the conversation is replaced. 409 `ai_feature_off` when reply drafts are off, 402 `ai_allowance_reached` when the server's provider spent this month's allowance, 429 `ai_drafts_rate_limited` past 30 drafts a minute in the workspace. */
+        post: operations["createAIDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-drafts/{draftId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        /** @description One AI draft. With `wait` (1 to 20 seconds) the answer waits while the draft is queued or running, and comes back as soon as it is ready, failed or cancelled. */
+        get: operations["getAIDraft"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-drafts/{draftId}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stops a draft still being written (`status` cancelled, which does not count as discarded: nobody saw it) or discards a ready one (`outcome` discarded); again on a draft already stopped or discarded it changes nothing. 409 `ai_draft_decided` once it was sent or replaced. */
+        post: operations["discardAIDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The conversation's newest AI triage suggestion (tags, priority, assignee), or null. A new ticket's first customer message queues one by itself when triage is on (never an imported message). */
+        get: operations["getAITriage"];
+        put?: never;
+        /** @description Asks for a triage suggestion by hand (202, `status` queued), replacing the open one. Refused at once like an AI draft: 409 `ai_feature_off`, 402 `ai_allowance_reached`, 429 `ai_drafts_rate_limited` (30 drafts and suggestions a minute in the workspace). */
+        post: operations["createAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Applies an open suggestion to the conversation, as a person's change would: without a body (or one naming nothing) the rest of it; with one, only what it names (each from the suggestion; 400 otherwise). After AI applied part of it, or after an undo ("Apply again", which fills only what is still empty), the rest can be accepted too. A part applied leaves the rest open; when all of it is applied the outcome is accepted. Tags are added, never removed; a part already applied is not applied again. Undo is an ordinary conversation change. Accepting an accepted one again changes nothing; 409 `ai_triage_decided` when it is not ready or was dismissed, replaced or expired, `ai_triage_nothing` when it names nothing to apply (a tag deleted or a teammate deactivated since is not named). */
+        post: operations["acceptAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stops a suggestion still being written, or dismisses the rest of an open one (outcome dismissed, or partly_accepted when a part was applied); nothing changes on the conversation. Again on one already stopped or dismissed it changes nothing. */
+        post: operations["dismissAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage/{suggestionId}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Takes back what AI applied of a suggestion by itself: the parts named, or all of it without a body. A part goes back only while it is still what AI set (a tag AI added is removed if it is still there, the priority returns to what it was before AI, the assignee is unassigned); a part a person changed since is kept and listed under kept. Undoing again changes nothing; accept applies it again, filling only what is still empty. 409 `ai_triage_not_auto_applied` when AI applied none of it. */
+        post: operations["undoAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -1255,7 +1956,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export` version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for agents, contacts, tags and conversations (with their messages, notes, tag ids and time entries), and the attachment files. Admins only. Works on self-hosted installs and in every plan state, including a read-only workspace. Sessions, pairing links, channel secrets and billing data are never exported. The archive is built while it is sent; if the server cannot finish it (for example a stored file is lost) the connection is aborted, so a truncated ZIP without `manifest.json` means the export failed. A client that stops reading is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at a time (409 until it has sent its last byte), and a server runs at most two exports at once (429 with `Retry-After`). */
+        /** @description Streams every record of the caller's workspace as one ZIP archive (format `colliedesk-export` version 1, documented in `docs/user/export.md`): `manifest.json`, one NDJSON file each for agents, contacts, tags and conversations (with their messages, notes, tag ids, time entries and status changes), and the attachment files. Admins only. Works on self-hosted installs and in every plan state, including a read-only workspace. Sessions, pairing links, channel secrets and billing data are never exported. The archive is built while it is sent; if the server cannot finish it (for example a stored file is lost) the connection is aborted, so a truncated ZIP without `manifest.json` means the export failed. A client that stops reading is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at a time (409 until it has sent its last byte), and a server runs at most two exports at once (429 with `Retry-After`). */
         get: operations["exportWorkspace"];
         put?: never;
         post?: never;
@@ -1272,9 +1973,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description State of the public web form channel. A workspace that never set it up has it off. */
+        /** @description State of the workspace's default web form (`is_default`). A workspace that never set one up has it off. Other forms are read with `GET /api/v1/channels/{id}`. */
         get: operations["getWebForm"];
-        /** @description Turn the public web form on or off and replace its allowed origins. Turning it off keeps the origins, so turning it on again needs nothing else. Origins are exact (`scheme://host[:port]`, http or https), at most 20, with no path, wildcard or credentials; they are lowercased and de-duplicated. */
+        /** @description Turn the default web form on or off and replace its allowed origins; the first save adds a form. Other forms are changed with `PATCH /api/v1/channels/{id}`. Turning it off keeps the origins, so turning it on again needs nothing else. Origins are exact (`scheme://host[:port]`, http or https), at most 20, with no path, wildcard or credentials; they are lowercased and de-duplicated. */
         put: operations["putWebForm"];
         post?: never;
         delete?: never;
@@ -1294,11 +1995,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Public, unauthenticated. A website posts a visitor's email (and optionally a message) and the workspace gets a conversation: the visitor becomes a contact (found by email), the text is an incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown workspace, a form that is off and a locked workspace all answer the same 404. Browsers may read the answer only from an origin on the workspace's allowed list (CORS). At most 5 submissions per client address and workspace per minute, and 30 requests per client address per minute across all forms; a workspace also accepts at most 50 form conversations per 10 minutes, counted apart from email. Fields the form does not know are ignored. The message is marked `email.via = web_form` with authentication `none` (unverified address). */
+        /** @description Public, unauthenticated. The workspace's older form address: it posts to the form that has it (`legacy_slug`, the form the workspace had first; making another form the default does not move it); every form also has its own, `POST /api/v1/public/web-forms/{channel_id}`. A website posts a visitor's email (and optionally a message) and the workspace gets a conversation: the visitor becomes a contact (found by email), the text is an incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown workspace, a form that is off and a locked workspace all answer the same 404. Browsers may read the answer only from an origin on the form's allowed list (CORS). At most 5 submissions per client address and form per minute, and 30 requests per client address per minute across all forms; a workspace also accepts at most 50 form conversations per 10 minutes, counted apart from email. Fields the form does not know are ignored. The message is marked `email.via = web_form` with authentication `none` (unverified address). */
         post: operations["submitWebForm"];
         delete?: never;
         /** @description CORS preflight. 204 with the allow headers for an allowed origin; every other case is the same 404 as a missing form. */
         options: operations["preflightWebForm"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/web-forms/{channel_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description One form's own address (its `submit_path`), with every rule of `POST /api/v1/public/forms/{workspace_slug}`: the conversation opens on this form, which checks its own allowed origins and counts its own submissions. The address names the form by its random channel id, so it tells nothing of the workspace's other forms. An unknown, removed or off form answers the same 404. */
+        post: operations["submitWebFormByChannel"];
+        delete?: never;
+        /** @description CORS preflight of one form's own address. 204 with the allow headers for an origin on that form's list; every other case is the same 404 as a missing form. */
+        options: operations["preflightWebFormByChannel"];
         head?: never;
         patch?: never;
         trace?: never;
@@ -1614,6 +2335,26 @@ export interface paths {
         /** @description Take an article out of the trash, as it was when deleted (a published article is published again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is not in the trash. In a collection ordered by hand it comes back last; otherwise it falls in by title. */
         post: operations["restoreKBArticle"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/ai-exclusion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Keep the article away from AI, in every language: reply drafts and triage suggestions no longer read or quote it, from this call on. People and the help center still see it. The change is a version of the article (kind `ai_exclude`, who and when), and `ai_exclusion` says since when and by whom; the text and `updated_at` do not change, so nobody's open edit is refused. Excluding an excluded article changes nothing. Undo with DELETE. */
+        post: operations["excludeKBArticleFromAI"];
+        /** @description Let AI read the article again (a version of kind `ai_include`). A published article is found again within seconds. Including an article that is not excluded changes nothing. */
+        delete: operations["includeKBArticleInAI"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2020,7 +2761,7 @@ export interface paths {
         };
         /** @description The brand of the public help center: logo, favicon, website and contact links, colors and fonts, with the contrast `checks` of the colors it shows. A null color or font is the default. */
         get: operations["getHelpCenterTheme"];
-        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). `custom_css` is the exception: it is required, and null or an empty string clears it; a body without it is refused (422 `validation_failed`, with `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent request filed before it existed, cannot remove the custom CSS. Admins only, and an `admin` agent token. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
+        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). `custom_css` is the exception: it is required, and null or an empty string clears it; a body without it is refused (422 `validation_failed`, with `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent request filed before it existed, cannot remove the custom CSS. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
         put: operations["putHelpCenterTheme"];
         post?: never;
         delete?: never;
@@ -2103,6 +2844,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description The browser's IANA timezone. At the agent's first sign-in, while they never chose a timezone and the workspace is still on its `UTC` default, it becomes the agent's own (`timezone_override`). A later sign-in never changes it, and an unknown zone is ignored; it never fails the sign-in. */
+        SignInTimezone: string;
         ImportPerson: {
             /** @description The Freshdesk agent id */
             external_id: string;
@@ -2309,6 +3052,8 @@ export interface components {
                 token_id: string | null;
                 token_label: string;
                 token_scope: components["schemas"]["TokenScope"];
+                /** @description What the token held when it asked (resource:action); empty for a request older than permissions. */
+                token_permissions: string[];
                 /** @description A request of a revoked token can only be rejected. */
                 token_revoked: boolean;
                 /** Format: uuid */
@@ -2337,6 +3082,10 @@ export interface components {
             expires_at: string;
         };
         PublicConfig: {
+            ai: {
+                /** @description True when the operator configured an AI provider for every workspace (AI_SERVER_*). */
+                server_provider: boolean;
+            };
             /** @description Where the web app reports which screens and buttons agents use. On by default on the cloud and self-hosted; `DISABLE_TELEMETRY` or `DO_NOT_TRACK` (and a development build) answer `enabled: false`, and then the web app never loads the analytics library. */
             product_analytics: {
                 enabled: boolean;
@@ -2370,6 +3119,548 @@ export interface components {
                 /** @description True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured). */
                 enabled: boolean;
             };
+        };
+        /** @enum {string} */
+        AISlotName: "triage" | "draft";
+        /** @enum {string} */
+        AIProviderKind: "anthropic" | "openai_compatible";
+        AIProvider: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["AIProviderKind"];
+            label: string;
+            /** @description Only an OpenAI-compatible provider has one. */
+            base_url: string | null;
+            /** @enum {string} */
+            auth_kind: "api_key" | "none";
+            /** @description The key's last four characters; the key itself is never returned. */
+            key_hint: string | null;
+            /** @description The first is the one a check uses. */
+            models: string[];
+            /** @enum {string} */
+            check_status: "ok" | "failing";
+            /** @description Why the last check failed: auth, permission, model_not_found, bad_request, too_large, rate_limited, overloaded, quota_exhausted, timeout, unavailable, blocked_address, invalid_response. */
+            check_error_code: string | null;
+            /** Format: date-time */
+            checked_at: string;
+            /** Format: uuid */
+            created_by: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description The features set to this provider, on or off. */
+            used_by: components["schemas"]["AISlotName"][];
+        };
+        AISlot: {
+            slot: components["schemas"]["AISlotName"];
+            /** @enum {string} */
+            source: "server" | "provider" | "none";
+            /** Format: uuid */
+            provider_id: string | null;
+            model: string | null;
+            /** @enum {string} */
+            effort: "low" | "medium" | "high";
+            enabled: boolean;
+            /** @description The feature runs by itself: triage suggestions of new tickets apply their auto_parts, filling only what nobody set; drafts are written for every customer message (never sent). Off unless an admin turns it on; off with the feature and when it moves to another provider. */
+            automatic: boolean;
+            /** @description Triage only: what applies by itself. */
+            auto_parts: ("tags" | "priority" | "assignee")[];
+            /** @description On, and its provider and model are still there: the feature runs. */
+            active: boolean;
+            /**
+             * @description Why a feature that is on cannot run.
+             * @enum {string|null}
+             */
+            off_reason: "server_provider_missing" | "model_not_offered" | null;
+            /**
+             * Format: uuid
+             * @description Who agreed that this feature's data goes to its current provider.
+             */
+            consented_by: string | null;
+            /** Format: date-time */
+            consented_at: string | null;
+            /** Format: uuid */
+            updated_by: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+        };
+        AIEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "provider_added" | "provider_changed" | "provider_key_changed" | "provider_removed" | "slot_changed" | "automatic_limits_changed";
+            /** Format: uuid */
+            actor_agent_id: string | null;
+            actor_name: string | null;
+            /** @description True when an agent token made the change. */
+            via_token: boolean;
+            /** Format: uuid */
+            provider_id: string | null;
+            /** @description The provider's name at the time; kept after it is deleted. */
+            provider_label: string | null;
+            slot: components["schemas"]["AISlotName"] | null;
+            /** @description What changed: from and to for a feature, from_hint and to_hint for a key, turned_off for a deleted provider. Never a key. */
+            detail: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        AIAutomaticLimits: {
+            per_day: number;
+            per_minute: number;
+            /** @description Automatic tasks that started today (UTC). Tasks count, not calls, so a retry uses no more. */
+            used_today: number;
+            /**
+             * Format: date-time
+             * @description When today's limit is used up: the next UTC midnight.
+             */
+            paused_until: string | null;
+            /** @description Drafts written by themselves in a UTC day, counted inside per_day. Each conversation gets at most 5 in 24 hours. */
+            draft_per_day: number;
+            drafts_today: number;
+            /**
+             * Format: date-time
+             * @description When today's automatic drafts (or all automatic runs) are used up: the next UTC midnight.
+             */
+            drafts_paused_until: string | null;
+            /**
+             * Format: date-time
+             * @description When automatic drafts spent half of this month's allowance of the server's provider: the next month. The other half stays for drafts people ask for and for triage.
+             */
+            drafts_reserved_until: string | null;
+        };
+        AIAllowance: {
+            /** @description About how many reply drafts what is left pays for, at the workspace's average cost of a draft over 30 days (before its first, a typical one); null when no price is known. */
+            drafts_left: number | null;
+            /** @description This month's allowance of the server's provider, in millionths of a US dollar. */
+            limit_micro_usd: number;
+            /** @description Spent so far; calls still running are not counted yet. */
+            used_micro_usd: number;
+            /**
+             * Format: date-time
+             * @description The first instant of the next UTC month.
+             */
+            resets_at: string;
+        };
+        Results: {
+            /** @description The caller's weekly email (admins only; null for agents). */
+            weekly_email: null | {
+                subscribed: boolean;
+                /** @description False when the server has no outgoing mail settings. */
+                can_send: boolean;
+                /**
+                 * Format: date-time
+                 * @description The next Monday 8:00 in the workspace's timezone.
+                 */
+                next_at: string;
+                /** @description The workspace's timezone (IANA). */
+                timezone: string;
+            };
+            /** @description Colliedesk's numbers; null until the worker has computed them once. */
+            current: components["schemas"]["ResultsSnapshot"] | null;
+            /** @description The imported history's numbers, measured when its import finished; null without one. */
+            baseline: components["schemas"]["ResultsSnapshot"] | null;
+            /**
+             * @description `none`: no import to compare with. `computing`: an import finished (or was run again or undone) and its numbers are being worked out. `ready`: `baseline` holds them.
+             * @enum {string}
+             */
+            baseline_state: "none" | "computing" | "ready";
+            /** @description Per window, the upper bound of time AI drafts saved: conversations with a draft sent nearly unchanged times the baseline's median handle time. Null without a baseline handle time from at least 5 conversations in that window. */
+            hours_saved: {
+                "30d"?: components["schemas"]["ResultsHoursSaved"];
+                "7d"?: components["schemas"]["ResultsHoursSaved"];
+            };
+            /** @description Why the last compute failed (admins only; null for agents and when it worked). */
+            error: null | {
+                message: string;
+                /** Format: date-time */
+                at: string;
+            };
+        };
+        ResultsShareLink: {
+            /** Format: date-time */
+            created_at: string;
+            /** @description Null when that person was removed. */
+            created_by_name: string | null;
+            /**
+             * Format: date-time
+             * @description Updated at most once an hour.
+             */
+            last_viewed_at: string | null;
+        };
+        ResultsShareLinkState: {
+            link: components["schemas"]["ResultsShareLink"] | null;
+        };
+        ResultsShareLinkCreated: {
+            link: components["schemas"]["ResultsShareLink"];
+            /** @description The address to share, shown only now. */
+            url: string;
+        };
+        SharedResults: {
+            workspace_name: string;
+            /**
+             * @description UNVERIFIED when the baseline's import could not check that every ticket arrived (the page labels it); null for an import made before results existed.
+             * @enum {string|null}
+             */
+            baseline_import_status: "OK" | "UNVERIFIED" | null;
+            /** Format: date-time */
+            computed_at: string | null;
+            /**
+             * @description Where the baseline was imported from; null without one (or while it is not shown).
+             * @enum {string|null}
+             */
+            baseline_from: "freshdesk" | "helpscout" | null;
+            current: components["schemas"]["SharedResultsSide"] | null;
+            baseline: components["schemas"]["SharedResultsSide"] | null;
+            hours_saved: {
+                "30d"?: components["schemas"]["ResultsHoursSaved"];
+                "7d"?: components["schemas"]["ResultsHoursSaved"];
+            };
+        };
+        SharedResultsSide: {
+            /** Format: date-time */
+            measured_at: string;
+            windows: {
+                "30d": components["schemas"]["ResultsWindow"];
+                "7d": components["schemas"]["ResultsWindow"];
+            };
+        };
+        ResultsHoursSaved: null | {
+            hours: number;
+            conversations: number;
+            median_handle_minutes: number;
+        };
+        ResultsSnapshot: {
+            /**
+             * Format: uuid
+             * @description Names the snapshot in the `result` filter.
+             */
+            id: string;
+            /** Format: date-time */
+            computed_at: string;
+            /**
+             * Format: date-time
+             * @description The moment the numbers describe: the anchor of a baseline.
+             */
+            measured_at: string;
+            /**
+             * Format: date-time
+             * @description Current only: since when status history is complete.
+             */
+            history_since?: string;
+            /** @description Baseline only: the import ledger source, for example freshdesk:account:123. */
+            source?: string;
+            /**
+             * @description Baseline only: the reconcile status of the import's latest run; empty for an import made before results existed.
+             * @enum {string}
+             */
+            import_status?: "OK" | "FAILED" | "UNVERIFIED" | "";
+            /**
+             * Format: date-time
+             * @description Baseline only: where its windows end (the newest ticket created by the anchor).
+             */
+            end?: string;
+            /** @description Baseline only: tickets whose resolve times were read; 0 means run the import again for them. */
+            stats_read?: number;
+            windows: {
+                "30d": components["schemas"]["ResultsWindow"];
+                "7d": components["schemas"]["ResultsWindow"];
+            };
+        };
+        /** @description Created after `from`, up to and including `to`. */
+        ResultsRange: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+        };
+        ResultsWindow: {
+            created: components["schemas"]["ResultsRange"];
+            resolved_created: components["schemas"]["ResultsRange"];
+            /**
+             * Format: date-time
+             * @description When resolution and reopens can be shown; set while status history does not reach back far enough.
+             */
+            available_on: string | null;
+            first_response: {
+                /** @description Null below 5 answered conversations. */
+                median_seconds: number | null;
+                p90_seconds: number | null;
+                answered: number;
+                /** @description Customer-started conversations of the window with no reply yet. */
+                waiting: number;
+            };
+            resolution: null | {
+                median_seconds: number | null;
+                resolved: number;
+                /** @description Not resolved, or resolved less than 7 days ago, or reopened. */
+                unresolved: number;
+                /** @description Imported tickets without a resolve time from the source. */
+                without_resolve_time: number;
+            };
+            reopened: null | {
+                /** @description Share (0 to 1); null below 5 resolutions. */
+                rate: number | null;
+                reopened: number;
+                resolutions: number;
+            };
+            volume: {
+                count: number;
+                /**
+                 * Format: date-time
+                 * @description Where the weeks are counted from: the window start or the first conversation, if later.
+                 */
+                from: string;
+                days: number;
+                per_week: number | null;
+            };
+            handle: null | {
+                median_minutes: number | null;
+                conversations: number;
+            };
+            ai: null | {
+                sent_unchanged: number;
+                sent_edited: number;
+                discarded: number;
+                conversations_sent_unchanged: number;
+            };
+        };
+        AIUsage: {
+            month: string;
+            allowance: components["schemas"]["AIAllowance"] | null;
+            rows: {
+                /** @enum {string} */
+                feature: "check" | "triage" | "draft";
+                /** @enum {string} */
+                billed_to: "server" | "workspace_key";
+                provider_label: string;
+                calls: number;
+                failed: number;
+                automatic: number;
+                input_tokens: number;
+                output_tokens: number;
+                /** @description Only for the server's provider. */
+                cost_micro_usd: number | null;
+            }[];
+        };
+        AIDraft: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed" | "cancelled";
+            /** @description Why a draft failed or stopped: feature_off, ai_allowance_reached, refused, too_long, empty_answer, a provider error code, restored, cancelled… */
+            error_code: string | null;
+            /** @description What the person asked for; erased 90 days after the draft ended. */
+            prompt: string;
+            /** @description The draft, plain text; null until ready, and 90 days after it ended. */
+            text: string | null;
+            /** @description What the draft needs that the sources did not say. */
+            missing_info: string | null;
+            /** @description The articles and solved conversations the draft used, named from the database. */
+            sources: components["schemas"]["AISource"][];
+            /** @description An email address, a number, another customer's name, a word in an alphabet the conversation does not use, or a masked detail ([email], [number], [company]) copied from a past conversation, in the draft but not in this conversation. Check before sending. */
+            warnings: {
+                /** @enum {string} */
+                kind: "email" | "number" | "name" | "script" | "placeholder";
+                value: string;
+            }[];
+            model: string | null;
+            /** @enum {string|null} */
+            outcome: "sent_unchanged" | "sent_edited" | "discarded" | "superseded" | "expired" | null;
+            /** @description How close the sent reply stayed to the draft, 0 to 1 by words; 0.9 and above is sent_unchanged. */
+            similarity: number | null;
+            /** Format: uuid */
+            sent_message_id: string | null;
+            /** Format: uuid */
+            requested_by_agent_id: string | null;
+            /** @description Written by itself when a customer wrote (the draft feature's automatic mode), not asked for by a person; the whole team sees it. Never sent by itself. */
+            automatic: boolean;
+            /**
+             * Format: uuid
+             * @description The customer message an automatic draft answers.
+             */
+            answers_message_id: string | null;
+            /** @description For an automatic draft: false when the model thinks the message needs no reply (a thank-you). Null for a person's draft. */
+            reply_needed: boolean | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            ready_at: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+        };
+        /** @description An article or a solved conversation an AI draft or suggestion read, named from the database, never by the model. */
+        AISource: {
+            /** @enum {string} */
+            kind: "kb_article" | "conversation";
+            /** Format: uuid */
+            id: string;
+            locale?: string;
+            number?: number;
+            title: string;
+        };
+        AITriage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed" | "cancelled";
+            /** @description Why it failed or stopped: automatic_limit (the workspace's daily limit of automatic suggestions), ai_allowance_reached, feature_off, refused, invalid_answer, a provider error code, restored, cancelled… */
+            error_code: string | null;
+            /** @description Queued by a new ticket rather than asked for by a person. */
+            automatic: boolean;
+            /** @description Tags of the workspace the suggestion names that the conversation did not have when it came. */
+            tag_ids: string[];
+            /**
+             * @description Null when it matches the conversation's or a person set it first.
+             * @enum {string|null}
+             */
+            priority: "low" | "normal" | "high" | "urgent" | null;
+            /**
+             * Format: uuid
+             * @description Null when it matches the conversation's or a person set it first.
+             */
+            assignee_agent_id: string | null;
+            /** @description One sentence a teammate can check; generated text, erased 90 days after it was decided. */
+            reason: string | null;
+            /** @description The articles and solved conversations the reason rests on. */
+            sources: components["schemas"]["AISource"][];
+            /** @description What a person set on the conversation after the suggestion was asked for and before it came; that field is not suggested. */
+            stale: {
+                /** @enum {string|null} */
+                priority: "low" | "normal" | "high" | "urgent" | null;
+                /** Format: uuid */
+                assignee_agent_id: string | null;
+            };
+            model: string | null;
+            /**
+             * @description Null while open, also after a part was applied. accepted: all of it applied; partly_accepted: a part applied, the rest dismissed, replaced or expired after 7 days; auto_applied: AI applied all of it by itself; undone: what AI applied was taken back.
+             * @enum {string|null}
+             */
+            outcome: "accepted" | "partly_accepted" | "dismissed" | "superseded" | "expired" | "auto_applied" | "undone" | null;
+            /** @description What was applied of it so far, by people or by AI. */
+            applied: components["schemas"]["AITriageSet"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            ready_at: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: uuid */
+            decided_by_agent_id: string | null;
+            /**
+             * Format: date-time
+             * @description When AI applied a part by itself (automatic apply).
+             */
+            auto_applied_at: string | null;
+            auto_applied: components["schemas"]["AITriageSet"];
+            /** @description The parts AI did not apply by itself because the conversation had them set: priority (set_by_person, agent_conversation) or assignee (already_assigned), with the value it had. */
+            skipped: {
+                [key: string]: {
+                    /** @enum {string} */
+                    reason: "set_by_person" | "agent_conversation" | "already_assigned";
+                    value: string | null;
+                };
+            };
+            undone_parts: components["schemas"]["AITriageSet"];
+            /** @description What an undo left because a person changed it after AI, with its value then. */
+            kept: {
+                /** @enum {string|null} */
+                priority: "low" | "normal" | "high" | "urgent" | null;
+                /** Format: uuid */
+                assignee_agent_id: string | null;
+            };
+            /** Format: date-time */
+            undone_at: string | null;
+            /** Format: uuid */
+            undone_by_agent_id: string | null;
+        };
+        AITriageSet: {
+            tag_ids: string[];
+            priority: string | null;
+            /** Format: uuid */
+            assignee_agent_id: string | null;
+        };
+        AISettings: {
+            /** @description The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none. */
+            server: null | {
+                kind: components["schemas"]["AIProviderKind"];
+                label: string;
+                /** @description Per feature, the models a workspace may pick; the first is the default. */
+                models: {
+                    [key: string]: string[];
+                };
+            };
+            providers: components["schemas"]["AIProvider"][];
+            slots: components["schemas"]["AISlot"][];
+            /** @description The newest 50 changes, newest first. */
+            events: components["schemas"]["AIEvent"][];
+            provider_limit: number;
+            /** @description False while the server has no MAILBOX_TOKEN_KEYS; no key can be added. */
+            can_store_keys: boolean;
+            /** @description True when the operator lets workspace providers use private addresses and plain http. */
+            allow_private_base_urls: boolean;
+            automatic: components["schemas"]["AIAutomaticLimits"];
+            /** @description This month's allowance of the server's provider; null when the server sets none. */
+            allowance: components["schemas"]["AIAllowance"] | null;
+            /** @description What a draft for every customer message would have meant in the last 30 days: the customer messages (imports left out), and a draft's cost on the server's provider (the workspace's average, or a typical one at the server's prices); null without a price. */
+            auto_draft_estimate: {
+                customer_messages: number;
+                draft_cost_micro_usd: number | null;
+            };
+            /** @description Triage suggestions AI applied by itself in the last 30 days, and how many of those a person undid. */
+            auto_triage: {
+                applied: number;
+                undone: number;
+            };
+        };
+        AIProviderInput: {
+            kind: components["schemas"]["AIProviderKind"];
+            label: string;
+            /** @description OpenAI-compatible only, with the version path: https://openrouter.ai/api/v1. */
+            base_url?: string;
+            /** @description Required except for an OpenAI-compatible server on a private address the operator allowed. */
+            api_key?: string;
+            models: string[];
+        };
+        AIModelsInput: {
+            kind: components["schemas"]["AIProviderKind"];
+            /** @description OpenAI-compatible only, with the version path: https://openrouter.ai/api/v1. */
+            base_url?: string;
+            /** @description Required except for an OpenAI-compatible server on a private address the operator allowed. Never stored. */
+            api_key?: string;
+        };
+        AIModelList: {
+            models: string[];
+        };
+        AIProviderChange: {
+            label?: string;
+            models?: string[];
+        };
+        AISlotInput: {
+            /** @enum {string} */
+            source: "server" | "provider" | "none";
+            /**
+             * Format: uuid
+             * @description With source provider.
+             */
+            provider_id?: string;
+            model?: string;
+            /**
+             * @description Low when left out.
+             * @enum {string}
+             */
+            effort?: "low" | "medium" | "high";
+            enabled: boolean;
+            /** @description Left out: kept as it is (off when the feature turns off or moves to another provider). */
+            automatic?: boolean;
+            /** @description Triage only. Left out: kept; tags and priority when automatic turns on with none. */
+            auto_parts?: ("tags" | "priority" | "assignee")[];
         };
         ExportLink: {
             /** @description Path on this server, for example /api/v1/export/download/<token>. */
@@ -2505,6 +3796,8 @@ export interface components {
             /** @enum {string} */
             source?: "imported" | "native";
             channel?: components["schemas"]["ConversationChannel"][];
+            /** @description Channels: a conversation that came through one of them or whose replies leave from one of them. A removed channel still filters. */
+            channel_id?: string[];
             /** Format: date-time */
             created_after?: string;
             /** Format: date-time */
@@ -2615,15 +3908,22 @@ export interface components {
          * @description Where the person heard of Colliedesk.
          * @enum {string}
          */
-        OnboardingSource: "x" | "email" | "search" | "reddit" | "github" | "referral" | "other";
+        OnboardingSource: "x" | "email" | "search" | "ai_chatgpt" | "ai_claude" | "ai_gemini" | "ai_perplexity" | "ai_other" | "tiktok" | "youtube" | "reddit" | "github" | "referral" | "other";
         Me: {
+            /** @description Which AI features can run now in the workspace (on, with a working provider); the web app offers only those. */
+            ai_features: {
+                triage: boolean;
+                draft: boolean;
+            };
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
             timezone: string;
             /** @description The goal given at cloud sign-up; the empty inbox starts with the matching step. Null when none was given and on self-hosted instances. */
             onboarding_goal: null | components["schemas"]["OnboardingGoal"];
-            /** @description The tier of the agent token making the call (read, draft or send); null for a person's own session. */
+            /** @description The tier of the agent token making the call, custom for one with its own permissions; null for a person's own session. */
             scope: null | components["schemas"]["TokenScope"];
+            /** @description What the agent token making the call holds (resource:action); empty for a person's own session. */
+            permissions: string[];
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
@@ -2640,10 +3940,20 @@ export interface components {
             };
         };
         /**
-         * @description Tier of an agent token. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
+         * @description A tier to create a token with; each holds every permission of its own preset and below (TokenPermission).
          * @enum {string}
          */
-        TokenScope: "read" | "draft" | "send" | "admin";
+        TokenPreset: "read" | "draft" | "send" | "admin";
+        /**
+         * @description A permission an agent token can hold, resource:action. Each has a preset, the lowest tier that holds it; the admin ones act with the creator's role. Actions beyond CRUD name a different risk: send (reaches a customer), publish (reaches the public help center), export and share (data leaves), purge (no way back), manage_credentials (another service's key), manage_roles, revoke and invite (people's access).
+         * @enum {string}
+         */
+        TokenPermission: "conversations:read" | "conversations:update" | "messages:read" | "messages:note" | "messages:send" | "ai_assist:read" | "ai_assist:create" | "contacts:read" | "contacts:create" | "contacts:update" | "tags:read" | "tags:create" | "tags:update" | "tags:delete" | "saved_replies:read" | "saved_replies:create" | "saved_replies:update" | "saved_replies:delete" | "saved_views:read" | "saved_views:create" | "saved_views:update" | "saved_views:delete" | "kb_articles:read" | "kb_articles:create" | "kb_articles:update" | "kb_articles:delete" | "kb_articles:publish" | "kb_media:read" | "kb_media:create" | "kb_media:update" | "kb_media:delete" | "kb_media:purge" | "help_center:read" | "help_center:update" | "results:read" | "results:share" | "agent_requests:read" | "agent_requests:cancel" | "profile:update" | "team:read" | "team:invite" | "team:revoke" | "team:manage_roles" | "team:create_tokens" | "channels:read" | "channels:update" | "channels:manage_credentials" | "workspace:update" | "workspace:export" | "billing:read" | "billing:manage" | "imports:read" | "imports:run" | "imports:manage_credentials" | "imports:undo" | "ai_settings:read" | "ai_settings:update" | "ai_settings:manage_credentials";
+        /**
+         * @description Tier of an agent token, or `custom` for a token that holds its own list of permissions. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
+         * @enum {string}
+         */
+        TokenScope: "read" | "draft" | "send" | "admin" | "custom";
         AgentToken: {
             /** @description Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again */
             token: string;
@@ -2657,8 +3967,10 @@ export interface components {
             /** Format: email */
             agent_email: string;
             label: string;
-            /** @description The tier of an agent token; null for a person's session, which has no tier. */
+            /** @description The tier of an agent token, custom for one with its own permissions; null for a person's session, which has no tier. */
             scope: null | components["schemas"]["TokenScope"];
+            /** @description What an agent token holds (resource:action), its tier's permissions or its own list; empty for a person's session. */
+            permissions: string[];
             /** @description True for the session that made this request, so a client can mark "this device". */
             current: boolean;
             /** Format: date-time */
@@ -2691,8 +4003,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            /** Format: email */
-            email: string;
+            /**
+             * Format: email
+             * @description Null for a customer known only on a channel (identities).
+             */
+            email: string | null;
+            /** @description Who the customer is on channels that know them by something other than email. */
+            identities?: components["schemas"]["ContactIdentity"][];
             /** @description Company or organization name, for example imported from a Freshdesk company */
             organization: string | null;
             /**
@@ -2897,10 +4214,10 @@ export interface components {
         KBArticleChange: {
             version: number;
             /**
-             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone.
+             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change).
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
             /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
@@ -2960,6 +4277,12 @@ export interface components {
              */
             url: string;
         };
+        KBArticleAIExclusion: {
+            /** Format: date-time */
+            at: string;
+            /** @description Who excluded it; null when that person was removed. */
+            by: null | components["schemas"]["SavedReplyPerson"];
+        };
         KBArticleTranslation: {
             locale: string;
             title: string;
@@ -2968,6 +4291,8 @@ export interface components {
             updated_at: string;
         };
         KBArticle: {
+            /** @description Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source. */
+            ai_drafts_this_month?: number;
             /** Format: uuid */
             id: string;
             number: number;
@@ -3001,6 +4326,8 @@ export interface components {
              * @description Set while the article is in the trash.
              */
             deleted_at: string | null;
+            /** @description Null while AI may read the article (when it is published); set while it is excluded from AI. */
+            ai_exclusion: null | components["schemas"]["KBArticleAIExclusion"];
             /** @description Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through. */
             missing_media?: string[];
         };
@@ -3040,7 +4367,7 @@ export interface components {
         KBArticleVersion: {
             version: number;
             /** @enum {string} */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -3414,6 +4741,8 @@ export interface components {
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
             channel: components["schemas"]["ConversationChannel"];
+            /** @description The channel the conversation came through and the one its replies leave through; null for one that came through none (started by a team member, imported, a problem report) and has no channel to reply through. */
+            channel_ref?: null | components["schemas"]["ChannelRef"];
             /** @description Where an imported conversation came from; null for conversations created in Colliedesk. */
             origin: null | components["schemas"]["ConversationOrigin"];
             /** Format: date-time */
@@ -3438,6 +4767,22 @@ export interface components {
             first_response_due_at: string | null;
             cc: string[];
             forwarded_to: string[];
+            /** @description The addresses the conversation was sent to at the source, most trusted first; its replies leave from the email channel of the first one the workspace has, else the default. */
+            mailboxes?: string[];
+            /** @description What the source helpdesk reported about the ticket (Freshdesk `include=stats`), read once: a later import keeps the first values it read and only fills a ticket that has none. Missing on imports that predate it, on archived Freshdesk tickets and on other sources. The results page reads `resolved_at` for the imported baseline (docs/user/results.md). */
+            stats?: {
+                /**
+                 * @description The ticket's status, as Colliedesk maps it, when these were read
+                 * @enum {string}
+                 */
+                status: "open" | "pending" | "resolved" | "closed";
+                /** Format: date-time */
+                resolved_at: string | null;
+                /** Format: date-time */
+                first_responded_at: string | null;
+                /** Format: date-time */
+                closed_at: string | null;
+            };
         };
         BulkConversationUpdate: {
             ids: string[];
@@ -3536,6 +4881,8 @@ export interface components {
                 contact_name: string;
                 /** Format: date-time */
                 assigned_at: string;
+                /** @description AI assigned it by itself (a triage suggestion applied automatically). */
+                by_ai: boolean;
             }[];
             updated: {
                 /** Format: uuid */
@@ -3554,6 +4901,27 @@ export interface components {
             }[];
         };
         Message: {
+            /**
+             * Format: uuid
+             * @description The channel that carried the message; null for a note and for messages stored before channels were recorded.
+             */
+            channel_id?: string | null;
+            /** @description The message's id on its channel, prefixed by the type ("email:<Message-ID>"). */
+            external_id?: string | null;
+            /** @description What the channel knows of the message beyond the email envelope (for example files that could not be fetched, files_failed). */
+            channel_meta?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Format: uuid
+             * @description The AI draft the reply was written from.
+             */
+            ai_draft_id: string | null;
+            /**
+             * @description Whether the reply kept the draft's words (sent_unchanged, 90 % or more) or was edited; null without a draft.
+             * @enum {string|null}
+             */
+            ai_draft_outcome: "sent_unchanged" | "sent_edited" | null;
             /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
             reply_number: number | null;
             /** Format: uuid */
@@ -3646,6 +5014,8 @@ export interface components {
         DeliveryStatus: "queued" | "sent" | "failed";
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
+            /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_not_connected (no channel of the type that carries the reply was connected, a web form without email; retry once it is), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused this server's own app credentials; the operator must update MICROSOFT_OAUTH_CLIENT_SECRET, and reconnecting does not help). Null for most email failures, whose words are in last_error. */
+            reason_code?: string | null;
             attempts: number;
             /** @description Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc) addresses it did not reach: refused by the relay or bounced later. A copy that misses never fails the reply to the contact. */
             last_error: string | null;
@@ -3678,7 +5048,24 @@ export interface components {
                 content_type: string;
             }[];
         };
+        TestMessageResult: {
+            /** Format: uuid */
+            conversation_id: string;
+            /** Format: uuid */
+            message_id: string;
+            /**
+             * Format: email
+             * @description The agent's own address the test came from, where a reply to it is delivered.
+             */
+            sent_to: string;
+        };
+        /** @description One email channel. Its domain's verification and provider domain belong to the domain: two channels of the workspace on one domain show the same, verify it once and share one provider domain. */
         EmailChannel: {
+            /**
+             * Format: uuid
+             * @description The channel these settings belong to.
+             */
+            channel_id?: string;
             /** Format: email */
             support_address: string;
             /** @description The name customers see in the From line of every reply this channel sends (with " via Colliedesk" while the domain is not verified) and in Reply-To. Renaming the workspace does not change it. */
@@ -3733,6 +5120,7 @@ export interface components {
         };
         EmailChannelSettings: {
             gmail: components["schemas"]["GmailSettings"];
+            microsoft: components["schemas"]["MicrosoftSettings"];
             /** @description Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and more than 0.3% of the replies sent). Replies can still be written; they stay queued with a note until an operator resumes sending with `collie email resume`. Admins cannot clear it. */
             sending_pause: null | components["schemas"]["EmailSendingPause"];
             /**
@@ -3740,14 +5128,14 @@ export interface components {
              * @enum {string}
              */
             domain_verification: "txt" | "provider";
-            /** @description Forwarding address of this workspace on the hosted cloud, `support@<slug>.<HOSTED_MAIL_DOMAIN>`. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail subdomain; change the slug with `PATCH /api/v1/workspace/slug`. */
+            /** @description Forwarding address of this email channel on the hosted cloud, `<local>@<slug>.<HOSTED_MAIL_DOMAIN>`: `support@` for the workspace's first channel (and while none is connected), a local part of its own for a channel added beside it. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail subdomain; change the slug with `PATCH /api/v1/workspace/slug`. */
             hosted_address: string | null;
             /**
              * @description `verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).
              * @enum {string}
              */
             from_policy: "verified" | "any";
-            /** @description The From address replies use now; null when replies cannot be emailed. With Gmail connected it is the Gmail address, and null while that connection has failed (replies never fall back to SMTP then). */
+            /** @description The From address replies use now; null when replies cannot be emailed. With a mailbox connected (Gmail or Microsoft 365) it is that address, and null while that connection has failed (replies never fall back to SMTP then). */
             sending_from: string | null;
             channel: null | components["schemas"]["EmailChannel"];
             /** Format: uri */
@@ -3764,36 +5152,254 @@ export interface components {
              * @description The redirect URI to register on the OAuth client in Google Cloud console.
              */
             redirect_uri: string;
+            /** @description The channel's Gmail connection; null when it has none (or sends through Microsoft 365). */
             connection: null | components["schemas"]["MailboxConnection"];
+            /** @description Only with a connection: whether its account is the channel's support address mailbox. A connection made before Gmail had to match keeps sending; connect it again with the support address to fix it. */
+            address_matches?: boolean;
+        };
+        MicrosoftSettings: {
+            /** @description Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys). */
+            available: boolean;
+            /** @description The server settings still needed before Microsoft 365 can be connected; empty when available. */
+            missing_settings: ("MICROSOFT_OAUTH_CLIENT_ID" | "MICROSOFT_OAUTH_CLIENT_SECRET" | "MAILBOX_TOKEN_KEYS")[];
+            /**
+             * Format: uri
+             * @description The Web redirect URI to register on the app in Microsoft Entra.
+             */
+            redirect_uri: string;
+            /**
+             * Format: uri
+             * @description The second redirect URI to register, where an organization's admin returns after approving Colliedesk.
+             */
+            admin_consent_redirect_uri: string;
+            /**
+             * Format: uri
+             * @description The address to send an organization's Microsoft 365 admin when Microsoft says the person needs an admin's approval; after the admin approves, the person connects again. Null when Microsoft 365 is not available or the server accepts personal accounts only.
+             */
+            admin_consent_url: string | null;
+            /** @description From this total size of files the web app warns that Microsoft may refuse the reply. Microsoft documents no limit for sending; a refused reply fails with the reason and keeps its files. */
+            large_attachment_bytes: number;
+            /** @description True while a reply of this channel waits because Microsoft refused this server's own app credentials (MICROSOFT_OAUTH_CLIENT_SECRET wrong or expired). The connection is fine; the operator must update the secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is false): missing_settings names what to set. */
+            server_credentials_refused: boolean;
+            /** @description The channel's Microsoft 365 connection; null when it has none (or sends through Gmail). */
+            connection: null | components["schemas"]["MailboxConnection"];
+            /** @description Only with a connection: whether its mailbox is the channel's support address. */
+            address_matches?: boolean;
         };
         MailboxConnection: {
             /** @enum {string} */
-            provider: "google";
+            provider: "google" | "microsoft";
             /**
              * Format: email
-             * @description The Google account replies are sent from.
+             * @description The mailbox replies are sent from.
              */
             address: string;
             /**
-             * @description `failed` when Google stopped honouring the grant: replies fail with `error` until an admin reconnects.
+             * @description `failed` when the provider stopped honouring the grant: replies fail with `error` until an admin reconnects.
              * @enum {string}
              */
             status: "connected" | "failed";
             /**
-             * @description revoked: Google refuses the grant. permission: Gmail refuses to send for it.
+             * @description revoked: the provider refuses the grant (access removed, expired, password reset, a sign-in policy). permission: the provider refuses to send for it. mailbox_unavailable: the Microsoft account has no Exchange Online mailbox any more.
              * @enum {string|null}
              */
-            error_code: "revoked" | "permission" | null;
+            error_code: "revoked" | "permission" | "mailbox_unavailable" | null;
             error: string | null;
             /** Format: date-time */
             failed_at: string | null;
             /** Format: date-time */
             connected_at: string;
         };
-        InboundEmailResult: {
+        /**
+         * @description A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
+         * @enum {string}
+         */
+        ChannelType: "email" | "web_form";
+        ChannelState: {
+            /**
+             * @description `waiting`: set up, but nothing has arrived on the channel yet (reason `no_message_yet`); it turns `working` with the first message received, which proves the way in works.
+             * @enum {string}
+             */
+            state: "working" | "waiting" | "off" | "needs_attention" | "not_connected" | "removed";
+            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`. A waiting channel has `no_message_yet`. */
+            reason_code: string | null;
+            message: string | null;
+        };
+        Channel: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["ChannelType"];
+            name: string;
+            enabled: boolean;
+            status: components["schemas"]["ChannelState"];
+            /** @description One line under the name: the support address, the allowed origins. */
+            summary: string;
+            /** @description Fixed codes of what the channel carries (threads, attachments_in, attachments_out, cc, html, form). */
+            capabilities: string[];
+            /** @description Messages that arrived while the channel was off and wait to be opened or discarded. */
+            held_count: number;
+            /** @description Replies whose delivery failed with channel_off; retry them once the channel is on. */
+            unsent_count: number;
+            /** Format: date-time */
+            last_inbound_at: string | null;
+            /** @description Whether this is its type's default channel: a call, link or address that names no channel uses it. */
+            is_default?: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * Format: date-time
+             * @description Only on a removed channel, which only `include_removed=true` lists.
+             */
+            deleted_at?: string;
+        };
+        /** @description The email channel's configuration, as `GET /api/v1/channels/email` shows it. */
+        EmailChannelConfig: components["schemas"]["EmailChannel"];
+        /** @description The web form's configuration, as `GET /api/v1/channels/web-form` shows it. */
+        WebFormChannelConfig: components["schemas"]["WebFormSettings"];
+        /** @description A channel's configuration, by its type. */
+        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"];
+        ChannelDetail: components["schemas"]["Channel"] & {
+            config: components["schemas"]["ChannelConfig"];
+        };
+        ChannelTypeInfo: {
+            type: components["schemas"]["ChannelType"];
+            /** @description Whether a channel of the type can be added now. */
+            available: boolean;
+            /** @description How many live channels of the type the workspace has. */
+            count: number;
+            /**
+             * Format: uuid
+             * @description The type's default channel; null while the workspace has none of it.
+             */
+            default_channel_id: string | null;
+        };
+        ChannelList: {
+            items: components["schemas"]["Channel"][];
+            types: components["schemas"]["ChannelTypeInfo"][];
+        };
+        EmailChannelConfigInput: {
+            /** Format: email */
+            support_address?: string;
+            sender_name?: string;
+        };
+        WebFormChannelConfigInput: {
+            allowed_origins?: string[];
+        };
+        /** @description A channel's configuration as its type takes it. */
+        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"];
+        /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type declares), `notices` {received}. Never a secret. */
+        ChannelSettings: {
+            [key: string]: unknown;
+        };
+        ChannelCreate: {
+            type: components["schemas"]["ChannelType"];
+            name?: string;
+            enabled?: boolean;
+            /** @description true makes the new channel its type's default; false is refused (400). */
+            is_default?: boolean;
+            config?: components["schemas"]["ChannelConfigInput"];
+            settings?: components["schemas"]["ChannelSettings"];
+        };
+        ChannelChange: {
+            name?: string;
+            enabled?: boolean;
+            /** @description true makes the channel its type's default (recorded as default_changed); the one that was loses it. A type keeps a default while it has a channel, so false is refused (400): make another channel the default instead. */
+            is_default?: boolean;
+            config?: components["schemas"]["ChannelConfigInput"];
+            settings?: components["schemas"]["ChannelSettings"];
+        };
+        ChannelCredentialInput: {
+            name: string;
+            value: string;
+        };
+        ChannelCredential: {
+            name: string;
+            /** @description The secret's last four characters. */
+            hint: string | null;
+        };
+        ChannelEvent: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
             /** @enum {string} */
-            status: "created" | "threaded" | "duplicate" | "dropped";
-            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient). */
+            kind: "added" | "renamed" | "enabled" | "disabled" | "config_changed" | "credential_changed" | "removed" | "held_replayed" | "held_discarded" | "default_changed";
+            /** Format: uuid */
+            channel_id: string;
+            channel_name: string;
+            channel_type: string;
+            actor: {
+                /** Format: uuid */
+                agent_id: string | null;
+                name: string | null;
+                token_label: string | null;
+            };
+            /** @description config_changed: the names of the settings that changed (email support_address, sender_name; web_form allowed_origins; settings for its rules). credential_changed: the name of the secret replaced (email inbound_secret). Never a value. Empty for other kinds. */
+            fields?: string[];
+            /** @description held_replayed and held_discarded: how many messages were opened or discarded. */
+            count?: number | null;
+        };
+        ChannelEventPage: {
+            items: components["schemas"]["ChannelEvent"][];
+            next_cursor: string | null;
+        };
+        HeldReplayInput: {
+            event_ids?: string[];
+            /** Format: uuid */
+            conversation_id?: string;
+        };
+        HeldReplayResult: {
+            results: {
+                status: string;
+                /** Format: uuid */
+                conversation_id: string | null;
+                /** Format: uuid */
+                message_id: string | null;
+            }[];
+        };
+        HeldDiscardInput: {
+            event_ids?: string[];
+        };
+        HeldDiscardResult: {
+            discarded: number;
+        };
+        /** @description The channel a conversation came through, and the one its replies leave through (`replies_via`, null when none can carry them): its own when its type sends, else the one its replies are pinned to (the channel it was started from, or that sent its first reply; an import's source mailbox when the workspace has it), else its type's default. A web form's replies leave by email. */
+        ChannelRef: {
+            /** Format: uuid */
+            id: string;
+            type: string;
+            name: string;
+            enabled: boolean;
+            deleted: boolean;
+            replies_via: null | {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                enabled: boolean;
+                /** @description The channel the replies would leave from, removed: the default stands in for it. Null otherwise. */
+                instead_of?: null | {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                };
+            };
+        };
+        ContactIdentity: {
+            /** Format: uuid */
+            channel_id: string;
+            kind: string;
+            value: string;
+            display_name: string | null;
+        };
+        InboundEmailResult: {
+            /**
+             * @description `held`: the email channel is off. The message is kept in the channel (its original is stored) until an admin opens it as a conversation or discards it; nothing is opened meanwhile.
+             * @enum {string}
+             */
+            status: "created" | "threaded" | "duplicate" | "dropped" | "held";
+            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, channel_removed, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient); why it was held: channel_off. */
             reason: string | null;
             /** Format: uuid */
             conversation_id: string | null;
@@ -3802,9 +5408,17 @@ export interface components {
             authentication: components["schemas"]["EmailAuthentication"];
         };
         WebFormSettings: {
+            /**
+             * Format: uuid
+             * @description The form's channel; absent while the workspace has no form.
+             */
+            channel_id?: string;
             enabled: boolean;
+            /** @description The origins this form may be posted from; each form has its own, and two forms may list the same. */
             allowed_origins: string[];
-            /** @description Path a website posts to; the host is this instance */
+            /** @description Whether the workspace's older address /api/v1/public/forms/<slug> posts to this form: the form the workspace had first keeps it. */
+            legacy_slug?: boolean;
+            /** @description Path a website posts to; the host is this instance: the older `/api/v1/public/forms/<workspace slug>` for the form that has it (`legacy_slug`), else the form's own `/api/v1/public/web-forms/<channel id>`, which every form also answers. */
             submit_path: string;
         };
         ProblemReportInput: {
@@ -3851,8 +5465,18 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on ai_check_failed: why the provider check failed (auth, permission, model_not_found, blocked_address, quota_exhausted, timeout, unavailable…). */
+                check_error_code?: string;
                 /** @description Only on upload_offset_mismatch: where the upload stands; send the part that starts there. */
                 offset?: number;
+                /** @description Only on channel_has_held: how many messages the channel holds; open or discard them before removing it. */
+                held_count?: number;
+                /** @description Only on channel_name_taken and support_address_taken: the channel of this workspace that has the value. */
+                conflict?: {
+                    /** Format: uuid */
+                    channel_id: string;
+                    channel_name: string;
+                };
                 /** @description Only on media_in_use: the live articles whose current text names the item. */
                 articles?: {
                     /** Format: uuid */
@@ -3865,10 +5489,10 @@ export interface components {
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
                 /**
-                 * @description Only on trial_outbound_restricted when the customer wrote first, but from another address than the contact's (a contact merged into this one): the reply would go to `reply_to`, which never wrote.
+                 * @description Only on trial_outbound_restricted when the customer did write, but the trial cannot count the mail. `contact_address_differs`: the customer wrote from another address than the contact's (a contact merged into this one), and the reply would go to `reply_to`, which never wrote. `mail_not_via_hosted_address`: the mail was posted to the workspace's own inbound URL, not received at its hosted forwarding address, so nothing proves who sent it. `sender_authentication_failed`: the mail arrived at the forwarding address but failed sender verification (SPF, DKIM or DMARC).
                  * @enum {string}
                  */
-                reason?: "contact_address_differs";
+                reason?: "contact_address_differs" | "mail_not_via_hosted_address" | "sender_authentication_failed";
                 /** @description Only with reason contact_address_differs: the address the reply would go to. */
                 reply_to?: string;
                 /** @description Only on order_stale: the collections under the parent now, in their current order. */
@@ -3883,6 +5507,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description The Idempotency-Key already names another request with other input (`idempotency_key_reused`); nothing was created */
+        IdempotencyKeyReused: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description An agent token called this above its tier, or the action needs a person's approval for every tier: nothing happened yet. The call is stored as an agent request a person approves or rejects (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A token gets 429 `too_many_requests` while 50 of its requests wait or after 100 in an hour (with `Retry-After`), 402 `workspace_locked` in a locked workspace, and a call with files gets 403 `files_need_approval` (send the text alone, attach files after approval). */
         AgentRequestAccepted: {
             headers: {
@@ -4014,6 +5647,25 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The provider check failed; nothing was saved or changed. `check_error_code` says why. */
+        AICheckFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The workspace ran 10 provider checks in the last minute; try again shortly. */
+        AIChecksRateLimited: {
+            headers: {
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         Unauthorized: {
             headers: {
                 [name: string]: unknown;
@@ -4105,7 +5757,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address). When the customer wrote but the mail does not count, `reason` says why: `mail_not_via_hosted_address` (posted to the workspace's own inbound URL) or `sender_authentication_failed` (sender verification failed). Nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -4126,6 +5778,10 @@ export interface components {
     };
     parameters: {
         ID: string;
+        /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+        WebFormPressKey: string;
+        /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+        CreateIdempotencyKey: string;
     };
     requestBodies: never;
     headers: never;
@@ -4166,6 +5822,7 @@ export interface operations {
                     workspace_slug?: string;
                     /** @description Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in". */
                     label?: string;
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -4200,6 +5857,7 @@ export interface operations {
                     goal?: components["schemas"]["OnboardingGoal"];
                     role?: components["schemas"]["OnboardingRole"];
                     source?: components["schemas"]["OnboardingSource"];
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -4257,6 +5915,7 @@ export interface operations {
                      * @enum {string}
                      */
                     session_type?: "cookie" | "bearer";
+                    timezone?: components["schemas"]["SignInTimezone"];
                 };
             };
         };
@@ -4358,7 +6017,10 @@ export interface operations {
     createAgentToken: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4367,11 +6029,24 @@ export interface operations {
                 "application/json": {
                     /** @description Name shown in the session list, for example the agent host */
                     label: string;
-                    scope: components["schemas"]["TokenScope"];
+                    scope?: components["schemas"]["TokenPreset"];
+                    /** @description A custom token's permissions, instead of a scope. */
+                    permissions?: components["schemas"]["TokenPermission"][];
                 };
             };
         };
         responses: {
+            /** @description The session of the token an earlier request with the same Idempotency-Key created; the raw token is not shown again and nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        session: components["schemas"]["Session"];
+                    };
+                };
+            };
             /** @description The token and its session. The raw token is in this response only. */
             201: {
                 headers: {
@@ -4386,6 +6061,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listInvites: {
@@ -4414,7 +6091,10 @@ export interface operations {
     createInvite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4428,6 +6108,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The invite an earlier request with the same Idempotency-Key created, without its one-time URL (shown once); nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        invite: components["schemas"]["Invite"];
+                    };
+                };
+            };
             /** @description The invite, and for a person its one-time URL */
             201: {
                 headers: {
@@ -4455,6 +6146,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     revokeInvite: {
@@ -4506,8 +6198,10 @@ export interface operations {
                 delivery_failed?: boolean;
                 /** @description imported (from another helpdesk) or native (created in Colliedesk). */
                 source?: "imported" | "native";
-                /** @description One channel or several, comma-separated (see `ConversationChannel`). */
+                /** @description One channel type or several, comma-separated (see `ConversationChannel`). */
                 channel?: string;
+                /** @description One channel or several by id, comma-separated (`GET /api/v1/channels`, `include_removed=true` for removed ones): a conversation that came through one of them or whose replies leave from one of them. An id of another workspace matches nothing. */
+                channel_id?: string;
                 created_after?: string;
                 created_before?: string;
                 updated_after?: string;
@@ -4516,6 +6210,8 @@ export interface operations {
                 sort?: components["schemas"]["ConversationSort"];
                 /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
                 search?: string;
+                /** @description Only the conversations one number of the results page counts: `<snapshot id>:<window>.<metric>`, as `GET /results` names them (for example `…:30d.first_response`). Send it without a status filter: a number counts conversations in any status. A snapshot that is no longer kept (numbers are worked out again every hour or so; a replaced one stays 24 hours) answers 410 `results_refreshed`. */
+                result?: string;
                 page?: number;
                 page_size?: number;
             };
@@ -4536,12 +6232,24 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description The results snapshot the `result` filter names is no longer kept (`results_refreshed`) */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     createConversation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4560,6 +6268,11 @@ export interface operations {
                     /** @description Markdown source of the first reply; without it the conversation starts empty */
                     body?: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /**
+                     * Format: uuid
+                     * @description The channel it starts from; the default email channel when left out.
+                     */
+                    channel_id?: string;
                 };
                 "multipart/form-data": {
                     /** Format: uuid */
@@ -4571,12 +6284,15 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /** Format: uuid */
+                    channel_id?: string;
                     seen_reply_number?: number;
                     files?: string[];
                 };
             };
         };
         responses: {
+            200: components["responses"]["Conversation"];
             201: components["responses"]["Conversation"];
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
@@ -4586,6 +6302,7 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["AttachmentsTooLarge"];
+            422: components["responses"]["IdempotencyKeyReused"];
             429: components["responses"]["TrialOutboundLimit"];
             /** @description The attachments volume is low on disk space; nothing was sent or stored */
             507: {
@@ -4713,7 +6430,10 @@ export interface operations {
     };
     listMessages: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The Idempotency-Key of a send, 1 to 200 printable ASCII characters */
+                idempotency_key?: string;
+            };
             header?: never;
             path: {
                 id: components["parameters"]["ID"];
@@ -4733,6 +6453,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
@@ -4740,7 +6461,10 @@ export interface operations {
     createMessage: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: components["parameters"]["ID"];
             };
@@ -4756,6 +6480,11 @@ export interface operations {
                     cc?: components["schemas"]["CopiedAddresses"];
                     /** @description The newest reply number the sender had seen; 0 when there was none. */
                     seen_reply_number?: number;
+                    /**
+                     * Format: uuid
+                     * @description The AI draft this reply was written from (outgoing replies sent directly only): the draft records how close the reply stayed to it. 409 ai_draft_not_ready when it is not this conversation's ready, undecided draft.
+                     */
+                    ai_draft_id?: string;
                     /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
                     draft?: boolean;
                 };
@@ -4765,11 +6494,22 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /** Format: uuid */
+                    ai_draft_id?: string;
                     files?: string[];
                 };
             };
         };
         responses: {
+            /** @description The message an earlier request with the same Idempotency-Key created; nothing new was stored or sent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
             /** @description Created reply or private note */
             201: {
                 headers: {
@@ -4795,6 +6535,15 @@ export interface operations {
                 };
             };
             413: components["responses"]["AttachmentsTooLarge"];
+            /** @description The Idempotency-Key already names another message (`idempotency_key_reused`); nothing was stored */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             429: components["responses"]["TrialOutboundLimit"];
             /** @description The attachments volume is low on disk space; nothing was sent or stored */
             507: {
@@ -4834,6 +6583,507 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             429: components["responses"]["TrialOutboundLimit"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listChannels: {
+        parameters: {
+            query?: {
+                include_removed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channels and the types */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createChannel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelCreate"];
+            };
+        };
+        responses: {
+            /** @description The channel an earlier request with the same Idempotency-Key created; nothing new was created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            /** @description The channel */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+        };
+    };
+    listChannelEvents: {
+        parameters: {
+            query?: {
+                channel_id?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelEventPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelChange"];
+            };
+        };
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    setChannelCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelCredentialInput"];
+            };
+        };
+        responses: {
+            /** @description The secret's hint */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelCredential"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    checkChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelDetail"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replayHeldChannelMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeldReplayInput"];
+            };
+        };
+        responses: {
+            /** @description What became of each message */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeldReplayResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    discardHeldChannelMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeldDiscardInput"];
+            };
+        };
+        responses: {
+            /** @description How many were discarded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeldDiscardResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEmailChannelByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EmailChannelSettings"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    verifyEmailDomainByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EmailChannelSettings"];
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    rotateEmailInboundSecretByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description New inbound secret, shown once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        inbound_secret: string;
+                        /** Format: uri */
+                        inbound_url: string;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    sendEmailTestMessageByID: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The test message an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            /** @description The test message arrived and opened a conversation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+            /** @description Five test messages were sent in the last hour; Retry-After says when the next one may go. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    connectGmailByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ConsentLink"];
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    disconnectGmailByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Gmail disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    connectMicrosoftByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ConsentLink"];
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    disconnectMicrosoftByID: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Microsoft 365 disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -4900,6 +7150,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     verifyEmailDomain: {
@@ -4948,6 +7199,55 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    sendEmailTestMessage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The test message an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            /** @description The test message arrived and opened a conversation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMessageResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+            /** @description Five test messages were sent in the last hour; Retry-After says when the next one may go. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -5007,7 +7307,104 @@ export interface operations {
             /** @description Back to the settings page, which explains the outcome. */
             303: {
                 headers: {
-                    /** @description The path /settings?gmail=connected or /settings?gmail_error=<reason>. */
+                    /** @description The channel settings path with ?tab=replies&gmail=connected or &gmail_error=<reason>. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    connectMicrosoft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ConsentLink"];
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    disconnectMicrosoft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Microsoft 365 disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    finishMicrosoftConnect: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Back to the settings page, which explains the outcome. */
+            303: {
+                headers: {
+                    /** @description The channel settings path with ?tab=replies&microsoft=connected or &microsoft_error=<reason>. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    finishMicrosoftAdminConsent: {
+        parameters: {
+            query?: {
+                admin_consent?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page for an admin without a Colliedesk session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Back to the settings page of the signed-in person. */
+            303: {
+                headers: {
+                    /** @description The channel settings path with ?tab=replies&microsoft=admin_consent_done or &microsoft_error=admin_consent_failed. */
                     Location?: string;
                     [name: string]: unknown;
                 };
@@ -5331,7 +7728,10 @@ export interface operations {
     createContact: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -5345,6 +7745,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The contact an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
             /** @description Created contact */
             201: {
                 headers: {
@@ -5367,6 +7776,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     getContact: {
@@ -5744,7 +8154,10 @@ export interface operations {
     createTag: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -5758,6 +8171,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The tag an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tag"];
+                };
+            };
             /** @description Created tag */
             201: {
                 headers: {
@@ -5771,6 +8193,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     deleteTag: {
@@ -5856,7 +8280,10 @@ export interface operations {
     createSavedView: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -5866,6 +8293,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The saved view an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
             /** @description Saved view */
             201: {
                 headers: {
@@ -5880,6 +8316,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listDeletedSavedViews: {
@@ -6016,7 +8453,10 @@ export interface operations {
     createSavedReply: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6026,6 +8466,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The saved reply an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReply"];
+                };
+            };
             /** @description Created saved reply */
             201: {
                 headers: {
@@ -6040,6 +8489,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listTrashedSavedReplies: {
@@ -6288,6 +8738,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description The payment provider did not accept the admin's address; the message says why and what to do. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
             502: components["responses"]["BadGateway"];
         };
@@ -6440,7 +8899,10 @@ export interface operations {
     previewImport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6450,6 +8912,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The preview job an earlier request with the same Idempotency-Key started, as it was then; nothing new was started. The Freshdesk key is not part of what makes two requests the same one. Read its state now with `GET /api/v1/imports/{id}`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportJob"];
+                };
+            };
             /** @description The preview job, still previewing */
             202: {
                 headers: {
@@ -6462,6 +8933,8 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     getImport: {
@@ -6729,6 +9202,753 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    getAISettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AISettings"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    addAIProvider: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIProviderInput"];
+            };
+        };
+        responses: {
+            /** @description The provider an earlier request with the same Idempotency-Key added; nothing new was stored or checked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            /** @description The provider, checked */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["AICheckFailed"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    listAIModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIModelsInput"];
+            };
+        };
+        responses: {
+            /** @description The models the key may use */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIModelList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["AICheckFailed"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    removeAIProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The features that turned off */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        turned_off: components["schemas"]["AISlotName"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAIProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIProviderChange"];
+            };
+        };
+        responses: {
+            /** @description The provider */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["AICheckFailed"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    setAIProviderKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    api_key: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The provider with its new key's last four characters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["AICheckFailed"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    checkAIProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The provider with the check's result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvider"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    setAISlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slot: components["schemas"]["AISlotName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AISlotInput"];
+            };
+        };
+        responses: {
+            /** @description The feature */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AISlot"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest numbers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Results"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The active link, or null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkState"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new link, shown once */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkCreated"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    revokeResultsShareLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No active link */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsShareLinkState"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getSharedResults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The shared totals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedResults"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description The link was turned off, replaced or never existed */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    setResultsEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    weekly: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's choice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        weekly: boolean;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAIUsage: {
+        parameters: {
+            query?: {
+                /** @description YYYY-MM; the current UTC month when left out. */
+                month?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The month's usage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIUsage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    setAIAutomaticLimits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    per_day: number;
+                    per_minute: number;
+                    /** @description Kept when left out. */
+                    draft_per_day?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The limits and today's use */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIAutomaticLimits"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listAIDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description AI drafts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AIDraft"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAIDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    prompt?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The draft, queued; or an agent request when the token is below the draft tier */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"] | components["schemas"]["AgentRequestAccepted"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    getAIDraft: {
+        parameters: {
+            query?: {
+                wait?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    discardAIDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                draftId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest suggestion */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        suggestion: null | components["schemas"]["AITriage"];
+                        /** @description The newest suggestion AI applied by itself; a later one asked for by hand does not hide it. */
+                        auto_applied: null | components["schemas"]["AITriage"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The suggestion, queued; or an agent request when the token is below the draft tier */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"] | components["schemas"]["AgentRequestAccepted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    acceptAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    tag_ids?: string[];
+                    /** @enum {string|null} */
+                    priority?: "low" | "normal" | "high" | "urgent" | null;
+                    /** Format: uuid */
+                    assignee_agent_id?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The suggestion, with what was applied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    dismissAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The suggestion */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    undoAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    parts?: ("tags" | "priority" | "assignee")[];
+                };
+            };
+        };
+        responses: {
+            /** @description The suggestion, with what was undone and kept */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     exportWorkspace: {
         parameters: {
             query?: never;
@@ -6807,7 +10027,10 @@ export interface operations {
     submitWebForm: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+                "Idempotency-Key"?: components["parameters"]["WebFormPressKey"];
+            };
             path: {
                 workspace_slug: string;
             };
@@ -6851,7 +10074,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid input; `error.fields` names each bad field */
+            /** @description Invalid input; `error.fields` names each bad field and `error.message` joins their sentences, for example "Message is too long: at most 5,000 characters." */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6879,6 +10102,103 @@ export interface operations {
             header?: never;
             path: {
                 workspace_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preflight accepted */
+            204: {
+                headers: {
+                    "Access-Control-Allow-Origin"?: string;
+                    "Access-Control-Allow-Methods"?: string;
+                    "Access-Control-Allow-Headers"?: string;
+                    "Access-Control-Max-Age"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    submitWebFormByChannel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional name of one press of the page's submit button, 1 to 200 printable ASCII characters; send the same key when the page retries that press. A repeat of the same key, form, email, message and source is accepted (202) and stores nothing new; the same key with other words is a new submission. Without a key every request is a submission. A malformed key is 400. Repeats still count against the limits. */
+                "Idempotency-Key"?: components["parameters"]["WebFormPressKey"];
+            };
+            path: {
+                channel_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    message?: string;
+                    /** @description Where the form sits, for example site:updates */
+                    source?: string;
+                    /** @description Honeypot; leave empty */
+                    website?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted (also for a honeypot hit) */
+            202: {
+                headers: {
+                    /** @description Set only for an allowed origin */
+                    "Access-Control-Allow-Origin"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            /** @description The body is not application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid input; `error.fields` names each bad field and `error.message` joins their sentences, for example "Message is too long: at most 5,000 characters." */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many submissions; retry after the `Retry-After` seconds */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    preflightWebFormByChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                channel_id: string;
             };
             cookie?: never;
         };
@@ -7139,7 +10459,10 @@ export interface operations {
     createProblemReport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7155,6 +10478,17 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The report an earlier request with the same Idempotency-Key sent; nothing new was sent and the hourly allowance is not used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        reference: string;
+                    };
+                };
+            };
             /** @description The report reached the support desk */
             201: {
                 headers: {
@@ -7180,7 +10514,8 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`) */
+            409: components["responses"]["Conflict"];
+            /** @description Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`). Also `idempotency_key_reused` when the Idempotency-Key was used before with other input. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7228,7 +10563,10 @@ export interface operations {
     createKBCollection: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7238,6 +10576,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The collection an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBCollection"];
+                };
+            };
             /** @description Created collection */
             201: {
                 headers: {
@@ -7252,6 +10599,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listTrashedKBCollections: {
@@ -7450,7 +10798,10 @@ export interface operations {
     createKBArticle: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7460,6 +10811,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The article an earlier request with the same Idempotency-Key created; nothing new was stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
             /** @description Created article */
             201: {
                 headers: {
@@ -7474,6 +10834,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listTrashedKBArticles: {
@@ -7633,6 +10994,58 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    excludeKBArticleFromAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article, excluded from AI */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    includeKBArticleInAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article, readable by AI */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listKBArticleVersions: {

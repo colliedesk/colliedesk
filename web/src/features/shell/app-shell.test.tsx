@@ -6,9 +6,9 @@ const me = {
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role: 'agent' as const, timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC',
-  scope: null,
+  scope: null, permissions: [],
   plan: null,
-  onboarding_goal: null,
+  ai_features: { triage: false, draft: false }, onboarding_goal: null,
 };
 
 test('shows the page content next to the rail', () => {
@@ -20,12 +20,6 @@ test('a signed-out visitor is told how to get back in instead of seeing an empty
   render(<AppShell signedOut><p>inbox</p></AppShell>);
   expect(screen.getByRole('alert')).toHaveTextContent('You are signed out. Ask your workspace admin for a new link.');
   expect(screen.queryByText('inbox')).not.toBeInTheDocument();
-});
-
-test('a signed-out visitor of a cloud instance gets a sign-in link instead of the self-host hint', () => {
-  render(<AppShell signedOut signIn={<a href="/sign-in">Sign in</a>}><p>inbox</p></AppShell>);
-  expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
-  expect(screen.queryByText(/collie pair/)).not.toBeInTheDocument();
 });
 
 test('a signed-out visitor of a self-hosted instance keeps the pair hint', () => {

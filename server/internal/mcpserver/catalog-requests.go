@@ -4,6 +4,12 @@ package mcpserver
 // token's tier or need a person's approval for every tier. A person approves or rejects them in
 // Colliedesk; no tool can, so a model never approves its own request.
 
+import (
+	"encoding/json"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+)
+
 const (
 	filedRequestSchema = `{"type":"object","required":["id","kind","status","summary","expires_at"],"properties":{` +
 		`"id":{"type":"string"},"kind":{"type":"string","enum":["reply_draft","action"]},"status":{"type":"string"},` +
@@ -103,10 +109,10 @@ func approvalSpec(name, title, description string, rest []string, input string, 
 
 func tokenCreateRequestSpec() Spec {
 	return approvalSpec("colliedesk_token_create_request", "Ask for a new agent token",
-		`Ask for a new agent token with a label and a tier. The token belongs to the person who approves, who sees it once and passes it on; it is never shown to you.`,
+		`Ask for a new agent token with a label and either a tier (scope) or its own list of permissions (resource:action, for example kb_articles:update). `+
+			`The token belongs to the person who approves, who sees it once and passes it on; it is never shown to you.`,
 		[]string{"POST /api/v1/auth/tokens"},
-		`{"type":"object","additionalProperties":false,"required":["label","scope"],"properties":{"label":{"type":"string","minLength":1,"maxLength":80},`+
-			`"scope":{"type":"string","enum":["read","draft","send","admin"],"description":"admin only when the approving person is an admin."}}}`, tokenCreateRequest)
+		tokenRequestInput(), tokenCreateRequest)
 }
 
 func workspaceExportRequestSpec() Spec {
@@ -127,26 +133,38 @@ func billingRequestSpec() Spec {
 
 func emailChannelDisconnectRequestSpec() Spec {
 	return approvalSpec("colliedesk_email_channel_disconnect_request", "Ask to disconnect the email channel",
-		`Ask to disconnect the workspace's email channel: mail stops coming in and replies stop going out until an admin connects it again.`,
+		`Ask to disconnect the workspace's default email channel (is_default): its mail stops coming in and its replies stop going out until an admin connects it again. To remove another channel, use colliedesk_channels_delete_request.`,
 		[]string{"DELETE /api/v1/channels/email"}, noArguments, emailChannelDisconnectRequest)
 }
 
 func gmailConnectRequestSpec() Spec {
 	return approvalSpec("colliedesk_gmail_connect_request", "Ask a person to connect Gmail for sending",
-		`Ask an admin to connect the workspace's Gmail account, so replies are sent from that address through Gmail and kept in its Sent folder (incoming mail still arrives by forwarding). The person who approves gets Google's consent page and signs in to Google there; you never see it. Connecting again replaces the account. Needs the email channel and the server's Google settings (see colliedesk_email_channel_get, gmail).`,
-		[]string{"POST /api/v1/channels/email/gmail"}, noArguments, gmailConnectRequest)
+		`Ask an admin to connect a Gmail account to an email channel, so its replies are sent from that address through Gmail and kept in its Sent folder (incoming mail still arrives by forwarding). The person who approves gets Google's consent page and signs in to Google there; you never see it. Connecting again replaces the account. Needs the email channel and the server's Google settings (see colliedesk_email_channel_get, gmail). `+emailChannelChoice,
+		[]string{"POST /api/v1/channels/email/gmail", "POST /api/v1/channels/{id}/email/gmail"}, emailChannelInput, gmailConnectRequest)
 }
 
 func gmailDisconnectRequestSpec() Spec {
 	return approvalSpec("colliedesk_gmail_disconnect_request", "Ask to disconnect Gmail",
-		`Ask to disconnect the workspace's Gmail account: Colliedesk's access is revoked at Google and replies go out the way they did before Gmail was connected. A reply still waiting to be sent through Gmail fails and can be retried.`,
-		[]string{"DELETE /api/v1/channels/email/gmail"}, noArguments, gmailDisconnectRequest)
+		`Ask to disconnect the Gmail account of an email channel: Colliedesk's access is revoked at Google (unless another channel uses the same account) and its replies go out the way they did before Gmail was connected. A reply still waiting to be sent through Gmail fails and can be retried. `+emailChannelChoice,
+		[]string{"DELETE /api/v1/channels/email/gmail", "DELETE /api/v1/channels/{id}/email/gmail"}, emailChannelInput, gmailDisconnectRequest)
+}
+
+func microsoftConnectRequestSpec() Spec {
+	return approvalSpec("colliedesk_microsoft_connect_request", "Ask a person to connect Microsoft 365 for sending",
+		`Ask an admin to connect a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to an email channel, so its replies are sent from that address through Microsoft and kept in its Sent Items (incoming mail still arrives by forwarding). The person who approves gets Microsoft's sign-in page and signs in there; you never see it. The mailbox must be the channel's support address; aliases and shared mailboxes are not supported yet. A work account may first need its organization's Microsoft 365 admin to approve Colliedesk (microsoft.admin_consent_url of colliedesk_email_channel_get). Connecting replaces the channel's Gmail or earlier Microsoft 365 connection. Needs the email channel and the server's Microsoft settings (see colliedesk_email_channel_get, microsoft). `+emailChannelChoice,
+		[]string{"POST /api/v1/channels/email/microsoft", "POST /api/v1/channels/{id}/email/microsoft"}, emailChannelInput, microsoftConnectRequest)
+}
+
+func microsoftDisconnectRequestSpec() Spec {
+	return approvalSpec("colliedesk_microsoft_disconnect_request", "Ask to disconnect Microsoft 365",
+		`Ask to disconnect the Microsoft 365 mailbox of an email channel: Colliedesk deletes its access, and its replies go out the way they did before Microsoft 365 was connected. Microsoft cannot be asked to revoke it, so Colliedesk stays listed in the account's apps until the person removes it there. A reply still waiting to be sent through Microsoft 365 fails and can be retried. `+emailChannelChoice,
+		[]string{"DELETE /api/v1/channels/email/microsoft", "DELETE /api/v1/channels/{id}/email/microsoft"}, emailChannelInput, microsoftDisconnectRequest)
 }
 
 func emailSecretRotateRequestSpec() Spec {
 	return approvalSpec("colliedesk_email_secret_rotate_request", "Ask to rotate the inbound email secret",
-		`Ask for a new inbound email secret, for example after the old one leaked. The person who approves sees the new secret once and updates the mail forwarder; it is never shown to you.`,
-		[]string{"POST /api/v1/channels/email/secret"}, noArguments, emailSecretRotateRequest)
+		`Ask for a new inbound secret of an email channel, for example after the old one leaked; mail forwarded with it arrives on that channel. The person who approves sees the new secret once and updates the mail forwarder; it is never shown to you. `+emailChannelChoice,
+		[]string{"POST /api/v1/channels/email/secret", "POST /api/v1/channels/{id}/email/secret"}, emailChannelInput, emailSecretRotateRequest)
 }
 
 func workspaceSlugRequestSpec() Spec {
@@ -154,4 +172,28 @@ func workspaceSlugRequestSpec() Spec {
 		`Ask to change the workspace's address (slug), which also changes its hosted support email address and web form link.`,
 		[]string{"PATCH /api/v1/workspace/slug"},
 		`{"type":"object","additionalProperties":false,"required":["slug"],"properties":{"slug":{"type":"string","minLength":1,"maxLength":63}}}`, workspaceSlugRequest)
+}
+
+// tokenRequestInput is the input schema of colliedesk_token_create_request, built as JSON so the
+// permission list comes from auth.TokenPermissions as data, never pasted into a string.
+func tokenRequestInput() string {
+	names := []string{}
+	for _, item := range auth.TokenPermissions() {
+		names = append(names, item.Name)
+	}
+	schema := map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"label"},
+		"properties": map[string]any{
+			"label": map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+			"scope": map[string]any{"type": "string", "enum": auth.ScopeNames,
+				"description": "A tier. admin only when the approving person is an admin. Leave out with permissions."},
+			"permissions": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "enum": names},
+				"description": "A custom token's permissions instead of a tier; an admin-only one needs an admin to approve."},
+		},
+	}
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		panic(err)
+	}
+	return string(encoded)
 }

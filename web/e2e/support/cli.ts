@@ -100,9 +100,10 @@ export function withDatabase(url: string, database: string): string {
   return parsed.toString();
 }
 
-// startServer runs `collie serve` on its own port and resolves once it answers.
-export async function startServer(port: number, env: Record<string, string>): Promise<ChildProcess> {
-  const child = spawn(binary(), ['serve', '--listen', `127.0.0.1:${port}`], {
+// startServer runs `collie serve` on its own port and resolves once it answers; tags builds it with seams
+// (e2e: the local stand-ins).
+export async function startServer(port: number, env: Record<string, string>, tags = ''): Promise<ChildProcess> {
+  const child = spawn(binary(tags), ['serve', '--listen', `127.0.0.1:${port}`], {
     stdio: ['ignore', 'inherit', 'inherit'],
     env: { ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir, ...env },
   });

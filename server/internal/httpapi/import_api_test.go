@@ -308,3 +308,28 @@ func TestAnImportKeepsTheOldHelpCenterAddressAsAHost(t *testing.T) {
 		t.Fatalf("options = %+v", job.Options)
 	}
 }
+
+func TestARepeatedKeyStartsOneImportPreview(t *testing.T) {
+	api, admin, _, _, _, count := newImportDesk(t)
+	body := map[string]any{"source": "freshdesk", "domain": "beta.freshdesk.com", "api_key": importCanary}
+	first := postWithKey(t, api, admin, "/api/v1/imports", "preview-1", body)
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("first: status=%d body=%s", first.Code, first.Body.String())
+	}
+	made := idOf(t, first, "id")
+	before := count(`SELECT count(*) FROM import_jobs`)
+	again := postWithKey(t, api, admin, "/api/v1/imports", "preview-1", body)
+	if again.Code != http.StatusOK || idOf(t, again, "id") != made {
+		t.Fatalf("repeat: status=%d body=%s, want 200 with job %s", again.Code, again.Body.String(), made)
+	}
+	if after := count(`SELECT count(*) FROM import_jobs`); after != before {
+		t.Fatalf("import jobs %d -> %d after a repeated press, want no new job", before, after)
+	}
+	other := postWithKey(t, api, admin, "/api/v1/imports", "preview-1", map[string]any{"source": "freshdesk", "domain": "gamma.freshdesk.com", "api_key": importCanary})
+	if other.Code != http.StatusUnprocessableEntity || !strings.Contains(other.Body.String(), "idempotency_key_reused") {
+		t.Fatalf("same key, other account: status=%d body=%s, want 422 idempotency_key_reused", other.Code, other.Body.String())
+	}
+	if n := count(`SELECT count(*) FROM request_idempotency_keys WHERE response::text LIKE '%'||$1||'%'`, importCanary); n != 0 {
+		t.Fatal("the remembered answer carries the Freshdesk key")
+	}
+}

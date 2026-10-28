@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import type { CheckoutPlan } from '../../api/schemas';
-import { api } from '../../api/client';
+import { api, InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
 import { billingMessages } from './billing-messages';
 import { openCheckout } from '../billing/open-checkout';
@@ -46,6 +46,6 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
   if (me.data && !isAdmin) return <main className="settings-page"><p className="muted-copy">{billingMessages.billingAdminsOnly}</p></main>;
   if (!billing.data) return <main className="settings-page">{billing.isError && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}</main>;
   return <BillingPage billing={billing.data} timezone={me.data?.timezone ?? 'UTC'} checkoutReturned={checkoutReturned}
-    failed={checkout.isError || portal.isError} busy={checkout.isPending}
+    failed={checkout.error instanceof InvalidRequestError ? checkout.error.message : checkout.isError || portal.isError} busy={checkout.isPending}
     onCheckout={(plan) => checkout.mutate(plan)} onManage={() => portal.mutate()} />;
 }

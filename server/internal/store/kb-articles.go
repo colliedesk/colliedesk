@@ -44,8 +44,11 @@ func scanKBSummary(row pgx.Row, extra ...any) (domain.KBArticleSummary, error) {
 // readKBArticle reads one article of the workspace, in or out of the trash, with its text and translations.
 func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.KBArticle, error) {
 	var article domain.KBArticle
-	summary, err := scanKBSummary(tx.QueryRow(ctx, kbArticleSelect(`,a.body_md,a.source_html IS NOT NULL,a.deleted_at`, ``)+` WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id),
-		&article.BodyMD, &article.HasSourceHTML, &article.DeletedAt)
+	var excludedAt *time.Time
+	var excludedBy, excludedByName *string
+	summary, err := scanKBSummary(tx.QueryRow(ctx, kbArticleSelect(`,a.body_md,a.source_html IS NOT NULL,a.deleted_at,a.ai_excluded_at,a.ai_excluded_by_agent_id::text,COALESCE(NULLIF(x.display_name,''),x.email)`,
+		` LEFT JOIN agents x ON x.workspace_id=a.workspace_id AND x.id=a.ai_excluded_by_agent_id`)+` WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id),
+		&article.BodyMD, &article.HasSourceHTML, &article.DeletedAt, &excludedAt, &excludedBy, &excludedByName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return article, domain.ErrKBArticleNotFound
 	}
@@ -53,6 +56,12 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 		return article, err
 	}
 	article.KBArticleSummary, article.DeletedAt = summary, domain.UTCOptional(article.DeletedAt)
+	if excludedAt != nil {
+		article.AIExclusion = &domain.KBAIExclusion{At: domain.UTC(*excludedAt)}
+		if excludedBy != nil && excludedByName != nil {
+			article.AIExclusion.By = &domain.SavedReplyPerson{AgentID: excludedBy, Name: *excludedByName}
+		}
+	}
 	rows, err := tx.Query(ctx, `SELECT locale,title,body_md,updated_at FROM kb_article_translations WHERE workspace_id=$1 AND article_id=$2 ORDER BY locale`, workspaceID, id)
 	if err != nil {
 		return article, err
@@ -528,6 +537,42 @@ func (s *Store) UndeleteKBArticle(ctx context.Context, workspaceID string, actor
 		return readKBArticle(ctx, tx, workspaceID, id)
 	})
 	return article, kbError("restore knowledge base article", err)
+}
+
+// SetKBArticleAIExcluded keeps a live article away from AI in every language, or lets AI read it
+// again, and records the change as a version. The text and updated_at stay, so an edit open
+// elsewhere still saves; an article already in that state is returned unchanged.
+func (s *Store) SetKBArticleAIExcluded(ctx context.Context, workspaceID string, actor Actor, id string, excluded bool) (domain.KBArticle, error) {
+	if !savedReplyID.MatchString(id) {
+		return domain.KBArticle{}, domain.ErrKBArticleNotFound
+	}
+	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
+		var current bool
+		err := tx.QueryRow(ctx, `SELECT ai_excluded FROM kb_articles WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE`, workspaceID, id).Scan(&current)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.KBArticle{}, domain.ErrKBArticleNotFound
+		}
+		if err != nil {
+			return domain.KBArticle{}, err
+		}
+		if current != excluded {
+			// The trigger on ai_excluded drops the article's retrieval rows in this transaction.
+			if _, err := tx.Exec(ctx, `UPDATE kb_articles SET ai_excluded=$3, ai_excluded_at=CASE WHEN $3 THEN $4::timestamptz END,
+				ai_excluded_by_agent_id=CASE WHEN $3 THEN $5::uuid END WHERE workspace_id=$1 AND id=$2`,
+				workspaceID, id, excluded, s.now(), optionalID(actor.AgentID)); err != nil {
+				return domain.KBArticle{}, err
+			}
+			kind := domain.KBArticleAIIncluded
+			if excluded {
+				kind = domain.KBArticleAIExcluded
+			}
+			if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, kind, nil); err != nil {
+				return domain.KBArticle{}, err
+			}
+		}
+		return readKBArticle(ctx, tx, workspaceID, id)
+	})
+	return article, kbError("change whether AI reads a knowledge base article", err)
 }
 
 // KBArticleVersions returns one page of the versions of an article, newest first, as

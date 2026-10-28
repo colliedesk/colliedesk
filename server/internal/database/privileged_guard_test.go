@@ -18,6 +18,7 @@ import (
 // Adding a line here is a security review: say why the path must cross workspaces and keep it to
 // the lookup that resolves a workspace. docs/internals/workspace-isolation.md lists the same set.
 var privilegedCallSites = []string{
+	"internal/ai/worker.go: PrivilegeAIJobClaim",
 	"internal/auth/cloud.go: PrivilegeCloudIdentity",
 	"internal/auth/links.go: PrivilegeLinkToken",
 	"internal/auth/service.go: PrivilegeCreateWorkspace",
@@ -29,12 +30,17 @@ var privilegedCallSites = []string{
 	"internal/database/scope.go: PrivilegeWorkspaceBySlug",
 	"internal/importjobs/people.go: PrivilegeImportJobClaim",
 	"internal/importjobs/store.go: PrivilegeImportJobClaim",
+	"internal/results/weekly_email.go: PrivilegeResultsClaim",
+	"internal/results/worker.go: PrivilegeResultsClaim",
 	"internal/retention/service.go: PrivilegeRetention",
 	"internal/store/agent-requests.go: PrivilegeAgentRequestPrune",
+	"internal/store/ai-retrieval.go: PrivilegeAIRetrievalQueue",
 	"internal/store/billing-reconcile.go: PrivilegeBillingReconcile",
+	"internal/store/channel-journal.go: PrivilegeChannelInboundClaim",
+	"internal/store/channel-outbound.go: PrivilegeOutboxClaim",
+	"internal/store/channels.go: PrivilegeChannelRoute",
 	"internal/store/email-channels.go: PrivilegeInboundSecret",
 	"internal/store/email-inbound.go: PrivilegeReplyToken",
-	"internal/store/email-outbox.go: PrivilegeOutboxClaim",
 	"internal/store/email-provider-domains.go: PrivilegeProviderDomainSweep",
 	"internal/store/email-relay-bounce.go: PrivilegeVerifiedSender",
 	"internal/store/help-center-domains.go: PrivilegeHelpCenterDomainRecheck",
@@ -44,6 +50,8 @@ var privilegedCallSites = []string{
 	"internal/store/kb-media-uploads.go: PrivilegeKBUploadDisk",
 	"internal/store/mail-image-cache.go: PrivilegeMailImageSweep",
 	"internal/store/mailbox-connections.go: PrivilegeMailboxGrantShared",
+	"internal/store/mailbox-connections.go: PrivilegeMailboxKeepAlive",
+	"internal/store/results-sharing.go: PrivilegeResultsShareToken",
 	"internal/store/saved-reply-history.go: PrivilegeSavedReplyPurge",
 	"internal/store/server-secrets.go: PrivilegeServerSecret",
 	"internal/telemetry/usage.go: PrivilegeTelemetry",
@@ -63,6 +71,7 @@ var poolFiles = []string{
 	"cmd/collie/trial.go",
 	"cmd/collie/undo.go",
 	"internal/auth/service.go",
+	"internal/database/databasetest/databasetest.go", // tests only: clones and drops test databases
 	"internal/database/migrate.go",
 	"internal/database/scope.go",
 	"internal/freshdesk/importer.go",

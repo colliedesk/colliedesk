@@ -44,7 +44,7 @@ test('a customer found by search, then the subject, the message and the copies s
   // A disabled Send says what is missing.
   expect(send).toHaveAccessibleDescription('To send, add a customer, a subject, a message.');
   fireEvent.change(screen.getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
-  fireEvent.click(await screen.findByRole('button', { name: /Pat Prospect/ }));
+  fireEvent.click(await screen.findByRole('option', { name: /Pat Prospect/ }));
   expect(screen.getByText('Pat Prospect <pat@prospect.example>')).toBeInTheDocument();
   await waitFor(() => expect(screen.getByLabelText('Subject')).toHaveFocus());
   write(' Your renewal ', ' It renews next week. ');
@@ -55,7 +55,7 @@ test('a customer found by search, then the subject, the message and the copies s
   fireEvent.click(send);
   await waitFor(() => expect(onStart).toHaveBeenCalledWith(pat.id, 'Your renewal', { body: 'It renews next week.', files: [], cc: ['boss@prospect.example'] }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(opener).toHaveFocus();
+  await waitFor(() => expect(opener).toHaveFocus());
 });
 
 test('a new customer goes with the conversation; a refusal keeps every field, and the address of a customer offers that customer', async () => {
@@ -95,7 +95,11 @@ test('on the trial without a verified domain the window says why, links to the w
   const onClose = vi.fn();
   wrap(<NewConversationDialog blocked="trial" onStart={vi.fn()} onClose={onClose} onOpenSettings={onOpenSettings} onChoosePlan={onChoosePlan} />);
   const dialog = screen.getByRole('dialog', { name: 'Start a conversation' });
-  expect(within(dialog).getByRole('status')).toHaveTextContent(/trial/);
+  const status = within(dialog).getByRole('status');
+  expect(status).toHaveTextContent(/trial/);
+  // Says what a sending domain is and that replies to customers who write in still work.
+  expect(status).toHaveTextContent(/domain of your support address/);
+  expect(status).toHaveTextContent(/You can still reply to customers who email your support address/);
   expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
   expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
   fireEvent.click(within(dialog).getByRole('link', { name: 'Choose a plan' }));
@@ -107,7 +111,7 @@ test('on the trial without a verified domain the window says why, links to the w
 
 test('without an email channel the window links to Settings to connect one', () => {
   wrap(<NewConversationDialog blocked="no_channel" onStart={vi.fn()} onClose={vi.fn()} />);
-  expect(screen.getByRole('link', { name: 'Connect the email channel in Settings' })).toHaveAttribute('href', '/settings');
+  expect(screen.getByRole('link', { name: 'Connect the email channel in Settings' })).toHaveAttribute('href', '/settings/channels/type/email?tab=replies');
 });
 
 test('the picker of a new conversation offers to add the customer when nobody matches', async () => {
@@ -140,4 +144,87 @@ test('a click on the backdrop keeps the focus in the window, so Escape still clo
   fireEvent.keyDown(dialog, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(opener).toHaveFocus();
+});
+
+test('the customers found open as a list under the search box that the arrows and Enter pick from, and Escape closes', async () => {
+  const sam = { ...pat, id: '22222222-2222-4222-8222-222222222222', name: 'Sam Prospect', email: 'sam@prospect.example', organization: 'Prospect Co' };
+  api.contacts.mockResolvedValue({ items: [pat, sam], has_more: false });
+  wrap(<NewConversationDialog onStart={vi.fn()} onClose={vi.fn()} />);
+  const search = screen.getByRole('combobox', { name: 'Find a customer by name or email' });
+  fireEvent.change(search, { target: { value: 'prospect' } });
+  const list = await screen.findByRole('listbox');
+  expect(search).toHaveAttribute('aria-expanded', 'true');
+  expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual(['Pat Prospectpat@prospect.example', 'Sam Prospectsam@prospect.example · Prospect Co']);
+  expect(within(list).getByRole('option', { name: /Pat/ })).toHaveAttribute('aria-selected', 'true');
+  fireEvent.keyDown(search, { key: 'Escape' });
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  fireEvent.keyDown(search, { key: 'ArrowDown' });
+  fireEvent.keyDown(search, { key: 'ArrowDown' });
+  expect(search).toHaveAttribute('aria-activedescendant', within(screen.getByRole('listbox')).getByRole('option', { name: /Sam/ }).id);
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(screen.getByText('Sam Prospect <sam@prospect.example>')).toBeInTheDocument();
+});
+
+test('Enter picks from the answer to what is typed now, not from the list of the search before', async () => {
+  const sam = { ...pat, id: '33333333-3333-4333-8333-333333333333', name: 'Sam Other', email: 'sam@other.example' };
+  let answer: (value: unknown) => void = () => {};
+  api.contacts.mockImplementation((term: string) => (term === 'pat' ? Promise.resolve({ items: [pat], has_more: false }) : new Promise((resolve) => { answer = resolve; })));
+  wrap(<NewConversationDialog onStart={vi.fn()} onClose={vi.fn()} />);
+  const search = screen.getByRole('combobox', { name: 'Find a customer by name or email' });
+  // Arrows before any result do nothing, so the first result is still the one Enter picks.
+  fireEvent.keyDown(search, { key: 'ArrowDown' });
+  fireEvent.change(search, { target: { value: 'pat' } });
+  await screen.findByRole('option', { name: /Pat Prospect/ });
+  fireEvent.change(search, { target: { value: 'sam' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(screen.queryByText('Pat Prospect <pat@prospect.example>')).not.toBeInTheDocument();
+  await waitFor(() => expect(api.contacts).toHaveBeenCalledWith('sam', expect.anything(), expect.anything()));
+  answer({ items: [sam], has_more: false });
+  await screen.findByRole('option', { name: /Sam Other/ });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(screen.getByText('Sam Other <sam@other.example>')).toBeInTheDocument();
+});
+
+// The window with two email channels: the person chooses which one sends, an off channel is listed but
+// cannot be chosen, and a channel the server refuses is said at the choice with the text kept.
+function TwoChannels({ onStart }: { onStart: (...args: unknown[]) => Promise<unknown> }) {
+  const [channelID, setChannelID] = useState('c1');
+  return <NewConversationDialog onStart={onStart} onClose={vi.fn()} channelID={channelID} onChooseChannel={setChannelID}
+    senders={[{ id: 'c1', name: 'Support', off: false }, { id: 'c2', name: 'Billing', off: false }, { id: 'c3', name: 'Old', off: true }]} />;
+}
+
+test('with two email channels the window asks which one sends, and a channel turned off is said at that choice', async () => {
+  api.contacts.mockResolvedValue({ items: [pat], has_more: false });
+  const onStart = vi.fn().mockRejectedValueOnce(new ConflictError('This channel is off: turn it on, or start from another channel. Nothing was stored.', { code: 'channel_off' }));
+  wrap(<TwoChannels onStart={onStart} />);
+  const from = screen.getByLabelText('Send from');
+  expect(from).toHaveValue('c1');
+  expect(screen.getByRole('option', { name: 'Old (off)' })).toBeDisabled();
+  fireEvent.change(from, { target: { value: 'c2' } });
+  expect(from).toHaveValue('c2');
+  fireEvent.change(screen.getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
+  fireEvent.click(await screen.findByRole('option', { name: /Pat Prospect/ }));
+  write('Invoice', 'Here it is.');
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(from).toHaveAccessibleDescription(/This channel is off/));
+  expect(from).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText('Message')).toHaveValue('Here it is.');
+});
+
+test('with one email channel the window asks nothing about channels', () => {
+  wrap(<NewConversationDialog onStart={vi.fn()} onClose={vi.fn()} channelID="c1" senders={[{ id: 'c1', name: 'Support', off: false }]} />);
+  expect(screen.queryByLabelText('Send from')).not.toBeInTheDocument();
+});
+
+// While the window checks whether the email may be sent, it holds the focus itself, so Escape closes it;
+// once it knows, the focus goes to the customer search.
+test('the window takes the focus while it checks, and gives it to the search once it can be written', () => {
+  const onClose = vi.fn();
+  const { rerender } = wrap(<NewConversationDialog checking onStart={vi.fn()} onClose={onClose} />);
+  const dialog = screen.getByRole('dialog', { name: 'Start a conversation' });
+  expect(dialog).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  expect(onClose).toHaveBeenCalledTimes(1);
+  rerender(<QueryClientProvider client={new QueryClient()}><NewConversationDialog onStart={vi.fn()} onClose={onClose} /></QueryClientProvider>);
+  expect(screen.getByLabelText('Find a customer by name or email')).toHaveFocus();
 });

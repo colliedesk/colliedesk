@@ -1,0 +1,80 @@
+/* Settings → Channels. Shared controls (tabs, switch, notices, dialogs) come from ui/controls.css. */
+.ch-page { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
+.ch-stack { display: grid; gap: var(--space-3); min-width: 0; }
+.ch-loading { min-height: 10rem; }
+.ch-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+.ch-add { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
+.ch-back { justify-self: start; color: var(--text-2); font-size: var(--fs-small); }
+.ch-back::before { content: "← "; }
+.ch-reason { display: block; }
+
+.ch-st-ok { --dot: var(--ok); }
+.ch-st-warn { --dot: var(--pending); }
+.ch-st-off { --dot: var(--line-control); }
+
+/* The list: name, state, then the switch and Configure. */
+.ch-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; padding: var(--space-3) var(--space-4); }
+.ch-row + .ch-row { border-top: 1px solid var(--line); }
+.ch-row-off .ch-row-name > svg { opacity: 0.6; }
+.ch-row-name { display: flex; gap: var(--space-3); align-items: center; min-width: 0; }
+.ch-row-name > svg { flex: none; color: var(--text-3); }
+.ch-row-name > span { display: grid; gap: 2px; min-width: 0; }
+.ch-row-name strong, .ch-row-name h2 { font-size: 14px; font-weight: 600; }
+.ch-row-name small, .ch-row-state small { color: var(--text-3); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.ch-default { justify-self: start; width: fit-content; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 var(--space-2); color: var(--text-2); font-size: var(--fs-label); font-weight: 500; line-height: 1.6; }
+.ch-row-state { display: grid; gap: 2px; justify-items: start; min-width: 0; }
+.ch-row-actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.ch-switch { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+/* Types to connect: on the empty page and in Add channel. */
+.ch-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.ch-type { display: flex; gap: var(--space-3); align-items: flex-start; width: 100%; min-height: var(--touch); height: 100%; border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface-1); padding: var(--space-3); color: var(--text-1); text-align: left; text-decoration: none; font: inherit; white-space: normal; justify-content: flex-start; cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease); }
+a.ch-type:hover, button.ch-type:hover { border-color: var(--line-strong); background: var(--surface-0); }
+.ch-type > svg { flex: none; margin-top: 2px; color: var(--text-3); }
+.ch-type > span { display: grid; gap: 2px; min-width: 0; }
+.ch-type strong { font-weight: 600; }
+.ch-type small { color: var(--text-3); font-size: var(--fs-small); }
+.ch-type[aria-disabled="true"] { cursor: default; background: var(--surface-0); color: var(--text-3); }
+.ch-empty .ch-types { grid-column: 2; }
+
+/* Email · Replies: one block per question, each under its heading. */
+.email-replies > section { display: grid; gap: var(--space-3); }
+.email-replies > section + section, .email-replies > .gmail-connection { border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.email-replies h3, .embed-code h3 { font-size: 14px; font-weight: 600; }
+
+/* The web form's code to copy: it scrolls sideways in its own frame. */
+.embed-code { display: grid; gap: var(--space-2); }
+.embed-code pre { margin: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0);
+  padding: var(--space-3); font-size: var(--fs-small); line-height: 1.5; }
+
+/* One channel: its head, then its tabs. */
+.ch-detail { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.ch-detail-head { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.ch-carries { font-size: var(--fs-small); }
+.ch-panel { display: grid; gap: var(--space-3); min-width: 0; }
+.ch-panel .settings-body { min-width: 0; }
+.ch-remove { justify-content: flex-start; }
+
+.ch-history { margin: 0; padding: 0; list-style: none; }
+.ch-history li { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-4); padding: var(--space-2) var(--space-4); color: var(--text-2); font-size: var(--fs-small); }
+.ch-history li + li { border-top: 1px solid var(--line); }
+.ch-history time { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ch-history b { color: var(--text-1); font-weight: 600; }
+.ch-empty-copy { margin: 0; padding: var(--space-4); }
+
+@media (prefers-reduced-motion: reduce) { .ch-type { transition: none; } }
+@media (max-width: 40rem) {
+  .ch-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3); }
+  .ch-row-actions { justify-content: flex-start; }
+  .ch-empty .ch-types { grid-column: auto; }
+  .ch-tabs-row .seg-tabs { flex: 1 1 auto; }
+  .ch-history li { grid-template-columns: 1fr; gap: 0; padding: var(--space-2) var(--space-3); }
+}
+
+.ch-row-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.ch-row-title strong { overflow-wrap: anywhere; }
+.ch-identity small { color: var(--text-2); font-size: var(--fs-small); }
+/* Links in a channel's results (the test conversation) are fingertip-sized on a phone. */
+@media (pointer: coarse), (max-width: 30rem) { .ch-panel [role="status"] a { display: inline-flex; align-items: center; min-height: var(--touch); } }

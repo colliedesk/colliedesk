@@ -27,6 +27,7 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 		"signup":            map[string]any{"enabled": enabled && a.polar != nil && !a.config.SignupDisabled},
 		"limits":            map[string]any{"outgoing_attachments_bytes": attachments.MaxOutgoingBytes, "outgoing_attachments_files": attachments.MaxOutgoingFiles},
 		"product_analytics": a.productAnalyticsConfig(),
+		"ai":                map[string]any{"server_provider": a.ai.ServerConfigured()},
 	})
 }
 
@@ -57,6 +58,7 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 	var input struct {
 		WorkspaceSlug string `json:"workspace_slug"`
 		Label         string `json:"label"`
+		Timezone      string `json:"timezone"`
 	}
 	if request.ContentLength != 0 {
 		if err := decodeJSON(request, &input); err != nil {
@@ -86,6 +88,7 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		writeJSON(response, http.StatusConflict, map[string]any{"workspaces": choices})
 		return
 	}
+	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
 	setSessionCookie(response, result.Token)
 	result.Token = ""
 	writeJSON(response, http.StatusOK, result)

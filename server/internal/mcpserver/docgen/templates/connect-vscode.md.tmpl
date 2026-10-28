@@ -1,0 +1,27 @@
+# Connect VS Code
+
+Connect GitHub Copilot in [VS Code](https://code.visualstudio.com) to Colliedesk. VS Code asks for
+the token once and stores it securely; it never appears in the configuration file.
+
+{{template "before" .}}
+## Connect
+
+1. In VS Code, run **MCP: Open User Configuration** from the Command Palette.
+2. Add the `inputs` entry and the `{{.ServerName}}` server below to the file (keep what is already
+   in it):
+
+   ```json
+   {{indent 3 (index .Snippets "vscode")}}
+   ```
+
+3. Start the server from the file or the **MCP Servers** view. VS Code asks for the Colliedesk
+   agent token once: paste it.
+
+The `{{.ServerName}}` tools then show in the tools picker of Copilot chat in agent mode.
+
+{{template "try" .}}
+{{template "tiers" .}}
+## Remove it
+
+Delete the `{{.ServerName}}` server and the `colliedesk-token` input from the file. {{template "revoke" .}}
+{{template "others" .}}

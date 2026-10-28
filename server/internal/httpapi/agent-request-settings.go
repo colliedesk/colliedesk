@@ -54,6 +54,9 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 	}
 	_ = json.Unmarshal(body, &call)
 	id := request.PathValue("id")
+	if action, ok := channelRequestActions[route.Method+" "+route.Pattern]; ok {
+		return action + " " + a.channelLabel(ctx, who.Workspace.ID, id)
+	}
 	switch route.Method + " " + route.Pattern {
 	case "PATCH /api/v1/workspace/timezone":
 		return fmt.Sprintf("Change the workspace timezone: %s → %s", who.Workspace.Timezone, orNone(call.Timezone, "(none)"))
@@ -227,4 +230,30 @@ func originList(origins []string) string {
 		return "none"
 	}
 	return strings.Join(origins, ", ")
+}
+
+// channelRequestActions are the requests about one channel; the summary names the channel, never a
+// secret the call carries.
+var channelRequestActions = map[string]string{
+	"DELETE /api/v1/channels/{id}":                         "Remove the channel",
+	"POST /api/v1/channels/{id}/held/discard":              "Discard the held messages of the channel",
+	"POST /api/v1/channels/{id}/email/secret":              "Rotate the inbound secret of the channel",
+	"POST /api/v1/channels/{id}/email/domain-verification": "Check the DNS record of the domain of the channel",
+	"POST " + channelGmailPath:                             "Connect Gmail to the channel",
+	"DELETE " + channelGmailPath:                           "Disconnect Gmail from the channel",
+	"POST " + channelMicrosoftPath:                         "Connect Microsoft 365 to the channel",
+	"DELETE " + channelMicrosoftPath:                       "Disconnect Microsoft 365 from the channel",
+}
+
+// channelLabel names a channel of the workspace for a person: its name and what it is (an email
+// channel's support address), or its id when it cannot be read.
+func (a *API) channelLabel(ctx context.Context, workspaceID, id string) string {
+	public, err := a.store.GetChannelPublic(ctx, workspaceID, id)
+	if err != nil {
+		return id
+	}
+	if public.Summary == "" {
+		return public.Channel.Name
+	}
+	return public.Channel.Name + " (" + public.Summary + ")"
 }
