@@ -170,8 +170,10 @@ func (s *Store) HelpCenterArticle(ctx context.Context, workspaceID string, numbe
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.PublicKBArticle, error) {
 		var body string
 		var id string
-		article, err := scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text FROM kb_articles a
-			WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number), &body, &id)
+		var seoTitle, seoDescription string
+		article, err := scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text, a.seo_title, a.seo_description FROM kb_articles a
+			WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number), &body, &id, &seoTitle, &seoDescription)
+		article.SEOTitle, article.SEODescription = seoTitle, seoDescription
 		article.BodyMD = body
 		if err != nil || !strings.Contains(body, domain.KBMediaPath) {
 			return article, err

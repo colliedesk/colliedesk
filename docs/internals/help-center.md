@@ -116,6 +116,17 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **Limits per client address** (the web form's limiter and `TRUSTED_PROXIES` handling): 600 pages
   and 30 searches a minute across all workspaces. A search reads every article vector of the
   workspace (no index under row-level security).
+- **Structured data is JSON from encoding/json in a `<script type="application/ld+json">`**
+  (`structured-data.go`), passed as `template.JS`. encoding/json escapes `<`, `>`, `&`, U+2028 and
+  U+2029, so no title or text can close the element; the CSP's `script-src 'none'` does not apply to
+  JSON-LD, which is data. A BreadcrumbList is on home, collection, article and search pages with
+  absolute addresses on the serving host; an article adds `Article`, and `FAQPage` when
+  `questionList` reads it as one: at least two headings of the text's highest level, all ending with
+  `?`, each with an answer (plain words, at most 1,000 characters) before the next. The rule runs in
+  the render cache with the page, so it costs nothing on a warm visit.
+- **An article's search title replaces the whole `<title>`** (no ` · <help center>` suffix), and its
+  meta description the excerpt; both default when empty. Versions keep them and a restore brings them
+  back.
 - **Trial pages ask not to be indexed** (`<meta name="robots">`, `X-Robots-Tag`, and `robots.txt`
   on a help center host). A trial's `sitemap.xml` and `llms.txt` list nothing and carry
   `X-Robots-Tag: noindex`, as its Markdown files do.

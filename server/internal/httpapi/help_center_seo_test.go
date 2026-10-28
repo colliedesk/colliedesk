@@ -124,7 +124,7 @@ func TestHelpCenterPagesNameOnlyTheirServingHost(t *testing.T) {
 			}
 			body := response.Body.String()
 			for _, found := range absoluteURL.FindAllString(body, -1) {
-				if name := strings.TrimLeft(strings.TrimPrefix(strings.TrimPrefix(found, "https:"), "http:"), "/"); name != host && name != "www.sitemaps.org" {
+				if name := strings.TrimLeft(strings.TrimPrefix(strings.TrimPrefix(found, "https:"), "http:"), "/"); name != host && name != "www.sitemaps.org" && name != "schema.org" {
 					t.Errorf("%s%s names %q", host, path, found)
 				}
 			}

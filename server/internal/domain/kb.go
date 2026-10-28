@@ -18,9 +18,13 @@ import (
 // TestKnowledgeBaseSearchLatencyBudget holds it to 100 ms at this cap. Raise both together, and read
 // docs/internals/knowledge-base.md first.
 const (
-	MaxKBArticles       = 2000
-	MaxKBCollections    = 1000
-	MaxKBArticleTitle   = 300
+	MaxKBArticles     = 2000
+	MaxKBCollections  = 1000
+	MaxKBArticleTitle = 300
+	// MaxKBSEOTitle and MaxKBSEODescription bound an article's own title and description for search
+	// engines (the database checks them too).
+	MaxKBSEOTitle       = 120
+	MaxKBSEODescription = 320
 	MaxKBArticleBody    = 100000
 	MaxKBCollectionName = 200
 	MaxKBDescription    = 2000
@@ -110,10 +114,14 @@ type KBArticleTranslation struct {
 // KBArticle is an article with its Markdown text.
 type KBArticle struct {
 	KBArticleSummary
-	BodyMD        string                 `json:"body_md"`
-	HasSourceHTML bool                   `json:"has_source_html"`
-	Translations  []KBArticleTranslation `json:"translations"`
-	DeletedAt     *time.Time             `json:"deleted_at"`
+	BodyMD string `json:"body_md"`
+	// SEOTitle and SEODescription are what search engines show; empty uses the title and the start
+	// of the text.
+	SEOTitle       string                 `json:"seo_title"`
+	SEODescription string                 `json:"seo_description"`
+	HasSourceHTML  bool                   `json:"has_source_html"`
+	Translations   []KBArticleTranslation `json:"translations"`
+	DeletedAt      *time.Time             `json:"deleted_at"`
 	// AIExclusion is set while AI may not read the article, in any language.
 	AIExclusion *KBAIExclusion `json:"ai_exclusion"`
 	// MissingMedia is set only in the answer to a save: media ids the text names that the library
@@ -141,11 +149,13 @@ type TrashedKBArticle struct {
 // KBArticleVersion is one version of an article with what it said after the change.
 type KBArticleVersion struct {
 	KBArticleChange
-	Title        string  `json:"title"`
-	Slug         string  `json:"slug"`
-	BodyMD       string  `json:"body_md"`
-	Status       string  `json:"status"`
-	CollectionID *string `json:"collection_id"`
+	Title          string  `json:"title"`
+	Slug           string  `json:"slug"`
+	BodyMD         string  `json:"body_md"`
+	SEOTitle       string  `json:"seo_title"`
+	SEODescription string  `json:"seo_description"`
+	Status         string  `json:"status"`
+	CollectionID   *string `json:"collection_id"`
 }
 
 // HelpCenter is the public help center's settings. UpdatedAt is nil until the first write.
@@ -197,6 +207,16 @@ func CleanKBText(what, value string, limit int) (string, error) {
 	case value == "":
 		return "", invalidKB("The %s is empty.", what)
 	case utf8.RuneCountInString(value) > limit:
+		return "", invalidKB("The %s holds at most %d characters.", what, limit)
+	}
+	return value, nil
+}
+
+// CleanKBSEO is a search title or description as stored: on one line, runs of white space as one
+// space, trimmed; empty is allowed (the default is used) and a longer one is refused, never cut.
+func CleanKBSEO(what, value string, limit int) (string, error) {
+	value = strings.Join(strings.Fields(value), " ")
+	if utf8.RuneCountInString(value) > limit {
 		return "", invalidKB("The %s holds at most %d characters.", what, limit)
 	}
 	return value, nil
@@ -323,8 +343,10 @@ type PublicKBArticle struct {
 	CollectionID string
 	BodyMD       string
 	Excerpt      string
-	PublishedAt  *time.Time
-	UpdatedAt    time.Time
+	// SEOTitle and SEODescription are read with the article page only; empty uses the defaults.
+	SEOTitle, SEODescription string
+	PublishedAt              *time.Time
+	UpdatedAt                time.Time
 	// Videos are the library videos the text may show, read with the article page only.
 	Videos []PublicKBVideo
 }

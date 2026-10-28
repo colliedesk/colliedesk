@@ -257,7 +257,8 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 			if header.Get("X-Content-Type-Options") != "nosniff" || header.Get("X-Frame-Options") != "DENY" || header.Get("Content-Type") != "text/html; charset=utf-8" {
 				t.Errorf("themed=%v %s headers=%v", themed, path, header)
 			}
-			body := strings.ToLower(response.Body.String())
+			// JSON-LD is data, never run (the CSP runs no script); every other script element is refused.
+			body := strings.ToLower(ldScripts.ReplaceAllString(response.Body.String(), ""))
 			for _, bad := range []string{"<script", "onerror", "javascript:", "style=", "colliedesk", "<b>title", "<img src=\"https://"} {
 				if strings.Contains(body, bad) {
 					t.Errorf("themed=%v %s holds %q:\n%s", themed, path, bad, body)

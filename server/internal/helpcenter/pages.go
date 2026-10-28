@@ -113,6 +113,9 @@ type page struct {
 	Searched bool
 	Results  []searchResult
 
+	// StructuredData are the page's JSON-LD blocks (structured-data.go).
+	StructuredData []template.JS
+
 	// The brand (theme.go): its style sheet, the light-only color scheme, the logo in place of the
 	// title, the favicon, the website link in the masthead and the contact links in the footer.
 	BrandStyle, Favicon string
@@ -305,6 +308,7 @@ func (s *Site) homeOf(v view, t tree, articles []domain.PublicKBArticle) page {
 	}
 	data := s.page(v, "", nil)
 	data.HeroSearch, data.Canonical = true, v.homeURL()
+	data.StructuredData = []template.JS{v.breadcrumbs(nil, link{Name: "Home", URL: v.home})}
 	for _, root := range visible(t.roots) {
 		data.Collections = append(data.Collections, v.card(root, byCollection[root.ID]))
 	}
@@ -362,6 +366,7 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 	}
 	crumbs := v.crumbs(current)
 	data := s.page(v, current.Name, crumbs[:len(crumbs)-1])
+	data.StructuredData = []template.JS{v.breadcrumbs(crumbs[:len(crumbs)-1], crumbs[len(crumbs)-1])}
 	data.Heading, data.Description = current.Name, current.Description
 	data.Canonical = v.address + strings.TrimPrefix(v.collectionURL(current), v.base)
 	if pageNumber > 1 {
@@ -479,6 +484,19 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 	data.Heading, data.Body = article.Title, rendered.body
 	data.Description, data.Canonical = rendered.description, v.address+ArticlePath(article.Number, article.Slug)
 	data.Markdown = data.Canonical + markdownSuffix
+	// The article's own search title and description replace the defaults.
+	if article.SEOTitle != "" {
+		data.Title = article.SEOTitle
+	}
+	if article.SEODescription != "" {
+		data.Description = article.SEODescription
+	}
+	data.StructuredData = []template.JS{
+		v.breadcrumbs(data.Crumbs, link{Name: article.Title, URL: v.base + ArticlePath(article.Number, article.Slug)}),
+		v.articleData(article, data.Canonical, data.Description)}
+	if len(rendered.faq) > 0 {
+		data.StructuredData = append(data.StructuredData, faqData(rendered.faq))
+	}
 	updated := article.UpdatedAt
 	data.Updated, data.UpdatedISO = updated.Format("2 Jan 2006"), updated.Format(time.RFC3339)
 	if collection != nil {
@@ -503,6 +521,7 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 		title = "Search: " + query
 	}
 	data := s.page(v, title, []link{{Name: "Home", URL: v.home}})
+	data.StructuredData = []template.JS{v.breadcrumbs(data.Crumbs, link{Name: "Search", URL: v.base + "/search"})}
 	// Result pages are for visitors, not for search engines.
 	data.Query, data.Searched, data.HeroSearch, data.NoIndex = query, query != "", true, true
 	if query != "" {

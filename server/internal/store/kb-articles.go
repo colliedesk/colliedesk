@@ -46,9 +46,9 @@ func readKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (doma
 	var article domain.KBArticle
 	var excludedAt *time.Time
 	var excludedBy, excludedByName *string
-	summary, err := scanKBSummary(tx.QueryRow(ctx, kbArticleSelect(`,a.body_md,a.source_html IS NOT NULL,a.deleted_at,a.ai_excluded_at,a.ai_excluded_by_agent_id::text,COALESCE(NULLIF(x.display_name,''),x.email)`,
+	summary, err := scanKBSummary(tx.QueryRow(ctx, kbArticleSelect(`,a.body_md,a.seo_title,a.seo_description,a.source_html IS NOT NULL,a.deleted_at,a.ai_excluded_at,a.ai_excluded_by_agent_id::text,COALESCE(NULLIF(x.display_name,''),x.email)`,
 		` LEFT JOIN agents x ON x.workspace_id=a.workspace_id AND x.id=a.ai_excluded_by_agent_id`)+` WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id),
-		&article.BodyMD, &article.HasSourceHTML, &article.DeletedAt, &excludedAt, &excludedBy, &excludedByName)
+		&article.BodyMD, &article.SEOTitle, &article.SEODescription, &article.HasSourceHTML, &article.DeletedAt, &excludedAt, &excludedBy, &excludedByName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return article, domain.ErrKBArticleNotFound
 	}
@@ -226,10 +226,10 @@ func (s *Store) ListTrashedKBArticles(ctx context.Context, workspaceID string, l
 // text points at, and bumps the knowledge base version. The caller changed the row in tx first, so
 // the row lock orders concurrent versions of one article.
 func addKBArticleVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, actor Actor, kind string, restoredFrom *int) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,restored_from_version,title,slug,body_md,status,collection_id,
+	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_versions(workspace_id,article_id,version,kind,restored_from_version,title,slug,body_md,seo_title,seo_description,status,collection_id,
 			changed_by_agent_id,token_id,token_label,agent_request_id,created_at)
 		SELECT a.workspace_id,a.id,COALESCE((SELECT max(version) FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2),0)+1,
-			$3,$4,a.title,a.slug,a.body_md,a.status,a.collection_id,$5,t.id,t.label,$7,clock_timestamp()
+			$3,$4,a.title,a.slug,a.body_md,a.seo_title,a.seo_description,a.status,a.collection_id,$5,t.id,t.label,$7,clock_timestamp()
 		FROM kb_articles a LEFT JOIN sessions t ON t.workspace_id=a.workspace_id AND t.id=$6
 		WHERE a.workspace_id=$1 AND a.id=$2`,
 		workspaceID, articleID, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)); err != nil {
@@ -358,6 +358,8 @@ func checkKBCollection(ctx context.Context, tx pgx.Tx, workspaceID, id string) e
 // KBArticleInput is a new article; an empty Slug is made from the title, an empty Status is a draft.
 type KBArticleInput struct {
 	CollectionID, Title, Slug, BodyMD, Status string
+	// SEOTitle and SEODescription are the search fields; empty uses the defaults.
+	SEOTitle, SEODescription string
 }
 
 // CreateKBArticle adds an article with the next number of the workspace and its first version.
@@ -372,6 +374,12 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 		return domain.KBArticle{}, err
 	}
 	if err := domain.CheckKBBody(input.BodyMD); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if input.SEOTitle, err = domain.CleanKBSEO("search title", input.SEOTitle, domain.MaxKBSEOTitle); err != nil {
+		return domain.KBArticle{}, err
+	}
+	if input.SEODescription, err = domain.CleanKBSEO("meta description", input.SEODescription, domain.MaxKBSEODescription); err != nil {
 		return domain.KBArticle{}, err
 	}
 	if input.Status == "" {
@@ -389,9 +397,9 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 		var id string
-		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,position)
-			VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8,`+kbArticleEnd(`$2::uuid`)+`) RETURNING id::text`,
-			workspaceID, input.CollectionID, number, title, input.Slug, input.BodyMD, input.Status, optionalID(actor.AgentID)).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,position,seo_title,seo_description)
+			VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8,`+kbArticleEnd(`$2::uuid`)+`,$9,$10) RETURNING id::text`,
+			workspaceID, input.CollectionID, number, title, input.Slug, input.BodyMD, input.Status, optionalID(actor.AgentID), input.SEOTitle, input.SEODescription).Scan(&id); err != nil {
 			return domain.KBArticle{}, err
 		}
 		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleCreated, nil); err != nil {
@@ -405,6 +413,7 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 // KBArticleChange is a partial update of an article; a nil field stays as it is.
 type KBArticleChange struct {
 	Title, Slug, BodyMD, CollectionID, Status *string
+	SEOTitle, SEODescription                  *string
 }
 
 // UpdateKBArticle changes a live article and records the version. seen is the updated_at the client read.
@@ -434,6 +443,20 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 	}
+	for _, field := range []struct {
+		value **string
+		what  string
+		limit int
+	}{{&change.SEOTitle, "search title", domain.MaxKBSEOTitle}, {&change.SEODescription, "meta description", domain.MaxKBSEODescription}} {
+		if *field.value == nil {
+			continue
+		}
+		cleaned, err := domain.CleanKBSEO(field.what, **field.value, field.limit)
+		if err != nil {
+			return domain.KBArticle{}, err
+		}
+		*field.value = &cleaned
+	}
 	return s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleEdited, nil, change.CollectionID != nil, func(tx pgx.Tx) error {
 		if change.CollectionID != nil {
 			if err := checkKBCollection(ctx, tx, workspaceID, *change.CollectionID); err != nil {
@@ -443,20 +466,21 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 		_, err := tx.Exec(ctx, `UPDATE kb_articles SET title=COALESCE($3,title), slug=COALESCE($4,slug), body_md=COALESCE($5,body_md),
 			position=CASE WHEN $6::uuid IS DISTINCT FROM collection_id AND $6::uuid IS NOT NULL THEN `+kbArticleEnd(`$6::uuid`)+` ELSE position END,
 			collection_id=COALESCE($6::uuid,collection_id), status=COALESCE($7,status),
-			published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END, updated_at=clock_timestamp()
-			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status)
+			published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END,
+			seo_title=COALESCE($8,seo_title), seo_description=COALESCE($9,seo_description), updated_at=clock_timestamp()
+			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status, change.SEOTitle, change.SEODescription)
 		return err
 	})
 }
 
-// RestoreKBArticleVersion makes the title, slug and text of version current as a new version; the
+// RestoreKBArticleVersion makes the title, slug, text and search fields of version current as a new version; the
 // status and collection stay.
 func (s *Store) RestoreKBArticleVersion(ctx context.Context, workspaceID string, actor Actor, id string, version int, seen time.Time) (domain.KBArticle, error) {
 	if !savedReplyID.MatchString(id) {
 		return domain.KBArticle{}, domain.ErrKBArticleNotFound
 	}
 	return s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleRestored, &version, false, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE kb_articles a SET title=v.title, slug=v.slug, body_md=v.body_md, updated_at=clock_timestamp() FROM kb_article_versions v
+		tag, err := tx.Exec(ctx, `UPDATE kb_articles a SET title=v.title, slug=v.slug, body_md=v.body_md, seo_title=v.seo_title, seo_description=v.seo_description, updated_at=clock_timestamp() FROM kb_article_versions v
 			WHERE a.workspace_id=$1 AND a.id=$2 AND v.workspace_id=a.workspace_id AND v.article_id=a.id AND v.version=$3`, workspaceID, id, version)
 		if err == nil && tag.RowsAffected() == 0 {
 			return domain.ErrKBArticleVersionNotFound
@@ -592,7 +616,7 @@ func (s *Store) KBArticleVersions(ctx context.Context, workspaceID, id string, l
 		if !exists {
 			return nil, domain.ErrKBArticleNotFound
 		}
-		rows, err := tx.Query(ctx, `SELECT `+kbArticleChangeColumns+`,v.title,v.slug,v.body_md,v.status,v.collection_id::text FROM kb_article_versions v
+		rows, err := tx.Query(ctx, `SELECT `+kbArticleChangeColumns+`,v.title,v.slug,v.body_md,v.seo_title,v.seo_description,v.status,v.collection_id::text FROM kb_article_versions v
 			LEFT JOIN agents p ON p.workspace_id=v.workspace_id AND p.id=v.changed_by_agent_id
 			WHERE v.workspace_id=$1 AND v.article_id=$2 AND v.version<$3 ORDER BY v.version DESC LIMIT $4`, workspaceID, id, before, limit+1)
 		if err != nil {
@@ -601,7 +625,7 @@ func (s *Store) KBArticleVersions(ctx context.Context, workspaceID, id string, l
 		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBArticleVersion, error) {
 			var change changeRow
 			var version domain.KBArticleVersion
-			if err := row.Scan(append(change.targets(), &version.Title, &version.Slug, &version.BodyMD, &version.Status, &version.CollectionID)...); err != nil {
+			if err := row.Scan(append(change.targets(), &version.Title, &version.Slug, &version.BodyMD, &version.SEOTitle, &version.SEODescription, &version.Status, &version.CollectionID)...); err != nil {
 				return version, err
 			}
 			version.KBArticleChange = *change.change()

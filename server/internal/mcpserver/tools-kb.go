@@ -60,6 +60,8 @@ type restKBArticle struct {
 	LastChange    *restSavedReplyChange `json:"last_change"`
 	URL           string                `json:"url"`
 	BodyMD        string                `json:"body_md"`
+	SEOTitle      string                `json:"seo_title"`
+	SEODesc       string                `json:"seo_description"`
 	HasSourceHTML bool                  `json:"has_source_html"`
 	Translations  []struct {
 		Locale string `json:"locale"`
@@ -116,11 +118,19 @@ type kbArticleOut struct {
 	UpdatedAt     string               `json:"updated_at"`
 	LastChange    *savedReplyChangeOut `json:"last_change"`
 	URL           string               `json:"url"`
-	TeamText      teamText             `json:"team_text"`
+	TeamText      kbTeamText           `json:"team_text"`
 	InTrash       bool                 `json:"in_trash"`
 	HasSourceHTML bool                 `json:"has_source_html"`
 	AIExclusion   *kbAIExclusionOut    `json:"ai_exclusion"`
 	Translations  []string             `json:"translations"`
+}
+
+// kbTeamText is what the team wrote of an article: its title, text and search fields.
+type kbTeamText struct {
+	Title          string `json:"title"`
+	Body           string `json:"body"`
+	SEOTitle       string `json:"seo_title"`
+	SEODescription string `json:"seo_description"`
 }
 
 // kbAIExclusionOut is since when, and by whom, AI may not read an article.
@@ -131,7 +141,7 @@ type kbAIExclusionOut struct {
 
 func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, Status: article.Status, Slug: article.Slug,
-		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: teamText{article.Title, article.BodyMD},
+		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTeamText{article.Title, article.BodyMD, article.SEOTitle, article.SEODesc},
 		InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []string{}}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, translation.Locale)
@@ -367,7 +377,7 @@ func kbArticleUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	change := kbArticleFields(arguments, "article_id")
 	if len(change) == 1 {
-		return nil, &toolError{"Give something to change: title, body, slug, collection_id or status."}
+		return nil, &toolError{"Give something to change: title, body, slug, collection_id, status, seo_title or seo_description."}
 	}
 	c.forArticle(args.ID)
 	var updated restKBArticle
