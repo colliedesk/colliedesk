@@ -110,8 +110,11 @@ took 4 s more of seeding on the latency runner, against the 120-second CI budget
 test binary for both gates (`sharedKBBudget`; seeding twice cost 33 s of the 120-second CI budget):
 half of the articles published, all in one collection, help centers on. It loads each public
 page 50 times, HTML rendering included: the home page, the first and last page of the collection
-(1,000 published articles, 50 a page), a 9,000- and a 100,000-character article, and searches with two
-words, a short prefix, no match and a title. Each must stay at or below 100 ms p95 (6–16 ms locally).
+(1,000 published articles, 50 a page), a 9,000- and a 100,000-character article, searches with two
+words, a short prefix, no match and a title, and the files for crawlers and AI assistants:
+`sitemap.xml` and `llms.txt` (all 1,000 published articles; 17 and 19 ms p95 locally on 2026-10-28)
+and the 100,000-character article's Markdown (4 ms). `TestPublicPagesMakeNoExternalCall` fails when
+a help center source other than the admin's domain check names an outbound client (HTTP, DNS, SMTP). Each must stay at or below 100 ms p95 (6–16 ms locally).
 A page is five short scoped transactions at most (slug lookup, settings and lock, collections,
 articles, neighbours); a 304 stops after the second. Workspace A carries a full theme with about
 31 KiB of custom CSS, the worst case of what every page reads and hashes into the brand sheet's name

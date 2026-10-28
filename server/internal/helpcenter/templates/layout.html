@@ -15,11 +15,18 @@
 {{- with .Canonical}}
 <link rel="canonical" href="{{.}}">
 <meta property="og:url" content="{{.}}">
+{{- if $.Lang}}
+<link rel="alternate" hreflang="{{$.Lang}}" href="{{.}}">
+{{- end}}
+<link rel="alternate" hreflang="x-default" href="{{.}}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="{{$.Title}}">
 {{- if $.SiteTitle}}
 <meta property="og:site_name" content="{{$.SiteTitle}}">
 {{- end}}
+{{- end}}
+{{- with .Markdown}}
+<link rel="alternate" type="text/markdown" href="{{.}}">
 {{- end}}
 {{- if .Style}}
 <link rel="stylesheet" href="{{.Style}}">
