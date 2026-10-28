@@ -25,7 +25,7 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   expect(editorChunks).toEqual([]);
 
   await page.getByRole('link', { name: 'New article' }).click();
-  await page.getByRole('textbox', { name: 'Title' }).fill('Reset your password');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Reset your password');
   const text = page.getByRole('textbox', { name: 'Text (Markdown)' });
   await text.click();
   await page.keyboard.type('## Steps');
@@ -55,14 +55,14 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   const saved = await (await page.request.get(`${servers.main}/api/v1/kb/articles/${id}`)).json() as { body_md: string };
   expect(saved.body_md).toMatch(/^## Steps\n\n- \[ \] Open Settings\n\n!\[login\]\(\/api\/v1\/kb\/images\/[0-9a-f-]{36}\)\n?$/);
 
-  await page.getByRole('textbox', { name: 'Title' }).fill('Reset a password');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Reset a password');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'More article actions' }).click();
   await page.getByRole('menuitem', { name: 'Version history' }).click();
   const history = page.getByRole('region', { name: 'History of Reset a password' });
   await history.getByRole('button', { name: 'Restore version 1' }).click();
-  await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Reset your password');
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Reset your password');
 
   await page.getByRole('button', { name: 'Close history' }).click();
   await page.getByRole('button', { name: 'More article actions' }).click();
@@ -264,7 +264,7 @@ test('knowledge base: an article excluded from AI says since when and by whom, k
   await newCollection.getByRole('textbox', { name: 'Name' }).fill('Billing');
   await newCollection.getByRole('button', { name: 'Create collection' }).click();
   await page.getByRole('link', { name: 'New article' }).click();
-  await page.getByRole('textbox', { name: 'Title' }).fill('Internal refund rules');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Internal refund rules');
   await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.type('Refunds above 100 need a second approval.');
   await page.getByRole('button', { name: 'Save and publish' }).click();
