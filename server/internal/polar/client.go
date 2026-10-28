@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -21,8 +22,19 @@ var ErrCustomerNotFound = errors.New("polar customer not found")
 // customer already uses the email. The caller may retry with a different address.
 var ErrCustomerConflict = errors.New("polar customer conflicts with an existing one")
 
-// StatusError is a non-2xx answer from Polar. The body is dropped on purpose: it can echo input.
-type StatusError struct{ Code int }
+// CustomerRejectedError means Polar refused the customer's details for another reason than an address
+// another customer already has: in practice an address it does not accept (a reserved domain). Detail is
+// Polar's reason, for the person and the log; it names the address the caller sent and nothing else.
+type CustomerRejectedError struct{ Detail string }
+
+func (e *CustomerRejectedError) Error() string { return "polar refused the customer: " + e.Detail }
+
+// StatusError is a non-2xx answer from Polar. The body is dropped on purpose: it can echo input. Only a
+// 422 keeps Polar's validation messages (Reasons), which the caller may show but Error never prints.
+type StatusError struct {
+	Code    int
+	Reasons []string
+}
 
 func (e *StatusError) Error() string { return fmt.Sprintf("polar answered HTTP %d", e.Code) }
 
@@ -72,7 +84,7 @@ func (c *Client) EnsureCustomer(ctx context.Context, externalID, email, name str
 	body := map[string]any{"external_id": externalID, "email": email, "name": name}
 	if err := c.do(ctx, http.MethodPost, "/v1/customers/", body, &created); err != nil {
 		if errors.As(err, &status) && status.Code == http.StatusUnprocessableEntity {
-			return "", fmt.Errorf("create polar customer: %w", ErrCustomerConflict)
+			return "", customerRefusal(status.Reasons)
 		}
 		return "", fmt.Errorf("create polar customer: %w", err)
 	}
@@ -80,6 +92,22 @@ func (c *Client) EnsureCustomer(ctx context.Context, externalID, email, name str
 		return "", errors.New("create polar customer: reply has no id")
 	}
 	return created.ID, nil
+}
+
+// customerRefusal tells the two ways Polar refuses a new customer apart: an address another customer
+// already has (ErrCustomerConflict, which the caller works around with another address) and anything
+// else it does not accept (CustomerRejectedError with Polar's words).
+func customerRefusal(reasons []string) error {
+	for _, reason := range reasons {
+		if strings.Contains(strings.ToLower(reason), "exist") {
+			return fmt.Errorf("create polar customer: %w", ErrCustomerConflict)
+		}
+	}
+	detail := strings.Join(reasons, " ")
+	if detail == "" {
+		detail = "the customer's details were not accepted"
+	}
+	return &CustomerRejectedError{Detail: detail}
 }
 
 // CreateCheckout returns the hosted checkout URL.
@@ -222,6 +250,9 @@ func (c *Client) doLimited(ctx context.Context, method, path string, body, targe
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusUnprocessableEntity {
+		return &StatusError{Code: response.StatusCode, Reasons: validationReasons(io.LimitReader(response.Body, maxReply))}
+	}
 	if response.StatusCode < 200 || response.StatusCode > 299 {
 		return &StatusError{Code: response.StatusCode}
 	}
@@ -229,4 +260,32 @@ func (c *Client) doLimited(ctx context.Context, method, path string, body, targe
 		return fmt.Errorf("decode reply: %w", err)
 	}
 	return nil
+}
+
+// validationReasons reads the messages of a Polar 422: detail is a list of {msg} or, from some
+// endpoints, one string. An unreadable body gives none.
+func validationReasons(body io.Reader) []string {
+	var reply struct {
+		Detail json.RawMessage `json:"detail"`
+	}
+	if json.NewDecoder(body).Decode(&reply) != nil {
+		return nil
+	}
+	var one string
+	if json.Unmarshal(reply.Detail, &one) == nil {
+		return []string{one}
+	}
+	var list []struct {
+		Message string `json:"msg"`
+	}
+	if json.Unmarshal(reply.Detail, &list) != nil {
+		return nil
+	}
+	reasons := make([]string, 0, len(list))
+	for _, item := range list {
+		if item.Message != "" {
+			reasons = append(reasons, item.Message)
+		}
+	}
+	return reasons
 }

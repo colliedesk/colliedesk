@@ -144,6 +144,29 @@ func TestEnsureCustomerFailsWhenPolarRefusesTheCreate(t *testing.T) {
 	}
 }
 
+func TestEnsureCustomerTellsAnAddressPolarRefusesFromOneItAlreadyHas(t *testing.T) {
+	fake := newFakePolar(t, http.StatusNotFound, `{}`)
+	fake.perPath = map[string]canned{
+		"GET /v1/customers/external/ws-1": {http.StatusNotFound, `{}`},
+		"POST /v1/customers/": {http.StatusUnprocessableEntity, `{"error":"PolarRequestValidationError","detail":[{"type":"value_error","loc":["body","email"],` +
+			`"msg":"value is not a valid email address: The domain name example.com does not accept email.","input":"qa@example.com"}]}`},
+	}
+	_, err := fake.client().EnsureCustomer(context.Background(), "ws-1", "qa@example.com", "Beta Desk")
+	if errors.Is(err, polar.ErrCustomerConflict) {
+		t.Fatalf("err=%v: an address Polar refuses is not one another customer uses", err)
+	}
+	var refused *polar.CustomerRejectedError
+	if !errors.As(err, &refused) || refused.Detail != "value is not a valid email address: The domain name example.com does not accept email." {
+		t.Fatalf("err=%v, want CustomerRejectedError with Polar's reason", err)
+	}
+
+	fake.perPath["POST /v1/customers/"] = canned{http.StatusUnprocessableEntity, `{"error":"PolarRequestValidationError","detail":[{"type":"value_error","loc":["body","email"],` +
+		`"msg":"A customer with this email address already exists."}]}`}
+	if _, err := fake.client().EnsureCustomer(context.Background(), "ws-1", "a@example.org", "Beta Desk"); !errors.Is(err, polar.ErrCustomerConflict) {
+		t.Fatalf("err=%v, want ErrCustomerConflict for an address another customer has", err)
+	}
+}
+
 func TestClientErrorsNeverCarryTheToken(t *testing.T) {
 	fake := newFakePolar(t, http.StatusUnauthorized, `{"detail":"bad token-for-test"}`)
 	_, err := fake.client().CreateCheckout(context.Background(), polar.CheckoutRequest{ProductID: "p", CustomerID: "c"})

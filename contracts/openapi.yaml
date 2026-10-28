@@ -2363,6 +2363,8 @@ paths:
         A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats
         (agents and pending invites) than the plan allows, or more stored attachment bytes, imported
         files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them.
+        422 `billing_email_refused` when the payment provider does not accept the admin's address (a
+        domain that receives no mail, for example); the message gives the provider's reason and what to do.
       requestBody:
         required: true
         content:
@@ -2381,6 +2383,9 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: The payment provider did not accept the admin's address; the message says why and what to do.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
         '502': {$ref: '#/components/responses/BadGateway'}
   /api/v1/billing/portal:
