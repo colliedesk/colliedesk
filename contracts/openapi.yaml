@@ -957,6 +957,37 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/{id}/email/test-message:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: sendEmailTestMessageByID
+      x-permission: conversations:write
+      description: >-
+        Send yourself a test message: an incoming email from the signed-in agent's own address arrives on
+        this email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the
+        whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's
+        mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only
+        recipient is an agent of this workspace whose address is proven (the agent signed in through a
+        pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused.
+        Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when
+        the workspace has no such email channel.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '201':
+          description: The test message arrived and opened a conversation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TestMessageResult'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429':
+          description: Five test messages were sent in the last hour; Retry-After says when the next one may go.
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/{id}/email/gmail:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1123,6 +1154,35 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email/test-message:
+    post:
+      operationId: sendEmailTestMessage
+      x-permission: conversations:write
+      description: >-
+        Send yourself a test message: an incoming email from the signed-in agent's own address arrives on
+        the default email channel and opens a conversation, stored the way real inbound mail is. It lets a team see the
+        whole loop without a terminal or a forwarder: answer it, and the reply is delivered to that agent's
+        mailbox by the channel's normal outbound path. On a trial the reply is allowed because its only
+        recipient is an agent of this workspace whose address is proven (the agent signed in through a
+        pairing link or a verified Cloud identity, not only an invite); a Cc to anyone else is still refused.
+        Five test messages per workspace an hour (429 `rate_limited` with Retry-After after that); 404 when
+        the workspace has no such email channel.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '201':
+          description: The test message arrived and opened a conversation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TestMessageResult'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429':
+          description: Five test messages were sent in the last hour; Retry-After says when the next one may go.
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email/gmail:
     post:
@@ -7014,6 +7074,13 @@ components:
             properties:
               filename: {type: string}
               content_type: {type: string}
+    TestMessageResult:
+      type: object
+      required: [conversation_id, message_id, sent_to]
+      properties:
+        conversation_id: {type: string, format: uuid}
+        message_id: {type: string, format: uuid}
+        sent_to: {type: string, format: email, description: "The agent's own address the test came from, where a reply to it is delivered."}
     EmailChannel:
       type: object
       required: [support_address, sender_name, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, dns_records, dns_records_expired_at, created_at, updated_at]

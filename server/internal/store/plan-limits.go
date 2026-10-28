@@ -147,12 +147,29 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 		if err := tx.QueryRow(ctx, customerWroteFirst, workspaceID, conversationID).Scan(&wrote); err != nil {
 			return fmt.Errorf("check first contact: %w", err)
 		}
+		if !wrote && recipients == 1 {
+			if err := tx.QueryRow(ctx, contactIsProvenAgent, workspaceID, conversationID).Scan(&wrote); err != nil {
+				return fmt.Errorf("check agent recipient: %w", err)
+			}
+		}
 		if !wrote {
 			return trialFirstContactRefusal(ctx, tx, workspaceID, conversationID)
 		}
 	}
 	return s.checkTrialCap(ctx, tx, workspaceID, now, recipients)
 }
+
+// contactIsProvenAgent is the one exception to the first-contact rule: a reply whose only recipient is an
+// active agent of the same workspace (the test message a person sends themselves) reaches nobody who did
+// not ask for it. The address must be proven: the agent signed in through a pairing link, which only the
+// server operator (the CLI) or a verified Cloud identity issues. An invite link proves nothing, because the
+// admin who made it can open it, so an agent who only ever used one does not count. A Cc is another
+// recipient: the caller applies this only to a reply without one.
+const contactIsProvenAgent = `SELECT EXISTS(SELECT 1 FROM conversations c
+	JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
+	JOIN agents a ON a.workspace_id=c.workspace_id AND lower(a.email)=lower(k.email) AND a.deactivated_at IS NULL
+	WHERE c.workspace_id=$1 AND c.id=$2 AND EXISTS(SELECT 1 FROM pairing_links p
+		WHERE p.workspace_id=a.workspace_id AND p.agent_id=a.id AND p.kind='pairing' AND p.used_at IS NOT NULL))`
 
 // customerMailThatDidNotCount reads, for a conversation the first-contact rule refused, the contact's
 // address and which customer mail it holds that the rule did not count: trusted mail from another

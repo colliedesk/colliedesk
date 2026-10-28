@@ -45,6 +45,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getEmailChannel, a.verifyEmailDomain, a.rotateEmailSecret, a.connectGmail, a.disconnectGmail, a.submitWebForm,
 		a.connectMicrosoft, a.disconnectMicrosoft, a.finishMicrosoftConnect, a.finishMicrosoftAdminConsent,
 		a.connectMicrosoft, a.disconnectMicrosoft,
+		a.sendTestMessage, a.sendTestMessage,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

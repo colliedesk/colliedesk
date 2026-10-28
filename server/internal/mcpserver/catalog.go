@@ -47,7 +47,7 @@ func Catalog() []Spec {
 		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), microsoftConnectRequestSpec(), microsoftDisconnectRequestSpec(), workspaceSlugRequestSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
-		helpCenterUpdateSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), billingGetSpec(),
+		helpCenterUpdateSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), emailTestMessageSendSpec(), billingGetSpec(),
 		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoRequestSpec(),
 		importPeopleListSpec(), importPersonLinkSpec(), importPersonUnlinkSpec(),
 		aiSettingsGetSpec(), aiModelsListSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetRequestSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
