@@ -20,7 +20,7 @@ import (
 
 // renderVersion changes when rendering changes, so a cached article is never served as an older
 // renderer wrote it.
-const renderVersion = "2"
+const renderVersion = "3"
 
 // renderWait is how long a visitor waits for an article to render before getting its text as it
 // is. Articles render in 1–20 ms, so only a text built to be slow reaches it.
@@ -33,12 +33,20 @@ const renderCacheBytes = 64 << 20
 type rendered struct {
 	body        template.HTML
 	description string
+	// faq is the article's questions when it is a list of questions (questionList).
+	faq []faqItem
 	// plain is a page that shows the text as written because rendering took too long; it must not
 	// be cached by the visitor's browser under the page's ETag.
 	plain bool
 }
 
-func (r rendered) size() int { return len(r.body) + len(r.description) }
+func (r rendered) size() int {
+	size := len(r.body) + len(r.description)
+	for _, item := range r.faq {
+		size += len(item.question) + len(item.answer)
+	}
+	return size
+}
 
 // renders renders article pages at most once per text and keeps Markdown from taking the server's
 // CPU: goldmark cannot be stopped, and some texts take it seconds (docs/internals/help-center.md).
@@ -84,11 +92,11 @@ func newRenders(render func(body, base string, videos []domain.PublicKBVideo) (r
 // defaultRenders renders with renderArticle, a quarter of the processors at once (at least two).
 func defaultRenders() *renders {
 	return newRenders(func(body, base string, videos []domain.PublicKBVideo) (rendered, error) {
-		page, err := renderArticleWith(body, base, videos)
+		page, faq, err := renderArticlePage(body, base, videos)
 		if err != nil {
 			return rendered{}, err
 		}
-		return rendered{body: page, description: excerpt(body, descriptionChars)}, nil
+		return rendered{body: page, description: excerpt(body, descriptionChars), faq: faq}, nil
 	}, max(2, runtime.GOMAXPROCS(0)/4), renderWait, renderCacheBytes)
 }
 

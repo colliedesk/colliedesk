@@ -8,6 +8,7 @@ import { SavedRepliesSection } from './saved-replies-section';
 import { TeamSection } from './team-section';
 import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 import { useScrollToHashWhenReady } from '../../lib/scroll-to-hash';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { helpCenterPart } from '../kb/kb-part';
@@ -106,7 +107,7 @@ export function SettingsRoute() {
       loadTrash={(cursor) => api.trashedSavedReplies(cursor)}
       onUndelete={async (id, updatedAt) => { await api.restoreSavedReply(id, updatedAt); await refreshSavedReplies(); }} />}
     helpCenterSection={<section className="settings-card" aria-labelledby="help-center-heading">
-      <div className="section-heading"><h2 id="help-center-heading">{messages.helpCenter}</h2><p>{messages.helpCenterDescription}</p></div>
+      <div className="section-heading"><h2 id="help-center-heading">{messages.helpCenter}</h2><p>{settingsMessages.helpCenterDescription}</p></div>
       <div className="settings-body"><Part part={helpCenterPart} failed={<PartUnavailable />}
         render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={isAdmin} workspaceName={me.data?.workspace.name} timezone={me.data?.timezone ?? 'UTC'} />} /></div>
     </section>}

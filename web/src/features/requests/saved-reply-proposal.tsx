@@ -1,5 +1,5 @@
 import type { AgentRequest } from '../../api/schemas';
-import { messages } from '../../messages';
+import { savedReplyMessages } from '../settings/saved-reply-messages';
 
 const savedRepliesRoute = '/api/v1/saved-replies';
 
@@ -29,25 +29,25 @@ export function SavedReplyProposal({ item }: { item: AgentRequest }) {
   const changedSince = before && current && (current.updated_at !== before.updated_at || current.deleted_at !== null);
   let content;
   if (!before) {
-    content = <><p className="muted-copy">{messages.savedReplyProposalNew}</p><Field to={proposed.title} /><Field to={proposed.body} /></>;
+    content = <><p className="muted-copy">{savedReplyMessages.savedReplyProposalNew}</p><Field to={proposed.title} /><Field to={proposed.body} /></>;
   } else if (item.method === 'DELETE') {
-    content = <><Field from={before.title} /><Field from={before.body} /><p className="muted-copy">{messages.savedReplyProposalDelete}</p></>;
+    content = <><Field from={before.title} /><Field from={before.body} /><p className="muted-copy">{savedReplyMessages.savedReplyProposalDelete}</p></>;
   } else if (item.route.endsWith('/{id}/restore')) {
-    content = <><Field to={before.title} /><Field to={before.body} /><p className="muted-copy">{messages.savedReplyProposalUndelete}</p></>;
+    content = <><Field to={before.title} /><Field to={before.body} /><p className="muted-copy">{savedReplyMessages.savedReplyProposalUndelete}</p></>;
   } else if (item.route.endsWith('/restore')) {
     const restores = item.saved_reply?.restores;
     content = restores
-      ? <><p className="muted-copy">{messages.savedReplyProposalVersion(restores.version)}</p>
+      ? <><p className="muted-copy">{savedReplyMessages.savedReplyProposalVersion(restores.version)}</p>
           <Field from={before.title} to={restores.title} /><Field from={before.body} to={restores.body} /></>
       : <><Field from={before.title} /><Field from={before.body} /></>;
   } else {
     content = <><Field from={before.title} to={proposed.title ?? before.title} /><Field from={before.body} to={proposed.body ?? before.body} /></>;
   }
   return (
-    <div role="group" aria-label={messages.savedReplyProposal} className="saved-reply-diff">
+    <div role="group" aria-label={savedReplyMessages.savedReplyProposal} className="saved-reply-diff">
       {content}
-      {changedSince && <><p className="warning-note">{messages.savedReplyChangedSince}</p><p className="request-body">{current.title}</p><p className="request-body">{current.body}</p></>}
-      {before && item.saved_reply && current === null && <p className="warning-note">{messages.savedReplyGoneSince}</p>}
+      {changedSince && <><p className="warning-note">{savedReplyMessages.savedReplyChangedSince}</p><p className="request-body">{current.title}</p><p className="request-body">{current.body}</p></>}
+      {before && item.saved_reply && current === null && <p className="warning-note">{savedReplyMessages.savedReplyGoneSince}</p>}
     </div>
   );
 }

@@ -258,6 +258,18 @@ Each article has a number that never changes. Its help center address ends in
 `/a/<number>-<address name>`, and the article page shows it under **Address name**. You can change the
 address name; links with the old one still lead to the article because the number does not change.
 
+### Search title and meta description
+
+Under **Search engines** on the article page, **Search title** (up to 120 characters) is the title
+Google and other search engines show, and **Meta description** (up to 320) the text under it. Left
+empty, the article's title (followed by the help center's title) and the first 160 characters of its
+text are used. Line breaks and repeated spaces become one space. Both are part of the article's
+history and of the [export](export.md), and are set through the API (`seo_title`,
+`seo_description` on `POST` and `PATCH /api/v1/kb/articles`) and by AI agents
+(`colliedesk_kb_article_create`, `colliedesk_kb_article_update`). Changing them on a published
+article changes the help center, so a token that may edit but not publish files a request a person
+approves.
+
 If a teammate (or an AI agent) saved the article after you opened it, your save is refused and
 nothing is overwritten. Your text stays on screen and you choose: **Save mine over theirs** (theirs
 stays in the history) or **Discard mine and show theirs**.
@@ -507,6 +519,12 @@ to serve on the domain again.
 - Raw HTML in the text is not shown, except [YouTube and Vimeo videos](#videos), and links work only
   for `http`, `https`, `mailto` and `tel`. A video's site sees the reader's address when the video
   loads, as with any embedded video.
+
+Every page carries structured data for search engines (schema.org JSON-LD, which runs nothing): a
+breadcrumb trail, and on an article page an `Article` with its title, description and dates. An article
+written as a list of questions also carries a `FAQPage`: it has at least two headings of its highest
+level, every one of them ends with `?`, and each is followed by its answer before the next one. Text
+before the first question is an introduction and is left out.
 
 Pages have no scripts, no cookies and no tracking, follow the visitor's light or dark setting, and
 fit a phone. The page labels (Search, Home and so on) are in English; the help center's language

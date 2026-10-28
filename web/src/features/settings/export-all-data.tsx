@@ -5,23 +5,24 @@ import { ExportRefusedError } from '../../api/workspace-export';
 import { track } from '../../lib/product-analytics';
 import { formatWait } from '../../lib/format-wait';
 import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 
 function refusalText(error: unknown): string {
-  if (!(error instanceof ExportRefusedError)) return messages.exportFailed;
+  if (!(error instanceof ExportRefusedError)) return settingsMessages.exportFailed;
   switch (error.refusal) {
-    case 'busy': return messages.exportBusy;
-    case 'forbidden': return messages.exportForbidden;
-    case 'server_busy': return error.retryAfterSeconds ? messages.exportServerBusy(formatWait(error.retryAfterSeconds)) : messages.exportServerBusyNoWait;
-    default: return messages.exportFailed;
+    case 'busy': return settingsMessages.exportBusy;
+    case 'forbidden': return settingsMessages.exportForbidden;
+    case 'server_busy': return error.retryAfterSeconds ? settingsMessages.exportServerBusy(formatWait(error.retryAfterSeconds)) : settingsMessages.exportServerBusyNoWait;
+    default: return settingsMessages.exportFailed;
   }
 }
 
 // A refused download redirects the browser back to the app with `?export_error=<reason>`; these are the reasons.
 const downloadRefusals: Record<string, string> = {
-  link_invalid: messages.exportLinkInvalid,
-  busy: messages.exportBusy,
-  server_busy: messages.exportServerBusyNoWait,
-  failed: messages.exportFailed,
+  link_invalid: settingsMessages.exportLinkInvalid,
+  busy: settingsMessages.exportBusy,
+  server_busy: settingsMessages.exportServerBusyNoWait,
+  failed: settingsMessages.exportFailed,
 };
 
 // The address is cleaned by the first mounted ExportAllData, but a second one can follow: the
@@ -53,7 +54,7 @@ export function ExportAllData() {
       <div className="button-row">
         <button type="button" disabled={start.isPending} onClick={() => start.mutate()}>{messages.exportHeading}</button>
       </div>
-      {start.isSuccess && <p role="status" className="muted-copy">{messages.exportStarted}</p>}
+      {start.isSuccess && <p role="status" className="muted-copy">{settingsMessages.exportStarted}</p>}
       {returned && !start.isPending && !start.isSuccess && !start.isError && <p role="alert" className="error-copy">{returned}</p>}
       {start.isError && <p role="alert" className="error-copy">{refusalText(start.error)}</p>}
     </div>

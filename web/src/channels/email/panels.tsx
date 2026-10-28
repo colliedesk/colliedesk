@@ -5,6 +5,7 @@ import { channelsApi } from '../../api/channels';
 import { useCreateMutation } from '../../api/use-create';
 import { Dialog } from '../../ui/dialog';
 import { messages } from '../../messages';
+import { settingsMessages } from '../../features/settings/settings-messages';
 import { EmailChannelSection, gmailPart } from '../../features/settings/email-channel-section';
 import { mailboxReturn } from '../../features/settings/gmail-return';
 import type { MailboxProvider } from '../../features/settings/gmail-return';
@@ -152,7 +153,7 @@ function Connect({ canManage, create }: ConnectProps) {
   const addressField = useRef<HTMLInputElement>(null);
   const feedback = useSaveFeedback(state, errorID, about === 'name' ? nameField : addressField, about === 'name' ? name : address);
   // A teammate reads what is set, as on a connected channel.
-  if (!canManage) return <p><strong>{messages.supportAddress}: </strong><span>{messages.emailNotConnected}</span></p>;
+  if (!canManage) return <p><strong>{settingsMessages.supportAddress}: </strong><span>{settingsMessages.emailNotConnected}</span></p>;
   const invalid = (field: 'name' | 'address') => (feedback.invalid && about === field) || undefined;
   const refusal = (field: 'name' | 'address') => about === field && <>
     {feedback.status}
@@ -164,11 +165,11 @@ function Connect({ canManage, create }: ConnectProps) {
         onChange={(event) => { feedback.touch(); setName(event.target.value); }} /></label>
     <small id={nameHint}>{emailMessages.nameHint}</small>
     {refusal('name')}
-    <label className="field"><span>{messages.supportAddress}</span>
+    <label className="field"><span>{settingsMessages.supportAddress}</span>
       <input ref={addressField} type="email" required value={address} aria-invalid={invalid('address')} aria-describedby={invalid('address') ? errorID : undefined}
         onChange={(event) => { feedback.touch(); setAddress(event.target.value); }} /></label>
     {refusal('address')}
-    <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveSupportAddress)}</button></span>
+    <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(settingsMessages.saveSupportAddress)}</button></span>
   </form>;
 }
 
@@ -183,7 +184,7 @@ function Overview({ defaultChannelID }: { defaultChannelID: string }) {
   if (!settings.data?.hosted_address || !me.data) return null;
   return <section className="settings-card" aria-labelledby="ch-address-heading">
     <div className="section-heading"><h2 id="ch-address-heading">{overviewMessages.heading}</h2><p>{overviewMessages.help}</p></div>
-    <NameForm label={messages.workspaceAddressName} saveLabel={messages.saveAddressName} hint={messages.addressNameWarning} value={me.data.workspace.slug} canManage
+    <NameForm label={settingsMessages.workspaceAddressName} saveLabel={settingsMessages.saveAddressName} hint={settingsMessages.addressNameWarning} value={me.data.workspace.slug} canManage
       maxLength={63} save={saveState(save)} onSave={(slug) => save.mutate(slug)} />
   </section>;
 }

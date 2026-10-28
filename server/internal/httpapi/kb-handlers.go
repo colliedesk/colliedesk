@@ -412,6 +412,8 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		Slug         *string `json:"slug"`
 		BodyMD       *string `json:"body_md"`
 		Status       string  `json:"status"`
+		SEOTitle     string  `json:"seo_title"`
+		SEODesc      string  `json:"seo_description"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.BodyMD == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "An article needs a collection_id, a title and body_md; slug and status are optional.")
@@ -429,9 +431,10 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 	if input.Status == "published" && a.askUnlessHeld(response, request, kbArticleCreateRoute, who, auth.PermKBArticlesPublish, raw, nil) {
 		return
 	}
-	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, input.Title, slug, *input.BodyMD, input.Status}, func(ctx context.Context) (any, error) {
+	a.createOnce(response, request, createKBArticleOperation, []string{input.CollectionID, input.Title, slug, *input.BodyMD, input.Status, input.SEOTitle, input.SEODesc}, func(ctx context.Context) (any, error) {
 		article, err := a.store.CreateKBArticle(ctx, who.Workspace.ID, savedReplyActor(ctx, who),
-			store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status})
+			store.KBArticleInput{CollectionID: input.CollectionID, Title: input.Title, Slug: slug, BodyMD: *input.BodyMD, Status: input.Status,
+				SEOTitle: input.SEOTitle, SEODescription: input.SEODesc})
 		if err != nil {
 			writeKBError(response, err)
 			return nil, errAnswered
@@ -455,10 +458,12 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		BodyMD       *string    `json:"body_md"`
 		CollectionID *string    `json:"collection_id"`
 		Status       *string    `json:"status"`
+		SEOTitle     *string    `json:"seo_title"`
+		SEODesc      *string    `json:"seo_description"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil ||
-		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.Status == nil) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id or status.")
+		(input.Title == nil && input.Slug == nil && input.BodyMD == nil && input.CollectionID == nil && input.Status == nil && input.SEOTitle == nil && input.SEODesc == nil) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read, and a new title, slug, body_md, collection_id, status, seo_title or seo_description.")
 		return
 	}
 	who := principal(request)
@@ -473,7 +478,8 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	article, err := a.store.UpdateKBArticle(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt,
-		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: input.CollectionID, Status: input.Status})
+		store.KBArticleChange{Title: input.Title, Slug: input.Slug, BodyMD: input.BodyMD, CollectionID: input.CollectionID, Status: input.Status,
+			SEOTitle: input.SEOTitle, SEODescription: input.SEODesc})
 	if err != nil {
 		writeKBError(response, err)
 		return

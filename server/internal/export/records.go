@@ -187,6 +187,8 @@ type KBArticle struct {
 	Title            string          `json:"title"`
 	Slug             string          `json:"slug"`
 	BodyMD           string          `json:"body_md"`
+	SEOTitle         string          `json:"seo_title"`
+	SEODescription   string          `json:"seo_description"`
 	Status           string          `json:"status"`
 	PublishedAt      *time.Time      `json:"published_at"`
 	AuthorAgentID    *string         `json:"author_agent_id"`
@@ -211,6 +213,8 @@ type KBArticleVersion struct {
 	Title               string    `json:"title"`
 	Slug                string    `json:"slug"`
 	BodyMD              string    `json:"body_md"`
+	SEOTitle            string    `json:"seo_title"`
+	SEODescription      string    `json:"seo_description"`
 	Status              string    `json:"status"`
 	CollectionID        *string   `json:"collection_id"`
 	ChangedByAgentID    *string   `json:"changed_by_agent_id"`

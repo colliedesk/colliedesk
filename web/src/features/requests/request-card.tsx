@@ -5,6 +5,7 @@ import { formatDate } from '../../lib/format-date';
 import { track } from '../../lib/product-analytics';
 import { permissionLabel } from '../settings/token-permissions';
 import { messages } from '../../messages';
+import { requestsMessages } from './requests-messages';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { autofixPart } from '../autofix/autofix-part';
 import { gmailPart } from '../settings/gmail-part';
@@ -63,7 +64,7 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
     try {
       await action();
     } catch (error) {
-      setProblem(error instanceof InvalidRequestError ? error.message : messages.requestActionFailed);
+      setProblem(error instanceof InvalidRequestError ? error.message : requestsMessages.requestActionFailed);
     } finally {
       setBusy(false);
     }
@@ -79,15 +80,15 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
     <article className="request-card" aria-labelledby={headingId} data-status={current.status}>
       <header className="request-head">
         <h3 id={headingId}>{current.summary}</h3>
-        <span className={`badge badge-request-${current.status}`}>{messages.requestStatus[current.status]}</span>
+        <span className={`badge badge-request-${current.status}`}>{requestsMessages.requestStatus[current.status]}</span>
       </header>
-      <p className="muted-copy">{messages.requestedBy(person, current.requested_by.token_label, current.requested_by.token_scope)}</p>
+      <p className="muted-copy">{requestsMessages.requestedBy(person, current.requested_by.token_label, current.requested_by.token_scope)}</p>
       {/* A custom token's own list, as it was when it asked: what the person approving extends. */}
       {current.requested_by.token_scope === 'custom' && current.requested_by.token_permissions.length > 0 && <details className="token-permissions">
-        <summary>{messages.tokenHeld(current.requested_by.token_permissions.length)}</summary>
+        <summary>{requestsMessages.tokenHeld(current.requested_by.token_permissions.length)}</summary>
         <ul>{current.requested_by.token_permissions.map((name) => <li key={name}>{permissionLabel(name)}</li>)}</ul></details>}
       <dl className="request-call">
-        <dt>{messages.requestCall}</dt><dd><code>{`${current.method} ${current.path}`}</code></dd>
+        <dt>{requestsMessages.requestCall}</dt><dd><code>{`${current.method} ${current.path}`}</code></dd>
       </dl>
       {reply
         ? <>
@@ -99,30 +100,30 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
             onApprove={consent && canApprove && current.status === 'pending' && !current.requested_by.token_revoked ? approve : undefined} busy={busy} />} />
             : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
       {edited && <>
-        <p className="muted-copy">{messages.editedBy(current.decided_by?.name ?? messages.someone)}</p>
+        <p className="muted-copy">{requestsMessages.editedBy(current.decided_by?.name ?? messages.someone)}</p>
         <p className="request-body reply-draft-text">{edited.text}</p>
         {edited.cc.length > 0 && <p className="request-recipients">{messages.draftCc(edited.cc)}</p>}
       </>}
       <p className="muted-copy"><time dateTime={current.created_at}>{formatDate(current.created_at, timezone)}</time>
-        {current.status === 'pending' && <> · {messages.requestExpires(formatDate(current.expires_at, timezone))}</>}</p>
+        {current.status === 'pending' && <> · {requestsMessages.requestExpires(formatDate(current.expires_at, timezone))}</>}</p>
       {mailboxConnectProvider(current) && <MailboxDisclosure provider={mailboxConnectProvider(current)!} />}
-      {current.status !== 'pending' && current.decided_by && <p>{messages.requestOutcome(messages.requestDecisionVerb[current.status], current.decided_by.name, current.result_status)}</p>}
+      {current.status !== 'pending' && current.decided_by && <p>{requestsMessages.requestOutcome(requestsMessages.requestDecisionVerb[current.status], current.decided_by.name, current.result_status)}</p>}
       {current.reason && <p className="muted-copy">{current.reason}</p>}
       {current.result_note && !outcome && <p className="muted-copy">{current.result_note}</p>}
       {outcome && outcome.result !== null && !autofixRoute(current.route) && <div className="request-result" role="status">
-        <p>{messages.requestResultOnce}</p>
-        {url ? <a href={url} target="_blank" rel="noreferrer">{messages.openResult(url)}</a> : <pre className="request-body">{JSON.stringify(outcome.result, null, 2)}</pre>}
+        <p>{requestsMessages.requestResultOnce}</p>
+        {url ? <a href={url} target="_blank" rel="noreferrer">{requestsMessages.openResult(url)}</a> : <pre className="request-body">{JSON.stringify(outcome.result, null, 2)}</pre>}
       </div>}
-      {current.requested_by.token_revoked && current.status === 'pending' && <p className="warning-note">{messages.tokenRevoked}</p>}
+      {current.requested_by.token_revoked && current.status === 'pending' && <p className="warning-note">{requestsMessages.tokenRevoked}</p>}
       {problem && <p role="alert" className="error-copy">{problem}</p>}
       {current.status === 'pending' && <div className="request-actions">
         {canApprove
-          ? !consent && <button type="button" className="primary-action" disabled={busy || current.requested_by.token_revoked} onClick={approve}>{messages.approve}</button>
-          : <span className="muted-copy">{item.approvable_by === 'owner' ? messages.onlyOwnerApproves : messages.onlyAdminApproves}</span>}
-        <label className="request-reason"><span>{messages.rejectReason}</span>
+          ? !consent && <button type="button" className="primary-action" disabled={busy || current.requested_by.token_revoked} onClick={approve}>{requestsMessages.approve}</button>
+          : <span className="muted-copy">{item.approvable_by === 'owner' ? requestsMessages.onlyOwnerApproves : requestsMessages.onlyAdminApproves}</span>}
+        <label className="request-reason"><span>{requestsMessages.rejectReason}</span>
           <input value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} /></label>
         <button type="button" className="danger-action" disabled={busy}
-          onClick={() => void run(async () => { await onReject(item.id, reason.trim() || undefined); track('agent_request_decided', { decision: 'rejected' }); })}>{messages.reject}</button>
+          onClick={() => void run(async () => { await onReject(item.id, reason.trim() || undefined); track('agent_request_decided', { decision: 'rejected' }); })}>{requestsMessages.reject}</button>
       </div>}
     </article>
   );

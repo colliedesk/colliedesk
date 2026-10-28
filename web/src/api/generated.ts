@@ -2317,7 +2317,7 @@ export interface paths {
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection or status (publish or unpublish). Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Change the title, slug, text, collection, status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of JSON). */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -4639,6 +4639,10 @@ export interface components {
              * @enum {string}
              */
             status: "draft" | "published";
+            /** @description The page title search engines show; empty uses the article title. */
+            seo_title?: string;
+            /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
+            seo_description?: string;
         };
         /**
          * @description published: on the public help center while it is on. draft: only agents see it.
@@ -4751,6 +4755,10 @@ export interface components {
              */
             url: string;
             body_md: string;
+            /** @description The page title search engines show; empty uses the article title. */
+            seo_title: string;
+            /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
+            seo_description: string;
             /** @description An import kept the original HTML; it is in the workspace export and is never shown on the help center. */
             has_source_html: boolean;
             /** @description Translations an import brought in. They are kept and exported; the help center does not show them yet. */
@@ -4816,6 +4824,8 @@ export interface components {
             title: string;
             slug: string;
             body_md: string;
+            seo_title: string;
+            seo_description: string;
             status: components["schemas"]["KBArticleStatus"];
             /**
              * Format: uuid
@@ -11734,6 +11744,10 @@ export interface operations {
                     collection_id?: string;
                     /** @enum {string} */
                     status?: "draft" | "published";
+                    /** @description The page title search engines show; empty uses the article title. */
+                    seo_title?: string;
+                    /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
+                    seo_description?: string;
                 };
             };
         };

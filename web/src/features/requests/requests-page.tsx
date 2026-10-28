@@ -1,5 +1,6 @@
 import type { AgentRequest } from '../../api/schemas';
 import { messages } from '../../messages';
+import { requestsMessages } from './requests-messages';
 import { RequestCard } from './request-card';
 import type { ApproveOutcome } from './request-card';
 
@@ -28,17 +29,17 @@ export function RequestsPage({ items = [], approved = [], filter, onFilter, time
     <main className="settings-page requests-page">
       <header>
         <h1>{messages.requests}</h1>
-        <p>{messages.requestsDescription}</p>
+        <p>{requestsMessages.requestsDescription}</p>
       </header>
-      <fieldset className="segmented" aria-label={messages.requestsFilter}>
+      <fieldset className="segmented" aria-label={requestsMessages.requestsFilter}>
         {(['pending', 'all'] as const).map((value) => (
           <label key={value}><input type="radio" name="request-filter" checked={filter === value} onChange={() => onFilter(value)} />
-            <span>{value === 'pending' ? messages.requestsPending : messages.requestsAll}</span></label>
+            <span>{value === 'pending' ? requestsMessages.requestsPending : requestsMessages.requestsAll}</span></label>
         ))}
       </fieldset>
       {loading && <p role="status" className="empty-copy">{messages.loading}</p>}
-      {failed && <p role="alert" className="error-copy">{messages.requestsFailed}</p>}
-      {empty && <p className="empty-copy">{filter === 'pending' ? messages.noPendingRequests : messages.noRequests}</p>}
+      {failed && <p role="alert" className="error-copy">{requestsMessages.requestsFailed}</p>}
+      {empty && <p className="empty-copy">{filter === 'pending' ? requestsMessages.noPendingRequests : requestsMessages.noRequests}</p>}
       <div className="request-list">
         {approved.map((outcome) => <RequestCard key={outcome.request.id} item={outcome.request} initialOutcome={outcome} timezone={timezone} onApprove={onApprove} onReject={onReject} />)}
         {rest.map((item) => <RequestCard key={item.id} item={item} canApprove={canApprove(item)} timezone={timezone} onApprove={onApprove} onReject={onReject} />)}
