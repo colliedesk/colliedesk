@@ -10,7 +10,10 @@ the list and cannot change it.
 Each channel shows its type, its name, one line about it (the support address, the website origins)
 and its state:
 
-- **Working**: it receives and sends.
+- **Working**: it receives and sends. A channel is Working only once a first message has arrived on it.
+- **Waiting for first message**: it is set up, but nothing has arrived yet. Send a test message (to
+  your support address, or through the form) and check that it opens a conversation in the inbox; the
+  channel then reads Working. Through the API the state is `waiting` with reason `no_message_yet`.
 - **Off**: an admin turned it off. See [Turn a channel off](#turn-a-channel-off).
 - **Needs attention**: it works only in part, and says why with a link to fix it. Email: sending is
   paused after spam complaints, the server cannot send (no SMTP relay and no Gmail), the Gmail

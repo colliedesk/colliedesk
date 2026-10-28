@@ -8,6 +8,18 @@ On Colliedesk Cloud every workspace has a ready-made address; you only forward y
 On your own server, the person who runs it first connects a mail forwarder and an SMTP relay: see
 [configuring email](../self-host/email.md).
 
+Two words name where mail enters Colliedesk, and **Settings → Channels → Email → Connection** shows
+the one your server uses:
+
+- **Forwarding address** (Colliedesk Cloud): an email address, `support@<workspace>.colliedesk.com`.
+  Your mailbox forwards to it like to any other address.
+- **Inbound URL** (your own server): a web address, not an email address. Your mailbox cannot send
+  to it by itself; a mail forwarder posts each message to it with the **inbound secret**, a password
+  for that forwarder only (not your email password). See
+  [On your own server: the inbound URL](#on-your-own-server-the-inbound-url).
+
+The channel reads **Waiting for first message** until a message has arrived, then **Working**.
+
 ## Colliedesk Cloud: forward to your address
 
 On Colliedesk Cloud every workspace has a ready-made address, `support@<workspace>.colliedesk.com`.
@@ -48,6 +60,23 @@ An admin can change the part before `.colliedesk.com` under **Workspace address 
 address stops receiving mail at once, so change the forwarding in your mailbox at the same time.
 A name is 1 to 63 lowercase letters, digits or hyphens; names such as `app`, `www` and `mail` are
 reserved. Do not set the Support address to a `colliedesk.com` address of another workspace.
+
+## On your own server: the inbound URL
+
+A server without a hosted mail domain shows the **Inbound URL** instead of a forwarding address.
+
+1. Open **Settings → Channels → Email → Connection** and save your **Support address**.
+2. Select **Create inbound secret**. Copy the secret now: it is shown once.
+3. Give the inbound URL and the secret to the person who runs the server. They connect a forwarder
+   (a Cloudflare Email Worker, Postmark, Amazon SES or a pipe on your mail server) as described in
+   [forward mail to Colliedesk](../self-host/email.md#3-forward-mail-to-colliedesk).
+4. To check the URL works before the forwarder is ready, copy the **Test request** under the secret
+   (**Copy test request**) and run it in a terminal. It posts one message from
+   `customer@example.com`, which opens a conversation in the inbox. The channel then reads **Working**.
+
+On Colliedesk Cloud, mail posted to the inbound URL does not count as a customer who wrote first
+during the trial, because whoever holds the secret can write any sender; see
+[Plan and billing](billing.md#the-free-trial).
 
 ## Sender name
 
