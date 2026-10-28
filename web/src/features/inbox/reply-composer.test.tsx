@@ -1043,3 +1043,57 @@ test('another tab sending its own different text leaves the text typed here in t
   expect(screen.queryByRole('button', { name: 'Use it' })).not.toBeInTheDocument();
   expect(JSON.parse(window.localStorage.getItem(key) as string)).toMatchObject({ body: 'Mine here' });
 });
+
+// A send cut off before its answer, pressed again: the same text, files and copies go under the same key;
+// other files or other copies are another message, under a new key, never a replay that drops them.
+test('a failed send pressed again with other files or copies goes under a new key, with the same ones under the same key', async () => {
+  window.localStorage.clear();
+  const onSubmit = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-20" agentId="agent-1" onSubmit={onSubmit} attachmentLimits={limits} />);
+  const keyOfCall = (index: number) => (onSubmit.mock.calls[index] as unknown[])[6] as string;
+  const press = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  };
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Invoice attached' } });
+  const first = new File([new Uint8Array(100)], 'invoice.pdf', { lastModified: 1 });
+  attach(first);
+  await press();
+  await press();
+  expect(keyOfCall(1)).toBe(keyOfCall(0));
+  fireEvent.click(screen.getByRole('button', { name: 'Remove invoice.pdf' }));
+  attach(new File([new Uint8Array(120)], 'invoice.pdf', { lastModified: 2 }));
+  await press();
+  expect(keyOfCall(2)).not.toBe(keyOfCall(1));
+  fireEvent.click(screen.getByRole('button', { name: 'Cc' }));
+  typeCc('billing@example.com');
+  await press();
+  expect(onSubmit.mock.calls[3]).toEqual(['outgoing', 'Invoice attached', expect.any(Array), ['billing@example.com'], undefined, undefined, expect.any(String)]);
+  expect(keyOfCall(3)).not.toBe(keyOfCall(2));
+});
+
+test('a tab sending the text another tab is already sending goes under that tab\'s key', async () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-21';
+  window.localStorage.setItem(key, JSON.stringify({ kind: 'note', body: 'Shared words', saved_at: Date.now() }));
+  const onSubmit = vi.fn(() => new Promise(() => undefined));
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-21" agentId="agent-1" onSubmit={onSubmit} />);
+  expect(screen.getByLabelText('Message body')).toHaveValue('Shared words');
+  // The other tab presses Add private note: its draft now holds its send's key.
+  const sending = JSON.stringify({ kind: 'note', body: 'Shared words', sendKey: 'tab-a-key', saved_at: Date.now() });
+  window.localStorage.setItem(key, sending);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: sending, storageArea: window.localStorage })); });
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  expect((onSubmit.mock.calls[0] as unknown[])[6]).toBe('tab-a-key');
+});
+
+test('taking over another tab\'s draft keeps the key of the send it has in flight', () => {
+  window.localStorage.clear();
+  const key = 'colliedesk.reply-draft:ws-1:agent-1:conv-22';
+  render(<ReplyComposer draftKey="ws-1:agent-1:conv-22" agentId="agent-1" onSubmit={vi.fn()} />);
+  const sending = JSON.stringify({ kind: 'note', body: 'From tab A', sendKey: 'tab-a-key', saved_at: Date.now() });
+  window.localStorage.setItem(key, sending);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key, newValue: sending, storageArea: window.localStorage })); });
+  expect(screen.getByLabelText('Message body')).toHaveValue('From tab A');
+  expect(keptDraft('ws-1:agent-1:conv-22')).toMatchObject({ body: 'From tab A', sendKey: 'tab-a-key' });
+});

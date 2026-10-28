@@ -657,8 +657,8 @@ paths:
 
         Send an `Idempotency-Key` header, new for each message and the same on every retry of it, and a
         repeated request returns the message the first one created (200) instead of storing and sending it
-        again. Keys belong to the workspace; the same key with another conversation, kind, body or author
-        answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft
+        again. Keys belong to the workspace; the same key with another conversation, kind, body, author,
+        `cc` or set of files (by name, size and bytes) answers 422 `idempotency_key_reused`. The key applies to a message written directly; a reply draft
         or a call filed as an agent request (202) does not use it.
       parameters:
         - name: Idempotency-Key

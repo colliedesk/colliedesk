@@ -72,6 +72,15 @@ const shortcuts: Record<string, Kind> = { r: 'outgoing', n: 'note' };
 
 const noAddresses: string[] = [];
 
+// inputOf names the files and copies of a send: each list counted first, a file by name, size and date (its
+// bytes are not read), so a changed attachment or Cc after a lost answer is a new message, never a replay.
+const inputOf = (files: File[], cc: string[]) =>
+  JSON.stringify([cc.length, ...cc, files.length, ...files.map((file) => [file.name, file.size, file.lastModified])]);
+const noInput = inputOf([], []);
+
+// PendingSend is a send in flight, failed or cut off: its text, files and copies, and its Idempotency-Key.
+interface PendingSend { kind: Kind; body: string; key: string; input: string }
+
 // The lists under the box are a chunk of their own, so the first bundle carries neither. The composer
 // starts loading it when it mounts, which is when a conversation opens: a click a moment later finds it.
 export const replyPickersPart = lazyPart(() => import('./reply-pickers'));
@@ -91,14 +100,17 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
   // remounts the box with it, so the draft kept there is read before anything is written over it.
   // A send in flight, failed or cut off keeps its key with the text while the text and kind are unchanged:
   // sending it again goes under the same key, so the server stores it once.
-  const pendingSend = useRef(stored?.sendKey ? { kind: stored.kind, body: stored.body, key: stored.sendKey } : undefined);
-  const keyOf = (draft: StoredDraft) => {
-    const send = pendingSend.current;
-    return send && send.kind === draft.kind && send.body === draft.body ? send.key : undefined;
+  // The files and copies of a send are part of it too (input, from inputOf): other ones are a new message.
+  // Another tab of this browser sending the same text wrote its key with the draft: that key is this one's.
+  const pendingSend = useRef<PendingSend | undefined>(stored?.sendKey ? { kind: stored.kind, body: stored.body, key: stored.sendKey, input: stored.sendInput ?? noInput } : undefined);
+  const sendOf = (kind: Kind, body: string, input?: string): PendingSend | undefined => {
+    const kept = readDraft(draftKey);
+    const fromStorage = kept?.sendKey ? { kind: kept.kind, body: kept.body, key: kept.sendKey, input: kept.sendInput ?? noInput } : undefined;
+    return [pendingSend.current, fromStorage].find((send) => send && send.kind === kind && send.body === body && (input === undefined || send.input === input));
   };
   useEffect(() => {
-    const sendKey = keyOf({ kind, body });
-    writeDraft(draftKey, { kind, body, ...(sendKey ? { sendKey } : {}) });
+    const send = sendOf(kind, body);
+    writeDraft(draftKey, { kind, body, ...(send ? { sendKey: send.key, sendInput: send.input } : {}) });
   }, [draftKey, kind, body]);
   const latestBody = useRef(body);
   latestBody.current = body;
@@ -269,10 +281,11 @@ export function ReplyComposer({ disabled, noReplies = false, onSubmit, attachmen
     setConflict(undefined);
     // The kept draft holds the send's key before the request leaves: a reload meanwhile asks the server about
     // that key before offering the text again, and the same text sent again goes under the same key.
-    const key = draftKey ? keyOf({ kind, body }) ?? newSubmitKey() : undefined;
+    const input = inputOf(sentFiles, sentCc);
+    const key = draftKey ? sendOf(kind, body, input)?.key ?? newSubmitKey() : undefined;
     if (key) {
-      pendingSend.current = { kind, body, key };
-      writeDraft(draftKey, { kind, body, sendKey: key });
+      pendingSend.current = { kind, body, key, input };
+      writeDraft(draftKey, { kind, body, sendKey: key, sendInput: input });
     }
     const send = (draftId?: string) => key ? onSubmit?.(kind, sent, sentFiles.length > 0 ? sentFiles : undefined, sentCc.length > 0 ? sentCc : undefined, seen, draftId, key)
       : draftId ? onSubmit?.(kind, sent, sentFiles, sentCc, seen, draftId)

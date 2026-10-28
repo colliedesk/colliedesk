@@ -1,10 +1,13 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strconv"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -156,7 +159,7 @@ func (s *Store) CreateReply(ctx context.Context, workspaceID, conversationID str
 }
 
 // ErrIdempotencyKeyReused means a message key already names a message of the workspace that differs from
-// this one (another conversation, kind, text or author): the client reused a key for a new message.
+// this one (another conversation, kind, text, author, copies or files): the client reused a key for a new message.
 var ErrIdempotencyKeyReused = errors.New("the idempotency key already names another message")
 
 // CreateReplyOnce is CreateReply that remembers key, the client's name for this submit (empty: none).
@@ -177,7 +180,7 @@ func (s *Store) CreateReplyOnce(ctx context.Context, workspaceID, conversationID
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	if key != "" {
-		existing, found, err := messageForKey(ctx, tx, workspaceID, conversationID, key, actor, kind, body)
+		existing, found, err := messageForKey(ctx, tx, workspaceID, conversationID, key, actor, kind, body, cc, files)
 		if err != nil || found {
 			return existing, found, err
 		}
@@ -202,8 +205,9 @@ func (s *Store) CreateReplyOnce(ctx context.Context, workspaceID, conversationID
 	return message, false, nil
 }
 
-// messageForKey takes the key's lock and reads the message the key already names, if any.
-func messageForKey(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, key string, actor Actor, kind, body string) (domain.Message, bool, error) {
+// messageForKey takes the key's lock and reads the message the key already names, if any. The message must
+// be this one: same conversation, kind, text, author, copies and files, else the key was reused.
+func messageForKey(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, key string, actor Actor, kind, body string, cc []string, files []NewAttachment) (domain.Message, bool, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "message-key:"+workspaceID+":"+key); err != nil {
 		return domain.Message{}, false, fmt.Errorf("lock message key: %w", err)
 	}
@@ -221,7 +225,48 @@ func messageForKey(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, 
 		return domain.Message{}, false, ErrIdempotencyKeyReused
 	}
 	message, err := getMessage(ctx, tx, workspaceID, messageID)
-	return message, err == nil, err
+	if err != nil {
+		return domain.Message{}, false, err
+	}
+	// The copies are compared as they are stored: without the conversation's contact.
+	cc, err = withoutContact(ctx, tx, workspaceID, conversationID, cc)
+	if err != nil {
+		return domain.Message{}, false, err
+	}
+	sent := make([]fileIdentity, 0, len(files))
+	for _, file := range files {
+		sent = append(sent, fileIdentity{name: file.Filename, size: file.Object.Size, sha256: file.Object.SHA256})
+	}
+	stored := make([]fileIdentity, 0, len(message.Attachments))
+	for _, file := range message.Attachments {
+		stored = append(stored, fileIdentity{name: file.Filename, size: file.Size, sha256: file.SHA256})
+	}
+	if messageInputFingerprint(cc, sent) != messageInputFingerprint(message.CC, stored) {
+		return domain.Message{}, false, ErrIdempotencyKeyReused
+	}
+	return message, true, nil
+}
+
+// fileIdentity is what makes two files of a message the same one: name, size and bytes.
+type fileIdentity struct {
+	name   string
+	size   int64
+	sha256 string
+}
+
+// messageInputFingerprint names the copies and files of a message: the copies in order, the files in any
+// order. Each list is counted first and every part is length-prefixed, so no two inputs share a name.
+func messageInputFingerprint(cc []string, files []fileIdentity) string {
+	sorted := slices.Clone(files)
+	slices.SortFunc(sorted, func(a, b fileIdentity) int {
+		return cmp.Or(cmp.Compare(a.name, b.name), cmp.Compare(a.size, b.size), cmp.Compare(a.sha256, b.sha256))
+	})
+	parts := append([]string{"cc", strconv.Itoa(len(cc))}, cc...)
+	parts = append(parts, "files", strconv.Itoa(len(sorted)))
+	for _, file := range sorted {
+		parts = append(parts, file.name, strconv.FormatInt(file.size, 10), file.sha256)
+	}
+	return RequestFingerprint(parts...)
 }
 
 // createMessage writes a message, its files and its outbox row inside tx; see CreateMessageWithCC.

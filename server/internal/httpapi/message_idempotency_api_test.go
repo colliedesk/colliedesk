@@ -182,3 +182,42 @@ func TestTheTimelineFindsTheMessageASendKeyStored(t *testing.T) {
 		t.Fatalf("a malformed key: status=%d, want 400", status)
 	}
 }
+
+// A send cut off before its answer may be pressed again after the person changed the files or the copies:
+// that is another message, never a replay of the first that silently drops what changed.
+func TestAKeyReusedWithOtherFilesOrCopiesIsRefused(t *testing.T) {
+	f := newLimitsFixture(t, false)
+	conversation := f.conversationA(t)
+	withFile := func(key, name, data string) *httptest.ResponseRecorder {
+		req := multipartMessage(t, conversation, f.adminA, "note", "Here it is", []upload{{name: name, contentType: "text/plain", data: []byte(data)}})
+		req.Header.Set("Idempotency-Key", key)
+		return serve(f.api, req)
+	}
+	if first := withFile("files-2", "a.txt", "hello"); first.Code != http.StatusCreated {
+		t.Fatalf("first: status=%d body=%s", first.Code, first.Body.String())
+	}
+	for name, response := range map[string]*httptest.ResponseRecorder{
+		"another file":           withFile("files-2", "b.txt", "hello"),
+		"same name, other bytes": withFile("files-2", "a.txt", "hullo"),
+		"no file":                postKeyed(t, f.api, f.adminA, conversation, "files-2", map[string]any{"kind": "note", "body": "Here it is"}),
+	} {
+		if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "idempotency_key_reused") {
+			t.Errorf("%s under the same key: status=%d body=%s, want 422 idempotency_key_reused", name, response.Code, response.Body.String())
+		}
+	}
+	if again := withFile("files-2", "a.txt", "hello"); again.Code != http.StatusOK {
+		t.Fatalf("the same file again: status=%d body=%s, want 200", again.Code, again.Body.String())
+	}
+
+	reply := map[string]any{"kind": "outgoing", "body": "Copying billing.", "cc": []string{"billing@cust.example.com"}}
+	if first := postKeyed(t, f.api, f.adminA, conversation, "cc-1", reply); first.Code != http.StatusCreated {
+		t.Fatalf("first reply: status=%d body=%s", first.Code, first.Body.String())
+	}
+	other := map[string]any{"kind": "outgoing", "body": "Copying billing.", "cc": []string{"billing@cust.example.com", "ops@cust.example.com"}}
+	if response := postKeyed(t, f.api, f.adminA, conversation, "cc-1", other); response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("other copies under the same key: status=%d body=%s, want 422", response.Code, response.Body.String())
+	}
+	if again := postKeyed(t, f.api, f.adminA, conversation, "cc-1", reply); again.Code != http.StatusOK {
+		t.Fatalf("the same reply again: status=%d body=%s, want 200", again.Code, again.Body.String())
+	}
+}
