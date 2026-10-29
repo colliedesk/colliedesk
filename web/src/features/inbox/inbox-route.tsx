@@ -21,7 +21,7 @@ import { usePendingRequests } from '../requests/use-pending-requests';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
-import { SetupGuide } from '../onboarding/setup-guide';
+import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
 import { guideHasWork } from '../onboarding/setup-steps';
 
 // errorMessage reads the message of an API error body, when the answer is one.
@@ -129,8 +129,11 @@ export function InboxRoute() {
   const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
   // The setup guide: what is left to receive and answer email. The activity poll refreshes it; it has no
   // poll of its own. A hidden guide is not even asked for.
-  const guideHidden = me.data?.setup_guide_hidden ?? true;
-  const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: Boolean(me.data) && !guideHidden });
+  // Until the session answers the guide is assumed to be wanted, so its data and its chunk go out with the
+  // session and the list instead of after the session; a guide the session says is hidden is dropped at once.
+  const guideHidden = me.data?.setup_guide_hidden ?? false;
+  const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: !guideHidden });
+  useEffect(() => { if (!guideHidden) preloadSetupGuide(); }, [guideHidden]);
   const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
   const isAdmin = me.data?.agent?.role === 'admin';
