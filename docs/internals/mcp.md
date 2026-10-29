@@ -116,12 +116,33 @@
   the team wrote it, but the model is still told it is text, never instructions. Writes need
   `updated_at` from a read, so a model cannot overwrite an edit it never saw.
 - **Attachments are read, not streamed.** `GET /attachments/{id}` streams bytes, so `attachment_get`
-  uses `restClient.download`, which keeps the first 128 KiB and stops the handler with `errEnough`
-  (the handler logs one `stream:` line for a larger file; that is expected). A plain UTF-8 file comes
-  back as text cut after 20,000 characters; anything else as name, size, SHA-256 and a sniffed type
-  only. No base64 and no link: an image or a PDF in the model context is one more injection channel,
-  and the web app already opens files. The file name is customer text even on a team note, because a
-  team member often forwards a customer's file. `conversation_get` lists attachment ids and sizes.
+  uses `restClient.download`, which keeps the first 2 MiB + 1 byte and stops the handler with
+  `errEnough` (the handler logs one `stream:` line for a larger file; that is expected). A plain
+  UTF-8 file comes back as text cut after 20,000 characters (from the first 128 KiB). A PNG, JPEG,
+  GIF or WebP of at most 2 MiB comes back as MCP image content, because customers send screenshots
+  and an agent that cannot see them cannot answer. The type is sniffed from the bytes
+  (`http.DetectContentType`), never the name or stored type, so an SVG (scriptable text) is never an
+  image. Text in an image cannot be put under `untrusted_customer_content`: it is one more injection
+  channel, so the description says so and `image: false` leaves the picture out. Anything else (PDF,
+  archive, larger image) is name, size, SHA-256 and sniffed type only; no PDF parser runs in the
+  server. The file name is customer text even on a team note, because a team member often forwards a
+  customer's file. `conversation_get` lists attachment ids and sizes.
+- **Files go in as base64, at most 5 MiB a call.** MCP here is remote HTTP only, so a file reaches a
+  tool as base64 in the arguments. `note_add`, `reply_send` and `conversation_start` decode `files`,
+  check the 5 MiB total and build the same multipart body the web app sends (fields first, so a
+  refusal comes before a byte is stored). Below the tier REST answers 403 `files_need_approval`;
+  the tool never files a request with files.
+- **The SDK refuses a request body over 4 MiB by default.** go-sdk's `DefaultMaxRequestBodyBytes` is
+  4 MiB, which silently broke every 5 MiB base64 tool (`kb_image_upload`, `kb_video_upload_part`)
+  with a 413 the model sees as a protocol error. `maxRequestBody` in `server.go` must stay above
+  7,000,000 characters of base64 plus the call; the 5 MiB note in `TestNoteAddAttachesFilesUnderTheDraftTier`
+  guards it.
+- **Few file calls at once.** The SDK decodes a request several times (about 150 MiB allocated for one
+  5 MiB file), so `limitLarge` lets in at most 4 requests over 1 MiB (or of unknown length) at a time,
+  at most 2 of one workspace, before their body is read; the others wait up to the call timeout, then
+  get 503 with Retry-After. Small calls never wait. A request holding a slot gets a read deadline of
+  2 minutes: `http.Server` has only `ReadHeaderTimeout` and the SDK sets none, so without it a client
+  that announces 8 MiB and stalls would hold the slot forever and lock file calls for everyone. Cutting copies inside the tool would not help much: most of it is the SDK.
 - **Bulk update creates no tag.** `PATCH /conversations` is one transaction; creating a missing tag
   before it would leave the tag behind when the transaction refuses an id. So
   `conversations_bulk_update` takes only existing tag names. It has no priority because the REST bulk

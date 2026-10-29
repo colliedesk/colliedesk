@@ -12,22 +12,25 @@ type replyOut struct {
 	// Warning says a person had a reply to this customer open and not sent yet.
 	Warning string `json:"warning,omitempty"`
 	Message struct {
-		ID                  string    `json:"id"`
-		Kind                string    `json:"kind"`
-		CreatedAt           string    `json:"created_at"`
-		Author              string    `json:"author,omitempty"`
-		Delivery            string    `json:"delivery,omitempty"`
-		CC                  []string  `json:"cc,omitempty"`
-		WrittenByAgentToken *tokenOut `json:"written_by_agent_token,omitempty"`
+		ID                  string             `json:"id"`
+		Kind                string             `json:"kind"`
+		CreatedAt           string             `json:"created_at"`
+		Author              string             `json:"author,omitempty"`
+		Delivery            string             `json:"delivery,omitempty"`
+		CC                  []string           `json:"cc,omitempty"`
+		WrittenByAgentToken *tokenOut          `json:"written_by_agent_token,omitempty"`
+		Attachments         []attachmentRowOut `json:"attachments,omitempty"`
 	} `json:"message"`
 }
 
 func replySend(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		ConversationID  string   `json:"conversation_id"`
-		Body            string   `json:"body"`
-		CC              []string `json:"cc"`
-		SeenReplyNumber *int     `json:"seen_reply_number"`
+		ConversationID  string          `json:"conversation_id"`
+		Body            string          `json:"body"`
+		CC              []string        `json:"cc"`
+		SeenReplyNumber *int            `json:"seen_reply_number"`
+		AIDraftID       string          `json:"ai_draft_id"`
+		Files           []inlineFileArg `json:"files"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -38,16 +41,39 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 	if args.SeenReplyNumber == nil {
 		return nil, &toolError{"Pass seen_reply_number: the latest_reply_number of colliedesk_conversation_get for this conversation. Nothing was sent."}
 	}
-	c.notFound = notFoundConversation(args.ConversationID)
-	request := map[string]any{"kind": "outgoing", "body": args.Body, "seen_reply_number": *args.SeenReplyNumber}
-	if len(args.CC) > 0 {
-		request["cc"] = args.CC
+	files, err := decodeFiles(args.Files)
+	if err != nil {
+		return nil, err
 	}
+	c.notFound = notFoundConversation(args.ConversationID)
 	path := "/api/v1/conversations/" + url.PathEscape(args.ConversationID) + "/messages"
 	var created restMessage
-	err = c.rest.do(c.ctx, c.token, http.MethodPost, path, nil, request, &created)
+	if len(files) > 0 {
+		fields := [][2]string{{"kind", "outgoing"}, {"body", args.Body}, {"seen_reply_number", strconv.Itoa(*args.SeenReplyNumber)}}
+		for _, address := range args.CC {
+			fields = append(fields, [2]string{"cc", address})
+		}
+		if args.AIDraftID != "" {
+			fields = append(fields, [2]string{"ai_draft_id", args.AIDraftID})
+		}
+		contentType, form := messageForm(fields, files)
+		err = c.rest.sendBytes(c.ctx, c.token, http.MethodPost, path, contentType, nil, form, &created)
+	} else {
+		request := map[string]any{"kind": "outgoing", "body": args.Body, "seen_reply_number": *args.SeenReplyNumber}
+		if len(args.CC) > 0 {
+			request["cc"] = args.CC
+		}
+		if args.AIDraftID != "" {
+			request["ai_draft_id"] = args.AIDraftID
+		}
+		err = c.rest.do(c.ctx, c.token, http.MethodPost, path, nil, request, &created)
+	}
 	if failure, ok := err.(*restError); ok && failure.Status == http.StatusConflict && failure.Code == "reply_conflict" {
 		return nil, c.replyConflict(args.ConversationID, *args.SeenReplyNumber)
+	}
+	if failure, ok := err.(*restError); ok && failure.Status == http.StatusBadRequest && args.AIDraftID != "" && strings.Contains(failure.Message, "ai_draft_id") {
+		return nil, &toolError{"ai_draft_id goes only with a reply this token sends itself, and a token below send files the reply for a person instead. Nothing was sent or filed. " +
+			"Call again without ai_draft_id: the reply is filed as a draft for a person to send."}
 	}
 	if err == nil {
 		c.wrote = true
@@ -58,6 +84,7 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 	out := replyOut{ConversationID: args.ConversationID}
 	out.Message.ID, out.Message.Kind, out.Message.CreatedAt, out.Message.CC = created.ID, created.Kind, utc(created.CreatedAt), created.CC
 	out.Message.WrittenByAgentToken = tokenOf(created)
+	out.Message.Attachments = attachmentRows(created)
 	if created.Delivery != nil {
 		out.Message.Delivery = created.Delivery.Status
 	}
