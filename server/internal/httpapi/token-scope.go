@@ -293,8 +293,13 @@ var tokenTiers = map[string]TokenAccess{
 	"PUT /api/v1/ai/slots/{slot}":          alwaysAsk(auth.PermAISettingsUpdate),
 	// Usage shows what the workspace spent, admin like billing. The automatic limits only lower or
 	// raise how much automatic work runs; the monthly allowance still bounds the money: admin.
-	"GET /api/v1/ai/usage":            grant(auth.PermBillingRead),
-	"PUT /api/v1/ai/automatic-limits": grant(auth.PermAISettingsUpdate),
+	"GET /api/v1/ai/usage":      grant(auth.PermBillingRead),
+	"GET /api/v1/ai/chat/usage": grant(auth.PermBillingRead),
+	// A chat's transcript is an end user's messages, read like a conversation's; deleting one is for good.
+	"GET /api/v1/ai/chat/sessions":         grant(auth.PermMessagesRead),
+	"GET /api/v1/ai/chat/sessions/{id}":    grant(auth.PermMessagesRead),
+	"DELETE /api/v1/ai/chat/sessions/{id}": alwaysAsk(auth.PermAISettingsUpdate),
+	"PUT /api/v1/ai/automatic-limits":      grant(auth.PermAISettingsUpdate),
 	// An AI draft never reaches a customer: a person edits and sends it, like a note, so asking for one
 	// and discarding one are draft; reading them is read.
 	"POST /api/v1/conversations/{id}/ai-drafts":                   grant(auth.PermAIAssistCreate),

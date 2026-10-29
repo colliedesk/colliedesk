@@ -17,10 +17,12 @@ import (
 const (
 	SlotTriage = "triage"
 	SlotDraft  = "draft"
+	// SlotChat answers end users in the help center's chat (ai-chat.go); it has its own money bucket.
+	SlotChat = "chat"
 )
 
 // Slots lists every slot in display order.
-var Slots = []string{SlotTriage, SlotDraft}
+var Slots = []string{SlotTriage, SlotDraft, SlotChat}
 
 // DefaultServerLabel names the server's provider when AI_SERVER_LABEL is not set.
 const DefaultServerLabel = "Server provider"

@@ -243,6 +243,10 @@ type SlotInput struct {
 	// Automatic and AutoParts are kept as they are when nil.
 	Automatic *bool
 	AutoParts []string
+	// MonthlyCap is the chat slot's most a calendar month (UTC) may spend, in micro-dollars, kept as it
+	// is unless MonthlyCapSet; nil with MonthlyCapSet removes it.
+	MonthlyCap    *int64
+	MonthlyCapSet bool
 }
 
 func newID() string {

@@ -231,6 +231,7 @@ func (s idleSink) ChannelInboundEvent(export.ChannelInboundEvent) error         
 func (s idleSink) AIUsage(export.AIUsage) error                                    { return nil }
 func (s idleSink) AIDraft(export.AIDraft) error                                    { return nil }
 func (s idleSink) AITriage(export.AITriage) error                                  { return nil }
+func (s idleSink) AIChatSession(export.AIChatSession) error                        { return nil }
 func (s idleSink) ResultsBaseline(export.ResultsBaseline) error                    { return nil }
 func (s idleSink) AutofixInstallation(export.AutofixInstallation) error            { return nil }
 func (s idleSink) AutofixRepo(export.AutofixRepo) error                            { return nil }

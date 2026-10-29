@@ -210,10 +210,35 @@ func (w *Worker) sweep(ctx context.Context) error {
 		}
 		// A suggestion's reason, the only generated text it holds, goes 90 days after it ended too.
 		// An open one has expired long before (one naming nothing never does, so it goes by its age).
-		_, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET reason=NULL WHERE reason IS NOT NULL AND COALESCE(decided_at,created_at)<$1`,
-			now.Add(-draftTextRetention))
-		return err
+		if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET reason=NULL WHERE reason IS NOT NULL AND COALESCE(decided_at,created_at)<$1`,
+			now.Add(-draftTextRetention)); err != nil {
+			return err
+		}
+		return sweepChats(ctx, tx, now)
 	})
+}
+
+// chatSessionKept is how long a chat's numbers stay after its last turn; its texts go after
+// ChatTranscriptDays. A transfer code is kept a day after it expired.
+const chatSessionKept = 400 * 24 * time.Hour
+
+// sweepChats erases the texts of chats whose last turn is ChatTranscriptDays old (questions, answers,
+// the titles of what they cited), removes chats a year old and transfer codes a day after they expired.
+func sweepChats(ctx context.Context, tx pgx.Tx, now time.Time) error {
+	expired := now.AddDate(0, 0, -ChatTranscriptDays)
+	if _, err := tx.Exec(ctx, `UPDATE ai_chat_turns t SET question=NULL,answer=NULL FROM ai_chat_sessions s
+		WHERE s.workspace_id=t.workspace_id AND s.id=t.session_id AND s.last_turn_at<$1 AND (t.question IS NOT NULL OR t.answer IS NOT NULL)`, expired); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE ai_chat_sources o SET title=NULL,folder=NULL FROM ai_chat_turns t JOIN ai_chat_sessions s ON s.workspace_id=t.workspace_id AND s.id=t.session_id
+		WHERE t.workspace_id=o.workspace_id AND t.id=o.turn_id AND s.last_turn_at<$1 AND (o.title IS NOT NULL OR o.folder IS NOT NULL)`, expired); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM ai_chat_sessions WHERE last_turn_at<$1`, now.Add(-chatSessionKept)); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `DELETE FROM ai_chat_transfers WHERE expires_at<$1`, now.Add(-24*time.Hour))
+	return err
 }
 
 // run is one attempt of one task. Every write names the claim token: a task cancelled or leased again

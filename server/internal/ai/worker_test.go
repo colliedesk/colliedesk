@@ -713,3 +713,46 @@ func TestAutomaticDraftsStopAtHalfTheAllowance(t *testing.T) {
 		t.Fatalf("a person's draft = %s", state)
 	}
 }
+
+// A chat's texts go 90 days after its last turn, its numbers stay; a chat goes 400 days after it, and
+// a transfer code a day after it expired. A recent chat keeps everything.
+func TestOldChatTextsAreErasedAndOldChatsRemoved(t *testing.T) {
+	q := newQueueEnv(t, nil)
+	ctx := context.Background()
+	now := q.clock.Now()
+	day := 24 * time.Hour
+	chat := func(last time.Time) string {
+		var id string
+		if err := q.pool.QueryRow(ctx, `WITH c AS (INSERT INTO channels(workspace_id,type,name) SELECT $1,'help_chat','Chat '||gen_random_uuid() RETURNING id),
+				s AS (INSERT INTO ai_chat_sessions(workspace_id,channel_id,token_hash,surface,created_at,last_turn_at)
+					SELECT $1,c.id,sha256(gen_random_uuid()::text::bytea),'help_center',$2,$2 FROM c RETURNING id),
+				t AS (INSERT INTO ai_chat_turns(workspace_id,session_id,seq,question,answer,status,input_tokens,created_at)
+					SELECT $1,s.id,1,'Where is my order?','It ships tomorrow [#1].','answered',40,$2 FROM s RETURNING id),
+				o AS (INSERT INTO ai_chat_sources(workspace_id,turn_id,ordinal,article_number,article_version,title,folder) SELECT $1,t.id,1,1,1,'Shipping','Orders' FROM t),
+				x AS (INSERT INTO ai_chat_transfers(workspace_id,session_id,code_hash,expires_at) SELECT $1,s.id,sha256(gen_random_uuid()::text::bytea),$2 FROM s)
+			SELECT id::text FROM s`, q.a.id, last).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	recent, old, ancient := chat(now.Add(-89*day)), chat(now.Add(-91*day)), chat(now.Add(-401*day))
+	q.tick(t)
+	texts := func(id string) (questions, titles, tokens, transfers int) {
+		if err := q.pool.QueryRow(ctx, `SELECT (SELECT count(question) FROM ai_chat_turns WHERE session_id=$1),
+				(SELECT count(o.title) FROM ai_chat_sources o JOIN ai_chat_turns t ON t.id=o.turn_id WHERE t.session_id=$1),
+				(SELECT count(input_tokens) FROM ai_chat_turns WHERE session_id=$1),
+				(SELECT count(*) FROM ai_chat_transfers WHERE session_id=$1)`, id).Scan(&questions, &titles, &tokens, &transfers); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if q, ti, tok, tr := texts(recent); q != 1 || ti != 1 || tok != 1 || tr != 0 {
+		t.Fatalf("recent chat = %d %d %d %d, want texts kept and its expired code gone", q, ti, tok, tr)
+	}
+	if q, ti, tok, _ := texts(old); q != 0 || ti != 0 || tok != 1 {
+		t.Fatalf("old chat = %d %d %d, want texts erased and numbers kept", q, ti, tok)
+	}
+	if n := q.count(t, `SELECT count(*) FROM ai_chat_sessions WHERE id=$1`, ancient); n != 0 {
+		t.Fatalf("a chat 401 days old is still there")
+	}
+}

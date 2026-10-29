@@ -1,0 +1,37 @@
+/* The AI chat tab of Settings → Built-in AI and the chat transcript pages: tokens only. */
+.aic-month { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-5); padding: var(--space-4); min-height: 6rem; }
+.aic-figure { font-size: var(--fs-h2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.aic-chats { container-type: inline-size; display: grid; gap: var(--space-3); padding: var(--space-4); min-width: 0; }
+.aic-chats-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.aic-chats-head h2 { margin: 0 auto 0 0; font-size: var(--fs-body); }
+.aic-empty { margin: 0; }
+.aic-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+.aic-table th, .aic-table td { padding: var(--space-2) var(--space-3); border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+.aic-table th { color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
+.aic-question { max-width: 22rem; }
+.aic-question a { color: var(--text-1); font-weight: 500; overflow-wrap: anywhere; }
+.aic-more { justify-content: center; }
+/* A narrow panel (the settings column is narrower than the window) shows each chat as a card. */
+@container (max-width: 54rem) {
+  .aic-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .aic-table, .aic-table tbody, .aic-table tr, .aic-table td { display: block; }
+  .aic-table tr { border-top: 1px solid var(--line); padding: var(--space-2) 0; }
+  .aic-table td { border: 0; padding: 2px 0; }
+  .aic-table td:not(.aic-question)::before { content: attr(data-label) ": "; color: var(--text-3); font-size: var(--fs-label); }
+  .aic-question { max-width: none; }
+}
+.aic-transcript { display: grid; gap: var(--space-4); }
+.aic-transcript-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); }
+.aic-transcript-head h2 { margin: 0; font-family: var(--font-display); }
+.aic-transcript-head p { margin: var(--space-1) 0 0; }
+.aic-turns { display: grid; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
+.aic-turn { display: grid; gap: var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.aic-said { display: grid; gap: 2px; }
+.aic-said b { color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
+.aic-said p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.aic-sources { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.aic-sources li { display: grid; border-radius: var(--radius); box-shadow: var(--shadow-1); background: var(--surface-1); padding: var(--space-1) var(--space-2); font-size: var(--fs-small); }
+.aic-sources small { color: var(--text-3); font-size: var(--fs-label); }
+.aic-turn-foot { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--text-3); font-size: var(--fs-label); }
+.aic-cap { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
+.aic-cap input { max-width: 10rem; }

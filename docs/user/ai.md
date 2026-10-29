@@ -206,6 +206,16 @@ undone in the last 30 days. Restoring a workspace from a backup turns the automa
    Usage** shows what is used. A call that starts sets aside the most it can cost, so calls running at
    the same time never spend more than is left; the last few cents of a month can stay unused.
 
+3. **AI chat.** The help center's [AI chat](ai-chat.md) has limits of its own and never uses the
+   included AI above, so customers asking questions cannot stop your team's drafts and suggestions.
+
+## AI chat
+
+**AI chat** answers your customers on the help center from your published articles. It is a feature
+of this page like the others (provider, model, on or off), and it needs a [Help chat](help-chat.md)
+channel too. Its use, its chats and their transcripts are on the **AI chat** tab; see
+[AI chat](ai-chat.md).
+
 ## History and usage
 
 **Settings → Built-in AI → History** lists who added, changed or deleted a provider or a key, and who turned a

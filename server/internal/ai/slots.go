@@ -24,6 +24,7 @@ type slotRow struct {
 	consentedAt *time.Time
 	updatedBy   *string
 	updatedAt   *time.Time
+	monthlyCap  *int64
 }
 
 func (r slotRow) source() string {
@@ -37,8 +38,8 @@ func (r slotRow) source() string {
 }
 
 func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (map[string]slotRow, error) {
-	query := `SELECT slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at
-		FROM ai_slots WHERE workspace_id=$1`
+	query := `SELECT slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
+		monthly_cap_micro_usd FROM ai_slots WHERE workspace_id=$1`
 	if lock {
 		query += ` FOR UPDATE`
 	}
@@ -48,7 +49,8 @@ func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (m
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (slotRow, error) {
 		var r slotRow
-		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.effort, &r.enabled, &r.automatic, &r.autoParts, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt)
+		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.effort, &r.enabled, &r.automatic, &r.autoParts, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt,
+			&r.monthlyCap)
 		return r, err
 	})
 	if err != nil {
@@ -71,6 +73,7 @@ func (s *Service) view(slot string, row slotRow, found bool) Slot {
 	view.Source, view.ProviderID, view.Model, view.Effort, view.Enabled = row.source(), row.providerID, row.model, row.effort, row.enabled
 	view.Automatic, view.AutoParts = row.automatic, orderedParts(row.autoParts)
 	view.ConsentedBy, view.ConsentedAt, view.UpdatedBy, view.UpdatedAt = row.consentedBy, utcPointer(row.consentedAt), row.updatedBy, utcPointer(row.updatedAt)
+	view.MonthlyCap = row.monthlyCap
 	view.Active = row.enabled
 	if row.enabled && row.usesServer {
 		reason := ""
@@ -202,6 +205,9 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 	if !effort.Valid() {
 		return Slot{}, invalid("effort is low, medium or high.")
 	}
+	if input.MonthlyCapSet && input.MonthlyCap != nil && (slot != SlotChat || *input.MonthlyCap <= 0) {
+		return Slot{}, invalid("Only AI chat takes a monthly limit, of more than zero.")
+	}
 	now := s.now().UTC()
 	var result Slot
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
@@ -263,16 +269,25 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 		if err := nextAutomatic(slot, &next, current, found && sameRecipient, input); err != nil {
 			return err
 		}
+		next.monthlyCap = current.monthlyCap
+		if input.MonthlyCapSet {
+			next.monthlyCap = input.MonthlyCap
+		}
 		updatedBy := nullable(actor.AgentID)
 		var row slotRow
-		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,automatic,auto_parts,consented_by,consented_at,updated_by,updated_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,automatic,auto_parts,consented_by,consented_at,updated_by,updated_at,
+				monthly_cap_micro_usd)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 			ON CONFLICT (workspace_id,slot) DO UPDATE SET uses_server=EXCLUDED.uses_server,provider_id=EXCLUDED.provider_id,model=EXCLUDED.model,
 				effort=EXCLUDED.effort,enabled=EXCLUDED.enabled,automatic=EXCLUDED.automatic,auto_parts=EXCLUDED.auto_parts,
-				consented_by=EXCLUDED.consented_by,consented_at=EXCLUDED.consented_at,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at
-			RETURNING slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at`,
-			workspaceID, slot, next.usesServer, next.providerID, next.model, next.effort, next.enabled, next.automatic, next.autoParts, next.consentedBy, next.consentedAt, updatedBy, now).
-			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.effort, &row.enabled, &row.automatic, &row.autoParts, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt)
+				consented_by=EXCLUDED.consented_by,consented_at=EXCLUDED.consented_at,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at,
+				monthly_cap_micro_usd=EXCLUDED.monthly_cap_micro_usd
+			RETURNING slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
+				monthly_cap_micro_usd`,
+			workspaceID, slot, next.usesServer, next.providerID, next.model, next.effort, next.enabled, next.automatic, next.autoParts, next.consentedBy, next.consentedAt, updatedBy, now,
+			next.monthlyCap).
+			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.effort, &row.enabled, &row.automatic, &row.autoParts, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt,
+				&row.monthlyCap)
 		if err != nil {
 			return err
 		}
@@ -296,6 +311,9 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 
 func (s *Service) slotDetail(ctx context.Context, tx pgx.Tx, workspaceID string, row slotRow) map[string]any {
 	detail := map[string]any{"enabled": row.enabled, "source": row.source(), "effort": row.effort, "automatic": row.automatic}
+	if row.monthlyCap != nil {
+		detail["monthly_cap_micro_usd"] = *row.monthlyCap
+	}
 	if parts := orderedParts(row.autoParts); len(parts) > 0 {
 		detail["auto_parts"] = strings.Join(parts, ",")
 	}

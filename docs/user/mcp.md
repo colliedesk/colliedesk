@@ -194,6 +194,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_slot_set_request` | Asks to set an AI feature: its provider and model, on or off | `read` |
 | `colliedesk_ai_usage_get` | Shows a month of AI usage per feature and provider, and what is left of the included AI | `admin` |
 | `colliedesk_ai_automatic_limits_set` | Changes how many automatic AI runs a workspace allows a day and a minute | `admin` |
+| `colliedesk_ai_chat_usage_get` | Shows a month of the help center's AI chat against its limits | `admin` |
+| `colliedesk_ai_chat_sessions_list` | Lists end users' chats with the help center's AI | `read` |
+| `colliedesk_ai_chat_session_get` | Reads one AI chat's transcript with the articles each answer cited | `read` |
+| `colliedesk_ai_chat_session_delete_request` | Asks a person to delete an AI chat's transcript for good | `read` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
 | `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `read` |
 | `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `read` |

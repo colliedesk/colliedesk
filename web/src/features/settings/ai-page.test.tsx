@@ -10,7 +10,7 @@ const providerID = '11111111-1111-4111-8111-111111111111';
 
 function slot(change: Partial<AISlot> = {}): AISlot {
   return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, automatic: false, auto_parts: [], active: false, off_reason: null,
-    consented_by: null, consented_at: null, updated_by: null, updated_at: null, ...change };
+    consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null, ...change };
 }
 
 function provider(change: Partial<AIProvider> = {}): AIProvider {

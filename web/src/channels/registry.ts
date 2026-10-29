@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { ChannelCreate, ChannelDetail, ChannelType } from '../api/channels';
 import type { LazyPart } from '../ui/lazy-part';
 import { emailChannel } from './email';
+import { helpChatChannel } from './help_chat';
 import { webFormChannel } from './web_form';
 
 // What a type's tab shows: the channel it belongs to, read fresh from GET /api/v1/channels/{id}.
@@ -52,7 +53,7 @@ export interface ChannelUI {
 }
 
 // The order here is the order of the Add channel list and of the empty page.
-export const channelTypes: ChannelUI[] = [emailChannel, webFormChannel];
+export const channelTypes: ChannelUI[] = [emailChannel, webFormChannel, helpChatChannel];
 
 // Types the roadmap promises with their tracking issue; shown as not available yet, never added.
 export const upcomingChannels: { label: string; issue: number }[] = [{ label: 'Live chat', issue: 124 }];

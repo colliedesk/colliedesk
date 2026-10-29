@@ -9,7 +9,7 @@ const nullableDate = z.string().datetime().nullable();
 export const roleSchema = z.enum(['admin', 'agent']);
 export const statusSchema = z.enum(['open', 'pending', 'resolved', 'closed']);
 export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
-export const channelSchema = z.enum(['email', 'web_form', 'imported', 'agent', 'problem_report']);
+export const channelSchema = z.enum(['email', 'web_form', 'help_chat', 'imported', 'agent', 'problem_report']);
 export const conversationSortSchema = z.enum(['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'priority', 'waiting_longest']);
 
 export const workspaceSchema = z.object({
@@ -192,7 +192,7 @@ export const meSchema = z.object({
   // An older server sends no goal; a goal this client does not know yet orders nothing.
   onboarding_goal: onboardingGoalSchema.nullable().catch(null),
   // An older server offers no AI feature.
-  ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
+  ai_features: z.object({ triage: z.boolean(), draft: z.boolean(), chat: z.boolean().catch(false) }).catch({ triage: false, draft: false, chat: false }),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;

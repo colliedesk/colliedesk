@@ -61,8 +61,10 @@ type Slot struct {
 	Effort     string  `json:"effort"`
 	Enabled    bool    `json:"enabled"`
 	// Automatic: triage suggestions apply by themselves (the AutoParts of them) as they come.
-	Automatic   bool       `json:"automatic"`
-	AutoParts   []string   `json:"auto_parts"`
+	Automatic bool     `json:"automatic"`
+	AutoParts []string `json:"auto_parts"`
+	// MonthlyCap is the chat slot's own monthly limit in micro-dollars; nil is none.
+	MonthlyCap  *int64     `json:"monthly_cap_micro_usd"`
 	Active      bool       `json:"active"`
 	OffReason   *string    `json:"off_reason"`
 	ConsentedBy *string    `json:"consented_by"`

@@ -32,6 +32,7 @@ const settingsRoutePart = lazyPart(() => import('./features/settings/settings-ro
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
+const aiChatRoutePart = lazyPart(() => import('./features/settings/ai-chat-route'));
 const channelsRoutePart = lazyPart(() => import('./features/settings/channels/channels-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
@@ -250,9 +251,32 @@ const importRoute = createRoute({
 const aiRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/ai',
+  // tab=chat opens the AI chat tab, where a chat's transcript page goes back to.
+  validateSearch: (search: Record<string, unknown>): { tab?: 'chat' } => (search.tab === 'chat' ? { tab: 'chat' } : {}),
   component: function AISettings() {
-    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute />} />;
+    const { tab } = aiRoute.useSearch();
+    const navigate = useNavigate();
+    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute tab={tab}
+      onOpenChat={(id) => void navigate({ href: `/settings/ai/chats/${encodeURIComponent(id)}` })} />} />;
   },
+});
+// A chat with the help center's AI: its transcript under Settings for an admin, and /ai-chat for everyone, read only.
+function AIChatScreen({ render }: { render: (chunk: typeof import('./features/settings/ai-chat-route'), go: (href: string) => void) => ReactNode }) {
+  const navigate = useNavigate();
+  const go = useCallback((href: string) => void navigate({ href }), [navigate]);
+  return <Part part={aiChatRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={(chunk) => render(chunk, go)} />;
+}
+const aiChatRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/settings/ai/chats/$chatId',
+  component: function AIChat() { const { chatId } = aiChatRoute.useParams(); return <AIChatScreen render={({ AIChatSettingsRoute }, go) => <AIChatSettingsRoute id={chatId} navigate={go} />} />; },
+});
+const chatsRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/ai-chat',
+  component: () => <AIChatScreen render={({ AIChatListRoute }, go) => <AIChatListRoute navigate={go} />} />,
+});
+const chatRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/ai-chat/sessions/$chatId',
+  component: function Chat() { const { chatId } = chatRoute.useParams(); return <AIChatScreen render={({ AIChatSessionRoute }, go) => <AIChatSessionRoute id={chatId} navigate={go} />} />; },
 });
 // Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).
 type ChannelsSearch = { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string };
@@ -322,7 +346,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, aiChatRoute, chatsRoute, chatRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

@@ -5,6 +5,8 @@ import { formatDate, formatDay } from '../../lib/format-date';
 import { Dialog as SharedDialog, Field } from '../../ui/dialog';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiMessages as m } from './ai-messages';
+import { aiChatMessages as chatMessages } from './ai-chat-messages';
+import { AIChatPanel } from './ai-chat-panel';
 import { SettingsNav } from './settings-nav';
 import type { Shown } from './settings-nav';
 import { selfHostGuide } from '../../lib/self-host-guide';
@@ -20,7 +22,7 @@ const TrashIcon = () => <Glyph><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></
 const ServerIcon = () => <Glyph><rect x="3" y="4" width="18" height="7" rx="1.5" /><rect x="3" y="13" width="18" height="7" rx="1.5" /><path d="M7 7.5h.01M7 16.5h.01" /></Glyph>;
 const InfoIcon = () => <Glyph><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></Glyph>;
 
-export type AITab = 'features' | 'providers' | 'usage' | 'history';
+export type AITab = 'features' | 'providers' | 'chat' | 'usage' | 'history';
 // FieldError places a refusal under the field it is about.
 export interface FieldError { field: 'label' | 'base_url' | 'api_key' | 'models' | 'form'; text: string }
 
@@ -53,6 +55,11 @@ export interface AIPageProps {
   usage?: AIUsage;
   usageFailed?: boolean;
   onUsageMonth: (month: string) => void;
+  // onOpenChat opens a chat's transcript (the AI chat tab); initialTab is the tab the page opens on.
+  onOpenChat?: (id: string) => void;
+  initialTab?: AITab;
+  // onSetChatCap sets the AI chat feature's own monthly spend limit (null removes it).
+  onSetChatCap?: (cap: number | null) => Promise<unknown>;
 }
 
 // money writes micro-dollars as dollars and cents.
@@ -90,13 +97,13 @@ export function AIPage(props: AIPageProps) {
   const { settings, isAdmin } = props;
   const focusAfterSave = useFocusAfterSave(props.busySlot);
   const setSlot = (slot: AISlotName, input: AISlotInput) => { focusAfterSave(slot); props.onSetSlot(slot, input); };
-  const [tab, setTab] = useState<AITab>('features');
+  const [tab, setTab] = useState<AITab>(props.isAdmin && props.initialTab ? props.initialTab : 'features');
   const [dialog, setDialog] = useState<{ kind: 'add' } | { kind: 'automatic' } | { kind: 'auto-triage' | 'auto-draft'; slot: AISlot } | { kind: 'key' | 'delete'; provider: AIProvider }>();
   const ids = { tabs: useId() };
   const full = settings ? settings.providers.length >= settings.provider_limit : false;
   const tabs: { id: AITab; label: string; count?: number }[] = [
     { id: 'features', label: m.tabFeatures }, { id: 'providers', label: m.tabProviders, count: settings ? settings.providers.length + (settings.server ? 1 : 0) : undefined },
-    ...(isAdmin ? [{ id: 'usage' as const, label: m.tabUsage }] : []), { id: 'history', label: m.tabHistory },
+    ...(isAdmin ? [{ id: 'chat' as const, label: chatMessages.tab }, { id: 'usage' as const, label: m.tabUsage }] : []), { id: 'history', label: m.tabHistory },
   ];
   const [month, setMonth] = useState(() => recentMonths()[0]);
   const show = (next: AITab) => { setTab(next); if (next === 'usage') props.onUsageMonth(month); };
@@ -118,6 +125,8 @@ export function AIPage(props: AIPageProps) {
             <div role="tabpanel" id={panelID(ids.tabs, tab)} aria-labelledby={tabID(ids.tabs, tab)} className="ai-panel-stack">
               {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })}
                 onConfirmAuto={(slot) => setDialog({ kind: slot.slot === 'draft' ? 'auto-draft' : 'auto-triage', slot })} onSetAuto={setSlot} />}
+              {tab === 'chat' && <AIChatPanel timezone={props.timezone} onOpen={(id) => props.onOpenChat?.(id)} slot={settings.slots.find((slot) => slot.slot === 'chat')}
+                onSetCap={props.onSetChatCap} />}
               {tab === 'usage' && <Usage usage={props.usage} failed={props.usageFailed} month={month} onMonth={(next) => { setMonth(next); props.onUsageMonth(next); }} />}
               {tab === 'providers' && <Providers {...props} settings={settings}
                 onKey={(provider) => setDialog({ kind: 'key', provider })} onDelete={(provider) => setDialog({ kind: 'delete', provider })} />}
@@ -513,6 +522,7 @@ function eventText(event: AIEvent): string {
     case 'provider_changed': return m.eventChanged(label);
     case 'provider_key_changed': return m.eventKey(label, detail.from_hint ?? '', detail.to_hint ?? '');
     case 'provider_removed': return m.eventRemoved(label);
+    case 'chat_deleted': return m.eventChatDeleted(Number((event.detail as { turns?: number }).turns ?? 0));
   }
   if (event.kind === 'automatic_limits_changed') {
     const to = detail.to as { per_day?: number; per_minute?: number; draft_per_day?: number } | undefined;
@@ -543,6 +553,9 @@ function eventText(event: AIEvent): string {
   const fromModel = String(detail.from?.model ?? '');
   const toModel = String(detail.to?.model ?? '');
   if (fromModel && toModel && fromModel !== toModel) return m.eventSlotModel(slot, fromModel, toModel);
+  const fromCap = detail.from?.monthly_cap_micro_usd as number | undefined;
+  const toCap = detail.to?.monthly_cap_micro_usd as number | undefined;
+  if (fromCap !== toCap) return toCap === undefined ? m.eventChatCapRemoved : m.eventChatCap(money(toCap));
   if (!fromLabel && toLabel) return m.eventSlotSet(slot, toLabel);
   return m.eventSlotChanged(slot);
 }

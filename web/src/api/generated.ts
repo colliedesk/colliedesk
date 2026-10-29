@@ -1792,6 +1792,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/chat/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One UTC calendar month of the help center's AI chat (docs/user/ai-chat.md): answers given (today and this month) against the limits, what it spent, chats, hand-offs to the team and feedback. On the cloud's own provider the limits are the plan's and spend shows only as a share (`spent_percent`); on the workspace's own provider, or a server without plan limits, spend is in micro-dollars against the AI chat feature's own monthly limit, if any. Admins only. */
+        get: operations["getAIChatUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/chat/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace's chats with the help center's AI, newest activity first, 50 a page. Texts are kept 90 days after a chat's last turn (`kept_until`); after that `first_question` is null. Every member of the team reads them. */
+        get: operations["listAIChatSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/chat/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description One chat with its transcript, each answer with the articles it cited (as they were) and its feedback. */
+        get: operations["getAIChatSession"];
+        put?: never;
+        post?: never;
+        /** @description Deletes a chat and its transcript for good; a conversation it handed off keeps its own copy. The history of the AI settings records it, without its texts. Every agent token's call becomes an agent request a person approves. */
+        delete: operations["deleteAIChatSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/automatic-limits": {
         parameters: {
             query?: never;
@@ -3554,8 +3608,11 @@ export interface components {
                 enabled: boolean;
             };
         };
-        /** @enum {string} */
-        AISlotName: "triage" | "draft";
+        /**
+         * @description `chat`: the AI that answers end users in the help center's chat (docs/user/ai-chat.md).
+         * @enum {string}
+         */
+        AISlotName: "triage" | "draft" | "chat";
         /** @enum {string} */
         AIProviderKind: "anthropic" | "openai_compatible";
         AIProvider: {
@@ -3588,6 +3645,8 @@ export interface components {
         };
         AISlot: {
             slot: components["schemas"]["AISlotName"];
+            /** @description AI chat only: the most it may spend a UTC calendar month, in millionths of a US dollar, on the workspace's own provider or a server without plan limits; null is no limit. The cloud's own provider has its plan's limits. */
+            monthly_cap_micro_usd: number | null;
             /** @enum {string} */
             source: "server" | "provider" | "none";
             /** Format: uuid */
@@ -3623,7 +3682,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "provider_added" | "provider_changed" | "provider_key_changed" | "provider_removed" | "slot_changed" | "automatic_limits_changed";
+            kind: "provider_added" | "provider_changed" | "provider_key_changed" | "provider_removed" | "slot_changed" | "automatic_limits_changed" | "chat_deleted";
             /** Format: uuid */
             actor_agent_id: string | null;
             actor_name: string | null;
@@ -3664,6 +3723,118 @@ export interface components {
              * @description When automatic drafts spent half of this month's allowance of the server's provider: the next month. The other half stays for drafts people ask for and for triage.
              */
             drafts_reserved_until: string | null;
+        };
+        /**
+         * @description `ended`: the end user started a new chat. `handed_off`: they asked to talk to a person.
+         * @enum {string}
+         */
+        AIChatStatus: "open" | "ended" | "handed_off";
+        AIChatUsage: {
+            /** @description YYYY-MM */
+            month: string;
+            /** @description Questions the AI answered (with or without a source) this month; a question over the limits is not counted. */
+            answers: number;
+            answers_today: number;
+            /** @description The plan's monthly answers on the cloud's own provider; null where answers are not limited. */
+            answer_limit: number | null;
+            /** @description A tenth of the month's. */
+            day_answer_limit: number | null;
+            /** @description What the chat spent, calls still running included at most; null on the cloud's own provider. */
+            spent_micro_usd: number | null;
+            /** @description The AI chat feature's own monthly limit; null without one, and on the cloud's own provider. */
+            limit_micro_usd: number | null;
+            /** @description Spend as a share of the month's limit; null without one. */
+            spent_percent: number | null;
+            /** @description Chats started this month. */
+            chats: number;
+            handed_off: number;
+            rated_helpful: number;
+            rated: number;
+            /** @description Published articles the AI may answer from (the help center's, without those kept away from AI); 0 answers nothing. */
+            articles: number;
+            /** Format: date-time */
+            resets_at: string;
+        };
+        AIChatSessionSummary: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            channel_id: string;
+            channel_name: string;
+            /**
+             * @description Where it started: the chat page, an article's chat box, or a site's widget.
+             * @enum {string}
+             */
+            surface: "help_center" | "article" | "widget";
+            status: components["schemas"]["AIChatStatus"];
+            turns: number;
+            /** @description Null once the texts expired. */
+            first_question: string | null;
+            /** @description An answer of it was rated not helpful. */
+            not_helpful: boolean;
+            /**
+             * Format: uuid
+             * @description The conversation its hand-off opened.
+             */
+            conversation_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_turn_at: string;
+            /** Format: date-time */
+            ended_at: string | null;
+            /**
+             * Format: date-time
+             * @description When its texts are removed unless another turn comes first.
+             */
+            kept_until: string;
+        };
+        AIChatSessionPage: {
+            items: components["schemas"]["AIChatSessionSummary"][];
+            next_cursor: string | null;
+        };
+        AIChatSource: {
+            ordinal: number;
+            /**
+             * Format: uuid
+             * @description Null once the article was deleted for good.
+             */
+            article_id: string | null;
+            number: number;
+            version: number;
+            title: string | null;
+            folder: string | null;
+        };
+        AIChatTurn: {
+            /** Format: uuid */
+            id: string;
+            seq: number;
+            question: string | null;
+            /** @description As the end user saw it: contact details not in the articles are hidden. */
+            answer: string | null;
+            /** @enum {string} */
+            status: "streaming" | "answered" | "no_source" | "over_limit" | "failed";
+            error_code: string | null;
+            /**
+             * Format: uuid
+             * @description The article they were reading when they asked.
+             */
+            viewing_article_id: string | null;
+            sources: components["schemas"]["AIChatSource"][];
+            /** @enum {string|null} */
+            feedback: "helpful" | "not_helpful" | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        AIChatSession: components["schemas"]["AIChatSessionSummary"] & {
+            /**
+             * Format: date-time
+             * @description Turns before it no longer fit what the AI reads of the chat.
+             */
+            history_cut_at: string | null;
+            transcript: components["schemas"]["AIChatTurn"][];
         };
         AIAllowance: {
             /** @description About how many reply drafts what is left pays for, at the workspace's average cost of a draft over 30 days (before its first, a typical one); null when no price is known. */
@@ -3866,7 +4037,7 @@ export interface components {
             allowance: components["schemas"]["AIAllowance"] | null;
             rows: {
                 /** @enum {string} */
-                feature: "check" | "triage" | "draft";
+                feature: "check" | "triage" | "draft" | "chat";
                 /** @enum {string} */
                 billed_to: "server" | "workspace_key";
                 provider_label: string;
@@ -4095,6 +4266,8 @@ export interface components {
             automatic?: boolean;
             /** @description Triage only. Left out: kept; tags and priority when automatic turns on with none. */
             auto_parts?: ("tags" | "priority" | "assignee")[];
+            /** @description AI chat only. Left out: kept; null removes the limit. */
+            monthly_cap_micro_usd?: number | null;
         };
         ExportLink: {
             /** @description Path on this server, for example /api/v1/export/download/<token>. */
@@ -4203,10 +4376,10 @@ export interface components {
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
         /**
-         * @description How the conversation started. email: a customer's mail. web_form: the public web form. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem.
+         * @description How the conversation started. email: a customer's mail. web_form: the public web form. help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified). imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem.
          * @enum {string}
          */
-        ConversationChannel: "email" | "web_form" | "imported" | "agent" | "problem_report";
+        ConversationChannel: "email" | "web_form" | "help_chat" | "imported" | "agent" | "problem_report";
         /**
          * @default updated_desc
          * @enum {string}
@@ -4348,6 +4521,8 @@ export interface components {
             ai_features: {
                 triage: boolean;
                 draft: boolean;
+                /** @description The help center's AI chat answers end users. */
+                chat: boolean;
             };
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
@@ -5701,7 +5876,7 @@ export interface components {
          * @description A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
          * @enum {string}
          */
-        ChannelType: "email" | "web_form";
+        ChannelType: "email" | "web_form" | "help_chat";
         ChannelState: {
             /**
              * @description `waiting`: set up, but nothing has arrived on the channel yet (reason `no_message_yet`); it turns `working` with the first message received, which proves the way in works.
@@ -5745,8 +5920,20 @@ export interface components {
         EmailChannelConfig: components["schemas"]["EmailChannel"];
         /** @description The web form's configuration, as `GET /api/v1/channels/web-form` shows it. */
         WebFormChannelConfig: components["schemas"]["WebFormSettings"];
+        /** @description The help chat's surface (docs/user/help-chat.md): what the chat says first, the questions it offers, what is added to the AI's instructions, and the sites whose pages may embed the chat. The chat answers on the help center's own address (`<help center>/chat`); a site embeds it with `<script src="<help center>/chat/widget.js" data-channel="<channel_id>" async></script>`. */
+        HelpChatChannelConfig: {
+            /** Format: uuid */
+            channel_id: string;
+            enabled: boolean;
+            greeting: string;
+            suggestions: string[];
+            /** @description Added to the AI's instructions. The AI still answers only from published articles; instructions cannot add facts. */
+            instructions: string;
+            /** @description Exact origins (scheme://host[:port]) whose pages may embed the chat. */
+            widget_origins: string[];
+        };
         /** @description A channel's configuration, by its type. */
-        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"];
+        ChannelConfig: components["schemas"]["EmailChannelConfig"] | components["schemas"]["WebFormChannelConfig"] | components["schemas"]["HelpChatChannelConfig"];
         ChannelDetail: components["schemas"]["Channel"] & {
             config: components["schemas"]["ChannelConfig"];
         };
@@ -5774,8 +5961,15 @@ export interface components {
         WebFormChannelConfigInput: {
             allowed_origins?: string[];
         };
+        /** @description A field left out is kept. */
+        HelpChatChannelConfigInput: {
+            greeting?: string;
+            suggestions?: string[];
+            instructions?: string;
+            widget_origins?: string[];
+        };
         /** @description A channel's configuration as its type takes it. */
-        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"];
+        ChannelConfigInput: components["schemas"]["EmailChannelConfigInput"] | components["schemas"]["WebFormChannelConfigInput"] | components["schemas"]["HelpChatChannelConfigInput"];
         /** @description The channel's rules, over its type's defaults: `join_policy` {kind: always_reopen, within_days (days), never}, `default_tags`, `default_priority`, `default_assignee_id`, `rate_limits` {window_seconds, per_sender, new_conversations, scope: workspace or channel}, `commands` (name to {action: open, cancel or reopen; phrases; tags; priority}), `review`, `scopes` (keys the type declares), `notices` {received}. Never a secret. */
         ChannelSettings: {
             [key: string]: unknown;
@@ -10440,6 +10634,112 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getAIChatUsage: {
+        parameters: {
+            query?: {
+                /** @description YYYY-MM; the current UTC month when left out. */
+                month?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The month's use */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatUsage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listAIChatSessions: {
+        parameters: {
+            query?: {
+                /** @description Only chats of this help chat channel. */
+                channel_id?: string;
+                status?: components["schemas"]["AIChatStatus"];
+                /** @description Only chats with an answer rated not helpful. */
+                feedback?: "not_helpful";
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of chats */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatSessionPage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getAIChatSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The chat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatSession"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAIChatSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     setAIAutomaticLimits: {

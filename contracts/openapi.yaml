@@ -3195,6 +3195,71 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/ai/chat/usage:
+    get:
+      operationId: getAIChatUsage
+      x-permission: billing:manage
+      description: >
+        One UTC calendar month of the help center's AI chat (docs/user/ai-chat.md): answers given (today and this month)
+        against the limits, what it spent, chats, hand-offs to the team and feedback. On the cloud's own provider the
+        limits are the plan's and spend shows only as a share (`spent_percent`); on the workspace's own provider, or a
+        server without plan limits, spend is in micro-dollars against the AI chat feature's own monthly limit, if any.
+        Admins only.
+      parameters:
+        - {name: month, in: query, required: false, schema: {type: string, pattern: '^[0-9]{4}-[0-9]{2}$'}, description: 'YYYY-MM; the current UTC month when left out.'}
+      responses:
+        '200':
+          description: The month's use
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIChatUsage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/ai/chat/sessions:
+    get:
+      operationId: listAIChatSessions
+      x-permission: conversations:read
+      description: >
+        The workspace's chats with the help center's AI, newest activity first, 50 a page. Texts are kept 90 days after a
+        chat's last turn (`kept_until`); after that `first_question` is null. Every member of the team reads them.
+      parameters:
+        - {name: channel_id, in: query, required: false, schema: {type: string, format: uuid}, description: Only chats of this help chat channel.}
+        - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/AIChatStatus'}}
+        - {name: feedback, in: query, required: false, schema: {type: string, enum: [not_helpful]}, description: Only chats with an answer rated not helpful.}
+        - {name: cursor, in: query, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: A page of chats
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIChatSessionPage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/ai/chat/sessions/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: getAIChatSession
+      x-permission: conversations:read
+      description: One chat with its transcript, each answer with the articles it cited (as they were) and its feedback.
+      responses:
+        '200':
+          description: The chat
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIChatSession'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteAIChatSession
+      x-permission: access:write
+      description: >
+        Deletes a chat and its transcript for good; a conversation it handed off keeps its own copy. The history of the AI
+        settings records it, without its texts. Every agent token's call becomes an agent request a person approves.
+      responses:
+        '204': {description: Deleted}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/ai/automatic-limits:
     put:
       operationId: setAIAutomaticLimits
@@ -6402,7 +6467,7 @@ components:
           required: [enabled]
           properties:
             enabled: {type: boolean, description: True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured).}
-    AISlotName: {type: string, enum: [triage, draft]}
+    AISlotName: {type: string, enum: [triage, draft, chat], description: '`chat`: the AI that answers end users in the help center''s chat (docs/user/ai-chat.md).'}
     AIProviderKind: {type: string, enum: [anthropic, openai_compatible]}
     AIProvider:
       type: object
@@ -6424,9 +6489,10 @@ components:
         used_by: {type: array, items: {$ref: '#/components/schemas/AISlotName'}, description: 'The features set to this provider, on or off.'}
     AISlot:
       type: object
-      required: [slot, source, provider_id, model, effort, enabled, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at]
+      required: [slot, source, provider_id, model, effort, enabled, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at, monthly_cap_micro_usd]
       properties:
         slot: {$ref: '#/components/schemas/AISlotName'}
+        monthly_cap_micro_usd: {type: [integer, 'null'], description: 'AI chat only: the most it may spend a UTC calendar month, in millionths of a US dollar, on the workspace''s own provider or a server without plan limits; null is no limit. The cloud''s own provider has its plan''s limits.'}
         source: {type: string, enum: [server, provider, none]}
         provider_id: {type: [string, 'null'], format: uuid}
         model: {type: [string, 'null']}
@@ -6445,7 +6511,7 @@ components:
       required: [id, kind, actor_agent_id, actor_name, via_token, provider_id, provider_label, slot, detail, created_at]
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [provider_added, provider_changed, provider_key_changed, provider_removed, slot_changed, automatic_limits_changed]}
+        kind: {type: string, enum: [provider_added, provider_changed, provider_key_changed, provider_removed, slot_changed, automatic_limits_changed, chat_deleted]}
         actor_agent_id: {type: [string, 'null'], format: uuid}
         actor_name: {type: [string, 'null']}
         via_token: {type: boolean, description: True when an agent token made the change.}
@@ -6466,6 +6532,81 @@ components:
         drafts_today: {type: integer}
         drafts_paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s automatic drafts (or all automatic runs) are used up: the next UTC midnight.'}
         drafts_reserved_until: {type: [string, 'null'], format: date-time, description: 'When automatic drafts spent half of this month''s allowance of the server''s provider: the next month. The other half stays for drafts people ask for and for triage.'}
+    AIChatStatus: {type: string, enum: [open, ended, handed_off], description: '`ended`: the end user started a new chat. `handed_off`: they asked to talk to a person.'}
+    AIChatUsage:
+      type: object
+      required: [month, answers, answers_today, answer_limit, day_answer_limit, spent_micro_usd, limit_micro_usd, spent_percent, chats, handed_off, rated_helpful, rated, articles, resets_at]
+      properties:
+        month: {type: string, description: YYYY-MM}
+        answers: {type: integer, description: 'Questions the AI answered (with or without a source) this month; a question over the limits is not counted.'}
+        answers_today: {type: integer}
+        answer_limit: {type: [integer, 'null'], description: 'The plan''s monthly answers on the cloud''s own provider; null where answers are not limited.'}
+        day_answer_limit: {type: [integer, 'null'], description: A tenth of the month's.}
+        spent_micro_usd: {type: [integer, 'null'], description: 'What the chat spent, calls still running included at most; null on the cloud''s own provider.'}
+        limit_micro_usd: {type: [integer, 'null'], description: 'The AI chat feature''s own monthly limit; null without one, and on the cloud''s own provider.'}
+        spent_percent: {type: [integer, 'null'], minimum: 0, maximum: 100, description: Spend as a share of the month's limit; null without one.}
+        chats: {type: integer, description: Chats started this month.}
+        handed_off: {type: integer}
+        rated_helpful: {type: integer}
+        rated: {type: integer}
+        articles: {type: integer, description: 'Published articles the AI may answer from (the help center''s, without those kept away from AI); 0 answers nothing.'}
+        resets_at: {type: string, format: date-time}
+    AIChatSessionSummary:
+      type: object
+      required: [id, channel_id, channel_name, surface, status, turns, first_question, not_helpful, conversation_id, created_at, last_turn_at, ended_at, kept_until]
+      properties:
+        id: {type: string, format: uuid}
+        channel_id: {type: string, format: uuid}
+        channel_name: {type: string}
+        surface: {type: string, enum: [help_center, article, widget], description: 'Where it started: the chat page, an article''s chat box, or a site''s widget.'}
+        status: {$ref: '#/components/schemas/AIChatStatus'}
+        turns: {type: integer}
+        first_question: {type: [string, 'null'], description: Null once the texts expired.}
+        not_helpful: {type: boolean, description: An answer of it was rated not helpful.}
+        conversation_id: {type: [string, 'null'], format: uuid, description: The conversation its hand-off opened.}
+        created_at: {type: string, format: date-time}
+        last_turn_at: {type: string, format: date-time}
+        ended_at: {type: [string, 'null'], format: date-time}
+        kept_until: {type: string, format: date-time, description: When its texts are removed unless another turn comes first.}
+    AIChatSessionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AIChatSessionSummary'}}
+        next_cursor: {type: [string, 'null']}
+    AIChatSource:
+      type: object
+      required: [ordinal, article_id, number, version, title, folder]
+      properties:
+        ordinal: {type: integer}
+        article_id: {type: [string, 'null'], format: uuid, description: Null once the article was deleted for good.}
+        number: {type: integer}
+        version: {type: integer}
+        title: {type: [string, 'null']}
+        folder: {type: [string, 'null']}
+    AIChatTurn:
+      type: object
+      required: [id, seq, question, answer, status, error_code, viewing_article_id, sources, feedback, created_at, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        seq: {type: integer}
+        question: {type: [string, 'null']}
+        answer: {type: [string, 'null'], description: 'As the end user saw it: contact details not in the articles are hidden.'}
+        status: {type: string, enum: [streaming, answered, no_source, over_limit, failed]}
+        error_code: {type: [string, 'null']}
+        viewing_article_id: {type: [string, 'null'], format: uuid, description: The article they were reading when they asked.}
+        sources: {type: array, items: {$ref: '#/components/schemas/AIChatSource'}}
+        feedback: {type: [string, 'null'], enum: [helpful, not_helpful, null]}
+        created_at: {type: string, format: date-time}
+        finished_at: {type: [string, 'null'], format: date-time}
+    AIChatSession:
+      allOf:
+        - {$ref: '#/components/schemas/AIChatSessionSummary'}
+        - type: object
+          required: [history_cut_at, transcript]
+          properties:
+            history_cut_at: {type: [string, 'null'], format: date-time, description: 'Turns before it no longer fit what the AI reads of the chat.'}
+            transcript: {type: array, items: {$ref: '#/components/schemas/AIChatTurn'}}
     AIAllowance:
       type: object
       required: [limit_micro_usd, used_micro_usd, resets_at, drafts_left]
@@ -6690,7 +6831,7 @@ components:
             type: object
             required: [feature, billed_to, provider_label, calls, failed, automatic, input_tokens, output_tokens, cost_micro_usd]
             properties:
-              feature: {type: string, enum: [check, triage, draft]}
+              feature: {type: string, enum: [check, triage, draft, chat]}
               billed_to: {type: string, enum: [server, workspace_key]}
               provider_label: {type: string}
               calls: {type: integer}
@@ -6883,6 +7024,7 @@ components:
         enabled: {type: boolean}
         automatic: {type: boolean, description: 'Left out: kept as it is (off when the feature turns off or moves to another provider).'}
         auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only. Left out: kept; tags and priority when automatic turns on with none.'}
+        monthly_cap_micro_usd: {type: [integer, 'null'], minimum: 1, description: 'AI chat only. Left out: kept; null removes the limit.'}
     ExportLink:
       type: object
       required: [url, expires_in_seconds]
@@ -7002,9 +7144,10 @@ components:
     Priority: {type: string, enum: [low, normal, high, urgent]}
     ConversationChannel:
       type: string
-      enum: [email, web_form, imported, agent, problem_report]
+      enum: [email, web_form, help_chat, imported, agent, problem_report]
       description: >-
         How the conversation started. email: a customer's mail. web_form: the public web form.
+        help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified).
         imported: brought over from another helpdesk (its original channel is in origin.source).
         agent: a team member started it in Colliedesk; an older image that does not know this field
         also writes agent. problem_report: an agent's Report a problem.
@@ -7145,10 +7288,11 @@ components:
         ai_features:
           type: object
           description: Which AI features can run now in the workspace (on, with a working provider); the web app offers only those.
-          required: [triage, draft]
+          required: [triage, draft, chat]
           properties:
             triage: {type: boolean}
             draft: {type: boolean}
+            chat: {type: boolean, description: The help center's AI chat answers end users.}
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
         timezone: {type: string}
@@ -8673,7 +8817,7 @@ components:
         connected_at: {type: string, format: date-time}
     ChannelType:
       type: string
-      enum: [email, web_form]
+      enum: [email, web_form, help_chat]
       description: A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
     ChannelState:
       type: object
@@ -8719,11 +8863,26 @@ components:
     WebFormChannelConfig:
       allOf: [{$ref: '#/components/schemas/WebFormSettings'}]
       description: The web form's configuration, as `GET /api/v1/channels/web-form` shows it.
+    HelpChatChannelConfig:
+      type: object
+      required: [channel_id, enabled, greeting, suggestions, instructions, widget_origins]
+      description: >-
+        The help chat's surface (docs/user/help-chat.md): what the chat says first, the questions it offers, what is added to
+        the AI's instructions, and the sites whose pages may embed the chat. The chat answers on the help center's own
+        address (`<help center>/chat`); a site embeds it with `<script src="<help center>/chat/widget.js" data-channel="<channel_id>" async></script>`.
+      properties:
+        channel_id: {type: string, format: uuid}
+        enabled: {type: boolean}
+        greeting: {type: string, maxLength: 300}
+        suggestions: {type: array, maxItems: 4, items: {type: string, maxLength: 120}}
+        instructions: {type: string, maxLength: 2000, description: 'Added to the AI''s instructions. The AI still answers only from published articles; instructions cannot add facts.'}
+        widget_origins: {type: array, maxItems: 20, items: {type: string}, description: 'Exact origins (scheme://host[:port]) whose pages may embed the chat.'}
     ChannelConfig:
       description: A channel's configuration, by its type.
       oneOf:
         - {$ref: '#/components/schemas/EmailChannelConfig'}
         - {$ref: '#/components/schemas/WebFormChannelConfig'}
+        - {$ref: '#/components/schemas/HelpChatChannelConfig'}
     ChannelDetail:
       allOf:
         - {$ref: '#/components/schemas/Channel'}
@@ -8757,11 +8916,22 @@ components:
       additionalProperties: false
       properties:
         allowed_origins: {type: array, maxItems: 20, items: {type: string, maxLength: 200}}
+    HelpChatChannelConfigInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: A field left out is kept.
+      properties:
+        greeting: {type: string, maxLength: 300}
+        suggestions: {type: array, maxItems: 4, items: {type: string, maxLength: 120}}
+        instructions: {type: string, maxLength: 2000}
+        widget_origins: {type: array, maxItems: 20, items: {type: string, maxLength: 200}}
     ChannelConfigInput:
       description: A channel's configuration as its type takes it.
       oneOf:
         - {$ref: '#/components/schemas/EmailChannelConfigInput'}
         - {$ref: '#/components/schemas/WebFormChannelConfigInput'}
+        - {$ref: '#/components/schemas/HelpChatChannelConfigInput'}
     ChannelSettings:
       type: object
       description: >-

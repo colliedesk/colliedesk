@@ -14,14 +14,15 @@ const (
 		`"models":{"type":"array","items":{"type":"string"},"description":"The first is the one a check uses."},` +
 		`"check_status":{"type":"string","enum":["ok","failing"]},"check_error_code":{"type":["string","null"]},"checked_at":{"type":"string"},` +
 		`"created_by":{"type":["string","null"]},"created_at":{"type":"string"},"updated_at":{"type":"string"},` +
-		`"used_by":{"type":"array","items":{"type":"string","enum":["triage","draft"]}}}}`
+		`"used_by":{"type":"array","items":{"type":"string","enum":["triage","draft","chat"]}}}}`
 
-	aiSlotSchema = `{"type":"object","required":["slot","source","enabled","active"],"properties":{"slot":{"type":"string","enum":["triage","draft"]},` +
+	aiSlotSchema = `{"type":"object","required":["slot","source","enabled","active"],"properties":{"slot":{"type":"string","enum":["triage","draft","chat"]},` +
 		`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":["string","null"]},"model":{"type":["string","null"]},` +
 		`"effort":{"type":"string","enum":["low","medium","high"]},"enabled":{"type":"boolean"},` +
 		`"active":{"type":"boolean","description":"On, and its provider and model are still there: the feature runs."},` +
 		`"off_reason":{"type":["string","null"],"description":"Why a feature that is on cannot run: server_provider_missing, model_not_offered."},` +
-		`"consented_by":{"type":["string","null"]},"consented_at":{"type":["string","null"]},"updated_by":{"type":["string","null"]},"updated_at":{"type":["string","null"]}}}`
+		`"consented_by":{"type":["string","null"]},"consented_at":{"type":["string","null"]},"updated_by":{"type":["string","null"]},"updated_at":{"type":["string","null"]},` +
+		`"monthly_cap_micro_usd":{"type":["integer","null"],"description":"AI chat only: its own monthly spending limit in millionths of a US dollar; null is none."}}}`
 
 	aiProviderOutput = `{"type":"object","required":["provider"],"properties":{"provider":` + aiProviderSchema + `}}`
 
@@ -141,22 +142,23 @@ func aiProviderRemoveSpec() Spec {
 		Tier: "admin", Destructive: true,
 		REST:   []string{"DELETE /api/v1/ai/providers/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `}}`,
-		Output: `{"type":"object","required":["turned_off"],"properties":{"turned_off":{"type":"array","items":{"type":"string","enum":["triage","draft"]}}}}`,
+		Output: `{"type":"object","required":["turned_off"],"properties":{"turned_off":{"type":"array","items":{"type":"string","enum":["triage","draft","chat"]}}}}`,
 		run:    aiProviderRemove,
 	}
 }
 
 func aiSlotSetRequestSpec() Spec {
 	return approvalSpec("colliedesk_ai_slot_set_request", "Ask to set an AI feature",
-		`Ask to set one AI feature (triage suggestions or reply drafts): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. `+
+		`Ask to set one AI feature (triage suggestions, reply drafts, or AI chat on the help center): where it runs (server, provider with provider_id, or none), the model, effort, and on or off. `+
 			`automatic lets the feature run by itself: triage suggestions apply the auto_parts (tags, priority, assignee), filling only what nobody set; drafts are written for every customer message, never sent. Left out, it stays as it is. `+
 			`Turning a feature on sends that feature's ticket data to its provider, and automatic apply changes tickets, so a person always decides.`,
 		[]string{"PUT /api/v1/ai/slots/{slot}"},
-		`{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":{"type":"string","enum":["triage","draft"]},`+
+		`{"type":"object","additionalProperties":false,"required":["slot","source","enabled"],"properties":{"slot":{"type":"string","enum":["triage","draft","chat"]},`+
 			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",`+uuid+`},"model":{"type":"string","maxLength":200},`+
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"},`+
 			`"automatic":{"type":"boolean","description":"The feature runs by itself. Off with the feature and when it moves to another provider."},`+
-			`"auto_parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]},"description":"Triage only: what applies by itself; tags and priority when left out as automatic turns on."}}}`, aiSlotSetRequest)
+			`"auto_parts":{"type":"array","items":{"type":"string","enum":["tags","priority","assignee"]},"description":"Triage only: what applies by itself; tags and priority when left out as automatic turns on."},`+
+			`"monthly_cap_micro_usd":{"type":["integer","null"],"minimum":1,"description":"AI chat only: the most it may spend a UTC month in millionths of a US dollar on the workspace's own provider. Left out: kept; null removes it."}}}`, aiSlotSetRequest)
 }
 
 func aiUsageGetSpec() Spec {
