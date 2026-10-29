@@ -19,7 +19,8 @@ type publicFeatures struct {
 		Enabled bool `json:"enabled"`
 	} `json:"features"`
 	Billing struct {
-		Enabled bool `json:"enabled"`
+		Enabled     bool `json:"enabled"`
+		SwitchedOff bool `json:"switched_off"`
 	} `json:"billing"`
 	CloudSignIn struct {
 		Enabled        bool    `json:"enabled"`
@@ -137,8 +138,19 @@ func TestASwitchedOffBillingKeepsItsWebhook(t *testing.T) {
 		t.Fatalf("billing switched off = %+v", config)
 	}
 	admin := createSession(t, api, service, "Billing Off", "admin@billing-off.example.com")
-	// What is paid stays visible and cancellable; only buying is refused.
-	if billing := request(t, api, http.MethodGet, "/api/v1/billing", nil, admin, nil); billing.Code != http.StatusOK {
+	if !config.BillingSwitchedOff() {
+		t.Fatalf("billing switched off does not say so: %+v", config.Billing)
+	}
+	// What is paid stays visible and cancellable; only buying is refused, and nothing offers it.
+	req := newRequest(t, http.MethodGet, "/api/v1/billing", nil, admin, nil)
+	billing := serve(api, req)
+	validateContractResponse(t, req, billing)
+	var plan struct {
+		CheckoutPlans      []string `json:"checkout_plans"`
+		StorageUpgradePlan *string  `json:"storage_upgrade_plan"`
+	}
+	decode(t, billing, &plan)
+	if billing.Code != http.StatusOK || len(plan.CheckoutPlans) != 0 || plan.StorageUpgradePlan != nil {
 		t.Fatalf("the plan while billing is off: %d %s", billing.Code, billing.Body.String())
 	}
 	checkout := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team_monthly"}, admin, nil)
@@ -174,3 +186,5 @@ func TestASwitchedOffCloudSignInLeavesTheOperatorLink(t *testing.T) {
 		t.Fatal("the operator link does not sign in while cloud sign-in is off")
 	}
 }
+
+func (c publicFeatures) BillingSwitchedOff() bool { return c.Billing.SwitchedOff && !c.Billing.Enabled }

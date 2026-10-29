@@ -190,3 +190,31 @@ test('a checkout the payment provider refuses shows its reason and what to do, n
   expect(alert).toHaveTextContent('Change your account email');
   expect(alert).not.toHaveTextContent('The billing action failed');
 });
+
+// Billing switched off by the operator: nothing is sold, but a subscription can always be seen and cancelled.
+const switchedOff = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: false, switched_off: true } };
+const paid = { ...free, plan: 'team', status: 'active', active_subscriptions: 1, current_period_end: '2026-11-15T09:00:00Z', checkout_plans: [] };
+
+test('with billing switched off a workspace that pays sees its plan and the portal to cancel, and nothing for sale', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.config.mockResolvedValue(switchedOff);
+  api.billing.mockResolvedValue(paid);
+  api.openBillingPortal.mockResolvedValue({ url: 'https://polar.example/portal' });
+  renderRoute();
+  expect(await screen.findByRole('note')).toHaveTextContent('Billing is turned off on this server: nothing is charged or locked meanwhile.');
+  expect(screen.queryByRole('heading', { name: /upgrade/i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Manage billing' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/portal'));
+  expect(api.startCheckout).not.toHaveBeenCalled();
+});
+
+test('with billing switched off a workspace that never paid sees no billing, and a remembered plan is dropped', async () => {
+  rememberCheckoutIntent('team_monthly');
+  api.me.mockResolvedValue(me('admin'));
+  api.config.mockResolvedValue(switchedOff);
+  api.billing.mockResolvedValue({ ...free, checkout_plans: [] });
+  renderRoute();
+  expect(await screen.findByText(/billing is not enabled/i)).toBeInTheDocument();
+  expect(api.startCheckout).not.toHaveBeenCalled();
+  expect(readCheckoutIntent()).toBeUndefined();
+});

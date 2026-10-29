@@ -7594,9 +7594,15 @@ components:
             publishable_key: {type: [string, 'null']}
         billing:
           type: object
-          required: [enabled]
+          required: [enabled, switched_off]
           properties:
             enabled: {type: boolean, description: False on self-hosted instances; the billing routes answer 404.}
+            switched_off:
+              type: boolean
+              description: >-
+                Billing is set up but the operator switched it off: nobody is billed or locked and nothing is
+                sold (checkout answers 409 `feature_off`, `checkout_plans` is empty), but `GET /api/v1/billing`
+                and the billing portal stay open, so a workspace with a subscription can still see and cancel it.
         signup:
           type: object
           required: [enabled]

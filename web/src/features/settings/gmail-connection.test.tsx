@@ -24,7 +24,7 @@ const failed: GmailSettings = {
 
 type PublicConfig = Awaited<ReturnType<typeof api.config>>;
 const selfHosted: PublicConfig = {
-  cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
+  cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false, switched_off: false }, signup: { enabled: false },
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null },
   ai: { server_provider: false },
@@ -33,7 +33,7 @@ const selfHosted: PublicConfig = {
     cloud_sign_in: { enabled: false }, billing: { enabled: false }, signup: { enabled: false } },
 };
 const cloud: PublicConfig = {
-  ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true }, signup: { enabled: true },
+  ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true, switched_off: false }, signup: { enabled: true },
 };
 
 // The block reads the server's public config to know whether it runs on Colliedesk Cloud.

@@ -23,7 +23,8 @@ const featureSchema = z.object({ enabled: z.boolean() });
 export const publicConfigSchema = z.object({
   version: z.string().optional(),
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
-  billing: z.object({ enabled: z.boolean() }),
+  // switched_off: set up but switched off by the operator; a server from before the switches never is.
+  billing: z.object({ enabled: z.boolean(), switched_off: z.boolean().default(false) }),
   signup: z.object({ enabled: z.boolean() }),
   limits: z.object({ outgoing_attachments_bytes: z.number().int(), outgoing_attachments_files: z.number().int() }),
   product_analytics: z.object({ enabled: z.boolean(), key: z.string().nullable(), host: z.string().nullable(), realm: z.enum(['cloud', 'self-hosted']).nullable() }),

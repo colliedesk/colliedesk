@@ -8,6 +8,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 )
 
 // billingRoute reports whether a route exists only when Polar billing is configured.
@@ -23,6 +24,12 @@ func (a *API) getBilling(response http.ResponseWriter, request *http.Request) {
 	}
 	billing.CheckoutPlans = a.checkoutPlans()
 	billing.CheckoutRefusals = []domain.CheckoutRefusal{}
+	// Billing switched off: the plan stays visible and the portal cancels it, but nothing is offered for sale.
+	if a.switchedOff(serverconfig.FeatureBilling) {
+		billing.CheckoutPlans = []string{}
+		writeJSON(response, http.StatusOK, billing)
+		return
+	}
 	for _, plan := range billing.CheckoutPlans {
 		product, _ := a.checkoutProduct(plan)
 		if reason := billing.PlanRefusals[a.config.Billing.Products.PlanOf(product)]; reason != "" {

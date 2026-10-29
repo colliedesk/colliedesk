@@ -15,6 +15,7 @@ import { helpCenterPart } from '../kb/kb-part';
 import type { AgentToken } from '../../api/schemas';
 import type { TokenChoice } from './agent-tokens-section';
 import { saveState } from './save-feedback';
+import { useBillingShown } from '../billing/billing-shown';
 
 // The email channel and the web form were sections of this page; a link to their old anchors (a bookmark,
 // an old guide) opens their channel instead. Rare, so it is done here, in this page's own chunk.
@@ -78,8 +79,9 @@ export function SettingsRoute() {
   const updateSavedReply = useMutation({ mutationFn: ({ id, ...change }: { id: string; title: string; body: string; updated_at: string }) => api.updateSavedReply(id, change), onSuccess: refreshSavedReplies });
   const deleteSavedReply = useMutation({ mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) => api.deleteSavedReply(id, updatedAt), onSuccess: refreshSavedReplies });
   const isAdmin = me.data?.agent.role === 'admin';
+  const billingShown = useBillingShown(isAdmin);
   // Plan and billing exists only on the hosted cloud and only admins manage it.
-  const showBilling = isAdmin && config.data?.billing.enabled === true;
+  const showBilling = billingShown;
   const loading = me.isPending || sessions.isPending || invites.isPending;
   // A link to a section (the nav from another settings page, a pasted address) arrives before the sections do.
   useScrollToHashWhenReady(!loading);

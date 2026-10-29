@@ -6,6 +6,10 @@ trial, no plan and no limits; nothing here applies to it.
 Only workspace admins see **Settings → Plan and billing**. Agents see how many days of the trial are left in
 the banner at the top, and nothing else about billing.
 
+If the server's operator turns billing off, nothing is charged or locked meanwhile and nothing can be bought.
+A workspace with a subscription still sees **Plan and billing** with a note saying so, and can change or
+cancel the subscription under **Manage billing**.
+
 ## The free trial
 
 Every new cloud workspace starts a 14-day free trial of the full Team plan. No card is needed.

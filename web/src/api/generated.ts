@@ -4346,6 +4346,8 @@ export interface components {
             billing: {
                 /** @description False on self-hosted instances; the billing routes answer 404. */
                 enabled: boolean;
+                /** @description Billing is set up but the operator switched it off: nobody is billed or locked and nothing is sold (checkout answers 409 `feature_off`, `checkout_plans` is empty), but `GET /api/v1/billing` and the billing portal stay open, so a workspace with a subscription can still see and cancel it. */
+                switched_off: boolean;
             };
             signup: {
                 /** @description True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured). */

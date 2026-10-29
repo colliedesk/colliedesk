@@ -23,7 +23,9 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]any{
 		"version":       version,
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
-		"billing":       map[string]any{"enabled": a.featureOn(serverconfig.FeatureBilling)},
+		// switched_off: billing is set up but the operator switched it off; a workspace with a subscription
+		// still sees its plan and the portal.
+		"billing": map[string]any{"enabled": a.featureOn(serverconfig.FeatureBilling), "switched_off": a.polar != nil && a.switchedOff(serverconfig.FeatureBilling)},
 		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing,
 		// 409 feature_off while an operator switched it (or cloud sign-in, or billing) off.
 		"signup":            map[string]any{"enabled": a.featureOn(serverconfig.FeatureSignup)},
