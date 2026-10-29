@@ -37,7 +37,11 @@ database schema.
   locked and can still export everything.
 - **AI included**: reply drafts and triage suggestions from your own knowledge base and solved
   tickets, with their sources shown; your own provider key or the server's; optionally a draft for
-  every customer message and suggestions that apply themselves (with Undo). AI never sends.
+  every customer message and suggestions that apply themselves (with Undo). AI never sends a reply
+  in a conversation.
+- **Help chat**: an AI on your help center (its chat page, every article, and your own site) that
+  answers customers only from your published articles, shows its sources, and hands the chat to
+  your team as a conversation; with its own monthly limit and every transcript kept for the team.
 - **Results**: your numbers in Colliedesk next to the history you imported from Freshdesk (first
   response, time to resolve, reopens, volume, AI drafts), each opening the conversations it counts,
   with a share link and a weekly email to admins.

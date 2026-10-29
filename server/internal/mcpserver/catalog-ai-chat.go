@@ -27,12 +27,12 @@ func aiChatSessionsListSpec() Spec {
 		Title: "List AI chats",
 		Description: `List the end users' chats with the help center's AI, newest activity first, 50 a page: where each started, its state (open, ended, handed_off), ` +
 			`how many turns, its first question, whether an answer was rated not helpful, and the conversation a hand-off opened. ` +
-			`Filter by channel_id, status or only_not_helpful; pass next_cursor to read on.` +
+			`Filter by channel_id, status, only_not_helpful or conversation_id (the chat that handed off to that conversation); pass next_cursor to read on.` +
 			"\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST: []string{"GET /api/v1/ai/chat/sessions"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"channel_id":{"type":"string",` + uuid + `},` +
-			`"status":{"type":"string","enum":["open","ended","handed_off"]},"only_not_helpful":{"type":"boolean"},"cursor":{"type":"string"}}}`,
+			`"status":{"type":"string","enum":["open","ended","handed_off"]},"only_not_helpful":{"type":"boolean"},"conversation_id":{"type":"string",` + uuid + `},"cursor":{"type":"string"}}}`,
 		Output: `{"type":"object","required":["items","next_cursor"],"properties":{"items":{"type":"array","items":{"type":"object"}},"next_cursor":{"type":["string","null"]}}}`,
 		run:    aiChatSessionsList,
 	}

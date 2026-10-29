@@ -314,13 +314,14 @@ func aiChatSessionsList(c *call, arguments map[string]any) (any, error) {
 		ChannelID      string `json:"channel_id"`
 		Status         string `json:"status"`
 		OnlyNotHelpful bool   `json:"only_not_helpful"`
+		ConversationID string `json:"conversation_id"`
 		Cursor         string `json:"cursor"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
 	query := url.Values{}
-	for key, value := range map[string]string{"channel_id": args.ChannelID, "status": args.Status, "cursor": args.Cursor} {
+	for key, value := range map[string]string{"channel_id": args.ChannelID, "status": args.Status, "conversation_id": args.ConversationID, "cursor": args.Cursor} {
 		if value != "" {
 			query.Set(key, value)
 		}

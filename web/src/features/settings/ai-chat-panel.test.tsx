@@ -4,9 +4,13 @@ import type { ReactNode } from 'react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AIChatSession, AIChatSummary, AIChatUsage } from '../../api/ai';
 import { AIChatPanel, ChatTranscript } from './ai-chat-panel';
+import { AIChatSettingsRoute } from './ai-chat-route';
 
 const aiApi = vi.hoisted(() => ({ chatUsage: vi.fn(), chatSessions: vi.fn(), chatSession: vi.fn(), deleteChatSession: vi.fn(), chatPreview: vi.fn() }));
 vi.mock('../../api/ai', () => ({ aiApi }));
+vi.mock('../../api/client', async (actual) => ({ ...(await actual<object>()), api: {
+  me: () => Promise.resolve({ agent: { role: 'admin' }, timezone: 'UTC' }), config: () => Promise.resolve({ billing: { enabled: false } }) } }));
+vi.mock('./settings-nav', () => ({ SettingsNav: () => null }));
 
 const summary = (change: Partial<AIChatSummary> = {}): AIChatSummary => ({
   id: '11111111-1111-4111-8111-111111111111', channel_id: '22222222-2222-4222-8222-222222222222', channel_name: 'Help chat', surface: 'help_center',
@@ -133,4 +137,25 @@ test('an admin tries the chat and reads the whole answer with what it read', asy
   expect(await screen.findByText('Orders ship in 2 days [#12].')).toBeTruthy();
   expect(screen.getByText('1.4 s · whole help center (38 articles) · counts as 1 answer')).toBeTruthy();
   expect(aiApi.chatPreview).toHaveBeenCalledWith('When does it ship?', expect.any(String));
+});
+
+test('the inbox link finds the chat that handed off to a conversation and shows its transcript', async () => {
+  aiApi.chatSessions.mockResolvedValue({ items: [summary({ status: 'handed_off', conversation_id: '44444444-4444-4444-8444-444444444444' })], next_cursor: null });
+  aiApi.chatSession.mockResolvedValue(session());
+  wrap(<AIChatSettingsRoute conversation="44444444-4444-4444-8444-444444444444" navigate={vi.fn()} />);
+  expect(await screen.findByText('It ships in 2 days.')).toBeTruthy();
+  expect(aiApi.chatSessions).toHaveBeenCalledWith({ conversationId: '44444444-4444-4444-8444-444444444444' });
+  expect(aiApi.chatSession).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+});
+
+test('a conversation whose chat is gone says so', async () => {
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  wrap(<AIChatSettingsRoute conversation="44444444-4444-4444-8444-444444444444" navigate={vi.fn()} />);
+  expect((await screen.findByRole('alert')).textContent).toMatch(/This chat is not there/);
+});
+
+test('a transcript shows an answer’s markers as its sources’ numbers', async () => {
+  aiApi.chatSession.mockResolvedValue(session({ transcript: [{ ...session().transcript[0], answer: 'It ships in 2 days [#12]. Ask us [#99].' }] }));
+  wrap(<ChatTranscript id="11111111-1111-4111-8111-111111111111" timezone="UTC" canDelete={false} back="AI chat" backHref="/settings/ai?tab=chat" onBack={vi.fn()} />);
+  expect(await screen.findByText('It ships in 2 days [1]. Ask us.')).toBeTruthy();
 });

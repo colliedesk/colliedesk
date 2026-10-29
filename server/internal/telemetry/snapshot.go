@@ -106,6 +106,19 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 	if err != nil {
 		return nil, fmt.Errorf("read first results: %w", err)
 	}
+	// The help chat: AI answers this month (UTC, the month its limits count) and chats handed to the team.
+	chats, err := countsByWorkspace(ctx, tx, 2, `SELECT workspace_id::text,
+		count(*) FILTER (WHERE kind='answer'), count(*) FILTER (WHERE kind='handoff') FROM (
+			SELECT workspace_id,'answer' AS kind FROM ai_chat_turns WHERE status='answered' AND created_at >= date_trunc('month',$1::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+			UNION ALL SELECT workspace_id,'handoff' FROM ai_chat_sessions WHERE conversation_id IS NOT NULL AND created_at >= date_trunc('month',$1::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') c
+		GROUP BY workspace_id`, now)
+	if err != nil {
+		return nil, fmt.Errorf("count help chats: %w", err)
+	}
+	helpChats, err := workspaceSet(ctx, tx, `SELECT DISTINCT workspace_id::text FROM channels WHERE type='help_chat' AND enabled`)
+	if err != nil {
+		return nil, fmt.Errorf("read help chats: %w", err)
+	}
 	subscriptions, err := store.LoadAllSubscriptions(ctx, tx)
 	if err != nil {
 		return nil, fmt.Errorf("read subscriptions: %w", err)
@@ -122,7 +135,7 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 		if row, ok := firstResults[w.id]; ok {
 			firstResult = max(row[0], 0)
 		}
-		replyCounts, signIns, convCounts := replies.at(w.id, 3), signedIn.at(w.id, 2), conversations.at(w.id, 2)
+		replyCounts, signIns, convCounts, chatCounts := replies.at(w.id, 3), signedIn.at(w.id, 2), conversations.at(w.id, 2), chats.at(w.id, 2)
 		snapshots = append(snapshots, snapshot{workspaceID: w.id, properties: map[string]any{
 			"plan":                         access.Plan,
 			"trial_days_left":              trialDaysLeft,
@@ -138,6 +151,9 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 			"email_channel":                emailChannels[w.id],
 			"web_form":                     webForms[w.id],
 			"tokens_active":                tokens.at(w.id, 1)[0],
+			"help_chat":                    helpChats[w.id],
+			"chat_answers_month":           chatCounts[0],
+			"chat_handoffs_month":          chatCounts[1],
 			"freshdesk_import":             imports[w.id],
 			"time_to_first_result_seconds": firstResult,
 			"workspace_name":               w.name,

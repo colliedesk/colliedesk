@@ -62,8 +62,10 @@ type ChatSessionFilter struct {
 	ChannelID  string
 	Status     string
 	NotHelpful bool
-	Cursor     string
-	Limit      int
+	// ConversationID: only the chat that handed off to this conversation.
+	ConversationID string
+	Cursor         string
+	Limit          int
 }
 
 // ChatSource is an article an answer cited, as it was then.
@@ -119,7 +121,7 @@ func (s *Service) ChatSessions(ctx context.Context, workspaceID string, filter C
 	if filter.Limit <= 0 || filter.Limit > 100 {
 		filter.Limit = 50
 	}
-	if filter.ChannelID != "" && !isUUID(filter.ChannelID) {
+	if (filter.ChannelID != "" && !isUUID(filter.ChannelID)) || (filter.ConversationID != "" && !isUUID(filter.ConversationID)) {
 		return page, nil
 	}
 	var before *time.Time
@@ -136,9 +138,9 @@ func (s *Service) ChatSessions(ctx context.Context, workspaceID string, filter C
 			WHERE s.workspace_id=$1 AND ($2='' OR s.channel_id::text=$2) AND ($3='' OR s.status=$3)
 				AND (NOT $4 OR EXISTS (SELECT 1 FROM ai_chat_feedback f JOIN ai_chat_turns t ON t.workspace_id=f.workspace_id AND t.id=f.turn_id
 					WHERE f.workspace_id=s.workspace_id AND t.session_id=s.id AND f.rating='not_helpful'))
-				AND ($5::timestamptz IS NULL OR (s.last_turn_at,s.id::text)<($5,$6))
+				AND ($5::timestamptz IS NULL OR (s.last_turn_at,s.id::text)<($5,$6)) AND ($8='' OR s.conversation_id::text=$8)
 			ORDER BY s.last_turn_at DESC,s.id::text DESC LIMIT $7`,
-			workspaceID, filter.ChannelID, filter.Status, filter.NotHelpful, before, beforeID, filter.Limit+1)
+			workspaceID, filter.ChannelID, filter.Status, filter.NotHelpful, before, beforeID, filter.Limit+1, filter.ConversationID)
 		if err != nil {
 			return err
 		}

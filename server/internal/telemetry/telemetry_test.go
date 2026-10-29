@@ -537,6 +537,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(1), "replies_30d": float64(2), "ai_agent_replies_7d": float64(1),
 			"conversations_open": float64(1), "conversations_created_7d": float64(1),
 			"email_channel": false, "web_form": true, "tokens_active": float64(1), "freshdesk_import": true,
+			"help_chat": false, "chat_answers_month": float64(0), "chat_handoffs_month": float64(0),
 			"time_to_first_result_seconds": float64(5420),
 			"workspace_name":               "Acme Support", "workspace_slug": "acme-support",
 		},
@@ -565,7 +566,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			t.Errorf("workspace %s realm/version/$process_person_profile = %#v/%#v/%#v", id, event.Properties["realm"], event.Properties["version"], event.Properties["$process_person_profile"])
 		}
 		// The fields are exactly the ones docs/user/telemetry.md lists; a new one needs the docs first.
-		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,plan,realm,replies_30d,replies_7d,time_to_first_result_seconds,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
+		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,chat_answers_month,chat_handoffs_month,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,help_chat,plan,realm,replies_30d,replies_7d,time_to_first_result_seconds,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
 		if got := keys(event.Properties); got != listed {
 			t.Errorf("workspace %s property keys = %s, want %s", id, got, listed)
 		}

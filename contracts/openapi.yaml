@@ -175,6 +175,49 @@ paths:
               schema: {type: object, required: [url], properties: {url: {type: string}}}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {description: The chat is off.}
+  /chat/handoff:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    post:
+      operationId: handOffHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        Talk to a person: the browser's chat (its questions, answers and the articles cited) goes to the team as an
+        inbound message of the help chat channel, from the typed address, which nothing checks (the inbox marks it
+        Unverified sender (Help chat)). A second hand-off of the same chat joins the same conversation. One address
+        may hand off 5 chats in 10 minutes, and the channel opens at most 50 conversations in 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, maxLength: 254}
+                name: {type: string, maxLength: 120}
+                note: {type: string, maxLength: 2000}
+      responses:
+        '201':
+          description: 'Sent: a reference the end user may quote (the start of the conversation''s id) and whether the workspace is on a trial (it cannot reply by email then).'
+          content:
+            application/json:
+              schema: {type: object, required: [reference, trial], properties: {reference: {type: string}, trial: {type: boolean}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: 'The chat is off.'}
+        '415': {description: Not JSON., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: '`validation_failed`, with `fields.email`, `fields.name` or `fields.note`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '429':
+          description: '`rate_limited`: too many hand-offs from this address, or conversations on the channel.'
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
   /chat/session/end:
     servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
     parameters:
@@ -3489,6 +3532,7 @@ paths:
         - {name: channel_id, in: query, required: false, schema: {type: string, format: uuid}, description: Only chats of this help chat channel.}
         - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/AIChatStatus'}}
         - {name: feedback, in: query, required: false, schema: {type: string, enum: [not_helpful]}, description: Only chats with an answer rated not helpful.}
+        - {name: conversation_id, in: query, required: false, schema: {type: string, format: uuid}, description: 'Only the chat that handed off to this conversation (the inbox''s Open chat transcript).'}
         - {name: cursor, in: query, required: false, schema: {type: string}}
       responses:
         '200':

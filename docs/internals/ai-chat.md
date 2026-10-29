@@ -77,8 +77,25 @@ The help center's AI chat: end users ask, an AI answers from the published artic
   without CORS, and widget.js draws nothing. `brand` is the theme's accent (`HelpCenterLook.Accent`).
 - **Open full chat**: the frame's cookie is partitioned by the site, so the help center's own page never
   sees it. `POST /chat/transfer` stores the SHA-256 of a one-time code (`ai_chat_transfers`, 2 minutes);
-  `GET /chat?t=` uses it once on the same channel, gives the chat a second token (`page_token_hash`) in
-  the page's own cookie and answers 303 to the page without the code.
+  `GET /chat?t=` uses it once on the same channel, moves the chat to a new token in the page's own
+  cookie (the frame's token no longer finds it: a link passed on never shares one chat between two
+  browsers) and answers 303 to the page without the code. The frame starts over and says where the
+  chat went.
+
+## Hand-off
+
+`POST /chat/handoff` (`helpChatHandoff`) checks the typed address like the web form (`validateWebForm`),
+reads the browser's chat and writes it as text (questions, answers, cited articles with absolute
+links), and gives a `helpchat.Handoff` to the help chat adapter through `HelpCenterKit.Receive`: the
+shared ingest (`store/channel-ingest.go`) stores it, so the journal's rate limits (5 per address hash, 50
+new conversations per channel in 10 minutes), duplicates and threading apply as for any channel. The
+thread key `chat-session:<id>` joins a second hand-off to the first conversation. The chat is marked
+`handed_off` with the conversation's id (`ai.ChatHandedOff`) and keeps answering. The message has no
+`email_meta` and no `origin`, so on a trial `customerWroteFirst` never counts it and a reply is
+`trial_outbound_restricted` (`TestTrialRepliesToHelpChatConversationsAreRefused`). The reference shown
+to the end user is the conversation id's first 8 hex digits: conversations have no number. The inbox
+finds the transcript with `GET /api/v1/ai/chat/sessions?conversation_id=`; its label and link load
+with the open conversation's chunk (`presence-view`) to keep the first bundle in its budget.
 
 ## Streaming
 

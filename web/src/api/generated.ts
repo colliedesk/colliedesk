@@ -148,6 +148,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/chat/handoff": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Talk to a person: the browser's chat (its questions, answers and the articles cited) goes to the team as an inbound message of the help chat channel, from the typed address, which nothing checks (the inbox marks it Unverified sender (Help chat)). A second hand-off of the same chat joins the same conversation. One address may hand off 5 chats in 10 minutes, and the channel opens at most 50 conversations in 10 minutes. */
+        post: operations["handOffHelpChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/chat/session/end": {
         parameters: {
             query?: {
@@ -7381,6 +7401,78 @@ export interface operations {
             };
         };
     };
+    handOffHelpChat: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    email: string;
+                    name?: string;
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sent: a reference the end user may quote (the start of the conversation's id) and whether the workspace is on a trial (it cannot reply by email then). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        reference: string;
+                        trial: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            /** @description The chat is off. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not JSON. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `validation_failed`, with `fields.email`, `fields.name` or `fields.note`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `rate_limited`: too many hand-offs from this address, or conversations on the channel. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
     endHelpChat: {
         parameters: {
             query?: {
@@ -11516,6 +11608,8 @@ export interface operations {
                 status?: components["schemas"]["AIChatStatus"];
                 /** @description Only chats with an answer rated not helpful. */
                 feedback?: "not_helpful";
+                /** @description Only the chat that handed off to this conversation (the inbox's Open chat transcript). */
+                conversation_id?: string;
                 cursor?: string;
             };
             header?: never;

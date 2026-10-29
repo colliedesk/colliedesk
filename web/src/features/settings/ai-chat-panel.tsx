@@ -17,6 +17,15 @@ const statusClass: Record<AIChatStatus, string> = { open: 'status-open', handed_
 // A 404 fails a request as Error('API 404') (api/client.ts).
 const missing = (error: unknown) => error instanceof Error && error.message === 'API 404';
 
+// cited writes an answer's markers ([#article number]) as the numbers of its sources, as the customer saw
+// them; a marker of no source goes.
+function cited(turn: AIChatTurn) {
+  return (turn.answer ?? '').replace(/\s*\[#(\d+)\]/g, (_, number: string) => {
+    const source = turn.sources.find((item) => String(item.number) === number);
+    return source ? ` [${source.ordinal}]` : '';
+  });
+}
+
 // A turn's status: answered is resolved; the others are not waiting on anyone, so they stay neutral.
 const turnClass = (status: AIChatTurn['status']) => (status === 'answered' ? 'status-resolved' : 'status-closed');
 
@@ -187,7 +196,7 @@ export function AIChatPanel({ timezone, onOpen, slot, onSetCap, isAdmin = true }
 function Turn({ turn, timezone }: { turn: AIChatTurn; timezone: string }) {
   return <li className="aic-turn">
     <div className="aic-said"><b>{m.customer}</b><p>{turn.question ?? m.textGone}</p></div>
-    {turn.answer !== null && <div className="aic-said"><b>{m.ai}</b><p>{turn.answer}</p></div>}
+    {turn.answer !== null && <div className="aic-said"><b>{m.ai}</b><p>{cited(turn)}</p></div>}
     {turn.sources.length > 0 && <ul className="aic-sources" aria-label={m.sources}>{turn.sources.map((source) =>
       <li key={source.ordinal}>{source.folder && <small>{source.folder}</small>}{source.title ?? `#${source.number}`}</li>)}</ul>}
     <div className="aic-turn-foot"><span className={`status ${turnClass(turn.status)}`}>{m.turnStatus[turn.status]}</span>

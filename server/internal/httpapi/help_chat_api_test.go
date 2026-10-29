@@ -537,4 +537,209 @@ func TestAChatMovesFromASitesFrameToTheChatPage(t *testing.T) {
 	if again := d.call(t, http.MethodGet, path, nil); len(again.Result().Cookies()) != 0 {
 		t.Fatal("a used code moved the chat again")
 	}
+	// The chat moved: the frame's cookie no longer reads it, so a link passed on shares nothing.
+	if framed := d.call(t, http.MethodGet, "/chat/session?surface=widget", nil, frameCookie); framed.Code != http.StatusNoContent {
+		t.Fatalf("frame after the move: status=%d", framed.Code)
+	}
+}
+
+// A transfer code of workspace A moves nothing at workspace B (B's own help center, the same code): no
+// cookie, and the code still works where it was made. A's chats list finds nothing by B's conversation.
+func TestATransferCodeNeverCrossesWorkspaces(t *testing.T) {
+	a := newChatDesk(t, "Chat Tango", nil)
+	a.fake.Script(chatReply("Orders ship in 2 days [#" + num(a.article.Number) + "]."))
+	framed := a.call(t, http.MethodPost, "/chat/turns?surface=widget", map[string]any{"question": "When?"})
+	chatEvents(t, framed)
+	var moved struct {
+		URL string `json:"url"`
+	}
+	decode(t, a.call(t, http.MethodPost, "/chat/transfer?surface=widget", nil, chatCookie(t, framed)), &moved)
+	code := moved.URL[strings.Index(moved.URL, "&t=")+3:]
+	b := newChatDeskOn(t, a.api, auth.New(a.pool, testOrigin), a.pool, a.fake, "Chat Uniform")
+	atB := b.call(t, http.MethodGet, "/chat?channel="+b.channel+"&t="+code, nil)
+	if atB.Code != http.StatusSeeOther || len(atB.Result().Cookies()) != 0 {
+		t.Fatalf("A's code at B: status=%d cookies=%v", atB.Code, atB.Result().Cookies())
+	}
+	if atA := a.call(t, http.MethodGet, "/chat?channel="+a.channel+"&t="+code, nil); len(atA.Result().Cookies()) != 1 {
+		t.Fatalf("A's code at A after B: cookies=%v", atA.Result().Cookies())
+	}
+
+	b.fake.Script(chatReply("Orders ship in 2 days [#" + num(b.article.Number) + "]."))
+	turn := b.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "When?"})
+	chatEvents(t, turn)
+	if response := b.call(t, http.MethodPost, "/chat/handoff", map[string]any{"email": "x@y.example"}, chatCookie(t, turn)); response.Code != http.StatusCreated {
+		t.Fatalf("handoff at B: %d", response.Code)
+	}
+	var conversations struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	kbCall(t, b.api, http.MethodGet, "/api/v1/conversations", nil, b.admin, http.StatusOK, &conversations)
+	var chats struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	kbCall(t, a.api, http.MethodGet, "/api/v1/ai/chat/sessions?conversation_id="+conversations.Items[0].ID, nil, a.admin, http.StatusOK, &chats)
+	if len(chats.Items) != 0 {
+		t.Fatalf("A's chats by B's conversation = %d", len(chats.Items))
+	}
+}
+
+type handoffSent struct {
+	Reference string `json:"reference"`
+	Trial     bool   `json:"trial"`
+}
+
+// Talk to a person opens a conversation on the help chat channel from the typed address, with the note
+// and the whole chat as text (questions, answers, the cited articles' links); a second hand-off of the
+// same chat joins it. The chat's transcript links the conversation, and the conversation finds its chat.
+func TestTalkToAPersonOpensOneConversationPerChat(t *testing.T) {
+	d := newChatDesk(t, "Chat Oscar", nil)
+	d.fake.Script(chatReply("Orders ship in 2 days [#" + num(d.article.Number) + "]."))
+	first := d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "When does my order ship?"})
+	chatEvents(t, first)
+	cookie := chatCookie(t, first)
+
+	var sent handoffSent
+	response := d.call(t, http.MethodPost, "/chat/handoff", map[string]any{"email": "Reader@Example.com", "name": " Ann  Reader ", "note": "Order 1182 please."}, cookie)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("handoff status=%d body=%s", response.Code, response.Body.String())
+	}
+	decode(t, response, &sent)
+	var conversations struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Subject string `json:"subject"`
+			Channel string `json:"channel"`
+		} `json:"items"`
+	}
+	kbCall(t, d.api, http.MethodGet, "/api/v1/conversations", nil, d.admin, http.StatusOK, &conversations)
+	if len(conversations.Items) != 1 || conversations.Items[0].Channel != "help_chat" || conversations.Items[0].Subject != "Help chat: When does my order ship?" ||
+		!strings.HasPrefix(strings.ReplaceAll(strings.ToUpper(conversations.Items[0].ID), "-", ""), sent.Reference) || sent.Trial {
+		t.Fatalf("conversations = %+v, sent = %+v", conversations.Items, sent)
+	}
+	conversation := conversations.Items[0].ID
+	var timeline struct {
+		Items []struct {
+			Kind string `json:"kind"`
+			Body string `json:"body"`
+		} `json:"items"`
+	}
+	kbCall(t, d.api, http.MethodGet, "/api/v1/conversations/"+conversation+"/messages", nil, d.admin, http.StatusOK, &timeline)
+	body := timeline.Items[0].Body
+	for _, want := range []string{"Order 1182 please.", "Customer: When does my order ship?", "AI: Orders ship in 2 days", "Source: Shipping times " + testOrigin + d.base + "/a/"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("message body lacks %q:\n%s", want, body)
+		}
+	}
+
+	again := d.call(t, http.MethodPost, "/chat/handoff", map[string]any{"email": "reader@example.com"}, cookie)
+	if again.Code != http.StatusCreated {
+		t.Fatalf("second handoff status=%d", again.Code)
+	}
+	kbCall(t, d.api, http.MethodGet, "/api/v1/conversations", nil, d.admin, http.StatusOK, &conversations)
+	kbCall(t, d.api, http.MethodGet, "/api/v1/conversations/"+conversation+"/messages", nil, d.admin, http.StatusOK, &timeline)
+	if len(conversations.Items) != 1 || len(timeline.Items) != 2 {
+		t.Fatalf("second hand-off: %d conversations, %d messages; want it joined", len(conversations.Items), len(timeline.Items))
+	}
+	var chats struct {
+		Items []struct {
+			Status         string  `json:"status"`
+			ConversationID *string `json:"conversation_id"`
+		} `json:"items"`
+	}
+	kbCall(t, d.api, http.MethodGet, "/api/v1/ai/chat/sessions?conversation_id="+conversation, nil, d.admin, http.StatusOK, &chats)
+	if len(chats.Items) != 1 || chats.Items[0].Status != "handed_off" || chats.Items[0].ConversationID == nil || *chats.Items[0].ConversationID != conversation {
+		t.Fatalf("chat of the conversation = %+v", chats.Items)
+	}
+	// The chat goes on after a hand-off.
+	d.fake.Script(chatReply("Yes [#" + num(d.article.Number) + "]."))
+	if after := d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "Still there?"}, cookie); after.Code != http.StatusOK {
+		t.Fatalf("turn after hand-off status=%d", after.Code)
+	}
+}
+
+// A hand-off checks what was typed and answers like the rest of the chat: a bad address is 422 with the
+// field, another site's page is refused, and a chat that is off is the help center's 404.
+func TestTalkToAPersonRefusesWhatItShouldNot(t *testing.T) {
+	d := newChatDesk(t, "Chat Papa", nil)
+	for _, body := range []map[string]any{{"email": "not an address"}, {"email": "a@b.example", "note": strings.Repeat("x", 2001)}, {"email": "a@b.example", "name": strings.Repeat("y", 121)}} {
+		if response := d.call(t, http.MethodPost, "/chat/handoff", body); response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "validation_failed") {
+			t.Errorf("body %v: status=%d %s", body, response.Code, response.Body.String())
+		}
+	}
+	req := newRequest(t, http.MethodPost, d.base+"/chat/handoff", map[string]any{"email": "a@b.example"}, "", nil)
+	req.Host = d.host
+	req.Header.Set("Origin", "https://evil.example")
+	if response := serve(d.site, req); response.Code != http.StatusForbidden {
+		t.Errorf("another origin: status=%d", response.Code)
+	}
+	kbCall(t, d.api, http.MethodPut, "/api/v1/ai/slots/chat", map[string]any{"source": "server", "enabled": false}, d.admin, http.StatusOK, nil)
+	if response := d.call(t, http.MethodPost, "/chat/handoff", map[string]any{"email": "a@b.example"}); response.Code != http.StatusNotFound {
+		t.Errorf("chat off: status=%d", response.Code)
+	}
+}
+
+// A chat cookie of workspace A hands nothing of A's chat to workspace B: B's conversation carries no
+// transcript of A, and A's chat stays open.
+func TestAHandoffNeverCarriesAnotherWorkspacesChat(t *testing.T) {
+	a := newChatDesk(t, "Chat Quebec", nil)
+	a.fake.Script(chatReply("Orders ship in 2 days [#" + num(a.article.Number) + "]."))
+	turn := a.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "Secret question of A"})
+	chatEvents(t, turn)
+	cookie := chatCookie(t, turn)
+	b := newChatDeskOn(t, a.api, auth.New(a.pool, testOrigin), a.pool, a.fake, "Chat Romeo")
+	sameName := &http.Cookie{Name: strings.Replace(cookie.Name, a.slug+"_"+a.channel[:8], b.slug+"_"+b.channel[:8], 1), Value: cookie.Value}
+	if response := b.call(t, http.MethodPost, "/chat/handoff", map[string]any{"email": "x@y.example"}, cookie, sameName); response.Code != http.StatusCreated {
+		t.Fatalf("handoff at B status=%d %s", response.Code, response.Body.String())
+	}
+	var conversations struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	kbCall(t, b.api, http.MethodGet, "/api/v1/conversations", nil, b.admin, http.StatusOK, &conversations)
+	var timeline struct {
+		Items []struct {
+			Body string `json:"body"`
+		} `json:"items"`
+	}
+	kbCall(t, b.api, http.MethodGet, "/api/v1/conversations/"+conversations.Items[0].ID+"/messages", nil, b.admin, http.StatusOK, &timeline)
+	if strings.Contains(timeline.Items[0].Body, "Secret question of A") {
+		t.Fatal("workspace B's conversation holds workspace A's chat")
+	}
+	var chats struct {
+		Items []struct {
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	kbCall(t, a.api, http.MethodGet, "/api/v1/ai/chat/sessions", nil, a.admin, http.StatusOK, &chats)
+	if len(chats.Items) != 1 || chats.Items[0].Status != "open" {
+		t.Fatalf("A's chat = %+v", chats.Items)
+	}
+}
+
+// On a Cloud trial, a reply to a help chat conversation is refused like one to a web form: anyone can
+// type any address, so the chat must not turn the trial's mail into a way to write to it.
+func TestTrialRepliesToHelpChatConversationsAreRefused(t *testing.T) {
+	fake := &aiprovider.Fake{FakeKind: aiprovider.KindAnthropic}
+	f := newLimitsFixtureConfigured(t, true, nil, func(config *httpapi.Config) {
+		config.AI = fakeAIConfig(fake)
+		config.AI.Server = chatServerProvider()
+	})
+	d := newChatDeskOn(t, f.api, f.billing.service, f.pool, fake, "Chat Sierra")
+	connectEmail(t, f.api, d.admin, "support@chat-sierra.example.com")
+	var sent handoffSent
+	response := d.call(t, http.MethodPost, "/chat/handoff", map[string]any{"email": "anyone@victim.example"})
+	decode(t, response, &sent)
+	if response.Code != http.StatusCreated || !sent.Trial {
+		t.Fatalf("handoff status=%d trial=%v", response.Code, sent.Trial)
+	}
+	var page struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	decode(t, request(t, f.api, http.MethodGet, "/api/v1/conversations", nil, d.admin, nil), &page)
+	wantStatus(t, f.reply(t, d.admin, page.Items[0].ID), http.StatusForbidden, restrictedCode, "trial reply to a help chat conversation")
 }

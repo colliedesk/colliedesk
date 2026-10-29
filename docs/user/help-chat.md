@@ -49,7 +49,9 @@ Every chat offers **Talk to a person**. The customer types an email address (and
 they like); a conversation opens in your inbox on the **Help chat** channel, with the tag `help-chat`,
 the note, and the whole chat as text with the articles it cited. The address was typed, never
 checked: the message is marked **Unverified sender (Help chat)**, and the conversation links to its
-chat transcript. A second hand-off of the same chat joins the same conversation.
+chat transcript (**Open chat transcript** next to the label). A second hand-off of the same chat joins
+the same conversation. The customer sees a reference they can quote: the first 8 characters of the
+conversation's id, the start of its address in Colliedesk (`/conversations/<id>`), not a search term; the chat goes on after a hand-off.
 
 You reply by email. On a Colliedesk Cloud **trial**, a reply to a help chat conversation is refused
 (error `trial_outbound_restricted`), as for the web form; the customer is told that you have their

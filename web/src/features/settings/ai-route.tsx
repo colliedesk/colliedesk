@@ -48,7 +48,7 @@ export function refusal(error: unknown): FieldError {
 const neverSet = (settings?: AISettings) => Boolean(settings?.server) && Boolean(settings?.slots.every((slot) => !slot.enabled && !slot.updated_at));
 
 // AIRoute is Settings → Built-in AI and a chat's transcript below it: path is what follows /settings/ai
-// ("chats/<id>").
+// ("chats/<id>", or "conversations/<id>/chat": the chat that handed off to a conversation).
 export function AIRoute({ path = '' }: { path?: string } = {}) {
   const navigate = useNavigate();
   const go = useCallback((href: string) => void navigate({ href }), [navigate]);
@@ -56,6 +56,8 @@ export function AIRoute({ path = '' }: { path?: string } = {}) {
   const tab = new URLSearchParams(window.location.search).get('tab') === 'chat' ? 'chat' : undefined;
   const chat = /^chats\/([^/]+)$/.exec(path)?.[1];
   if (chat) return <AIChatSettingsRoute id={decodeURIComponent(chat)} navigate={go} />;
+  const conversation = /^conversations\/([^/]+)\/chat$/.exec(path)?.[1];
+  if (conversation) return <AIChatSettingsRoute conversation={decodeURIComponent(conversation)} navigate={go} />;
   return <AISettingsRoute tab={tab} onOpenChat={(id) => go(`/settings/ai/chats/${encodeURIComponent(id)}`)} />;
 }
 

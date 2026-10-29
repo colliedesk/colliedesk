@@ -452,7 +452,14 @@
   Chat.prototype.openFull = function () {
     var self = this;
     this.api.call('POST', '/transfer', {}).then(function (response) { return response.ok ? response.json() : { url: self.c.page }; })
-      .catch(function () { return { url: self.c.page }; }).then(function (to) { window.open(to.url, '_blank', 'noopener'); });
+      .catch(function () { return { url: self.c.page }; }).then(function (to) {
+        window.open(to.url, '_blank', 'noopener');
+        // The chat moves to the new tab: this frame starts over.
+        if (/[?&]t=/.test(to.url)) {
+          self.clear(); self.welcome();
+          self.thread.appendChild(note('', 'info', 'This chat continues in the new tab.', '', null, 'status'));
+        }
+      });
   };
 
   /* ---------- Talk to a person ---------- */

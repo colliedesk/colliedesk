@@ -250,7 +250,11 @@ const importRoute = createRoute({
 // Settings → Built-in AI, with a chat's transcript below it (/settings/ai/chats/<id>): the chunk reads its path.
 const aiRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/settings/ai/$',
-  component: () => <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute path={aiRoute.useParams()._splat ?? ''} />} />,
+  component: function AISettings() {
+    // The path is read here, not in render: the part calls render only once its chunk has loaded.
+    const path = aiRoute.useParams()._splat ?? '';
+    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute path={path} />} />;
+  },
 });
 // Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).
 type ChannelsSearch = { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string };

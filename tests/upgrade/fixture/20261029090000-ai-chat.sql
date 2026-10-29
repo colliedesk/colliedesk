@@ -14,10 +14,10 @@ INSERT INTO ai_slots (workspace_id, slot, uses_server, provider_id, model, effor
     (md5('ws-acme')::uuid, 'chat', false, md5('aip-acme-1')::uuid, 'claude-haiku-5-5', 'low', true,
      md5('agent-acme-admin')::uuid, '2026-10-28 09:01:00+00', md5('agent-acme-admin')::uuid, '2026-10-28 09:01:00+00', 10000000);
 
-INSERT INTO ai_chat_sessions (id, workspace_id, channel_id, token_hash, page_token_hash, surface, status, conversation_id, history_cut_at, created_at, last_turn_at, ended_at) VALUES
-    (md5('chat-acme-1')::uuid, md5('ws-acme')::uuid, md5('channel-acme-chat')::uuid, sha256('token-acme-1'), sha256('page-token-acme-1'), 'widget', 'handed_off', md5('conv-acme-1')::uuid,
+INSERT INTO ai_chat_sessions (id, workspace_id, channel_id, token_hash, surface, status, conversation_id, history_cut_at, created_at, last_turn_at, ended_at) VALUES
+    (md5('chat-acme-1')::uuid, md5('ws-acme')::uuid, md5('channel-acme-chat')::uuid, sha256('token-acme-1'), 'widget', 'handed_off', md5('conv-acme-1')::uuid,
      '2026-10-28 10:00:00+00', '2026-10-28 09:30:00+00', '2026-10-28 10:05:00+00', NULL),
-    (md5('chat-acme-2')::uuid, md5('ws-acme')::uuid, md5('channel-acme-chat')::uuid, sha256('token-acme-2'), NULL, 'article', 'ended', NULL,
+    (md5('chat-acme-2')::uuid, md5('ws-acme')::uuid, md5('channel-acme-chat')::uuid, sha256('token-acme-2'), 'article', 'ended', NULL,
      NULL, '2026-10-28 11:00:00+00', '2026-10-28 11:01:00+00', '2026-10-28 11:02:00+00');
 
 INSERT INTO ai_chat_turns (id, workspace_id, session_id, seq, question, answer, viewing_kb_article_id, status, error_code, model, ttft_ms,

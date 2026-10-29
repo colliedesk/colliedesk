@@ -396,6 +396,7 @@ var helpCenterPublicRoutes = map[string]string{
 	"GET /chat/chat.css":                    "the chat page's own style sheet",
 	"GET /chat/widget.js":                   "the script a company's site loads",
 	"GET /chat/widget-config":               "what that script draws, for a site the channel lists",
+	"POST /chat/handoff":                    "an end user handing the chat to the team (Talk to a person)",
 	"POST /chat/transfer":                   "an end user moving the chat from a site's frame to the help center",
 	"GET /chat/session":                     "an end user's chat, read back by its cookie",
 	"POST /chat/session/end":                "an end user's New chat",

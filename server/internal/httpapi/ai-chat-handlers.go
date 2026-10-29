@@ -28,7 +28,7 @@ func (a *API) getAIChatUsage(response http.ResponseWriter, request *http.Request
 
 func (a *API) listAIChatSessions(response http.ResponseWriter, request *http.Request) {
 	query := request.URL.Query()
-	filter := ai.ChatSessionFilter{ChannelID: query.Get("channel_id"), Status: query.Get("status"), Cursor: query.Get("cursor")}
+	filter := ai.ChatSessionFilter{ChannelID: query.Get("channel_id"), Status: query.Get("status"), ConversationID: query.Get("conversation_id"), Cursor: query.Get("cursor")}
 	switch filter.Status {
 	case "", ai.ChatOpen, ai.ChatEnded, ai.ChatHandedOff:
 	default:

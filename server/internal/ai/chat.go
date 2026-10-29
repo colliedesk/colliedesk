@@ -117,6 +117,7 @@ type ChatTurnView struct {
 
 // ChatSessionView is a browser's chat.
 type ChatSessionView struct {
+	ID        string         `json:"-"`
 	Status    string         `json:"status"`
 	IdleHours int            `json:"idle_hours"`
 	Turns     []ChatTurnView `json:"turns"`
@@ -142,8 +143,7 @@ func (s *Service) findChat(ctx context.Context, tx pgx.Tx, workspaceID string, b
 	if len(browser.TokenHash) != 32 || !isUUID(browser.ChannelID) {
 		return "", "", time.Time{}, false, nil
 	}
-	query := `SELECT id::text,status,last_turn_at FROM ai_chat_sessions WHERE workspace_id=$1 AND channel_id=$2 AND (token_hash=$3 OR page_token_hash=$3)
-		AND status<>'ended' AND last_turn_at>$4`
+	query := `SELECT id::text,status,last_turn_at FROM ai_chat_sessions WHERE workspace_id=$1 AND channel_id=$2 AND token_hash=$3 AND status<>'ended' AND last_turn_at>$4`
 	if lock {
 		query += ` FOR UPDATE`
 	}
@@ -163,7 +163,7 @@ func (s *Service) ChatSessionOf(ctx context.Context, workspaceID string, browser
 		if err != nil || !ok {
 			return err
 		}
-		found, view.Status, view.IdleHours = true, status, int(s.now().UTC().Sub(last).Hours())
+		found, view.ID, view.Status, view.IdleHours = true, id, status, int(s.now().UTC().Sub(last).Hours())
 		turns, err := readChatTurns(ctx, tx, workspaceID, id)
 		view.Turns = make([]ChatTurnView, 0, len(turns))
 		for _, turn := range turns {
@@ -324,9 +324,7 @@ func (s *Service) startChatTurn(ctx context.Context, workspaceID string, in Chat
 				surface = SurfaceHelpCenter
 			}
 			// A chat that ended or expired under the same token gives its token up first.
-			if _, err := tx.Exec(ctx, `UPDATE ai_chat_sessions SET token_hash=sha256(token_hash||id::text::bytea),
-				page_token_hash=CASE WHEN page_token_hash=$3 THEN NULL ELSE page_token_hash END
-				WHERE workspace_id=$1 AND channel_id=$2 AND (token_hash=$3 OR page_token_hash=$3)`,
+			if _, err := tx.Exec(ctx, `UPDATE ai_chat_sessions SET token_hash=sha256(token_hash||id::text::bytea) WHERE workspace_id=$1 AND channel_id=$2 AND token_hash=$3`,
 				workspaceID, in.Browser.ChannelID, in.Browser.TokenHash); err != nil {
 				return err
 			}
@@ -659,9 +657,10 @@ func (s *Service) CreateChatTransfer(ctx context.Context, workspaceID string, br
 	return found, err
 }
 
-// RedeemChatTransfer uses a code once, within its time, on the channel it was made on: the chat answers
-// pageTokenHash from now on (the page's own cookie). ok is false for a code that is unknown, used,
-// expired or of another channel.
+// RedeemChatTransfer uses a code once, within its time, on the channel it was made on: the chat moves to
+// pageTokenHash (the page's own cookie) and the frame's token no longer finds it, so a link sent to
+// someone else never shares one chat between two browsers. ok is false for a code that is unknown,
+// used, expired or of another channel.
 func (s *Service) RedeemChatTransfer(ctx context.Context, workspaceID, channelID string, codeHash, pageTokenHash []byte) (bool, error) {
 	var ok bool
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
@@ -677,8 +676,21 @@ func (s *Service) RedeemChatTransfer(ctx context.Context, workspaceID, channelID
 			return err
 		}
 		ok = true
-		_, err = tx.Exec(ctx, `UPDATE ai_chat_sessions SET page_token_hash=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, sessionID, pageTokenHash)
+		_, err = tx.Exec(ctx, `UPDATE ai_chat_sessions SET token_hash=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, sessionID, pageTokenHash)
 		return err
 	})
 	return ok, err
+}
+
+// ChatHandedOff records that a chat's "Talk to a person" opened (or joined) a conversation: the chat
+// says so in its transcript and links the conversation. The chat goes on; its texts stay its own.
+func (s *Service) ChatHandedOff(ctx context.Context, workspaceID, sessionID, conversationID string) error {
+	if !isUUID(sessionID) || !isUUID(conversationID) {
+		return nil
+	}
+	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE ai_chat_sessions SET status='handed_off',conversation_id=$3 WHERE workspace_id=$1 AND id=$2 AND status<>'ended'`,
+			workspaceID, sessionID, conversationID)
+		return err
+	})
 }

@@ -8,21 +8,26 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 // The help center's AI chat as end users reach it: routes of the help chat channel below every help
@@ -73,6 +78,7 @@ func (a *API) helpChatRoutes() []channels.HelpCenterRoute {
 		route(http.MethodGet, "/chat/widget.js", false, a.helpChatAsset("widget.js")),
 		route(http.MethodGet, "/chat/widget-config", false, a.helpChatWidgetConfig),
 		route(http.MethodPost, "/chat/transfer", true, a.helpChatTransfer),
+		route(http.MethodPost, "/chat/handoff", true, a.helpChatHandoff),
 		route(http.MethodGet, "/chat/session", false, a.helpChatSession),
 		route(http.MethodPost, "/chat/session/end", true, a.helpChatEnd),
 		route(http.MethodPost, "/chat/turns", true, a.helpChatTurn),
@@ -598,4 +604,125 @@ func (a *API) helpChatAdditions(kit channels.HelpCenterKit) func(ctx context.Con
 		return channels.HelpCenterAdditions{Link: "/chat", LinkLabel: "Ask AI", ArticleStyle: "/chat/chat.css?v=" + css.Version, ArticleScript: "/chat/chat.js?v=" + js.Version,
 			ArticleBox: true, BoxConfig: box, Version: hex.EncodeToString(sum[:8])}, nil
 	}
+}
+
+// helpChatHandoff is "Talk to a person": the chat, as text with the articles it cited, goes to the team
+// as an inbound message of the help chat channel (the shared ingest: rate limits by address, threading
+// by chat, trial rules). A second hand-off of the same chat joins its conversation. The address was
+// typed and is never checked; the inbox says so.
+func (a *API) helpChatHandoff(c *helpChat) {
+	var input struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+		Note  string `json:"note"`
+	}
+	if err := json.NewDecoder(io.LimitReader(c.request.Body, 16<<10)).Decode(&input); err != nil {
+		writeError(c.response, http.StatusBadRequest, "invalid_request", "The body must be a JSON object with an email.")
+		return
+	}
+	submission, fields := validateWebForm(input.Email, "", "")
+	if fields == nil {
+		fields = map[string]string{}
+	}
+	input.Name = strings.Join(strings.Fields(input.Name), " ")
+	if utf8.RuneCountInString(input.Name) > 120 {
+		fields["name"] = "Name is too long: at most 120 characters."
+	}
+	if utf8.RuneCountInString(input.Note) > 2000 {
+		fields["note"] = "Note is too long: at most 2,000 characters."
+	}
+	if len(fields) > 0 {
+		writeJSON(c.response, http.StatusUnprocessableEntity, map[string]any{"error": errorBody(c.response, map[string]any{
+			"code": "validation_failed", "message": webFormFieldsMessage(fields), "fields": fields})})
+		return
+	}
+	ctx := c.request.Context()
+	handoff := helpchat.Handoff{Email: submission.Email, Name: input.Name, Note: strings.TrimSpace(input.Note),
+		Address: helpchat.AddressKey(c.at.WorkspaceID, clientAddress(c.request, a.config.TrustedProxies))}
+	if browser, token := c.browser(); token != "" {
+		view, found, err := a.ai.ChatSessionOf(ctx, c.at.WorkspaceID, browser)
+		if err != nil {
+			a.helpChatFailed(c, err)
+			return
+		}
+		if found {
+			handoff.SessionID, handoff.Transcript = view.ID, c.transcript(view)
+			if len(view.Turns) > 0 && view.Turns[0].Question != nil {
+				handoff.FirstQuestion = *view.Turns[0].Question
+			}
+		}
+	}
+	if handoff.Transcript == "" {
+		handoff.Transcript = "(No questions yet.)"
+	}
+	body, err := json.Marshal(handoff)
+	if err != nil {
+		a.helpChatFailed(c, err)
+		return
+	}
+	results, err := c.kit.Receive(ctx, c.channel, []channels.Raw{{JSON: body, ReceivedAt: a.now()}})
+	switch {
+	case errors.Is(err, channels.ErrChannelOff), errors.Is(err, domain.ErrMailboxClosed):
+		c.at.NotFound(c.response)
+		return
+	case errors.Is(err, store.ErrRateLimited):
+		c.response.Header().Set("Retry-After", strconv.Itoa(int(store.InboundRateWindow.Seconds())))
+		writeError(c.response, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again later.")
+		return
+	case err != nil:
+		a.helpChatFailed(c, err)
+		return
+	}
+	conversationID := ""
+	for _, result := range results {
+		if result.ConversationID != nil {
+			conversationID = *result.ConversationID
+		}
+	}
+	if conversationID == "" {
+		a.helpChatFailed(c, fmt.Errorf("hand-off stored no conversation"))
+		return
+	}
+	if err := a.ai.ChatHandedOff(ctx, c.at.WorkspaceID, handoff.SessionID, conversationID); err != nil {
+		a.helpChatFailed(c, err)
+		return
+	}
+	writeJSON(c.response, http.StatusCreated, map[string]any{"reference": chatReference(conversationID), "trial": c.at.Trial})
+}
+
+// chatReference is what the end user may quote to the team: the start of the conversation's id (the
+// conversation's address in the app begins with it). Conversations have no number of their own.
+func chatReference(conversationID string) string {
+	return strings.ToUpper(strings.ReplaceAll(conversationID, "-", "")[:8])
+}
+
+// chatMarker is an answer's citation of an article ([#12]): the transcript lists the sources instead.
+var chatMarker = regexp.MustCompile(`\s*\[#\d+\]`)
+
+// transcript is the chat as the team reads it: each question and answer, with the articles cited.
+func (c *helpChat) transcript(view ai.ChatSessionView) string {
+	var text strings.Builder
+	for _, turn := range view.Turns {
+		if turn.Question != nil {
+			text.WriteString("Customer: " + *turn.Question + "\n")
+		}
+		answer := "(no answer)"
+		switch {
+		case turn.Status == "over_limit":
+			answer = "(AI answers were paused: over the chat's limit)"
+		case turn.Answer != nil && strings.TrimSpace(*turn.Answer) != "":
+			answer = strings.TrimSpace(chatMarker.ReplaceAllString(*turn.Answer, ""))
+		}
+		text.WriteString("AI: " + answer + "\n")
+		for _, source := range turn.Sources {
+			s := c.source(source.Number, source.Title, source.Folder)
+			link := s.URL
+			if strings.HasPrefix(link, "/") {
+				link = c.at.Address + link
+			}
+			text.WriteString("  Source: " + s.Title + " " + link + "\n")
+		}
+		text.WriteString("\n")
+	}
+	return strings.TrimSpace(text.String())
 }

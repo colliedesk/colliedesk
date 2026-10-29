@@ -91,7 +91,7 @@ export type AIChatSummary = z.infer<typeof aiChatSummarySchema>;
 export type AIChatPage = z.infer<typeof aiChatPageSchema>;
 export type AIChatSession = z.infer<typeof aiChatSessionSchema>;
 export type AIChatTurn = z.infer<typeof aiChatTurnSchema>;
-export interface AIChatFilter { status?: AIChatStatus; notHelpful?: boolean; cursor?: string }
+export interface AIChatFilter { status?: AIChatStatus; notHelpful?: boolean; conversationId?: string; cursor?: string }
 
 export type AISettings = z.infer<typeof aiSettingsSchema>;
 export type AIProvider = z.infer<typeof aiProviderSchema>;
@@ -123,6 +123,7 @@ export const aiApi = {
     const query = new URLSearchParams();
     if (filter.status) query.set('status', filter.status);
     if (filter.notHelpful) query.set('feedback', 'not_helpful');
+    if (filter.conversationId) query.set('conversation_id', filter.conversationId);
     if (filter.cursor) query.set('cursor', filter.cursor);
     const search = query.toString();
     return request(`/api/v1/ai/chat/sessions${search ? `?${search}` : ''}`, aiChatPageSchema);
