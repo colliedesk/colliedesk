@@ -31,6 +31,69 @@ The help center's AI chat: end users ask, an AI answers from the published artic
   `Inbound.RateKey` (a hash of the client address per workspace) is what the journal's `sender_key`
   holds for a hand-off; the contact is still found by the email.
 
+## Routes, cookie, Origin
+
+- Below the help center root on every address (`/chat/session`, `/chat/turns`, `/chat/turns/{id}`,
+  `…/feedback`, `/chat/session/end`, `/chat/prewarm`; `httpapi/help-chat-handlers.go`), in the contract
+  under the tag `HelpCenterChat` with the help center as server; `helpCenterPublicRoutes` (token-scope.go)
+  lists them with why no token tier classifies them, and `TestEveryHelpCenterRouteIsListedAndInTheContract`
+  keeps the routes, the list and the contract equal. `?channel=<id>` picks a help chat channel, its
+  type's default otherwise.
+- **Off is the help center's 404.** Channel off, the chat feature off or unable to run, an unknown
+  channel or another workspace's: `HelpCenter.NotFound`, byte for byte the answer of a help center that
+  is not there. A turn or feedback id outside the browser's chat is a JSON `404 not_found`.
+- **Writes** need `Origin` equal to the help center's own origin (`helpcenter.SiteURL`'s scheme and host:
+  the slug host, the custom domain, or `APP_ORIGIN` below `/help/<slug>`) and `Content-Type:
+  application/json` when they carry a body: 403 `csrf_rejected`, 415.
+- **Cookie**: a random 128-bit token, only its SHA-256 stored, found by (workspace, channel, hash).
+  On a host of its own `__Host-cd_chat_<channel8>` (`Path=/`), below `/help/<slug>`
+  `__Secure-cd_chat_<slug>_<channel8>` with that path, in a site's frame `_w` with `SameSite=None;
+  Partitioned`; a server on plain `http://` (development) sets neither prefix nor `Secure`; never
+  `Domain=`. A chat starts at its first question only (the session read, the pre-warm and the widget's
+  config never start one) and its cookie is renewed for 30 days with each answer, before the first byte
+  of the stream. A chat that ended or expired gives its token hash up (it is rehashed) so the same
+  browser starts a new chat.
+
+## Streaming
+
+`POST …/chat/turns` answers NDJSON (`turn`, `delta`*, `sources`, `done` or `error`), `X-Accel-Buffering:
+no`, a write deadline of 90 s through `http.ResponseController` (a test recorder cannot, which is
+ignored). Refusals before the stream starts are HTTP statuses (403, 415, 422 `question_too_long`, 409
+`chat_full`, 429 `rate_limited` with `Retry-After` for the address limits, 10 a minute and 60 an hour,
+and for answers at once, 3 a workspace and 32 a process). Once the turn is stored every outcome is an
+event, and the provider call runs on a context the end user cannot cancel (60 s): an end user who
+leaves still gets the answer stored and metered, and reads it back with `GET …/chat/turns/{id}`.
+
+- **Sentences and the contact filter** (`chat-filter.go`): text is sent at a sentence's end, or early
+  at 200 characters or 1.5 s, at the last space that does not split a run of number groups (`+84 912
+  345` waits for `678`). An email address, a run of 6 or more digits (compared digits only, so
+  `10.000.000` and `10,000,000` are the same) or a link (scheme, `www.`, a domain with a path, or a
+  common top-level domain; compared without scheme and `www.`, a translated `<placeholder>` keeps the
+  part before it) that the articles the AI read do not hold replaces its whole sentence with
+  `[contact details hidden — not in the articles]`. The 20 answers of the eval keep every word
+  (`TestRealAnswersFromTheArticlesAreNeverHidden`).
+- **Citations**: `[#number]` of the articles the prompt held, in the order first cited, are the
+  sources; none makes the turn `no_source`. A knowledge base with no article answers `no_source`
+  without a call.
+
+## Limits and money
+
+`metered` sends a chat call (`FeatureChat`) through `chatRoom`, under its own advisory lock
+(`ai-chat:<workspace>`), never the team's allowance check, and `allowanceLeft` leaves `feature='chat'`
+out of what the team spent and holds. On the cloud's own provider (plan limits) a call is refused
+(`ErrChatLimit`: the turn is `over_limit`, the end user gets 3 related articles, nothing is sent) once
+the month's or the day's answers or spend are reached; elsewhere only the slot's own monthly limit and a
+tenth of it a day. A chat call on a workspace's key is priced at `AI_SERVER_PRICES` when its model has a
+price there, so that limit can count; a limit on a model without a price is refused when it is set
+(400 naming the model).
+
+- **Pre-warm**: `POST …/chat/prewarm` (the chat page, when the end user first focuses the question)
+  sends the turn's own prefix with `max_tokens: 0`, not streamed (a stream refuses 0), only to a
+  provider with a cache and a knowledge base sent whole, skipped when a call read or wrote that cache
+  in the last 4 minutes (`ai_chat_kb_snapshots.last_cache_at`), at most once in 5 minutes per address
+  and workspace. Measured against Claude (`TestHelpChatAgainstClaude`): the pre-warm wrote 2,190 cached
+  tokens and the first question read 2,161 back.
+
 ## The prompt
 
 Order, byte-stable before the turn (`ai/chat-context.go`):

@@ -5,6 +5,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
+	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"io"
@@ -169,7 +170,9 @@ type API struct {
 	dispatches sync.WaitGroup
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
-	config Config
+	// helpChat bounds the help center's AI chat per client address.
+	helpChat helpChatLimiters
+	config   Config
 	// alerted dedupes the operator alert for paid subscriptions without a workspace.
 	alerted alertedSubscriptions
 	auth    *auth.Service
@@ -267,14 +270,14 @@ func Outbound(config Config) store.OutboundPolicy {
 
 // Channels is the registry of channel types a configuration runs. revoke, when given, revokes the
 // mailbox grant of a removed email channel at its provider.
-func Channels(config Config, outbound store.OutboundPolicy, revoke ...func(*store.SealedGrant, string, string)) *channels.Registry {
+func Channels(config Config, outbound store.OutboundPolicy, helpChat helpchat.Config, revoke ...func(*store.SealedGrant, string, string)) *channels.Registry {
 	email := channelemail.Config{TrustedAuthServID: config.Email.TrustedAuthServID,
 		HostedMailDomain: config.Email.HostedMailDomain, PlatformForwarding: config.Email.PlatformInboundSecret != "",
 		Cloud: config.Billing.Enabled(), Outbound: outbound}
 	if len(revoke) > 0 {
 		email.RevokeGrant = revoke[0]
 	}
-	registered := registry.New(registry.Config{Email: email})
+	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat})
 	if len(config.ExtraChannelTypes) == 0 {
 		return registered
 	}
@@ -320,7 +323,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
 			WithSealKeys(config.Google.Keys)}
-	api.store = api.store.WithChannels(Channels(config, outbound, api.revokeSealed))
+	api.store = api.store.WithChannels(Channels(config, outbound, helpchat.Config{HelpCenterRoutes: api.helpChatRoutes()}, api.revokeSealed))
 	api.pipeline = pipeline.New(api.store, clock)
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	importKeys := config.ImportKeys
@@ -561,6 +564,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/ai/chat/sessions", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/ai/chat/sessions/{id}", auth.PermissionConversationsRead},
 		{http.MethodDelete, "/api/v1/ai/chat/sessions/{id}", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/ai/chat/preview", auth.PermissionConversationsWrite},
 		{http.MethodPut, "/api/v1/ai/automatic-limits", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionConversationsRead},

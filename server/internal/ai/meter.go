@@ -80,7 +80,7 @@ func (s *Service) allowanceLeft(ctx context.Context, tx pgx.Tx, workspaceID stri
 	var used int64
 	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
 			(SELECT COALESCE(sum(CASE WHEN status='started' THEN COALESCE(reserved_micro_usd,0) ELSE COALESCE(cost_micro_usd,0) END),0)
-				FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND started_at>=$2)`,
+				FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND started_at>=$2)`,
 		workspaceID, monthStart(s.now())).Scan(&agents, &used); err != nil {
 		return 0, 0, false, err
 	}
@@ -142,7 +142,14 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 	var usageID string
 	err := s.db.InWorkspace(ctx, call.WorkspaceID, func(tx pgx.Tx) error {
 		var reserved *int64
-		if call.BilledTo == BilledToServer && s.config.Server != nil {
+		if call.Feature == FeatureChat {
+			// The chat has its own money: it never spends or waits on the team's allowance.
+			hold, err := s.chatRoom(ctx, tx, call, model, tokens)
+			if err != nil {
+				return err
+			}
+			reserved = hold
+		} else if call.BilledTo == BilledToServer && s.config.Server != nil {
 			// Checked and held in one step per workspace: calls that start together each see what the
 			// others hold, so together they never pass the allowance by more than their estimates miss.
 			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ai-allowance:"+call.WorkspaceID); err != nil {
@@ -155,7 +162,7 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 			}
 			if limited && (left <= 0 || hold > left) {
 				var held int64
-				if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND status='started'`,
+				if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND status='started'`,
 					call.WorkspaceID).Scan(&held); err != nil {
 					return err
 				}
@@ -193,7 +200,7 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 		}
 		var hops []byte
 		var cost *int64
-		if response.Usage.Reported && call.BilledTo == BilledToServer && s.config.Server != nil {
+		if response.Usage.Reported && s.priced(call, model) {
 			value, known := costMicroUSD(s.config.Server.Prices, response.Hops)
 			if !known {
 				slog.Warn("an AI model without a price in AI_SERVER_PRICES answered; charged at the highest declared price", "model", response.Model)
@@ -233,6 +240,19 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 		return response, fmt.Errorf("record the AI call after it: %w", err)
 	}
 	return response, callErr
+}
+
+// priced says whether a call's cost is computed: every call on the server's provider, and a chat call
+// on a workspace's key when the server declares its model's price (its own monthly limit counts it).
+func (s *Service) priced(call Call, model string) bool {
+	if s.config.Server == nil {
+		return false
+	}
+	if call.BilledTo == BilledToServer {
+		return true
+	}
+	_, known := s.config.Server.Prices[model]
+	return call.Feature == FeatureChat && known
 }
 
 func nullable(value string) any {
@@ -302,7 +322,7 @@ func (s *Service) typicalCallFits(ctx context.Context, tx pgx.Tx, workspaceID, m
 		return err
 	}
 	var held int64
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND status='started'`,
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND status='started'`,
 		workspaceID).Scan(&held); err != nil {
 		return err
 	}

@@ -61,6 +61,23 @@ Videos take disk room: the server refuses an upload when the disk has less than 
 uploads in progress and 1 GiB free. Back up `ATTACHMENTS_DIR` with the database; a backup and an
 [export](../user/export.md) grow with the videos.
 
+## The help center's AI chat
+
+An [AI chat](../user/ai-chat.md) answer streams line by line (`application/x-ndjson`) from
+`POST …/chat/turns` on the help center's address. The server sends `X-Accel-Buffering: no`, which
+nginx honours; if your nginx ignores it, turn buffering off for that path:
+
+```nginx
+location ~ /chat/turns {
+    proxy_pass http://colliedesk:8080;
+    proxy_buffering off;
+}
+```
+
+Caddy streams it as it is. Do not compress `application/x-ndjson` (a compressing proxy holds the lines
+back). An answer takes up to 90 seconds; keep the proxy's read timeout above that. Set `TRUSTED_PROXIES`
+so the chat's limit of 10 questions a minute per address counts readers, not the proxy.
+
 ## Help center host names
 
 Every workspace's [help center](../user/knowledge-base.md#public-help-center) works at

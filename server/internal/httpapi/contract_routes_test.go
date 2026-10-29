@@ -330,6 +330,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/ai/chat/sessions":                                     {path: "/api/v1/ai/chat/sessions?status=handed_off", token: admin, status: 200},
 		"GET /api/v1/ai/chat/sessions/{id}":                                {path: "/api/v1/ai/chat/sessions/" + f.aiChatID, token: admin, status: 200},
 		"DELETE /api/v1/ai/chat/sessions/{id}":                             {path: "/api/v1/ai/chat/sessions/" + f.aiChatID, token: admin, status: 204},
+		"POST /api/v1/ai/chat/preview":                                     {path: "/api/v1/ai/chat/preview", body: map[string]any{"question": "Where is my order?"}, token: admin, status: 409},
 		"PUT /api/v1/ai/automatic-limits":                                  {path: "/api/v1/ai/automatic-limits", body: map[string]any{"per_day": 200, "per_minute": 20}, token: admin, status: 200},
 		"POST /api/v1/conversations/{id}/ai-drafts":                        {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts", body: map[string]any{"prompt": "Another contract draft"}, token: admin, status: 202},
 		"GET /api/v1/conversations/{id}/ai-drafts":                         {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts", token: admin, status: 200},

@@ -1,13 +1,13 @@
 import { useId, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { aiApi } from '../../api/ai';
-import type { AIChatSession, AIChatStatus, AIChatSummary, AIChatTurn, AIChatUsage, AISlot } from '../../api/ai';
+import type { AIChatPreview, AIChatSession, AIChatStatus, AIChatSummary, AIChatTurn, AIChatUsage, AISlot } from '../../api/ai';
+import { ConflictError } from '../../api/client';
 import { formatDate, formatDay } from '../../lib/format-date';
 import { Dialog } from '../../ui/dialog';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { aiChatMessages as m } from './ai-chat-messages';
 import './ai-settings.css';
-import './ai-chat.css';
 
 // The team's side of the help center's AI chat: the month's use (admins), the chats and a chat's
 // transcript. Every member reads chats; only an admin deletes one.
@@ -87,6 +87,34 @@ function Month({ usage, slot, onSetCap }: { usage: AIChatUsage; slot?: AISlot; o
   </section>;
 }
 
+// TryIt asks the chat as a customer would, from Settings: the whole answer, nothing stored.
+function TryIt({ on }: { on: boolean }) {
+  const [question, setQuestion] = useState('');
+  const id = useId();
+  const ask = useMutation({ mutationFn: (text: string) => aiApi.chatPreview(text, crypto.randomUUID()) });
+  const answer: AIChatPreview | undefined = ask.data;
+  const off = !on || (ask.error instanceof ConflictError && ask.error.detail?.code === 'ai_feature_off');
+  return <section className="panel aic-try" aria-labelledby={`${id}-heading`}>
+    <div className="aic-chats-head"><h2 id={`${id}-heading`}>{m.try}</h2>
+      {(answer || ask.isError) && <button type="button" onClick={() => { ask.reset(); setQuestion(''); }}>{m.tryClear}</button>}</div>
+    <p className="muted-copy">{m.tryHelp}</p>
+    {off ? <p className="notice notice-plain" role="status"><span>{m.tryOff}</span></p>
+      : <form className="aic-try-form" onSubmit={(event) => { event.preventDefault(); if (!ask.isPending && question.trim()) ask.mutate(question.trim()); }}>
+          <label className="field" htmlFor={id}><span>{m.tryLabel}</span>
+            <textarea id={id} rows={2} maxLength={1000} value={question} onChange={(event) => setQuestion(event.target.value)} /></label>
+          <span className="button-row"><button type="submit" className="primary-action" disabled={ask.isPending || !question.trim()}>{ask.isPending ? m.tryAsking : m.tryAsk}</button></span>
+        </form>}
+    {ask.isError && !off && <p role="alert" className="error-copy">{m.tryFailed}</p>}
+    {answer && <div className="aic-turn" aria-live="polite">
+      {answer.answer && <div className="aic-said"><b>{m.ai}</b><p>{answer.answer}</p></div>}
+      {answer.sources.length > 0 && <ul className="aic-sources" aria-label={m.sources}>{answer.sources.map((source) =>
+        <li key={source.number}>{source.folder && <small>{source.folder}</small>}{source.title}</li>)}</ul>}
+      <p className="aic-turn-foot">{answer.status === 'no_source' ? m.tryNoSource : answer.status === 'over_limit' ? m.tryOver
+        : m.tryMeta((answer.took_ms / 1000).toFixed(1), answer.whole, answer.articles)}</p>
+    </div>}
+  </section>;
+}
+
 type ChatTab = 'all' | AIChatStatus;
 
 // ChatList is the chats, newest activity first, as a table on a wide panel and cards on a narrow one.
@@ -139,14 +167,19 @@ function ChatRow({ chat, timezone, onOpen }: { chat: AIChatSummary; timezone: st
 
 // AIChatPanel is the AI chat tab of Settings → Built-in AI. slot is the AI chat feature, whose own monthly
 // limit onSetCap changes where the plan sets none.
-export function AIChatPanel({ timezone, onOpen, slot, onSetCap }: { timezone: string; onOpen: (id: string) => void; slot?: AISlot; onSetCap?: (cap: number | null) => Promise<unknown> }) {
+export function AIChatPanel({ timezone, onOpen, slot, onSetCap, isAdmin = true }: {
+  timezone: string; onOpen: (id: string) => void; slot?: AISlot; onSetCap?: (cap: number | null) => Promise<unknown>; isAdmin?: boolean;
+}) {
   const client = useQueryClient();
-  const usage = useQuery({ queryKey: ['ai-chat-usage'], queryFn: aiApi.chatUsage });
+  // The month's use and Try it are an admin's (spend); every member reads the chats.
+  const usage = useQuery({ queryKey: ['ai-chat-usage'], queryFn: aiApi.chatUsage, enabled: isAdmin });
+  if (!isAdmin) return <ChatList timezone={timezone} onOpen={onOpen} />;
   const setCap = onSetCap && ((cap: number | null) => onSetCap(cap).then(() => client.invalidateQueries({ queryKey: ['ai-chat-usage'] })));
   return <>
     {usage.data && <Notices usage={usage.data} />}
     {usage.isError && <p role="alert" className="error-copy">{m.usageFailed}</p>}
     {usage.data ? <Month usage={usage.data} slot={slot} onSetCap={setCap} /> : !usage.isError && <section className="panel aic-month" aria-busy="true" aria-label={m.month} />}
+    <TryIt on={slot?.active ?? false} />
     <ChatList timezone={timezone} onOpen={onOpen} />
   </>;
 }

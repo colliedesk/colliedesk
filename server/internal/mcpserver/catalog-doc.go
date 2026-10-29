@@ -160,6 +160,7 @@ var toolDocs = map[string]string{
 	"colliedesk_ai_chat_sessions_list":              "Lists end users' chats with the help center's AI",
 	"colliedesk_ai_chat_session_get":                "Reads one AI chat's transcript with the articles each answer cited",
 	"colliedesk_ai_chat_session_delete_request":     "Asks a person to delete an AI chat's transcript for good",
+	"colliedesk_ai_chat_preview":                    "Asks the help center's AI chat a question as a customer would",
 	"colliedesk_ai_automatic_limits_set":            "Changes how many automatic AI runs a workspace allows a day and a minute",
 	"colliedesk_ai_draft_create":                    "Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent",
 	"colliedesk_ai_draft_get":                       "Shows an AI draft, waiting up to 20 seconds while it is written",

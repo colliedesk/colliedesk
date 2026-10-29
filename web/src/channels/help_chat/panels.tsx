@@ -3,13 +3,19 @@ import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { channelsApi } from '../../api/channels';
 import type { HelpChatConfig } from '../../api/channels';
-import { kbApi } from '../../features/kb/kb-api';
+import { z } from 'zod';
+import { request } from '../../api/client';
 import { CopyButton } from '../../features/settings/copy-button';
 import { saveState, useSaveFeedback } from '../../features/settings/save-feedback';
 import type { SaveState } from '../../features/settings/save-feedback';
 import type { ChannelPanelProps, ConnectProps } from '../registry';
 
 const limits = { greeting: 300, suggestions: 4, suggestion: 120, instructions: 2000 };
+
+// The help center's address, for the chat page and the code for a site; read here so this part needs
+// none of the knowledge base's code.
+const helpCenterSchema = z.object({ enabled: z.boolean(), url: z.string() });
+const helpCenter = () => request('/api/v1/help-center', helpCenterSchema);
 
 const m = {
   greeting: 'Greeting',
@@ -121,7 +127,7 @@ function Embed({ channel, canManage }: ChannelPanelProps) {
   useEffect(() => setOrigins(config.widget_origins.join('\n')), [config.widget_origins]);
   const feedback = useSaveFeedback(saveState(save));
   const hint = useId();
-  const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter });
+  const center = useQuery({ queryKey: ['help-center', 'address'], queryFn: helpCenter });
   const home = center.data?.enabled ? center.data.url.replace(/\/$/, '') : undefined;
   const code = home ? `<script src="${home}/chat/widget.js" data-channel="${channel.id}" async></script>` : undefined;
   return <div className="settings-body">

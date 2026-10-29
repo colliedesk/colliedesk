@@ -13,6 +13,7 @@ import (
 var toolNames = []string{
 	"colliedesk_agents_list",
 	"colliedesk_ai_automatic_limits_set",
+	"colliedesk_ai_chat_preview",
 	"colliedesk_ai_chat_session_delete_request",
 	"colliedesk_ai_chat_session_get",
 	"colliedesk_ai_chat_sessions_list",
@@ -371,6 +372,7 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_ai_chat_sessions_list":              {readOnly: true, tier: "read"},
 	"colliedesk_ai_chat_session_get":                {readOnly: true, tier: "read"},
 	"colliedesk_ai_chat_session_delete_request":     {tier: "read"},
+	"colliedesk_ai_chat_preview":                    {tier: "draft"},
 	"colliedesk_ai_draft_create":                    {tier: "draft"},
 	"colliedesk_ai_draft_get":                       {readOnly: true, tier: "read"},
 	"colliedesk_ai_drafts_list":                     {readOnly: true, tier: "read"},

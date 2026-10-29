@@ -97,13 +97,13 @@ export function AIPage(props: AIPageProps) {
   const { settings, isAdmin } = props;
   const focusAfterSave = useFocusAfterSave(props.busySlot);
   const setSlot = (slot: AISlotName, input: AISlotInput) => { focusAfterSave(slot); props.onSetSlot(slot, input); };
-  const [tab, setTab] = useState<AITab>(props.isAdmin && props.initialTab ? props.initialTab : 'features');
+  const [tab, setTab] = useState<AITab>(props.initialTab ?? 'features');
   const [dialog, setDialog] = useState<{ kind: 'add' } | { kind: 'automatic' } | { kind: 'auto-triage' | 'auto-draft'; slot: AISlot } | { kind: 'key' | 'delete'; provider: AIProvider }>();
   const ids = { tabs: useId() };
   const full = settings ? settings.providers.length >= settings.provider_limit : false;
   const tabs: { id: AITab; label: string; count?: number }[] = [
     { id: 'features', label: m.tabFeatures }, { id: 'providers', label: m.tabProviders, count: settings ? settings.providers.length + (settings.server ? 1 : 0) : undefined },
-    ...(isAdmin ? [{ id: 'chat' as const, label: chatMessages.tab }, { id: 'usage' as const, label: m.tabUsage }] : []), { id: 'history', label: m.tabHistory },
+    { id: 'chat', label: chatMessages.tab }, ...(isAdmin ? [{ id: 'usage' as const, label: m.tabUsage }] : []), { id: 'history', label: m.tabHistory },
   ];
   const [month, setMonth] = useState(() => recentMonths()[0]);
   const show = (next: AITab) => { setTab(next); if (next === 'usage') props.onUsageMonth(month); };
@@ -126,7 +126,7 @@ export function AIPage(props: AIPageProps) {
               {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })}
                 onConfirmAuto={(slot) => setDialog({ kind: slot.slot === 'draft' ? 'auto-draft' : 'auto-triage', slot })} onSetAuto={setSlot} />}
               {tab === 'chat' && <AIChatPanel timezone={props.timezone} onOpen={(id) => props.onOpenChat?.(id)} slot={settings.slots.find((slot) => slot.slot === 'chat')}
-                onSetCap={props.onSetChatCap} />}
+                onSetCap={props.onSetChatCap} isAdmin={isAdmin} />}
               {tab === 'usage' && <Usage usage={props.usage} failed={props.usageFailed} month={month} onMonth={(next) => { setMonth(next); props.onUsageMonth(next); }} />}
               {tab === 'providers' && <Providers {...props} settings={settings}
                 onKey={(provider) => setDialog({ kind: 'key', provider })} onDelete={(provider) => setDialog({ kind: 'delete', provider })} />}

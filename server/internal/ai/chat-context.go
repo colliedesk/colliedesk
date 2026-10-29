@@ -238,7 +238,7 @@ func (s *Service) ChatPrompt(ctx context.Context, binding Binding, workspaceID s
 	}
 	excerptTokens := int64(0)
 	if !prompt.Whole && len(articles) > 0 {
-		excerpts, sent, refs, err := s.chatExcerpts(ctx, workspaceID, in.Question, viewing)
+		excerpts, sent, refs, err := s.chatExcerpts(ctx, workspaceID, in.Question, viewing, articles)
 		if err != nil {
 			return ChatPrompt{}, err
 		}
@@ -335,24 +335,20 @@ func (s *Service) measureChatKB(ctx context.Context, binding Binding, workspaceI
 
 // chatExcerpts are the best matching articles of a knowledge base too large to send whole, the
 // article being read first, up to chatExcerptTokens.
-func (s *Service) chatExcerpts(ctx context.Context, workspaceID, question string, viewing *store.ChatKBArticle) (string, string, map[int64]ChatArticleRef, error) {
+func (s *Service) chatExcerpts(ctx context.Context, workspaceID, question string, viewing *store.ChatKBArticle, articles []store.ChatKBArticle) (string, string, map[int64]ChatArticleRef, error) {
 	refs := map[int64]ChatArticleRef{}
+	known := make(map[string]store.ChatKBArticle, len(articles))
+	for _, a := range articles {
+		known[a.ID] = a
+	}
 	var docs []store.AIRetrievedDoc
-	var known map[string]store.ChatKBArticle
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		text := question
 		if viewing != nil {
 			text = viewing.Title + " " + question
 		}
 		var err error
-		if docs, err = store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: text, KBLimit: chatExcerptArticles}); err != nil {
-			return err
-		}
-		all, err := store.ChatKBArticles(ctx, tx, workspaceID, false)
-		known = map[string]store.ChatKBArticle{}
-		for _, a := range all {
-			known[a.ID] = a
-		}
+		docs, err = store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: text, KBLimit: chatExcerptArticles})
 		return err
 	})
 	if err != nil {

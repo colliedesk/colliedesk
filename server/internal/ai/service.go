@@ -71,6 +71,8 @@ type Service struct {
 	checks checkLimiter
 	// wakeup tells the worker a task was queued, so it does not wait for its next tick.
 	wakeup chan struct{}
+	// chats bounds the chat answers streaming at once (chat.go).
+	chats *chatGate
 }
 
 // NewService uses db (request pool).
@@ -78,7 +80,7 @@ func NewService(db *database.DB, config Config) *Service {
 	if config.CheckTimeout <= 0 {
 		config.CheckTimeout = defaultCheckTimeout
 	}
-	return &Service{db: db, config: config, now: time.Now, checks: checkLimiter{seen: map[string][]time.Time{}}, wakeup: make(chan struct{}, 1)}
+	return &Service{db: db, config: config, now: time.Now, checks: checkLimiter{seen: map[string][]time.Time{}}, wakeup: make(chan struct{}, 1), chats: newChatGate()}
 }
 
 // SetClock replaces the clock; tests use it.

@@ -3,7 +3,12 @@ package httpapi_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -17,7 +22,17 @@ type chatSlotView struct {
 // AI chat is a feature like drafts and triage, with a monthly spending limit of its own on a provider
 // the workspace pays for: set, kept when left out, removed with null; no other feature takes one.
 func TestTheChatFeatureTakesAMonthlyLimitOfItsOwn(t *testing.T) {
-	desk := newAIDesk(t, nil)
+	// Without a price for the model the server cannot count spend, so a limit is refused and says why.
+	unpriced := newAIDesk(t, nil)
+	refused := request(t, unpriced.api, http.MethodPut, "/api/v1/ai/slots/chat", map[string]any{"source": "provider", "provider_id": unpriced.providerA, "enabled": true,
+		"monthly_cap_micro_usd": 5_000_000}, unpriced.adminA, nil)
+	wantResponse(t, refused, http.StatusBadRequest, "invalid_request")
+	if !strings.Contains(refused.Body.String(), "claude-sonnet-5-5") {
+		t.Fatalf("refusal = %s", refused.Body.String())
+	}
+	desk := newAIDesk(t, func(config *httpapi.Config) {
+		config.AI.Server = &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Server", APIKey: "k", Prices: map[string]ai.Price{"claude-sonnet-5-5": {Input: 2, Output: 10}}}
+	})
 	put := func(body map[string]any, want int) chatSlotView {
 		t.Helper()
 		response := request(t, desk.api, http.MethodPut, "/api/v1/ai/slots/chat", body, desk.adminA, nil)

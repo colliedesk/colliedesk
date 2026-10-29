@@ -42,6 +42,153 @@ security:
   - bearerAuth: []
   - sessionCookie: []
 paths:
+  /chat/session:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    get:
+      operationId: getHelpChatSession
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: The end user's current chat by its cookie, with its turns; 204 without one.
+      responses:
+        '200':
+          description: The chat
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpChatSession'}}}
+        '204': {description: No chat on this browser.}
+        '404': {description: 'The chat is off: the help center''s own 404 page, as when it is off.'}
+  /chat/session/end:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    post:
+      operationId: endHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: New chat. Ends the browser's chat and removes its cookie; the team keeps its transcript. Needs the help center's Origin.
+      responses:
+        '204': {description: 'Ended, or there was none.'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: The chat is off (the help center's own 404 page).}
+  /chat/turns:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: surface, in: query, required: false, schema: {type: string, enum: [help_center, article, widget]}, description: '`widget`: the chat is framed by a site, its cookie is partitioned.'}
+    post:
+      operationId: askHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        Asks a question. The answer streams as NDJSON (`application/x-ndjson`), one `HelpChatEvent` a line: `turn`,
+        then `delta` (one checked sentence each; a sentence with contact details the articles do not hold is replaced),
+        `sources`, `done`; or `error` after the stream started. A chat starts at its first question and its cookie is
+        set (renewed for 30 days on each). Needs the help center's Origin and JSON. Limits: 1,000 characters, 50
+        questions a chat, 10 a minute and 60 an hour per address; past the month's or day's limit `done` says
+        `over_limit` with related articles and nothing is sent to the AI.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: {type: string, maxLength: 1000}
+                viewing_article_id: {type: string, format: uuid, description: 'The article the end user reads, when they ask about it.'}
+                surface: {type: string, enum: [help_center, article, widget], description: Where a new chat starts.}
+      responses:
+        '200':
+          description: The answer, as NDJSON events
+          content: {application/x-ndjson: {schema: {$ref: '#/components/schemas/HelpChatEvent'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: The chat is off (the help center's own 404 page).}
+        '409': {description: '`chat_full`: 50 questions; start a new chat.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '415': {description: Not JSON., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: '`question_too_long` or `invalid_request`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '429':
+          description: '`rate_limited`: too many questions from this address, or answers at once.'
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /chat/turns/{turn_id}:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: turn_id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: getHelpChatTurn
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: One answer of the browser's chat as stored, to recover a stream that broke.
+      responses:
+        '200':
+          description: The turn
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpChatTurn'}}}
+        '404': {description: 'Not an answer of this browser''s chat (`not_found`), or the chat is off (the help center''s own 404 page).'}
+  /chat/turns/{turn_id}/feedback:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: turn_id, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: rateHelpChatAnswer
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: Rates an answer of the browser's chat; a second rating replaces the first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating: {type: string, enum: [helpful, not_helpful]}
+      responses:
+        '204': {description: Rated}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Not an answer of this browser's chat.}
+        '422': {description: Not a rating., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    delete:
+      operationId: unrateHelpChatAnswer
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: Takes a rating back.
+      responses:
+        '204': {description: Taken back}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Not an answer of this browser's chat.}
+  /chat/prewarm:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    post:
+      operationId: prewarmHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        Warms the AI's cache of the articles when the end user starts typing, so the first answer comes sooner. At most
+        once in 5 minutes per address and workspace, never when the cache is warm, never a new chat; it counts toward the
+        chat's limits. Always 204.
+      responses:
+        '204': {description: Done or skipped.}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: The chat is off (the help center's own 404 page).}
   /api/v1/config:
     get:
       operationId: getPublicConfig
@@ -3260,6 +3407,42 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/ai/chat/preview:
+    post:
+      operationId: previewAIChat
+      x-permission: conversations:write
+      description: >
+        Answers a question as the help center's AI chat would, with the default help chat channel's instructions (or
+        `channel_id`'s), for an admin trying it. Nothing reaches a customer and nothing is stored but the call's usage,
+        which counts toward the chat's limits. Not streamed: the whole answer comes back. A repeat with the same
+        Idempotency-Key answers the first answer again and asks the AI nothing; the key with another question is
+        refused with 422, code `idempotency_key_reused`.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [question]
+              properties:
+                question: {type: string, maxLength: 1000}
+                channel_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: The answer as an end user would see it (or, for a repeated Idempotency-Key, the first one's)
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIChatPreview'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {description: Too many chat answers at once., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '502': {description: '`ai_failed`: the AI did not answer.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /api/v1/ai/automatic-limits:
     put:
       operationId: setAIAutomaticLimits
@@ -6532,6 +6715,59 @@ components:
         drafts_today: {type: integer}
         drafts_paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s automatic drafts (or all automatic runs) are used up: the next UTC midnight.'}
         drafts_reserved_until: {type: [string, 'null'], format: date-time, description: 'When automatic drafts spent half of this month''s allowance of the server''s provider: the next month. The other half stays for drafts people ask for and for triage.'}
+    HelpChatEvent:
+      type: object
+      required: [type]
+      description: 'One line of an answer''s stream. `turn` first; `delta` a checked sentence; `sources` the cited articles (or, `over_limit`, related ones); `done` last; `error` instead of `done`.'
+      properties:
+        type: {type: string, enum: [turn, delta, sources, done, error]}
+        turn_id: {type: string, format: uuid}
+        session_created: {type: boolean, description: This question started a new chat.}
+        text: {type: string}
+        sources: {type: array, items: {$ref: '#/components/schemas/HelpChatSource'}}
+        status: {type: string, enum: [answered, no_source, over_limit]}
+        links_allowed: {type: array, items: {type: string}, description: Links of the answer that are the articles' own; only these are shown as links.}
+        redacted: {type: boolean}
+        code: {type: string, enum: [model_failed, timeout]}
+    HelpChatSession:
+      type: object
+      required: [status, idle_hours, turns]
+      properties:
+        status: {$ref: '#/components/schemas/AIChatStatus'}
+        idle_hours: {type: integer, description: Hours since the last turn; a chat idle more than 24 asks the end user to continue it.}
+        turns: {type: array, items: {$ref: '#/components/schemas/HelpChatTurn'}}
+    HelpChatTurn:
+      type: object
+      required: [id, question, answer, status, sources, feedback, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        question: {type: [string, 'null']}
+        answer: {type: [string, 'null']}
+        status: {type: string, enum: [streaming, answered, no_source, over_limit, failed]}
+        error_code: {type: [string, 'null']}
+        sources: {type: array, items: {$ref: '#/components/schemas/HelpChatSource'}}
+        feedback: {type: [string, 'null'], enum: [helpful, not_helpful, null]}
+        redacted: {type: boolean, description: A sentence of the answer was hidden because it held contact details not in the articles.}
+        created_at: {type: string, format: date-time}
+    HelpChatSource:
+      type: object
+      required: [number, title, url, folder]
+      properties:
+        number: {type: integer}
+        title: {type: string}
+        url: {type: string, description: The article's page on the help center.}
+        folder: {type: string}
+    AIChatPreview:
+      type: object
+      required: [answer, status, sources, redacted, whole, articles, took_ms]
+      properties:
+        answer: {type: string}
+        status: {type: string, enum: [answered, no_source, over_limit]}
+        sources: {type: array, items: {type: object, required: [number, title, folder], properties: {number: {type: integer}, title: {type: string}, folder: {type: string}}}}
+        redacted: {type: boolean}
+        whole: {type: boolean, description: 'The AI read every article (else the best excerpts of a large knowledge base).'}
+        articles: {type: integer, description: How many articles it read.}
+        took_ms: {type: integer}
     AIChatStatus: {type: string, enum: [open, ended, handed_off], description: '`ended`: the end user started a new chat. `handed_off`: they asked to talk to a person.'}
     AIChatUsage:
       type: object
@@ -7288,11 +7524,11 @@ components:
         ai_features:
           type: object
           description: Which AI features can run now in the workspace (on, with a working provider); the web app offers only those.
-          required: [triage, draft, chat]
+          required: [triage, draft]
           properties:
             triage: {type: boolean}
             draft: {type: boolean}
-            chat: {type: boolean, description: The help center's AI chat answers end users.}
+            chat: {type: boolean, description: 'The help center''s AI chat answers end users (a server before it sends none).'}
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
         timezone: {type: string}

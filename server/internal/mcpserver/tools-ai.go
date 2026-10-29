@@ -366,3 +366,11 @@ func aiChatSessionDeleteRequest(c *call, arguments map[string]any) (any, error) 
 	c.notFound = aiChatNotFound
 	return ask(c, http.MethodDelete, path, nil)
 }
+
+func aiChatPreview(c *call, arguments map[string]any) (any, error) {
+	var answer json.RawMessage
+	if err := c.send(http.MethodPost, "/api/v1/ai/chat/preview", arguments, &answer); err != nil {
+		return nil, err
+	}
+	return answer, nil
+}

@@ -273,6 +273,10 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 		if input.MonthlyCapSet {
 			next.monthlyCap = input.MonthlyCap
 		}
+		// A limit counts spend, which the server can compute only for a model it has a price for.
+		if input.MonthlyCapSet && next.monthlyCap != nil && next.model != nil && !s.priced(Call{Feature: FeatureChat, BilledTo: BilledToWorkspaceKey}, *next.model) {
+			return invalid("This server has no price for %s, so it cannot count what AI chat spends. Ask its operator to add one to AI_SERVER_PRICES.", *next.model)
+		}
 		updatedBy := nullable(actor.AgentID)
 		var row slotRow
 		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,automatic,auto_parts,consented_by,consented_at,updated_by,updated_at,

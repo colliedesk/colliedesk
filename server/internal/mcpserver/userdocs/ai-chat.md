@@ -51,8 +51,9 @@ how many answers were rated helpful, with a warning at 80% and when answers are 
 **Settings → Built-in AI → AI chat → Chats** lists the chats, newest first, with where each started
 (the chat page, an article, your site), its state (open, handed off, ended) and whether an answer was
 rated not helpful. Open one to read it with the articles each answer cited. Every member of the team
-reads them at **/ai-chat**, and from a conversation a hand-off opened (**Open chat transcript**); only
-an admin deletes one, for good (the conversation keeps its own copy).
+reads them there (the tab shows only the chats to someone who is not an admin), and from a conversation
+a hand-off opened (**Open chat transcript**); only an admin deletes one, for good (the conversation
+keeps its own copy).
 
 A chat's texts are kept 90 days after its last question, then erased; its numbers stay a year. They
 are in the [export](export.md) (`ai-chat-sessions.ndjson`).

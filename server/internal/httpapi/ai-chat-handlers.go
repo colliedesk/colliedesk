@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 )
 
 // The team's side of the help center's AI chat: the month's use, the chats and their transcripts.
@@ -73,4 +75,56 @@ func (a *API) deleteAIChatSession(response http.ResponseWriter, request *http.Re
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
+}
+
+// previewAIChat answers a question as the help center's chat would, for an admin trying it (Settings →
+// Built-in AI → AI chat → Try it). Nothing is shown to customers or stored but the call's usage.
+func (a *API) previewAIChat(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		Question  string `json:"question"`
+		ChannelID string `json:"channel_id"`
+	}
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send question and, to try one channel's instructions, channel_id.")
+		return
+	}
+	who := principal(request)
+	ctx := request.Context()
+	surface := ai.ChatSurface{WorkspaceName: who.Workspace.Name}
+	channel, found, err := channelRouteKit{api: a, kind: helpchat.Type}.Channel(ctx, who.Workspace.ID, input.ChannelID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	if input.ChannelID != "" && !found {
+		writeError(response, http.StatusNotFound, "not_found", "No help chat channel with that id in this workspace.")
+		return
+	}
+	if found {
+		config, err := a.store.ChannelConfigOf(ctx, channel)
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+		if value, ok := config.(helpchat.Surface); ok {
+			surface.ChannelID, surface.Instructions = channel.ID, value.Instructions
+		}
+	}
+	// A press sent again (its Idempotency-Key) answers what the first one got: one paid answer per press.
+	a.runOnce(response, request, http.StatusOK, previewAIChatOperation, []string{input.Question, input.ChannelID}, func(ctx context.Context) (any, error) {
+		result, err := a.ai.ChatPreview(ctx, who.Workspace.ID, aiActor(request), surface, input.Question)
+		var failed *ai.ChatPreviewError
+		switch {
+		case errors.Is(err, ai.ErrChatBusy):
+			response.Header().Set("Retry-After", "5")
+			writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many chat answers at once. Try again in a moment.")
+		case errors.As(err, &failed):
+			writeError(response, http.StatusBadGateway, "ai_failed", "The AI did not answer ("+failed.Code+"). Try again.")
+		case err != nil:
+			writeAIError(response, err)
+		default:
+			return result, nil
+		}
+		return nil, errAnswered
+	})
 }

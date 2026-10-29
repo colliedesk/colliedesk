@@ -79,6 +79,12 @@ const aiChatTurnSchema = z.object({
 }) satisfies z.ZodType<Generated<'AIChatTurn'>>;
 export const aiChatSessionSchema = z.object({ ...chatSummaryShape, history_cut_at: nullableDate, transcript: z.array(aiChatTurnSchema) }) satisfies z.ZodType<Generated<'AIChatSession'>>;
 
+export const aiChatPreviewSchema = z.object({
+  answer: z.string(), status: z.enum(['answered', 'no_source', 'over_limit']),
+  sources: z.array(z.object({ number: z.number().int(), title: z.string(), folder: z.string() })),
+  redacted: z.boolean(), whole: z.boolean(), articles: z.number().int(), took_ms: z.number().int(),
+}) satisfies z.ZodType<Generated<'AIChatPreview'>>;
+export type AIChatPreview = z.infer<typeof aiChatPreviewSchema>;
 export type AIChatUsage = z.infer<typeof aiChatUsageSchema>;
 export type AIChatStatus = z.infer<typeof chatStatusSchema>;
 export type AIChatSummary = z.infer<typeof aiChatSummarySchema>;
@@ -122,6 +128,9 @@ export const aiApi = {
     return request(`/api/v1/ai/chat/sessions${search ? `?${search}` : ''}`, aiChatPageSchema);
   },
   chatSession: (id: string) => request(`/api/v1/ai/chat/sessions/${encodeURIComponent(id)}`, aiChatSessionSchema),
+  // One key per press: a press sent again after a lost answer gets the first answer, not a second paid one.
+  chatPreview: (question: string, key: string) =>
+    request('/api/v1/ai/chat/preview', aiChatPreviewSchema, { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify({ question }) }),
   deleteChatSession: (id: string) => requestNoContent(`/api/v1/ai/chat/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   setAutomatic: (perDay: number, perMinute: number, draftPerDay?: number) =>
     request('/api/v1/ai/automatic-limits', aiAutomaticSchema, { method: 'PUT',

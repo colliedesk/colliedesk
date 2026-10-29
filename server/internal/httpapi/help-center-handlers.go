@@ -102,3 +102,13 @@ func (a *API) askHelpCenterCertificate(response http.ResponseWriter, request *ht
 	response.Header().Set("Cache-Control", "no-store")
 	response.WriteHeader(http.StatusOK)
 }
+
+// HelpCenterRoutes lists the channel types' routes below every help center, "METHOD path", for the
+// gate that holds them to the contract.
+func (s *Server) HelpCenterRoutes() []string {
+	var list []string
+	for _, route := range s.api.channelHelpCenterRoutes() {
+		list = append(list, route.Method+" "+route.Path)
+	}
+	return list
+}

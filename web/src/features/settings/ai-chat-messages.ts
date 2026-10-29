@@ -45,9 +45,20 @@ export const aiChatMessages = {
   noMatch: 'No chats match.',
   older: 'Show older chats',
   listFailed: 'The chats could not be loaded. Try again in a moment.',
+  try: 'Try it',
+  tryHelp: 'Not shown to customers. Counts toward the AI chat limit.',
+  tryLabel: 'Ask as a customer would',
+  tryAsk: 'Ask',
+  tryAsking: 'Asking…',
+  tryClear: 'Clear',
+  tryMeta: (seconds: string, whole: boolean, articles: number) =>
+    `${seconds} s · ${whole ? `whole help center (${articles} ${articles === 1 ? 'article' : 'articles'})` : `best ${articles} matching articles`} · counts as 1 answer`,
+  tryNoSource: 'Not in the articles · customers see Talk to a person here',
+  tryOver: 'Paused by the limit · customers see these articles and Talk to a person',
+  tryFailed: 'The AI did not answer. Try again.',
+  tryOff: 'Turn AI chat on in Features first.',
   // The transcript page.
   back: 'AI chat',
-  backAgent: 'AI chats',
   title: (when: string) => `Chat from ${when}`,
   keptUntil: (day: string) => `Kept until ${day}`,
   openConversation: 'Open conversation',
@@ -67,6 +78,4 @@ export const aiChatMessages = {
   textGone: 'The text of this turn expired.',
   notFound: 'This chat is not there: it was deleted, or it belongs to another workspace.',
   loadFailed: 'The chat could not be loaded. Try again in a moment.',
-  agentHeading: 'AI chats',
-  agentDescription: 'Customers’ chats with the AI on your help center. Read only.',
 };

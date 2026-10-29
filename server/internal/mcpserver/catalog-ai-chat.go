@@ -59,3 +59,19 @@ func aiChatSessionDeleteRequestSpec() Spec {
 		[]string{"DELETE /api/v1/ai/chat/sessions/{id}"},
 		`{"type":"object","additionalProperties":false,"required":["chat_id"],"properties":{`+aiChatIDProperty+`}}`, aiChatSessionDeleteRequest)
 }
+
+func aiChatPreviewSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_chat_preview",
+		Title: "Try the AI chat",
+		Description: `Ask the help center's AI chat a question as a customer would, with the default help chat channel's instructions (or channel_id's), ` +
+			`and get the whole answer as the customer would see it: its text (contact details not in the articles hidden), status (answered, no_source, ` +
+			`over_limit) and the articles it cites. Nothing reaches a customer; the call costs like a customer's question and counts toward the chat's limits.` +
+			"\n\nTier: draft.",
+		Tier:   "draft",
+		REST:   []string{"POST /api/v1/ai/chat/preview"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["question"],"properties":{"question":{"type":"string","maxLength":1000},"channel_id":{"type":"string",` + uuid + `}}}`,
+		Output: `{"type":"object","required":["answer","status","sources"],"properties":{"answer":{"type":"string"},"status":{"type":"string"},"sources":{"type":"array","items":{"type":"object"}}}}`,
+		run:    aiChatPreview,
+	}
+}

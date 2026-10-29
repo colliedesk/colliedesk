@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ConflictError, InvalidRequestError } from '../../api/client';
 import { aiApi } from '../../api/ai';
@@ -7,6 +8,7 @@ import { aiMessages as m } from './ai-messages';
 import { AIPage } from './ai-page';
 import type { FieldError } from './ai-page';
 import { useCreateAction } from '../../api/use-create';
+import { AIChatSettingsRoute } from './ai-chat-route';
 
 const consentKey = 'colliedesk.ai-consent-dismissed';
 
@@ -45,7 +47,19 @@ export function refusal(error: unknown): FieldError {
 // The banner shows on a server with a provider until a feature was set once or someone chose "Not now".
 const neverSet = (settings?: AISettings) => Boolean(settings?.server) && Boolean(settings?.slots.every((slot) => !slot.enabled && !slot.updated_at));
 
-export function AIRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat?: (id: string) => void } = {}) {
+// AIRoute is Settings → Built-in AI and a chat's transcript below it: path is what follows /settings/ai
+// ("chats/<id>").
+export function AIRoute({ path = '' }: { path?: string } = {}) {
+  const navigate = useNavigate();
+  const go = useCallback((href: string) => void navigate({ href }), [navigate]);
+  // tab=chat opens the AI chat tab, where a transcript goes back to.
+  const tab = new URLSearchParams(window.location.search).get('tab') === 'chat' ? 'chat' : undefined;
+  const chat = /^chats\/([^/]+)$/.exec(path)?.[1];
+  if (chat) return <AIChatSettingsRoute id={decodeURIComponent(chat)} navigate={go} />;
+  return <AISettingsRoute tab={tab} onOpenChat={(id) => go(`/settings/ai/chats/${encodeURIComponent(id)}`)} />;
+}
+
+function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: string) => void }) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings, enabled: Boolean(me.data) });

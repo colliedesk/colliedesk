@@ -198,6 +198,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_chat_sessions_list` | Lists end users' chats with the help center's AI | `read` |
 | `colliedesk_ai_chat_session_get` | Reads one AI chat's transcript with the articles each answer cited | `read` |
 | `colliedesk_ai_chat_session_delete_request` | Asks a person to delete an AI chat's transcript for good | `read` |
+| `colliedesk_ai_chat_preview` | Asks the help center's AI chat a question as a customer would | `draft` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
 | `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `read` |
 | `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `read` |

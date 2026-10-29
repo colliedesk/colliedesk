@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { aiChatMessages as m } from './ai-chat-messages';
-import { ChatList, ChatTranscript } from './ai-chat-panel';
+import { ChatTranscript } from './ai-chat-panel';
 import { aiMessages } from './ai-messages';
 import { SettingsNav } from './settings-nav';
 
-// The chat transcript pages: under Settings → Built-in AI for an admin (with Delete), and /ai-chat for every
-// member of the team, read only.
+// A chat's transcript page under Settings → Built-in AI: every member of the team reads it, an admin
+// deletes it.
 
 function useMe() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
@@ -30,24 +30,5 @@ export function AIChatSettingsRoute({ id, navigate }: { id: string; navigate: (h
           onBack={() => navigate('/settings/ai?tab=chat')} />
       </div>
     </div>
-  </main>;
-}
-
-// AIChatListRoute is /ai-chat: every member reads the chats.
-export function AIChatListRoute({ navigate }: { navigate: (href: string) => void }) {
-  const { me } = useMe();
-  if (!me) return <main className="settings-page" aria-busy="true" />;
-  return <main className="settings-page panel ai-settings">
-    <header><h1>{m.agentHeading}</h1><p>{m.agentDescription}</p></header>
-    <ChatList timezone={me.timezone ?? 'UTC'} onOpen={(id) => navigate(`/ai-chat/sessions/${encodeURIComponent(id)}`)} />
-  </main>;
-}
-
-// AIChatSessionRoute is /ai-chat/sessions/:id, read only.
-export function AIChatSessionRoute({ id, navigate }: { id: string; navigate: (href: string) => void }) {
-  const { me } = useMe();
-  if (!me) return <main className="settings-page" aria-busy="true" />;
-  return <main className="settings-page panel ai-settings">
-    <ChatTranscript id={id} timezone={me.timezone ?? 'UTC'} canDelete={false} back={m.backAgent} backHref="/ai-chat" onBack={() => navigate('/ai-chat')} />
   </main>;
 }

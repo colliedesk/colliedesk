@@ -4,6 +4,133 @@
  */
 
 export interface paths {
+    "/chat/session": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The end user's current chat by its cookie, with its turns; 204 without one. */
+        get: operations["getHelpChatSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/session/end": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description New chat. Ends the browser's chat and removes its cookie; the team keeps its transcript. Needs the help center's Origin. */
+        post: operations["endHelpChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/turns": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+                /** @description `widget`: the chat is framed by a site, its cookie is partitioned. */
+                surface?: "help_center" | "article" | "widget";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Asks a question. The answer streams as NDJSON (`application/x-ndjson`), one `HelpChatEvent` a line: `turn`, then `delta` (one checked sentence each; a sentence with contact details the articles do not hold is replaced), `sources`, `done`; or `error` after the stream started. A chat starts at its first question and its cookie is set (renewed for 30 days on each). Needs the help center's Origin and JSON. Limits: 1,000 characters, 50 questions a chat, 10 a minute and 60 an hour per address; past the month's or day's limit `done` says `over_limit` with related articles and nothing is sent to the AI. */
+        post: operations["askHelpChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/turns/{turn_id}": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path: {
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        /** @description One answer of the browser's chat as stored, to recover a stream that broke. */
+        get: operations["getHelpChatTurn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/turns/{turn_id}/feedback": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path: {
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Rates an answer of the browser's chat; a second rating replaces the first. */
+        put: operations["rateHelpChatAnswer"];
+        post?: never;
+        /** @description Takes a rating back. */
+        delete: operations["unrateHelpChatAnswer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/prewarm": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Warms the AI's cache of the articles when the end user starts typing, so the first answer comes sooner. At most once in 5 minutes per address and workspace, never when the cache is warm, never a new chat; it counts toward the chat's limits. Always 204. */
+        post: operations["prewarmHelpChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/config": {
         parameters: {
             query?: never;
@@ -1841,6 +1968,23 @@ export interface paths {
         post?: never;
         /** @description Deletes a chat and its transcript for good; a conversation it handed off keeps its own copy. The history of the AI settings records it, without its texts. Every agent token's call becomes an agent request a person approves. */
         delete: operations["deleteAIChatSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/chat/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Answers a question as the help center's AI chat would, with the default help chat channel's instructions (or `channel_id`'s), for an admin trying it. Nothing reaches a customer and nothing is stored but the call's usage, which counts toward the chat's limits. Not streamed: the whole answer comes back. A repeat with the same Idempotency-Key answers the first answer again and asks the AI nothing; the key with another question is refused with 422, code `idempotency_key_reused`. */
+        post: operations["previewAIChat"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3724,6 +3868,69 @@ export interface components {
              */
             drafts_reserved_until: string | null;
         };
+        /** @description One line of an answer's stream. `turn` first; `delta` a checked sentence; `sources` the cited articles (or, `over_limit`, related ones); `done` last; `error` instead of `done`. */
+        HelpChatEvent: {
+            /** @enum {string} */
+            type: "turn" | "delta" | "sources" | "done" | "error";
+            /** Format: uuid */
+            turn_id?: string;
+            /** @description This question started a new chat. */
+            session_created?: boolean;
+            text?: string;
+            sources?: components["schemas"]["HelpChatSource"][];
+            /** @enum {string} */
+            status?: "answered" | "no_source" | "over_limit";
+            /** @description Links of the answer that are the articles' own; only these are shown as links. */
+            links_allowed?: string[];
+            redacted?: boolean;
+            /** @enum {string} */
+            code?: "model_failed" | "timeout";
+        };
+        HelpChatSession: {
+            status: components["schemas"]["AIChatStatus"];
+            /** @description Hours since the last turn; a chat idle more than 24 asks the end user to continue it. */
+            idle_hours: number;
+            turns: components["schemas"]["HelpChatTurn"][];
+        };
+        HelpChatTurn: {
+            /** Format: uuid */
+            id: string;
+            question: string | null;
+            answer: string | null;
+            /** @enum {string} */
+            status: "streaming" | "answered" | "no_source" | "over_limit" | "failed";
+            error_code?: string | null;
+            sources: components["schemas"]["HelpChatSource"][];
+            /** @enum {string|null} */
+            feedback: "helpful" | "not_helpful" | null;
+            /** @description A sentence of the answer was hidden because it held contact details not in the articles. */
+            redacted?: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        HelpChatSource: {
+            number: number;
+            title: string;
+            /** @description The article's page on the help center. */
+            url: string;
+            folder: string;
+        };
+        AIChatPreview: {
+            answer: string;
+            /** @enum {string} */
+            status: "answered" | "no_source" | "over_limit";
+            sources: {
+                number: number;
+                title: string;
+                folder: string;
+            }[];
+            redacted: boolean;
+            /** @description The AI read every article (else the best excerpts of a large knowledge base). */
+            whole: boolean;
+            /** @description How many articles it read. */
+            articles: number;
+            took_ms: number;
+        };
         /**
          * @description `ended`: the end user started a new chat. `handed_off`: they asked to talk to a person.
          * @enum {string}
@@ -4521,8 +4728,8 @@ export interface components {
             ai_features: {
                 triage: boolean;
                 draft: boolean;
-                /** @description The help center's AI chat answers end users. */
-                chat: boolean;
+                /** @description The help center's AI chat answers end users (a server before it sends none). */
+                chat?: boolean;
             };
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
@@ -6787,6 +6994,297 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getHelpChatSession: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The chat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpChatSession"];
+                };
+            };
+            /** @description No chat on this browser. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The chat is off: the help center's own 404 page, as when it is off. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    endHelpChat: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ended, or there was none. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description The chat is off (the help center's own 404 page). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    askHelpChat: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+                /** @description `widget`: the chat is framed by a site, its cookie is partitioned. */
+                surface?: "help_center" | "article" | "widget";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    question: string;
+                    /**
+                     * Format: uuid
+                     * @description The article the end user reads, when they ask about it.
+                     */
+                    viewing_article_id?: string;
+                    /**
+                     * @description Where a new chat starts.
+                     * @enum {string}
+                     */
+                    surface?: "help_center" | "article" | "widget";
+                };
+            };
+        };
+        responses: {
+            /** @description The answer, as NDJSON events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": components["schemas"]["HelpChatEvent"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description The chat is off (the help center's own 404 page). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `chat_full`: 50 questions; start a new chat. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not JSON. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `question_too_long` or `invalid_request`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `rate_limited`: too many questions from this address, or answers at once. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getHelpChatTurn: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path: {
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The turn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpChatTurn"];
+                };
+            };
+            /** @description Not an answer of this browser's chat (`not_found`), or the chat is off (the help center's own 404 page). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    rateHelpChatAnswer: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path: {
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    rating: "helpful" | "not_helpful";
+                };
+            };
+        };
+        responses: {
+            /** @description Rated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Not an answer of this browser's chat. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a rating. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    unrateHelpChatAnswer: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path: {
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Taken back */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Not an answer of this browser's chat. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    prewarmHelpChat: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done or skipped. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description The chat is off (the help center's own 404 page). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getPublicConfig: {
         parameters: {
             query?: never;
@@ -10740,6 +11238,62 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    previewAIChat: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    question: string;
+                    /** Format: uuid */
+                    channel_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The answer as an end user would see it (or, for a repeated Idempotency-Key, the first one's) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIChatPreview"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
+            /** @description Too many chat answers at once. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `ai_failed`: the AI did not answer. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     setAIAutomaticLimits: {

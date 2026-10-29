@@ -31,6 +31,7 @@ e2e:
 # another model. Record the results in docs/internals/ai-chat.md.
 eval-chat:
 	cd server && AI_CHAT_EVAL=1 TEST_DATABASE_URL='$(TEST_DATABASE_URL)' $(GO_ENV) go test ./internal/ai -run TestChatEval -count=1 -v
+	cd server && AI_CHAT_EVAL=1 TEST_DATABASE_URL='$(TEST_DATABASE_URL)' $(GO_ENV) go test ./internal/httpapi -run TestHelpChatAgainstClaude -count=1 -v
 
 # The server embeds a copy of docs/user for its documentation search tool (go:embed cannot reach
 # outside the Go module). Run this after editing a guide; a Go test fails when the copy is stale.

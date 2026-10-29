@@ -213,6 +213,7 @@ var routeTiers = map[string]string{
 	"GET /api/v1/ai/chat/sessions":                                     "read",
 	"GET /api/v1/ai/chat/sessions/{id}":                                "read",
 	"DELETE /api/v1/ai/chat/sessions/{id}":                             "approval",
+	"POST /api/v1/ai/chat/preview":                                     "draft",
 	"PUT /api/v1/ai/automatic-limits":                                  "admin",
 	"POST /api/v1/conversations/{id}/ai-drafts":                        "draft",
 	"GET /api/v1/conversations/{id}/ai-drafts":                         "read",

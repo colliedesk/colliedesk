@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { AIChatSession, AIChatSummary, AIChatUsage } from '../../api/ai';
 import { AIChatPanel, ChatTranscript } from './ai-chat-panel';
 
-const aiApi = vi.hoisted(() => ({ chatUsage: vi.fn(), chatSessions: vi.fn(), chatSession: vi.fn(), deleteChatSession: vi.fn() }));
+const aiApi = vi.hoisted(() => ({ chatUsage: vi.fn(), chatSessions: vi.fn(), chatSession: vi.fn(), deleteChatSession: vi.fn(), chatPreview: vi.fn() }));
 vi.mock('../../api/ai', () => ({ aiApi }));
 
 const summary = (change: Partial<AIChatSummary> = {}): AIChatSummary => ({
@@ -118,4 +118,19 @@ test('on a workspace key an admin sets the monthly spend limit in dollars, and e
   fireEvent.change(field, { target: { value: '' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save limit' }));
   await waitFor(() => expect(setCap).toHaveBeenLastCalledWith(null));
+});
+
+test('an admin tries the chat and reads the whole answer with what it read', async () => {
+  aiApi.chatUsage.mockResolvedValue(usage());
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  aiApi.chatPreview.mockResolvedValue({ answer: 'Orders ship in 2 days [#12].', status: 'answered', sources: [{ number: 12, title: 'Shipping times', folder: 'Orders' }],
+    redacted: false, whole: true, articles: 38, took_ms: 1400 });
+  const slot = { slot: 'chat', source: 'server', provider_id: null, model: 'claude-haiku-5-5', effort: 'low', enabled: true, automatic: false, auto_parts: [],
+    active: true, off_reason: null, consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null } as const;
+  wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} />);
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Ask as a customer would' }), { target: { value: 'When does it ship?' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(await screen.findByText('Orders ship in 2 days [#12].')).toBeTruthy();
+  expect(screen.getByText('1.4 s · whole help center (38 articles) · counts as 1 answer')).toBeTruthy();
+  expect(aiApi.chatPreview).toHaveBeenCalledWith('When does it ship?', expect.any(String));
 });

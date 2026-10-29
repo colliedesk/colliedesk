@@ -299,7 +299,9 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/ai/chat/sessions":         grant(auth.PermMessagesRead),
 	"GET /api/v1/ai/chat/sessions/{id}":    grant(auth.PermMessagesRead),
 	"DELETE /api/v1/ai/chat/sessions/{id}": alwaysAsk(auth.PermAISettingsUpdate),
-	"PUT /api/v1/ai/automatic-limits":      grant(auth.PermAISettingsUpdate),
+	// A trial answer costs money and reaches no customer, like a draft.
+	"POST /api/v1/ai/chat/preview":    grant(auth.PermAIAssistCreate),
+	"PUT /api/v1/ai/automatic-limits": grant(auth.PermAISettingsUpdate),
 	// An AI draft never reaches a customer: a person edits and sends it, like a note, so asking for one
 	// and discarding one are draft; reading them is read.
 	"POST /api/v1/conversations/{id}/ai-drafts":                   grant(auth.PermAIAssistCreate),
@@ -381,6 +383,25 @@ var tokenTiers = map[string]TokenAccess{
 // TokenAccessTable returns a copy of the classification, for the tests that hold it to Routes() and
 // the MCP catalog.
 func TokenAccessTable() map[string]TokenAccess { return maps.Clone(tokenTiers) }
+
+// helpCenterPublicRoutes are the channel types' routes below every help center
+// (channels.HelpCenterRoute), keyed "METHOD path below the help center's root", with why no token tier
+// classifies them. Like the public form, they are end users': no session and no token ever reaches a
+// help center host, so no MCP tool mirrors them; what the team does with the chat is under
+// /api/v1/ai/chat. TestEveryHelpCenterRouteIsListedAndInTheContract keeps this list, the routes the
+// types register and the contract's HelpCenterChat paths equal.
+var helpCenterPublicRoutes = map[string]string{
+	"GET /chat/session":                     "an end user's chat, read back by its cookie",
+	"POST /chat/session/end":                "an end user's New chat",
+	"POST /chat/turns":                      "an end user's question",
+	"GET /chat/turns/{turn_id}":             "an answer of the end user's chat, read back after a broken stream",
+	"PUT /chat/turns/{turn_id}/feedback":    "an end user's rating of an answer",
+	"DELETE /chat/turns/{turn_id}/feedback": "an end user taking a rating back",
+	"POST /chat/prewarm":                    "the chat page warming the AI's cache as the end user starts typing",
+}
+
+// HelpCenterPublicRoutes is helpCenterPublicRoutes for the gate test.
+func HelpCenterPublicRoutes() map[string]string { return maps.Clone(helpCenterPublicRoutes) }
 
 // gateToken answers for an agent token whose call may not run as it is and reports true when it did:
 // a call the token holds no permission for, or on an Approval route, becomes an agent request (202);
