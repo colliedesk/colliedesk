@@ -177,8 +177,19 @@ settings it rides with).
   is never refused. Billing closes only checkout and Founding.
   Parsed configs are not emptied: `Missing()` stays right and the key ring stays shared.
 - **Gmail and Microsoft 365 off defer, not fail.** `emailoutbox` answers `channels.Defer` (no attempt spent,
-  10 minutes, the reason in `last_error`) when the provider is configured but switched off; never configured
-  still fails as before. The Microsoft keep-alive keeps running so grants outlive the switch.
+  10 minutes, the reason in `last_error`, `reason_code` `mailbox_switched_off`) when the provider is switched
+  off, and the same (`mailbox_not_configured`) when the server lost a setting a connected provider needs:
+  a connection exists only where the provider once worked, so a missing setting is a provider off, and no
+  reply fails for a setting. Queuing (`notReadyReason`) no longer fails such a reply either. The Microsoft
+  keep-alive keeps running so grants outlive the switch.
+- **Workspaces never read setting names.** `missing_settings` of the Gmail, Microsoft 365 and Autofix
+  answers is always empty (kept for the contract); `off_reason` (`not_set_up`, `switched_off`) says why. The
+  names are for the console, `collie config features` and the log.
+- **Autofix off closes only what starts something** (`autofixStarts`: sending or retrying a fix, adding an
+  installation or a repository, a connector or Cursor's key). Fixes already sent are still followed by the
+  workers and can be cancelled, marked deployed or given their pull request.
+- **Hosted addresses off withdraw the offer, not the address.** `hosted_address` stays for a channel whose
+  support address is its hosted address (its setup reads it); new workspaces get none.
 - **Billing off is limits off, not the cloud off.** `generation` and `httpapi.New` read
   `billing.Enabled() && !off`, for plan limits, retention, Founding and the AI allowance; the Polar client
   stays (its webhook keeps subscriptions in step). `hostedCloud()`, telemetry's realm and the console's

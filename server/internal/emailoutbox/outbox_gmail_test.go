@@ -433,3 +433,26 @@ func TestAReplyWaitsWhileGmailIsSwitchedOffAndIsSentOnceItIsOn(t *testing.T) {
 		t.Fatalf("Gmail on again: %+v, gmail %d", delivery, len(fake.Messages()))
 	}
 }
+
+// The server lost a setting Gmail needs while a channel is connected: as if Gmail were switched off, the reply
+// waits with the reason and is sent once the setting is back; nothing fails for a setting.
+func TestAReplyWaitsWhileTheServerMissesAGmailSettingAndIsSentOnceItIsBack(t *testing.T) {
+	f := newFixture(t)
+	fake, config := gmailStandIn(t)
+	f.connectGmail(t, fake, config, "help@acme.example")
+	clock := time.Now().UTC().Add(time.Second)
+	missing := config
+	missing.ClientSecret = ""
+	reply := f.write(t, "outgoing", "Hello")
+	process(t, gmailWorker(f, startSMTPServer(t), missing, &clock))
+	delivery := f.delivery(t, reply.ID)
+	if delivery.Status != "queued" || delivery.ReasonCode == nil || *delivery.ReasonCode != domain.MailboxNotConfiguredCode ||
+		delivery.LastError == nil || !strings.Contains(*delivery.LastError, "waits") {
+		t.Fatalf("delivery while Gmail misses a setting = %+v", delivery)
+	}
+	clock = clock.Add(time.Hour)
+	process(t, gmailWorker(f, startSMTPServer(t), config, &clock))
+	if delivery := f.delivery(t, reply.ID); delivery.Status != "sent" || len(fake.Messages()) != 1 {
+		t.Fatalf("with the setting back: %+v, gmail %d", delivery, len(fake.Messages()))
+	}
+}

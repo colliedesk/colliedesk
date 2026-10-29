@@ -137,7 +137,8 @@ versioned and restored like any other.
 - **A feature cannot be switched on before its settings are complete.** The switch is greyed out and
   lists what is missing, each item a link to its page; the server refuses `true` the same way
   (`config_invalid`, and `collie config set` exits with the names).
-- **Settings that go missing later turn the feature off by themselves.** The save is not refused; the
+- **Settings that go missing later turn the feature off by themselves**, as if it were switched off (a Gmail
+  or Microsoft 365 reply waits with the reason instead of failing). The save is not refused; the
   Overview and `collie config doctor` warn that the feature is switched on but off, and name what it needs.
 - **Off hides the feature and refuses its use; it removes nothing.** Workspaces no longer see it, and its
   API routes and MCP tools answer `409 feature_off`. Connections, repositories, fixes, subscriptions,
@@ -145,11 +146,13 @@ versioned and restored like any other.
   - Gmail and Microsoft 365: replies of a channel connected to it wait in the outbox, with the reason on the
     conversation, and are sent once it is on again. Disconnecting still works. Microsoft's weekly keep-alive
     still runs, so its connections are alive when you switch it on again.
-  - Autofix: no fix is sent; GitHub's webhook is still received.
+  - Autofix: nothing new is sent and no repository or installation is added; fixes already sent are still
+    followed to their end and can be cancelled, marked deployed or given their pull request, and GitHub's
+    webhook is still received.
   - The server's AI provider: features set to it stop and say why; a workspace's own provider is not
     affected. The help center hides its chat while its AI cannot answer, as before.
-  - Hosted addresses: new workspaces get none and the address is not shown; mail to existing hosted
-    addresses still arrives.
+  - Hosted addresses: no channel is offered one (new workspaces get none); a channel already at its hosted
+    address keeps it, and mail to hosted addresses still arrives.
   - Billing: no workspace is billed or locked and trials are not enforced, retention deletes nothing, and
     nothing new can be bought (checkout answers `feature_off`). A workspace that has or had a subscription
     still sees **Plan and billing**, read-only with **Manage billing** to change or cancel it in the portal

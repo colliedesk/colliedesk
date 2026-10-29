@@ -86,7 +86,10 @@ func (w *Worker) deliverMailbox(ctx context.Context, item store.Delivery, provid
 		return waits
 	}
 	if !ok || !sender.configured() {
-		return channels.Failed(domain.MailboxNotConfiguredNote(provider))
+		// A setting gone missing is a provider off, not a failed reply: it waits, without spending an attempt.
+		waits := channels.Defer(w.options.Now().Add(switchedOffWait), domain.MailboxNotConfiguredNote(provider))
+		waits.Code = domain.MailboxNotConfiguredCode
+		return waits
 	}
 	// The grant opens with the context of the provider that issued it, which the row names.
 	refresh, err := sender.keys().Open(mailbox.Grant.KeyID, mailbox.Grant.Sealed, sender.grantContext(item.WorkspaceID))

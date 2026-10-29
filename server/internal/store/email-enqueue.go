@@ -56,9 +56,9 @@ func (p OutboundPolicy) notReadyReason(domainVerified bool, mailbox *mailboxStat
 	switch {
 	case mailbox != nil && mailbox.status == domain.MailboxFailed:
 		return domain.MailboxFailureText(mailbox.provider, mailbox.errorCode)
-	case mailbox != nil && !p.MailboxEnabled(mailbox.provider):
-		return domain.MailboxNotConfiguredNote(mailbox.provider)
 	case mailbox != nil:
+		// A provider the server lost a setting of is queued all the same: the outbox keeps it waiting, with
+		// the reason, until the setting is back (no reply fails for a setting).
 		return ""
 	case !p.Enabled:
 		return "Outgoing email is not configured on this server: ask whoever runs it to set up outgoing email."

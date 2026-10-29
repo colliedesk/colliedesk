@@ -31,7 +31,8 @@ export interface AutofixSettingsPageProps {
   load: 'loading' | 'error' | 'ready';
   // The server's GitHub App is set up (GET /api/v1/config); the names it still needs otherwise.
   available: boolean;
-  missingSettings: string[];
+  // Why Autofix is not offered: not set up on the server, or switched off by its operator.
+  offReason: 'not_set_up' | 'switched_off' | null;
   isAdmin: boolean;
   settings?: AutofixSettings;
   // The repositories the installation reaches, read from GitHub now.
@@ -232,7 +233,7 @@ function VendorCard({ state, kind, isAdmin, at, busy, run, actions, ticks, onTic
 
 // AutofixSettingsPage is Settings → Autofix: one checklist of three steps (GitHub, repositories, agents), each with its
 // state and its way back. Admins change it; everyone else reads it.
-export function AutofixSettingsPage({ load, available, missingSettings, isAdmin, settings, githubRepos, timezone, now, actions, notice, problem, onRetry, checklist, onChecklist }: AutofixSettingsPageProps) {
+export function AutofixSettingsPage({ load, available, offReason, isAdmin, settings, githubRepos, timezone, now, actions, notice, problem, onRetry, checklist, onChecklist }: AutofixSettingsPageProps) {
   const [busy, setBusy] = useState(false);
   const run: Busy = (task) => { setBusy(true); void task().finally(() => setBusy(false)); };
   const at = (value: string) => (Date.parse(value) > now - 86_400_000 ? formatShortDate(value, timezone, new Date(now)) : formatDay(value, timezone));
@@ -243,8 +244,8 @@ export function AutofixSettingsPage({ load, available, missingSettings, isAdmin,
     {notice && <p role="status" className="af-notice af-ok">{notice}</p>}
     {problem && <p role="alert" className="error-copy">{problem}</p>}
     {/* Nothing missing: the operator switched Autofix off, said without a setting's name. */}
-    {!available ? <div className="af-notice" role="note">{missingSettings.length === 0 ? <span>{m.turnedOff}</span>
-      : <span><strong>{m.unavailable}</strong> {m.unavailableHelp(missingSettings.map((name) => name))}</span>}</div>
+    {!available ? <div className="af-notice" role="note">{offReason === 'switched_off' ? <span>{m.turnedOff}</span>
+      : <span><strong>{m.unavailable}</strong> {m.unavailableHelp}</span>}</div>
       : load === 'loading' ? <p role="status" className="empty-copy">{m.loading}</p>
         : load === 'error' || !settings ? <div className="af-empty panel"><p role="alert" className="error-copy">{m.failed}</p><button type="button" onClick={onRetry}>{autofixMessages.tryAgain}</button></div>
           : <>

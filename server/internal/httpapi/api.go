@@ -291,8 +291,9 @@ func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refre
 // from which identity.
 func Outbound(config Config) store.OutboundPolicy {
 	return store.OutboundPolicy{
-		GmailEnabled:          config.Google.Enabled(),
-		MicrosoftEnabled:      config.Microsoft.Enabled(),
+		// Switched off reads as not set up: the channel says it cannot send, and its replies wait in the outbox.
+		GmailEnabled:          config.Google.Enabled() && !config.SwitchedOff[serverconfig.FeatureGmail],
+		MicrosoftEnabled:      config.Microsoft.Enabled() && !config.SwitchedOff[serverconfig.FeatureMicrosoft],
 		Enabled:               config.Email.SMTP.Configured(),
 		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
 		FallbackDomain:        config.Email.MailFromDomain,

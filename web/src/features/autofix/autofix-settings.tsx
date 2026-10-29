@@ -102,7 +102,7 @@ export function AutofixSettingsRoute() {
       <SettingsNav page="/settings/autofix" shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
         billing: billingShown, importData: isAdmin, ai: true, autofix: true }} />
       <AutofixSettingsPage load={settings.isPending ? 'loading' : settings.isError ? 'error' : 'ready'} available={available}
-        missingSettings={config.data?.autofix.missing_settings ?? []} isAdmin={isAdmin} settings={settings.data}
+        offReason={config.data?.autofix.off_reason ?? null} isAdmin={isAdmin} settings={settings.data}
         githubRepos={{ load: installation?.status !== 'active' ? 'ready' : github.isPending ? 'loading' : github.isError ? 'error' : 'ready', items: github.data?.items ?? [], onRetry: () => void github.refetch() }}
         timezone={me.data.timezone ?? 'UTC'} now={Date.now()} actions={actions} notice={back?.notice} problem={problem} onRetry={() => void settings.refetch()}
         checklist={(kind) => ticks[kind] ?? readChecklist(workspace, kind)}

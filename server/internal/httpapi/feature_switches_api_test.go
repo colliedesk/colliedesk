@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -32,6 +33,7 @@ type publicFeatures struct {
 	Autofix struct {
 		Available       bool     `json:"available"`
 		MissingSettings []string `json:"missing_settings"`
+		OffReason       *string  `json:"off_reason"`
 	} `json:"autofix"`
 }
 
@@ -76,7 +78,7 @@ func TestASwitchedOffMailboxProviderIsHiddenAndRefused(t *testing.T) {
 	admin := createSession(t, api, service, "Gmail Switched", "admin@gmail-switched.example.com")
 	connectEmail(t, api, admin, "support@gmail-switched.example.com")
 	view := gmailDesk{api: api, admin: admin}.settings(t, admin)
-	if view.Gmail.Available || len(view.Gmail.MissingSettings) != 0 {
+	if view.Gmail.Available || len(view.Gmail.MissingSettings) != 0 || view.Gmail.OffReason == nil || *view.Gmail.OffReason != "switched_off" {
 		t.Fatalf("gmail switched off = %+v, want unavailable and no setting named", view.Gmail)
 	}
 	connect := request(t, api, http.MethodPost, "/api/v1/channels/email/gmail", nil, admin, nil)
@@ -107,7 +109,7 @@ func TestASwitchedOffAutofixIsHiddenAndRefused(t *testing.T) {
 		config.SwitchedOff = map[string]bool{serverconfig.FeatureAutofix: true}
 	})
 	config := publicConfigOf(t, api)
-	if config.Autofix.Available || len(config.Autofix.MissingSettings) != 0 || config.Features["autofix"].Enabled {
+	if config.Autofix.Available || len(config.Autofix.MissingSettings) != 0 || config.Autofix.OffReason == nil || *config.Autofix.OffReason != "switched_off" || config.Features["autofix"].Enabled {
 		t.Fatalf("autofix switched off = %+v", config.Autofix)
 	}
 	admin := createSession(t, api, service, "Autofix Off", "admin@autofix-off.example.com")
@@ -115,6 +117,15 @@ func TestASwitchedOffAutofixIsHiddenAndRefused(t *testing.T) {
 	featureOff(t, install, install.Body.String())
 	if settings := request(t, api, http.MethodGet, "/api/v1/autofix/settings", nil, admin, nil); settings.Code != http.StatusOK {
 		t.Fatalf("what autofix holds stays readable: %d %s", settings.Code, settings.Body.String())
+	}
+	// What was sent goes on: a fix can still be cancelled, marked deployed or given its pull request.
+	for _, path := range []string{"/api/v1/autofix/fixes/00000000-0000-4000-8000-000000000000/cancel"} {
+		if open := request(t, api, http.MethodPost, path, map[string]any{}, admin, nil); open.Code == http.StatusConflict {
+			t.Fatalf("%s while autofix is off: %d %s", path, open.Code, open.Body.String())
+		}
+	}
+	if marked := request(t, api, http.MethodPut, "/api/v1/autofix/fixes/00000000-0000-4000-8000-000000000000/deployed", map[string]any{}, admin, nil); marked.Code == http.StatusConflict {
+		t.Fatalf("marking a fix deployed while autofix is off: %d %s", marked.Code, marked.Body.String())
 	}
 	// The ways out stay open: a stored key or a repository can still be removed.
 	if removed := request(t, api, http.MethodDelete, "/api/v1/autofix/connectors/cursor_api/key", nil, admin, nil); removed.Code == http.StatusConflict {
@@ -155,6 +166,13 @@ func TestASwitchedOffBillingKeepsItsWebhook(t *testing.T) {
 	}
 	checkout := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team_monthly"}, admin, nil)
 	featureOff(t, checkout, checkout.Body.String())
+	var founding struct {
+		Open bool `json:"open"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/founding", nil, "", nil), &founding)
+	if founding.Open {
+		t.Fatal("Founding is offered for sale while billing is off")
+	}
 	if webhook := request(t, api, http.MethodPost, "/api/v1/webhooks/polar", map[string]any{}, "", nil); webhook.Code == http.StatusNotFound || webhook.Code == http.StatusConflict {
 		t.Fatalf("Polar's webhook stops while billing is off: %d", webhook.Code)
 	}
@@ -188,3 +206,41 @@ func TestASwitchedOffCloudSignInLeavesTheOperatorLink(t *testing.T) {
 }
 
 func (c publicFeatures) BillingSwitchedOff() bool { return c.Billing.SwitchedOff && !c.Billing.Enabled }
+
+// Hosted addresses switched off: none is offered to a channel, but a channel already at its hosted address
+// keeps seeing it (its forwarding name, its setup), and mail to it is still received.
+func TestSwitchedOffHostedAddressesStayForTheChannelsUsingThem(t *testing.T) {
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newSignupFixture(t, func(config *httpapi.Config) {
+		config.Attachments = storage
+		config.SwitchedOff = map[string]bool{serverconfig.FeatureHostedMail: true}
+	})
+	response := f.signUp(t, "ada@example.com", "Lovelace Help", defaultPeer)
+	wantResponse(t, response, http.StatusCreated, "")
+	cookie := sessionCookie(t, response)
+	hostedAddress := func() *string {
+		var body struct {
+			HostedAddress *string `json:"hosted_address"`
+		}
+		decode(t, request(t, f.api, http.MethodGet, "/api/v1/channels/email", nil, "", cookie), &body)
+		return body.HostedAddress
+	}
+	address := "support@lovelace-help." + hostedDomain
+	if offered := hostedAddress(); offered != nil {
+		t.Fatalf("a hosted address offered while they are switched off: %s", *offered)
+	}
+	put := newRequest(t, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": address}, "", cookie)
+	put.Header.Set("Origin", testOrigin)
+	if saved := serve(f.api, put); saved.Code != http.StatusOK {
+		t.Fatalf("support address at the hosted address: %d %s", saved.Code, saved.Body.String())
+	}
+	if shown := hostedAddress(); shown == nil || *shown != address {
+		t.Fatalf("a channel at its hosted address while they are switched off sees %v, want %s", shown, address)
+	}
+	if result := inboundOK(t, f.api, platformSecret, hostedMail(address, "first@customer.example")); result.Status != "created" {
+		t.Fatalf("mail to the hosted address while they are switched off: %+v", result)
+	}
+}

@@ -305,7 +305,7 @@ export const autofixMessages = {
     failed: 'Autofix settings did not load. Fixes in progress are not affected.',
     unavailable: 'Autofix is not set up on this server.',
     turnedOff: 'Autofix is not turned on on this server. Connected repositories and fixes are kept.',
-    unavailableHelp: (names: string[]) => `The administrator creates a GitHub App and sets ${names.join(', ')} (see the self-host guide). Until then Autofix is hidden from conversations.`,
+    unavailableHelp: 'Whoever runs this server sets up its GitHub App (see the self-host guide). Until then Autofix is hidden from conversations.',
     member: 'Only admins change Autofix settings. You can send a conversation to an agent from the conversation.',
     connected: 'Connected',
     notConnected: 'Not connected',

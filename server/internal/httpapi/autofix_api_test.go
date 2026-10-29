@@ -282,12 +282,14 @@ func TestConfigSaysWhetherAutofixIsAvailable(t *testing.T) {
 		Autofix struct {
 			Available       bool     `json:"available"`
 			MissingSettings []string `json:"missing_settings"`
+			OffReason       *string  `json:"off_reason"`
 		} `json:"autofix"`
 	}
 	api, _ := testAPI(t)
 	var off config
 	decode(t, request(t, api, http.MethodGet, "/api/v1/config", nil, "", nil), &off)
-	if off.Autofix.Available || len(off.Autofix.MissingSettings) != 6 || off.Autofix.MissingSettings[0] != github.EnvAppID {
+	// A public answer never names the server's settings: only why Autofix is off.
+	if off.Autofix.Available || len(off.Autofix.MissingSettings) != 0 || off.Autofix.OffReason == nil || *off.Autofix.OffReason != "not_set_up" {
 		t.Errorf("without the App: %+v", off.Autofix)
 	}
 	on, _, _, _ := testAPIWithConfig(t, func(c *httpapi.Config) {
@@ -295,7 +297,7 @@ func TestConfigSaysWhetherAutofixIsAvailable(t *testing.T) {
 	})
 	var configured config
 	decode(t, request(t, on, http.MethodGet, "/api/v1/config", nil, "", nil), &configured)
-	if !configured.Autofix.Available || len(configured.Autofix.MissingSettings) != 0 {
+	if !configured.Autofix.Available || len(configured.Autofix.MissingSettings) != 0 || configured.Autofix.OffReason != nil {
 		t.Errorf("with the App: %+v", configured.Autofix)
 	}
 }

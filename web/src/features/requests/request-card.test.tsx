@@ -156,7 +156,7 @@ const selfHosted: PublicConfig = {
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null },
   ai: { server_provider: false },
-  autofix: { available: false, missing_settings: [] },
+  autofix: { available: false, missing_settings: [], off_reason: null },
   features: { gmail: { enabled: true }, microsoft: { enabled: true }, autofix: { enabled: false }, ai_server: { enabled: false }, hosted_mail: { enabled: false },
     cloud_sign_in: { enabled: false }, billing: { enabled: false }, signup: { enabled: false } },
 };

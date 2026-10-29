@@ -1309,7 +1309,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.missing_settings` in the channel settings names them); 409 `feature_off` when the operator switched Gmail off (connections stay, and their replies wait until it is on again). An agent token gets an agent request; the person who approves receives the consent address. */
+        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.off_reason` is `not_set_up`; the server log and the operator console name them); 409 `feature_off` when the operator switched Gmail off (connections stay, and their replies wait until it is on again). An agent token gets an agent request; the person who approves receives the consent address. */
         post: operations["connectGmail"];
         /** @description Disconnect Gmail: the grant is removed here and revoked at Google. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Gmail fails with the reason and can be retried. A locked workspace may disconnect. */
         delete: operations["disconnectGmail"];
@@ -1347,7 +1347,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to the default email channel, so its replies are sent through Microsoft Graph from that address and kept in its Sent Items. Incoming mail still arrives by forwarding. Answers Microsoft's sign-in address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Microsoft then sends that browser to `GET /api/v1/channels/email/microsoft/callback`, which finishes only for the same signed-in person. Microsoft is asked for `Mail.Send`, `User.Read`, `offline_access` and `openid`, and nothing that reads mail. The mailbox must be the channel's support address, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting replaces the channel's earlier connection, Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when the server lacks its Microsoft settings (`microsoft.missing_settings` names them). An agent token gets an agent request; the person who approves receives the sign-in address. */
+        /** @description Start connecting a Microsoft 365 (work or school) or Outlook.com (personal) mailbox to the default email channel, so its replies are sent through Microsoft Graph from that address and kept in its Sent Items. Incoming mail still arrives by forwarding. Answers Microsoft's sign-in address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Microsoft then sends that browser to `GET /api/v1/channels/email/microsoft/callback`, which finishes only for the same signed-in person. Microsoft is asked for `Mail.Send`, `User.Read`, `offline_access` and `openid`, and nothing that reads mail. The mailbox must be the channel's support address, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting replaces the channel's earlier connection, Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when the server lacks its Microsoft settings (`microsoft.off_reason` is `not_set_up`). An agent token gets an agent request; the person who approves receives the sign-in address. */
         post: operations["connectMicrosoft"];
         /** @description Disconnect Microsoft 365: the grant is deleted here. Microsoft has no API that revokes one app's grant, so Colliedesk stays listed in the account's apps until the person removes it there (My Apps for a work or school account, account.live.com/consent/Manage for a personal one); the deleted token is useless without this server's client secret. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Microsoft 365 fails with the reason and can be retried. A locked workspace may disconnect. 404 when the channel has no Microsoft 365 connection. */
         delete: operations["disconnectMicrosoft"];
@@ -4311,8 +4311,12 @@ export interface components {
             autofix: {
                 /** @description The operator set up the server's GitHub App (operator console → Mailboxes & GitHub, github.*) and has not switched Autofix off, so Autofix can be used; the web app hides it otherwise. */
                 available: boolean;
-                /** @description The settings the operator still needs; empty when available, and when Autofix is only switched off. */
+                /**
+                 * @deprecated
+                 * @description Always empty: a public answer never names the server's settings (the operator console and `collie config features` do). Read off_reason.
+                 */
                 missing_settings: string[];
+                off_reason: components["schemas"]["FeatureOffReason"];
             };
             ai: {
                 /** @description True when the operator configured an AI provider for every workspace (operator console → AI: ai.server.*). */
@@ -4354,6 +4358,11 @@ export interface components {
                 enabled: boolean;
             };
         };
+        /**
+         * @description Why the feature is not offered: `not_set_up` (the server misses its settings), `switched_off` (the operator switched it off; what it holds stays). Null while it is offered.
+         * @enum {string|null}
+         */
+        FeatureOffReason: "not_set_up" | "switched_off" | null;
         PublicFeature: {
             enabled: boolean;
         };
@@ -5113,7 +5122,7 @@ export interface components {
             slots: number;
             /** @description Slots held by active, trialing or past due subscriptions; null until counted */
             taken: number | null;
-            /** @description Whether Founding can still be bought */
+            /** @description Whether Founding can still be bought; false while the operator switched billing off */
             open: boolean;
         };
         WebhookResult: {
@@ -6528,7 +6537,7 @@ export interface components {
         DeliveryStatus: "queued" | "sent" | "failed";
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
-            /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_not_connected (no channel of the type that carries the reply was connected, a web form without email; retry once it is), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and reconnecting does not help), mailbox_switched_off (a queued reply waits because the operator switched Gmail or Microsoft 365 off; it is sent once it is on again). Null for most email failures, whose words are in last_error. */
+            /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_not_connected (no channel of the type that carries the reply was connected, a web form without email; retry once it is), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and reconnecting does not help), mailbox_switched_off (a queued reply waits because the operator switched Gmail or Microsoft 365 off; it is sent once it is on again), mailbox_not_configured (a queued reply waits because the server lost a setting its connected provider needs; it is sent once the setting is back). Null for most email failures, whose words are in last_error. */
             reason_code?: string | null;
             attempts: number;
             /** @description Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc) addresses it did not reach: refused by the relay or bounced later. A copy that misses never fails the reply to the contact. */
@@ -6673,10 +6682,14 @@ export interface components {
             smtp: components["schemas"]["SMTPStatus"];
         };
         GmailSettings: {
-            /** @description Whether this server can connect Gmail (its operator set the Google OAuth client and token keys). */
+            /** @description Whether this server can connect Gmail (its operator set the Google OAuth client and token keys, and has not switched Gmail off). */
             available: boolean;
-            /** @description The server settings still needed before Gmail can be connected; empty when available. */
+            /**
+             * @deprecated
+             * @description Always empty; a workspace never reads the server's setting names. Read off_reason.
+             */
             missing_settings: ("GOOGLE_OAUTH_CLIENT_ID" | "GOOGLE_OAUTH_CLIENT_SECRET" | "MAILBOX_TOKEN_KEYS")[];
+            off_reason: components["schemas"]["FeatureOffReason"];
             /**
              * Format: uri
              * @description The redirect URI to register on the OAuth client in Google Cloud console.
@@ -6688,10 +6701,14 @@ export interface components {
             address_matches?: boolean;
         };
         MicrosoftSettings: {
-            /** @description Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys). */
+            /** @description Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys, and has not switched it off). */
             available: boolean;
-            /** @description The server settings still needed before Microsoft 365 can be connected; empty when available. */
+            /**
+             * @deprecated
+             * @description Always empty; a workspace never reads the server's setting names. Read off_reason.
+             */
             missing_settings: ("MICROSOFT_OAUTH_CLIENT_ID" | "MICROSOFT_OAUTH_CLIENT_SECRET" | "MAILBOX_TOKEN_KEYS")[];
+            off_reason: components["schemas"]["FeatureOffReason"];
             /**
              * Format: uri
              * @description The Web redirect URI to register on the app in Microsoft Entra.
@@ -6709,7 +6726,7 @@ export interface components {
             admin_consent_url: string | null;
             /** @description From this total size of files the web app warns that Microsoft may refuse the reply. Microsoft documents no limit for sending; a refused reply fails with the reason and keeps its files. */
             large_attachment_bytes: number;
-            /** @description True while a reply of this channel waits because Microsoft refused this server's own app credentials (microsoft.client_secret wrong or expired). The connection is fine; the operator must update the secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is false): missing_settings names what to set. */
+            /** @description True while a reply of this channel waits because Microsoft refused this server's own app credentials (microsoft.client_secret wrong or expired). The connection is fine; the operator must update the secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is false): off_reason says why. */
             server_credentials_refused: boolean;
             /** @description The channel's Microsoft 365 connection; null when it has none (or sends through Gmail). */
             connection: null | components["schemas"]["MailboxConnection"];

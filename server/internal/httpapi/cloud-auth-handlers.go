@@ -113,9 +113,7 @@ func bearerToken(header string) (string, bool) {
 // autofixConfig tells the web app whether Autofix can be used on this server (its GitHub App is set up)
 // and, when not, which settings the operator still needs; the web app hides Autofix while it is off.
 func (a *API) autofixConfig() map[string]any {
-	missing := a.config.GitHub.Missing()
-	if missing == nil {
-		missing = []string{}
-	}
-	return map[string]any{"available": len(missing) == 0 && !a.switchedOff(serverconfig.FeatureAutofix), "missing_settings": missing}
+	// Public: never the names of the server's settings, only why Autofix is off (the console names them).
+	off := a.offReason(serverconfig.FeatureAutofix, a.config.GitHub.Missing())
+	return map[string]any{"available": off == nil, "missing_settings": []string{}, "off_reason": off}
 }

@@ -152,11 +152,8 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
   const settings = active === 'microsoft' ? microsoft! : gmail;
   const text = providers[active ?? 'google'];
   const available = (provider: MailboxProvider) => (provider === 'google' ? gmail.available : microsoft?.available === true);
-  // Unavailable with nothing missing: the operator switched it off.
-  const switchedOff = (provider: MailboxProvider) => {
-    const offered = provider === 'google' ? gmail : microsoft;
-    return offered !== undefined && !offered.available && offered.missing_settings.length === 0;
-  };
+  // The operator switched it off (its settings are complete).
+  const switchedOff = (provider: MailboxProvider) => (provider === 'google' ? gmail : microsoft)?.off_reason === 'switched_off';
   const other: MailboxProvider | undefined = active && available(active === 'google' ? 'microsoft' : 'google') ? (active === 'google' ? 'microsoft' : 'google') : undefined;
   const pending: MailboxProvider | undefined = connectPending === true ? 'google' : connectPending || undefined;
   const [confirming, setConfirming] = useState<'disconnect' | 'switch' | null>(null);

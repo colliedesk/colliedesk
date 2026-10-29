@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 )
 
 const (
@@ -111,7 +112,7 @@ func (a *API) getFounding(response http.ResponseWriter, request *http.Request) {
 		Slots int  `json:"slots"`
 		Taken *int `json:"taken"`
 		Open  bool `json:"open"`
-	}{Slots: domain.FoundingSlots, Open: !closed}
+	}{Slots: domain.FoundingSlots, Open: !closed && !a.switchedOff(serverconfig.FeatureBilling)}
 	if known {
 		view.Taken = &taken
 	}

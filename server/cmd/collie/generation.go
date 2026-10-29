@@ -265,9 +265,9 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	aiWorker.Handle(ai.SlotDraft, api.AI().DraftHandler())
 	aiWorker.Handle(ai.SlotTriage, api.AI().TriageHandler())
 	g.Go(aiWorker.Run)
-	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach. Switched
-	// off, no fix is sent (they wait) and only the webhook keeps the repositories in step.
-	if sync := api.GitHubSync(); sync != nil && !off[serverconfig.FeatureAutofix] {
+	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach. Switched off,
+	// nothing new is sent (the API refuses it) but the fixes already sent are still followed to their end.
+	if sync := api.GitHubSync(); sync != nil {
 		g.Go(func(ctx context.Context) { sync.Run(ctx, githubsync.ReconcileEvery) })
 		// Fixes sent to Cursor: the worker reads each repository on GitHub before a fix leaves for it.
 		fixes := &autofixworker.Worker{Cursor: p.cursor, Repos: sync}

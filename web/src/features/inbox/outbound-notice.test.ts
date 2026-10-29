@@ -5,7 +5,7 @@ import { largeAttachmentWarning, outboundNotice } from './outbound-notice';
 const base = {
   channel: { support_address: 'support@example.com' }, sending_from: null,
   smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
-  gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/cb', connection: null },
+  gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/cb', connection: null },
 } as unknown as EmailChannelSettings;
 const gmail = { provider: 'google', address: 'support@example.com', status: 'connected', error_code: null, error: null, failed_at: null, connected_at: '2026-10-19T08:00:00Z' } as const;
 
@@ -23,7 +23,7 @@ test('the composer says why replies are not emailed, and Gmail is named when it 
 
 test('a Microsoft 365 connection is named when it is the cause, and large files through it are warned', () => {
   const ms = { ...gmail, provider: 'microsoft' as const };
-  const microsoft = { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/cb', admin_consent_redirect_uri: 'https://desk.example.com/ac',
+  const microsoft = { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/cb', admin_consent_redirect_uri: 'https://desk.example.com/ac',
     admin_consent_url: null, large_attachment_bytes: 3145728, server_credentials_refused: false, connection: ms };
   const failed = { ...base, microsoft: { ...microsoft, connection: { ...ms, status: 'failed' as const, error_code: 'mailbox_unavailable' as const } } };
   expect(outboundNotice(failed, true)).toMatch(/Microsoft 365 stopped sending.*Reconnect it in Settings/);

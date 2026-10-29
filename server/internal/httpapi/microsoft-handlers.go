@@ -26,8 +26,10 @@ const (
 
 // microsoftSettings is what the email channel settings say about Microsoft 365.
 type microsoftSettings struct {
-	Available               bool                      `json:"available"`
+	Available bool `json:"available"`
+	// MissingSettings is always empty, as for Gmail; OffReason says why it is not offered.
 	MissingSettings         []string                  `json:"missing_settings"`
+	OffReason               *string                   `json:"off_reason"`
 	RedirectURI             string                    `json:"redirect_uri"`
 	AdminConsentRedirectURI string                    `json:"admin_consent_redirect_uri"`
 	AdminConsentURL         *string                   `json:"admin_consent_url"`
@@ -41,11 +43,8 @@ type microsoftSettings struct {
 // link returns to that channel's settings.
 func (a *API) microsoftSettings(channelID string, connection *domain.MailboxConnection) microsoftSettings {
 	config := a.config.Microsoft
-	missing := config.Missing()
-	if missing == nil {
-		missing = []string{}
-	}
-	settings := microsoftSettings{Available: len(missing) == 0 && !a.switchedOff(serverconfig.FeatureMicrosoft), MissingSettings: missing, RedirectURI: a.redirectURI(a.microsoft()),
+	off := a.offReason(serverconfig.FeatureMicrosoft, config.Missing())
+	settings := microsoftSettings{Available: off == nil, MissingSettings: []string{}, OffReason: off, RedirectURI: a.redirectURI(a.microsoft()),
 		AdminConsentRedirectURI: a.config.Origin + microsoftAdminConsentPath, LargeAttachmentBytes: microsoft.LargeAttachmentBytes, Connection: connection}
 	if settings.Available {
 		if address := config.AdminConsentURL(settings.AdminConsentRedirectURI, channelID); address != "" {

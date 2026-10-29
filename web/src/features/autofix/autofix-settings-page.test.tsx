@@ -20,20 +20,21 @@ const githubRepos: GitHubRepo[] = [
 
 function show(settings: AutofixSettings | undefined = settingsOf(), props: Partial<AutofixSettingsPageProps> = {}) {
   const actions = actionsOf();
-  render(<AutofixSettingsPage load="ready" available missingSettings={[]} isAdmin settings={settings} githubRepos={{ load: 'ready', items: githubRepos, onRetry: vi.fn() }}
+  render(<AutofixSettingsPage load="ready" available offReason={null} isAdmin settings={settings} githubRepos={{ load: 'ready', items: githubRepos, onRetry: vi.fn() }}
     timezone="UTC" now={now} actions={actions} onRetry={vi.fn()} checklist={() => []} onChecklist={vi.fn()} {...props} />);
   return actions;
 }
 
 describe('AutofixSettingsPage', () => {
-  it('names the settings the operator still needs on a server without the GitHub App', () => {
-    show(undefined, { available: false, missingSettings: ['GITHUB_APP_ID', 'GITHUB_APP_PRIVATE_KEY'] });
-    expect(screen.getByRole('note')).toHaveTextContent('GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY');
+  it('says who sets Autofix up on a server without the GitHub App, naming no setting', () => {
+    show(undefined, { available: false, offReason: 'not_set_up' });
+    expect(screen.getByRole('note')).toHaveTextContent('Autofix is not set up on this server. Whoever runs this server sets up its GitHub App');
+    expect(screen.getByRole('note')).not.toHaveTextContent('GITHUB_APP');
     expect(screen.queryByRole('heading', { name: 'GitHub' })).not.toBeInTheDocument();
   });
 
   it('says Autofix is not turned on, naming no setting, when the operator switched it off', () => {
-    show(undefined, { available: false, missingSettings: [] });
+    show(undefined, { available: false, offReason: 'switched_off' });
     expect(screen.getByRole('note')).toHaveTextContent('Autofix is not turned on on this server. Connected repositories and fixes are kept.');
     expect(screen.queryByText('Autofix is not set up on this server.')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'GitHub' })).not.toBeInTheDocument();

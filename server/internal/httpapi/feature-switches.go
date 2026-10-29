@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
@@ -37,10 +36,9 @@ func featureOfRoute(route Route) string {
 		return serverconfig.FeatureGmail
 	case route.Method == http.MethodPost && (route.Pattern == microsoftPath || route.Pattern == channelMicrosoftPath):
 		return serverconfig.FeatureMicrosoft
-	case route.Method != http.MethodGet && route.Method != http.MethodDelete &&
-		(strings.HasPrefix(route.Pattern, "/api/v1/autofix/") || strings.HasPrefix(route.Pattern, "/api/v1/conversations/{id}/fixes")):
+	case autofixStarts[route.Method+" "+route.Pattern]:
 		return serverconfig.FeatureAutofix
-	case route.Pattern == "/api/v1/billing/checkout" || route.Pattern == foundingPath:
+	case route.Pattern == "/api/v1/billing/checkout":
 		return serverconfig.FeatureBilling
 	case route.Pattern == "/api/v1/auth/cloud/exchange":
 		return serverconfig.FeatureCloudSignIn
@@ -48,6 +46,18 @@ func featureOfRoute(route Route) string {
 		return serverconfig.FeatureSignup
 	}
 	return ""
+}
+
+// autofixStarts are the Autofix routes that send something new or connect something new. Everything about
+// fixes already sent (cancel, deployed, pull request), the repositories' settings and every removal stay
+// open, and the workers keep following the runs in progress.
+var autofixStarts = map[string]bool{
+	"POST /api/v1/conversations/{id}/fixes":         true,
+	"POST /api/v1/autofix/fixes/{id}/retry":         true,
+	"POST /api/v1/autofix/github/installations":     true,
+	"POST /api/v1/autofix/repos":                    true,
+	"PUT /api/v1/autofix/connectors/{kind}":         true,
+	"PUT /api/v1/autofix/connectors/cursor_api/key": true,
 }
 
 // featureGate answers feature_off in place of a route whose feature is switched off.
@@ -91,4 +101,19 @@ func (a *API) hostedMailDomain() string {
 		return ""
 	}
 	return a.config.Email.HostedMailDomain
+}
+
+// offReason says why a feature workspaces see is not offered, without naming a setting: someone using a
+// workspace cannot change one (the names go to the log, the console and collie config). Nil when it runs.
+func (a *API) offReason(feature string, missing []string) *string {
+	var reason string
+	switch {
+	case len(missing) > 0:
+		reason = "not_set_up"
+	case a.switchedOff(feature):
+		reason = "switched_off"
+	default:
+		return nil
+	}
+	return &reason
 }

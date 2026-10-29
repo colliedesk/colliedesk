@@ -2260,7 +2260,7 @@ paths:
         sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces
         the earlier account and revokes its grant. 409
         `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its
-        Google settings (`gmail.missing_settings` in the channel settings names them); 409 `feature_off` when
+        Google settings (`gmail.off_reason` is `not_set_up`; the server log and the operator console name them); 409 `feature_off` when
         the operator switched Gmail off (connections stay, and their replies wait until it is on again). An agent token gets an
         agent request; the person who approves receives the consent address.
       responses:
@@ -2329,7 +2329,7 @@ paths:
         Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need
         its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel
         settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when
-        the server lacks its Microsoft settings (`microsoft.missing_settings` names them). An agent token
+        the server lacks its Microsoft settings (`microsoft.off_reason` is `not_set_up`). An agent token
         gets an agent request; the person who approves receives the sign-in address.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
@@ -7558,10 +7558,11 @@ components:
             signup: {$ref: '#/components/schemas/PublicFeature'}
         autofix:
           type: object
-          required: [available, missing_settings]
+          required: [available, missing_settings, off_reason]
           properties:
             available: {type: boolean, description: 'The operator set up the server''s GitHub App (operator console → Mailboxes & GitHub, github.*) and has not switched Autofix off, so Autofix can be used; the web app hides it otherwise.'}
-            missing_settings: {type: array, items: {type: string}, description: 'The settings the operator still needs; empty when available, and when Autofix is only switched off.'}
+            missing_settings: {type: array, maxItems: 0, items: {type: string}, deprecated: true, description: 'Always empty: a public answer never names the server''s settings (the operator console and `collie config features` do). Read off_reason.'}
+            off_reason: {$ref: '#/components/schemas/FeatureOffReason'}
         ai:
           type: object
           required: [server_provider]
@@ -7608,6 +7609,10 @@ components:
           required: [enabled]
           properties:
             enabled: {type: boolean, description: True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured).}
+    FeatureOffReason:
+      type: [string, 'null']
+      enum: [not_set_up, switched_off, null]
+      description: 'Why the feature is not offered: `not_set_up` (the server misses its settings), `switched_off` (the operator switched it off; what it holds stays). Null while it is offered.'
     PublicFeature:
       type: object
       required: [enabled]
@@ -8258,7 +8263,7 @@ components:
       properties:
         slots: {type: integer, description: Founding slots in total}
         taken: {type: [integer, 'null'], description: 'Slots held by active, trialing or past due subscriptions; null until counted'}
-        open: {type: boolean, description: Whether Founding can still be bought}
+        open: {type: boolean, description: Whether Founding can still be bought; false while the operator switched billing off}
     WebhookResult:
       type: object
       required: [status]
@@ -9809,7 +9814,8 @@ components:
             the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused
             this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and
             reconnecting does not help), mailbox_switched_off (a queued reply waits because the operator switched
-            Gmail or Microsoft 365 off; it is sent once it is on again).
+            Gmail or Microsoft 365 off; it is sent once it is on again), mailbox_not_configured (a queued reply
+            waits because the server lost a setting its connected provider needs; it is sent once the setting is back).
             Null for most email failures, whose words are in last_error.
         attempts: {type: integer, minimum: 0}
         last_error:
@@ -9982,15 +9988,18 @@ components:
         smtp: {$ref: '#/components/schemas/SMTPStatus'}
     GmailSettings:
       type: object
-      required: [available, missing_settings, redirect_uri, connection]
+      required: [available, missing_settings, off_reason, redirect_uri, connection]
       properties:
         available:
           type: boolean
-          description: Whether this server can connect Gmail (its operator set the Google OAuth client and token keys).
+          description: Whether this server can connect Gmail (its operator set the Google OAuth client and token keys, and has not switched Gmail off).
         missing_settings:
           type: array
+          maxItems: 0
+          deprecated: true
           items: {type: string, enum: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, MAILBOX_TOKEN_KEYS]}
-          description: The server settings still needed before Gmail can be connected; empty when available.
+          description: Always empty; a workspace never reads the server's setting names. Read off_reason.
+        off_reason: {$ref: '#/components/schemas/FeatureOffReason'}
         redirect_uri:
           type: string
           format: uri
@@ -10007,15 +10016,18 @@ components:
             made before Gmail had to match keeps sending; connect it again with the support address to fix it.
     MicrosoftSettings:
       type: object
-      required: [available, missing_settings, redirect_uri, admin_consent_redirect_uri, admin_consent_url, large_attachment_bytes, server_credentials_refused, connection]
+      required: [available, missing_settings, off_reason, redirect_uri, admin_consent_redirect_uri, admin_consent_url, large_attachment_bytes, server_credentials_refused, connection]
       properties:
         available:
           type: boolean
-          description: Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys).
+          description: Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys, and has not switched it off).
         missing_settings:
           type: array
+          maxItems: 0
+          deprecated: true
           items: {type: string, enum: [MICROSOFT_OAUTH_CLIENT_ID, MICROSOFT_OAUTH_CLIENT_SECRET, MAILBOX_TOKEN_KEYS]}
-          description: The server settings still needed before Microsoft 365 can be connected; empty when available.
+          description: Always empty; a workspace never reads the server's setting names. Read off_reason.
+        off_reason: {$ref: '#/components/schemas/FeatureOffReason'}
         redirect_uri:
           type: string
           format: uri
@@ -10042,7 +10054,7 @@ components:
             True while a reply of this channel waits because Microsoft refused this server's own app credentials
             (microsoft.client_secret wrong or expired). The connection is fine; the operator must update the
             secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is
-            false): missing_settings names what to set.
+            false): off_reason says why.
         connection:
           description: The channel's Microsoft 365 connection; null when it has none (or sends through Gmail).
           oneOf:
