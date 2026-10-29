@@ -1309,7 +1309,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an agent request; the person who approves receives the consent address. */
+        /** @description Start connecting a Gmail account to the default email channel, so its replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. The account must be the channel's support address mailbox, and one account sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.missing_settings` in the channel settings names them); 409 `feature_off` when the operator switched Gmail off (connections stay, and their replies wait until it is on again). An agent token gets an agent request; the person who approves receives the consent address. */
         post: operations["connectGmail"];
         /** @description Disconnect Gmail: the grant is removed here and revoked at Google. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Gmail fails with the reason and can be retried. A locked workspace may disconnect. */
         delete: operations["disconnectGmail"];
@@ -4297,10 +4297,21 @@ export interface components {
             expires_at: string;
         };
         PublicConfig: {
+            /** @description Which features of the server run here: their settings are complete and the operator has not switched them off (operator console → Features, `features.<name>`). The web app shows only those. A route of a feature switched off answers 409 `feature_off`; what the feature holds (connections, fixes, subscriptions, queued replies) stays and is used again once it is on. */
+            features: {
+                gmail: components["schemas"]["PublicFeature"];
+                microsoft: components["schemas"]["PublicFeature"];
+                autofix: components["schemas"]["PublicFeature"];
+                ai_server: components["schemas"]["PublicFeature"];
+                hosted_mail: components["schemas"]["PublicFeature"];
+                cloud_sign_in: components["schemas"]["PublicFeature"];
+                billing: components["schemas"]["PublicFeature"];
+                signup: components["schemas"]["PublicFeature"];
+            };
             autofix: {
-                /** @description The operator set up the server's GitHub App (operator console → Mailboxes & GitHub, github.*), so Autofix can be used; the web app hides it otherwise. */
+                /** @description The operator set up the server's GitHub App (operator console → Mailboxes & GitHub, github.*) and has not switched Autofix off, so Autofix can be used; the web app hides it otherwise. */
                 available: boolean;
-                /** @description The settings the operator still needs; empty when available. */
+                /** @description The settings the operator still needs; empty when available, and when Autofix is only switched off. */
                 missing_settings: string[];
             };
             ai: {
@@ -4340,6 +4351,9 @@ export interface components {
                 /** @description True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured). */
                 enabled: boolean;
             };
+        };
+        PublicFeature: {
+            enabled: boolean;
         };
         /**
          * @description `chat`: the AI that answers end users in the help center's chat (docs/user/ai-chat.md).
@@ -4395,10 +4409,10 @@ export interface components {
             /** @description On, and its provider and model are still there: the feature runs. */
             active: boolean;
             /**
-             * @description Why a feature that is on cannot run.
+             * @description Why a feature that is on cannot run. `server_provider_off`: the operator switched the server's provider off; it runs again once it is on.
              * @enum {string|null}
              */
-            off_reason: "server_provider_missing" | "model_not_offered" | null;
+            off_reason: "server_provider_missing" | "server_provider_off" | "model_not_offered" | null;
             /**
              * Format: uuid
              * @description Who agreed that this feature's data goes to its current provider.
@@ -7074,7 +7088,7 @@ export interface components {
         };
         OperatorWarning: {
             /** @enum {string} */
-            code: "env_differs" | "env_same" | "env_dead" | "no_key_ring" | "secret_stale_key" | "version_refused" | "waiting_for_import" | "path_mode" | "origin_invalid" | "requests_waiting";
+            code: "env_differs" | "env_same" | "env_dead" | "no_key_ring" | "secret_stale_key" | "version_refused" | "waiting_for_import" | "path_mode" | "origin_invalid" | "requests_waiting" | "feature_incomplete";
             /** @enum {string} */
             severity: "error" | "warning";
             /** @description The environment variable it is about, as data (never written in the web app) */
@@ -7117,7 +7131,7 @@ export interface components {
             /** @description The variable it replaced, as data */
             env_name?: string;
             /** @enum {string} */
-            group: "ai" | "email" | "mailboxes" | "billing" | "signups" | "security" | "limits" | "operator";
+            group: "ai" | "email" | "mailboxes" | "billing" | "signups" | "security" | "limits" | "operator" | "features";
             secret: boolean;
             /** @description Applies at once; otherwise in a few seconds */
             hot: boolean;
@@ -7160,6 +7174,18 @@ export interface components {
             };
             telemetry_env_off?: boolean;
             operator_email?: string;
+            /** @description Every feature with a switch, as this version runs it. `requested` is the switch (`unset` is on once the settings are complete); `enabled` is whether it runs; `missing` names what it still needs (settings, `MAILBOX_TOKEN_KEYS`, or another feature's switch). A switch cannot be turned on while `missing` is not empty (422 `config_invalid`). */
+            features?: components["schemas"]["OperatorFeature"][];
+        };
+        OperatorFeature: {
+            /** @enum {string} */
+            name: "gmail" | "microsoft" | "autofix" | "ai_server" | "hosted_mail" | "cloud_sign_in" | "billing" | "signup";
+            label: string;
+            switch_key: string;
+            /** @enum {string} */
+            requested: "on" | "off" | "unset";
+            enabled: boolean;
+            missing: string[];
         };
         OperatorConfigChange: {
             base_version: number;

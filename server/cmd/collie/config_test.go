@@ -453,3 +453,33 @@ func TestConfigNamesAnUnnamedShellUserByItsID(t *testing.T) {
 		t.Fatalf("--by = %q", got)
 	}
 }
+
+// A feature switch is set like any setting, but never turned on before its settings are complete; once on,
+// removing a setting is saved and the feature reads as off, which doctor and features say.
+func TestConfigFeatureSwitchTurnsOnOnlyWithItsSettings(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("MAILBOX_TOKEN_KEYS", cliTestRing)
+	if _, err := runConfig(t, databaseURL, "", "set", "features.gmail=true"); err == nil || !strings.Contains(err.Error(), "google.client_id") {
+		t.Fatalf("turning gmail on without its settings: %v", err)
+	}
+	if features := mustConfig(t, databaseURL, "", "features"); !strings.Contains(features, "features.gmail\toff\tswitch unset\tneeds google.client_id, google.client_secret") {
+		t.Fatalf("features = %q", features)
+	}
+	mustConfig(t, databaseURL, "", "set", "google.client_id=client")
+	mustConfig(t, databaseURL, "secret\n", "set-secret", "google.client_secret")
+	if features := mustConfig(t, databaseURL, "", "features"); !strings.Contains(features, "features.gmail\ton\tswitch unset\n") {
+		t.Fatalf("gmail with its settings and no switch: %q", features)
+	}
+	mustConfig(t, databaseURL, "", "set", "features.gmail=true")
+	mustConfig(t, databaseURL, "", "unset", "google.client_id")
+	if doctor, _ := runConfig(t, databaseURL, "", "doctor"); !strings.Contains(doctor, "features.gmail is switched on but misses google.client_id") {
+		t.Fatalf("doctor = %q", doctor)
+	}
+	mustConfig(t, databaseURL, "", "set", "features.gmail=false")
+	if features := mustConfig(t, databaseURL, "", "features"); !strings.Contains(features, "features.gmail\toff\tswitch off") {
+		t.Fatalf("features = %q", features)
+	}
+	if _, err := runConfig(t, databaseURL, "", "set", "features.gmail=maybe"); err == nil {
+		t.Fatal("a switch took a value that is neither true nor false")
+	}
+}

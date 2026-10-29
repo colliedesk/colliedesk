@@ -242,7 +242,9 @@ export function AutofixSettingsPage({ load, available, missingSettings, isAdmin,
     <header className="af-page-head"><div><h1>{m.heading}</h1><p>{m.description}</p></div></header>
     {notice && <p role="status" className="af-notice af-ok">{notice}</p>}
     {problem && <p role="alert" className="error-copy">{problem}</p>}
-    {!available ? <div className="af-notice" role="note"><span><strong>{m.unavailable}</strong> {m.unavailableHelp(missingSettings.map((name) => name))}</span></div>
+    {/* Nothing missing: the operator switched Autofix off, said without a setting's name. */}
+    {!available ? <div className="af-notice" role="note">{missingSettings.length === 0 ? <span>{m.turnedOff}</span>
+      : <span><strong>{m.unavailable}</strong> {m.unavailableHelp(missingSettings.map((name) => name))}</span>}</div>
       : load === 'loading' ? <p role="status" className="empty-copy">{m.loading}</p>
         : load === 'error' || !settings ? <div className="af-empty panel"><p role="alert" className="error-copy">{m.failed}</p><button type="button" onClick={onRetry}>{autofixMessages.tryAgain}</button></div>
           : <>

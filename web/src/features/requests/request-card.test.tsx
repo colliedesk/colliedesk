@@ -157,6 +157,8 @@ const selfHosted: PublicConfig = {
   product_analytics: { enabled: false, key: null, host: null, realm: null },
   ai: { server_provider: false },
   autofix: { available: false, missing_settings: [] },
+  features: { gmail: { enabled: true }, microsoft: { enabled: true }, autofix: { enabled: false }, ai_server: { enabled: false }, hosted_mail: { enabled: false },
+    cloud_sign_in: { enabled: false }, billing: { enabled: false }, signup: { enabled: false } },
 };
 const cloud: PublicConfig = { ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true }, signup: { enabled: true } };
 const gmailConnect = agentRequest({ summary: 'Connect Gmail for sending', method: 'POST', route: '/api/v1/channels/email/gmail', path: '/api/v1/channels/email/gmail', body: null, approvable_by: 'admin' });

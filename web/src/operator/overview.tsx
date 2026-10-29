@@ -14,6 +14,7 @@ function warningText(warning: ConsoleData['status']['warnings'][number]): string
     case 'waiting_for_import': return m.warning.waiting_for_import(warning.detail ?? '');
     case 'path_mode': return m.warning.path_mode(env);
     case 'requests_waiting': return m.warning.requests_waiting(warning.detail ?? '');
+    case 'feature_incomplete': return m.warning.feature_incomplete(warning.key ?? '', warning.detail ?? '');
     default: return warning.code;
   }
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 )
 
@@ -44,7 +45,7 @@ func (a *API) microsoftSettings(channelID string, connection *domain.MailboxConn
 	if missing == nil {
 		missing = []string{}
 	}
-	settings := microsoftSettings{Available: len(missing) == 0, MissingSettings: missing, RedirectURI: a.redirectURI(a.microsoft()),
+	settings := microsoftSettings{Available: len(missing) == 0 && !a.switchedOff(serverconfig.FeatureMicrosoft), MissingSettings: missing, RedirectURI: a.redirectURI(a.microsoft()),
 		AdminConsentRedirectURI: a.config.Origin + microsoftAdminConsentPath, LargeAttachmentBytes: microsoft.LargeAttachmentBytes, Connection: connection}
 	if settings.Available {
 		if address := config.AdminConsentURL(settings.AdminConsentRedirectURI, channelID); address != "" {

@@ -22,7 +22,10 @@ const (
 // Why a slot that is on cannot run.
 const (
 	OffServerProviderMissing = "server_provider_missing"
-	OffModelNotOffered       = "model_not_offered"
+	// OffServerProviderOff: the operator switched the server's provider off; the feature runs again once
+	// it is on.
+	OffServerProviderOff = "server_provider_off"
+	OffModelNotOffered   = "model_not_offered"
 )
 
 // Provider is a provider a workspace added. It never carries the key, only its last four characters.
@@ -151,6 +154,8 @@ var (
 	ErrLabelTaken = errors.New("another AI provider of this workspace has that name")
 	// ErrNoServerProvider means the server has no provider (or none for that slot).
 	ErrNoServerProvider = errors.New("this server has no AI provider for that feature")
+	// ErrServerProviderOff means the operator switched the server's provider off.
+	ErrServerProviderOff = errors.New("the server's AI provider is turned off on this server")
 )
 
 // InvalidError is a request the service refuses; Message says what to send instead.

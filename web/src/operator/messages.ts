@@ -33,6 +33,7 @@ export const m = {
     security: 'Security & network',
     limits: 'Limits & telemetry',
     operator: 'Operators',
+    features: 'Features',
   } as Record<string, string>,
   groupLead: {
     ai: 'The model this server offers every workspace, and what a workspace pays for it.',
@@ -43,7 +44,11 @@ export const m = {
     security: 'Proxies, cloud sign-in, the help center address and private AI addresses.',
     limits: 'Sizes, the problem report inbox and the usage report.',
     operator: 'How operators sign in.',
+    features: 'Turn what workspaces see on or off. A feature turns on only once its settings are complete.',
   } as Record<string, string>,
+  featureNeeds: 'Needs first:',
+  featureIncomplete: 'Switched on, but off until these are set:',
+  featureAnotherSwitch: (label: string) => `${label} on`,
   // Sign-in
   signInTitle: 'Sign in to the operator console',
   signInLead: 'This link works once. Continue to use it.',
@@ -110,6 +115,7 @@ export const m = {
     waiting_for_import: (what: string) => `A new version waits for ${what} to end, then applies by itself.`,
     path_mode: (env: string) => `The console shares the workspace app's address. Give it its own host with ${env}.`,
     requests_waiting: (n: string) => `${n} operator request${n === '1' ? '' : 's'} waiting for you.`,
+    feature_incomplete: (key: string, needs: string) => `${key} is switched on but off until these are set: ${needs}.`,
   },
   // Configuration
   unsavedChanges: (n: number) => `${n} unsaved change${n === 1 ? '' : 's'}`,

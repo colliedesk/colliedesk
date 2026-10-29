@@ -183,6 +183,10 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 			return
 		}
 	}
+	if refused := switchesRefused(current.Snapshot, next); refused != nil {
+		writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", "A feature cannot be turned on before its settings are complete. Nothing was saved.", refused.Fields)
+		return
+	}
 	names := make([]string, 0, len(touched))
 	for _, key := range touched {
 		names = append(names, key.Name)
@@ -329,7 +333,8 @@ func (a *API) getOperatorConfig(response http.ResponseWriter, request *http.Requ
 	who := operatorPrincipal(request)
 	writeJSON(response, http.StatusOK, map[string]any{"version": current.Version, "settings": settings, "bootstrap": bootstrap,
 		"key_ring":          map[string]any{"configured": current.Ring(), "key_ids": a.config.ServerConfig.Keys().IDs(), "current": a.config.ServerConfig.Keys().Current()},
-		"telemetry_env_off": environ("DISABLE_TELEMETRY") != "" || environ("DO_NOT_TRACK") != "", "operator_email": who.Operator.Email})
+		"telemetry_env_off": environ("DISABLE_TELEMETRY") != "" || environ("DO_NOT_TRACK") != "", "operator_email": who.Operator.Email,
+		"features": serverconfig.FeatureStates(current.Snapshot)})
 }
 
 func guardNames(guards []serverconfig.Guard) []string {
@@ -395,13 +400,19 @@ func (a *API) getOperatorStatus(response http.ResponseWriter, request *http.Requ
 	if a.config.OperatorOrigin == "" {
 		// On the hosted cloud a console on the app's origin is an error: a bug in the app would reach it.
 		severity := "warning"
-		if a.limits {
+		if a.config.Billing.Enabled() {
 			severity = "error"
 		}
 		warnings = append(warnings, map[string]any{"code": "path_mode", "severity": severity, "env_name": "OPERATOR_ORIGIN"})
 	}
 	if waiting > 0 {
 		warnings = append(warnings, map[string]any{"code": "requests_waiting", "severity": "warning", "detail": strconv.Itoa(waiting)})
+	}
+	// A feature switched on whose settings went missing reads as off; the console says what it misses.
+	for _, state := range serverconfig.FeatureStates(current.Snapshot) {
+		if state.Requested == "on" && !state.Enabled {
+			warnings = append(warnings, map[string]any{"code": "feature_incomplete", "severity": "warning", "key": state.SwitchKey, "detail": strings.Join(state.Missing, ", ")})
+		}
 	}
 	var trial any
 	if run, ok, err := a.config.ServerConfig.Trial(ctx); err == nil && ok {
@@ -459,6 +470,9 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			}
 			out["ok"], out["errors"] = false, fields
 		}
+	}
+	if refused := switchesRefused(current.Snapshot, next); refused != nil && out["ok"] == true {
+		out["ok"], out["errors"] = false, refused.Fields
 	}
 	if out["ok"] == true {
 		var names []string
@@ -1082,4 +1096,13 @@ func (a *API) requestGuards(request *http.Request, body json.RawMessage, secrets
 		}
 	}
 	return guards, ""
+}
+
+// switchesRefused is serverconfig.CheckSwitches as a refusal per switch, nil when none.
+func switchesRefused(current, next serverconfig.Snapshot) *serverconfig.SwitchError {
+	var refused *serverconfig.SwitchError
+	if errors.As(serverconfig.CheckSwitches(current, next), &refused) {
+		return refused
+	}
+	return nil
 }

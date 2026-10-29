@@ -7,10 +7,11 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 )
 
 func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
-	enabled := a.cloud != nil
+	enabled := a.featureOn(serverconfig.FeatureCloudSignIn)
 	var publishableKey *string
 	if enabled {
 		publishableKey = &a.config.CloudAuth.PublishableKey
@@ -22,13 +23,15 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]any{
 		"version":       version,
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
-		"billing":       map[string]any{"enabled": a.polar != nil},
-		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing.
-		"signup":            map[string]any{"enabled": enabled && a.polar != nil && !a.config.SignupDisabled},
+		"billing":       map[string]any{"enabled": a.featureOn(serverconfig.FeatureBilling)},
+		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing,
+		// 409 feature_off while an operator switched it (or cloud sign-in, or billing) off.
+		"signup":            map[string]any{"enabled": a.featureOn(serverconfig.FeatureSignup)},
 		"limits":            map[string]any{"outgoing_attachments_bytes": attachments.MaxOutgoingBytes, "outgoing_attachments_files": attachments.MaxOutgoingFiles},
 		"product_analytics": a.productAnalyticsConfig(),
 		"ai":                map[string]any{"server_provider": a.ai.ServerConfigured()},
 		"autofix":           a.autofixConfig(),
+		"features":          a.featuresConfig(),
 	})
 }
 
@@ -112,5 +115,5 @@ func (a *API) autofixConfig() map[string]any {
 	if missing == nil {
 		missing = []string{}
 	}
-	return map[string]any{"available": len(missing) == 0, "missing_settings": missing}
+	return map[string]any{"available": len(missing) == 0 && !a.switchedOff(serverconfig.FeatureAutofix), "missing_settings": missing}
 }

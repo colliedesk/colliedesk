@@ -402,3 +402,33 @@ func queryOne(t *testing.T, f fixture, sql string) string {
 	}
 	return value
 }
+
+// Gmail switched off by the operator: the reply waits with the reason, an attempt is not spent and no retry
+// comes for minutes; switched on again, it is sent from the same connection.
+func TestAReplyWaitsWhileGmailIsSwitchedOffAndIsSentOnceItIsOn(t *testing.T) {
+	f := newFixture(t)
+	fake, config := gmailStandIn(t)
+	f.connectGmail(t, fake, config, "help@acme.example")
+	clock := time.Now().UTC().Add(time.Second)
+	off := gmailWorker(f, startSMTPServer(t), config, &clock, func(options *emailoutbox.Options) {
+		options.SwitchedOff = map[string]bool{domain.MailboxGoogle: true}
+	})
+	reply := f.write(t, "outgoing", "Hello")
+	process(t, off)
+	delivery := f.delivery(t, reply.ID)
+	if delivery.Status != "queued" || delivery.LastError == nil || !strings.Contains(*delivery.LastError, "turned off on this server") || len(fake.Messages()) != 0 {
+		t.Fatalf("delivery while Gmail is off = %+v", delivery)
+	}
+	clock = clock.Add(time.Minute)
+	if process(t, off) != 0 {
+		t.Fatal("a reply waiting for Gmail was tried again within a minute")
+	}
+	if connection := f.mailboxStatus(t); connection.Status != "connected" {
+		t.Fatalf("switching Gmail off touched the connection: %+v", connection)
+	}
+	clock = clock.Add(time.Hour)
+	process(t, gmailWorker(f, startSMTPServer(t), config, &clock))
+	if delivery := f.delivery(t, reply.ID); delivery.Status != "sent" || len(fake.Messages()) != 1 {
+		t.Fatalf("Gmail on again: %+v, gmail %d", delivery, len(fake.Messages()))
+	}
+}

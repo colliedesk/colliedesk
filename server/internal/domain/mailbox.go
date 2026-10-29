@@ -105,6 +105,15 @@ func MailboxNotConfiguredNote(provider string) string {
 	return "Gmail sending is not set up on this server: ask whoever runs it."
 }
 
+// MailboxSwitchedOffNote is the reason of a reply waiting because the operator switched its provider off.
+func MailboxSwitchedOffNote(provider string) string {
+	label := "Gmail"
+	if provider == MailboxMicrosoft {
+		label = "Microsoft 365"
+	}
+	return label + " sending is turned off on this server: this reply waits and is sent once it is on again."
+}
+
 // MailboxDisconnectedNote is the reason of a reply accepted for a mailbox whose connection was removed,
 // or replaced by another provider's, before it was sent.
 func MailboxDisconnectedNote(provider string) string {

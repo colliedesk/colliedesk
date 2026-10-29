@@ -25,7 +25,8 @@ Each feature (**Triage suggestions**, **Reply drafts**) picks one of:
    is **Colliedesk AI**: Anthropic's Claude models, run for HC Labs and included in your plan. On your
    own server it is whatever the operator configured (see
    [environment variables](../self-host/environment-variables.md#ai-provider)); without one, Settings
-   explains the two ways to get started.
+   explains the two ways to get started. If the operator switches the server's provider off, the features
+   set to it stop and Settings says so; they run again once it is on, or pick another provider.
 2. **A provider you add.** Your workspace pays that provider directly.
 3. **None.** The feature stays off.
 

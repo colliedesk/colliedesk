@@ -13,6 +13,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
@@ -79,7 +80,8 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, 
 	if channel != nil {
 		local = channel.HostedLocal
 	}
-	if address := email.HostedLocalAddress(local, workspaceSlug, config.HostedMailDomain); address != "" {
+	// Hosted addresses switched off are not offered; mail that still arrives at one is received.
+	if address := email.HostedLocalAddress(local, workspaceSlug, config.HostedMailDomain); address != "" && !a.switchedOff(serverconfig.FeatureHostedMail) {
 		settings.HostedAddress = &address
 	}
 	if channel != nil && mailbox != nil {

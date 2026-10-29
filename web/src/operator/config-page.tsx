@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { ApiError, api } from './api';
-import type { Guard, Setting } from './api';
+import type { Feature, Guard, Setting } from './api';
 import type { ConsoleData } from './app';
 import { CommandLine, when } from './copy';
 import { fields, sections } from './fields';
@@ -44,7 +44,19 @@ function change(setDraft: SetDraft, setting: Setting, value: string) {
   });
 }
 
-function SettingRow({ setting, draft, setDraft, error }: { setting: Setting; draft: Draft; setDraft: SetDraft; error?: string }) {
+// What a feature still needs, each a link to the setting's page; a variable of the environment or another
+// feature's switch is named as it is.
+function FeatureNeeds({ names, groupOf }: { names: string[]; groupOf: (key: string) => string | undefined }) {
+  return <ul className="feature-needs">{names.map((name) => {
+    const group = groupOf(name);
+    const label = name.startsWith('features.') ? m.featureAnotherSwitch(fields[name]?.label ?? name) : fields[name]?.label ?? name;
+    return <li key={name}>{group
+      ? <a href={href(`/config/${group}`)} onClick={(event) => { event.preventDefault(); navigate(`/config/${group}`); }}>{label}</a>
+      : label} <code className="setting-key">{name}</code></li>;
+  })}</ul>;
+}
+
+function SettingRow({ setting, draft, setDraft, error, feature, groupOf }: { setting: Setting; draft: Draft; setDraft: SetDraft; error?: string; feature?: Feature; groupOf: (key: string) => string | undefined }) {
   const info = fields[setting.key] ?? { label: setting.key, kind: 'text' as const };
   const id = `setting-${setting.key.replace(/\./g, '-')}`;
   const noteId = `${id}-note`;
@@ -90,6 +102,21 @@ function SettingRow({ setting, draft, setDraft, error }: { setting: Setting; dra
     const oneWay = setting.key === 'operator.require_totp' && on && !(setting.key in draft.set);
     control = <label className="switch"><input id={id} type="checkbox" role="switch" checked={on} disabled={disabled || oneWay} aria-describedby={describedBy}
       onChange={(event) => change(setDraft, setting, event.target.checked ? 'true' : 'false')} /><span>{on ? m.on : m.off}</span></label>;
+  } else if (info.kind === 'feature') {
+    // Unset runs the feature once its settings are complete; it cannot be turned on before they are, and a
+    // feature switched on whose settings went missing is off until they are back.
+    const value = currentValue(setting, draft);
+    const missingNow = feature?.missing ?? [];
+    const on = value !== 'false' && (missingNow.length === 0 || value === 'true');
+    const blocked = missingNow.length > 0 && value !== 'true';
+    const needsId = `${id}-needs`;
+    control = <div className="feature-switch">
+      <label className="switch"><input id={id} type="checkbox" role="switch" checked={on} disabled={disabled || blocked}
+        aria-describedby={[missingNow.length > 0 && needsId, describedBy].filter(Boolean).join(' ')}
+        onChange={(event) => change(setDraft, setting, event.target.checked ? 'true' : 'false')} /><span>{on ? m.on : m.off}</span></label>
+      {missingNow.length > 0 && <div id={needsId} className={value === 'true' ? 'warning-note' : 'help'}>
+        <span>{value === 'true' ? m.featureIncomplete : m.featureNeeds}</span><FeatureNeeds names={missingNow} groupOf={groupOf} /></div>}
+    </div>;
   } else if (info.kind === 'select') {
     control = <select id={id} value={currentValue(setting, draft)} disabled={disabled} aria-describedby={describedBy} onChange={(event) => change(setDraft, setting, event.target.value)}>
       {(info.options ?? []).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>;
@@ -165,7 +192,8 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
       <div className="section-heading"><h2>{section.title}</h2><p>{section.lead}</p></div>
       <div className="settings-body">
         {section.keys.map((key) => byKey.get(key)).filter((setting): setting is Setting => Boolean(setting)).map((setting) =>
-          <SettingRow key={setting.key} setting={setting} draft={draft} setDraft={setDraft} error={errors[setting.key]} />)}
+          <SettingRow key={setting.key} setting={setting} draft={draft} setDraft={setDraft} error={errors[setting.key]}
+            feature={data.config.features?.find((feature) => feature.switch_key === setting.key)} groupOf={(key) => byKey.get(key)?.group} />)}
         {section.test && <div className="ops-check">
           <button type="button" disabled={testing} onClick={() => void runTest(section.test!)}>{testing ? m.checking
             : section.test === 'smtp' ? m.sendTestEmail(data.config.operator_email ?? data.me.operator.email) : section.test === 'polar' ? m.tryPolar : section.test === 'ai' ? m.tryAI : m.tryJWKS}</button>

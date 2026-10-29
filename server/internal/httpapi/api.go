@@ -144,6 +144,10 @@ type Config struct {
 	// ExtraChannelTypes are channel types run after the registered ones; tests prove the frame with a
 	// type no server ships (channeltest.Loopback). Each needs its channel_types row.
 	ExtraChannelTypes []channels.Adapter
+	// SwitchedOff are the features an operator switched off (serverconfig features.<name> = false). Their
+	// settings and what they hold stay: the app hides them, the routes that use them answer 409 feature_off,
+	// and what keeps their data whole (webhooks, inbound mail, keep-alive) runs on (feature-switches.go).
+	SwitchedOff map[string]bool
 	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
 	Carry *Carry
 	// OperatorOrigin is OPERATOR_ORIGIN: the operator console's own host. Empty serves it at Origin/operator.
@@ -338,7 +342,8 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
-	limits := config.Billing.Enabled()
+	// Billing switched off bills and locks no workspace; its subscriptions stay as they are (feature-switches.go).
+	limits := config.Billing.Enabled() && !config.SwitchedOff[serverconfig.FeatureBilling]
 	carry := config.Carry
 	if carry == nil {
 		carry = NewCarry(config)
@@ -378,6 +383,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		aiConfig.Keys = config.Google.Keys
 	}
 	aiConfig.PlanLimits = limits
+	if config.SwitchedOff[serverconfig.FeatureAIServer] {
+		aiConfig.Server, aiConfig.ServerOff = nil, true
+	}
 	if aiConfig.ChatGate == nil {
 		aiConfig.ChatGate = carry.chatGate
 	}
@@ -427,6 +435,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		if billingRoute(route.Route) && api.polar == nil {
 			continue
 		}
+		route.handler = api.featureGate(route.Route, route.handler)
 		if route.Pattern == resendWebhookPath && config.Email.ResendWebhookSecret == "" {
 			continue
 		}

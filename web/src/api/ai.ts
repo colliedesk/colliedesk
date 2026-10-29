@@ -18,7 +18,7 @@ export const aiSlotSchema = z.object({
   slot: aiSlotNameSchema, source: z.enum(['server', 'provider', 'none']), provider_id: z.string().uuid().nullable(), model: z.string().nullable(),
   effort: z.enum(['low', 'medium', 'high']), enabled: z.boolean(), automatic: z.boolean(), auto_parts: z.array(z.enum(['tags', 'priority', 'assignee'])),
   active: z.boolean(),
-  off_reason: z.enum(['server_provider_missing', 'model_not_offered']).nullable(),
+  off_reason: z.enum(['server_provider_missing', 'server_provider_off', 'model_not_offered']).nullable(),
   consented_by: z.string().uuid().nullable(), consented_at: nullableDate, updated_by: z.string().uuid().nullable(), updated_at: nullableDate,
   // An older server has no chat slot and no limit.
   monthly_cap_micro_usd: z.number().int().nullable().catch(null),

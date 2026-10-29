@@ -7,6 +7,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/google"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 )
 
@@ -35,7 +36,8 @@ func (a *API) gmailSettings(connection *domain.MailboxConnection) gmailSettings 
 	if missing == nil {
 		missing = []string{}
 	}
-	return gmailSettings{Available: len(missing) == 0, MissingSettings: missing, RedirectURI: a.gmailRedirectURI(), Connection: connection}
+	// Switched off with its settings complete: unavailable, and nothing is missing.
+	return gmailSettings{Available: len(missing) == 0 && !a.switchedOff(serverconfig.FeatureGmail), MissingSettings: missing, RedirectURI: a.gmailRedirectURI(), Connection: connection}
 }
 
 // connectGmail starts the consent: it records who started it and answers Google's consent address.

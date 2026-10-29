@@ -65,7 +65,7 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	ip := clientIP(request, a.config.TrustedProxies)
-	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.config.Email.HostedMailDomain, Onboarding: onboarding})
+	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.hostedMailDomain(), Onboarding: onboarding})
 	switch {
 	case errors.Is(err, auth.ErrInvalidEmail):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The identity provider returned an email address this service cannot use.")

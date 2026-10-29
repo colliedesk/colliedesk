@@ -20,6 +20,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -135,6 +136,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if billingWarning != "" {
 		logger.Error(billingWarning)
 	}
+	// Switches turn features off without touching their settings (serverconfig features.go): billing
+	// switched off bills and locks nobody and deletes nothing, and still takes Polar's webhook (the API).
+	off := config.SwitchedOff
+	billingOn := billing.Enabled() && !off[serverconfig.FeatureBilling]
 	trustedProxies, internalSignups, signupKey, cloudAuth := config.TrustedProxies, config.InternalSignups, config.SignupHashKey, config.CloudAuth
 	signupWarning := signupProblem(cloudAuth.Enabled(), billing.Enabled(), trustedProxies, signupKey)
 	if signupWarning != "" {
@@ -158,7 +163,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// replies that need them fail with the reason. The journal worker processes what Async channels received.
 	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing}
 	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig), helpchat.Config{})).
-		WithSealKeys(googleConfig.Keys).WithPlanLimits(billing.Enabled())
+		WithSealKeys(googleConfig.Keys).WithPlanLimits(billingOn)
 	var sender emailoutbox.Sender
 	if emailConfig.SMTP.Configured() {
 		sender = email.SMTPSender{Config: emailConfig.SMTP}
@@ -166,10 +171,12 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if emailConfig.SMTP.Configured() || googleConfig.Enabled() || microsoftConfig.Enabled() {
 		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
 		worker := emailoutbox.New(channelStore, sender,
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig})
+			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,
+				SwitchedOff: map[string]bool{domain.MailboxGoogle: off[serverconfig.FeatureGmail], domain.MailboxMicrosoft: off[serverconfig.FeatureMicrosoft]}})
 		g.Go(func(ctx context.Context) { worker.Run(ctx, 5*time.Second) })
 		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly
-		// and shows a revoked one before a customer waits for a reply.
+		// and shows a revoked one before a customer waits for a reply. It runs while Microsoft 365 is switched
+		// off too, so switching it on again finds the grants alive.
 		if microsoftConfig.Enabled() {
 			g.Go(func(ctx context.Context) { worker.RunKeepAlive(ctx, time.Hour) })
 		}
@@ -189,11 +196,11 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// In-app imports run here, on the owner pool like the CLI. Their keys are sealed with the Gmail ring
 	// (MAILBOX_TOKEN_KEYS); without one they stay in this process's memory (p.importKeys).
 	var importPlans []string
-	if billing.Enabled() {
+	if billingOn {
 		importPlans = billing.PlansOnSale()
 	}
 	importOptions := importjobs.WorkerOptions{Pool: p.pool, DB: db, Keys: p.importKeys, Storage: storage,
-		Cloud: billing.Enabled(), PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork, Origin: origin, HelpCenterDomain: helpCenterDomain}
+		Cloud: billingOn, PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork, Origin: origin, HelpCenterDomain: helpCenterDomain}
 	// The admins hear when an import ends, from the platform address, as for retention notices.
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
 		importOptions.Mailer, importOptions.MailFrom = email.SMTPSender{Config: emailConfig.SMTP}, "noreply@"+emailConfig.MailFromDomain
@@ -216,7 +223,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
 		resultsWorker.WithMail(results.Mail{Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain, Origin: origin,
 			Locked: func(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error) {
-				if !billing.Enabled() {
+				if !billingOn {
 					return false, nil
 				}
 				access, err := store.WorkspaceAccess(ctx, tx, workspaceID, now)
@@ -224,7 +231,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 			}})
 	}
 	g.Go(resultsWorker.Run)
-	if billing.Enabled() {
+	if billingOn {
 		retentionService, err := newRetentionService(db, origin, billing, config.Retention)
 		if err != nil {
 			logger.Error("workspace retention is not running", "error", err)
@@ -233,12 +240,12 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		}
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
-	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: config.AllowPrivateBaseURLs, PlanLimits: billing.Enabled()}
+	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: config.AllowPrivateBaseURLs, PlanLimits: billingOn}
 	apiConfig := httpapi.Config{Cursor: p.cursor, AI: aiConfig, ImportKeys: p.importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth,
 		Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: config.MailImageCacheBytes,
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,
 		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
-		ProblemReportWorkspace: config.ProblemReportWorkspace, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
+		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
 		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
@@ -258,14 +265,15 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	aiWorker.Handle(ai.SlotDraft, api.AI().DraftHandler())
 	aiWorker.Handle(ai.SlotTriage, api.AI().TriageHandler())
 	g.Go(aiWorker.Run)
-	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach.
-	if sync := api.GitHubSync(); sync != nil {
+	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach. Switched
+	// off, no fix is sent (they wait) and only the webhook keeps the repositories in step.
+	if sync := api.GitHubSync(); sync != nil && !off[serverconfig.FeatureAutofix] {
 		g.Go(func(ctx context.Context) { sync.Run(ctx, githubsync.ReconcileEvery) })
 		// Fixes sent to Cursor: the worker reads each repository on GitHub before a fix leaves for it.
 		fixes := &autofixworker.Worker{Cursor: p.cursor, Repos: sync}
 		g.Go(func(ctx context.Context) { fixes.Run(ctx, 5*time.Second) })
 	}
-	if billing.Enabled() {
+	if billingOn {
 		g.Go(func(ctx context.Context) { refreshFoundingAtStart(ctx, api) })
 	}
 	// The console's sign-in page offers cloud sign-in when it is configured (POST /api/v1/operator/auth/cloud).

@@ -32,6 +32,13 @@ describe('AutofixSettingsPage', () => {
     expect(screen.queryByRole('heading', { name: 'GitHub' })).not.toBeInTheDocument();
   });
 
+  it('says Autofix is not turned on, naming no setting, when the operator switched it off', () => {
+    show(undefined, { available: false, missingSettings: [] });
+    expect(screen.getByRole('note')).toHaveTextContent('Autofix is not turned on on this server. Connected repositories and fixes are kept.');
+    expect(screen.queryByText('Autofix is not set up on this server.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'GitHub' })).not.toBeInTheDocument();
+  });
+
   it('says “Only select repositories” before GitHub opens', async () => {
     const actions = show(settingsOf({ installations: [], repos: [] }));
     expect(screen.getByRole('heading', { name: 'Repositories' }).closest('section')).toHaveTextContent('After GitHub');

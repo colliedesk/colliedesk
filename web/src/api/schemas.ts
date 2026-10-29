@@ -17,6 +17,9 @@ export const workspaceSchema = z.object({
 }) satisfies z.ZodType<Generated<'Workspace'>>;
 export const workspaceChoiceSchema = z.object({ slug: z.string(), name: z.string() }) satisfies z.ZodType<Generated<'WorkspaceChoice'>>;
 export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema).min(2) }) satisfies z.ZodType<Generated<'CloudWorkspaceChoices'>>;
+export const serverFeatures = ['gmail', 'microsoft', 'autofix', 'ai_server', 'hosted_mail', 'cloud_sign_in', 'billing', 'signup'] as const;
+export type ServerFeature = (typeof serverFeatures)[number];
+const featureSchema = z.object({ enabled: z.boolean() });
 export const publicConfigSchema = z.object({
   version: z.string().optional(),
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
@@ -27,6 +30,10 @@ export const publicConfigSchema = z.object({
   ai: z.object({ server_provider: z.boolean() }),
   // Autofix needs the server's GitHub App; a server from before Autofix reads as without it.
   autofix: z.object({ available: z.boolean(), missing_settings: z.array(z.string()) }).default({ available: false, missing_settings: [] }),
+  // Which of the server's features run here (operator console → Features); a server from before the
+  // switches reads as running none of them, and the fields above still say what it has.
+  features: z.object(Object.fromEntries(serverFeatures.map((name) => [name, featureSchema])) as Record<ServerFeature, typeof featureSchema>)
+    .default(Object.fromEntries(serverFeatures.map((name) => [name, { enabled: false }])) as Record<ServerFeature, { enabled: boolean }>),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const checkoutPlanSchema = z.enum(['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
 export const planSchema = z.enum(['trial', 'solo', 'small', 'team', 'team25', 'founding', 'none']);

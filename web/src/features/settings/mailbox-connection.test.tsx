@@ -28,6 +28,8 @@ const selfHosted: PublicConfig = {
   product_analytics: { enabled: false, key: null, host: null, realm: null },
   ai: { server_provider: false },
   autofix: { available: false, missing_settings: [] },
+  features: { gmail: { enabled: true }, microsoft: { enabled: true }, autofix: { enabled: false }, ai_server: { enabled: false }, hosted_mail: { enabled: false },
+    cloud_sign_in: { enabled: false }, billing: { enabled: false }, signup: { enabled: false } },
 };
 const cloud: PublicConfig = { ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true }, signup: { enabled: true } };
 
@@ -257,4 +259,31 @@ test('a server that lost its Microsoft settings says what to set, not that a wro
 test('the approval fold names the button that starts the sign-in now', () => {
   render(block({ gmail: { ...gmail, connection: gmailConnection }, returned: { kind: 'error', reason: 'denied', provider: 'microsoft' } }));
   expect(screen.getByText(/After they approve, select Use Microsoft 365 instead again\./)).toBeInTheDocument();
+});
+
+// Switched off by the operator: available is false with nothing missing.
+const gmailOff: GmailSettings = { ...gmail, available: false };
+
+test('Gmail switched off keeps its connection: the replies wait, said plainly, and it can still be disconnected', () => {
+  render(block({ gmail: { ...gmailOff, connection: gmailConnection }, microsoft: { ...microsoft, connection: null } }));
+  expect(screen.getByRole('note')).toHaveTextContent('Gmail sending is turned off on this server: replies wait in the outbox and are sent once it is on again.');
+  expect(screen.queryByText(/not set up on this server/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Use another Gmail account' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Disconnect Gmail' })).toBeInTheDocument();
+});
+
+test('a provider switched off is one neutral line for a self-hosted admin, without the setup guide', () => {
+  render(block({ gmail: gmailOff }));
+  expect(screen.getByText('Gmail is not turned on on this server.')).toBeInTheDocument();
+  expect(screen.queryByText(/not set up on this server/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Connect Gmail' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Connect Microsoft 365' })).toBeInTheDocument();
+});
+
+test('on Colliedesk Cloud a provider switched off is not mentioned, and with every provider off the block is gone', () => {
+  render(block({ gmail: gmailOff }), cloud);
+  expect(screen.queryByText('Gmail is not turned on on this server.')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Connect Microsoft 365' })).toBeInTheDocument();
+  const { container } = render(block({ gmail: gmailOff, microsoft: { ...microsoft, available: false, admin_consent_url: null } }), cloud);
+  expect(container).toBeEmptyDOMElement();
 });

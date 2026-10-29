@@ -81,6 +81,7 @@ process could not use it). On a phone it keeps the host and the version.
 - **Overview**: the release and database, the version to run and how many processes run it, what needs
   attention (a variable that still differs from the database, a secret sealed with an old key, a request
   waiting), each process, and the server environment (read at start; change it in `.env` and restart).
+- **Features**: a switch for each feature workspaces see (see [Features](#features) below).
 - **Configuration pages** (AI and pricing, Email, Mailboxes and GitHub, Billing and retention, Sign-ups,
   Security and network, Limits and telemetry): each setting with its key, where its value comes from, and
   when a save applies. Changes stay in the tab until **Review and save**; the review lists every change
@@ -115,9 +116,57 @@ is saved:
 | A mail domain already in use changed | replies to mail sent before stop threading | the new domain |
 | `ai.allow_private_base_urls` on | workspace admins can point the AI provider inside your network | `allow private addresses` |
 | `problem_report.workspace` | reports of every workspace become conversations there (a slug nobody has is refused) | — |
+| Gmail or Microsoft 365 switched off | how many email channels in how many workspaces send through it; their replies wait | `gmail off`, `microsoft off` (only when a channel uses it) |
+| The server's AI provider switched off | how many workspaces run an AI feature on it | — |
+| Billing switched off (`features.billing`) | nobody is billed or locked, retention deletes nothing, subscriptions stay | `billing off` |
+| Billing switched on again | how many workspaces whose trial ended without a plan lock at once | `billing on` |
+| Cloud sign-in switched off (a trial) | nobody signs in to the app or signs up with it; the console still opens with a one-time link | `cloud sign-in off` |
 
 Rotating the Polar token while billing stays on, turning these back off, and the other settings ask only
 for your code when they need it. The authenticator, once required, is turned off on the server only.
+
+## Features
+
+The **Features** page has a switch for each feature workspaces see that needs the server's settings:
+Gmail and Microsoft 365 mailboxes, Autofix, the server's AI provider, hosted support addresses, cloud
+sign-in, billing and cloud sign-up. A switch is the setting `features.<name>` (`true` or `false`), saved,
+versioned and restored like any other.
+
+- **Unset means "on once its settings are complete".** An upgrade sets no switch: every feature that ran
+  before still runs, every feature that missed settings stays off.
+- **A feature cannot be switched on before its settings are complete.** The switch is greyed out and
+  lists what is missing, each item a link to its page; the server refuses `true` the same way
+  (`config_invalid`, and `collie config set` exits with the names).
+- **Settings that go missing later turn the feature off by themselves.** The save is not refused; the
+  Overview and `collie config doctor` warn that the feature is switched on but off, and name what it needs.
+- **Off hides the feature and refuses its use; it removes nothing.** Workspaces no longer see it, and its
+  API routes and MCP tools answer `409 feature_off`. Connections, repositories, fixes, subscriptions,
+  hosted addresses and queued replies stay as they are, and switched on again the feature carries on:
+  - Gmail and Microsoft 365: replies of a channel connected to it wait in the outbox, with the reason on the
+    conversation, and are sent once it is on again. Disconnecting still works. Microsoft's weekly keep-alive
+    still runs, so its connections are alive when you switch it on again.
+  - Autofix: no fix is sent; GitHub's webhook is still received.
+  - The server's AI provider: features set to it stop and say why; a workspace's own provider is not
+    affected. The help center hides its chat while its AI cannot answer, as before.
+  - Hosted addresses: new workspaces get none and the address is not shown; mail to existing hosted
+    addresses still arrives.
+  - Billing: no workspace is billed or locked and trials are not enforced, retention deletes nothing, and
+    the billing pages say billing is off. Subscriptions stay as they are at Polar and Polar's webhook is
+    still received, so they stay in step. Switched on again, a workspace whose trial ended without a plan
+    locks at once (the review counts them first). The server still counts as the hosted cloud
+    (an authenticator stays required, the console must keep its own address).
+  - Cloud sign-in: nobody signs in to the app or signs up with it; sessions already open keep working. It is
+    a trial change. The operator console still opens with a one-time link (`collie operator pair`) and with
+    its own cloud sign-in, so switching it off never locks you out.
+  - Cloud sign-up: nobody can start a trial; it is also off while cloud sign-in or billing is.
+- A switch applies in seconds, like the settings it rides with; while an import runs in the app it waits for
+  the import to end.
+
+`collie config features` lists each switch, whether the feature runs, and what it still needs.
+
+The help center's own address (`help_center.domain`), outgoing mail (SMTP and the reply domain) and Resend
+have no switch: switching them off would break public links or every email reply at once. Their settings
+are the switch.
 
 ## Trial changes
 
@@ -149,7 +198,7 @@ docker compose exec server /app/collie config <command>
 | Command | What it does |
 |---|---|
 | `get [KEY]` | Prints every setting, or one. A secret prints `(set)` or `(not set)`, never its value. |
-| `list [--group G]` | Every setting with its value, its default and who set it in which version. Groups: `ai`, `email`, `mailboxes`, `billing`, `signups`, `security`, `limits`, `operator`. |
+| `list [--group G]` | Every setting with its value, its default and who set it in which version. Groups: `features`, `ai`, `email`, `mailboxes`, `billing`, `signups`, `security`, `limits`, `operator`. |
 | `set KEY=VALUE…` | Saves settings as a new version. A setting that changes what the server does for every workspace (billing, retention, help center domain, trusted proxies, the problem report workspace, video size) needs `--yes`. |
 | `set-secret KEY` | Saves a secret read from standard input, so it never sits in your shell history. |
 | `unset KEY…`, `reset KEY…` | Removes settings: they go back to their default. |
@@ -159,7 +208,8 @@ docker compose exec server /app/collie config <command>
 | `history` | Lists the versions: number, time, how (`env-import`, `cli`, `apply-file`, `restore`…), who, status, settings changed. |
 | `restore VERSION` | Saves an older version again as the newest one. |
 | `trial [confirm\|revert]` | Shows the trial change that runs (a console change of trusted proxies, cloud sign-in or the help center domain), keeps it, or ends it now. The console saves nothing else while one runs; `set`, `reset`, `apply` and `restore` here end it. |
-| `doctor` | Checks the configuration. Exit code 0: clean. 1: warnings (a setting still in the environment, a variable no release reads, a secret sealed with an older key, no key ring, a trial change that runs). 2: errors (a version the server refused). |
+| `features` | Lists each feature switch: whether the feature runs, the switch (`on`, `off` or `unset`) and what it still needs. |
+| `doctor` | Checks the configuration. Exit code 0: clean. 1: warnings (a setting still in the environment, a variable no release reads, a secret sealed with an older key, no key ring, a trial change that runs, a feature switched on that misses settings). 2: errors (a version the server refused). |
 | `reseal` | Seals every secret again with the first key of `MAILBOX_TOKEN_KEYS`, after you add a new key in front. |
 
 Every command that writes takes `--by NAME` for the audit log (default: your user name, or `uid-<n>` in the server container, whose user has no name). A key is named

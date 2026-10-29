@@ -53,6 +53,9 @@ type builtConfig struct {
 	ProblemReportWorkspace string
 	BillingAlertEmail      string
 	RequireTOTP            bool
+	// SwitchedOff are the features an operator switched off (serverconfig features.go); the settings
+	// above stay as they are, so the hosted cloud is still the hosted cloud with billing switched off.
+	SwitchedOff map[string]bool
 }
 
 // buildConfig parses every setting of getenv and the rules that span them. Errors name settings, never
@@ -110,6 +113,16 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 	built.BillingAlertEmail = strings.TrimSpace(getenv("BILLING_ALERT_EMAIL"))
 	if built.BillingAlertEmail != "" && !strings.Contains(built.BillingAlertEmail, "@") {
 		keep(errors.New("billing.alert_email must be an email address"))
+	}
+	built.SwitchedOff = map[string]bool{}
+	for _, feature := range serverconfig.Features() {
+		switch value := strings.TrimSpace(getenv(serverconfig.SwitchKey(feature.Name))); value {
+		case "", "true":
+		case "false":
+			built.SwitchedOff[feature.Name] = true
+		default:
+			keep(fmt.Errorf("%s must be true or false", serverconfig.SwitchKey(feature.Name)))
+		}
 	}
 	if value := strings.TrimSpace(getenv("SMTP_PORT")); value != "" {
 		if port, err := strconv.Atoi(value); err != nil || port < 1 || port > 65535 {

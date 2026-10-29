@@ -140,7 +140,8 @@ const (
 	// tables has a workspace_id or a grant to the app role; no workspace row is read.
 	PrivilegeOperator Privilege = "operator"
 	// PrivilegeOperatorPreview counts, for the operator console's previews, what a change would do across
-	// workspaces: how many lock when billing turns on, and whether a workspace slug exists. Only a count or
+	// workspaces: how many lock when billing turns on, whether a workspace slug exists, and how many channels
+	// and workspaces use a feature an operator switches off (mailbox connections, the server's AI). Only a count or
 	// a yes or no leaves the transaction; no row is returned.
 	PrivilegeOperatorPreview Privilege = "operator-preview"
 )
