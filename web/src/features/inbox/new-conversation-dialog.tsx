@@ -10,7 +10,6 @@ import type { Contact } from '../../api/schemas';
 import { messages } from '../../messages';
 import { contactAddress, contactMessages } from '../contacts/contact-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
-import { RouterLink } from '../../ui/router-link';
 import { ContactPicker } from '../contacts/contact-picker';
 import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import type { AttachmentLimits } from './attachment-picker';
@@ -60,8 +59,7 @@ export function StartConversationWindow({ onClose, onStarted }: { onClose: () =>
   const settingsHref = channelID ? `/settings/channels/${encodeURIComponent(channelID)}?tab=replies` : '/settings/channels/type/email?tab=replies';
   return <NewConversationDialog blocked={blocked} checking={me.isPending || list.isPending || (Boolean(channelID) && channel.isPending)} onClose={onClose} onStart={start}
     senders={senders} channelID={channelID} onChooseChannel={setChosen} settingsHref={settingsHref}
-    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(channel.data) } : undefined}
-    onOpenSettings={() => void navigate({ href: settingsHref })} onChoosePlan={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />;
+    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files, warn: largeAttachmentWarning(channel.data) } : undefined} />;
 }
 
 // An email channel a conversation can start from; one that is off is listed but cannot be chosen.
@@ -86,9 +84,6 @@ export interface NewConversationDialogProps {
   // Resolves once the conversation exists and its email is queued; rejects when nothing was stored. A
   // customer added here is written with the conversation, so a refusal leaves no contact behind either.
   onStart: (contact: ConversationContact, subject: string, reply: FirstReply) => Promise<unknown>;
-  // Where a blocked window sends the person: Settings (email channel, sending domain) and the plans.
-  onOpenSettings?: () => void;
-  onChoosePlan?: () => void;
   onClose: () => void;
 }
 
@@ -106,7 +101,7 @@ function startRefusalText(error: unknown): string {
 // NewConversationDialog starts a conversation by email: the customer (found or added), a subject, the
 // message, Cc and files. Nothing typed is lost when the server refuses.
 export function NewConversationDialog({ blocked, checking = false, senders = [], channelID, onChooseChannel, settingsHref = '/settings/channels/type/email?tab=replies',
-  attachmentLimits, onStart, onOpenSettings, onChoosePlan, onClose }: NewConversationDialogProps) {
+  attachmentLimits, onStart, onClose }: NewConversationDialogProps) {
   useReturnFocus('[data-opens="new-conversation"]');
   const [contact, setContact] = useState<Contact>();
   const [adding, setAdding] = useState(false);
@@ -195,9 +190,9 @@ export function NewConversationDialog({ blocked, checking = false, senders = [],
         <h2 id={titleId}>{contactMessages.newConversationTitle}</h2>
         {blocked && <p role="status" className="composer-notice">
           {blocked === 'trial' ? contactMessages.newConversationTrial : contactMessages.newConversationNeedsChannel}{' '}
-          <RouterLink href={settingsHref} onFollow={onOpenSettings && (() => { onClose(); onOpenSettings(); })}>
-            {blocked === 'trial' ? contactMessages.verifySendingDomain : contactMessages.connectEmailChannel}</RouterLink>
-          {blocked === 'trial' && <>{' · '}<RouterLink href="/settings/billing" onFollow={onChoosePlan && (() => { onClose(); onChoosePlan(); })}>{messages.choosePlan}</RouterLink></>}
+          <a href={settingsHref} onClick={onClose}>
+            {blocked === 'trial' ? contactMessages.verifySendingDomain : contactMessages.connectEmailChannel}</a>
+          {blocked === 'trial' && <>{' · '}<a href="/settings/billing" onClick={onClose}>{messages.choosePlan}</a></>}
         </p>}
         <form className="new-conversation-form" onSubmit={(event) => { event.preventDefault(); void send(); }}>
           {/* Nothing can be sent while the workspace is blocked, so nothing can be written either. */}

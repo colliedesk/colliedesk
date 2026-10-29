@@ -216,7 +216,6 @@ export function InboxRoute() {
     if (params.conversationId && listIsBehind(params.conversationId)) window.history.back();
     else void navigate({ to: '/', search: filters });
   };
-  const openContact = (contactId: string) => void navigate({ to: '/contacts/$contactId', params: { contactId } });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const agentId = me.data?.agent?.id;
@@ -299,7 +298,7 @@ export function InboxRoute() {
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={me.data?.agent?.role === 'admin'} onOpenSettings={(to = '/settings') => void navigate({ href: to })}
+    canManage={me.data?.agent?.role === 'admin'}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
@@ -323,8 +322,7 @@ export function InboxRoute() {
       setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
     }}
     onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }}
-    contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} onOpenContact={openContact} />} />}
-    onOpenContact={openContact}
+    contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
     onNewConversation={() => setStarting(true)} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
       render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}

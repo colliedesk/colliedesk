@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { ImportJob, ImportPreview, ImportReport, UndoReport } from '../../api/imports';
 import { reportDownloadPath } from '../../api/imports';
-import { RouterLink } from '../../ui/router-link';
 import { formatDate } from '../../lib/format-date';
 import { formatWait } from '../../lib/format-wait';
 import { ImportLinksSummary } from './import-links';
@@ -44,9 +43,6 @@ export interface ImportPageProps {
   onUndo: (id: string) => void;
   // onNewImport opens the form again, with the address of a preview that failed.
   onNewImport: () => void;
-  // onOpenInbox follows the inbox link inside the app.
-  onOpenInbox?: () => void;
-  onOpenBilling?: () => void;
 }
 
 const recentDays = (job: ImportJob) => job.options.recent_days ?? defaultRecentDays;
@@ -210,7 +206,7 @@ function Phases({ job }: { job: ImportJob }) {
   );
 }
 
-function Running({ job, onCancel, busy, timezone, report, onOpenInbox }: ImportPageProps & { job: ImportJob }) {
+function Running({ job, onCancel, busy, timezone, report }: ImportPageProps & { job: ImportJob }) {
   const progress = job.progress;
   const step = progress ? m.steps[progress.step] ?? progress.step : '';
   // A bar only while a step with a known size is under way: a finished or sizeless step never shows full.
@@ -223,7 +219,7 @@ function Running({ job, onCancel, busy, timezone, report, onOpenInbox }: ImportP
   return <Heading title={m.heading} help={job.domain}>
     <Phases job={job} />
     {job.phase === 'full' && job.has_interim_report && report?.interim && ((report.tickets?.imported ?? 0) > 0
-      ? <p role="status" className="import-ready">{m.recentDone}{' '}<RouterLink href="/" onFollow={onOpenInbox}>{m.openInbox}</RouterLink></p>
+      ? <p role="status" className="import-ready">{m.recentDone}{' '}<a href="/">{m.openInbox}</a></p>
       : <p role="status">{m.recentNone(recentDays(job))}</p>)}
     {job.state === 'queued' && <p role="status">{m.queued}</p>}
     {retry && <p className="warning-note">{retry}</p>}
@@ -268,7 +264,7 @@ function ReportLedger({ report }: { report: ImportReport }) {
   </figure>;
 }
 
-function Finished({ job, report, onUndo, onNewImport, onOpenInbox, busy }: ImportPageProps & { job: ImportJob }) {
+function Finished({ job, report, onUndo, onNewImport, busy }: ImportPageProps & { job: ImportJob }) {
   const status = job.status ?? 'FAILED';
   return <Heading title={m[`status${status}`]} help={job.domain}>
     <p className="import-status" data-status={status}>{m[`explain${status}`]}</p>
@@ -282,13 +278,13 @@ function Finished({ job, report, onUndo, onNewImport, onOpenInbox, busy }: Impor
     </div>
     {/* Only the way on stays at the bottom of a phone screen; the report and the undo scroll with the page. */}
     <div className="button-row import-actions">
-      <RouterLink className="button primary-action" href="/" onFollow={onOpenInbox}>{m.openInbox}</RouterLink>
+      <a className="button primary-action" href="/">{m.openInbox}</a>
       <button type="button" onClick={onNewImport}>{m.newImport}</button>
     </div>
   </Heading>;
 }
 
-function Stopped({ job, report, onUndo, onNewImport, onOpenBilling, showBilling, busy }: ImportPageProps & { job: ImportJob }) {
+function Stopped({ job, report, onUndo, onNewImport, showBilling, busy }: ImportPageProps & { job: ImportJob }) {
   // The count is taken when the import ends; an older row without it falls back to what the job knows.
   // Contacts, saved replies and the knowledge base are written before any ticket, so a stopped full
   // pass may hold data without a conversation: undo stays offered.
@@ -305,7 +301,7 @@ function Stopped({ job, report, onUndo, onNewImport, onOpenBilling, showBilling,
     {job.error_message && job.state === 'failed' && <details><summary>{m.failureDetail}</summary><p className="muted-copy">{job.error_message}</p></details>}
     {report && <ReportLedger report={report} />}
     <div className="button-row import-actions">
-      {job.error_code === 'storage_cap' && showBilling && <RouterLink className="button primary-action" href="/settings/billing" onFollow={onOpenBilling}>{m.planAndBilling}</RouterLink>}
+      {job.error_code === 'storage_cap' && showBilling && <a className="button primary-action" href="/settings/billing">{m.planAndBilling}</a>}
       <button type="button" className={job.error_code === 'storage_cap' && showBilling ? undefined : 'primary-action'} onClick={onNewImport}>{preview ? m.tryAgain : m.newImport}</button>
       {imported && job.account_source && <UndoButton onUndo={() => onUndo(job.id)} busy={busy} />}
     </div>

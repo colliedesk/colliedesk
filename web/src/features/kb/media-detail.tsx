@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent, RefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { formatBytes } from '../../lib/format-bytes';
-import { RouterLink } from '../../ui/router-link';
 import { Icon } from './editor/icons';
 import { dialogKeys } from '../../ui/dialog-keys';
 import { KBDialog, usePhone } from './kb-ui';
@@ -201,11 +200,11 @@ function Usage({ item }: { item: KBMediaDetails }) {
     : <ul className="media-used">
         {item.articles.map((article) => (
           <li key={article.id}>
-            <RouterLink href={`/knowledge/articles/${article.id}`}>
+            <a href={`/knowledge/articles/${article.id}`}>
               <span className="media-used-title">{article.title}</span>
               <span className="kb-hint">#{article.number}{article.in_trash ? ` · ${mediaMessages.inTrash}` : ''}{article.current ? '' : ` · ${mediaMessages.olderVersion}`}</span>
               <span className="kb-dot-status" data-status={article.status}>{article.status === 'published' ? mediaMessages.published : mediaMessages.draft}</span>
-            </RouterLink>
+            </a>
           </li>
         ))}
       </ul>;
@@ -257,7 +256,7 @@ function Actions({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetail
       {problem && <div role="alert" className="error-copy media-problem">
         <p>{problem}</p>
         {problem === mediaMessages.inUseRefused && <ul className="media-articles">
-          {live.map((article) => <li key={article.id}><RouterLink href={`/knowledge/articles/${article.id}`}>{article.title}</RouterLink></li>)}
+          {live.map((article) => <li key={article.id}><a href={`/knowledge/articles/${article.id}`}>{article.title}</a></li>)}
         </ul>}
       </div>}
       {replacing && <ReplacePicker item={item} onPick={(other) => void replace(other)} onClose={() => setReplacing(false)} />}

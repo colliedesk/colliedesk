@@ -13,19 +13,16 @@ const mai = {
 
 test('customers a search finds are listed, each opening their page', async () => {
   api.contacts.mockResolvedValue({ items: [mai], has_more: false });
-  const onOpenContact = vi.fn();
-  render(<QueryClientProvider client={new QueryClient()}><ContactMatches search=" mai " onOpenContact={onOpenContact} /></QueryClientProvider>);
+  render(<QueryClientProvider client={new QueryClient()}><ContactMatches search=" mai " /></QueryClientProvider>);
   const found = await screen.findByRole('navigation', { name: 'Customers' });
   expect(api.contacts).toHaveBeenCalledWith('mai', 5, expect.anything());
   const link = within(found).getByRole('link', { name: /mai@customer.example/ });
   expect(link).toHaveAttribute('href', `/contacts/${mai.id}`);
-  fireEvent.click(link);
-  expect(onOpenContact).toHaveBeenCalledWith(mai.id);
 });
 
 test('no search, or nobody found, shows nothing', async () => {
   api.contacts.mockReset();
-  const { container } = render(<QueryClientProvider client={new QueryClient()}><ContactMatches search="  " onOpenContact={vi.fn()} /></QueryClientProvider>);
+  const { container } = render(<QueryClientProvider client={new QueryClient()}><ContactMatches search="  " /></QueryClientProvider>);
   expect(container).toBeEmptyDOMElement();
   expect(api.contacts).not.toHaveBeenCalled();
 });

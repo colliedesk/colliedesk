@@ -1,7 +1,6 @@
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { KBCollection } from './kb-api';
-import { RouterLink } from '../../ui/router-link';
 import { kbMessages } from './kb-messages';
 import { indent, parentChoices, reason } from './kb-tree';
 import type { TreeNode } from './kb-tree';
@@ -77,28 +76,29 @@ interface CollectionTreeProps {
   // total counts the articles of every collection, for All articles.
   total?: number;
   selected?: string;
-  onSelect: (collection?: KBCollection) => void;
+  // hrefTo is the address of the article list with that collection chosen (none: all articles).
+  hrefTo: (collection?: KBCollection) => string;
 }
 
 // CollectionTree lists the collections as nested links; the chosen one filters the articles.
-export function CollectionTree({ tree, total, selected, onSelect }: CollectionTreeProps) {
+export function CollectionTree({ tree, total, selected, hrefTo }: CollectionTreeProps) {
   const item = (node: TreeNode) => (
     <li key={node.collection.id}>
-      <RouterLink href={`/knowledge?${new URLSearchParams({ collection: node.collection.id })}`} className="kb-tree-link" current={selected === node.collection.id}
-        label={`${node.collection.name}, ${kbMessages.articleCount(node.collection.article_count)}`} onFollow={() => onSelect(node.collection)}>
+      <a href={hrefTo(node.collection)} className="kb-tree-link" aria-current={selected === node.collection.id ? 'page' : undefined}
+        aria-label={`${node.collection.name}, ${kbMessages.articleCount(node.collection.article_count)}`}>
         <span className="kb-tree-name">{node.collection.name}</span>
         <span className="kb-tree-count">{node.collection.article_count}</span>
-      </RouterLink>
+      </a>
       {node.children.length > 0 && <ul>{node.children.map(item)}</ul>}
     </li>
   );
   return (
     <ul className="kb-tree">
       <li>
-        <RouterLink href="/knowledge" className="kb-tree-link" current={!selected} onFollow={() => onSelect(undefined)}>
+        <a href={hrefTo()} className="kb-tree-link" aria-current={selected ? undefined : 'page'}>
           <span className="kb-tree-name">{kbMessages.allArticles}</span>
           {total !== undefined && <span className="kb-tree-count" aria-hidden="true">{total}</span>}
-        </RouterLink>
+        </a>
       </li>
       {tree.map(item)}
     </ul>

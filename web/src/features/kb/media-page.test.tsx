@@ -45,8 +45,7 @@ test('the library shows images and videos, a video with its length, and leads to
   expect(shot).not.toHaveTextContent('In 1 article');
   // Not used counts every item the Not used page lists, kept ones too.
   expect((await screen.findByText('42 not used')).closest('p')).toHaveTextContent('42 not used · 430.0 MiB, 5 of them kept');
-  fireEvent.click(screen.getByRole('link', { name: 'Review not used' }));
-  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media/unused', search: {}, replace: false });
+  expect(screen.getByRole('link', { name: 'Review not used' })).toHaveAttribute('href', '/knowledge/media/unused');
   fireEvent.click(screen.getByRole('radio', { name: 'Videos' }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { kind: 'video' }, replace: false });
   fireEvent.change(screen.getByRole('combobox', { name: 'Use' }), { target: { value: 'missing_alt' } });

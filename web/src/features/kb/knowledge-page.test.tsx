@@ -30,8 +30,7 @@ test('collections nest three levels, and choosing one lists only its articles', 
   expect(within(setup).getByRole('link', { name: 'Email, 0 articles' })).toBeInTheDocument();
   expect(within(tree).getByRole('link', { name: 'All articles' })).toHaveAttribute('aria-current', 'page');
   expect(await screen.findByRole('link', { name: /Reset your password/ })).toHaveTextContent('Published');
-  fireEvent.click(within(tree).getByRole('link', { name: 'Setup, 2 articles' }));
-  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge', search: { collection: ids.setup }, replace: false });
+  expect(within(tree).getByRole('link', { name: 'Setup, 2 articles' })).toHaveAttribute('href', `/knowledge?collection=${ids.setup}`);
   show({ collection: ids.setup });
   await waitFor(() => expect(calls.some((call) => call.path === '/api/v1/kb/articles' && call.search.get('collection_id') === ids.setup)).toBe(true));
   expect(within(tree).getByRole('link', { name: 'Setup, 2 articles' })).toHaveAttribute('aria-current', 'page');

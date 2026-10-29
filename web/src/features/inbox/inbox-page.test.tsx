@@ -120,10 +120,8 @@ test('tells the agent when replies will not be emailed', () => {
 });
 
 test('an admin can go straight to Settings from the notice that replies are not emailed', () => {
-  const onOpenSettings = vi.fn();
-  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Gmail stopped sending." canManage onOpenSettings={onOpenSettings} />);
-  fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Open Settings' }));
-  expect(onOpenSettings).toHaveBeenCalled();
+  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Gmail stopped sending." canManage />);
+  expect(within(screen.getByRole('status')).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/type/email?tab=replies');
 });
 
 test('shows the author name and attachment download links on a timeline message', () => {
@@ -234,10 +232,8 @@ test('an agent of an empty workspace reads how to import, which an admin does', 
 });
 
 test('the import link of an empty workspace opens the import page in the app', () => {
-  const onOpenSettings = vi.fn();
-  render(<InboxPage conversations={[]} canManage onOpenSettings={onOpenSettings} />);
-  fireEvent.click(within(screen.getByRole('region', { name: /get started/i })).getByRole('link', { name: 'Import from Freshdesk' }));
-  expect(onOpenSettings).toHaveBeenCalledWith('/settings/import-freshdesk');
+  render(<InboxPage conversations={[]} canManage />);
+  expect(within(screen.getByRole('region', { name: /get started/i })).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', '/settings/import-freshdesk');
 });
 
 test('an empty filtered list says no conversation matches', () => {
@@ -284,12 +280,9 @@ test('the list of a results number that was refreshed says so and leads back to 
 });
 
 test('get-started links open Settings inside the app and hide admin-only steps from agents', () => {
-  const onOpenSettings = vi.fn();
-  const { rerender } = render(<InboxPage conversations={[]} canManage onOpenSettings={onOpenSettings} />);
-  const link = screen.getByRole('link', { name: 'Connect your support email' });
-  expect(fireEvent.click(link)).toBe(false); // default navigation (full page load) prevented
-  expect(onOpenSettings).toHaveBeenCalled();
-  rerender(<InboxPage conversations={[]} canManage={false} onOpenSettings={onOpenSettings} />);
+  const { rerender } = render(<InboxPage conversations={[]} canManage />);
+  expect(screen.getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings/channels/type/email');
+  rerender(<InboxPage conversations={[]} canManage={false} />);
   const start = screen.getByRole('region', { name: /get started/i });
   expect(within(start).queryByRole('link', { name: 'Invite your team' })).not.toBeInTheDocument();
   expect(within(start).queryByRole('link', { name: 'Connect your support email' })).not.toBeInTheDocument();

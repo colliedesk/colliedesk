@@ -30,8 +30,6 @@ interface ConversationListProps {
   onRetry?: () => void;
   onClearFilters?: () => void;
   canManage?: boolean;
-  // onOpenSettings opens a settings page in the app: Settings, or the import page.
-  onOpenSettings?: (to?: SettingsTarget) => void;
   // checkedIds are the rows ticked for a bulk action; ticking never opens the conversation.
   checkedIds?: ReadonlySet<string>;
   onToggle?: (id: string) => void;
@@ -70,7 +68,7 @@ function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boo
 
 const visibleTags = 2;
 export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal, onTestMessage }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, canManage = false, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal, onTestMessage }: ConversationListProps) {
   const [testing, setTesting] = useState(false);
   const [testFailed, setTestFailed] = useState<string>();
   const testInFlight = useRef(false);
@@ -99,11 +97,7 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
   }, [checkedCount, allChecked]);
   const scroll = useRef<HTMLDivElement>(null);
   const onListKey = useListKeys(scroll, items.map((item) => item.id), selectedId, onSelect);
-  const settingsLink = (label: string, to: SettingsTarget, className: string) => <a href={to} className={className} onClick={(event) => {
-    if (!onOpenSettings) return;
-    event.preventDefault();
-    onOpenSettings(to);
-  }}>{label}</a>;
+  const settingsLink = (label: string, to: SettingsTarget, className: string) => <a href={to} className={className}>{label}</a>;
   const getStarted = getStartedSteps(onboardingGoal, canManage);
   // Every step is a full-size button; the first (the recommended one when there is one) is the primary
   // action of a brand-new workspace, ahead of anything about billing.

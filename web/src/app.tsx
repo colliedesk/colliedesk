@@ -25,6 +25,7 @@ import { resetProductAnalytics, useProductAnalytics } from './lib/product-analyt
 import { forgetAllDrafts } from './features/inbox/reply-draft-storage';
 import { inboxQueryFromSearch } from './lib/inbox-query';
 import { signInFormReady } from './lib/sign-in-ready';
+import { useInAppLinks } from './lib/in-app-links';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
 // Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
@@ -43,6 +44,8 @@ const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
+  // A bare link to a page of the app opens without reloading, wherever it is written.
+  useInAppLinks();
   // The public page of a results share link has no session and no rail.
   const onSignIn = path === '/sign-in' || path === '/r';
   // An address that matches no page is no rail destination either.
@@ -242,9 +245,7 @@ const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/import-freshdesk',
   component: function Import() {
-    const navigate = useNavigate();
-    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute onOpenInbox={() => void navigate({ to: '/' })}
-      onOpenBilling={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />} />;
+    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
   },
 });
 const aiRoute = createRoute({

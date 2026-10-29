@@ -869,8 +869,7 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   const notice = await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/);
   // One channel of a type: no mailbox name on the rows or the thread.
   expect(document.querySelector('.channel-pill')).toBeNull();
-  fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
-  expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/55555555-5555-4555-8555-555555555555' });
+  expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/55555555-5555-4555-8555-555555555555');
   navigate.mockRestore();
 });
 
@@ -895,8 +894,7 @@ test('a web form conversation with no email connected can still be answered, and
   expect(screen.queryByText(/was removed/)).toBeNull();
   fireEvent.change(screen.getAllByLabelText('Message body').at(-1)!, { target: { value: 'Hello' } });
   expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeEnabled();
-  fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
-  expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/type/email?tab=replies' });
+  expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/type/email?tab=replies');
   navigate.mockRestore();
 });
 
@@ -1001,8 +999,7 @@ test('the composer warns about the mailbox a reply leaves from, and leads to tha
     api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'failed'));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
     const notice = await screen.findByText(/Gmail stopped sending/);
-    fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
-    expect(navigate).toHaveBeenCalledWith({ href: `/settings/channels/${sales.id}?tab=replies` });
+    expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', `/settings/channels/${sales.id}?tab=replies`);
   } finally {
     api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
     navigate.mockRestore();
