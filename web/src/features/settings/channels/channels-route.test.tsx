@@ -364,6 +364,13 @@ test('a web form that lists no website says so in plain words', async () => {
   expect(await screen.findByText('No website can send messages through this form yet. Add your website address below.')).toBeInTheDocument();
 });
 
+test('a help chat whose AI chat cannot answer says why the help center shows no chat', async () => {
+  channelsApi.get.mockResolvedValue({ ...channel('web_form', { type: 'help_chat', name: 'Help chat', status: { state: 'needs_attention', reason_code: 'ai_chat_off', message: null } }),
+    config: { channel_id: FORM, enabled: true, greeting: 'Hi!', suggestions: [], instructions: '', widget_origins: [] } });
+  show(FORM);
+  expect(await screen.findByText('Your help center shows no chat: the AI chat is off in Settings → Built-in AI, or this server no longer offers its model.')).toBeInTheDocument();
+});
+
 test('the web form save shows Saved after it succeeds', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   channelsApi.update.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });

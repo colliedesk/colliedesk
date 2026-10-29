@@ -9352,7 +9352,7 @@ components:
           type: [string, 'null']
           description: >-
             Why a channel needs attention, a fixed code the web app explains: email `sending_paused`,
-            `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`.
+            `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`; help chat `ai_chat_off`.
             A waiting channel has `no_message_yet`.
         message: {type: [string, 'null']}
     Channel:

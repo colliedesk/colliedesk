@@ -146,6 +146,16 @@ func (s *Service) ChatActive(ctx context.Context, workspaceID string) (bool, err
 	return features[SlotChat], err
 }
 
+// ChatActiveIn is ChatActive read in the caller's transaction, which is in the workspace.
+func (s *Service) ChatActiveIn(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
+	slots, err := readSlots(ctx, tx, workspaceID, false)
+	if err != nil {
+		return false, err
+	}
+	row, found := slots[SlotChat]
+	return found && s.view(SlotChat, row, true).Active, nil
+}
+
 // findChat is the open chat of a browser, kept ChatKeptFor after its last turn; an ended one is gone.
 func (s *Service) findChat(ctx context.Context, tx pgx.Tx, workspaceID string, browser ChatBrowser, lock bool) (id, status string, last time.Time, found bool, err error) {
 	if len(browser.TokenHash) != 32 || !isUUID(browser.ChannelID) {

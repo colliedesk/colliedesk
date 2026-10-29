@@ -866,3 +866,56 @@ func TestTheExportCarriesEveryChatInPages(t *testing.T) {
 		previous = created
 	}
 }
+
+// A server whose operator removes its AI provider (or the chat's model) after a workspace turned the
+// chat on still serves the help center: its pages answer without Ask AI or the article's chat box, every
+// chat address is the help center's own 404 (never a 500), and the channel says why the chat is not
+// showing.
+func TestTheHelpCenterRunsWithoutTheChatWhenTheServerOffersNoModel(t *testing.T) {
+	var server *ai.ServerProvider
+	d := newChatDesk(t, "Chat Zulu", func(config *httpapi.Config) { server = config.AI.Server })
+	// Another workspace's chat that is off says so, and does not turn this one's status.
+	other := newChatDeskOn(t, d.api, auth.New(d.pool, testOrigin), d.pool, d.fake, "Chat Yankee")
+	kbCall(t, d.api, http.MethodPut, "/api/v1/ai/slots/chat", map[string]any{"source": "server", "enabled": false}, other.admin, http.StatusOK, nil)
+	if state, reason := chatChannelStatus(t, other); state != "needs_attention" || reason != "ai_chat_off" {
+		t.Fatalf("the other workspace's chat that is off: %s %s", state, reason)
+	}
+	if state, _ := chatChannelStatus(t, d); state == "needs_attention" {
+		t.Fatalf("a chat that is on reads another workspace's: %s", state)
+	}
+	server.Models = nil
+	missing := helpCenterCall(d.site, http.MethodGet, testOriginHost, "/help/no-such-help/chat/session")
+	for _, path := range []string{"/chat", "/chat/session", "/chat/widget.js", "/chat/widget-config"} {
+		if response := d.call(t, http.MethodGet, path, nil); response.Code != http.StatusNotFound || response.Body.String() != missing.Body.String() {
+			t.Errorf("%s: status=%d, want the help center's own 404", path, response.Code)
+		}
+	}
+	if response := d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "Hi"}); response.Code != http.StatusNotFound {
+		t.Errorf("a question: status=%d, want 404", response.Code)
+	}
+	home := helpCenterCall(d.site, http.MethodGet, testOriginHost, d.base)
+	article := helpCenterCall(d.site, http.MethodGet, testOriginHost, d.base+"/a/"+num(d.article.Number)+"-"+d.article.Slug)
+	for name, page := range map[string]*httptest.ResponseRecorder{"home": home, "article": article} {
+		if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "ask-link") || strings.Contains(page.Body.String(), "chatbox") || strings.Contains(page.Body.String(), "<script src") {
+			t.Errorf("%s: status=%d, want the page without the chat: %.300s", name, page.Code, page.Body.String())
+		}
+	}
+	if state, reason := chatChannelStatus(t, d); state != "needs_attention" || reason != "ai_chat_off" {
+		t.Fatalf("channel status = %s %s, want needs_attention ai_chat_off", state, reason)
+	}
+	if len(d.fake.Requests()) != 0 {
+		t.Fatalf("the provider was called %d times", len(d.fake.Requests()))
+	}
+}
+
+func chatChannelStatus(t *testing.T, d chatDesk) (state, reason string) {
+	t.Helper()
+	var channel struct {
+		Status struct {
+			State      string `json:"state"`
+			ReasonCode string `json:"reason_code"`
+		} `json:"status"`
+	}
+	kbCall(t, d.api, http.MethodGet, "/api/v1/channels/"+d.channel, nil, d.admin, http.StatusOK, &channel)
+	return channel.Status.State, channel.Status.ReasonCode
+}

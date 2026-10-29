@@ -9,7 +9,9 @@ articles**, and lets them hand the chat to your team. It needs two things turned
    [AI chat](ai-chat.md) for what the AI does, its limits and the transcripts.
 
 While either is off, the chat answers `404`, the same as a help center that is off, and no page shows
-a chat button.
+a chat button. The same happens when the server's operator removes its AI provider or the chat's
+model: the help center keeps working without the chat, and the channel in **Settings → Channels**
+says it needs attention because the help center shows no chat.
 
 ## Where customers chat
 

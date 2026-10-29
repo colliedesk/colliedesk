@@ -34,6 +34,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -323,7 +324,10 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
 			WithSealKeys(config.Google.Keys)}
-	api.store = api.store.WithChannels(Channels(config, outbound, helpchat.Config{HelpCenterRoutes: api.helpChatRoutes(), HelpCenterAdditions: api.helpChatAdditions}, api.revokeSealed))
+	api.store = api.store.WithChannels(Channels(config, outbound, helpchat.Config{HelpCenterRoutes: api.helpChatRoutes(), HelpCenterAdditions: api.helpChatAdditions,
+		ChatActive: func(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
+			return api.ai.ChatActiveIn(ctx, tx, workspaceID)
+		}}, api.revokeSealed))
 	api.pipeline = pipeline.New(api.store, clock)
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	importKeys := config.ImportKeys

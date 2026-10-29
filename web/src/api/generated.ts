@@ -6343,7 +6343,7 @@ export interface components {
              * @enum {string}
              */
             state: "working" | "waiting" | "off" | "needs_attention" | "not_connected" | "removed";
-            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`. A waiting channel has `no_message_yet`. */
+            /** @description Why a channel needs attention, a fixed code the web app explains: email `sending_paused`, `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`; help chat `ai_chat_off`. A waiting channel has `no_message_yet`. */
             reason_code: string | null;
             message: string | null;
         };

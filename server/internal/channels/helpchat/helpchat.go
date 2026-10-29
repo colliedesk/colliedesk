@@ -54,6 +54,9 @@ const ThreadKeyPrefix = "chat-session:"
 type Config struct {
 	HelpCenterRoutes    []channels.HelpCenterRoute
 	HelpCenterAdditions func(kit channels.HelpCenterKit) func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error)
+	// ChatActive reports, in the caller's transaction, whether the workspace's AI chat can answer now:
+	// on, and its provider still offers its model. Nil reads only whether the feature is on.
+	ChatActive func(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error)
 }
 
 // Adapter is the help chat channel type.
@@ -73,7 +76,7 @@ func (a *Adapter) Definition() channels.Definition {
 		HelpCenterRoutes: a.config.HelpCenterRoutes, HelpCenterAdditions: a.config.HelpCenterAdditions}
 }
 
-func (a *Adapter) Config() channels.ConfigPart     { return config{} }
+func (a *Adapter) Config() channels.ConfigPart     { return config{chatActive: a.config.ChatActive} }
 func (a *Adapter) Inbound() channels.InboundPart   { return inbound{} }
 func (a *Adapter) Outbound() channels.OutboundPart { return nil }
 
@@ -95,7 +98,9 @@ type Surface struct {
 	WidgetOrigins []string `json:"widget_origins"`
 }
 
-type config struct{}
+type config struct {
+	chatActive func(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error)
+}
 
 func fieldError(field, message string) error {
 	return &channels.FieldError{Fields: map[string]string{field: message}, Message: message}
@@ -205,13 +210,19 @@ func (config) Summary(ctx context.Context, tx pgx.Tx, channel channels.Channel) 
 
 func (config) Credentials() []channels.CredentialSpec { return nil }
 
-// ReasonAIChatOff: the channel is on but the workspace's AI chat feature is off or cannot run, so the
-// help center shows no chat.
+// ReasonAIChatOff: the channel is on but the workspace's AI chat feature is off or cannot run (the
+// server's operator removed its provider or the chat's model), so the help center shows no chat.
 const ReasonAIChatOff = "ai_chat_off"
 
-func (config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel) (channels.Status, error) {
+func (c config) Status(ctx context.Context, tx pgx.Tx, channel channels.Channel) (channels.Status, error) {
 	var on bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM ai_slots WHERE workspace_id=$1 AND slot='chat' AND enabled)`, channel.WorkspaceID).Scan(&on); err != nil {
+	var err error
+	if c.chatActive != nil {
+		on, err = c.chatActive(ctx, tx, channel.WorkspaceID)
+	} else {
+		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM ai_slots WHERE workspace_id=$1 AND slot='chat' AND enabled)`, channel.WorkspaceID).Scan(&on)
+	}
+	if err != nil {
 		return channels.Status{}, err
 	}
 	if !on {
