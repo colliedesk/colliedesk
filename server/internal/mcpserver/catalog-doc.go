@@ -172,6 +172,8 @@ var toolDocs = map[string]string{
 	"colliedesk_results_share_link_create":          "Asks a person to create a share link of the results page; the old link stops working",
 	"colliedesk_results_share_link_revoke":          "Turns off the results page's share link",
 	"colliedesk_results_email_set":                  "Turns your weekly results email on or off (admins only)",
+	"colliedesk_setup_progress_get":                 "Shows the four getting-started steps (email, import, invite, first reply) and where each stands",
+	"colliedesk_setup_guide_set":                    "Hides the [setup guide](setup-guide.md) from your inbox, or shows it again",
 	"colliedesk_autofix_status":                     "Shows whether Autofix is set up and how many fixes wait for a person or are running",
 	"colliedesk_fixes_list":                         "Lists the fixes sent to coding agents, by group (needs a person, running, done)",
 	"colliedesk_fix_get":                            "Shows one fix: where it is, its issue and pull request, what was sent and its timeline",

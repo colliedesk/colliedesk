@@ -3199,6 +3199,50 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/workspace/setup:
+    get:
+      operationId: getSetupProgress
+      x-permission: authenticated
+      description: >-
+        Where the workspace stands on getting started: receive customer email, import from Freshdesk,
+        invite the team, answer the first email. The steps come in the order the sign-up goal suggests;
+        first_reply is always last. States only, computed on every call.
+      responses:
+        '200':
+          description: The setup steps and whether all are done
+          content: {application/json: {schema: {$ref: '#/components/schemas/SetupProgress'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/agents/me/setup-guide:
+    put:
+      operationId: setSetupGuideHidden
+      x-permission: authenticated
+      description: >-
+        Hides the setup guide from the inbox of the caller, or shows it again. It is a choice of the
+        person; other agents keep their own.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [hidden]
+              properties:
+                hidden: {type: boolean}
+      responses:
+        '200':
+          description: The caller's choice
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hidden]
+                properties:
+                  hidden: {type: boolean}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/ai/usage:
     get:
       operationId: getAIUsage
@@ -7107,6 +7151,32 @@ components:
         slug: {type: string}
         name: {type: string}
         timezone: {type: string, default: UTC}
+    SetupProgress:
+      type: object
+      required: [steps, complete, recommended]
+      properties:
+        steps:
+          type: array
+          items: {$ref: '#/components/schemas/SetupStep'}
+        complete: {type: boolean, description: True when every step is done.}
+        recommended:
+          description: The step the sign-up goal puts first while it is not done; null for a goal without one.
+          type: [string, 'null']
+          enum: [email, import, invite, null]
+    SetupStep:
+      type: object
+      required: [key, state, detail]
+      properties:
+        key: {type: string, enum: [email, import, invite, first_reply]}
+        state:
+          type: string
+          description: >-
+            email none, waiting, working or needs_attention; import none, running or done; invite alone,
+            invited or joined; first_reply none or sent.
+          enum: [none, waiting, working, needs_attention, running, done, alone, invited, joined, sent]
+        detail:
+          description: A reason code for needs_attention; null otherwise.
+          type: [string, 'null']
     Agent:
       type: object
       required: [id, email, display_name, role, timezone_override]
@@ -7163,8 +7233,9 @@ components:
       description: Where the person heard of Colliedesk.
     Me:
       type: object
-      required: [agent, workspace, timezone, scope, permissions, plan, onboarding_goal, ai_features]
+      required: [agent, workspace, timezone, scope, permissions, plan, onboarding_goal, ai_features, setup_guide_hidden]
       properties:
+        setup_guide_hidden: {type: boolean, description: True when this agent hid the setup guide in the inbox.}
         ai_features:
           type: object
           description: Which AI features can run now in the workspace (on, with a working provider); the web app offers only those.

@@ -1794,6 +1794,40 @@ export interface paths {
         patch: operations["setResultsEmail"];
         trace?: never;
     };
+    "/api/v1/workspace/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Where the workspace stands on getting started: receive customer email, import from Freshdesk, invite the team, answer the first email. The steps come in the order the sign-up goal suggests; first_reply is always last. States only, computed on every call. */
+        get: operations["getSetupProgress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/setup-guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Hides the setup guide from the inbox of the caller, or shows it again. It is a choice of the person; other agents keep their own. */
+        put: operations["setSetupGuideHidden"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/usage": {
         parameters: {
             query?: never;
@@ -4310,6 +4344,27 @@ export interface components {
             /** @default UTC */
             timezone: string;
         };
+        SetupProgress: {
+            steps: components["schemas"]["SetupStep"][];
+            /** @description True when every step is done. */
+            complete: boolean;
+            /**
+             * @description The step the sign-up goal puts first while it is not done; null for a goal without one.
+             * @enum {string|null}
+             */
+            recommended: "email" | "import" | "invite" | null;
+        };
+        SetupStep: {
+            /** @enum {string} */
+            key: "email" | "import" | "invite" | "first_reply";
+            /**
+             * @description email none, waiting, working or needs_attention; import none, running or done; invite alone, invited or joined; first_reply none or sent.
+             * @enum {string}
+             */
+            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "alone" | "invited" | "joined" | "sent";
+            /** @description A reason code for needs_attention; null otherwise. */
+            detail: string | null;
+        };
         Agent: {
             /** Format: uuid */
             id: string;
@@ -4363,6 +4418,8 @@ export interface components {
          */
         OnboardingSource: "x" | "email" | "search" | "ai_chatgpt" | "ai_claude" | "ai_gemini" | "ai_perplexity" | "ai_other" | "tiktok" | "youtube" | "reddit" | "github" | "referral" | "other";
         Me: {
+            /** @description True when this agent hid the setup guide in the inbox. */
+            setup_guide_hidden: boolean;
             /** @description Which AI features can run now in the workspace (on, with a working provider); the web app offers only those. */
             ai_features: {
                 triage: boolean;
@@ -10465,6 +10522,59 @@ export interface operations {
                 content: {
                     "application/json": {
                         weekly: boolean;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getSetupProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The setup steps and whether all are done */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupProgress"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    setSetupGuideHidden: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    hidden: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's choice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        hidden: boolean;
                     };
                 };
             };

@@ -73,28 +73,19 @@ test('a settled list is not marked busy', () => {
   expect(document.querySelector('.conversation-scroll')).toHaveAttribute('aria-busy', 'false');
 });
 
-const steps = () => within(screen.getByRole('region', { name: 'Get started' })).getAllByRole('listitem').map((item) => item.textContent);
-
-test.each([
-  ['leave_helpdesk', ['Recommended first step: Import from Freshdesk', 'Connect your support email', 'Invite your team']],
-  ['shared_inbox', ['Recommended first step: Connect your support email', 'Import from Freshdesk', 'Invite your team']],
-  ['lower_cost', ['Recommended first step: Invite your team', 'Connect your support email', 'Import from Freshdesk']],
-  ['ai_agents', ['Recommended first step: Connect an AI agent', 'Connect your support email', 'Import from Freshdesk', 'Invite your team']],
-  ['other', ['Connect your support email', 'Import from Freshdesk', 'Invite your team']],
-  [null, ['Connect your support email', 'Import from Freshdesk', 'Invite your team']],
-] as const)('a brand-new workspace whose goal is %s starts with the matching step', (goal, expected) => {
-  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={goal} />);
-  expect(steps()).toEqual(expected);
+test('a brand-new workspace explains itself and no longer lists setup steps as buttons', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} />);
+  const start = screen.getByRole('region', { name: 'Get started' });
+  expect(within(start).getByRole('heading', { name: 'No conversations yet' })).toBeInTheDocument();
+  expect(within(start).queryByRole('link')).not.toBeInTheDocument();
 });
 
-test('the AI agent step links to the MCP guide', () => {
-  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} onboardingGoal="ai_agents" />);
-  expect(screen.getByRole('link', { name: 'Connect an AI agent' })).toHaveAttribute('href', 'https://colliedesk.com/docs/mcp');
-});
-
-test('an agent who is not an admin never gets the settings steps, whatever the goal', () => {
-  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} onboardingGoal="lower_cost" />);
-  expect(steps()).toEqual(['Import from Freshdesk']);
+test('the setup guide shows at the top of the list, also when conversations exist', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  render(<ConversationList items={[row('2026-10-15T09:05:00Z')]} timezone="UTC" page={1} hasNextPage={false} guide={<section aria-label="Finish setting up">guide</section>} />);
+  const scroll = document.querySelector('.conversation-scroll')!;
+  expect(scroll.firstElementChild).toBe(screen.getByRole('region', { name: 'Finish setting up' }));
+  expect(screen.getByRole('button', { name: /example request/i })).toBeInTheDocument();
 });
 
 test('a row marks who else has the conversation open, and says in words who is writing a reply', () => {
@@ -234,22 +225,11 @@ test('j and k are text while typing, and nothing with a modifier key held', () =
   expect(onSelect).not.toHaveBeenCalled();
 });
 
-test('in a brand-new workspace the first onboarding step is the primary action and every step is a full-size button', () => {
-  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} />);
-  const links = within(screen.getByRole('region', { name: 'Get started' })).getAllByRole('link');
-  expect(links[0]).toHaveTextContent('Connect your support email');
-  expect(links[0]).toHaveClass('button', 'primary-action');
-  for (const link of links.slice(1)) {
-    expect(link).toHaveClass('button');
-    expect(link).not.toHaveClass('primary-action');
-  }
-});
-
 test('a brand-new workspace with an email channel offers a test message it can send without leaving the app', async () => {
   vi.useRealTimers();
   let finish: () => void = () => undefined;
   const send = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
-  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} onTestMessage={send} />);
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} onTestMessage={send} />);
   const button = within(screen.getByRole('region', { name: 'Get started' })).getByRole('button', { name: 'Send yourself a test message' });
   fireEvent.click(button);
   fireEvent.click(button);
@@ -268,6 +248,6 @@ test('a test message that fails says why under the button', async () => {
 });
 
 test('without an email channel the get-started guide offers no test message', () => {
-  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={null} />);
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} />);
   expect(screen.queryByRole('button', { name: 'Send yourself a test message' })).not.toBeInTheDocument();
 });

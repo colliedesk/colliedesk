@@ -46,7 +46,9 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText('Trial: 14 days left');
   await expect(page.getByRole('button', { name: 'Choose a plan' })).toBeVisible();
   // The goal given at sign-up picks the first step of the empty inbox.
-  await expect(page.getByRole('region', { name: 'Get started' }).getByRole('listitem').first()).toHaveText('Recommended first step: Import from Freshdesk');
+  const firstStep = page.getByRole('region', { name: 'Finish setting up' }).getByRole('listitem').first();
+  await expect(firstStep).toContainText('Import from Freshdesk');
+  await expect(firstStep).toContainText('Recommended');
   // An unknown answer is refused before anything is created.
   const refused = await page.request.post(`${baseURL}/api/v1/auth/cloud/signup`, {
     headers: { Origin: baseURL, Authorization: `Bearer ${provider.token({ email: `other-${email}` })}`, 'X-Forwarded-For': newClientAddress() },
