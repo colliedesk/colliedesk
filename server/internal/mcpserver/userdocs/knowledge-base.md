@@ -415,7 +415,10 @@ in **Settings → Help center** (see [Help center settings](#help-center-setting
 **Settings → Help center** shows the address as a link, even while the help center is off; the API
 (`GET /api/v1/help-center`) and `colliedesk_help_center_get` give it in `url`.
 
-- **Colliedesk Cloud:** the workspace's own host name, `https://<workspace address name>.colliedesk.com`.
+- **Colliedesk Cloud:** `/help` on the workspace's own host name, `https://<workspace address name>.colliedesk.com/help`.
+  The root of that host name, `https://<workspace address name>.colliedesk.com`, opens your team's
+  desk: it goes to sign-in for that workspace, or straight to the inbox when you are signed in.
+  The help center's older addresses without `/help` move there (301).
 - **Your own server:** `<server address>/help/<workspace address name>`, for example
   `https://desk.example.com/help/acme`. The server can give each workspace its own host name instead;
   see [help center host names](../self-host/running-behind-proxy.md#help-center-host-names).

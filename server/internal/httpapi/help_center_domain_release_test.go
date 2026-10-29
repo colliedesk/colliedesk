@@ -76,7 +76,7 @@ func TestAnActiveDomainWithoutProofForSevenDaysGoesBackToPending(t *testing.T) {
 	if response := onHost(site, host, "/"); response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "Release help") {
 		t.Fatalf("the released host status=%d", response.Code)
 	}
-	wantPage(t, visit(site, "/", "192.0.2.90", "Host", slug+".help.example.net"), http.StatusOK, []string{"Release help"}, nil)
+	wantPage(t, visit(site, "/help", "192.0.2.90", "Host", slug+".help.example.net"), http.StatusOK, []string{"Release help"}, nil)
 
 	// Proving it again makes it active and clears the reason.
 	dns.set("_help-center-verify."+host, view.token())
@@ -130,7 +130,7 @@ func TestAnotherWorkspaceTakesOverAHostItsHolderNoLongerProves(t *testing.T) {
 	if !strings.Contains(page, "Owner help") || strings.Contains(page, "Holder help") {
 		t.Fatalf("the host serves %s", page)
 	}
-	wantPage(t, visit(site, "/", "192.0.2.91", "Host", holderSlug+".help.example.net"), http.StatusOK, []string{"Holder help"}, nil)
+	wantPage(t, visit(site, "/help", "192.0.2.91", "Host", holderSlug+".help.example.net"), http.StatusOK, []string{"Holder help"}, nil)
 }
 
 // Two workspaces whose TXT tokens both prove a host its holder no longer proves race for it: exactly

@@ -306,23 +306,29 @@ const resultsShareRoute = createRoute({
   path: '/r',
   component: () => <Part part={resultsSharePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ResultsShareRoute }) => <ResultsShareRoute />} />,
 });
+// A workspace slug is a DNS label: lowercase letters and digits with inner hyphens, at most 63 characters.
+const workspaceSlugShape = /^(?=.{1,63}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
   // `signed_out` marks the arrival right after the session ended (see AppLayout). `intent=trial` is the
-  // website's "Start free trial" link: the page is titled for a new team.
-  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true; intent?: 'trial' } => ({
+  // website's "Start free trial" link: the page is titled for a new team. `workspace` is the slug of the
+  // workspace host name the visitor came from (<slug>.<HELP_CENTER_DOMAIN>/ leads here).
+  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true; intent?: 'trial'; workspace?: string } => ({
     ...(typeof search.token === 'string' ? { token: search.token } : {}),
     ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
     ...(search.signed_out === true ? { signed_out: true as const } : {}),
     ...(search.intent === 'trial' ? { intent: 'trial' as const } : {}),
+    ...(typeof search.workspace === 'string' ? { workspace: search.workspace } : {}),
   }),
   // `buy` stays in the address through the identity provider's round trip, so the address decides
   // which plan, if any, this sign-in is for (see signInCheckoutIntent).
   beforeLoad: ({ search }) => { signInCheckoutIntent(search); },
   component: function SignIn() {
-    const { token, buy, signed_out: signedOut, intent } = signInRoute.useSearch();
-    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} />;
+    const { token, buy, signed_out: signedOut, intent, workspace } = signInRoute.useSearch();
+    // The router keeps a parameter its validation leaves out, so the slug's shape is checked here.
+    const hint = typeof workspace === 'string' && workspaceSlugShape.test(workspace) ? workspace : undefined;
+    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} workspace={hint} />;
   },
 });
 

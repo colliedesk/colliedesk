@@ -1411,7 +1411,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 when the workspace's help center is on and the workspace is not locked, and `domain` is exactly one label below `HELP_CENTER_DOMAIN` whose label is that workspace's slug or the CNAME target `hc-<claim>` of its custom domain's claim (which redirects to the help center), or the workspace's custom domain. A custom domain answers 200 once it is active, or when it is pending and its DNS check passes now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a time on the server and at most one per host name every 30 seconds. Every other case is the same 404; custom domains work without `HELP_CENTER_DOMAIN` too. */
+        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 when `domain` is exactly one label below `HELP_CENTER_DOMAIN` whose label is an existing workspace's slug (that host leads to the workspace's desk at its root and serves its help center under `/help`, so it answers whatever the help center's state). It also answers 200 when the workspace's help center is on and the workspace is not locked, and `domain` is the CNAME target `hc-<claim>` below `HELP_CENTER_DOMAIN` of its custom domain's claim (which redirects to the help center), or the workspace's custom domain. A custom domain answers 200 once it is active, or when it is pending and its DNS check passes now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a time on the server and at most one per host name every 30 seconds. Every other case is the same 404; custom domains work without `HELP_CENTER_DOMAIN` too. */
         get: operations["askHelpCenterCertificate"];
         put?: never;
         post?: never;
@@ -5070,7 +5070,7 @@ export interface components {
             updated_at: string | null;
             /**
              * Format: uri
-             * @description The public address of the help center, also while it is off: `https://<custom domain>` once the workspace's custom domain is active (GET /api/v1/help-center/domain), else `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that variable and the slug can be a host name. The older addresses redirect to the custom domain while it is active. Changing the workspace slug changes the slug addresses, and links to the old slug stop working.
+             * @description The public address of the help center, also while it is off: `https://<custom domain>` once the workspace's custom domain is active (GET /api/v1/help-center/domain), else `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>/help` when the server sets that variable and the slug can be a host name (the root of that host leads to the workspace's desk). The older addresses redirect to the custom domain while it is active. Changing the workspace slug changes the slug addresses, and links to the old slug stop working.
              */
             url: string;
         };

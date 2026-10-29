@@ -10,6 +10,12 @@ requests. This file keeps the first release.
 
 ## Unreleased
 
+**Workspace host names: the root opens the desk, the help center moves to `/help`.** With
+`HELP_CENTER_DOMAIN`, `https://<slug>.<domain>/` now redirects to `APP_ORIGIN/sign-in?workspace=<slug>`,
+and the help center answers at `https://<slug>.<domain>/help`; its old addresses on that host move there
+(301). Custom domains keep the help center at their root. See
+[help center host names](docs/self-host/running-behind-proxy.md#help-center-host-names).
+
 **Operators: the reverse proxy must send the visitor's `Host` header.** The server now answers the app,
 the API, MCP and attachments only when the `Host` of the request is `APP_ORIGIN`'s host, `localhost` or
 an IP address (health checks, the proxy's certificate question). Every other host name gets the help

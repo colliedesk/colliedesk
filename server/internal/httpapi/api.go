@@ -48,8 +48,9 @@ type Config struct {
 	// KBVideoMaxBytes (KB_VIDEO_MAX_BYTES) is the largest knowledge base video; 0 is
 	// domain.MaxKBVideoBytes.
 	KBVideoMaxBytes int64
-	// HelpCenterDomain (HELP_CENTER_DOMAIN) serves each workspace's help center on <slug>.<domain>;
-	// empty serves it on <Origin>/help/<slug> only.
+	// HelpCenterDomain (HELP_CENTER_DOMAIN) gives each workspace the host name <slug>.<domain>: its root
+	// leads to the desk's sign-in and its help center is under /help. Empty serves the help center on
+	// <Origin>/help/<slug> only.
 	HelpCenterDomain string
 	// Version is the build stamped into the binary, reported by GET /api/v1/config; empty reports "dev".
 	Version   string

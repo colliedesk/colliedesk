@@ -11,15 +11,16 @@ import (
 )
 
 // SiteURL is the public address of a workspace's help center, without a trailing slash: its active
-// custom domain when custom is set; else its own host name <slug>.<domain> when the server has a
-// help center domain and the slug can be a host name; else <origin>/help/<slug>. A host name keeps
-// the scheme and port of the origin, so a local server works the same way. Every address the server
-// hands out comes from here.
+// custom domain when custom is set; else /help on the workspace's own host name <slug>.<domain> when
+// the server has a help center domain and the slug can be a host name (the root of that host is the
+// way into the workspace's desk); else <origin>/help/<slug>. A host name keeps the scheme and port of
+// the origin, so a local server works the same way. Every address the server hands out comes from
+// here.
 func SiteURL(origin, domain, slug, custom string) string {
 	origin = strings.TrimRight(origin, "/")
-	host := custom
+	host, base := custom, ""
 	if host == "" {
-		host = SlugHost(domain, slug)
+		host, base = SlugHost(domain, slug), workspaceHostBase
 	}
 	if host == "" {
 		return origin + "/help/" + slug
@@ -33,7 +34,7 @@ func SiteURL(origin, domain, slug, custom string) string {
 			port = ":" + parsed.Port()
 		}
 	}
-	return scheme + "://" + host + port
+	return scheme + "://" + host + port + base
 }
 
 // URL is SiteURL for a workspace without a custom domain.

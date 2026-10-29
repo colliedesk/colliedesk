@@ -64,17 +64,27 @@ uploads in progress and 1 GiB free. Back up `ATTACHMENTS_DIR` with the database;
 ## Help center host names
 
 Every workspace's [help center](../user/knowledge-base.md#public-help-center) works at
-`APP_ORIGIN/help/<slug>` with no extra setup. To give each one its own host name instead, for
-example `acme.help.example.com`:
+`APP_ORIGIN/help/<slug>` with no extra setup. To give each workspace its own host name instead, for
+example `acme.example.com`:
 
-1. Point a wildcard DNS record, `*.help.example.com`, at the proxy.
-2. Set `HELP_CENTER_DOMAIN=help.example.com` and restart the server. The help center then answers
-   on `<slug>.help.example.com` with the scheme and port of `APP_ORIGIN`, and `APP_ORIGIN/help/<slug>`
-   redirects there (301). A slug that cannot be a host name (for example `www`, `mail` or `support`)
-   keeps the path address. On those host names the server answers only help center pages: the
-   app, the API and MCP stay on `APP_ORIGIN`.
+1. Point a wildcard DNS record, `*.example.com`, at the proxy.
+2. Set `HELP_CENTER_DOMAIN=example.com` and restart the server. Each workspace then has the host
+   name `<slug>.example.com`, with the scheme and port of `APP_ORIGIN`:
+   - `https://acme.example.com/` is the way into the workspace's desk: it redirects (302) to
+     `APP_ORIGIN/sign-in?workspace=acme`. A browser already signed in to that workspace opens its
+     inbox; a browser signed in to another workspace stays in it, and the bar at the top names it.
+   - `https://acme.example.com/help` is the workspace's help center. `APP_ORIGIN/help/<slug>`
+     redirects there (301), and so do the help center's addresses from before it moved under
+     `/help` (`https://acme.example.com/a/12-reset` moves to `https://acme.example.com/help/a/12-reset`).
+     `robots.txt` stays at the root of the host.
+
+   A slug that cannot be a host name (for example `www`, `mail` or `support`) keeps the path
+   address. `APP_ORIGIN`'s own host is never a workspace's, even when `HELP_CENTER_DOMAIN` is the
+   domain it sits in (`APP_ORIGIN=https://app.example.com` beside `HELP_CENTER_DOMAIN=example.com`).
+   On workspace host names the server answers only help center pages and that redirect: the app,
+   the API, MCP and the session cookie stay on `APP_ORIGIN`.
 3. Give the proxy certificates for the host names. With Caddy, get each one on demand and let the
-   server say which names it serves; it answers `200` only for a help center that is on, and
+   server say which names it serves; it answers `200` for an existing workspace's host name, and
    `404` for everything else:
 
 ```caddyfile
@@ -84,13 +94,35 @@ example `acme.help.example.com`:
 	}
 }
 
-*.help.example.com {
+*.example.com {
 	tls {
 		on_demand
 	}
 	reverse_proxy 127.0.0.1:8080
 }
 ```
+
+**Moving from an older `HELP_CENTER_DOMAIN`.** Before this layout, the help center answered at the
+root of `<slug>.<HELP_CENTER_DOMAIN>`, often below a dedicated name such as `help.example.com`. If you
+change `HELP_CENTER_DOMAIN` from `help.example.com` to `example.com`, keep the old names working with
+a redirect in the proxy; the server no longer knows them. With Caddy:
+
+```caddyfile
+*.help.example.com {
+	tls {
+		on_demand
+	}
+	@ws header_regexp ws Host ^([a-z0-9-]+)\.help\.example\.com$
+	redir @ws https://{re.ws.1}.example.com/help{uri} permanent
+}
+```
+
+`https://acme.help.example.com/a/12-reset` then moves to `https://acme.example.com/help/a/12-reset`.
+The certificate question for the old names answers `404` once `HELP_CENTER_DOMAIN` changes, so use a
+wildcard certificate (DNS challenge) for `*.help.example.com`, or skip `on_demand` there. Custom
+domains are not affected: their `CNAME` target moves with `HELP_CENTER_DOMAIN`
+(`hc-<claim>.example.com`); update the record of an existing custom domain, or keep a `CNAME` for
+the old target.
 
 Let's Encrypt issues at most 50 certificates per registered domain a week; a wildcard certificate
 (DNS challenge) avoids that limit if you serve many workspaces. Keep `APP_ORIGIN`'s own site block:

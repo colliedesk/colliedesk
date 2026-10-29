@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { markSignInFormReady } from '../../lib/sign-in-ready';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
+import { Navigate, useNavigate } from '@tanstack/react-router';
 import { api, CloudWorkspaceChoiceError, PlanLimitError } from '../../api/client';
 import { NotAnAgentError } from '../../api/cloud-signup';
 import type { SignupAnswers } from '../../api/cloud-signup';
@@ -16,8 +16,11 @@ const CloudSignIn = lazy(() => loadCloudSignIn().then((module) => ({ default: mo
 
 // buy is the plan named in the sign-in address when a visitor came from the website to buy it.
 // signedOut marks the arrival right after the browser's session ended. trial marks the website's
-// "Start free trial" link.
-export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean }) {
+// "Start free trial" link. workspace is the slug of the workspace host name the visitor came from: cloud
+// sign-in asks for that workspace, so an agent of several is not asked to choose. A browser that already
+// has a session opens the inbox of the workspace it is signed in to, which the identity bar names; the
+// hint never switches a session to another workspace.
+export function RedeemRoute({ token, buy, trial = false, signedOut = false, workspace }: { token: string; buy?: string; trial?: boolean; signedOut?: boolean; workspace?: string }) {
   const navigate = useNavigate();
   const client = useQueryClient();
   // A visitor who came to buy a plan lands on the billing page, which carries the purchase out.
@@ -31,7 +34,9 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
   // instead of after it. A page without a sign-in form lets what waited for one go.
   useEffect(() => { if (!token && (trial || buy)) void loadCloudSignIn().catch(() => undefined); }, [token, trial, buy]);
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-  const [workspaceSlug, setWorkspaceSlug] = useState<string>();
+  const hinted = !token && workspace !== undefined;
+  const session = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: hinted });
+  const [workspaceSlug, setWorkspaceSlug] = useState<string | undefined>(hinted ? workspace : undefined);
   const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
@@ -59,6 +64,10 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
   useEffect(() => { if (config.data && !cloudEnabled) markSignInFormReady(); }, [config.data, cloudEnabled]);
   useEffect(() => { if (cloudEnabled && cloudConfig?.publishable_key) preconnectClerk(cloudConfig.publishable_key); }, [cloudEnabled, cloudConfig?.publishable_key]);
   const buying = buy ?? readCheckoutIntent();
+  if (hinted && session.data) return <Navigate to="/" replace />;
+  // Until the session is known nothing is exchanged: an open identity session would otherwise sign in
+  // to the hinted workspace over the session this browser already has.
+  if (hinted && session.isPending) return <p>{messages.loadingCloudSignIn}</p>;
 
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
     buying={buying} trial={trial} signedOut={signedOut && cloudEnabled} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
