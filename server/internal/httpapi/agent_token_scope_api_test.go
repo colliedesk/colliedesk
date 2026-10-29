@@ -174,6 +174,7 @@ var routeTiers = map[string]string{
 	"POST /api/v1/channels/{id}/held/replay":                           "admin",
 	"POST /api/v1/channels/{id}/held/discard":                          "approval",
 	"GET /api/v1/channels/{id}/email":                                  "read",
+	"GET /api/v1/channels/{id}/email/forwarding-confirmation":          "read",
 	"POST /api/v1/channels/{id}/email/domain-verification":             "admin",
 	"POST /api/v1/channels/email/test-message":                         "draft",
 	"POST /api/v1/channels/{id}/email/test-message":                    "draft",

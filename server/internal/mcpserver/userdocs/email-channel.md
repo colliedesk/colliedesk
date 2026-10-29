@@ -61,8 +61,9 @@ address `support@<workspace>.colliedesk.com`; select **Copy**. Then pick your ma
 
 - **Gmail** and **Google Workspace:** Settings → See all settings → Forwarding and POP/IMAP → **Add a
   forwarding address**, paste the address, **Next** → **Proceed**. Google sends a confirmation email to
-  Colliedesk: it opens a conversation in your inbox; open it and select the confirmation link. Back in
-  Gmail, choose **Forward a copy of incoming mail** and **Save Changes**. **Open Gmail** opens the
+  Colliedesk. The step shows it under **Gmail's confirmation email** within a few seconds: its
+  **Confirmation code**, **Open confirm link** (opens Google in a new tab) and **Open its conversation**
+  (the email also opens a conversation in your inbox, as any mail does). Back in Gmail, choose **Forward a copy of incoming mail** and **Save Changes**. **Open Gmail** opens the
   forwarding settings in a new tab. A Google Workspace admin may have turned automatic forwarding off;
   the tab says where they allow it.
 - **Microsoft 365:** Outlook on the web → Settings → Mail → Forwarding, turn on forwarding, paste the
@@ -80,6 +81,13 @@ address `support@<workspace>.colliedesk.com`; select **Copy**. Then pick your ma
 - **Other / own server:** forward every message for the support address to the forwarding address,
   keeping a copy. On your own server this tab is where mail comes in: see
   [On your own server: the inbound URL](#on-your-own-server-the-inbound-url).
+
+The confirm link is offered only when the email passed the sender check of the receiving mail server
+and the link is on Google's own address (`mail.google.com` or `mail-settings.google.com`): anyone can
+send mail that claims to come from Google. Otherwise only the code shows; type it in Gmail instead. On
+your own server the sender check needs `EMAIL_TRUSTED_AUTHSERV_ID` ([configuring email](../self-host/email.md)).
+Agents read the same with `GET /api/v1/channels/{id}/email/forwarding-confirmation` or the MCP tool
+`colliedesk_email_forwarding_confirmation_get`; it answers for the last 24 hours.
 
 The step then reads **Waiting for first email**. Send a message to your support address from another
 address. When it arrives the step reads **First email received** with its time, without reloading the
