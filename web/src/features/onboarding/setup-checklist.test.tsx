@@ -1,7 +1,12 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render as renderPlain, screen, within } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { SetupChecklist } from './setup-checklist';
 import type { SetupProgress } from '../../api/schemas';
+
+const client = new QueryClient();
+const render = (ui: ReactElement) => renderPlain(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
 
 const tracked = vi.hoisted(() => vi.fn());
 vi.mock('../../lib/product-analytics', () => ({ track: tracked }));

@@ -315,3 +315,13 @@ Go tests that need a migrated database clone one (`internal/database/databasetes
 Earlier layout: the Go test shards and both browser jobs restored the Go module and build cache keyed on `server/go.sum`; CodeQL keeps a cold build. The browser jobs export the restored `GOPATH`, `GOMODCACHE` and `GOCACHE`, and `web/e2e/support/cli.ts` passes them to every `go run` and `go build`; a test that hard-codes its own Go paths compiles cold inside its 30-second timeout. Measured on 2026-10-19 ([run](https://github.com/colliedesk/colliedesk/actions/runs/39297304159)): 111 seconds from trigger to `ci-ok`, against 122 seconds before; the browser job fell from 109 to 71 seconds and the image job from 104 to about 80. A change to `go.sum` runs cold: the first such run measured 147 seconds, including a 15-second queue.
 
 Measured on 2026-10-19: the original PR CI took 370 seconds. Removing idle polling reduced the browser step from 248 to 56 seconds before parallel workers; removing the remote image cache reduced its build from 103 to 54 seconds. The final partition's [full run](https://github.com/colliedesk/colliedesk/actions/runs/39260278182) passed every test and security job, but the phase gate rejected its 199 seconds: 84 seconds waiting for the previous run, then 115 seconds through the final job. These numbers do **not** establish budget compliance. Go CodeQL was the longest execution job at 107 seconds. The workflow has no Go, pnpm or Docker GHA cache to warm; acceptance requires the completed phase clock, never execution time with the queue subtracted.
+
+## Pages that need data and chunks
+
+A page asks for its data and its chunks together, never one after another. The inbox asks for the
+setup guide's data (`/api/v1/workspace/setup`) and its chunk when it opens, beside the session
+request, so a guide the session says is hidden has cost one small request. The email setup page
+(`/settings/channels/type/email`) starts its page chunk, its panels chunk and `GET /api/v1/channels`
+when a link to it is pointed at, focused or followed (`channels-preload.ts`). The e2e test
+`setup-loads-in-parallel.spec.ts` adds 150 ms to every request and fails when one of these requests
+waits for another to come back. A new page with a lazy chunk and a query follows the same rule.

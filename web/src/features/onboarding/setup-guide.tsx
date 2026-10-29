@@ -6,6 +6,9 @@ import { visibleSteps } from './setup-steps';
 // The checklist loads from its own chunk: the first bundle has no room for it.
 const checklistPart = lazyPart(() => import('./setup-checklist'));
 
+// Starts the download of that chunk; the inbox calls it when it asks for the setup data, so the two travel together.
+export const preloadSetupGuide = checklistPart.preload;
+
 interface SetupGuideProps {
   progress: SetupProgress;
   admin: boolean;

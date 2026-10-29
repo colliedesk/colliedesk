@@ -1088,14 +1088,15 @@ test('Hide removes the guide and asks the server to remember it for this agent',
   expect(api.setSetupGuideHidden).toHaveBeenCalledWith(true);
 });
 
-test('a hidden guide shows nothing and is not even requested', async () => {
+test('a hidden guide shows nothing, even though its data left with the session', async () => {
   quietApis();
   api.setupProgress.mockClear();
+  api.setupProgress.mockResolvedValue(unfinished);
   api.me.mockResolvedValue(adminMe(true));
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
   renderRoute();
   await screen.findByRole('button', { name: /alpha conversation/i });
+  await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
-  expect(api.setupProgress).not.toHaveBeenCalled();
 });

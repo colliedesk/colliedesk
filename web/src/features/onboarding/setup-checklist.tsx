@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { OnboardingGoal } from '../../api/schemas';
 import type { SetupProgress, SetupStepKey } from '../../api/schemas';
+import { preloadChannelsPage } from '../settings/channels/channels-preload';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { setupMessages } from './setup-messages';
@@ -20,6 +22,7 @@ interface SetupChecklistProps {
 // SetupChecklist lists what is left before the team can receive and answer customer email. The
 // server orders the steps by the sign-up goal; this only drops the ones the agent cannot take.
 export function SetupChecklist({ progress, admin, goal, onHide }: SetupChecklistProps) {
+  const client = useQueryClient();
   const steps = visibleSteps(progress, admin);
   const done = steps.filter(stepIsDone).length;
   const firstTodo = steps.find((step) => !stepIsDone(step))?.key;
@@ -60,7 +63,8 @@ export function SetupChecklist({ progress, admin, goal, onHide }: SetupChecklist
           return (
             <li key={step.key} className="setup-step" data-state={finished ? 'done' : 'todo'} data-step={step.key}>
               <span className="setup-mark" aria-hidden="true" />
-              <a href={targets[step.key]} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}>
+              <a href={targets[step.key]} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
+                onPointerEnter={() => preloadChannelsPage(client, targets[step.key])} onFocus={() => preloadChannelsPage(client, targets[step.key])}>
                 <span className="setup-title">{setupMessages.title[step.key]}</span>
                 <span className="setup-state" data-attention={step.state === 'needs_attention' || undefined}>
                   {progress.recommended === step.key && !finished && <><b>{setupMessages.recommended}</b>{' · '}</>}

@@ -19,6 +19,7 @@ import { BookIcon, ChartIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
+import { channelsRoutePart, preloadChannelsPage } from './features/settings/channels/channels-preload';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
@@ -33,7 +34,6 @@ const settingsRoutePart = lazyPart(() => import('./features/settings/settings-ro
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
-const channelsRoutePart = lazyPart(() => import('./features/settings/channels/channels-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
 // Agent requests are their own chunk too: the rail link starts loading it on hover and focus.
@@ -263,6 +263,9 @@ const channelsSearch = (search: Record<string, unknown>) => search as ChannelsSe
 function ChannelsSettings({ path, search }: { path: string; search: ChannelsSearch }) {
   const navigate = useNavigate();
   const go = useCallback((href: string, replace?: boolean) => void navigate({ href, replace }), [navigate]);
+  // A page opened without a hover first (a typed address, a redirect) still asks for everything at once.
+  const client = useQueryClient();
+  useEffect(() => { preloadChannelsPage(client, `/settings/channels/${path}`); }, [client, path]);
   return <Part part={channelsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ChannelsRoute }) => <ChannelsRoute path={path} search={search} navigate={go} />} />;
 }
 // /settings/channels itself is this route with an empty splat.
