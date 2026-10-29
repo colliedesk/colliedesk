@@ -2317,7 +2317,7 @@ export interface paths {
         delete: operations["deleteKBArticle"];
         options?: never;
         head?: never;
-        /** @description Change the title, slug, text, collection or status (publish or unpublish). Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Change the title, slug, text, collection, status (publish or unpublish), search title or meta description. Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of JSON). */
         patch: operations["updateKBArticle"];
         trace?: never;
     };
@@ -3156,6 +3156,41 @@ export interface paths {
         get: operations["getHelpCenterTheme"];
         /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). `custom_css` is the exception: it is required, and null or an empty string clears it; a body without it is refused (422 `validation_failed`, with `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent request filed before it existed, cannot remove the custom CSS. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
         put: operations["putHelpCenterTheme"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/search-console": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The verification tokens of the help center: the content of the `google-site-verification` (Google Search Console) and `msvalidate.01` (Bing Webmaster Tools) `<meta>` tags. A token is null until set. Each is served as a `<meta>` tag in the head of every page of this workspace's help center, on its own host or custom domain, and never on the app or another workspace. */
+        get: operations["getHelpCenterSearchConsole"];
+        /** @description Set or remove the verification tokens. A field left out stays as it is; null or an empty string removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to 100 letters, digits, `-` or `_`); anything else, such as the whole tag, is refused (422 `validation_failed`, with `fields`) and nothing is saved. The tags change every public page, so a save changes `content_version`. Admins only; an agent token needs `help_center:update` and `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an agent request (202) and changes no public page. */
+        put: operations["putHelpCenterSearchConsole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center/freshdesk-redirect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What a team that moved from `<name>.freshdesk.com` should do about its old help center addresses, read from the workspace's latest finished Freshdesk import. A team on its own domain redirects at DNS (`own_domain`). Otherwise Freshdesk cannot answer 301 from `*.freshdesk.com`, and the team pastes a script into its Freshdesk portal's head that sends a visitor of an old help page to the new one. Freshdesk allows that only on its Pro and Enterprise plans, so `plan` (the account's Freshdesk plan) decides: without it the state is `ask_plan`; `growth` is `growth` and carries no snippet; `pro` and `enterprise` are `ready` with the `snippet`. The snippet is built from the help center's address and the pages the import made public, never from the request; it is a JavaScript redirect, not a 301, and works only while the Freshdesk account does, so keep the account and the snippet for `keep_weeks` after the switch. Only help pages (home, solutions, search) move; sign-in and tickets stay. */
+        get: operations["getFreshdeskRedirect"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -4604,6 +4639,10 @@ export interface components {
              * @enum {string}
              */
             status: "draft" | "published";
+            /** @description The page title search engines show; empty uses the article title. */
+            seo_title?: string;
+            /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
+            seo_description?: string;
         };
         /**
          * @description published: on the public help center while it is on. draft: only agents see it.
@@ -4716,6 +4755,10 @@ export interface components {
              */
             url: string;
             body_md: string;
+            /** @description The page title search engines show; empty uses the article title. */
+            seo_title: string;
+            /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
+            seo_description: string;
             /** @description An import kept the original HTML; it is in the workspace export and is never shown on the help center. */
             has_source_html: boolean;
             /** @description Translations an import brought in. They are kept and exported; the help center does not show them yet. */
@@ -4781,6 +4824,8 @@ export interface components {
             title: string;
             slug: string;
             body_md: string;
+            seo_title: string;
+            seo_description: string;
             status: components["schemas"]["KBArticleStatus"];
             /**
              * Format: uuid
@@ -5026,6 +5071,47 @@ export interface components {
          * @enum {string|null}
          */
         ThemeFont: "system-sans" | "humanist-sans" | "geometric-sans" | "classic-serif" | "transitional-serif" | "rounded-sans" | "mono" | null;
+        FreshdeskRedirect: {
+            /**
+             * @description `no_import`: no finished Freshdesk import. `own_domain`: the old help center had its own domain; redirect it at DNS. `help_center_off`: turn the help center on first. `ask_plan`: send `plan`. `growth`: Freshdesk's Growth plan cannot paste code into the portal, so old `*.freshdesk.com` links cannot be redirected; point your own links at the new address. `ready`: `snippet` holds the code.
+             * @enum {string}
+             */
+            state: "no_import" | "own_domain" | "help_center_off" | "ask_plan" | "growth" | "ready";
+            /** @description The imported account, such as acme.freshdesk.com. */
+            freshdesk_domain: string | null;
+            /**
+             * Format: uri
+             * @description The help center address the snippet redirects to.
+             */
+            address: string;
+            /** @description Keep the Freshdesk account and the snippet at least this many weeks after the switch. */
+            keep_weeks: number;
+            /** @description HTML for the Freshdesk portal head; null unless state is ready. */
+            snippet: string | null;
+            mapped: {
+                articles: number;
+                folders: number;
+                categories: number;
+                /** @description False when the knowledge base was too large to embed: the snippet then redirects every old address by its id to the help center, which maps it. */
+                embedded: boolean;
+            } | null;
+        };
+        HelpCenterSearchConsoleInput: {
+            /** @description The content of Google Search Console's `google-site-verification` meta tag. Left out: unchanged. Null or empty: removed. */
+            google_site_verification?: string | null;
+            /** @description The content of Bing Webmaster Tools' `msvalidate.01` meta tag. Left out: unchanged. Null or empty: removed. */
+            bing_site_verification?: string | null;
+        };
+        HelpCenterSearchConsole: {
+            google_site_verification: string | null;
+            bing_site_verification: string | null;
+            content_version: number;
+            /**
+             * Format: date-time
+             * @description Null until the help center settings were first changed.
+             */
+            updated_at: string | null;
+        };
         HelpCenterThemeInput: {
             /**
              * Format: uuid
@@ -11658,6 +11744,10 @@ export interface operations {
                     collection_id?: string;
                     /** @enum {string} */
                     status?: "draft" | "published";
+                    /** @description The page title search engines show; empty uses the article title. */
+                    seo_title?: string;
+                    /** @description The meta description search engines show; empty uses the start of the text (160 characters). */
+                    seo_description?: string;
                 };
             };
         };
@@ -13643,6 +13733,81 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    getHelpCenterSearchConsole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The verification tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterSearchConsole"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenterSearchConsole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterSearchConsoleInput"];
+            };
+        };
+        responses: {
+            /** @description The saved tokens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterSearchConsole"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    getFreshdeskRedirect: {
+        parameters: {
+            query?: {
+                /** @description The account's Freshdesk plan. */
+                plan?: "growth" | "pro" | "enterprise";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The state and, when ready, the snippet */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreshdeskRedirect"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     checkHelpCenterTheme: {

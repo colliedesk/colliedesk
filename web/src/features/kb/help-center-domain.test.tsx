@@ -150,3 +150,18 @@ test('a paid workspace sees no payment note', async () => {
   expect(await screen.findByText('The help center is served on help.acme.example.')).toBeInTheDocument();
   expect(screen.queryByText(/once you pay for a plan/)).not.toBeInTheDocument();
 });
+
+test('the card says to verify by TXT first and then change the CNAME, before the domain is set and while it waits', async () => {
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, none) });
+  open(true);
+  expect(await screen.findByText(/Verify by TXT first, then change the CNAME/)).toBeInTheDocument();
+  cleanup();
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, pending) });
+  open(true);
+  expect(await screen.findByText(/Verify by TXT first, then change the CNAME/)).toBeInTheDocument();
+  cleanup();
+  serve({ 'GET /api/v1/help-center/domain': () => json(200, active) });
+  open(true);
+  await screen.findByText('The help center is served on help.acme.example.');
+  expect(screen.queryByText(/Verify by TXT first/)).not.toBeInTheDocument();
+});

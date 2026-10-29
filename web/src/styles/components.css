@@ -542,13 +542,24 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .conversation-item .conversation-row { padding-left: var(--touch); }
 }
 .bulk-message:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; }
-.team-list article { flex-wrap: wrap; }
+/* One grid for the whole list, so role, state, last activity and the actions line up from row to row. */
+.team-list { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; column-gap: var(--space-4); }
+.team-list article { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; row-gap: var(--space-3); }
+.team-list .team-cells { display: contents; }
+.team-list .team-confirm { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+.team-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.team-actions:empty { display: none; }
 .team-list .team-person { display: grid; min-width: 0; }
 .team-list .team-person small { overflow: hidden; color: var(--text-3); text-overflow: ellipsis; white-space: nowrap; }
-.team-confirm { display: grid; flex: 1 0 100%; gap: var(--space-2); border-left: 2px solid var(--danger); padding-left: var(--space-3); }
+.team-confirm { display: grid; grid-column: 1 / -1; gap: var(--space-2); border-left: 2px solid var(--danger); padding-left: var(--space-3); }
 .team-confirm label { display: flex; align-items: center; gap: var(--space-2); }
-.team-rename { flex: 1 0 100%; }
+.team-rename { grid-column: 1 / -1; }
 .team-role { display: flex; gap: var(--space-2); align-items: center; }
+@media (max-width: 44rem) {
+  .team-list { display: block; }
+  .team-list article { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-2); }
+  .team-actions { justify-content: flex-start; }
+}
 
 /* Settings details: a warning that needs action, the saved state of a form, copyable values. */
 .warning-note { margin: 0; border-left: 3px solid var(--warn); border-radius: var(--radius-sm); background: var(--warn-soft); padding: var(--space-2) var(--space-3); color: var(--text-1); }

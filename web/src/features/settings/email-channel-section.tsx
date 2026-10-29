@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { EmailChannelSettings, EmailDnsRecord } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 import { channelSetupMessages } from './channel-setup-messages';
 import { PartUnavailable } from '../../ui/lazy-part';
 import type { MailboxProvider, MailboxReturn } from './gmail-return';
@@ -78,86 +79,86 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const mailboxSending = mailboxConnection?.status === 'connected' &&
     (mailboxConnection.provider === 'microsoft' ? settings?.microsoft.available : settings?.gmail.available) === true;
   const dnsVerification = channel && <div className="email-channel-dns">
-    <p className="muted-copy">{settings?.domain_verification === 'provider' ? messages.providerProofHelp : messages.domainVerificationHelp}</p>
-    <label className="invite-link"><span className="field-label">{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
-    <label className="invite-link"><span className="field-label">{messages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
+    <p className="muted-copy">{settings?.domain_verification === 'provider' ? settingsMessages.providerProofHelp : settingsMessages.domainVerificationHelp}</p>
+    <label className="invite-link"><span className="field-label">{settingsMessages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
+    <label className="invite-link"><span className="field-label">{settingsMessages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
     {settings?.domain_verification === 'provider' && <DnsRecordsTable records={channel.dns_records} expiredAt={channel.dns_records_expired_at} timezone={timezone} />}
     {verifyError && <p role="alert" className="error-copy">{verifyError}</p>}
-    {canManage && <span className="button-row"><button type="button" disabled={verifyPending} onClick={() => onVerifyDomain?.()}>{verifyPending ? messages.verifyingDomain : messages.verifyDomain}</button></span>}
+    {canManage && <span className="button-row"><button type="button" disabled={verifyPending} onClick={() => onVerifyDomain?.()}>{verifyPending ? settingsMessages.verifyingDomain : settingsMessages.verifyDomain}</button></span>}
   </div>;
   const addressPart = <>
         {canManage
           ? <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!addressFeedback.pending) onSave?.(address.trim()); }}>
-              <label className="field"><span>{messages.supportAddress}</span><input ref={addressField} type="email" value={address} aria-invalid={addressFeedback.invalid || undefined}
+              <label className="field"><span>{settingsMessages.supportAddress}</span><input ref={addressField} type="email" value={address} aria-invalid={addressFeedback.invalid || undefined}
                 aria-describedby={addressFeedback.invalid ? addressError : undefined} onChange={(event) => { addressFeedback.touch(); setAddress(event.target.value); }} required /></label>
-              <button className="primary-action" type="submit" disabled={addressFeedback.pending}>{addressFeedback.saveLabel(messages.saveSupportAddress)}</button>
+              <button className="primary-action" type="submit" disabled={addressFeedback.pending}>{addressFeedback.saveLabel(settingsMessages.saveSupportAddress)}</button>
               {addressFeedback.status}
               {addressFeedback.invalid && addressSave?.conflict && addressConflictLink?.(addressSave.conflict)}
             </form>
-          : <p><strong>{messages.supportAddress}: </strong><span>{channel ? channel.support_address : messages.emailNotConnected}</span></p>}
+          : <p><strong>{settingsMessages.supportAddress}: </strong><span>{channel ? channel.support_address : settingsMessages.emailNotConnected}</span></p>}
   </>;
   const senderPart = <>
-        {channel && <NameForm label={messages.senderName} saveLabel={messages.saveSenderName} hint={messages.senderNameHelp}
+        {channel && <NameForm label={settingsMessages.senderName} saveLabel={settingsMessages.saveSenderName} hint={settingsMessages.senderNameHelp}
           value={channel.sender_name} canManage={canManage} save={senderNameSave} onSave={onSaveSenderName} />}
   </>;
   const arrivalPart = <>
         {hostedAddress && <div className="email-channel-forwarding">
           <div className="copy-field">
-            <label className="invite-link"><span className="field-label">{messages.forwardingAddress}</span><input readOnly value={hostedAddress} /></label>
-            <span className="button-row"><CopyButton value={hostedAddress} copiedText={messages.addressCopied}>{messages.copyForwardingAddress}</CopyButton></span>
+            <label className="invite-link"><span className="field-label">{settingsMessages.forwardingAddress}</span><input readOnly value={hostedAddress} /></label>
+            <span className="button-row"><CopyButton value={hostedAddress} copiedText={settingsMessages.addressCopied}>{settingsMessages.copyForwardingAddress}</CopyButton></span>
           </div>
-          <p className="muted-copy">{messages.forwardingHelp}</p>
-          <ul className="muted-copy"><li>{messages.forwardingGmail}</li><li>{messages.forwardingOutlook}</li></ul>
+          <p className="muted-copy">{settingsMessages.forwardingHelp}</p>
+          <ul className="muted-copy"><li>{settingsMessages.forwardingGmail}</li><li>{settingsMessages.forwardingOutlook}</li></ul>
           {canManage && onSaveSlug && <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!slugFeedback.pending) onSaveSlug(slug.trim()); }}>
-            <label className="field"><span>{messages.workspaceAddressName}</span><input value={slug} onChange={(event) => { slugFeedback.touch(); setSlug(event.target.value); }} required /></label>
-            <button type="submit" disabled={slugFeedback.pending}>{slugFeedback.saveLabel(messages.saveAddressName)}</button>
+            <label className="field"><span>{settingsMessages.workspaceAddressName}</span><input value={slug} onChange={(event) => { slugFeedback.touch(); setSlug(event.target.value); }} required /></label>
+            <button type="submit" disabled={slugFeedback.pending}>{slugFeedback.saveLabel(settingsMessages.saveAddressName)}</button>
             {slugFeedback.status}
-            <small>{messages.addressNameWarning}</small>
+            <small>{settingsMessages.addressNameWarning}</small>
           </form>}
         </div>}
         {settings && !hostedAddress && <div className="copy-field">
-          <label className="invite-link"><span className="field-label">{messages.inboundURL}</span><input readOnly value={settings.inbound_url} /></label>
-          <span className="button-row"><CopyButton value={settings.inbound_url} copiedText={messages.urlCopied}>{messages.copyInboundURL}</CopyButton></span>
+          <label className="invite-link"><span className="field-label">{settingsMessages.inboundURL}</span><input readOnly value={settings.inbound_url} /></label>
+          <span className="button-row"><CopyButton value={settings.inbound_url} copiedText={settingsMessages.urlCopied}>{settingsMessages.copyInboundURL}</CopyButton></span>
         </div>}
         {channel && !hostedAddress && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
-          ? messages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : channelSetupMessages.inboundSecretMissing}</p>}
-        {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{messages.inboundSecret}</span>
-          <input readOnly value={createdSecret} /><small>{messages.inboundSecretNotice}</small></label>}
+          ? settingsMessages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : channelSetupMessages.inboundSecretMissing}</p>}
+        {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{settingsMessages.inboundSecret}</span>
+          <input readOnly value={createdSecret} /><small>{settingsMessages.inboundSecretNotice}</small></label>}
         {canManage && channel && settings && !hostedAddress && <InboundURLGuide inboundURL={settings.inbound_url} supportAddress={channel.support_address} secret={createdSecret} />}
         {canManage && channel && <span className="button-row">
-          {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>}
-          {!confirmingDisconnect && onDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{messages.disconnectEmail}</button>}
+          {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? settingsMessages.rotateInboundSecret : settingsMessages.createInboundSecret}</button>}
+          {!confirmingDisconnect && onDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{settingsMessages.disconnectEmail}</button>}
         </span>}
         {canManage && channel && confirmingDisconnect && <div className="confirm-panel" role="group" aria-labelledby="disconnect-email-question"
           onKeyDown={(event) => { if (event.key === 'Escape') cancelDisconnect(); }}>
-          <p><strong id="disconnect-email-question">{messages.disconnectEmailQuestion}</strong> {messages.disconnectEmailConsequence(channel.support_address)}</p>
+          <p><strong id="disconnect-email-question">{settingsMessages.disconnectEmailQuestion}</strong> {settingsMessages.disconnectEmailConsequence(channel.support_address)}</p>
           <span className="button-row">
-            <button type="button" className="danger-action" onClick={() => { setConfirmingDisconnect(false); onDisconnect?.(); }}>{messages.confirmDisconnectEmail}</button>
+            <button type="button" className="danger-action" onClick={() => { setConfirmingDisconnect(false); onDisconnect?.(); }}>{settingsMessages.confirmDisconnectEmail}</button>
             <button type="button" autoFocus onClick={cancelDisconnect}>{messages.cancel}</button>
           </span>
         </div>}
   </>;
   const domainPart = <>
         {channel && (channel.domain_verified_at
-          ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))} {sharedDomain(channel.domain)}</p>
+          ? <p className="muted-copy">{settingsMessages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))} {sharedDomain(channel.domain)}</p>
           : mailboxSending
             // Replies through a mailbox need no verified domain; the records stay one click away for SMTP.
             ? <details className="email-channel-dns-folded" open={Boolean(verifyError) || undefined}>
-                <summary>{messages.domainVerificationNotNeeded}</summary>
+                <summary>{settingsMessages.domainVerificationNotNeeded}</summary>
                 {dnsVerification}
               </details>
             : dnsVerification)}
   </>;
   const pausePart = <>
         {settings?.sending_pause && <div role="alert" aria-labelledby="email-paused-heading" className="warning-note">
-          <strong id="email-paused-heading">{messages.emailSendingPausedTitle}</strong>
-          <p>{messages.emailSendingPausedBody(settings.sending_pause.reason, formatDate(settings.sending_pause.paused_at, timezone))}</p>
+          <strong id="email-paused-heading">{settingsMessages.emailSendingPausedTitle}</strong>
+          <p>{settingsMessages.emailSendingPausedBody(settings.sending_pause.reason, formatDate(settings.sending_pause.paused_at, timezone))}</p>
         </div>}
   </>;
   const sendingPart = <>
         {channel && !mailboxConnection && (settings?.sending_from
-          ? <p className="muted-copy">{messages.sendingFrom(settings.sending_from)}</p>
-          : <p role="status" className="error-copy">{messages.cannotSend}</p>)}
+          ? <p className="muted-copy">{settingsMessages.sendingFrom(settings.sending_from)}</p>
+          : <p role="status" className="error-copy">{settingsMessages.cannotSend}</p>)}
   </>;
   const gmailBlock = <>
         {channel && settings && (gmail.status === 'ready'
@@ -171,9 +172,9 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </>;
   const smtpPart = <>
         {smtp && (smtp.configured
-          ? <><p className="muted-copy">{messages.smtpPlain}</p>
-            {canManage && <ServerDetails><p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p></ServerDetails>}</>
-          : !mailboxConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{channelSetupMessages.smtpNotConfigured}</p>)}
+          ? <><p className="muted-copy">{settingsMessages.smtpPlain}</p>
+            {canManage && <ServerDetails><p className="muted-copy"><strong>{settingsMessages.outgoingEmail}: </strong>{settingsMessages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p></ServerDetails>}</>
+          : !mailboxConnection && <p role="note" className="warning-note"><strong>{settingsMessages.outgoingEmail}: </strong>{channelSetupMessages.smtpNotConfigured}</p>)}
   </>;
   const repliesPart = <>{domainPart}{pausePart}{sendingPart}{gmailBlock}{smtpPart}</>;
   if (part === 'connection') return <div className="settings-body">{addressPart}{arrivalPart}</div>;
@@ -187,7 +188,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </div>;
   return (
     <section className="settings-card" aria-labelledby="email-channel-heading">
-      <div className="section-heading"><h2 id="email-channel-heading">{messages.emailChannel}</h2><p>{channelSetupMessages.emailChannelDescription}</p></div>
+      <div className="section-heading"><h2 id="email-channel-heading">{settingsMessages.emailChannel}</h2><p>{channelSetupMessages.emailChannelDescription}</p></div>
       <div className="settings-body">
         {addressPart}{senderPart}{arrivalPart}{repliesPart}
       </div>
@@ -202,15 +203,15 @@ const sharedDomain = (domain: string) => `The verification is for ${domain}: eve
 const repliesHeadings = { leave: 'How replies leave', name: 'The name customers see', domain: 'Your domain' };
 
 function DnsRecordsTable({ records, expiredAt, timezone }: { records: EmailDnsRecord[]; expiredAt: string | null; timezone: string }) {
-  if (records.length === 0) return <p className="muted-copy">{expiredAt ? messages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : messages.dnsRecordsNotReady}</p>;
+  if (records.length === 0) return <p className="muted-copy">{expiredAt ? settingsMessages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : settingsMessages.dnsRecordsNotReady}</p>;
   return <>
-    <p className="muted-copy">{messages.dnsRecordsHelp}</p>
+    <p className="muted-copy">{settingsMessages.dnsRecordsHelp}</p>
     {/* A narrow screen scrolls the table sideways inside its own frame, faded at the edges. */}
-    <div className="scroll-x-fade"><table aria-label={messages.dnsRecordsHeading}>
-      <thead><tr><th>{messages.dnsColumnPurpose}</th><th>{messages.dnsColumnType}</th><th>{messages.dnsColumnName}</th><th>{messages.dnsColumnValue}</th><th>{messages.dnsColumnPriority}</th><th>{messages.dnsColumnStatus}</th></tr></thead>
+    <div className="scroll-x-fade"><table aria-label={settingsMessages.dnsRecordsHeading}>
+      <thead><tr><th>{settingsMessages.dnsColumnPurpose}</th><th>{settingsMessages.dnsColumnType}</th><th>{settingsMessages.dnsColumnName}</th><th>{settingsMessages.dnsColumnValue}</th><th>{settingsMessages.dnsColumnPriority}</th><th>{settingsMessages.dnsColumnStatus}</th></tr></thead>
       <tbody>{records.map((record) => <tr key={`${record.type}-${record.name}-${record.value}`}>
         <td>{record.record}</td><td>{record.type}</td><td>{record.name}</td><td><code>{record.value}</code></td>
-        <td>{record.priority ?? ''}</td><td>{messages.dnsRecordStatus(record.status)}</td>
+        <td>{record.priority ?? ''}</td><td>{settingsMessages.dnsRecordStatus(record.status)}</td>
       </tr>)}</tbody>
     </table></div>
   </>;

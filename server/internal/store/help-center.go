@@ -43,7 +43,7 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 		err := tx.QueryRow(ctx, `SELECT w.slug, w.name, COALESCE(h.enabled, false), COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
 				logo.id::text, logo.width, logo.height, icon.id::text, COALESCE(h.logo_alt, ''), h.linkback_url, h.contact_url, h.contact_phone,
 				h.color_primary, h.color_header, h.color_header_text, h.color_background, h.color_text, h.color_link, h.color_footer, h.body_font, h.heading_font,
-				COALESCE(h.custom_css, ''), COALESCE(d.hostname, '')
+				COALESCE(h.custom_css, ''), COALESCE(d.hostname, ''), COALESCE(h.google_site_verification, ''), COALESCE(h.bing_site_verification, '')
 			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id
 			LEFT JOIN help_center_domains d ON d.workspace_id=w.id AND d.status='active'
 			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=h.logo_media_id AND logo.kind='image' AND logo.deleted_at IS NULL
@@ -52,7 +52,7 @@ func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string)
 			Scan(&site.Slug, &site.Name, &got.enabled, &site.Title, &site.Locale, &site.ContentVersion,
 				&theme.LogoMediaID, &logoWidth, &logoHeight, &theme.FaviconMediaID, &theme.LogoAlt, &theme.LinkbackURL, &theme.ContactURL, &theme.ContactPhone,
 				&colors.Primary, &colors.Header, &colors.HeaderText, &colors.Background, &colors.Text, &colors.Link, &colors.Footer, &theme.BodyFont, &theme.HeadingFont,
-				&theme.CustomCSS, &site.CustomHost)
+				&theme.CustomCSS, &site.CustomHost, &site.SearchConsole.Google, &site.SearchConsole.Bing)
 		if logoWidth != nil && logoHeight != nil {
 			site.LogoWidth, site.LogoHeight = *logoWidth, *logoHeight
 		}
@@ -170,8 +170,10 @@ func (s *Store) HelpCenterArticle(ctx context.Context, workspaceID string, numbe
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.PublicKBArticle, error) {
 		var body string
 		var id string
-		article, err := scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text FROM kb_articles a
-			WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number), &body, &id)
+		var seoTitle, seoDescription string
+		article, err := scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text, a.seo_title, a.seo_description FROM kb_articles a
+			WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number), &body, &id, &seoTitle, &seoDescription)
+		article.SEOTitle, article.SEODescription = seoTitle, seoDescription
 		article.BodyMD = body
 		if err != nil || !strings.Contains(body, domain.KBMediaPath) {
 			return article, err

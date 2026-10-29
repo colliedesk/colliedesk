@@ -76,3 +76,48 @@ func (s *Store) HelpCenterLegacyTarget(ctx context.Context, workspaceID, entity,
 	}
 	return target, nil
 }
+
+// HelpCenterLegacyItem is one imported Freshdesk knowledge base item of an account and the public page
+// it became: an article (Number and Slug) or a collection (CollectionID).
+type HelpCenterLegacyItem struct {
+	Entity, SourceID string
+	Number           int64
+	Slug             string
+	CollectionID     string
+}
+
+// HelpCenterLegacyItems lists the imported knowledge base items of one Freshdesk account (the ledger
+// source, freshdesk:account:<id>) that are public now: a published article outside the trash, or a
+// collection outside the trash (the caller decides whether it shows anything). Only done rows count.
+func (s *Store) HelpCenterLegacyItems(ctx context.Context, workspaceID, accountSource string) ([]HelpCenterLegacyItem, error) {
+	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]HelpCenterLegacyItem, error) {
+		rows, err := tx.Query(ctx, `SELECT i.entity, i.source_id, a.number, a.slug, c.id::text FROM import_items i
+			LEFT JOIN kb_articles a ON i.entity='kb_article' AND a.workspace_id=i.workspace_id AND a.id=i.target_id AND a.status='published' AND a.deleted_at IS NULL
+			LEFT JOIN kb_collections c ON i.entity IN ('kb_category','kb_folder') AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND c.deleted_at IS NULL
+			WHERE i.workspace_id=$1 AND i.source=$2 AND i.source LIKE 'freshdesk:%' AND i.status='done'
+				AND i.entity IN ('kb_article','kb_category','kb_folder') AND (a.id IS NOT NULL OR c.id IS NOT NULL)
+			ORDER BY i.entity, length(i.source_id), i.source_id`, workspaceID, accountSource)
+		if err != nil {
+			return nil, err
+		}
+		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (HelpCenterLegacyItem, error) {
+			var item HelpCenterLegacyItem
+			var number *int64
+			var slug, collection *string
+			if err := row.Scan(&item.Entity, &item.SourceID, &number, &slug, &collection); err != nil {
+				return item, err
+			}
+			if number != nil && slug != nil {
+				item.Number, item.Slug = *number, *slug
+			}
+			if collection != nil {
+				item.CollectionID = *collection
+			}
+			return item, nil
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list imported help center items: %w", err)
+	}
+	return items, nil
+}

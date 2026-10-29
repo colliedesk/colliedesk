@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import type { ImportPerson } from '../../api/imports';
 import type { Invite, TeamMember } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
-import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 import { importMessages as m } from './import-messages';
 
 // CreatedInvite is the one-time link of an invite just made: the server shows it once.
@@ -79,9 +79,9 @@ function InviteLink({ invite, timezone }: { invite: CreatedInvite; timezone: str
   const [copied, setCopied] = useState<'yes' | 'failed'>();
   const id = useId();
   const url = invite.url;
-  if (!url) return <p role="status" className="import-invite-link">{messages.inviteLinkShownOnce}</p>;
+  if (!url) return <p role="status" className="import-invite-link">{settingsMessages.inviteLinkShownOnce}</p>;
   return <div className="import-invite-link">
-    <label htmlFor={id} className="field-label">{messages.inviteLink}</label>
+    <label htmlFor={id} className="field-label">{settingsMessages.inviteLink}</label>
     <div className="button-row">
       <input id={id} readOnly value={url} onFocus={(event) => event.target.select()} />
       <button type="button" onClick={() => {

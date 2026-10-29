@@ -187,6 +187,8 @@ type KBArticle struct {
 	Title            string          `json:"title"`
 	Slug             string          `json:"slug"`
 	BodyMD           string          `json:"body_md"`
+	SEOTitle         string          `json:"seo_title"`
+	SEODescription   string          `json:"seo_description"`
 	Status           string          `json:"status"`
 	PublishedAt      *time.Time      `json:"published_at"`
 	AuthorAgentID    *string         `json:"author_agent_id"`
@@ -211,6 +213,8 @@ type KBArticleVersion struct {
 	Title               string    `json:"title"`
 	Slug                string    `json:"slug"`
 	BodyMD              string    `json:"body_md"`
+	SEOTitle            string    `json:"seo_title"`
+	SEODescription      string    `json:"seo_description"`
 	Status              string    `json:"status"`
 	CollectionID        *string   `json:"collection_id"`
 	ChangedByAgentID    *string   `json:"changed_by_agent_id"`
@@ -326,6 +330,9 @@ type HelpCenter struct {
 	BodyFont          *string   `json:"body_font"`
 	HeadingFont       *string   `json:"heading_font"`
 	CustomCSS         string    `json:"custom_css"`
+	// GoogleSiteVerification and BingSiteVerification are the Search Console tokens (null when none).
+	GoogleSiteVerification *string `json:"google_site_verification"`
+	BingSiteVerification   *string `json:"bing_site_verification"`
 	// CustomDomain is the help center's custom host name (null when none), CustomDomainStatus pending or
 	// active, CustomDomainVerifiedAt when its DNS check first passed. The proof token is not exported.
 	CustomDomain           *string    `json:"custom_domain"`

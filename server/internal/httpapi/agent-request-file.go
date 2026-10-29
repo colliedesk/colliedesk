@@ -188,6 +188,7 @@ var requestTitles = map[string]string{
 	"DELETE /api/v1/auth/sessions/{id}":                          "Revoke a session",
 	"PUT /api/v1/channels/web-form":                              "Change the web form",
 	"PUT /api/v1/help-center/theme":                              "Change the help center's brand",
+	"PUT /api/v1/help-center/search-console":                     "Change the help center's Search Console verification",
 	"PUT /api/v1/help-center/domain":                             "Set the help center's custom domain",
 	"DELETE /api/v1/help-center/domain":                          "Remove the help center's custom domain",
 	"POST /api/v1/help-center/domain/check":                      "Check the help center's custom domain",

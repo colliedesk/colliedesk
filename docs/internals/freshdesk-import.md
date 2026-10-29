@@ -403,6 +403,23 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   article links, with their files. `targetExists` covers every `kb_*` entity, so a kept article keeps
   its ledger row and a later import does not add it twice.
 
+### Search Console tokens
+
+Code: `search-console.go`, `store.CarryOverSearchConsole`. Step "reading Search Console tokens" runs in
+the full run after the links step (never in a dry run or `ModeRecent`).
+
+- **The page is read without the key.** `client.readPortal` builds its own request on the download
+  client rather than `client.do`, which sends the API key to the account host. Redirects may only stay on
+  the account host. Only `/support/home` is read, from `client.base` (the account host the API uses); the
+  old custom domain serves the same head and may already point elsewhere.
+- **Only the head counts.** `portalTokens` walks the `golang.org/x/net/html` tokens and stops at
+  `</head>` or `<body>`; a `<script>` is raw text to the tokenizer, so a tag written by a script is never
+  seen. The first tag of each name wins.
+- **Never replace.** `CarryOverSearchConsole` locks the help center row and writes only the tokens that are
+  NULL, in one `content_version` bump. A token that fails `domain.ValidSearchConsoleToken` is reported as
+  `invalid` and not stored.
+- **Undo leaves the tokens**, like the help center settings; they hold no customer data.
+
 ### Old help center links
 
 Code: `solutions-links.go`, `solutions-link-targets.go`, `report-links.go`; the writes are

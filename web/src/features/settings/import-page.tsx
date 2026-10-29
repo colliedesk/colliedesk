@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { ImportJob, ImportPreview, ImportReport, UndoReport } from '../../api/imports';
 import { reportDownloadPath } from '../../api/imports';
@@ -12,6 +12,9 @@ import { SettingsNav } from './settings-nav';
 const defaultRecentDays = 90;
 // Freshdesk API calls one ticket takes: the ticket, its conversations and its time entries.
 const callsPerTicket = 3;
+
+// The Search Console section is rarely shown and loads on its own, so the first bundle does not carry it.
+const ImportSearchConsoleSummary = lazy(() => import('./import-search-console'));
 
 export interface ImportPageProps {
   isAdmin: boolean;
@@ -271,6 +274,7 @@ function Finished({ job, report, onUndo, onNewImport, onOpenInbox, busy }: Impor
     <p className="import-status" data-status={status}>{m[`explain${status}`]}</p>
     {report && <ReportLedger report={report} />}
     {report?.links && <ImportLinksSummary links={report.links} />}
+    {report?.search_console !== undefined && <Suspense fallback={null}><ImportSearchConsoleSummary section={report.search_console} /></Suspense>}
     <div className="button-row">
       <a className="link-action" href={reportDownloadPath(job.id)} download>{m.downloadReport}</a>
       <a className="link-action" href={`/api/v1/imports/${job.id}/report`} download={`freshdesk-import-${job.id}.json`}>{m.downloadReportJSON}</a>

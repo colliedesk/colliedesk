@@ -116,6 +116,17 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **Limits per client address** (the web form's limiter and `TRUSTED_PROXIES` handling): 600 pages
   and 30 searches a minute across all workspaces. A search reads every article vector of the
   workspace (no index under row-level security).
+- **Structured data is JSON from encoding/json in a `<script type="application/ld+json">`**
+  (`structured-data.go`), passed as `template.JS`. encoding/json escapes `<`, `>`, `&`, U+2028 and
+  U+2029, so no title or text can close the element; the CSP's `script-src 'none'` does not apply to
+  JSON-LD, which is data. A BreadcrumbList is on home, collection, article and search pages with
+  absolute addresses on the serving host; an article adds `Article`, and `FAQPage` when
+  `questionList` reads it as one: at least two headings of the text's highest level, all ending with
+  `?`, each with an answer (plain words, at most 1,000 characters) before the next. The rule runs in
+  the render cache with the page, so it costs nothing on a warm visit.
+- **An article's search title replaces the whole `<title>`** (no ` · <help center>` suffix), and its
+  meta description the excerpt; both default when empty. Versions keep them and a restore brings them
+  back.
 - **Trial pages ask not to be indexed** (`<meta name="robots">`, `X-Robots-Tag`, and `robots.txt`
   on a help center host). A trial's `sitemap.xml` and `llms.txt` list nothing and carry
   `X-Robots-Tag: noindex`, as its Markdown files do.
@@ -181,6 +192,24 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   request filed before it, would clear the CSS silently. It is 422 `validation_failed` instead, an
   agent request without it is not filed, and one stored earlier fails on approval with the same 422;
   null or `""` clears it. The check and the preview save nothing and keep it optional.
+- **Search Console tokens are their own resource** (`/api/v1/help-center/search-console`), not theme
+  fields. A field left out stays, because two optional tokens in a whole-replace body would let a
+  client that knows only one erase the other, and losing a token breaks a verified property. The
+  tag goes in the `layout.html` head from `domain.HelpCenterSite.SearchConsole`, so it exists only
+  where a workspace's pages are rendered (never on the 404 of an unknown host). The token is held
+  to `[A-Za-z0-9_-]{16,100}` in the domain, the SQL check and the template's attribute escaping;
+  any one of the three keeps a quote or angle bracket out of the head. A save bumps
+  `content_version`, which is in every page's ETag.
+- **The Freshdesk head snippet is built from `SiteURL` and the ledger** (`FreshdeskHeadSnippet`,
+  `Site.LegacyRedirects`, `GET /api/v1/help-center/freshdesk-redirect`). The script's target is a JSON
+  string of the help center address plus either a path from the map (collection and article paths the
+  import made public), a fixed path, or the digits of a Freshdesk id, so it cannot be steered to another
+  host: `//evil.example/support/...` fails the anchored patterns and nothing moves. The id map is bounded
+  (`maxSnippetMapBytes`); a larger knowledge base sends every old id to the help center's own old-address
+  handler (`legacy.go`), which holds the whole mapping. There is no `meta refresh` in `<noscript>`: it
+  cannot tell help pages from sign-in and would move every visitor of the portal. `TestSnippet…` run the
+  script in Node with a stub `location` (they skip where Node is missing). The plan question exists
+  because Freshdesk Growth has no portal customization (checked 28/10/2026): that state returns no snippet.
 - **Every color pair the pages show reads (WCAG AA), not only the six the save checks.**
   `domain.ThemeBrandPalette` derives surface, muted, rule and the accent tints from the saved
   colors and falls back (surface to the background, muted to the text, tints to the surface) when

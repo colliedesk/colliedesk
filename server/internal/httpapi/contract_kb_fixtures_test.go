@@ -168,6 +168,9 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"PUT /api/v1/help-center/domain":                           {"/api/v1/help-center/domain", map[string]any{"hostname": "help.contract.example"}, admin, 200, ""},
 		"POST /api/v1/help-center/domain/check":                    {"/api/v1/help-center/domain/check", nil, admin, 404, ""},
 		"DELETE /api/v1/help-center/domain":                        {path: "/api/v1/help-center/domain", token: admin, status: 200},
+		"GET /api/v1/help-center/search-console":                   {path: "/api/v1/help-center/search-console", token: admin, status: 200},
+		"GET /api/v1/help-center/freshdesk-redirect":               {path: "/api/v1/help-center/freshdesk-redirect?plan=pro", token: admin, status: 200},
+		"PUT /api/v1/help-center/search-console":                   {"/api/v1/help-center/search-console", map[string]any{"google_site_verification": "Ab3dEf6hIj9lMn2pQr5tUv8xYz1-Ab3dEf6hIj9lMn2"}, admin, 200, ""},
 		"POST /api/v1/help-center/theme/check":                     {"/api/v1/help-center/theme/check", map[string]any{"colors": map[string]any{"text": "#999999"}}, admin, 200, ""},
 		"POST /api/v1/help-center/theme/preview":                   {"/api/v1/help-center/theme/preview", map[string]any{"page": "article", "theme": map[string]any{"colors": map[string]any{"text": "#999999"}}}, admin, 200, ""},
 		// The contract server has no HELP_CENTER_DOMAIN, so every host name is refused.

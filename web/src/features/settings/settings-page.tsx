@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Invite, Session } from '../../api/schemas';
 import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 import { DisplayNameField } from './display-name-field';
 import { InvitesSection } from './invites-section';
 import { NameForm } from './name-form';
@@ -70,21 +71,21 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           {error && <p role="alert" className="error-copy">{error}</p>}
           <p className="settings-group-label">{messages.settingsYourAccount}</p>
           <section className="settings-card" aria-labelledby="profile-heading">
-            <div className="section-heading"><h2 id="profile-heading">{messages.profile}</h2><p>{messages.profileDescription}</p></div>
+            <div className="section-heading"><h2 id="profile-heading">{messages.profile}</h2><p>{settingsMessages.profileDescription}</p></div>
             <div className="settings-body">
               <DisplayNameField value={displayName} email={email} save={displayNameSave} onSave={onSetDisplayName} />
-              <TimezoneSelect label={messages.yourTimezone} value={timezoneOverride ?? ''} emptyOption={messages.sameAsWorkspace(workspaceTimezone)}
+              <TimezoneSelect label={settingsMessages.yourTimezone} value={timezoneOverride ?? ''} emptyOption={settingsMessages.sameAsWorkspace(workspaceTimezone)}
                 save={personalTimezoneSave} onChange={(value) => onSetAgentTimezone?.(value || null)} />
             </div>
           </section>
           <PreferencesSection />
           <p className="settings-group-label">{messages.settingsWorkspace}</p>
           {canManageWorkspace && <section className="settings-card" aria-labelledby="general-heading">
-            <div className="section-heading"><h2 id="general-heading">{messages.general}</h2><p>{messages.generalDescription}</p></div>
+            <div className="section-heading"><h2 id="general-heading">{messages.general}</h2><p>{settingsMessages.generalDescription}</p></div>
             <div className="settings-body">
-              <NameForm label={messages.workspaceName} saveLabel={messages.saveWorkspaceName} hint={messages.workspaceNameHelp}
+              <NameForm label={messages.workspaceName} saveLabel={settingsMessages.saveWorkspaceName} hint={settingsMessages.workspaceNameHelp}
                 value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} minLength={2} maxLength={60} />
-              <TimezoneSelect label={messages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave} onChange={(value) => onSetWorkspaceTimezone?.(value)} />
+              <TimezoneSelect label={settingsMessages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave} onChange={(value) => onSetWorkspaceTimezone?.(value)} />
             </div>
           </section>}
           {teamSection}

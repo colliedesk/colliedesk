@@ -129,6 +129,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
 | `colliedesk_help_center_theme_get` | Reads the public help center's logo, colors, fonts, custom CSS and links | `read` |
 | `colliedesk_help_center_theme_check` | Checks a candidate brand, custom CSS and color contrast without saving it; can render a page preview | `read` |
+| `colliedesk_help_center_search_console_get` | Reads the Google and Bing Search Console verification tokens of the help center | `read` |
+| `colliedesk_help_center_freshdesk_redirect_get` | Says how the old Freshdesk help center addresses move and, for a Freshdesk plan that allows it, returns the snippet that redirects them | `read` |
 | `colliedesk_help_center_domain_get` | Reads the custom domain, its DNS records and the last check | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
@@ -160,6 +162,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_session_revoke` | Revokes a token or signs out one of your own devices; signing out another person waits for approval. Cannot be undone | `admin` |
 | `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
 | `colliedesk_help_center_theme_update` | Replaces the public help center's brand after checking its color contrast and custom CSS | `admin` |
+| `colliedesk_help_center_search_console_update` | Sets or removes the Google and Bing verification tokens served as meta tags on the help center's pages | `admin` |
 | `colliedesk_help_center_domain_set` | Sets or replaces the custom domain, pending DNS ownership proof | `admin` |
 | `colliedesk_help_center_domain_check` | Checks DNS ownership and activates the proven custom domain | `admin` |
 | `colliedesk_help_center_domain_remove` | Removes the custom domain and restores the slug address | `admin` |

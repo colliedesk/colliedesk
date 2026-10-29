@@ -9,6 +9,9 @@ var toolDocs = map[string]string{
 	"colliedesk_help_center_domain_check":  "Checks DNS ownership and activates the proven custom domain",
 	"colliedesk_help_center_domain_remove": "Removes the custom domain and restores the slug address",
 
+	"colliedesk_help_center_freshdesk_redirect_get": "Says how the old Freshdesk help center addresses move and, for a Freshdesk plan that allows it, returns the snippet that redirects them",
+	"colliedesk_help_center_search_console_get":     "Reads the Google and Bing Search Console verification tokens of the help center",
+	"colliedesk_help_center_search_console_update":  "Sets or removes the Google and Bing verification tokens served as meta tags on the help center's pages",
 	"colliedesk_help_center_theme_get":              "Reads the public help center's logo, colors, fonts, custom CSS and links",
 	"colliedesk_help_center_theme_check":            "Checks a candidate brand, custom CSS and color contrast without saving it; can render a page preview",
 	"colliedesk_help_center_theme_update":           "Replaces the public help center's brand after checking its color contrast and custom CSS",

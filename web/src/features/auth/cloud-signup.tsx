@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { SignupError } from '../../api/cloud-signup';
 import type { SignupAnswers } from '../../api/cloud-signup';
 import { messages } from '../../messages';
+import { signupMessages } from './signup-messages';
 
 interface CloudSignupProps {
   // onCreate rejects with a SignupError that says why the server refused.
@@ -17,10 +18,10 @@ interface CloudSignupProps {
 const nameLength = { min: 2, max: 60 };
 const questions = ['goal', 'role', 'source'] as const;
 type Question = typeof questions[number];
-type Problem = keyof typeof messages.signupErrors | 'unanswered';
+type Problem = keyof typeof signupMessages.signupErrors | 'unanswered';
 // The answers offered are the words of each listed value; a value missing from the copy fails to compile.
 const answerLabels: { [Q in Question]: Record<SignupAnswers[Q], string> } = {
-  goal: messages.signupQuestions.goal.options, role: messages.signupQuestions.role.options, source: messages.signupQuestions.source.options,
+  goal: signupMessages.signupQuestions.goal.options, role: signupMessages.signupQuestions.role.options, source: signupMessages.signupQuestions.source.options,
 };
 
 function complete(answers: Partial<SignupAnswers>): answers is SignupAnswers {
@@ -47,8 +48,8 @@ export function CloudSignup({ onCreate, onSignIn, onUseAnotherAccount, buying = 
   };
   return (
     <form className="cloud-signup" onSubmit={submit} noValidate>
-      <h2>{messages.signupHeading}</h2>
-      <p className="muted-copy">{buying ? messages.signupBuyingExplanation : messages.signupExplanation}</p>
+      <h2>{signupMessages.signupHeading}</h2>
+      <p className="muted-copy">{buying ? signupMessages.signupBuyingExplanation : signupMessages.signupExplanation}</p>
       <label className="field"><span>{messages.workspaceName}</span>
         <input value={name} autoComplete="organization" maxLength={nameLength.max * 2} onChange={(event) => setName(event.target.value)} /></label>
       <QuestionField question="goal" value={answers.goal} onChange={answer('goal')} />
@@ -56,10 +57,10 @@ export function CloudSignup({ onCreate, onSignIn, onUseAnotherAccount, buying = 
         <PickerField question="role" value={answers.role} onChange={answer('role')} />
         <PickerField question="source" value={answers.source} onChange={answer('source')} />
       </div>
-      {problem && <p role="alert" className="error-copy">{problem === 'unanswered' ? messages.signupAnswerEach : messages.signupErrors[problem]}</p>}
-      {problem === 'trial_already_used' && <button type="button" onClick={onSignIn}>{messages.signInToWorkspace}</button>}
-      <button type="submit" className="primary-action" disabled={pending}>{pending ? messages.creatingWorkspace : buying ? messages.createWorkspaceAndPay : messages.startTrial}</button>
-      <button type="button" className="link-button" onClick={onUseAnotherAccount}>{messages.useAnotherAccount}</button>
+      {problem && <p role="alert" className="error-copy">{problem === 'unanswered' ? signupMessages.signupAnswerEach : signupMessages.signupErrors[problem]}</p>}
+      {problem === 'trial_already_used' && <button type="button" onClick={onSignIn}>{signupMessages.signInToWorkspace}</button>}
+      <button type="submit" className="primary-action" disabled={pending}>{pending ? signupMessages.creatingWorkspace : buying ? signupMessages.createWorkspaceAndPay : signupMessages.startTrial}</button>
+      <button type="button" className="link-button" onClick={onUseAnotherAccount}>{signupMessages.useAnotherAccount}</button>
     </form>
   );
 }
@@ -74,7 +75,7 @@ interface QuestionFieldProps {
 function QuestionField({ question, value, onChange }: QuestionFieldProps) {
   return (
     <fieldset className="signup-question">
-      <legend>{messages.signupQuestions[question].legend}</legend>
+      <legend>{signupMessages.signupQuestions[question].legend}</legend>
       {Object.entries(answerLabels[question]).map(([option, label]) => (
         <label key={option} className="check-row"><input type="radio" name={`signup-${question}`} required checked={value === option}
           onChange={() => onChange(option)} /><span>{label}</span></label>))}
@@ -86,9 +87,9 @@ function QuestionField({ question, value, onChange }: QuestionFieldProps) {
 // starts on an empty prompt: nobody is counted as an answer they did not pick.
 function PickerField({ question, value, onChange }: QuestionFieldProps) {
   return (
-    <label className="field"><span>{messages.signupQuestions[question].legend}</span>
+    <label className="field"><span>{signupMessages.signupQuestions[question].legend}</span>
       <select required value={value ?? ''} onChange={(event) => onChange(event.target.value)}>
-        <option value="">{messages.signupChooseOne}</option>
+        <option value="">{signupMessages.signupChooseOne}</option>
         {Object.entries(answerLabels[question]).map(([option, label]) => <option key={option} value={option}>{label}</option>)}
       </select></label>
   );

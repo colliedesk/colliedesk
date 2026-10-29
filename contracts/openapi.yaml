@@ -4217,7 +4217,8 @@ paths:
       operationId: updateKBArticle
       x-permission: conversations:write
       description: >
-        Change the title, slug, text, collection or status (publish or unpublish). Send back the
+        Change the title, slug, text, collection, status (publish or unpublish), search title or meta
+        description. Send back the
         `updated_at` you read; when the article was saved since, nothing changes and the answer is 409
         `changed_elsewhere`. Every change adds a version to the history. An article in the trash is
         404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of
@@ -4236,6 +4237,8 @@ paths:
                 body_md: {type: string, maxLength: 100000}
                 collection_id: {type: string, format: uuid}
                 status: {type: string, enum: [draft, published]}
+                seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
+                seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
@@ -5690,6 +5693,73 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/ThemeInvalid'}
+  /api/v1/help-center/search-console:
+    get:
+      operationId: getHelpCenterSearchConsole
+      x-permission: conversations:read
+      description: >
+        The verification tokens of the help center: the content of the `google-site-verification`
+        (Google Search Console) and `msvalidate.01` (Bing Webmaster Tools) `<meta>` tags. A token is
+        null until set. Each is served as a `<meta>` tag in the head of every page of this workspace's
+        help center, on its own host or custom domain, and never on the app or another workspace.
+      responses:
+        '200':
+          description: The verification tokens
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSearchConsole'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    put:
+      operationId: putHelpCenterSearchConsole
+      x-permission: access:write
+      description: >
+        Set or remove the verification tokens. A field left out stays as it is; null or an empty string
+        removes that token. Paste only the `content` value of the meta tag Google or Bing shows (16 to
+        100 letters, digits, `-` or `_`); anything else, such as the whole tag, is refused (422
+        `validation_failed`, with `fields`) and nothing is saved. The tags change every public page, so
+        a save changes `content_version`. Admins only; an agent token needs `help_center:update` and
+        `kb_articles:publish` (both held by the `admin` preset). Without either permission, it files an
+        agent request (202) and changes no public page.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterSearchConsoleInput'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The saved tokens
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterSearchConsole'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ThemeInvalid'}
+  /api/v1/help-center/freshdesk-redirect:
+    get:
+      operationId: getFreshdeskRedirect
+      x-permission: conversations:read
+      description: >
+        What a team that moved from `<name>.freshdesk.com` should do about its old help center
+        addresses, read from the workspace's latest finished Freshdesk import. A team on its own
+        domain redirects at DNS (`own_domain`). Otherwise Freshdesk cannot answer 301 from
+        `*.freshdesk.com`, and the team pastes a script into its Freshdesk portal's head that sends a
+        visitor of an old help page to the new one. Freshdesk allows that only on its Pro and
+        Enterprise plans, so `plan` (the account's Freshdesk plan) decides: without it the state is
+        `ask_plan`; `growth` is `growth` and carries no snippet; `pro` and `enterprise` are `ready`
+        with the `snippet`. The snippet is built from the help center's address and the pages the
+        import made public, never from the request; it is a JavaScript redirect, not a 301, and works
+        only while the Freshdesk account does, so keep the account and the snippet for `keep_weeks`
+        after the switch. Only help pages (home, solutions, search) move; sign-in and tickets stay.
+      parameters:
+        - name: plan
+          in: query
+          required: false
+          description: The account's Freshdesk plan.
+          schema: {type: string, enum: [growth, pro, enterprise]}
+      responses:
+        '200':
+          description: The state and, when ready, the snippet
+          content: {application/json: {schema: {$ref: '#/components/schemas/FreshdeskRedirect'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /api/v1/help-center/theme/check:
     post:
       operationId: checkHelpCenterTheme
@@ -7436,6 +7506,8 @@ components:
         slug: {type: string, minLength: 1, maxLength: 120, description: 'Lowercase letters, digits and hyphens in any script; made from the title when left out.'}
         body_md: {type: string, maxLength: 100000, description: 'The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>; anything else is left out when shown and kept as written.'}
         status: {type: string, enum: [draft, published], default: draft}
+        seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
+        seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
     KBArticleStatus:
       type: string
       enum: [draft, published]
@@ -7528,7 +7600,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion]
+      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion, seo_title, seo_description]
       properties:
         ai_drafts_this_month: {type: integer, minimum: 0, description: 'Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source.'}
         id: {type: string, format: uuid}
@@ -7548,6 +7620,8 @@ components:
             - {$ref: '#/components/schemas/KBArticleChange'}
         url: {type: string, format: uri, description: 'The public address of the article, as in KBArticleSummary.'}
         body_md: {type: string}
+        seo_title: {type: string, maxLength: 120, description: 'The page title search engines show; empty uses the article title.'}
+        seo_description: {type: string, maxLength: 320, description: 'The meta description search engines show; empty uses the start of the text (160 characters).'}
         has_source_html: {type: boolean, description: An import kept the original HTML; it is in the workspace export and is never shown on the help center.}
         translations:
           type: array
@@ -7591,7 +7665,7 @@ components:
         purges_at: {type: string, format: date-time, description: When the article and its history are deleted for good (30 days after deleted_at).}
     KBArticleVersion:
       type: object
-      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id]
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id, seo_title, seo_description]
       properties:
         version: {type: integer, minimum: 1}
         kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include]}
@@ -7613,6 +7687,8 @@ components:
         title: {type: string}
         slug: {type: string}
         body_md: {type: string}
+        seo_title: {type: string}
+        seo_description: {type: string}
         status: {$ref: '#/components/schemas/KBArticleStatus'}
         collection_id: {type: [string, 'null'], format: uuid, description: Null once that collection was deleted for good.}
     KBMedia:
@@ -7833,6 +7909,45 @@ components:
       description: >-
         A font stack of the reader's own system: nothing is downloaded. Null is the default (system-sans
         for text, classic-serif for headings).
+    FreshdeskRedirect:
+      type: object
+      required: [state, freshdesk_domain, address, keep_weeks, snippet, mapped]
+      properties:
+        state:
+          type: string
+          enum: [no_import, own_domain, help_center_off, ask_plan, growth, ready]
+          description: >-
+            `no_import`: no finished Freshdesk import. `own_domain`: the old help center had its own
+            domain; redirect it at DNS. `help_center_off`: turn the help center on first. `ask_plan`:
+            send `plan`. `growth`: Freshdesk's Growth plan cannot paste code into the portal, so old
+            `*.freshdesk.com` links cannot be redirected; point your own links at the new address.
+            `ready`: `snippet` holds the code.
+        freshdesk_domain: {type: [string, 'null'], description: 'The imported account, such as acme.freshdesk.com.'}
+        address: {type: string, format: uri, description: 'The help center address the snippet redirects to.'}
+        keep_weeks: {type: integer, description: 'Keep the Freshdesk account and the snippet at least this many weeks after the switch.'}
+        snippet: {type: [string, 'null'], description: 'HTML for the Freshdesk portal head; null unless state is ready.'}
+        mapped:
+          type: [object, 'null']
+          required: [articles, folders, categories, embedded]
+          properties:
+            articles: {type: integer}
+            folders: {type: integer}
+            categories: {type: integer}
+            embedded: {type: boolean, description: 'False when the knowledge base was too large to embed: the snippet then redirects every old address by its id to the help center, which maps it.'}
+    HelpCenterSearchConsoleInput:
+      type: object
+      additionalProperties: false
+      properties:
+        google_site_verification: {type: [string, 'null'], maxLength: 100, description: 'The content of Google Search Console''s `google-site-verification` meta tag. Left out: unchanged. Null or empty: removed.'}
+        bing_site_verification: {type: [string, 'null'], maxLength: 100, description: 'The content of Bing Webmaster Tools'' `msvalidate.01` meta tag. Left out: unchanged. Null or empty: removed.'}
+    HelpCenterSearchConsole:
+      type: object
+      required: [google_site_verification, bing_site_verification, content_version, updated_at]
+      properties:
+        google_site_verification: {type: [string, 'null']}
+        bing_site_verification: {type: [string, 'null']}
+        content_version: {type: integer, minimum: 0}
+        updated_at: {type: [string, 'null'], format: date-time, description: Null until the help center settings were first changed.}
     HelpCenterThemeInput:
       type: object
       additionalProperties: false

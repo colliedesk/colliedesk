@@ -172,6 +172,51 @@ link was left behind. Otherwise it is `UNVERIFIED` and says why; this does not c
 status. Links on `acme.freshdesk.com` itself, in emails your customers keep, stop working when you close
 the Freshdesk account: move your custom domain to Colliedesk before you close it.
 
+### Search Console and the move of your domain
+
+If your team verified the old help center in Google Search Console or Bing Webmaster Tools by pasting
+a `<meta>` tag into the Freshdesk portal head, the import copies that verification, so the new help
+center stays verified when your DNS switches. It reads the public home page of the old help center
+(`https://acme.freshdesk.com/support/home`, without your API key) and takes the `content` of the
+`google-site-verification` and `msvalidate.01` meta tags in its `<head>`. A tag in the body or in a
+script does not count.
+
+- A token is copied only when the help center has none of that kind yet. One you set in
+  [Settings → Help center → Search Console](knowledge-base.md#search-console-and-bing-webmaster-tools)
+  is never replaced.
+- A value that is not 16 to 100 letters, digits, `-` or `_` is not copied; the report says so.
+- A dry run reads nothing. `import undo` leaves the tokens: they only prove who owns the address.
+  Remove them in Settings if you do not want them.
+
+The report has a section **Search Console** (`search_console` in the JSON and in the app) that says,
+for Google and for Bing, whether the token was carried over, the help center already had one, the old
+head had none, or the token had the wrong shape. It never prints a token. If the old home page could
+not be read, the section is `UNVERIFIED` and says why; add the tokens in Settings by hand. This does
+not change the import's status.
+
+### Old `*.freshdesk.com` addresses
+
+If your help center had its own domain, point it at Colliedesk with a 301 at your DNS provider (see
+[Custom domain](knowledge-base.md#custom-domain)). If it was only on `acme.freshdesk.com`, Freshdesk
+cannot answer 301 from that address, so **Settings → Help center → Old Freshdesk links** gives you a
+snippet to paste into the portal before you cancel:
+
+1. Say which Freshdesk plan the account is on. Only the **Pro** and **Enterprise** plans can add code to
+   the portal (Admin → Channels → Portals → Customize portal → Layout & Pages → Head). On **Growth**
+   old `*.freshdesk.com` links cannot be redirected: the app says so and gives no snippet. Point the
+   links on your own website, product and emails at the new help center instead.
+2. Copy the snippet and paste it into the portal head.
+
+The snippet sends a visitor of an old help page (home, solutions, search, and each article, folder and
+category the import brought over) to its new address, and nowhere else: the target always starts with
+your help center's address. Sign-in and ticket pages stay. It is a JavaScript redirect, not a 301, and
+it works only while the Freshdesk account exists: keep the account and the snippet for at least 4 weeks
+after the switch. Freshdesk suspends a cancelled account after 24 hours and deletes it after 14 days.
+There is no `meta refresh` fallback, because it cannot tell a help page from the sign-in page.
+
+An AI agent reads the same through `colliedesk_help_center_freshdesk_redirect_get` (`GET
+/api/v1/help-center/freshdesk-redirect?plan=pro`).
+
 ## Before you start
 
 1. Create the Colliedesk workspace (on your own server, see

@@ -24,7 +24,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listTrashedKBMedia, a.trashKBMedia, a.trashUnusedKBMedia, a.restoreKBMediaBatch, a.purgeKBMedia, a.trashOneKBMedia, a.restoreKBMedia, a.replaceKBMedia, a.undoKBMediaReplacement,
 		a.createKBMediaUpload, a.listKBMediaUploads, a.getKBMediaUpload, a.putKBMediaUploadPart, a.cancelKBMediaUpload, a.completeKBMediaUpload, a.getKBMediaFile, a.putKBVideoPoster, a.getKBVideoPoster,
 		a.getKBMediaDetails, a.getKBMediaThumbnail, a.getHelpCenter, a.putHelpCenter,
-		a.getHelpCenterTheme, a.putHelpCenterTheme, a.checkHelpCenterTheme,
+		a.getHelpCenterTheme, a.putHelpCenterTheme, a.getHelpCenterSearchConsole, a.putHelpCenterSearchConsole, a.getFreshdeskRedirect, a.checkHelpCenterTheme,
 		a.getHelpCenterDomain, a.putHelpCenterDomain, a.deleteHelpCenterDomain, a.checkHelpCenterDomain, a.previewHelpCenterTheme, a.askHelpCenterCertificate,
 		a.retryMessageDelivery,
 		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.checkInboundRecipient, a.rotateEmailSecret,

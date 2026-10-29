@@ -6,6 +6,8 @@ import { messages } from '../../messages';
 import { useSaveFeedback } from '../settings/save-feedback';
 import { kbApi } from './kb-api';
 import { HelpCenterDomainSection } from './help-center-domain';
+import { HelpCenterFreshdeskRedirectSection } from './help-center-freshdesk-redirect';
+import { HelpCenterSearchConsoleSection } from './help-center-search-console';
 import { kbMessages } from './kb-messages';
 
 // The brand settings are a chunk of their own (with their styles and the preview), asked for as soon as this
@@ -69,6 +71,8 @@ export function HelpCenterSettings({ canManage, workspaceName, timezone = 'UTC' 
         </form>
       : <p className="muted-copy">{kbMessages.helpCenterAdminsOnly}</p>}
     <HelpCenterDomainSection canManage={canManage} timezone={timezone} />
+    <HelpCenterSearchConsoleSection canManage={canManage} />
+    <HelpCenterFreshdeskRedirectSection />
     <Brand canManage={canManage} />
   </>;
 }

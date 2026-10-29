@@ -258,6 +258,18 @@ Each article has a number that never changes. Its help center address ends in
 `/a/<number>-<address name>`, and the article page shows it under **Address name**. You can change the
 address name; links with the old one still lead to the article because the number does not change.
 
+### Search title and meta description
+
+Under **Search engines** on the article page, **Search title** (up to 120 characters) is the title
+Google and other search engines show, and **Meta description** (up to 320) the text under it. Left
+empty, the article's title (followed by the help center's title) and the first 160 characters of its
+text are used. Line breaks and repeated spaces become one space. Both are part of the article's
+history and of the [export](export.md), and are set through the API (`seo_title`,
+`seo_description` on `POST` and `PATCH /api/v1/kb/articles`) and by AI agents
+(`colliedesk_kb_article_create`, `colliedesk_kb_article_update`). Changing them on a published
+article changes the help center, so a token that may edit but not publish files a request a person
+approves.
+
 If a teammate (or an AI agent) saved the article after you opened it, your save is refused and
 nothing is overwritten. Your text stays on screen and you choose: **Save mine over theirs** (theirs
 stays in the history) or **Discard mine and show theirs**.
@@ -450,6 +462,14 @@ checks and removes it.
 
 The certificate (`https://`) is issued automatically the first time someone opens the address.
 
+**Moving from Freshdesk: verify by TXT first, then change the CNAME.** Add only the `TXT` record and
+press **Check now**. The domain is then verified while your visitors still reach Freshdesk. Change the
+`CNAME` afterwards, to the target the card shows. The domain is already verified, so the first visit
+after the switch gets its certificate at once and does not wait for a DNS check. If you change the
+`CNAME` first, the first visitor makes the server check DNS and ask for the certificate, which takes
+longer. The old `*.freshdesk.com` addresses are covered in
+[Import from Freshdesk](import-freshdesk.md#old-freshdesk-com-addresses).
+
 **Colliedesk Cloud:** a custom domain comes with every paid plan, one per workspace. During the trial
 you can set and verify it, to prepare the move, but the help center serves on it only once the
 workspace is paid: trial pages are hidden from search engines, and serving them on your domain would
@@ -500,6 +520,12 @@ to serve on the domain again.
   for `http`, `https`, `mailto` and `tel`. A video's site sees the reader's address when the video
   loads, as with any embedded video.
 
+Every page carries structured data for search engines (schema.org JSON-LD, which runs nothing): a
+breadcrumb trail, and on an article page an `Article` with its title, description and dates. An article
+written as a list of questions also carries a `FAQPage`: it has at least two headings of its highest
+level, every one of them ends with `?`, and each is followed by its answer before the next one. Text
+before the first question is an introduction and is left out.
+
 Pages have no scripts, no cookies and no tracking, follow the visitor's light or dark setting, and
 fit a phone. The page labels (Search, Home and so on) are in English; the help center's language
 marks your articles' language for browsers and search engines.
@@ -541,6 +567,29 @@ address, never the app's address or another workspace's:
 
 During a Colliedesk Cloud **trial**, `robots.txt` asks every crawler to stay away, and `sitemap.xml`
 and `llms.txt` list nothing. A paid plan lifts this at once.
+
+#### Search Console and Bing Webmaster Tools
+
+You can verify the help center's address in Google Search Console and Bing Webmaster Tools yourself.
+Both tools offer a verification by HTML tag. Copy only the `content` value of the tag:
+
+- Google: the tag is `<meta name="google-site-verification" content="…">`.
+- Bing: the tag is `<meta name="msvalidate.01" content="…">`.
+
+Open **Settings → Help center → Search Console**, paste each value into its field and press **Save**.
+The help center then puts the tag in the head of every page of this workspace, on its own address
+(its host or its custom domain). The app and every other workspace's help center never carry it.
+Then press **Verify** in Search Console or Bing.
+
+- Paste the value, not the whole tag. A value that is not 16 to 100 letters, digits, `-` or `_`
+  is refused and nothing is saved.
+- To remove a token, clear its field and save. A token you do not touch stays as it is.
+- Saving changes the public help center, so it needs the same permission as publishing: an admin
+  saves it at once, and an AI agent token needs `help_center:update` and `kb_articles:publish`
+  (without them, it files a request a person approves). The API is `GET` and `PUT
+  /api/v1/help-center/search-console`; AI agents use `colliedesk_help_center_search_console_get` and
+  `colliedesk_help_center_search_console_update`.
+- The tokens are in the [export](export.md) (`help-center.ndjson`), so a move away keeps them.
 
 ### Limits
 

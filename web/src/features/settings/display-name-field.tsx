@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { messages } from '../../messages';
+import { settingsMessages } from './settings-messages';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 
@@ -21,7 +22,7 @@ export function DisplayNameField({ value, email, save, onSave }: DisplayNameFiel
   useEffect(() => setDraft(value), [value]);
   return (
     <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(draft.trim()); }}>
-      <label className="field"><span>{messages.displayName}</span>
+      <label className="field"><span>{settingsMessages.displayName}</span>
         <input value={draft} maxLength={displayNameMaxLength} placeholder={email} autoComplete="name"
           onChange={(event) => { feedback.touch(); setDraft(event.target.value); }} /></label>
       <button type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveName)}</button>

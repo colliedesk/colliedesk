@@ -8,6 +8,12 @@
 <meta name="robots" content="noindex">
 {{- end}}
 <title>{{.Title}}</title>
+{{- with .GoogleVerification}}
+<meta name="google-site-verification" content="{{.}}">
+{{- end}}
+{{- with .BingVerification}}
+<meta name="msvalidate.01" content="{{.}}">
+{{- end}}
 {{- with .Description}}
 <meta name="description" content="{{.}}">
 <meta property="og:description" content="{{.}}">
@@ -36,6 +42,9 @@
 {{- end}}
 {{- with .Favicon}}
 <link rel="icon" href="{{.}}">
+{{- end}}
+{{- range .StructuredData}}
+<script type="application/ld+json">{{.}}</script>
 {{- end}}
 </head>
 <body>
