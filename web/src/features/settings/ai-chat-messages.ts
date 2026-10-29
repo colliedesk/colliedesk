@@ -11,7 +11,7 @@ export const aiChatMessages = {
   resets: (day: string) => `Resets ${day}`,
   noLimit: 'No monthly limit.',
   priceUnknown: 'Price unknown',
-  unpriced: (model: string) => `This server has no price for ${model}, so what AI chat spends is not counted and no limit in dollars can be set. Its operator adds one in AI_SERVER_PRICES.`,
+  unpriced: (model: string) => `This server has no price for ${model}, so what AI chat spends is not counted and no limit in dollars can be set. Ask whoever runs this server to add a price for it.`,
   unpricedNoServer: (model: string) => `This server has no AI provider of its own, so it has no price for ${model}: what AI chat spends on your key is not counted and no limit in dollars can be set. Your provider’s dashboard shows the spend.`,
   capLabel: 'Monthly spend limit (US dollars)',
   capHint: 'Empty means no limit. Past it, customers see related articles and Talk to a person until the next month (UTC).',
