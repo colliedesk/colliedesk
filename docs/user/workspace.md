@@ -21,9 +21,30 @@ sign-up. Spaces at the ends are removed. Line breaks and other control character
 Colliedesk Cloud a name with a well-known brand in it (for example "PayPal Support") is refused;
 contact us if it is your own brand.
 
-The workspace address (the slug in `support@<address>.colliedesk.com` and the help center address)
-is separate. It is changed under **Workspace address name** in
+The workspace address (the slug in `support@<address>.colliedesk.com`, the desk address and the help
+center address) is separate. It is changed under **Workspace address name** in
 [Email channel](email-channel.md#2-forward-its-mail-to-colliedesk).
+
+## Your workspace's address
+
+On Colliedesk Cloud your team works at the workspace's own address, `https://<address>.colliedesk.com`:
+the inbox and every page are there, and the help center is at `/help` on it. Bookmark it.
+
+- **Signing in.** Sign in on your workspace's address. If your email is not an agent of that
+  workspace, the page says so and links to `https://app.colliedesk.com`, where you find your workspace.
+- **app.colliedesk.com** is where a new team signs up and where you find your workspace: sign in there,
+  choose the workspace if you are in several, and the browser continues on its address, signed in.
+  An old bookmark of `app.colliedesk.com` opens the same page on your workspace's address.
+- **One workspace per address.** A sign-in belongs to the address it was made on. Signed in to two
+  workspaces, you have one tab per address; one never switches the other.
+- **Links Colliedesk sends you** (invites, emails, payment and connection returns) open your workspace's
+  address.
+- **Changing the workspace address** moves the desk to the new address, and the browser that changed it
+  follows, still signed in. Everyone else signs in again on the new address.
+
+A server you run yourself works the same way when it sets
+[`HELP_CENTER_DOMAIN`](../self-host/running-behind-proxy.md#workspace-host-names); without it everything
+stays on the server's one address.
 
 ## API and AI agents
 

@@ -106,11 +106,12 @@ func New(config Config) *Site {
 }
 
 // Wrap answers help center requests and passes the others to next (the app, the API and MCP). next
-// is reached only on APP_ORIGIN's host, and on loopback and IP address hosts (health checks, the
-// reverse proxy's certificate question): there the paths under /help/ are the help center and every
-// other path goes on. Every other host name belongs to the help center: a workspace's host name below
-// the help center domain serves it under /help and leads its root to the desk's sign-in on APP_ORIGIN
-// (serveWorkspaceHost); a claim's CNAME target or an active custom domain serve it, whatever the path, and
+// is reached on APP_ORIGIN's host, on loopback and IP address hosts (health checks, the reverse
+// proxy's certificate question), and on a workspace's own host name below the help center domain:
+// on the first ones the paths under /help/ are the help center and every other path goes on; a
+// workspace's host serves its help center under /help and runs its desk on every other path, marked
+// with the workspace (serveWorkspaceHost). Every other host name belongs to the help center: a claim's
+// CNAME target or an active custom domain serve it, whatever the path, and
 // any other name, such as a custom domain just removed, gets the help center's 404. So the app, its
 // sign-in and its session never answer on a name the server does not own. Requests to APP_ORIGIN's
 // host and below HELP_CENTER_DOMAIN never look a custom domain up.
@@ -118,7 +119,7 @@ func (s *Site) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		host := requestHost(request.Host)
 		if slug, ok := hostSlug(host, s.config.Domain, s.originHost); ok {
-			s.serveWorkspaceHost(response, request, slug)
+			s.serveWorkspaceHost(response, request, slug, next)
 			return
 		}
 		if _, ok := claimOfHost(host, s.config.Domain); ok {

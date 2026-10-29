@@ -12,16 +12,22 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const linkLifetime = 15 * time.Minute
+
+// handoffLifetime bounds a hand-off from APP_ORIGIN to a workspace's host: the browser follows it at once.
+const handoffLifetime = time.Minute
 const sessionLifetime = 30 * 24 * time.Hour
 
 type Service struct {
 	db     *database.DB
 	origin string
+	// domain is HELP_CENTER_DOMAIN: links for a workspace's agents name its own host below it.
+	domain string
 	now    func() time.Time
 	// planLimits turns on the agent cap of the hosted cloud's plans; self-hosted has none.
 	plansOnSale []string
@@ -130,8 +136,17 @@ func slugify(value string) string {
 	return strings.Trim(nonSlug.ReplaceAllString(strings.ToLower(value), "-"), "-")
 }
 
-func (s *Service) redeemURL(token string) string {
-	return s.origin + "/sign-in?token=" + url.QueryEscape(token)
+// redeemURL is the sign-in address of a one-time link, on the workspace's own host when it has one.
+func (s *Service) redeemURL(token, slug string) string {
+	return workspacehost.Origin(s.origin, s.domain, slug) + "/sign-in?token=" + url.QueryEscape(token)
+}
+
+// WithWorkspaceHosts returns a service whose links name each workspace's host below domain
+// (HELP_CENTER_DOMAIN); empty keeps every link on the origin.
+func (s *Service) WithWorkspaceHosts(domain string) *Service {
+	copy := *s
+	copy.domain = domain
+	return &copy
 }
 
 // WithPlanLimits returns a service that refuses to add agents beyond the workspace plan's cap.

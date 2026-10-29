@@ -28,10 +28,11 @@ func TestValidateHostedSlug(t *testing.T) {
 		"reserved in":   "in",
 		"reserved help": "help",
 		// colliedesk.com has its own DNS records for these names (staging app, Clerk).
-		"reserved staging": "staging",
-		"reserved clerk":   "clerk",
-		"reserved clkmail": "clkmail",
-		"punycode":         "xn--acme",
+		"reserved staging":      "staging",
+		"reserved clerk":        "clerk",
+		"reserved clkmail":      "clkmail",
+		"reserved help-staging": "help-staging",
+		"punycode":              "xn--acme",
 		// hc-<24 hex digits> is the CNAME target of a custom help center domain's claim.
 		"claim target": "hc-0123456789abcdef01234567",
 	} {

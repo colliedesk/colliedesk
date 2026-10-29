@@ -52,11 +52,11 @@ async function signupFailure(response: Response): Promise<SignupError> {
 
 // signUpCloud creates a trial workspace for the verified identity of the bearer token and returns
 // the signed-in agent and workspace (the session cookie is set by the response).
-export async function signUpCloud(token: string, workspaceName: string, answers?: SignupAnswers) {
+export async function signUpCloud(token: string, workspaceName: string, answers?: SignupAnswers, next?: string) {
   const response = await fetch('/api/v1/auth/cloud/signup', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ workspace_name: workspaceName, ...answers, timezone: browserTimeZone() }),
+    body: JSON.stringify({ workspace_name: workspaceName, ...answers, timezone: browserTimeZone(), ...(next ? { next } : {}) }),
   });
   if (!response.ok) throw await signupFailure(response);
   return redeemedSchema.parse(await response.json());

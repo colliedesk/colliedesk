@@ -12,15 +12,15 @@ var hostedLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // reservedSlugs are names a platform needs for its own hosts or that read as official mail senders.
 // A workspace's slug is also its subdomain on the hosted cloud (mail address and help center host), so
 // every one-label name that has its own DNS record under the hosted domain belongs here: such a record
-// wins over the wildcard and would send the workspace's mail and help center elsewhere. Add the name
-// here whenever such a record is added (colliedesk.com today: app, www, mx, mail, send, rsend, staging,
-// and Clerk's clerk, accounts and clkmail). Reserving a name refuses it for a new or changed slug and
-// gives it no hosted address or help center host; a workspace that already has it keeps signing in,
-// its data, and its help center on the path address.
+// wins over the wildcard and would send the workspace's mail, desk and help center elsewhere. Add the
+// name here whenever such a record is added (colliedesk.com today: app, www, mx, mail, send, rsend,
+// help, help-staging, staging, and Clerk's clerk, accounts and clkmail). Reserving a name refuses it
+// for a new or changed slug and gives it no hosted address or workspace host; a workspace that already
+// has it keeps signing in on APP_ORIGIN, its data, and its help center on the path address.
 var reservedSlugs = map[string]bool{
 	"abuse": true, "account": true, "accounts": true, "admin": true, "api": true, "app": true, "autoconfig": true,
 	"autodiscover": true, "billing": true, "bounce": true, "bounces": true, "em": true, "resend": true, "rsend": true, "send": true, "blog": true, "cdn": true, "clerk": true, "clkmail": true, "dashboard": true, "dkim": true, "dmarc": true,
-	"docs": true, "ftp": true, "help": true, "hostmaster": true, "imap": true, "in": true, "inbound": true, "login": true,
+	"docs": true, "ftp": true, "help": true, "help-staging": true, "hostmaster": true, "imap": true, "in": true, "inbound": true, "login": true,
 	"mail": true, "mx": true, "ns": true, "ns1": true, "ns2": true, "postmaster": true, "root": true, "security": true,
 	"sales": true, "signin": true, "smtp": true, "spf": true, "staging": true, "static": true, "status": true, "support": true, "test": true,
 	"webmail": true, "webmaster": true, "www": true,

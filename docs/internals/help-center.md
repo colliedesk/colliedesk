@@ -81,14 +81,14 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   UUID that was public while the article was.
 - **Two addresses, one handler.** `APP_ORIGIN/help/<slug>` always works. With `HELP_CENTER_DOMAIN`,
   `<slug>.<domain>/help` serves the same pages and the path redirects there (301), whether or not the
-  workspace exists, so the redirect tells nothing. The root of `<slug>.<domain>` is the front door to
-  the workspace's desk (owner decision, 2026-10-29): it answers 302 to
-  `APP_ORIGIN/sign-in?workspace=<slug>` for an existing workspace and the 404 otherwise, so it does
-  tell whether a slug exists, as the hosted mail address already does. Any other path outside `/help`
-  (`/a/…`, `/c/…`, `/search`, `/sitemap.xml`) is an address from before the move and answers 301 to
-  the same path under `/help`; old Freshdesk paths go straight to their page; `robots.txt` stays at the
-  root, where crawlers read it. The tls-ask answers 200 for every existing workspace's host for the
-  same reason. Custom domains keep the help center at their root. A slug `email.ValidateHostedSlug` refuses (reserved
+  workspace exists, so the redirect tells nothing. The rest of `<slug>.<domain>` runs the workspace's
+  desk (owner decision, 2026-10-29; `docs/internals/workspace-isolation.md#workspace-hosts`): a page of
+  the app there is served for an existing workspace and is the 404 otherwise, so it tells whether a
+  slug exists, as the hosted mail address already does. The help center's paths from before the move
+  (`/a/…`, `/c/…`, `/images/…`, `/media/…`, `/_/…`, `/search`, `/sitemap.xml`, `/llms.txt`) answer 301 to
+  the same path under `/help`; none of them is a page of the app. Old Freshdesk paths go straight to
+  their page; `robots.txt` stays at the root, where crawlers read it. The tls-ask answers 200 for every
+  existing workspace's host for the same reason. Custom domains keep the help center at their root. A slug `email.ValidateHostedSlug` refuses (reserved
   names such as `app`, `www`, `help`) never becomes a host, so the app's own host never turns into a
   help center. The help center wraps everything else in `serve.go`: a request to a help center host
   never reaches the app, the API or `/mcp`. `helpcenter.URL` and `ArticleURL` build every address;

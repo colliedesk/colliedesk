@@ -9,6 +9,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -21,7 +22,21 @@ var ErrInvalidCredential = errors.New("invalid credential")
 // authenticates several times in a moment; writing the row each time made those requests queue on it.
 const lastSeenInterval = time.Minute
 
+// Authenticate finds the principal of a session or agent token. On a workspace's own host name
+// (workspacehost.Slug) only that workspace's sessions and tokens are valid: a cookie is bound to the
+// host it was set on, and a request there acts on that workspace and no other.
 func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) (Principal, error) {
+	principal, err := s.authenticate(ctx, raw, viaCookie)
+	if err != nil {
+		return Principal{}, err
+	}
+	if slug, ok := workspacehost.Slug(ctx); ok && principal.Workspace.Slug != slug {
+		return Principal{}, fmt.Errorf("%w: the session belongs to another workspace's host", ErrInvalidCredential)
+	}
+	return principal, nil
+}
+
+func (s *Service) authenticate(ctx context.Context, raw string, viaCookie bool) (Principal, error) {
 	if raw == "" {
 		return Principal{}, fmt.Errorf("%w: missing credential", ErrInvalidCredential)
 	}

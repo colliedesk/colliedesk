@@ -8,23 +8,24 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 )
 
 // SiteURL is the public address of a workspace's help center, without a trailing slash: its active
 // custom domain when custom is set; else /help on the workspace's own host name <slug>.<domain> when
-// the server has a help center domain and the slug can be a host name (the root of that host is the
-// way into the workspace's desk); else <origin>/help/<slug>. A host name keeps the scheme and port of
+// the server has a help center domain and the slug can be a host name (the rest of that host runs the
+// workspace's desk); else <origin>/help/<slug>. A host name keeps the scheme and port of
 // the origin, so a local server works the same way. Every address the server hands out comes from
 // here.
 func SiteURL(origin, domain, slug, custom string) string {
 	origin = strings.TrimRight(origin, "/")
+	if custom == "" {
+		if workspacehost.Host(domain, slug) == "" {
+			return origin + "/help/" + slug
+		}
+		return workspacehost.Origin(origin, domain, slug) + workspaceHostBase
+	}
 	host, base := custom, ""
-	if host == "" {
-		host, base = SlugHost(domain, slug), workspaceHostBase
-	}
-	if host == "" {
-		return origin + "/help/" + slug
-	}
 	scheme, port := "https", ""
 	if parsed, err := url.Parse(origin); err == nil {
 		if parsed.Scheme != "" {
@@ -99,7 +100,7 @@ func DomainClaim(name, domain string) (string, bool) {
 func DomainFromEnv(getenv func(string) string) (string, error) {
 	domain := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(getenv("HELP_CENTER_DOMAIN"))), ".")
 	if domain != "" && (!email.ValidHostname(domain) || !strings.Contains(domain, ".")) {
-		return "", fmt.Errorf("HELP_CENTER_DOMAIN must be a domain name such as help.example.com, got %q", domain)
+		return "", fmt.Errorf("HELP_CENTER_DOMAIN must be a domain name such as example.com, got %q", domain)
 	}
 	return domain, nil
 }

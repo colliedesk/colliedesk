@@ -7,6 +7,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 )
 
 func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
@@ -20,7 +21,10 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 		version = "dev"
 	}
 	writeJSON(response, http.StatusOK, map[string]any{
-		"version":       version,
+		"version": version,
+		// app_origin is APP_ORIGIN: where a person finds their workspace and signs a new team up, also
+		// when the page runs on a workspace's own host.
+		"app_origin":    a.config.Origin,
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
 		"billing":       map[string]any{"enabled": a.polar != nil},
 		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing.
@@ -29,6 +33,9 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 		"product_analytics": a.productAnalyticsConfig(),
 		"ai":                map[string]any{"server_provider": a.ai.ServerConfigured()},
 		"autofix":           a.autofixConfig(),
+		// workspace_hosts: each workspace's desk runs on its own host (HELP_CENTER_DOMAIN); a browser
+		// signed in on app_origin continues there (POST /api/v1/auth/handoff).
+		"workspace_hosts": a.config.HelpCenterDomain != "",
 	})
 }
 
@@ -47,7 +54,8 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusNotFound, "not_found", "Cloud sign-in is not configured.")
 		return
 	}
-	if request.Header.Get("Origin") != a.config.Origin {
+	origin := a.requestOrigin(request)
+	if request.Header.Get("Origin") != origin {
 		writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this Colliedesk instance.")
 		return
 	}
@@ -60,6 +68,7 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		WorkspaceSlug string `json:"workspace_slug"`
 		Label         string `json:"label"`
 		Timezone      string `json:"timezone"`
+		Next          string `json:"next"`
 	}
 	if request.ContentLength != 0 {
 		if err := decodeJSON(request, &input); err != nil {
@@ -67,7 +76,12 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 			return
 		}
 	}
-	email, err := a.cloud.Verify(request.Context(), token)
+	// On a workspace's own host the workspace is the host's, whatever the browser asks for, and the
+	// identity token was issued to that host's page.
+	if slug, ok := workspacehost.Slug(request.Context()); ok {
+		input.WorkspaceSlug = slug
+	}
+	email, err := a.cloud.Verify(request.Context(), token, origin)
 	if err != nil {
 		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
 		return
@@ -90,6 +104,9 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		return
 	}
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
+	if !a.setContinueURL(response, request, &result, input.Next) {
+		return
+	}
 	setSessionCookie(response, result.Token)
 	result.Token = ""
 	writeJSON(response, http.StatusOK, result)

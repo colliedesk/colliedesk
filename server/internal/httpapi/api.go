@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
@@ -302,7 +303,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
-		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
+		auth: auth.NewWithDB(db, config.Origin).WithWorkspaceHosts(config.HelpCenterDomain).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
 			WithSealKeys(config.Google.Keys)}
 	api.store = api.store.WithChannels(Channels(config, outbound, api.revokeSealed))
@@ -650,6 +651,11 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			var err error
 			principal, err = a.auth.Authenticate(request.Context(), raw, viaCookie)
 			if err != nil {
+				// A cookie that no longer signs in here (revoked, expired, or another workspace's on a
+				// workspace host) is dropped, so the browser stops sending it.
+				if viaCookie && errors.Is(err, auth.ErrInvalidCredential) {
+					clearSessionCookie(response)
+				}
 				writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
 				return
 			}
@@ -661,7 +667,7 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			writeError(response, http.StatusForbidden, "forbidden", "This session does not have permission.")
 			return
 		}
-		if viaCookie && writes(request.Method) && request.Header.Get("Origin") != a.config.Origin {
+		if viaCookie && writes(request.Method) && request.Header.Get("Origin") != a.requestOrigin(request) {
 			writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this Colliedesk instance.")
 			return
 		}

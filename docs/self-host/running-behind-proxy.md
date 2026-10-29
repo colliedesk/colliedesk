@@ -7,13 +7,13 @@ to the public address (see [environment variables](environment-variables.md)).
 ## The Host header
 
 The proxy **must** pass the visitor's `Host` header on unchanged: the server decides from it what to
-answer. It serves the app, the API, MCP and attachments only when `Host` is `APP_ORIGIN`'s host name,
+answer. It serves the app, the API, MCP and attachments when `Host` is `APP_ORIGIN`'s host name,
 `localhost`, or an IP address (the shipped health check calls `http://127.0.0.1:8080/`, and Caddy asks
-its certificate question on `127.0.0.1`). Every other host name belongs to the
-[help center](#help-center-host-names): a workspace's help center host name or
-[custom domain](#custom-help-center-domains) serves it, and any other name gets the help center's
-`404`, never the app. A name the server does not own therefore never shows the sign-in page, even if
-its DNS still points at the proxy.
+its certificate question on `127.0.0.1`), and, with `HELP_CENTER_DOMAIN`, on each workspace's own host
+`<slug>.<HELP_CENTER_DOMAIN>` for that workspace only ([workspace host names](#workspace-host-names)).
+A [custom domain](#custom-help-center-domains) serves only its help center, and any other name gets
+the help center's `404`, never the app. A name the server does not own therefore never shows the
+sign-in page, even if its DNS still points at the proxy.
 
 - **Caddy** keeps `Host` by default.
 - **nginx** sends the upstream's name unless told otherwise; add `proxy_set_header Host $host;` to
@@ -61,28 +61,27 @@ Videos take disk room: the server refuses an upload when the disk has less than 
 uploads in progress and 1 GiB free. Back up `ATTACHMENTS_DIR` with the database; a backup and an
 [export](../user/export.md) grow with the videos.
 
-## Help center host names
+## Workspace host names
 
-Every workspace's [help center](../user/knowledge-base.md#public-help-center) works at
-`APP_ORIGIN/help/<slug>` with no extra setup. To give each workspace its own host name instead, for
-example `acme.example.com`:
+Without extra setup, everything runs on `APP_ORIGIN`, and each workspace's
+[help center](../user/knowledge-base.md#public-help-center) is at `APP_ORIGIN/help/<slug>`. To give
+each workspace its own host name instead, for example `acme.example.com`:
 
 1. Point a wildcard DNS record, `*.example.com`, at the proxy.
-2. Set `HELP_CENTER_DOMAIN=example.com` and restart the server. Each workspace then has the host
-   name `<slug>.example.com`, with the scheme and port of `APP_ORIGIN`:
-   - `https://acme.example.com/` is the way into the workspace's desk: it redirects (302) to
-     `APP_ORIGIN/sign-in?workspace=acme`. A browser already signed in to that workspace opens its
-     inbox; a browser signed in to another workspace stays in it, and the bar at the top names it.
-   - `https://acme.example.com/help` is the workspace's help center. `APP_ORIGIN/help/<slug>`
-     redirects there (301), and so do the help center's addresses from before it moved under
-     `/help` (`https://acme.example.com/a/12-reset` moves to `https://acme.example.com/help/a/12-reset`).
+2. Set `HELP_CENTER_DOMAIN=example.com` and restart the server. Each workspace then has the host name
+   `<slug>.example.com`, with the scheme and port of `APP_ORIGIN`:
+   - `https://acme.example.com/` runs the workspace's desk: the inbox, every page of the app, its
+     API and MCP. The team works there every day.
+   - `https://acme.example.com/help` is the workspace's help center. `APP_ORIGIN/help/acme` redirects
+     there (301), and so do the help center's addresses from before it moved under `/help`
+     (`https://acme.example.com/a/12-reset` moves to `https://acme.example.com/help/a/12-reset`).
      `robots.txt` stays at the root of the host.
-
-   A slug that cannot be a host name (for example `www`, `mail` or `support`) keeps the path
-   address. `APP_ORIGIN`'s own host is never a workspace's, even when `HELP_CENTER_DOMAIN` is the
-   domain it sits in (`APP_ORIGIN=https://app.example.com` beside `HELP_CENTER_DOMAIN=example.com`).
-   On workspace host names the server answers only help center pages and that redirect: the app,
-   the API, MCP and the session cookie stay on `APP_ORIGIN`.
+   - `APP_ORIGIN` keeps sign-up, "find your workspace" (sign in there, choose the workspace) and the
+     fixed callback addresses of Google, Microsoft, GitHub and Polar. A browser signed in on
+     `APP_ORIGIN` moves to the same page on its workspace's host, signed in there by a one-time token
+     that works once, for one minute, only on that host. A callback that arrives on `APP_ORIGIN` is
+     sent, with its query, to the same callback on the host of the workspace that started it, which
+     finishes it for the person signed in there.
 3. Give the proxy certificates for the host names. With Caddy, get each one on demand and let the
    server say which names it serves; it answers `200` for an existing workspace's host name, and
    `404` for everything else:
@@ -102,27 +101,22 @@ example `acme.example.com`:
 }
 ```
 
-**Moving from an older `HELP_CENTER_DOMAIN`.** Before this layout, the help center answered at the
-root of `<slug>.<HELP_CENTER_DOMAIN>`, often below a dedicated name such as `help.example.com`. If you
-change `HELP_CENTER_DOMAIN` from `help.example.com` to `example.com`, keep the old names working with
-a redirect in the proxy; the server no longer knows them. With Caddy:
+**Sessions belong to a host.** The session cookie has no `Domain` attribute, so a browser sends it
+only to the host that set it. On a workspace host the server accepts only that workspace's sessions
+and agent tokens: another workspace's session gets `401` and its cookie is cleared, and a write made
+with the cookie must come from that host's own origin. Cloud sign-in on a workspace host signs in to
+that workspace only, whatever the browser asks for.
 
-```caddyfile
-*.help.example.com {
-	tls {
-		on_demand
-	}
-	@ws header_regexp ws Host ^([a-z0-9-]+)\.help\.example\.com$
-	redir @ws https://{re.ws.1}.example.com/help{uri} permanent
-}
-```
+**Names that never become workspace hosts.** A slug that cannot be a host name (a reserved name such as
+`www`, `mail`, `support` or `help-staging`) keeps everything on `APP_ORIGIN`. `APP_ORIGIN`'s own host is
+never a workspace's, also when it is inside `HELP_CENTER_DOMAIN` (`APP_ORIGIN=https://app.example.com`
+beside `HELP_CENTER_DOMAIN=example.com`) or is `HELP_CENTER_DOMAIN` itself
+(`APP_ORIGIN=https://staging.example.com` beside `HELP_CENTER_DOMAIN=staging.example.com`, workspaces on
+`<slug>.staging.example.com`). Give every one-label name that has its own DNS record under the domain a
+reserved slug, or the explicit record would take a workspace's host.
 
-`https://acme.help.example.com/a/12-reset` then moves to `https://acme.example.com/help/a/12-reset`.
-The certificate question for the old names answers `404` once `HELP_CENTER_DOMAIN` changes, so use a
-wildcard certificate (DNS challenge) for `*.help.example.com`, or skip `on_demand` there. Custom
-domains are not affected: their `CNAME` target moves with `HELP_CENTER_DOMAIN`
-(`hc-<claim>.example.com`); update the record of an existing custom domain, or keep a `CNAME` for
-the old target.
+**Changing `HELP_CENTER_DOMAIN`** changes every workspace's host name and every custom domain's `CNAME`
+target (`hc-<claim>.<HELP_CENTER_DOMAIN>`). The server answers only the names of the current value.
 
 Let's Encrypt issues at most 50 certificates per registered domain a week; a wildcard certificate
 (DNS challenge) avoids that limit if you serve many workspaces. Keep `APP_ORIGIN`'s own site block:

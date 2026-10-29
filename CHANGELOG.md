@@ -10,11 +10,15 @@ requests. This file keeps the first release.
 
 ## Unreleased
 
-**Workspace host names: the root opens the desk, the help center moves to `/help`.** With
-`HELP_CENTER_DOMAIN`, `https://<slug>.<domain>/` now redirects to `APP_ORIGIN/sign-in?workspace=<slug>`,
-and the help center answers at `https://<slug>.<domain>/help`; its old addresses on that host move there
-(301). Custom domains keep the help center at their root. See
-[help center host names](docs/self-host/running-behind-proxy.md#help-center-host-names).
+**Workspace host names: each workspace's desk runs on its own host.** With `HELP_CENTER_DOMAIN`
+(for example `example.com`), the team works at `https://<slug>.example.com`: the app, its API and MCP
+run there, and the help center moves to `https://<slug>.example.com/help` (its old addresses on that
+host move there with a 301). A session belongs to the host that made it, and a workspace host acts for
+its own workspace only. `APP_ORIGIN` keeps sign-up, finding your workspace and the fixed provider
+callbacks; a browser signed in there continues on its workspace's host. Agent links (invites, emails,
+payment returns) name the workspace host. Custom domains keep the help center at their root. Without
+`HELP_CENTER_DOMAIN` nothing changes. See
+[workspace host names](docs/self-host/running-behind-proxy.md#workspace-host-names).
 
 **Operators: the reverse proxy must send the visitor's `Host` header.** The server now answers the app,
 the API, MCP and attachments only when the `Host` of the request is `APP_ORIGIN`'s host, `localhost` or

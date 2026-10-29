@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +37,10 @@ func New(config Config) *Verifier {
 	return &Verifier{config: config, client: &http.Client{Timeout: 5 * time.Second}, keys: map[string]*rsa.PublicKey{}}
 }
 
-func (verifier *Verifier) Verify(ctx context.Context, token string) (string, error) {
+// Verify checks a session token of the identity provider and returns its verified email. The token's
+// authorized party (azp, the origin of the page that got it) must be one of the configured ones or
+// one of parties: the workspace host the token is exchanged on.
+func (verifier *Verifier) Verify(ctx context.Context, token string, parties ...string) (string, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return "", fmt.Errorf("JWT must have three parts")
@@ -61,10 +65,10 @@ func (verifier *Verifier) Verify(ctx context.Context, token string) (string, err
 	if err := decodePart(parts[1], &claims); err != nil {
 		return "", fmt.Errorf("decode JWT claims: %w", err)
 	}
-	return verifier.verifyClaims(claims, time.Now())
+	return verifier.verifyClaims(claims, time.Now(), parties...)
 }
 
-func (verifier *Verifier) verifyClaims(claims map[string]json.RawMessage, now time.Time) (string, error) {
+func (verifier *Verifier) verifyClaims(claims map[string]json.RawMessage, now time.Time, parties ...string) (string, error) {
 	var issuer, party, email string
 	var expires, notBefore int64
 	var verified bool
@@ -78,7 +82,7 @@ func (verifier *Verifier) verifyClaims(claims map[string]json.RawMessage, now ti
 	if len(rawNotBefore) == 0 || string(rawNotBefore) == "null" || json.Unmarshal(rawNotBefore, &notBefore) != nil || now.Add(clockLeeway).Before(time.Unix(notBefore, 0)) {
 		return "", fmt.Errorf("JWT is not active")
 	}
-	if json.Unmarshal(claims["azp"], &party) != nil || !verifier.config.authorizedParties()[party] {
+	if json.Unmarshal(claims["azp"], &party) != nil || !(verifier.config.authorizedParties()[party] || party != "" && slices.Contains(parties, party)) {
 		return "", fmt.Errorf("JWT authorized party is invalid")
 	}
 	if json.Unmarshal(claims[verifier.config.emailClaim()], &email) != nil || !strings.Contains(email, "@") {

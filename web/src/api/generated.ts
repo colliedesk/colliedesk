@@ -29,6 +29,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Exchanges a verified identity token for a Colliedesk session. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` the workspace is always the host's (`workspace_slug` is ignored), the request must come from that host's origin, and the token's authorized party may be that origin. */
         post: operations["exchangeCloudSession"];
         delete?: never;
         options?: never;
@@ -65,6 +66,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Redeems a one-time link (pairing, invite or hand-off) for a session. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's links are accepted; another workspace's link is refused like an invalid one and stays unused. */
         post: operations["redeemLink"];
         delete?: never;
         options?: never;
@@ -3563,6 +3565,13 @@ export interface components {
             expires_at: string;
         };
         PublicConfig: {
+            /** @description True when each workspace's desk runs on its own host `<slug>.<HELP_CENTER_DOMAIN>`: a browser signed in on `app_origin` continues there (`continue_url` of a sign-in). */
+            workspace_hosts: boolean;
+            /**
+             * Format: uri
+             * @description `APP_ORIGIN`: where a person finds their workspace and a new team signs up. With `HELP_CENTER_DOMAIN`, each workspace's desk runs on its own host `<slug>.<HELP_CENTER_DOMAIN>`, and this is the address a page there links to for everything else.
+             */
+            app_origin: string;
             autofix: {
                 /** @description The operator set up the server's GitHub App (GITHUB_APP_*), so Autofix can be used; the web app hides it otherwise. */
                 available: boolean;
@@ -4406,7 +4415,21 @@ export interface components {
             token?: string;
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
+            /**
+             * Format: uri
+             * @description Present only for a browser that signed in on `APP_ORIGIN` of a server with `HELP_CENTER_DOMAIN`: the workspace host's `/sign-in` address, with `next` and a one-time token in the fragment (`#handoff=<token>`, never sent to a server). The web app there redeems the token with `POST /api/v1/auth/redeem` for a session of the same agent and role. The token works once, for one minute, and only on that workspace's host.
+             */
+            continue_url?: string;
         };
+        RenamedWorkspace: components["schemas"]["Workspace"] & {
+            /**
+             * Format: uri
+             * @description Present when the rename was made with a browser session on the workspace's own host `<slug>.<HELP_CENTER_DOMAIN>`: the desk moves to the new host, and the browser continues at this address, signed in there by a one-time token in the fragment (as for a sign-in's `continue_url`). The old host's cookie no longer signs in.
+             */
+            continue_url?: string;
+        };
+        /** @description The page a browser signing in on `APP_ORIGIN` opens on its workspace's host (`continue_url`), a path of this site such as `/settings/billing?buy=team_monthly`; anything else opens the inbox. */
+        SignInNext: string;
         /**
          * @description What the team wants Colliedesk to do first, asked at cloud sign-up.
          * @enum {string}
@@ -6724,6 +6747,7 @@ export interface operations {
                     /** @description Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in". */
                     label?: string;
                     timezone?: components["schemas"]["SignInTimezone"];
+                    next?: components["schemas"]["SignInNext"];
                 };
             };
         };
@@ -6759,6 +6783,7 @@ export interface operations {
                     role?: components["schemas"]["OnboardingRole"];
                     source?: components["schemas"]["OnboardingSource"];
                     timezone?: components["schemas"]["SignInTimezone"];
+                    next?: components["schemas"]["SignInNext"];
                 };
             };
         };
@@ -6817,6 +6842,7 @@ export interface operations {
                      */
                     session_type?: "cookie" | "bearer";
                     timezone?: components["schemas"]["SignInTimezone"];
+                    next?: components["schemas"]["SignInNext"];
                 };
             };
         };
@@ -8972,6 +8998,7 @@ export interface operations {
             content: {
                 "application/json": {
                     slug: string;
+                    next?: components["schemas"]["SignInNext"];
                 };
             };
         };
@@ -8982,7 +9009,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Workspace"];
+                    "application/json": components["schemas"]["RenamedWorkspace"];
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];

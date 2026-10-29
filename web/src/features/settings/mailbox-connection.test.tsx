@@ -23,7 +23,7 @@ const gmailConnection: Connection = { ...msConnection, provider: 'google' };
 
 type PublicConfig = Awaited<ReturnType<typeof api.config>>;
 const selfHosted: PublicConfig = {
-  cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
+  app_origin: 'https://desk.example.com', workspace_hosts: false, cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null },
   ai: { server_provider: false },

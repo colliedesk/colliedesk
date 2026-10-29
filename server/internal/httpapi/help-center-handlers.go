@@ -64,7 +64,10 @@ func (a *API) helpCenterHome(response http.ResponseWriter, request *http.Request
 }
 
 // WrapHelpCenter serves the public help centers in front of next (the web app and the API).
-func (s *Server) WrapHelpCenter(next http.Handler) http.Handler { return s.api.helpCenter.Wrap(next) }
+// A page of the app loaded on APP_ORIGIN with a session of a workspace that has its own host moves there.
+func (s *Server) WrapHelpCenter(next http.Handler) http.Handler {
+	return s.api.helpCenter.Wrap(s.api.handOffAppPages(next))
+}
 
 // askHelpCenterCertificate answers the reverse proxy's on-demand TLS question: 200 only for a workspace's
 // own host name <slug>.<HELP_CENTER_DOMAIN> (its root leads to the desk's sign-in, so every existing

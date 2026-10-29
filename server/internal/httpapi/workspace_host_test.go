@@ -24,31 +24,80 @@ func wantRedirect(t *testing.T, response *httptest.ResponseRecorder, status int,
 	}
 }
 
-// The root of a workspace's own host name is the front door to its desk: it leads to the sign-in page
-// for that workspace, whether or not its help center is on. A slug no workspace has, and a reserved
-// name, keep the help center's 404; the root accepts only GET and HEAD.
-func TestTheWorkspaceHostRootLeadsToItsDeskSignIn(t *testing.T) {
-	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "help.example.net" })
+// The workspace's own host name runs the desk: the app and its API answer there, as on APP_ORIGIN. A
+// slug no workspace has, and a reserved name, keep the help center's 404 for the app's pages.
+func TestTheWorkspaceHostRunsTheDesk(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "example.net" })
 	site := helpCenterSite(api)
 	admin := createSession(t, api, service, "Front Door", "admin@front-door.example.com")
 	slug := workspaceSlug(t, api, admin)
-	host := slug + ".help.example.net"
+	host := slug + ".example.net"
 
-	for _, method := range []string{http.MethodGet, http.MethodHead} {
-		response := onWorkspaceHost(site, method, host, "/")
-		wantRedirect(t, response, http.StatusFound, "https://desk.example.com/sign-in?workspace="+slug)
-		if response.Header().Get("Cache-Control") != "no-store" {
-			t.Errorf("%s / cache-control=%q", method, response.Header().Get("Cache-Control"))
+	config := onWorkspaceHost(site, http.MethodGet, host, "/api/v1/config")
+	if config.Code != http.StatusOK || !strings.HasPrefix(config.Header().Get("Content-Type"), "application/json") {
+		t.Fatalf("/api/v1/config on the workspace host status=%d type=%q", config.Code, config.Header().Get("Content-Type"))
+	}
+	for _, path := range []string{"/", "/settings", "/conversations/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b", "/sign-in"} {
+		app := onWorkspaceHost(site, http.MethodGet, testOriginHost, path)
+		got := onWorkspaceHost(site, http.MethodGet, host, path)
+		if got.Code != app.Code || got.Header().Get("Location") != "" || got.Header().Get("Content-Type") != app.Header().Get("Content-Type") {
+			t.Errorf("%s on the workspace host status=%d type=%q, want the app's %d %q", path, got.Code, got.Header().Get("Content-Type"), app.Code, app.Header().Get("Content-Type"))
 		}
 	}
-	wantRedirect(t, onWorkspaceHost(site, http.MethodGet, strings.ToUpper(host)+":443", "/"), http.StatusFound, "https://desk.example.com/sign-in?workspace="+slug)
-	if response := onWorkspaceHost(site, http.MethodPost, host, "/"); response.Code != http.StatusMethodNotAllowed {
-		t.Errorf("POST / status=%d", response.Code)
+	me := newRequest(t, http.MethodGet, "/api/v1/auth/me", nil, "", sessionCookieOf(admin))
+	me.Host = host
+	if response := serve(site, me); response.Code != http.StatusOK {
+		t.Fatalf("me on the workspace host status=%d body=%s", response.Code, response.Body.String())
 	}
-	for _, name := range []string{"nobody-here.help.example.net", "www.help.example.net", "help.example.net", "a." + host} {
+	for _, name := range []string{"nobody-here.example.net", "www.example.net", "example.net", "a." + host} {
 		response := onWorkspaceHost(site, http.MethodGet, name, "/")
-		if response.Code != http.StatusNotFound || response.Header().Get("Location") != "" || !strings.HasPrefix(response.Header().Get("Content-Type"), "text/html") {
-			t.Errorf("%s/ status=%d location=%q, want the help center's 404", name, response.Code, response.Header().Get("Location"))
+		if response.Code != http.StatusNotFound || !strings.HasPrefix(response.Header().Get("Content-Type"), "text/html") {
+			t.Errorf("%s/ status=%d type=%q, want the help center's 404", name, response.Code, response.Header().Get("Content-Type"))
+		}
+	}
+}
+
+// A session belongs to the host it was made on: on a workspace host only that workspace's sessions and
+// agent tokens act, and another workspace's session is refused and its cookie cleared. Writes made with
+// the cookie must come from the workspace host's own origin.
+func TestAWorkspaceHostActsOnlyForItsOwnWorkspace(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "example.net" })
+	site := helpCenterSite(api)
+	alpha := createSession(t, api, service, "Host Alpha", "admin@host-alpha.example.com")
+	beta := createSession(t, api, service, "Host Beta", "admin@host-beta.example.com")
+	alphaHost := workspaceSlug(t, api, alpha) + ".example.net"
+	betaHost := workspaceSlug(t, api, beta) + ".example.net"
+
+	for name, req := range map[string]*http.Request{
+		"cookie": newRequest(t, http.MethodGet, "/api/v1/auth/me", nil, "", sessionCookieOf(alpha)),
+		"bearer": newRequest(t, http.MethodGet, "/api/v1/auth/me", nil, alpha, nil),
+	} {
+		req.Host = betaHost
+		response := serve(site, req)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("alpha's %s on beta's host status=%d", name, response.Code)
+		}
+		if name == "cookie" && !strings.Contains(response.Header().Get("Set-Cookie"), "colliedesk_session=;") {
+			t.Errorf("alpha's cookie on beta's host was not cleared: %q", response.Header().Get("Set-Cookie"))
+		}
+	}
+	// APP_ORIGIN keeps every session working.
+	if response := request(t, site, http.MethodGet, "/api/v1/auth/me", nil, "", sessionCookieOf(alpha)); response.Code != http.StatusOK {
+		t.Fatalf("alpha's cookie on the app host status=%d", response.Code)
+	}
+
+	write := func(origin string) int {
+		req := newRequest(t, http.MethodPatch, "/api/v1/workspace/name", map[string]any{"name": "Host Alpha"}, "", sessionCookieOf(alpha))
+		req.Host = alphaHost
+		req.Header.Set("Origin", origin)
+		return serve(site, req).Code
+	}
+	if code := write("https://" + alphaHost); code != http.StatusOK {
+		t.Fatalf("a write from the workspace host's own origin status=%d", code)
+	}
+	for _, origin := range []string{testOrigin, "https://" + betaHost, "https://evil.example"} {
+		if code := write(origin); code != http.StatusForbidden {
+			t.Errorf("a write on alpha's host from %s status=%d, want 403", origin, code)
 		}
 	}
 }
@@ -57,11 +106,11 @@ func TestTheWorkspaceHostRootLeadsToItsDeskSignIn(t *testing.T) {
 // address the API hands out carry /help, an address from before the move answers 301 to the same
 // path under /help, robots.txt stays at the root, and the path address moves to the host under /help.
 func TestTheHelpCenterOnTheWorkspaceHostLivesUnderHelp(t *testing.T) {
-	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "help.example.net" })
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "example.net" })
 	site := helpCenterSite(api)
 	admin := createSession(t, api, service, "Moved Help", "admin@moved-help.example.com")
 	slug := workspaceSlug(t, api, admin)
-	host := slug + ".help.example.net"
+	host := slug + ".example.net"
 	enableHelpCenter(t, api, admin, "Moved help", true)
 	guides := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": guides.ID, "title": "Start here", "status": "published", "body_md": "Hello"})
@@ -81,7 +130,8 @@ func TestTheHelpCenterOnTheWorkspaceHostLivesUnderHelp(t *testing.T) {
 		"/search?q=start":      "/help/search?q=start",
 		"/sitemap.xml":         "/help/sitemap.xml",
 		"/llms.txt":            "/help/llms.txt",
-		"/helpdesk":            "/help/helpdesk",
+		"/images/x":            "/help/images/x",
+		"/media/x":             "/help/media/x",
 	} {
 		wantRedirect(t, onWorkspaceHost(site, http.MethodGet, host, old), http.StatusMovedPermanently, want)
 	}
@@ -93,12 +143,6 @@ func TestTheHelpCenterOnTheWorkspaceHostLivesUnderHelp(t *testing.T) {
 	}
 	if response := onWorkspaceHost(site, http.MethodGet, host, "/help/robots.txt"); response.Code != http.StatusNotFound {
 		t.Errorf("/help/robots.txt status=%d, want 404", response.Code)
-	}
-	// Nothing of the app answers on the workspace's host.
-	for _, path := range []string{"/api/v1/config", "/mcp"} {
-		if response := onWorkspaceHost(site, http.MethodGet, host, path); response.Code == http.StatusOK {
-			t.Errorf("%s on the workspace host status=%d", path, response.Code)
-		}
 	}
 
 	moved := visit(site, "/help/"+slug+articlePath+"?q=1", "192.0.2.71")
@@ -114,7 +158,7 @@ func TestTheHelpCenterOnTheWorkspaceHostLivesUnderHelp(t *testing.T) {
 }
 
 // With the help center domain at the apex of APP_ORIGIN's host (app on desk.example.com, workspaces on
-// <slug>.example.com), the app's own host stays the app's, a workspace host leads to its desk, and a
+// <slug>.example.com), the app's own host stays the app's, a workspace host runs its desk, and a
 // claim's CNAME target hc-<claim>.example.com stays a claim, never a workspace.
 func TestTheWorkspaceHostBesideTheAppOnTheSameApex(t *testing.T) {
 	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "example.com" })
@@ -127,10 +171,11 @@ func TestTheWorkspaceHostBesideTheAppOnTheSameApex(t *testing.T) {
 	if config.Code != http.StatusOK || !strings.HasPrefix(config.Header().Get("Content-Type"), "application/json") {
 		t.Fatalf("/api/v1/config on the app host status=%d type=%q", config.Code, config.Header().Get("Content-Type"))
 	}
-	if response := onWorkspaceHost(site, http.MethodGet, testOriginHost, "/"); response.Code == http.StatusFound {
-		t.Fatalf("the app host root redirects to %q", response.Header().Get("Location"))
+	me := newRequest(t, http.MethodGet, "/api/v1/auth/me", nil, admin, nil)
+	me.Host = slug + ".example.com"
+	if response := serve(site, me); response.Code != http.StatusOK {
+		t.Fatalf("me on the workspace host status=%d", response.Code)
 	}
-	wantRedirect(t, onWorkspaceHost(site, http.MethodGet, slug+".example.com", "/"), http.StatusFound, "https://desk.example.com/sign-in?workspace="+slug)
 	wantPage(t, onWorkspaceHost(site, http.MethodGet, slug+".example.com", "/help"), http.StatusOK, []string{"Apex help"}, nil)
 
 	target := setDomain(t, api, admin, "help.apex-team.example.org", http.StatusOK).cnameTarget()
@@ -140,5 +185,65 @@ func TestTheWorkspaceHostBesideTheAppOnTheSameApex(t *testing.T) {
 	wantRedirect(t, onWorkspaceHost(site, http.MethodGet, target, "/c/guides"), http.StatusMovedPermanently, "https://"+slug+".example.com/help/c/guides")
 	if response := onWorkspaceHost(site, http.MethodGet, "hc-0123456789abcdef01234567.example.com", "/"); response.Code != http.StatusNotFound {
 		t.Fatalf("an unheld claim target status=%d location=%q", response.Code, response.Header().Get("Location"))
+	}
+}
+
+// Staging runs the app on the help center domain itself (APP_ORIGIN https://staging.example.com,
+// HELP_CENTER_DOMAIN staging.example.com): that host stays the app, and <slug>.staging.example.com runs
+// each workspace's desk.
+func TestTheAppHostCanBeTheHelpCenterDomainItself(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.Origin = "https://staging.example.com"
+		config.HelpCenterDomain = "staging.example.com"
+	})
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Stage Team", "admin@stage-team.example.org")
+	me := newRequest(t, http.MethodGet, "/api/v1/auth/me", nil, admin, nil)
+	me.Host = "staging.example.com"
+	if response := serve(site, me); response.Code != http.StatusOK {
+		t.Fatalf("me on the app host status=%d", response.Code)
+	}
+	slug := workspaceSlug(t, api, admin)
+	me = newRequest(t, http.MethodGet, "/api/v1/auth/me", nil, admin, nil)
+	me.Host = slug + ".staging.example.com"
+	if response := serve(site, me); response.Code != http.StatusOK {
+		t.Fatalf("me on the workspace host status=%d", response.Code)
+	}
+	var center struct {
+		URL string `json:"url"`
+	}
+	enableHelpCenter(t, api, admin, "Stage help", true)
+	kbCall(t, api, http.MethodGet, "/api/v1/help-center", nil, admin, http.StatusOK, &center)
+	if center.URL != "https://"+slug+".staging.example.com/help" {
+		t.Fatalf("help center url=%q", center.URL)
+	}
+}
+
+// Renaming the workspace's address on its host moves the desk to the new host: the answer says where the
+// browser continues, signed in there, and the old host's cookie no longer signs in.
+func TestRenamingTheWorkspaceAddressMovesTheDeskToItsNewHost(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.HelpCenterDomain = "example.net" })
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Rename Desk", "admin@rename-desk.example.com")
+	req := newRequest(t, http.MethodPatch, "/api/v1/workspace/slug", map[string]any{"slug": "renamed-desk", "next": "/settings/channels/type/email"}, "", sessionCookieOf(admin))
+	req.Host = "rename-desk.example.net"
+	req.Header.Set("Origin", "https://rename-desk.example.net")
+	response := serve(site, req)
+	var renamed struct {
+		Slug        string  `json:"slug"`
+		ContinueURL *string `json:"continue_url"`
+	}
+	decode(t, response, &renamed)
+	if response.Code != http.StatusOK || renamed.Slug != "renamed-desk" || renamed.ContinueURL == nil ||
+		!strings.HasPrefix(*renamed.ContinueURL, "https://renamed-desk.example.net/sign-in?next=%2Fsettings%2Fchannels%2Ftype%2Femail#handoff=") {
+		t.Fatalf("rename status=%d body=%s", response.Code, response.Body.String())
+	}
+	if code := redeemOn(t, site, "renamed-desk.example.net", handoffToken(t, *renamed.ContinueURL)); code != http.StatusOK {
+		t.Fatalf("continue on the new host status=%d", code)
+	}
+	me := newRequest(t, http.MethodGet, "/api/v1/auth/me", nil, "", sessionCookieOf(admin))
+	me.Host = "rename-desk.example.net"
+	if response := serve(site, me); response.Code != http.StatusUnauthorized {
+		t.Fatalf("the old host's cookie after the rename status=%d", response.Code)
 	}
 }

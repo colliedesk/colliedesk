@@ -12,6 +12,8 @@ export const signupMessages = {
   creatingWorkspace: 'Creating workspace…',
   signInToWorkspace: 'Sign in to your workspace',
   useAnotherAccount: 'Use another account',
+  notAnAgentHere: 'This email is not an agent of this workspace. Use another account, or find the workspace your email belongs to.',
+  findYourWorkspace: 'Find your workspace',
   noWorkspaceForEmail: 'This email is not part of a workspace yet. Ask your workspace admin for an invite link, or use another account.',
   // The answers order the first steps of the empty inbox and fit our emails to the team; fixed lists, no free text.
   signupQuestions: {

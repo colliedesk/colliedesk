@@ -7,6 +7,7 @@ import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
+import { HandoffSignIn } from './features/auth/handoff-sign-in';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
@@ -306,29 +307,27 @@ const resultsShareRoute = createRoute({
   path: '/r',
   component: () => <Part part={resultsSharePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ResultsShareRoute }) => <ResultsShareRoute />} />,
 });
-// A workspace slug is a DNS label: lowercase letters and digits with inner hyphens, at most 63 characters.
-const workspaceSlugShape = /^(?=.{1,63}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
   // `signed_out` marks the arrival right after the session ended (see AppLayout). `intent=trial` is the
-  // website's "Start free trial" link: the page is titled for a new team. `workspace` is the slug of the
-  // workspace host name the visitor came from (<slug>.<HELP_CENTER_DOMAIN>/ leads here).
-  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true; intent?: 'trial'; workspace?: string } => ({
+  // website's "Start free trial" link: the page is titled for a new team. `next` is the page a hand-off
+  // from APP_ORIGIN opens once its token (in the fragment, `#handoff=…`) signs in on this workspace host.
+  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true; intent?: 'trial'; next?: string } => ({
     ...(typeof search.token === 'string' ? { token: search.token } : {}),
     ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
     ...(search.signed_out === true ? { signed_out: true as const } : {}),
     ...(search.intent === 'trial' ? { intent: 'trial' as const } : {}),
-    ...(typeof search.workspace === 'string' ? { workspace: search.workspace } : {}),
+    ...(typeof search.next === 'string' ? { next: search.next } : {}),
   }),
   // `buy` stays in the address through the identity provider's round trip, so the address decides
   // which plan, if any, this sign-in is for (see signInCheckoutIntent).
   beforeLoad: ({ search }) => { signInCheckoutIntent(search); },
   component: function SignIn() {
-    const { token, buy, signed_out: signedOut, intent, workspace } = signInRoute.useSearch();
-    // The router keeps a parameter its validation leaves out, so the slug's shape is checked here.
-    const hint = typeof workspace === 'string' && workspaceSlugShape.test(workspace) ? workspace : undefined;
-    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} workspace={hint} />;
+    const { token, buy, signed_out: signedOut, intent, next } = signInRoute.useSearch();
+    const handoff = useRouterState({ select: (state) => /^handoff=(.+)$/.exec(state.location.hash)?.[1] });
+    if (handoff) return <HandoffSignIn token={handoff} next={next} />;
+    return <RedeemRoute token={token ?? ''} buy={buy} trial={intent === 'trial'} signedOut={signedOut === true} />;
   },
 });
 

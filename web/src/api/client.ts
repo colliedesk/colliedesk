@@ -11,7 +11,7 @@ import {
   agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, channelCountsSchema, emailChannelSettingsSchema, inboundSecretSchema, testMessageResultSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, setupGuideHiddenSchema, setupProgressSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentRequestListSchema, agentRequestSchema, agentTokenSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentRequestListSchema, agentRequestSchema, agentTokenSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, renamedWorkspaceSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { Message, WorkspaceChoice } from './schemas';
 
@@ -221,10 +221,10 @@ export class CloudWorkspaceChoiceError extends Error {
   }
 }
 
-async function exchangeCloudSession(token: string, workspaceSlug?: string) {
+async function exchangeCloudSession(token: string, workspaceSlug?: string, next?: string) {
   // The user agent names this device in Settings → Sessions, as it does for a pairing link.
   // The browser's timezone starts a first-time agent on their own clock instead of UTC.
-  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}), timezone: browserTimeZone() };
+  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}), timezone: browserTimeZone(), ...(next ? { next } : {}) };
   const response = await fetch('/api/v1/auth/cloud/exchange', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -275,15 +275,18 @@ export const api = {
   signUpCloud,
   requestExportLink,
   logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }),
-  redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {
-    method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone() }),
+  // next is the page a sign-in on APP_ORIGIN opens on the workspace's own host (continue_url).
+  redeem: (token: string, label: string, next?: string) => request('/api/v1/auth/redeem', redeemedSchema, {
+    method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie', timezone: browserTimeZone(), ...(next ? { next } : {}) }),
   }),
   me: () => request('/api/v1/auth/me', meSchema),
   setupProgress: () => request('/api/v1/workspace/setup', setupProgressSchema),
   setSetupGuideHidden: (hidden: RequestBody<'setSetupGuideHidden'>['hidden']) => request('/api/v1/agents/me/setup-guide', setupGuideHiddenSchema, { method: 'PUT', body: json<'setSetupGuideHidden'>({ hidden }) }),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),
   updateWorkspaceName: (name: RequestBody<'updateWorkspaceName'>['name']) => request('/api/v1/workspace/name', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceName'>({ name }) }),
-  updateWorkspaceSlug: (slug: RequestBody<'updateWorkspaceSlug'>['slug']) => request('/api/v1/workspace/slug', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceSlug'>({ slug }) }),
+  // On the workspace's own host the answer carries continue_url: the desk moved to the new host.
+  updateWorkspaceSlug: (slug: RequestBody<'updateWorkspaceSlug'>['slug']) => request('/api/v1/workspace/slug', renamedWorkspaceSchema, {
+    method: 'PATCH', body: json<'updateWorkspaceSlug'>({ slug, next: window.location.pathname + window.location.search }) }),
   updateAgentTimezone: (timezone: RequestBody<'updateAgentTimezone'>['timezone']) => request('/api/v1/agents/me/timezone', agentSchema, { method: 'PATCH', body: json<'updateAgentTimezone'>({ timezone }) }),
   updateAgentDisplayName: (display_name: RequestBody<'updateAgentDisplayName'>['display_name']) => request('/api/v1/agents/me/display-name', agentSchema, { method: 'PATCH', body: json<'updateAgentDisplayName'>({ display_name }) }),
   updateAgent: (id: string, value: RequestBody<'updateAgent'>) => request(`/api/v1/agents/${id}`, teamMemberSchema, { method: 'PATCH', body: json<'updateAgent'>(value) }),
