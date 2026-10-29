@@ -168,7 +168,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if emailConfig.SMTP.Configured() {
 		sender = email.SMTPSender{Config: emailConfig.SMTP}
 	}
-	if emailConfig.SMTP.Configured() || googleConfig.Enabled() || microsoftConfig.Enabled() {
+	if httpapi.Outbound(channelConfig).Worker {
 		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
 		worker := emailoutbox.New(channelStore, sender,
 			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig,

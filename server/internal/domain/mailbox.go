@@ -100,6 +100,15 @@ func MailboxFailureText(provider, code string) string {
 // provider needs: it waits, as if the provider were switched off, and is sent once the setting is back.
 const MailboxNotConfiguredCode = "mailbox_not_configured"
 
+// MailboxNotConfiguredFailedNote is the reason of a reply refused at once for a connected mailbox on a
+// server that lost the provider's settings and runs no email outbox to keep it waiting.
+func MailboxNotConfiguredFailedNote(provider string) string {
+	if provider == MailboxMicrosoft {
+		return "Microsoft 365 sending is not set up on this server: ask whoever runs it, then retry the reply."
+	}
+	return "Gmail sending is not set up on this server: ask whoever runs it, then retry the reply."
+}
+
 // MailboxNotConfiguredNote is the reason of a reply for a connected mailbox on a server that lost the
 // provider's settings.
 func MailboxNotConfiguredNote(provider string) string {

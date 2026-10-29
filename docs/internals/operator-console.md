@@ -180,7 +180,11 @@ settings it rides with).
   10 minutes, the reason in `last_error`, `reason_code` `mailbox_switched_off`) when the provider is switched
   off, and the same (`mailbox_not_configured`) when the server lost a setting a connected provider needs:
   a connection exists only where the provider once worked, so a missing setting is a provider off, and no
-  reply fails for a setting. Queuing (`notReadyReason`) no longer fails such a reply either. The Microsoft
+  reply fails for a setting. Queuing (`notReadyReason`) no longer fails such a reply either, except on a
+  server that runs no email outbox (`OutboundPolicy.Worker` false: no SMTP relay and no provider set up, the
+  same condition serve starts the worker on): nobody would keep it waiting, so it fails at once with the
+  reason and `mailbox_not_configured`, and Retry sends it later. The worker is not started always: it would
+  fail SMTP replies queued before the relay was removed, which wait today. The Microsoft
   keep-alive keeps running so grants outlive the switch.
 - **Workspaces never read setting names.** `missing_settings` of the Gmail, Microsoft 365 and Autofix
   answers is always empty (kept for the contract); `off_reason` (`not_set_up`, `switched_off`) says why. The

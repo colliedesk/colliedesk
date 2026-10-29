@@ -9815,7 +9815,9 @@ components:
             this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and
             reconnecting does not help), mailbox_switched_off (a queued reply waits because the operator switched
             Gmail or Microsoft 365 off; it is sent once it is on again), mailbox_not_configured (a queued reply
-            waits because the server lost a setting its connected provider needs; it is sent once the setting is back).
+            waits because the server lost a setting its connected provider needs; it is sent once the setting is back;
+            on a server that runs no email outbox at all, no SMTP relay and no provider set up, the reply fails at once
+            with this code and Retry sends it once the setting is back).
             Null for most email failures, whose words are in last_error.
         attempts: {type: integer, minimum: 0}
         last_error:

@@ -292,9 +292,11 @@ func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refre
 func Outbound(config Config) store.OutboundPolicy {
 	return store.OutboundPolicy{
 		// Switched off reads as not set up: the channel says it cannot send, and its replies wait in the outbox.
-		GmailEnabled:          config.Google.Enabled() && !config.SwitchedOff[serverconfig.FeatureGmail],
-		MicrosoftEnabled:      config.Microsoft.Enabled() && !config.SwitchedOff[serverconfig.FeatureMicrosoft],
-		Enabled:               config.Email.SMTP.Configured(),
+		GmailEnabled:     config.Google.Enabled() && !config.SwitchedOff[serverconfig.FeatureGmail],
+		MicrosoftEnabled: config.Microsoft.Enabled() && !config.SwitchedOff[serverconfig.FeatureMicrosoft],
+		Enabled:          config.Email.SMTP.Configured(),
+		// The same condition as the email outbox worker serve runs (cmd/collie generation.go).
+		Worker:                config.Email.SMTP.Configured() || config.Google.Enabled() || config.Microsoft.Enabled(),
 		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
 		FallbackDomain:        config.Email.MailFromDomain,
 	}

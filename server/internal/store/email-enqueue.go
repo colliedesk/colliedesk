@@ -27,6 +27,9 @@ type OutboundPolicy struct {
 	GmailEnabled bool
 	// MicrosoftEnabled is the same for Microsoft 365 and its Microsoft settings.
 	MicrosoftEnabled bool
+	// Worker is whether this server runs the email outbox (SMTP or a mailbox provider set up, switched off
+	// or not): only then can a reply for a provider that cannot send now wait, with its reason, for it.
+	Worker bool
 }
 
 // MailboxEnabled reports whether this server has the settings of the provider, so a mailbox connected
@@ -49,23 +52,26 @@ func (s *Store) WithOutbound(policy OutboundPolicy) *Store {
 	return &copy
 }
 
-// notReadyReason explains why a reply cannot be emailed, or returns "" when it can. A connected mailbox
-// sends by itself: it needs no relay and no verified domain, and a broken one never hands its replies to
-// the relay instead.
-func (p OutboundPolicy) notReadyReason(domainVerified bool, mailbox *mailboxState) string {
+// notReadyReason explains why a reply cannot be emailed, or returns "" when it can, with the code beside
+// the reason. A connected mailbox sends by itself: it needs no relay and no verified domain, and a broken
+// one never hands its replies to the relay instead.
+func (p OutboundPolicy) notReadyReason(domainVerified bool, mailbox *mailboxState) (string, string) {
 	switch {
 	case mailbox != nil && mailbox.status == domain.MailboxFailed:
-		return domain.MailboxFailureText(mailbox.provider, mailbox.errorCode)
+		return domain.MailboxFailureText(mailbox.provider, mailbox.errorCode), ""
+	case mailbox != nil && !p.MailboxEnabled(mailbox.provider) && !p.Worker:
+		// No outbox runs here to keep it waiting: it fails now, saying why, and Retry sends it later.
+		return domain.MailboxNotConfiguredFailedNote(mailbox.provider), domain.MailboxNotConfiguredCode
 	case mailbox != nil:
 		// A provider the server lost a setting of is queued all the same: the outbox keeps it waiting, with
 		// the reason, until the setting is back (no reply fails for a setting).
-		return ""
+		return "", ""
 	case !p.Enabled:
-		return "Outgoing email is not configured on this server: ask whoever runs it to set up outgoing email."
+		return "Outgoing email is not configured on this server: ask whoever runs it to set up outgoing email.", ""
 	case p.RequireVerifiedDomain && !domainVerified && p.FallbackDomain == "":
-		return "Verify the support address domain in Settings before replies can be emailed."
+		return "Verify the support address domain in Settings before replies can be emailed.", ""
 	default:
-		return ""
+		return "", ""
 	}
 }
 
@@ -94,8 +100,8 @@ func (s *Store) PrepareEmailReply(ctx context.Context, tx pgx.Tx, request channe
 	recipients := 1 + len(request.CC)
 	prepared := channels.Prepared{Status: channels.DeliveryQueued, Recipients: recipients, Transport: mailbox.transport()}
 	if request.Retry {
-		if reason := s.outbound.notReadyReason(verified, mailbox); reason != "" {
-			return channels.Prepared{Status: channels.DeliveryFailed, Reason: reason}, nil
+		if reason, code := s.outbound.notReadyReason(verified, mailbox); reason != "" {
+			return channels.Prepared{Status: channels.DeliveryFailed, Reason: reason, Code: code}, nil
 		}
 		// A reply first queued while its channel was off has no Message-ID and token yet.
 		var assigned bool
@@ -126,8 +132,8 @@ func (s *Store) PrepareEmailReply(ctx context.Context, tx pgx.Tx, request channe
 	if err := s.assignEmailIdentity(ctx, tx, workspaceID, conversationID, supportAddress, &prepared); err != nil {
 		return channels.Prepared{}, err
 	}
-	if reason := s.outbound.notReadyReason(verified, mailbox); reason != "" {
-		prepared.Status, prepared.Reason = channels.DeliveryFailed, reason
+	if reason, code := s.outbound.notReadyReason(verified, mailbox); reason != "" {
+		prepared.Status, prepared.Reason, prepared.Code = channels.DeliveryFailed, reason, code
 	}
 	return prepared, nil
 }
