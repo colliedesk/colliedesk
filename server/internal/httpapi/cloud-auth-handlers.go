@@ -104,11 +104,9 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		return
 	}
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
-	if !a.setContinueURL(response, request, &result, input.Next) {
+	if !a.finishBrowserSignIn(response, request, &result, input.Next) {
 		return
 	}
-	setSessionCookie(response, result.Token)
-	result.Token = ""
 	writeJSON(response, http.StatusOK, result)
 }
 

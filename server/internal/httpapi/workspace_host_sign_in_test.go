@@ -68,17 +68,19 @@ func TestAnAppHostSessionHandsOffToItsWorkspaceHost(t *testing.T) {
 	if code := redeemOn(t, site, alphaHost, token); code != http.StatusUnauthorized {
 		t.Fatalf("a hand-off used twice status=%d", code)
 	}
-	if code, address := handoff(t, site, f.adminA, testOriginHost, "/"); code != http.StatusFound || !strings.HasPrefix(address, "https://"+alphaHost+"/sign-in#handoff=") {
+	// Each hand-off revokes the APP_ORIGIN session it came from; every load below brings a new one.
+	fresh := func() string { return appSession(t, f, "limits-alpha", "admin@limits-alpha.example.com") }
+	if code, address := handoff(t, site, fresh(), testOriginHost, "/"); code != http.StatusFound || !strings.HasPrefix(address, "https://"+alphaHost+"/sign-in#handoff=") {
 		t.Fatalf("root page load status=%d location=%q", code, address)
 	}
-	_, address = handoff(t, site, f.adminA, testOriginHost, "/")
+	_, address = handoff(t, site, fresh(), testOriginHost, "/")
 	f.clock.set(f.clock.Now().Add(2 * time.Minute))
 	if code := redeemOn(t, site, alphaHost, handoffToken(t, address)); code != http.StatusUnauthorized {
 		t.Fatalf("a hand-off after two minutes status=%d", code)
 	}
 	// The API, the sign-in page and the workspace host itself never hand off.
 	for _, at := range []struct{ host, path string }{{testOriginHost, "/api/v1/auth/me"}, {testOriginHost, "/sign-in"}, {alphaHost, "/settings"}} {
-		if code, address := handoff(t, site, f.adminA, at.host, at.path); code == http.StatusFound {
+		if code, address := handoff(t, site, fresh(), at.host, at.path); code == http.StatusFound {
 			t.Errorf("%s%s handed off to %q", at.host, at.path, address)
 		}
 	}

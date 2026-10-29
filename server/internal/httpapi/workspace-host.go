@@ -55,43 +55,50 @@ func (a *API) handoffTo(ctx context.Context, who auth.Principal, next string) (s
 	return address + "#handoff=" + token, nil
 }
 
-// setContinueURL sets result.ContinueURL for a browser that just signed in on APP_ORIGIN; it answers
-// the error and reports false when the hand-off could not be made.
-func (a *API) setContinueURL(response http.ResponseWriter, request *http.Request, result *auth.Redeemed, next string) bool {
+// finishBrowserSignIn ends a browser's sign-in as a cookie session. On APP_ORIGIN, for a workspace with
+// its own host, the browser continues there (result.ContinueURL) and APP_ORIGIN keeps no session: the
+// one just made is revoked, and only the one-time hand-off crosses over, so signing out on the workspace
+// host is the end of it. APP_ORIGIN keeps only the workspace's slug, which sends its bookmarks on.
+// Everywhere else the session becomes this host's cookie. It answers the error and reports false when
+// the sign-in could not be finished.
+func (a *API) finishBrowserSignIn(response http.ResponseWriter, request *http.Request, result *auth.Redeemed, next string) bool {
 	address, err := a.handoffURL(request.Context(), auth.Principal{Workspace: result.Workspace, Agent: result.Agent}, next)
 	if err != nil {
 		writeInternalError(response, err)
 		return false
 	}
-	if address != "" {
-		result.ContinueURL = &address
+	if address == "" {
+		setSessionCookie(response, result.Token)
+		result.Token = ""
+		return true
 	}
+	if err := a.auth.EndSession(request.Context(), result.Workspace.ID, result.Token); err != nil {
+		writeInternalError(response, err)
+		return false
+	}
+	result.Token = ""
+	result.ContinueURL = &address
+	clearSessionCookie(response)
+	setWorkspaceHint(response, result.Workspace.Slug)
 	return true
 }
 
-// handOffAppPages sends a page load of the web app on APP_ORIGIN that carries a session of a workspace
-// with its own host to the same page there, signed in through a one-time hand-off: bookmarks of
-// APP_ORIGIN keep working after each workspace moved to its own host. The API, MCP, assets, the help
-// center, the sign-in page and the results share page stay on APP_ORIGIN.
+// handOffAppPages sends a page load of the web app on APP_ORIGIN to the same page on the workspace's own
+// host, so bookmarks of APP_ORIGIN keep working after each workspace moved to its own host. A session
+// on APP_ORIGIN from before the move signs in there through a one-time hand-off and is revoked, its
+// cookie cleared, in the same response: it hands off once. Without one, the workspace hint left by a
+// sign-in sends the browser on without any credential; the workspace host asks for a sign-in when its
+// own session has ended. The API, MCP, assets, the help center, the sign-in page and the results share
+// page stay on APP_ORIGIN.
 func (a *API) handOffAppPages(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if a.config.HelpCenterDomain == "" || !appPageLoad(request) {
 			next.ServeHTTP(response, request)
 			return
 		}
-		cookie, err := request.Cookie(sessionCookie)
-		if err != nil || cookie.Value == "" {
-			next.ServeHTTP(response, request)
-			return
-		}
-		who, err := a.auth.Authenticate(request.Context(), cookie.Value, true)
-		if err != nil {
-			next.ServeHTTP(response, request)
-			return
-		}
-		address, err := a.handoffURL(request.Context(), who, request.URL.RequestURI())
-		if err != nil {
-			slog.Error("hand off to the workspace host", "workspace_id", who.Workspace.ID, "error", err)
+		address := a.handOffAppSession(response, request)
+		if address == "" {
+			address = a.workspaceHintAddress(request)
 		}
 		if address == "" {
 			next.ServeHTTP(response, request)
@@ -101,6 +108,35 @@ func (a *API) handOffAppPages(next http.Handler) http.Handler {
 		response.Header().Set("Referrer-Policy", "no-referrer")
 		http.Redirect(response, request, address, http.StatusFound)
 	})
+}
+
+// handOffAppSession is the hand-off address for the APP_ORIGIN session the request carries, once that
+// session is revoked and its cookie cleared, or "" when it carries none to hand off.
+func (a *API) handOffAppSession(response http.ResponseWriter, request *http.Request) string {
+	cookie, err := request.Cookie(sessionCookie)
+	if err != nil || cookie.Value == "" {
+		return ""
+	}
+	who, err := a.auth.Authenticate(request.Context(), cookie.Value, true)
+	if err != nil {
+		return ""
+	}
+	address, err := a.handoffURL(request.Context(), who, request.URL.RequestURI())
+	if err != nil {
+		slog.Error("hand off to the workspace host", "workspace_id", who.Workspace.ID, "error", err)
+		return ""
+	}
+	if address == "" {
+		return ""
+	}
+	// A session that cannot be revoked is not handed off: it would sign the browser in again later.
+	if err := a.auth.EndSession(request.Context(), who.Workspace.ID, cookie.Value); err != nil {
+		slog.Error("end the handed-off session", "workspace_id", who.Workspace.ID, "error", err)
+		return ""
+	}
+	clearSessionCookie(response)
+	setWorkspaceHint(response, who.Workspace.Slug)
+	return address
 }
 
 // appPageLoad reports whether request loads a page of the web app on APP_ORIGIN.
@@ -121,9 +157,14 @@ func appPageLoad(request *http.Request) bool {
 }
 
 // localPath is path when it is a path of this site ("/settings?tab=x"), else "": never an address that
-// a browser would read as another host ("//evil.example", "/\evil.example", "https://…").
+// a browser would read as another host ("//evil.example", "/\evil.example", "https://…"). A browser
+// drops tabs and line breaks from an address, so "/\t/evil.example" is "//evil.example": every control
+// character is refused.
 func localPath(path string) string {
-	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.ContainsAny(path, "\\\r\n") || len(path) > 2048 {
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.Contains(path, "\\") || len(path) > 2048 {
+		return ""
+	}
+	if strings.ContainsFunc(path, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return ""
 	}
 	return path

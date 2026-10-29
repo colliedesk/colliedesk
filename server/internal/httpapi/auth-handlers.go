@@ -35,7 +35,7 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Session type must be cookie or bearer.")
 		return
 	}
-	result, err := a.auth.Redeem(request.Context(), input.Token, input.RequestedRole, input.Label)
+	result, err := a.auth.Redeem(request.Context(), input.Token, input.RequestedRole, input.Label, input.SessionType == "cookie")
 	if writePlanLimit(response, err) {
 		return
 	}
@@ -49,12 +49,8 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		slog.Error("link imported Freshdesk agent", "workspace_id", result.Workspace.ID, "error", err)
 	}
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
-	if input.SessionType == "cookie" && !a.setContinueURL(response, request, &result, input.Next) {
+	if input.SessionType == "cookie" && !a.finishBrowserSignIn(response, request, &result, input.Next) {
 		return
-	}
-	if input.SessionType == "cookie" {
-		setSessionCookie(response, result.Token)
-		result.Token = ""
 	}
 	writeJSON(response, http.StatusOK, result)
 }

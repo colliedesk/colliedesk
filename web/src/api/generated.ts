@@ -4417,7 +4417,7 @@ export interface components {
             workspace: components["schemas"]["Workspace"];
             /**
              * Format: uri
-             * @description Present only for a browser that signed in on `APP_ORIGIN` of a server with `HELP_CENTER_DOMAIN`: the workspace host's `/sign-in` address, with `next` and a one-time token in the fragment (`#handoff=<token>`, never sent to a server). The web app there redeems the token with `POST /api/v1/auth/redeem` for a session of the same agent and role. The token works once, for one minute, and only on that workspace's host.
+             * @description Present only for a browser that signed in on `APP_ORIGIN` of a server with `HELP_CENTER_DOMAIN`: the workspace host's `/sign-in` address, with `next` and a one-time token in the fragment (`#handoff=<token>`, never sent to a server). The web app there redeems the token with `POST /api/v1/auth/redeem` for a cookie session of the same agent and role. The token works once, for one minute, only on that workspace's host and only with `session_type: cookie`. With `continue_url` the answer sets no session cookie on `APP_ORIGIN`.
              */
             continue_url?: string;
         };

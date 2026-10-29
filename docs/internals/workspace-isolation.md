@@ -135,10 +135,25 @@ the request then acts on that workspace only:
 - Cloud sign-in takes the workspace from the host, never from the request body, and accepts the
   identity token's authorized party `https://<slug>.<domain>` only on that host.
 - Writes with the cookie must come from the workspace host's own origin (`httpapi.requestOrigin`).
-- A hand-off from `APP_ORIGIN` is a pairing link of the same agent and role that lives one minute; its
-  token travels in the address's fragment, which no server receives or logs.
+- A hand-off from `APP_ORIGIN` is a one-time link of kind `handoff` for the same agent and role that
+  lives one minute; its token travels in the address's fragment, which no server receives or logs. It
+  redeems only on its workspace's host and only as a cookie session, never as a bearer token. It is no
+  pairing link: it does not prove the agent's address. Making one deletes up to 100 of the workspace's
+  expired hand-offs.
+- A sign-in on `APP_ORIGIN` that continues on a workspace host keeps no session on `APP_ORIGIN`: the
+  session it made is revoked and only the hand-off crosses over, so signing out on the workspace host
+  ends it. `APP_ORIGIN` keeps the cookie `colliedesk_workspace` with the slug, which is no credential: a
+  page load there redirects to the same page on that host. A session on `APP_ORIGIN` from before the
+  move hands off once; the page load that hands it off revokes it and clears its cookie.
+- `Authenticate` checks the host before it refreshes `last_seen_at` and `expires_at`, so a session sent
+  to another workspace's host is not extended.
+- A path a sign-in opens (`next`) is refused when it holds a control character: a browser drops tabs
+  and line breaks, so `/\t/evil.com` would open `//evil.com`.
+- The help center under `/help` shares the host with the desk session, so its pages run no script:
+  `script-src 'none'`.
 
-Tests: `workspace_host_test.go`, `workspace_host_sign_in_test.go` in `internal/httpapi`.
+Tests: `workspace_host_test.go`, `workspace_host_sign_in_test.go`, `workspace_host_sign_out_test.go`,
+`workspace_host_hardening_test.go` in `internal/httpapi`.
 
 ## Privileged allowlist
 

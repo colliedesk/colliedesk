@@ -25,18 +25,8 @@ const lastSeenInterval = time.Minute
 // Authenticate finds the principal of a session or agent token. On a workspace's own host name
 // (workspacehost.Slug) only that workspace's sessions and tokens are valid: a cookie is bound to the
 // host it was set on, and a request there acts on that workspace and no other.
+// A session refused on another workspace's host is refused before it is refreshed, so it is not extended.
 func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) (Principal, error) {
-	principal, err := s.authenticate(ctx, raw, viaCookie)
-	if err != nil {
-		return Principal{}, err
-	}
-	if slug, ok := workspacehost.Slug(ctx); ok && principal.Workspace.Slug != slug {
-		return Principal{}, fmt.Errorf("%w: the session belongs to another workspace's host", ErrInvalidCredential)
-	}
-	return principal, nil
-}
-
-func (s *Service) authenticate(ctx context.Context, raw string, viaCookie bool) (Principal, error) {
 	if raw == "" {
 		return Principal{}, fmt.Errorf("%w: missing credential", ErrInvalidCredential)
 	}
@@ -79,6 +69,9 @@ func (s *Service) authenticate(ctx context.Context, raw string, viaCookie bool) 
 		// A browser attaches cookies by itself; an agent token is only ever sent on purpose, as a bearer.
 		if viaCookie && principal.Scope != "" {
 			return fmt.Errorf("%w: agent tokens are not accepted as cookies", ErrInvalidCredential)
+		}
+		if slug, ok := workspacehost.Slug(ctx); ok && principal.Workspace.Slug != slug {
+			return fmt.Errorf("%w: the session belongs to another workspace's host", ErrInvalidCredential)
 		}
 		expires := now.Add(sessionLifetime)
 		if principal.Scope != "" {
@@ -203,6 +196,20 @@ func (s *Service) RevokeSession(ctx context.Context, principal Principal, sessio
 		return false, fmt.Errorf("revoke session: %w", err)
 	}
 	return revoked, nil
+}
+
+// EndSession revokes the session with the raw token in workspaceID: a session that was only a step on
+// the way to another host (a sign-in on APP_ORIGIN that continues on the workspace's own host).
+func (s *Service) EndSession(ctx context.Context, workspaceID, raw string) error {
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE sessions SET revoked_at=COALESCE(revoked_at,$2) WHERE workspace_id=$1 AND token_hash=$3`,
+			workspaceID, s.now(), credentialHash(raw))
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("end session: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) Logout(ctx context.Context, principal Principal) error {

@@ -118,10 +118,8 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	}
 	a.recordFunnel("trial_started", workspace.ID, properties)
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
-	if !a.setContinueURL(response, request, &result, input.Next) {
+	if !a.finishBrowserSignIn(response, request, &result, input.Next) {
 		return
 	}
-	setSessionCookie(response, result.Token)
-	result.Token = ""
 	writeJSON(response, http.StatusCreated, result)
 }
