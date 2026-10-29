@@ -4534,7 +4534,7 @@ export interface components {
             limit_micro_usd: number | null;
             /** @description Spend as a share of the month's limit; null without one. */
             spent_percent: number | null;
-            /** @description The AI chat's model when the server has no price for it (AI_SERVER_PRICES): its spend is not counted (spent_micro_usd is null) and no limit in dollars can be set. Null when it is priced. */
+            /** @description The AI chat's model when the server has no price for it (the setting ai.server.prices): its spend is not counted (spent_micro_usd is null) and no limit in dollars can be set. Null when it is priced. */
             unpriced_model: string | null;
             /** @description Chats started this month. */
             chats: number;

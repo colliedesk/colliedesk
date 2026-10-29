@@ -7696,7 +7696,7 @@ components:
         spent_micro_usd: {type: [integer, 'null'], description: 'What the chat spent, calls still running included at most; null on the cloud''s own provider, and when the server has no price for the model (unpriced_model).'}
         limit_micro_usd: {type: [integer, 'null'], description: 'The AI chat feature''s own monthly limit; null without one, and on the cloud''s own provider.'}
         spent_percent: {type: [integer, 'null'], minimum: 0, maximum: 100, description: Spend as a share of the month's limit; null without one.}
-        unpriced_model: {type: [string, 'null'], description: 'The AI chat''s model when the server has no price for it (AI_SERVER_PRICES): its spend is not counted (spent_micro_usd is null) and no limit in dollars can be set. Null when it is priced.'}
+        unpriced_model: {type: [string, 'null'], description: 'The AI chat''s model when the server has no price for it (the setting ai.server.prices): its spend is not counted (spent_micro_usd is null) and no limit in dollars can be set. Null when it is priced.'}
         chats: {type: integer, description: Chats started this month.}
         handed_off: {type: integer}
         rated_helpful: {type: integer}
