@@ -28,6 +28,8 @@ func (c *call) refuse(err error, notFound string) error {
 		return err // nil, a *toolError or an unplanned failure: nothing to translate
 	}
 	switch {
+	case failure.Status == 403 && failure.Code == "files_need_approval":
+		return &toolError{filesNeedApproval}
 	case failure.Status == 403 && failure.Code == "scope_insufficient":
 		return &toolError{c.scopeText(failure)}
 	case failure.Status == 401:

@@ -189,18 +189,20 @@ func (c *call) resolveTags(names []string) ([]restTag, error) {
 }
 
 type noteArgs struct {
-	ConversationID string `json:"conversation_id"`
-	Body           string `json:"body"`
+	ConversationID string          `json:"conversation_id"`
+	Body           string          `json:"body"`
+	Files          []inlineFileArg `json:"files"`
 }
 
 type noteOut struct {
 	ConversationID string `json:"conversation_id"`
 	Message        struct {
-		ID                  string    `json:"id"`
-		Kind                string    `json:"kind"`
-		CreatedAt           string    `json:"created_at"`
-		Author              string    `json:"author,omitempty"`
-		WrittenByAgentToken *tokenOut `json:"written_by_agent_token,omitempty"`
+		ID                  string             `json:"id"`
+		Kind                string             `json:"kind"`
+		CreatedAt           string             `json:"created_at"`
+		Author              string             `json:"author,omitempty"`
+		WrittenByAgentToken *tokenOut          `json:"written_by_agent_token,omitempty"`
+		Attachments         []attachmentRowOut `json:"attachments,omitempty"`
 	} `json:"message"`
 }
 
@@ -212,14 +214,25 @@ func noteAdd(c *call, arguments map[string]any) (any, error) {
 	if strings.TrimSpace(args.Body) == "" {
 		return nil, &toolError{"The note is empty. Write the note text in body."}
 	}
+	files, err := decodeFiles(args.Files)
+	if err != nil {
+		return nil, err
+	}
 	c.notFound = notFoundConversation(args.ConversationID)
+	path := "/api/v1/conversations/" + url.PathEscape(args.ConversationID) + "/messages"
 	var created restMessage
-	err = c.send(http.MethodPost, "/api/v1/conversations/"+url.PathEscape(args.ConversationID)+"/messages", map[string]any{"kind": "note", "body": args.Body}, &created)
+	if len(files) > 0 {
+		contentType, form := messageForm([][2]string{{"kind", "note"}, {"body", args.Body}}, files)
+		err = c.sendBytes(http.MethodPost, path, contentType, nil, form, &created)
+	} else {
+		err = c.send(http.MethodPost, path, map[string]any{"kind": "note", "body": args.Body}, &created)
+	}
 	if err != nil {
 		return nil, err
 	}
 	out := noteOut{ConversationID: args.ConversationID}
 	out.Message.ID, out.Message.Kind, out.Message.CreatedAt = created.ID, created.Kind, utc(created.CreatedAt)
+	out.Message.Attachments = attachmentRows(created)
 	if nativeTeamMessage(created) {
 		out.Message.WrittenByAgentToken = tokenOf(created)
 		// The note is saved already, so a failed team lookup only leaves the author's name out.

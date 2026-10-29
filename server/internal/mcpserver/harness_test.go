@@ -42,6 +42,8 @@ type env struct {
 	pool    *pgxpool.Pool
 	service *auth.Service
 	server  *httptest.Server
+	// files is the directory of the attachment storage.
+	files string
 }
 
 func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
@@ -57,7 +59,8 @@ func newEnvBuilt(t *testing.T, mutate func(*httpapi.Config), front func(real htt
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
-	storage, err := attachments.NewLocalDisk(t.TempDir())
+	files := t.TempDir()
+	storage, err := attachments.NewLocalDisk(files)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +76,7 @@ func newEnvBuilt(t *testing.T, mutate func(*httpapi.Config), front func(real htt
 	}
 	server := httptest.NewServer(mcpserver.Mount(mcpserver.Config{API: toolAPI, Auth: service, Version: testVersion}, api))
 	t.Cleanup(server.Close)
-	return &env{t: t, api: api, pool: pool, service: service, server: server}
+	return &env{t: t, api: api, pool: pool, service: service, server: server, files: files}
 }
 
 func testPool(t *testing.T) *pgxpool.Pool {

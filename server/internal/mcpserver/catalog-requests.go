@@ -86,7 +86,8 @@ func replyDraftSpec() Spec {
 		Title: "Draft a reply for a person to send",
 		Description: `Leave a reply draft on a conversation. Nothing reaches the customer: the draft shows above the reply box, with your token's name, ` +
 			`and a person edits it, sends it or discards it. Use it with any tier when a person should check the words before they go out. ` +
-			`colliedesk_reply_send with a token below send files the same draft. Each call leaves one more draft.` +
+			`colliedesk_reply_send with a token below send files the same draft. Each call leaves one more draft. ` +
+			`A draft carries no files: a person attaches them when they send it, or a send token attaches them with colliedesk_reply_send.` +
 			"\n\nTier: read.",
 		Tier: "read",
 		REST: []string{"POST /api/v1/conversations/{id}/messages"},

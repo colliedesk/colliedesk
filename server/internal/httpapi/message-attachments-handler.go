@@ -283,7 +283,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 		}
 		switch name := part.FormName(); {
 		case name == "kind" && !fields.opening, name == "body", name == "cc", name == "seen_reply_number" && !fields.opening, name == "ai_draft_id" && !fields.opening,
-			fields.opening && (name == "contact_id" || name == "subject" || name == "contact_name" || name == "contact_email"):
+			fields.opening && (name == "contact_id" || name == "subject" || name == "channel_id" || name == "contact_name" || name == "contact_email"):
 			text, err := readField(part)
 			if err != nil {
 				return fields, nil, err
@@ -353,7 +353,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			*stored = append(*stored, store.NewAttachment{Filename: cleanFilename(part.FileName()), ContentType: cleanContentType(part.Header.Get("Content-Type")), Object: object})
 		default:
 			if fields.opening {
-				return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send contact_id (or contact_name and contact_email), subject, body, cc and files only; every file needs a filename."}
+				return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send contact_id (or contact_name and contact_email), subject, body, channel_id, cc and files only; every file needs a filename."}
 			}
 			return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send kind, body, cc and files only; every file needs a filename."}
 		}

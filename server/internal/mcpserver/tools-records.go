@@ -116,8 +116,11 @@ func timeEntriesList(c *call, arguments map[string]any) (any, error) {
 }
 
 const (
-	// attachmentReadBytes is the most of a file a call reads: enough for attachmentTextLimit characters.
+	// attachmentReadBytes is the most of a file the text path keeps: enough for attachmentTextLimit characters.
 	attachmentReadBytes = 128 << 10
+	// attachmentImageLimit is the largest image a call shows; a call reads one byte more to tell a larger one.
+	attachmentImageLimit      = 2 << 20
+	attachmentImageLimitWords = "2 MiB"
 	// attachmentTextLimit is the most text of a file a call returns.
 	attachmentTextLimit      = 20000
 	attachmentTextLimitWords = "20,000"
@@ -129,6 +132,7 @@ type attachmentOut struct {
 	SHA256                   string `json:"sha256"`
 	DetectedType             string `json:"detected_type"`
 	IsText                   bool   `json:"is_text"`
+	IsImage                  bool   `json:"is_image"`
 	TextTruncated            bool   `json:"text_truncated"`
 	Hint                     string `json:"hint,omitempty"`
 	UntrustedCustomerContent struct {
@@ -140,12 +144,13 @@ type attachmentOut struct {
 func attachmentGet(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
 		AttachmentID string `json:"attachment_id"`
+		Image        *bool  `json:"image"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = "No attachment " + args.AttachmentID + " in this workspace. Use an attachment id from colliedesk_conversation_get."
-	header, body, err := c.download("/api/v1/attachments/"+url.PathEscape(args.AttachmentID), attachmentReadBytes)
+	header, body, err := c.download("/api/v1/attachments/"+url.PathEscape(args.AttachmentID), attachmentImageLimit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +159,24 @@ func attachmentGet(c *call, arguments map[string]any) (any, error) {
 	if _, params, err := mime.ParseMediaType(header.Get("Content-Disposition")); err == nil {
 		out.UntrustedCustomerContent.Filename = params["filename"]
 	}
+	// The type comes from the bytes, never from the name or the declared type: SVG is sniffed as text, so
+	// it is never shown as an image.
 	out.DetectedType, _, _ = strings.Cut(http.DetectContentType(body), ";")
+	if shownImageTypes[out.DetectedType] {
+		switch {
+		case len(body) > attachmentImageLimit || int64(len(body)) < out.Size:
+			out.Hint = "This image is larger than " + attachmentImageLimitWords + ", the most a call shows. Open it in the web app to see it."
+		case args.Image != nil && !*args.Image:
+			out.Hint = "image was false, so the picture is left out."
+		default:
+			out.IsImage = true
+			return &imageResult{Data: body, MIMEType: out.DetectedType, Meta: out}, nil
+		}
+		return out, nil
+	}
+	if len(body) > attachmentReadBytes {
+		body = body[:attachmentReadBytes]
+	}
 	partial := int64(len(body)) < out.Size
 	if partial {
 		body = withoutPartialRune(body)
@@ -170,6 +192,9 @@ func attachmentGet(c *call, arguments map[string]any) (any, error) {
 	out.IsText, out.TextTruncated, out.UntrustedCustomerContent.Text = true, wasCut, &text
 	return out, nil
 }
+
+// shownImageTypes are the sniffed types a call shows as an image: the ones every MCP client renders.
+var shownImageTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
 
 // withoutPartialRune drops the bytes of a character that the read limit split.
 func withoutPartialRune(data []byte) []byte {
