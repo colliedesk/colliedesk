@@ -375,6 +375,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		aiConfig.Keys = config.Google.Keys
 	}
 	aiConfig.PlanLimits = limits
+	if aiConfig.ChatGate == nil {
+		aiConfig.ChatGate = carry.chatGate
+	}
 	api.ai = ai.NewService(db, aiConfig)
 	api.ai.SetClock(clock)
 	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())

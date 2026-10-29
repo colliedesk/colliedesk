@@ -59,16 +59,17 @@ const (
 	ChatFailed    = "failed"
 )
 
-// chatGate counts the answers streaming at once.
-type chatGate struct {
+// ChatGate counts the answers streaming at once, per workspace and in the process.
+type ChatGate struct {
 	mu        sync.Mutex
 	total     int
 	workspace map[string]int
 }
 
-func newChatGate() *chatGate { return &chatGate{workspace: map[string]int{}} }
+// NewChatGate makes the count of one process.
+func NewChatGate() *ChatGate { return &ChatGate{workspace: map[string]int{}} }
 
-func (g *chatGate) enter(workspaceID string) bool {
+func (g *ChatGate) enter(workspaceID string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.total >= chatPerProcess || g.workspace[workspaceID] >= chatPerWorkspace {
@@ -79,7 +80,7 @@ func (g *chatGate) enter(workspaceID string) bool {
 	return true
 }
 
-func (g *chatGate) leave(workspaceID string) {
+func (g *ChatGate) leave(workspaceID string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.total--

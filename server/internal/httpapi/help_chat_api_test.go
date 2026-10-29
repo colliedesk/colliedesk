@@ -919,3 +919,39 @@ func chatChannelStatus(t *testing.T, d chatDesk) (state, reason string) {
 	kbCall(t, d.api, http.MethodGet, "/api/v1/channels/"+d.channel, nil, d.admin, http.StatusOK, &channel)
 	return channel.Status.State, channel.Status.ReasonCode
 }
+
+// The answers streaming at once are bounded per process, across configurations: an API built for a new
+// configuration (re-serve) counts the answers the previous one is still writing.
+func TestTheChatBoundOnAnswersAtOnceHoldsAcrossConfigurations(t *testing.T) {
+	var config httpapi.Config
+	d := newChatDesk(t, "Chat Xray", func(c *httpapi.Config) {
+		c.Carry = httpapi.NewCarry(*c)
+		config = *c
+	})
+	next := chatDesk{api: httpapi.New(d.pool, config), pool: d.pool, fake: d.fake, admin: d.admin, slug: d.slug, ws: d.ws, article: d.article, channel: d.channel,
+		host: d.host, base: d.base, origin: d.origin}
+	next.site = helpCenterSite(next.api)
+	hold := make(chan struct{})
+	for range 3 {
+		held := chatReply("Orders ship ", "in 2 days [#"+num(d.article.Number)+"].")
+		held.Hold = hold
+		d.fake.Script(held)
+	}
+	d.fake.Script(chatReply("Orders ship in 2 days [#" + num(d.article.Number) + "]."))
+	done := make(chan struct{}, 3)
+	for range 3 {
+		go func() {
+			d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "When?"})
+			done <- struct{}{}
+		}()
+	}
+	for len(d.fake.Requests()) < 3 {
+		runtime.Gosched()
+	}
+	busy := next.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "When?"})
+	close(hold)
+	for range 3 {
+		<-done
+	}
+	wantResponse(t, busy, http.StatusTooManyRequests, "rate_limited")
+}

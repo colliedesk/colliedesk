@@ -62,6 +62,9 @@ type Config struct {
 	// PlanLimits is true on the hosted cloud, where a trial and a lock apply: the allowance reads
 	// the plan, and the worker cancels the tasks of a locked workspace.
 	PlanLimits bool
+	// ChatGate counts the chat answers streaming in this process; the services built for each new
+	// configuration share it (NewChatGate). Nil makes one for this service alone.
+	ChatGate *ChatGate
 }
 
 // Service reads and changes a workspace's AI settings. Every call names the workspace; a provider of
@@ -74,7 +77,7 @@ type Service struct {
 	// wakeup tells the worker a task was queued, so it does not wait for its next tick.
 	wakeup chan struct{}
 	// chats bounds the chat answers streaming at once (chat.go).
-	chats *chatGate
+	chats *ChatGate
 }
 
 // NewService uses db (request pool).
@@ -82,7 +85,11 @@ func NewService(db *database.DB, config Config) *Service {
 	if config.CheckTimeout <= 0 {
 		config.CheckTimeout = defaultCheckTimeout
 	}
-	return &Service{db: db, config: config, now: time.Now, checks: checkLimiter{seen: map[string][]time.Time{}}, wakeup: make(chan struct{}, 1), chats: newChatGate()}
+	chats := config.ChatGate
+	if chats == nil {
+		chats = NewChatGate()
+	}
+	return &Service{db: db, config: config, now: time.Now, checks: checkLimiter{seen: map[string][]time.Time{}}, wakeup: make(chan struct{}, 1), chats: chats}
 }
 
 // SetClock replaces the clock; tests use it.
