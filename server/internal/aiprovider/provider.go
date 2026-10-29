@@ -1,6 +1,6 @@
 // Package aiprovider calls a language model on behalf of a Colliedesk feature (triage suggestions,
-// reply drafts). The interface is at the level a feature needs: one complete request in, one
-// complete answer out, no sampling knobs, no streaming and no tool use. Each adapter translates it
+// reply drafts, the help center's chat). The interface is at the level a feature needs: one request
+// in, one answer out, whole or as it is written (Stream), no sampling knobs and no tool use. Each adapter translates it
 // to its provider's wire format. Adapters never retry: one Complete or Check is one HTTP attempt,
 // so the caller can meter every attempt (see docs/internals/ai.md).
 package aiprovider
@@ -57,6 +57,36 @@ type Request struct {
 	MaxOutput int
 	// Schema, when set, asks for JSON matching this JSON Schema object (structured output).
 	Schema map[string]any
+	// SystemParts follow System, in order. A part marked Cache ends a prefix the provider may cache
+	// (Claude: a cache_control breakpoint, five minutes); providers without a prompt cache join them.
+	SystemParts []SystemPart
+	// CacheHistory lets the provider cache the messages as well (Claude: automatic caching of the
+	// last message), so the next turn of a conversation reads them back.
+	CacheHistory bool
+	// NoThinking turns the model's thinking off where the model allows it; elsewhere it is left out
+	// and Effort alone bounds it.
+	NoThinking bool
+	// Warm asks the provider only to write the prompt's cache: no output, MaxOutput 0, never streamed.
+	// Only a provider with a prompt cache takes it (Caches).
+	Warm bool
+}
+
+// SystemPart is one block of system text.
+type SystemPart struct {
+	Text  string
+	Cache bool
+}
+
+// SystemText is the whole system text: System and every part, as a provider without blocks reads it.
+func (r Request) SystemText() string {
+	text := r.System
+	for _, part := range r.SystemParts {
+		if text != "" && part.Text != "" {
+			text += "\n\n"
+		}
+		text += part.Text
+	}
+	return text
 }
 
 // MaxOutputLimit is the largest output a request may ask for. Requests are not streamed, and the
@@ -75,7 +105,9 @@ func (r Request) Validate() error {
 		return errors.New("aiprovider: request has no messages")
 	case r.Messages[len(r.Messages)-1].Role != RoleUser:
 		return errors.New("aiprovider: the last message must be the user's")
-	case r.MaxOutput <= 0 || r.MaxOutput > MaxOutputLimit:
+	case r.Warm && r.MaxOutput != 0:
+		return errors.New("aiprovider: a request that warms the cache asks for no output")
+	case !r.Warm && (r.MaxOutput <= 0 || r.MaxOutput > MaxOutputLimit):
 		return fmt.Errorf("aiprovider: the output limit must be 1 to %d tokens", MaxOutputLimit)
 	}
 	for _, message := range r.Messages {
@@ -151,7 +183,41 @@ type Provider interface {
 	// Check sends the smallest request that proves the endpoint, credential and model work. It is a
 	// real, billed call: the caller meters it like any other. A max_tokens stop still passes.
 	Check(ctx context.Context, model string) (Response, error)
+	// Stream sends one request and hands each piece of the answer's text to onText as it is written,
+	// in order, then returns the whole answer as Complete does. When the call fails after the
+	// provider counted the prompt, the response holds the usage known so far (Usage.Reported), so a
+	// call cut short is still metered.
+	Stream(ctx context.Context, request Request, onText func(text string)) (Response, error)
 }
+
+// TokenCounter is a provider that counts a request's input tokens with its own tokenizer, free of
+// charge (Claude's count_tokens).
+type TokenCounter interface {
+	CountTokens(ctx context.Context, request Request) (int64, error)
+}
+
+// CountTokens counts a request's input tokens: exactly when the provider can (exact), else at one
+// token per 3 bytes, which no tokenizer this server meets undercounts by much.
+func CountTokens(ctx context.Context, provider Provider, request Request) (tokens int64, exact bool, err error) {
+	if counter, ok := provider.(TokenCounter); ok {
+		tokens, err := counter.CountTokens(ctx, request)
+		return tokens, err == nil, err
+	}
+	return EstimateTokens(request), false, nil
+}
+
+// EstimateTokens is a request's input at one token per 3 bytes. Characters ÷ 4 undercounts Claude's
+// tokenizer by about 40% on help articles.
+func EstimateTokens(request Request) int64 {
+	size := len(request.SystemText())
+	for _, message := range request.Messages {
+		size += len(message.Text)
+	}
+	return int64(size/3 + 1)
+}
+
+// Caches says whether a provider keeps a prompt cache a request can warm (Request.Warm).
+func Caches(provider Provider) bool { return provider.Kind() == KindAnthropic }
 
 // ErrorCode is the provider-independent reason a call failed. Codes are stored and shown, so
 // values never change.

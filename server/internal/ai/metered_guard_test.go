@@ -41,7 +41,8 @@ func TestProvidersAreCalledOnlyThroughMetered(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if selector, ok := call.Fun.(*ast.SelectorExpr); ok && (selector.Sel.Name == "Complete" || selector.Sel.Name == "Check") && len(call.Args) == 2 {
+			if selector, ok := call.Fun.(*ast.SelectorExpr); ok && ((selector.Sel.Name == "Complete" || selector.Sel.Name == "Check") && len(call.Args) == 2 ||
+				selector.Sel.Name == "Stream" && len(call.Args) == 3) {
 				t.Errorf("%s calls .%s: call a provider through ai.Service.Metered, so the call leaves a usage row", relative, selector.Sel.Name)
 			}
 			return true

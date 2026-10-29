@@ -103,10 +103,20 @@ func (s *Service) Metered(ctx context.Context, call Call, provider aiprovider.Pr
 	})
 }
 
+// MeteredStream is Metered for an answer handed to onText as it is written (aiprovider.Provider.Stream).
+// A call that fails or is cut short after the provider read the prompt is recorded with the usage it
+// reported, so what it cost counts.
+func (s *Service) MeteredStream(ctx context.Context, call Call, provider aiprovider.Provider, request aiprovider.Request, onText func(text string)) (aiprovider.Response, error) {
+	input, output := estimateTokens(request)
+	return s.metered(ctx, call, request.Model, [2]int64{input, output}, func(ctx context.Context) (aiprovider.Response, error) {
+		return provider.Stream(ctx, request, onText)
+	})
+}
+
 // estimateTokens is the most a request can use: its text at one token per 3 bytes (about one per CJK
 // character, more than English uses), and all of its output.
 func estimateTokens(request aiprovider.Request) (input, output int64) {
-	size := len(request.System)
+	size := len(request.SystemText())
 	for _, message := range request.Messages {
 		size += len(message.Text)
 	}
@@ -174,17 +184,7 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 	defer cancel()
 	latency := finished.Sub(started).Milliseconds()
 	err = s.db.InWorkspace(finishCtx, call.WorkspaceID, func(tx pgx.Tx) error {
-		if callErr != nil {
-			code := aiprovider.CodeOf(callErr)
-			var providerErr *aiprovider.Error
-			requestID := ""
-			if errors.As(callErr, &providerErr) {
-				requestID = providerErr.RequestID
-			}
-			_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='error',error_code=$3,provider_request_id=$4,finished_at=$5,latency_ms=$6
-				WHERE workspace_id=$1 AND id=$2`, call.WorkspaceID, usageID, string(code), nullable(requestID), finished, latency)
-			return err
-		}
+		// A failed call keeps the usage the provider reported before it failed (a stream cut short).
 		var input, output, cacheRead, cacheWrite *int64
 		if response.Usage.Reported {
 			input, output, cacheRead, cacheWrite = &response.Usage.InputTokens, &response.Usage.OutputTokens, &response.Usage.CacheReadTokens, &response.Usage.CacheWriteTokens
@@ -204,6 +204,22 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 				list = append(list, usageHop{Model: hop.Model, Input: hop.Usage.InputTokens, Output: hop.Usage.OutputTokens, CacheRead: hop.Usage.CacheReadTokens, CacheWrite: hop.Usage.CacheWriteTokens})
 			}
 			hops, _ = json.Marshal(list)
+		}
+		if callErr != nil {
+			code := aiprovider.CodeOf(callErr)
+			var providerErr *aiprovider.Error
+			requestID := ""
+			if errors.As(callErr, &providerErr) {
+				requestID = providerErr.RequestID
+			}
+			if requestID == "" {
+				requestID = response.RequestID
+			}
+			_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='error',error_code=$3,provider_request_id=$4,finished_at=$5,latency_ms=$6,
+					served_model=$7,input_tokens=$8,output_tokens=$9,cache_read_tokens=$10,cache_write_tokens=$11,hops=$12,cost_micro_usd=$13
+				WHERE workspace_id=$1 AND id=$2`, call.WorkspaceID, usageID, string(code), nullable(requestID), finished, latency,
+				nullable(response.Model), input, output, cacheRead, cacheWrite, hops, cost)
+			return err
 		}
 		_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='ok',stop_reason=$3,served_model=$4,input_tokens=$5,output_tokens=$6,cache_read_tokens=$7,
 				cache_write_tokens=$8,hops=$9,provider_request_id=$10,finished_at=$11,latency_ms=$12,cost_micro_usd=$13
