@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
-import type { Conversation, ConversationViewer, OnboardingGoal } from '../../api/schemas';
+import type { Conversation, ConversationViewer } from '../../api/schemas';
 import { dayGroup, formatDate, formatListTime, formatShortDate, stampTitle, zoneSuffix } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
@@ -29,7 +29,6 @@ interface ConversationListProps {
   failed?: boolean | 'results_refreshed';
   onRetry?: () => void;
   onClearFilters?: () => void;
-  canManage?: boolean;
   // checkedIds are the rows ticked for a bulk action; ticking never opens the conversation.
   checkedIds?: ReadonlySet<string>;
   onToggle?: (id: string) => void;
@@ -43,32 +42,18 @@ interface ConversationListProps {
   viewers?: ReadonlyMap<string, ConversationViewer[]>;
   // grouped splits the rows under Today and Earlier; only the latest-activity order keeps the groups contiguous.
   grouped?: boolean;
-  // onboardingGoal is what the team said it wants first at sign-up; its step leads the get-started list.
-  onboardingGoal?: OnboardingGoal | null;
+  // guide is the setup guide, shown above the rows while setup is unfinished (also when conversations exist).
+  guide?: ReactNode;
   // Sends the agent a test message on the default email channel; only where the workspace has one.
   onTestMessage?: () => Promise<unknown>;
 }
 
-type Step = 'connect' | 'import' | 'invite' | 'mcp';
-
-// The step each sign-up goal starts with; any other goal keeps the usual order.
-const firstStep: Partial<Record<OnboardingGoal, Step>> = { leave_helpdesk: 'import', shared_inbox: 'connect', lower_cost: 'invite', ai_agents: 'mcp' };
-
-// getStartedSteps lists the steps this agent can take, the goal's step first. The settings steps stay
-// admin-only; a goal whose step this agent cannot take recommends nothing.
+// Where the inbox sends an admin to finish something in Settings.
 export type SettingsTarget = '/settings' | '/settings/import-freshdesk' | `/settings/channels/${string}`;
-
-function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boolean): { steps: Step[]; recommended?: Step } {
-  const lead = goal ? firstStep[goal] : undefined;
-  const steps = (['connect', 'import', 'invite'] as Step[]).filter((step) => canManage || step === 'import');
-  if (lead === 'mcp') return { steps: ['mcp', ...steps], recommended: 'mcp' };
-  if (!lead || !steps.includes(lead)) return { steps };
-  return { steps: [lead, ...steps.filter((step) => step !== lead)], recommended: lead };
-}
 
 const visibleTags = 2;
 export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal, onTestMessage }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, guide, onTestMessage }: ConversationListProps) {
   const [testing, setTesting] = useState(false);
   const [testFailed, setTestFailed] = useState<string>();
   const testInFlight = useRef(false);
@@ -97,30 +82,15 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
   }, [checkedCount, allChecked]);
   const scroll = useRef<HTMLDivElement>(null);
   const onListKey = useListKeys(scroll, items.map((item) => item.id), selectedId, onSelect);
-  const settingsLink = (label: string, to: SettingsTarget, className: string) => <a href={to} className={className}>{label}</a>;
-  const getStarted = getStartedSteps(onboardingGoal, canManage);
-  // Every step is a full-size button; the first (the recommended one when there is one) is the primary
-  // action of a brand-new workspace, ahead of anything about billing.
-  const stepLink: Record<Step, (className: string) => ReactNode> = {
-    connect: (className) => settingsLink(messages.connectEmail, '/settings/channels/type/email', className),
-    // An admin imports in the app; an agent reads how, to ask an admin.
-    import: (className) => canManage ? settingsLink(messages.importFreshdesk, '/settings/import-freshdesk', className)
-      : <a href={messages.importFreshdeskURL} className={className} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,
-    invite: (className) => settingsLink(messages.inviteTeam, '/settings', className),
-    mcp: (className) => <a href={messages.mcpURL} className={className} target="_blank" rel="noreferrer">{messages.connectAIAgent}</a>,
-  };
   return (
     <div className="conversation-scroll" aria-busy={refreshing} ref={scroll} onKeyDown={onListKey}>
+      {guide}
       {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
         {onTestMessage && <p><button type="button" className="button" disabled={testing} onClick={sendTest}>{messages.sendTestMessage}</button>{' '}
           <span className="muted-copy">{messages.sendTestMessageHint}</span>{testFailed && <span role="alert" className="error-copy"> {testFailed}</span>}</p>}
-        <ul>
-          {getStarted.steps.map((step, index) => <li key={step} data-recommended={step === getStarted.recommended || undefined}>
-            {step === getStarted.recommended && <><span className="recommended-step">{messages.recommendedFirstStep}</span>{' '}</>}{stepLink[step](index === 0 ? 'button primary-action' : 'button')}</li>)}
-        </ul>
       </section>}
       {failed === 'results_refreshed' && <div className="empty-copy"><p role="alert" className="error-copy">{messages.resultsRefreshed}</p>
         <p className="muted-copy">{messages.resultsRefreshedWhy}</p>

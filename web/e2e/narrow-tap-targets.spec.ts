@@ -30,7 +30,7 @@ async function newDesk(page: Page, label: string): Promise<void> {
 test('on a 375 px screen the empty inbox steps, the composer, the email channel form and the settings sections are tap-sized', async ({ page }) => {
   await newDesk(page, 'Narrow Desk');
   await page.goto(`${servers.main}/`);
-  await expectTapSized(page.getByRole('region', { name: 'Get started' }).getByRole('list'), 'empty inbox next steps');
+  await expectTapSized(page.getByRole('region', { name: 'Finish setting up' }), 'setup guide rows and Hide');
 
   const headers = { Origin: servers.main };
   const contact = await page.request.post(`${servers.main}/api/v1/contacts`, { headers, data: { name: 'Narrow Customer', email: `narrow-${Date.now()}@example.com` } });
