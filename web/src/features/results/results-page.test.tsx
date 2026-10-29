@@ -105,6 +105,18 @@ describe('ResultsPage', () => {
     expect(screen.getByRole('link', { name: '3 h 12 min' })).toBeVisible();
   });
 
+  it('treats an import unverified only by the plan\'s archive limit as information, not a warning', () => {
+    const archive = results();
+    archive.baseline!.import_status = 'UNVERIFIED';
+    archive.baseline!.import_cause = 'archive_refused';
+    renderPage({ results: archive });
+    const note = screen.getByText(/Freshdesk doesn’t let your plan read archived tickets/);
+    expect(note.closest('.results-notice-warn')).toBeNull();
+    expect(screen.queryByText(/UNVERIFIED import/)).toBeNull();
+    expect(screen.queryByText('Unverified import')).toBeNull();
+    expect(screen.getByRole('link', { name: '3 h 12 min' })).toBeVisible();
+  });
+
   it('says when resolutions will be available and when a sample is too small', () => {
     const early = results();
     early.current!.windows['30d'] = window({ available_on: '2026-11-08T00:00:00Z', resolution: null, reopened: null,
@@ -112,7 +124,9 @@ describe('ResultsPage', () => {
     early.current!.history_since = '2026-10-02T00:00:00Z';
     renderPage({ results: early });
     expect(screen.getAllByText('Available on Nov 8').length).toBe(2);
-    expect(screen.getByText(/start on Nov 8/)).toBeVisible();
+    expect(screen.getByText(/the comparison appears on Nov 8/)).toBeVisible();
+    expect(screen.getByText(/Colliedesk has recorded when conversations are resolved since Oct 2/)).toBeVisible();
+    expect(screen.queryByText(/start on Nov 8/)).toBeNull();
     expect(screen.getByText('Too few (3)')).toBeVisible();
     expect(screen.getByText('Answered conversations are 3. A median needs at least 5.')).toBeVisible();
   });

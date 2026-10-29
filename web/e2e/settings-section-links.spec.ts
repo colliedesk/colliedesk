@@ -25,9 +25,10 @@ test('a link to a settings section lands on it, opened directly or from another 
   await expect(page.getByRole('heading', { name: 'Sessions', exact: true })).toBeInViewport();
   await expect(page.getByRole('heading', { name: 'Profile' })).not.toBeInViewport();
 
-  // The email channel and the web form were sections here; their old anchors open their channel pages.
+  // The email channel and the web form were sections here; their old anchors open their pages in Settings.
   await page.goto(`${baseURL}/settings#email-channel-heading`);
-  await expect(page).toHaveURL(`${baseURL}/settings/channels/new/email`);
+  await expect(page).toHaveURL(`${baseURL}/settings/channels/type/email`);
+  await expect(page.getByRole('heading', { name: 'Connect your support email' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Email', exact: true })).toBeVisible();
   await page.goto(`${baseURL}/settings#web-form-heading`);
   await expect(page).toHaveURL(`${baseURL}/settings/channels/new/web_form`);

@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   savedReplies: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), contact: vi.fn(),
   channelCounts: vi.fn(async () => ({ types: [{ type: 'email', count: 1 }] })),
   emailChannelOf: vi.fn(),
+  setupProgress: vi.fn(async (): Promise<unknown> => ({ steps: [], complete: true, recommended: null })), setSetupGuideHidden: vi.fn(async (hidden: boolean) => ({ hidden })),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
@@ -869,8 +870,7 @@ test('a conversation whose channel is off says its reply waits, and an admin is 
   const notice = await screen.findByText(/Email is off: this reply is saved but not sent until the channel is on/);
   // One channel of a type: no mailbox name on the rows or the thread.
   expect(document.querySelector('.channel-pill')).toBeNull();
-  fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
-  expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/55555555-5555-4555-8555-555555555555' });
+  expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/55555555-5555-4555-8555-555555555555');
   navigate.mockRestore();
 });
 
@@ -895,8 +895,7 @@ test('a web form conversation with no email connected can still be answered, and
   expect(screen.queryByText(/was removed/)).toBeNull();
   fireEvent.change(screen.getAllByLabelText('Message body').at(-1)!, { target: { value: 'Hello' } });
   expect(screen.getAllByRole('button', { name: 'Send reply' }).at(-1)).toBeEnabled();
-  fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
-  expect(navigate).toHaveBeenCalledWith({ href: '/settings/channels/type/email?tab=replies' });
+  expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/type/email?tab=replies');
   navigate.mockRestore();
 });
 
@@ -1001,8 +1000,7 @@ test('the composer warns about the mailbox a reply leaves from, and leads to tha
     api.emailChannelOf.mockResolvedValue(settings('sales@desk.example', 'failed'));
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
     const notice = await screen.findByText(/Gmail stopped sending/);
-    fireEvent.click(within(notice).getByRole('button', { name: 'Open Settings' }));
-    expect(navigate).toHaveBeenCalledWith({ href: `/settings/channels/${sales.id}?tab=replies` });
+    expect(within(notice).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', `/settings/channels/${sales.id}?tab=replies`);
   } finally {
     api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
     navigate.mockRestore();
@@ -1058,4 +1056,47 @@ test('a reply that lands after the person opened another conversation reloads th
   // Alpha's timeline is not on screen, so it is marked stale rather than read now: it is read when it opens.
   await waitFor(() => expect(client.getQueryState(['messages', alpha.id])?.isInvalidated).toBe(true));
   expect(api.messages).not.toHaveBeenCalledWith(beta.id);
+});
+
+const unfinished = { steps: [
+  { key: 'email', state: 'none', detail: null }, { key: 'import', state: 'none', detail: null },
+  { key: 'invite', state: 'alone', detail: null }, { key: 'first_reply', state: 'none', detail: null },
+], complete: false, recommended: null };
+const adminMe = (hidden: boolean) => ({ timezone: 'UTC', agent: { id: 'a-1', role: 'admin', email: 'ann@example.com', display_name: 'Ann' }, onboarding_goal: null, setup_guide_hidden: hidden });
+
+test('the setup guide shows above the conversations of a workspace that has not finished setting up', async () => {
+  quietApis();
+  api.me.mockResolvedValue(adminMe(false));
+  api.setupProgress.mockResolvedValue(unfinished);
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  renderRoute();
+  const guide = await screen.findByRole('region', { name: 'Finish setting up' });
+  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
+  expect(screen.getByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
+});
+
+test('Hide removes the guide and asks the server to remember it for this agent', async () => {
+  quietApis();
+  api.me.mockResolvedValue(adminMe(false));
+  api.setupProgress.mockResolvedValue(unfinished);
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: 'Hide' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument());
+  expect(api.setSetupGuideHidden).toHaveBeenCalledWith(true);
+});
+
+test('a hidden guide shows nothing, even though its data left with the session', async () => {
+  quietApis();
+  api.setupProgress.mockClear();
+  api.setupProgress.mockResolvedValue(unfinished);
+  api.me.mockResolvedValue(adminMe(true));
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  renderRoute();
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
+  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
 });

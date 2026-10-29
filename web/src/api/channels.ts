@@ -41,6 +41,9 @@ const heldReplaySchema = z.object({
   results: z.array(z.object({ status: z.string(), conversation_id: z.string().uuid().nullable(), message_id: z.string().uuid().nullable() })),
 }) satisfies z.ZodType<Generated<'HeldReplayResult'>>;
 const heldDiscardSchema = z.object({ discarded: z.number().int().nonnegative() }) satisfies z.ZodType<Generated<'HeldDiscardResult'>>;
+const forwardingConfirmationSchema = z.object({
+  code: z.string(), confirm_url: z.string().url().nullable(), received_at: z.string().datetime(), conversation_id: z.string().uuid(),
+}) satisfies z.ZodType<Generated<'ForwardingConfirmation'>>;
 // 204: no body.
 const removedSchema = z.undefined();
 
@@ -50,6 +53,7 @@ export type ChannelDetail = z.infer<typeof channelDetailSchema>;
 export type ChannelList = z.infer<typeof channelListSchema>;
 export type ChannelTypeInfo = ChannelList['types'][number];
 export type ChannelEvent = z.infer<typeof channelEventSchema>;
+export type ForwardingConfirmation = z.infer<typeof forwardingConfirmationSchema>;
 export type ChannelCreate = RequestBody<'createChannel'>;
 export type ChannelChange = RequestBody<'updateChannel'>;
 
@@ -75,6 +79,8 @@ export const channelsApi = {
   emailSecret: (id: string) => request(`/api/v1/channels/${id}/email/secret`, inboundSecretSchema, { method: 'POST' }),
   emailTestMessage: (id: string, key: string) => request(`/api/v1/channels/${id}/email/test-message`, testMessageResultSchema,
     { method: 'POST', headers: { 'Idempotency-Key': key } }),
+  // What Gmail sent to confirm forwarding to this channel in the last 24 hours; 404 while nothing came.
+  emailForwardingConfirmation: (id: string) => request(`/api/v1/channels/${id}/email/forwarding-confirmation`, forwardingConfirmationSchema),
   emailVerifyDomain: (id: string) => request(`/api/v1/channels/${id}/email/domain-verification`, emailChannelSettingsSchema, { method: 'POST' }),
   emailConnectGmail: (id: string) => request(`/api/v1/channels/${id}/email/gmail`, consentLinkSchema, { method: 'POST' }),
   emailDisconnectGmail: (id: string) => requestNoContent(`/api/v1/channels/${id}/email/gmail`, { method: 'DELETE' }),

@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import type { ChannelCreate, ChannelDetail, ChannelType } from '../api/channels';
+import type { Channel, ChannelCreate, ChannelDetail, ChannelList, ChannelType } from '../api/channels';
 import type { LazyPart } from '../ui/lazy-part';
 import { emailChannel } from './email';
 import { helpChatChannel } from './help_chat';
@@ -21,12 +21,30 @@ export interface ConnectProps {
   create: (input: Omit<ChannelCreate, 'type'>) => Promise<unknown>;
 }
 
+// What a type's home (Settings → the type's name) gets: the workspace's channels, every type.
+export interface HomeProps {
+  list: ChannelList;
+  canManage: boolean;
+  timezone: string;
+  navigate: (href: string, replace?: boolean) => void;
+  create: ConnectProps['create'];
+}
+
+// What a type's setup gets: the channel it sets up (none yet: the first step creates it with create).
+export interface SetupProps extends HomeProps {
+  channel?: Channel;
+  // named: the setup adds another channel of the type, told apart by its name.
+  named?: boolean;
+}
+
 export interface ChannelPanels {
   // One component per tab id the type declares.
   Tabs: Record<string, ComponentType<ChannelPanelProps>>;
   Connect: ComponentType<ConnectProps>;
-  // Overview is what the type shows on the channel list about all its channels, for an admin.
-  Overview?: ComponentType<{ defaultChannelID: string }>;
+  // Home is the type's own page, /settings/channels/type/<type>; without it that address opens the
+  // workspace's channel of the type. Setup is the guided connect, /settings/channels/<id>/setup and new/<type>.
+  Home?: ComponentType<HomeProps>;
+  Setup?: ComponentType<SetupProps>;
 }
 
 // ChannelUI is all the web app knows about a channel type. The shared pages (features/settings/channels)

@@ -358,6 +358,16 @@ func emailTestMessageSend(c *call, arguments map[string]any) (any, error) {
 	return sent, nil
 }
 
+func emailForwardingConfirmationGet(c *call, arguments map[string]any) (any, error) {
+	id, _ := arguments["channel_id"].(string)
+	c.notFound = "No forwarding confirmation reached email channel " + id + " in the last 24 hours (or it is not an email channel of this workspace: list them with colliedesk_channels_list)."
+	var confirmation map[string]any
+	if err := c.get("/api/v1/channels/"+url.PathEscape(id)+"/email/forwarding-confirmation", nil, &confirmation); err != nil {
+		return nil, err
+	}
+	return confirmation, nil
+}
+
 func billingGet(c *call, _ map[string]any) (any, error) {
 	c.notFound = "This Colliedesk server has no billing (it is self-hosted), so there is no plan to show."
 	var billing map[string]any

@@ -1,8 +1,6 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { useNavigate } from '@tanstack/react-router';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
-import { RouterLink } from '../../ui/router-link';
 import { Icon } from './editor/icons';
 import type { IconName } from './editor/icons';
 import { kbMessages } from './kb-messages';
@@ -176,14 +174,13 @@ interface HeadProps {
 
 // KBHead is the one row at the top of the knowledge base pages: the page title, Articles | Media, and the page's actions.
 export function KBHead({ current, heading, articles, actions }: HeadProps) {
-  const navigate = useNavigate();
   return (
     <header className="kb-head">
       <h1 id="kb-heading" className="kb-page-title">{heading}</h1>
       <nav className="kb-sections" aria-label={mediaMessages.sections}>
-        <RouterLink href="/knowledge" current={current === 'articles'} onFollow={() => void navigate({ to: '/knowledge' })}>
-          {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</RouterLink>
-        <RouterLink href="/knowledge/media" current={current === 'media'} onFollow={() => void navigate({ to: '/knowledge/media' })}>{mediaMessages.mediaTab}</RouterLink>
+        <a href="/knowledge" aria-current={current === 'articles' ? 'page' : undefined}>
+          {mediaMessages.articlesTab}{articles !== undefined && <span className="kb-count-tag">{articles.toLocaleString('en')}</span>}</a>
+        <a href="/knowledge/media" aria-current={current === 'media' ? 'page' : undefined}>{mediaMessages.mediaTab}</a>
       </nav>
       {actions && <div className="kb-head-actions">{actions}</div>}
     </header>

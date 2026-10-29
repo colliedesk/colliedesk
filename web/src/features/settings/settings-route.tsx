@@ -67,6 +67,7 @@ export function SettingsRoute() {
   const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
   // Your name also shows in the team list and the assignee lists.
   const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => { void refresh('me'); void refresh('agents'); } });
+  const setupGuide = useMutation({ mutationFn: api.setSetupGuideHidden, onSuccess: () => { void refresh('me'); void refresh('setup'); } });
   // The help center card is its own chunk (the knowledge base's); it loads alongside the settings requests.
   useEffect(helpCenterPart.preload, []);
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
@@ -88,6 +89,7 @@ export function SettingsRoute() {
     workspaceName={me.data?.workspace.name} workspaceNameSave={saveState(workspaceName)} onSetWorkspaceName={(name) => workspaceName.mutate(name)}
     email={me.data?.agent.email} displayName={me.data?.agent.display_name} displayNameSave={saveState(agentDisplayName)}
     onSetDisplayName={(name) => agentDisplayName.mutate(name)}
+    setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError ? messages.settingsActionFailed : undefined}
     agentsSection={<AgentTokensSection canCreateAdmin={isAdmin}

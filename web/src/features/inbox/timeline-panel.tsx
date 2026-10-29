@@ -32,7 +32,6 @@ interface TimelinePanelProps {
   // Team member names by id, to name the person who approved a reply an AI agent drafted.
   agentNames?: ReadonlyMap<string, string>;
   // Opens the customer's page: every conversation they had, newest first.
-  onOpenContact?: (contactId: string) => void;
   // The others who have this conversation open now, and whether one is writing a reply.
   viewers?: ConversationViewer[];
   // Changes the status from the header: Resolve while it is open or pending, Reopen once resolved or closed.
@@ -63,7 +62,7 @@ function StatusButton({ status, onSetStatus }: { status: Conversation['status'];
   </>;
 }
 
-export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [], onSetStatus, onBack, autofix = false }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, channelLabel, items, afterFirstCustomerMessage, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, suggestionWaiting = false, onToggleDetails, detailsToggleRef, agentNames, viewers = [], onSetStatus, onBack, autofix = false }: TimelinePanelProps) {
   const firstCustomer = items.findIndex((item) => item.kind === 'incoming');
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
@@ -75,9 +74,7 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
             {channelLabel && <span className="channel-pill">{channelLabel}</span>}
             {/* Anyone can type any address into the help chat: say so, and link the chat it came from. */}
             {conversation.channel === 'help_chat' && <Part part={presenceViewPart} render={(view) => <view.HelpChatLine conversationId={conversation.id} />} />}
-            {/* A plain click opens the page in the app; a new tab or a copied address still works. */}
-            <a className="timeline-contact" href={`/contacts/${conversation.contact_id}`} aria-label={messages.openContact(conversation.contact_name)}
-              onClick={(event) => { if (onOpenContact && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); onOpenContact(conversation.contact_id); } }}>
+            <a className="timeline-contact" href={`/contacts/${conversation.contact_id}`} aria-label={messages.openContact(conversation.contact_name)}>
               {conversation.contact_name}</a></div>}
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>

@@ -118,6 +118,10 @@
   background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
 .get-started a.button.primary-action { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .get-started li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* Holds the place of the setup guide while its chunk loads: the same height as the finished list
+   (header 44, bar 4 + 2 x space-2, rows 56 + 1 border each but the first, padding 2 x space-3, bottom border 1). */
+.setup-guide-placeholder { box-sizing: border-box; border-bottom: 1px solid var(--line);
+  min-height: calc(45px + 2 * var(--space-3) + 4px + 2 * var(--space-2) + var(--rows, 4) * 56px + (var(--rows, 4) - 1) * 1px); }
 .empty-copy { padding: var(--space-4); }
 
 /* Status: a dot plus a word, never colour alone. */
@@ -785,10 +789,22 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .import-report { margin: 0; display: grid; gap: var(--space-2); }
 .import-links { display: grid; gap: var(--space-2); }
 .import-links p, .import-links ul { margin: 0; }
-.import-phases { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
-.import-phases li { flex: 1; border-top: 3px solid var(--surface-3); padding-top: var(--space-2); color: var(--text-3); }
-.import-phases li[data-state="done"] { border-color: var(--ok); color: var(--text-2); }
-.import-phases li[data-state="current"] { border-color: var(--accent); color: var(--text-1); font-weight: 600; }
+.import-steps { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.import-steps li { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: var(--space-3); align-items: start; color: var(--text-3); }
+.import-steps li[data-state="done"] { color: var(--text-2); }
+.import-steps li[data-state="current"] { color: var(--text-1); }
+.import-step-body { display: grid; gap: var(--space-1); min-width: 0; }
+.import-steps li[data-state="current"] [data-step-name] { font-weight: 600; }
+.import-step-state { color: var(--text-3); font-size: var(--fs-label); }
+.import-step-mark { box-sizing: border-box; width: 1.25rem; height: 1.25rem; border: 2px solid var(--surface-3); border-radius: 50%; margin-top: 1px; }
+.import-steps li[data-state="done"] .import-step-mark { border-color: var(--ok); background: var(--ok) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.7 2.7L12 5.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat; }
+.import-steps li[data-state="current"] .import-step-mark { border-color: var(--surface-3); border-top-color: var(--accent); }
+.import-detail { display: block; }
+.import-check { color: var(--ok); margin-right: var(--space-2); }
+.import-undo { margin-top: var(--space-2); }
+.quiet-danger { color: var(--text-3); font-size: var(--fs-small); }
+.quiet-danger:hover:not(:disabled) { color: var(--danger); }
+.info-note { margin: 0; border-left: 3px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); padding: var(--space-2) var(--space-3); color: var(--text-1); }
 .import-ready { margin: 0; border-left: 3px solid var(--ok); border-radius: var(--radius-sm); background: var(--ok-soft); padding: var(--space-2) var(--space-3); color: var(--text-1); }
 .import-status { margin: 0; }
 .import-status[data-status="FAILED"] { color: var(--danger); }
@@ -803,8 +819,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .import-history time { grid-column: 1 / -1; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .import-phases li { transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+  .import-steps li[data-state="current"] .import-step-mark { animation: import-step-spin 0.9s linear infinite; }
 }
+@keyframes import-step-spin { to { transform: rotate(360deg); } }
 .import-people { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
 .import-people li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4); align-items: center; border-bottom: 1px solid var(--line); padding-bottom: var(--space-3); }
 .import-people .button-row { grid-column: 1 / -1; }

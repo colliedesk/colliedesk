@@ -2,16 +2,16 @@ import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { ImportJob, ImportPreview, ImportReport, UndoReport } from '../../api/imports';
 import { reportDownloadPath } from '../../api/imports';
-import { RouterLink } from '../../ui/router-link';
 import { formatDate } from '../../lib/format-date';
 import { formatWait } from '../../lib/format-wait';
+import { estimateRange } from './import-estimate';
 import { ImportLinksSummary } from './import-links';
 import { importMessages as m } from './import-messages';
+import { ImportSteps } from './import-steps';
+import { onlyArchiveRefused } from './import-verdict';
 import { SettingsNav } from './settings-nav';
 
 const defaultRecentDays = 90;
-// Freshdesk API calls one ticket takes: the ticket, its conversations and its time entries.
-const callsPerTicket = 3;
 
 // The Search Console section is rarely shown and loads on its own, so the first bundle does not carry it.
 const ImportSearchConsoleSummary = lazy(() => import('./import-search-console'));
@@ -44,9 +44,6 @@ export interface ImportPageProps {
   onUndo: (id: string) => void;
   // onNewImport opens the form again, with the address of a preview that failed.
   onNewImport: () => void;
-  // onOpenInbox follows the inbox link inside the app.
-  onOpenInbox?: () => void;
-  onOpenBilling?: () => void;
 }
 
 const recentDays = (job: ImportJob) => job.options.recent_days ?? defaultRecentDays;
@@ -99,7 +96,7 @@ function Current(props: ImportPageProps) {
   }
 }
 
-function Heading({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
+function Heading({ title, help, children }: { title: ReactNode; help?: string; children: ReactNode }) {
   return <>
     <div className="section-heading"><h2 id="import-current-heading">{title}</h2>{help && <p>{help}</p>}</div>
     <div className="settings-body">{children}</div>
@@ -167,17 +164,10 @@ function Ledger({ rows, imported }: { rows: { label: string; source: ReactNode; 
 
 const count = (value: number | null | undefined) => (value === null || value === undefined ? m.unknownCount : value.toLocaleString('en'));
 
-function estimate(preview: ImportPreview): string | undefined {
-  const tickets = Math.max(preview.tickets_outside_archive ?? 0, preview.highest_listed_ticket_id);
-  if (!preview.rate_limit_per_minute || tickets === 0) return undefined;
-  const minutes = (tickets * callsPerTicket) / (preview.rate_limit_per_minute * 0.8);
-  return formatWait(minutes * 60);
-}
-
 function Found({ job, preview, onStart, onCancel, busy }: ImportPageProps & { job: ImportJob; preview: ImportPreview | null }) {
   if (!preview) return null;
   const tickets = preview.tickets_outside_archive;
-  const time = estimate(preview);
+  const time = estimateRange(preview);
   return <Heading title={m.foundHeading(job.domain)} help={m.foundHelp}>
     <Ledger imported={false} rows={[
       { label: m.rowTickets, source: tickets === null ? m.unknownCount : m.atLeast(Math.max(tickets, 0)) },
@@ -186,11 +176,12 @@ function Found({ job, preview, onStart, onCancel, busy }: ImportPageProps & { jo
       { label: m.rowAgents, source: count(preview.agents.length) },
     ]} />
     <small className="muted-copy">{m.ticketsNote}</small>
-    {preview.archive === 'refused' && <p className="warning-note">{m.archiveRefused}</p>}
+    {preview.archive === 'refused' && <p className="info-note">{m.archiveRefused}</p>}
     {preview.canned_responses === 'refused' && <p className="warning-note">{m.cannedRefused}</p>}
     {preview.knowledge_base === 'refused' && <p className="warning-note">{m.knowledgeBaseRefused}</p>}
     {recentDays(job) > 0 && <p>{m.recentFirst(recentDays(job))}</p>}
-    {time && <p className="muted-copy">{m.estimate(time)}</p>}
+    {time && <p>{m.estimate(time)}</p>}
+    <p>{m.whileItRuns}</p>
     <div className="button-row import-actions">
       <button type="button" className="primary-action" onClick={() => onStart(job.id)} disabled={busy}>{m.startImport}</button>
       <button type="button" onClick={() => onCancel(job.id)} disabled={busy}>{m.discard}</button>
@@ -198,45 +189,34 @@ function Found({ job, preview, onStart, onCancel, busy }: ImportPageProps & { jo
   </Heading>;
 }
 
-function Phases({ job }: { job: ImportJob }) {
-  const days = recentDays(job);
-  if (days === 0) return null;
-  const recentDone = job.phase === 'full';
-  return (
-    <ol className="import-phases" aria-label={m.phases}>
-      <li data-state={recentDone ? 'done' : 'current'} aria-current={recentDone ? undefined : 'step'}>{m.phaseRecent(days)}</li>
-      <li data-state={recentDone ? 'current' : 'next'} aria-current={recentDone ? 'step' : undefined}>{m.phaseFull}</li>
-    </ol>
-  );
-}
-
-function Running({ job, onCancel, busy, timezone, report, onOpenInbox }: ImportPageProps & { job: ImportJob }) {
+function Running({ job, onCancel, busy, timezone, report }: ImportPageProps & { job: ImportJob }) {
   const progress = job.progress;
-  const step = progress ? m.steps[progress.step] ?? progress.step : '';
-  // A bar only while a step with a known size is under way: a finished or sizeless step never shows full.
-  const percent = progress && progress.total > 0 && progress.done < progress.total ? Math.round((progress.done / progress.total) * 100) : undefined;
   const waitingUntil = progress?.rate_limit_until && Date.parse(progress.rate_limit_until) > Date.now() ? progress.rate_limit_until : undefined;
   const when = job.next_run_at ? formatDate(job.next_run_at, timezone) : '';
   const retry = job.state === 'retry_wait'
     ? job.error_code === 'retrying_failed_items' ? m.retryingFailures(when) : job.error_code === 'import_running_elsewhere' ? m.waitingOtherImport(when) : m.retrying(when)
     : undefined;
+  // Conversations are in the inbox from the first minute of the first pass; a pass that found nothing leaves the inbox as it was.
+  const recentIn = (report?.interim && (report.tickets?.imported ?? 0) > 0) || (job.imported_conversations ?? 0) > 0;
+  const inboxHasTickets = recentIn || (job.phase === 'recent' && job.state === 'running');
   return <Heading title={m.heading} help={job.domain}>
-    <Phases job={job} />
-    {job.phase === 'full' && job.has_interim_report && report?.interim && ((report.tickets?.imported ?? 0) > 0
-      ? <p role="status" className="import-ready">{m.recentDone}{' '}<RouterLink href="/" onFollow={onOpenInbox}>{m.openInbox}</RouterLink></p>
+    <ImportSteps job={job} report={report} recentDays={recentDays(job)} />
+    {job.phase === 'full' && job.has_interim_report && report?.interim && (recentIn
+      ? <p role="status" className="import-ready">{m.recentDone}</p>
       : <p role="status">{m.recentNone(recentDays(job))}</p>)}
     {job.state === 'queued' && <p role="status">{m.queued}</p>}
     {retry && <p className="warning-note">{retry}</p>}
-    {progress && job.state === 'running' && <div className="usage" aria-live="polite">
-      <span>{m.stepCounts(step, progress.done, progress.total)}</span>
-      {percent !== undefined && <div className="usage-bar" role="progressbar" aria-label={step} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>}
-      {waitingUntil ? <small className="muted-copy">{m.rateLimitWait(formatDate(waitingUntil, timezone))}</small>
-        : progress.eta_seconds !== undefined && <small className="muted-copy">{m.eta(formatWait(progress.eta_seconds))}</small>}
-      <small className="muted-copy">{m.apiCalls(progress.api_calls)}</small>
-    </div>}
+    {progress && job.state === 'running' && progress.eta_seconds !== undefined && !waitingUntil && <p aria-live="polite">{m.eta(formatWait(progress.eta_seconds))}</p>}
+    <p className="muted-copy">{m.closeNote}</p>
     {report && <ReportLedger report={report} />}
-    {job.cancel_requested ? <p role="status">{m.stopping}</p>
-      : <div className="button-row import-actions"><button type="button" onClick={() => onCancel(job.id)} disabled={busy}>{m.stopImport}</button></div>}
+    <div className="button-row import-actions">
+      {inboxHasTickets && <a className="button primary-action" href="/">{m.openInbox}</a>}
+      {job.cancel_requested ? <p role="status">{m.stopping}</p>
+        : <button type="button" onClick={() => onCancel(job.id)} disabled={busy}>{m.stopImport}</button>}
+    </div>
+    {progress && <small className="muted-copy import-detail">
+      {m.apiCalls(progress.api_calls)}{waitingUntil && <>{' '}{m.rateLimitWait(formatDate(waitingUntil, timezone))}</>}
+    </small>}
   </Heading>;
 }
 
@@ -268,27 +248,33 @@ function ReportLedger({ report }: { report: ImportReport }) {
   </figure>;
 }
 
-function Finished({ job, report, onUndo, onNewImport, onOpenInbox, busy }: ImportPageProps & { job: ImportJob }) {
+function Finished({ job, report, onUndo, onNewImport, busy }: ImportPageProps & { job: ImportJob }) {
   const status = job.status ?? 'FAILED';
-  return <Heading title={m[`status${status}`]} help={job.domain}>
-    <p className="import-status" data-status={status}>{m[`explain${status}`]}</p>
+  // An archive the plan refuses is not the customer's to fix: the import is done, and the report names what to check.
+  const archiveOnly = status === 'UNVERIFIED' && onlyArchiveRefused(report);
+  const done = status === 'OK' || archiveOnly;
+  const title = archiveOnly ? m.statusDone : m[`status${status}`];
+  const note = archiveOnly ? m.archiveNote(report?.tickets?.unresolved_ids?.length ?? 0) : undefined;
+  return <Heading title={done ? <><span className="import-check" aria-hidden="true">✓</span>{title}</> : title} help={job.domain}>
+    {note ? <p className="import-status info-note" data-status="OK">{note.before}<a href={reportDownloadPath(job.id)} download>{note.link}</a>{note.after}</p>
+      : <p className="import-status" data-status={status}>{m[`explain${status}`]}</p>}
     {report && <ReportLedger report={report} />}
     {report?.links && <ImportLinksSummary links={report.links} />}
     {report?.search_console !== undefined && <Suspense fallback={null}><ImportSearchConsoleSummary section={report.search_console} /></Suspense>}
     <div className="button-row">
       <a className="link-action" href={reportDownloadPath(job.id)} download>{m.downloadReport}</a>
       <a className="link-action" href={`/api/v1/imports/${job.id}/report`} download={`freshdesk-import-${job.id}.json`}>{m.downloadReportJSON}</a>
-      <UndoButton onUndo={() => onUndo(job.id)} busy={busy} />
     </div>
     {/* Only the way on stays at the bottom of a phone screen; the report and the undo scroll with the page. */}
     <div className="button-row import-actions">
-      <RouterLink className="button primary-action" href="/" onFollow={onOpenInbox}>{m.openInbox}</RouterLink>
+      <a className="button primary-action" href="/">{m.openInbox}</a>
       <button type="button" onClick={onNewImport}>{m.newImport}</button>
     </div>
+    <div className="import-undo"><UndoButton quiet onUndo={() => onUndo(job.id)} busy={busy} /></div>
   </Heading>;
 }
 
-function Stopped({ job, report, onUndo, onNewImport, onOpenBilling, showBilling, busy }: ImportPageProps & { job: ImportJob }) {
+function Stopped({ job, report, onUndo, onNewImport, showBilling, busy }: ImportPageProps & { job: ImportJob }) {
   // The count is taken when the import ends; an older row without it falls back to what the job knows.
   // Contacts, saved replies and the knowledge base are written before any ticket, so a stopped full
   // pass may hold data without a conversation: undo stays offered.
@@ -305,14 +291,14 @@ function Stopped({ job, report, onUndo, onNewImport, onOpenBilling, showBilling,
     {job.error_message && job.state === 'failed' && <details><summary>{m.failureDetail}</summary><p className="muted-copy">{job.error_message}</p></details>}
     {report && <ReportLedger report={report} />}
     <div className="button-row import-actions">
-      {job.error_code === 'storage_cap' && showBilling && <RouterLink className="button primary-action" href="/settings/billing" onFollow={onOpenBilling}>{m.planAndBilling}</RouterLink>}
+      {job.error_code === 'storage_cap' && showBilling && <a className="button primary-action" href="/settings/billing">{m.planAndBilling}</a>}
       <button type="button" className={job.error_code === 'storage_cap' && showBilling ? undefined : 'primary-action'} onClick={onNewImport}>{preview ? m.tryAgain : m.newImport}</button>
       {imported && job.account_source && <UndoButton onUndo={() => onUndo(job.id)} busy={busy} />}
     </div>
   </Heading>;
 }
 
-function UndoButton({ onUndo, busy }: { onUndo: () => void; busy?: boolean }) {
+function UndoButton({ onUndo, busy, quiet }: { onUndo: () => void; busy?: boolean; quiet?: boolean }) {
   const [asking, setAsking] = useState(false);
   const keep = useRef<HTMLButtonElement>(null);
   // The question appears below the fold on a phone: it is brought into view and the safe answer focused.
@@ -321,7 +307,7 @@ function UndoButton({ onUndo, busy }: { onUndo: () => void; busy?: boolean }) {
     keep.current?.scrollIntoView?.({ block: 'nearest' });
     keep.current?.focus();
   }, [asking]);
-  if (!asking) return <button type="button" className="danger-action" onClick={() => setAsking(true)} disabled={busy}>{m.undoImport}</button>;
+  if (!asking) return <button type="button" className={quiet ? 'link-action quiet-danger' : 'danger-action'} onClick={() => setAsking(true)} disabled={busy}>{m.undoImport}</button>;
   return <div className="import-confirm" role="group" aria-label={m.undoImport}>
     <p>{m.undoConfirm}</p>
     <div className="button-row import-actions">

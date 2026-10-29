@@ -71,8 +71,8 @@ URL. Open it to sign in as the admin. Running the installer again keeps your `.e
 The link works once and expires after 15 minutes. To print a new one, see
 [troubleshooting](troubleshooting.md#the-sign-in-link-expired).
 
-After you sign in, the empty inbox links to the next steps: connect your support email, import
-from Freshdesk, and invite your team.
+After you sign in, the [setup guide](../user/setup-guide.md) at the top of the inbox lists the next steps: receive
+customer email, import from Freshdesk, invite your team and answer your first email.
 
 ## Upgrading
 

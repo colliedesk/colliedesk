@@ -120,10 +120,8 @@ test('tells the agent when replies will not be emailed', () => {
 });
 
 test('an admin can go straight to Settings from the notice that replies are not emailed', () => {
-  const onOpenSettings = vi.fn();
-  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Gmail stopped sending." canManage onOpenSettings={onOpenSettings} />);
-  fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Open Settings' }));
-  expect(onOpenSettings).toHaveBeenCalled();
+  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Gmail stopped sending." canManage />);
+  expect(within(screen.getByRole('status')).getByRole('link', { name: 'Open Settings' })).toHaveAttribute('href', '/settings/channels/type/email?tab=replies');
 });
 
 test('shows the author name and attachment download links on a timeline message', () => {
@@ -217,27 +215,12 @@ test('shows where an imported conversation came from', () => {
   expect(within(details).getByText('Type: Problem')).toBeInTheDocument();
 });
 
-test('an empty new workspace explains the next steps instead of a filter message', () => {
-  render(<InboxPage conversations={[]} canManage />);
+test('an empty new workspace explains itself and shows the guide it is given above the explanation', () => {
+  render(<InboxPage conversations={[]} canManage guide={<section aria-label="Finish setting up">steps</section>} />);
   const start = screen.getByRole('region', { name: /get started/i });
   expect(start).toHaveTextContent('No conversations yet');
-  expect(within(start).getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings/channels/type/email');
-  // An admin imports in the app.
-  expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', '/settings/import-freshdesk');
-  expect(within(start).getByRole('link', { name: 'Invite your team' })).toHaveAttribute('href', '/settings');
-});
-
-test('an agent of an empty workspace reads how to import, which an admin does', () => {
-  render(<InboxPage conversations={[]} />);
-  const start = screen.getByRole('region', { name: /get started/i });
-  expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', 'https://colliedesk.com/docs/import-freshdesk');
-});
-
-test('the import link of an empty workspace opens the import page in the app', () => {
-  const onOpenSettings = vi.fn();
-  render(<InboxPage conversations={[]} canManage onOpenSettings={onOpenSettings} />);
-  fireEvent.click(within(screen.getByRole('region', { name: /get started/i })).getByRole('link', { name: 'Import from Freshdesk' }));
-  expect(onOpenSettings).toHaveBeenCalledWith('/settings/import-freshdesk');
+  expect(screen.getByRole('region', { name: 'Finish setting up' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Finish setting up' }).compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test('an empty filtered list says no conversation matches', () => {
@@ -283,17 +266,10 @@ test('the list of a results number that was refreshed says so and leads back to 
   expect(onQuery).toHaveBeenCalled();
 });
 
-test('get-started links open Settings inside the app and hide admin-only steps from agents', () => {
-  const onOpenSettings = vi.fn();
-  const { rerender } = render(<InboxPage conversations={[]} canManage onOpenSettings={onOpenSettings} />);
-  const link = screen.getByRole('link', { name: 'Connect your support email' });
-  expect(fireEvent.click(link)).toBe(false); // default navigation (full page load) prevented
-  expect(onOpenSettings).toHaveBeenCalled();
-  rerender(<InboxPage conversations={[]} canManage={false} onOpenSettings={onOpenSettings} />);
-  const start = screen.getByRole('region', { name: /get started/i });
-  expect(within(start).queryByRole('link', { name: 'Invite your team' })).not.toBeInTheDocument();
-  expect(within(start).queryByRole('link', { name: 'Connect your support email' })).not.toBeInTheDocument();
-  expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toBeInTheDocument();
+test('the guide shows above the rows of an inbox that has conversations', () => {
+  render(<InboxPage conversations={[conversation]} guide={<section aria-label="Finish setting up">steps</section>} />);
+  expect(screen.getByRole('region', { name: 'Finish setting up' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /example/i })).toBeInTheDocument();
 });
 
 test('details drawer takes focus when opened and returns it on Escape', () => {

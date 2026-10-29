@@ -126,6 +126,30 @@ func (f *fakeFreshdesk) count(path string) int {
 	return f.requests[path]
 }
 
+// allTimeEntries is GET /api/v2/time_entries: every entry of the account, each with its ticket_id.
+func (f *fakeFreshdesk) allTimeEntries() []map[string]any {
+	names, _ := filepath.Glob(filepath.Join("testdata", "time-entries-*.json"))
+	sort.Strings(names)
+	all := []map[string]any{}
+	for _, name := range names {
+		all = append(all, f.list(filepath.Base(name))...)
+	}
+	return all
+}
+
+// apiCalls is the number of requests the fake saw on the Freshdesk API (attachment downloads excluded).
+func (f *fakeFreshdesk) apiCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	total := 0
+	for path, n := range f.requests {
+		if strings.HasPrefix(path, "/api/") {
+			total += n
+		}
+	}
+	return total
+}
+
 func (f *fakeFreshdesk) hit(path string) int {
 	f.mu.Lock()
 	f.requests[path]++
@@ -297,6 +321,8 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 		f.page(w, r, []map[string]any{})
 	case f.solutions && (parts[0] == "solutions" || r.URL.Path == "/api/v2/settings/helpdesk"):
 		f.serveSolutions(w, r, parts)
+	case r.URL.Path == "/api/v2/time_entries":
+		f.page(w, r, f.allTimeEntries())
 	case len(parts) == 3 && parts[2] == "time_entries":
 		f.page(w, r, f.list("time-entries-"+parts[1]+".json"))
 	default:

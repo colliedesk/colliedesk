@@ -6,7 +6,6 @@ import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/clien
 import { useCreateAction } from '../../api/use-create';
 import { messages } from '../../messages';
 import { savedReplyMessages } from '../settings/saved-reply-messages';
-import { RouterLink } from '../../ui/router-link';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import { ArticleAIBox, ArticleAINote } from './article-ai';
@@ -85,8 +84,7 @@ export function ArticleRoute({ articleId, collectionId }: { articleId?: string; 
 }
 
 function BackLink() {
-  const navigate = useNavigate();
-  return <RouterLink className="kb-back" href="/knowledge" onFollow={() => void navigate({ to: '/knowledge' })}><Icon name="chevronLeft" />{kbMessages.backToList}</RouterLink>;
+  return <a className="kb-back" href="/knowledge"><Icon name="chevronLeft" />{kbMessages.backToList}</a>;
 }
 
 // Side by side needs a wide window: the text and the preview each get half of the column left of the settings.
@@ -458,8 +456,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
           <span>{status === 'published' ? (isPublic === false ? kbMessages.notPublicHelpCenter : kbMessages.statusPublished) : kbMessages.statusDraft}</span>
         </div>
-        {isPublic === false && <RouterLink className="button-link" href="/settings#help-center-heading" onFollow={() => void navigate({ to: '/settings', hash: 'help-center-heading' })}>
-          <Icon name="globe" />{kbMessages.turnOnHelpCenter}</RouterLink>}
+        {isPublic === false && <a className="button-link" href="/settings#help-center-heading">
+          <Icon name="globe" />{kbMessages.turnOnHelpCenter}</a>}
       </section>
       {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
@@ -505,8 +503,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       <header className="kb-art-bar">
         <nav className="kb-crumbs" aria-label={kbMessages.breadcrumb}>
           <BackLink />
-          {collectionName && <><span aria-hidden="true">/</span><RouterLink href={`/knowledge?${new URLSearchParams({ collection: draft.collection_id })}`}
-            onFollow={() => void navigate({ to: '/knowledge', search: { collection: draft.collection_id } })}>{collectionName}</RouterLink></>}
+          {collectionName && <><span aria-hidden="true">/</span><a href={`/knowledge?${new URLSearchParams({ collection: draft.collection_id })}`}>{collectionName}</a></>}
           <span aria-hidden="true">/</span><span aria-current="page">{draft.title.trim() || heading}</span>
         </nav>
         {!phone && <>

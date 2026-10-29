@@ -27,10 +27,10 @@ async function newDesk(page: Page, label: string): Promise<void> {
   await redeemLink(page, createWorkspaceWithSlug(`${label} ${suffix}`, `owner-${suffix}@example.com`).url);
 }
 
-test('on a 375 px screen the empty inbox steps, the composer, the email channel form and the settings sections are tap-sized', async ({ page }) => {
+test('on a 375 px screen the empty inbox steps, the composer, every email setup step and the settings sections are tap-sized', async ({ page }) => {
   await newDesk(page, 'Narrow Desk');
   await page.goto(`${servers.main}/`);
-  await expectTapSized(page.getByRole('region', { name: 'Get started' }).getByRole('list'), 'empty inbox next steps');
+  await expectTapSized(page.getByRole('region', { name: 'Finish setting up' }), 'setup guide rows and Hide');
 
   const headers = { Origin: servers.main };
   const contact = await page.request.post(`${servers.main}/api/v1/contacts`, { headers, data: { name: 'Narrow Customer', email: `narrow-${Date.now()}@example.com` } });
@@ -51,6 +51,27 @@ test('on a 375 px screen the empty inbox steps, the composer, the email channel 
   await expect(page.getByRole('textbox', { name: 'Support address' })).toBeVisible();
   await expectTapSized(page.locator('form').filter({ has: page.getByRole('textbox', { name: 'Support address' }) }), 'email channel form');
   await expectTapSized(page.getByRole('navigation', { name: 'Settings sections' }), 'settings sections');
+
+  // Every step of the email setup, each with its controls open.
+  await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${Date.now()}@narrow-desk.example`);
+  await page.getByRole('button', { name: 'Save support address' }).click();
+  const forward = page.getByRole('group', { name: 'Forward its mail to Colliedesk' });
+  await expect(forward).toContainText('Step 2 of 4');
+  await page.getByRole('button', { name: 'Create inbound secret' }).click();
+  await expect(page.getByRole('textbox', { name: /Inbound secret/ })).toBeVisible();
+  await expectTapSized(forward, 'email setup step 2');
+  await forward.getByRole('tab', { name: 'Gmail' }).click();
+  await expectTapSized(forward, 'email setup step 2, Gmail');
+  await forward.getByRole('button', { name: 'Skip for now' }).click();
+  const replies = page.getByRole('group', { name: /Send replies from/ });
+  await expect(replies).toContainText('Step 3 of 4');
+  await expectTapSized(replies, 'email setup step 3');
+  await expectTapSized(page.getByRole('group', { name: 'Your support address' }), 'email setup done step');
+  await replies.getByRole('button', { name: /Skip for now/ }).click();
+  const test4 = page.getByRole('group', { name: 'Try it with a test message' });
+  await expect(test4).toContainText('Step 4 of 4');
+  await expectTapSized(test4, 'email setup step 4');
+  await expectTapSized(page.getByRole('complementary', { name: 'Customers see' }), 'email setup preview');
 });
 
 test('on a 375 px screen the test message conversation, its email links and the contact history link are tap-sized', async ({ page }) => {
@@ -58,6 +79,9 @@ test('on a 375 px screen the test message conversation, its email links and the 
   await page.goto(`${servers.main}/settings/channels/type/email`);
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${Date.now()}@narrow-mail.example`);
   await page.getByRole('button', { name: 'Save support address' }).click();
+  // The test message is the setup's last step: forwarding and replies are skipped for now.
+  await page.getByRole('group', { name: 'Forward its mail to Colliedesk' }).getByRole('button', { name: 'Skip for now' }).click();
+  await page.getByRole('group', { name: /Send replies from/ }).getByRole('button', { name: /Skip for now/ }).click();
   await page.getByRole('button', { name: 'Send yourself a test message' }).click();
   await expect(page).toHaveURL(/\/conversations\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('link', { name: 'Download original email' })).toBeVisible();

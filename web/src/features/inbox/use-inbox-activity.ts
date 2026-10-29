@@ -106,7 +106,11 @@ export function useInboxActivity(enabled = true, agentId?: string) {
     const items = alerts(unseen, replies, agentId, viewing, (id) => seen.current.created.has(id) && !unseen.new_conversations.some((item) => item.id === id));
     // An update does not say who made it, so the caller's own change also refreshes the list once
     // more. That costs at most one list fetch per poll and keeps the server row free of an actor field.
-    if (items.length > 0 || changes.length > 0) void client.invalidateQueries({ queryKey: ['conversations'] });
+    if (items.length > 0 || changes.length > 0) {
+      void client.invalidateQueries({ queryKey: ['conversations'] });
+      // A new email, a reply or a joined teammate moves a step of the setup guide.
+      void client.invalidateQueries({ queryKey: ['setup'] });
+    }
     for (const item of changes) void client.invalidateQueries({ queryKey: ['messages', item.id] });
     if (items.length === 0) return;
     if (document.hasFocus()) return;

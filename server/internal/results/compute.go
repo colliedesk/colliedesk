@@ -17,9 +17,11 @@ type Data struct {
 	HistorySince *time.Time `json:"history_since,omitempty"`
 	// Source, ImportStatus and End describe a baseline: the import it is measured from, that import's
 	// reconcile status (empty for an import made before results existed) and where its windows end.
-	Source       string     `json:"source,omitempty"`
-	ImportStatus string     `json:"import_status,omitempty"`
-	End          *time.Time `json:"end,omitempty"`
+	Source       string `json:"source,omitempty"`
+	ImportStatus string `json:"import_status,omitempty"`
+	// ImportCause is archive_refused when the import is UNVERIFIED only because the Freshdesk plan refuses the archive API.
+	ImportCause string     `json:"import_cause,omitempty"`
+	End         *time.Time `json:"end,omitempty"`
 	// StatsRead counts the baseline conversations whose ticket stats were read; zero with conversations
 	// means the import predates them and must run again for resolve times.
 	StatsRead int `json:"stats_read"`
@@ -53,9 +55,9 @@ func ComputeCurrent(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 // ComputeBaseline computes the baseline of the workspace's import, or removes it when there is none.
 // A baseline replaces the previous one at once: its import was run again or undone.
 func ComputeBaseline(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) error {
-	var source, status *string
+	var source, status, cause *string
 	var anchor *time.Time
-	err := tx.QueryRow(ctx, `SELECT baseline_source,baseline_anchor_at,baseline_import_status FROM results_state WHERE workspace_id=$1`, workspaceID).Scan(&source, &anchor, &status)
+	err := tx.QueryRow(ctx, `SELECT baseline_source,baseline_anchor_at,baseline_import_status,baseline_import_cause FROM results_state WHERE workspace_id=$1`, workspaceID).Scan(&source, &anchor, &status, &cause)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("read the results baseline: %w", err)
 	}
@@ -71,6 +73,9 @@ func ComputeBaseline(ctx context.Context, tx pgx.Tx, workspaceID string, now tim
 		data := Data{Windows: numbers, Source: *source, End: &in.End}
 		if status != nil {
 			data.ImportStatus = *status
+		}
+		if cause != nil {
+			data.ImportCause = *cause
 		}
 		for _, c := range in.Conversations {
 			if c.Stats != nil {

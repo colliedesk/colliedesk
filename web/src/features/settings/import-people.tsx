@@ -42,6 +42,7 @@ export function ImportPeople(props: ImportPeopleProps) {
     <div className="settings-body">
       {failed && <p role="alert" className="error-copy">{m.peopleFailed}{' '}
         <button type="button" className="link-action" onClick={onRetry}>{m.peopleRetry}</button></p>}
+      {people.some((person) => person.email.includes('@')) && <p className="muted-copy">{m.inviteNote}</p>}
       {people.length > 0 && <ul className="import-people">
         {people.map((person) => <Person key={person.external_id} {...props} person={person} active={active}
           invite={invited.get(person.email.toLowerCase())} member={members.has(person.email.toLowerCase())} busy={busy} />)}

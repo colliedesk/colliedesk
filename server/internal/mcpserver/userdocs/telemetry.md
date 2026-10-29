@@ -120,6 +120,8 @@ Each is sent only after the action succeeded.
 | `agent_request_decided` | `decision`: `approved` or `rejected` |
 | `settings_section_opened` | `section`: the settings section |
 | `workspace_export_requested` | none |
+| `onboarding_step_started` | `step`: `email`, `import`, `invite` or `first_reply`; sent when someone selects a step of the [setup guide](setup-guide.md) |
+| `onboarding_step_completed` | `step`: as above; sent when the step turns done while the guide is shown |
 | `problem_reported` | none; sent after a [problem report](problem-reports.md) reached the support desk (the report itself goes to the server's support desk, not to PostHog) |
 
 When you sign out, the web app forgets the agent id, so later events no longer carry it.

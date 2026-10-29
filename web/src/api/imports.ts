@@ -55,8 +55,12 @@ const linksSchema = z.object({
   rewritten: z.object({ articles: z.number(), translations: z.number().optional(), saved_replies: z.number(), links: z.number() }),
   left: z.array(z.object({ entity: z.string(), freshdesk_id: z.string(), url: z.string(), reason: z.string() })).nullable().optional(),
 }).passthrough();
+// verification says, per total, whether Freshdesk's own count confirmed it; cause names the one plan limit behind a total
+// that could not be confirmed (archive_refused: the plan does not allow the archive API).
+const verificationSchema = z.object({ verified: z.boolean(), cause: z.string().optional() }).passthrough();
 export const importReportSchema = z.object({
   status: z.string(),
+  verification: z.object({ tickets: verificationSchema, contacts: verificationSchema, saved_replies: verificationSchema, knowledge_base: verificationSchema }).partial().optional(),
   interim: z.boolean().optional(),
   contacts: countSchema.optional(), tickets: countSchema.extend({ unresolved_ids: z.array(z.string()).nullable().optional() }).optional(),
   messages: countSchema.optional(), attachments: countSchema.optional(), time_entries: countSchema.optional(), saved_replies: countSchema.optional(),

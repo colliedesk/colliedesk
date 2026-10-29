@@ -56,31 +56,77 @@ test('the old help center address is optional and goes with the preview as a hos
   expect(onPreview).toHaveBeenCalledWith('acme.freshdesk.com', 'secret', 'support.acme.com');
 });
 
-test('the preview shows what Freshdesk holds before anything is written, and what the key cannot read', () => {
-  const { onStart } = page({ job: job({ preview: { ...preview, archive: 'refused' } }) });
+test('the preview shows what Freshdesk holds before anything is written', () => {
+  const { onStart } = page({ job: job() });
   const ledger = screen.getByRole('table');
   expect(within(ledger).getByRole('row', { name: /Tickets/ })).toHaveTextContent('at least 4,800');
   expect(within(ledger).getByRole('row', { name: /Contacts/ })).toHaveTextContent('3');
   expect(within(ledger).queryByRole('columnheader', { name: 'In Colliedesk' })).not.toBeInTheDocument();
-  expect(screen.getByText(/cannot read archived tickets/)).toBeInTheDocument();
   expect(screen.getByText(/Tickets updated in the last 90 days come first/)).toBeInTheDocument();
-  expect(screen.getByText(/leaves a fifth of that to your other Freshdesk apps/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start import' }));
   expect(onStart).toHaveBeenCalledWith(job().id);
 });
 
-test('a running import shows its step, its counts and when the recent tickets are in', () => {
+test('a plan that does not allow the archive API gets a calm note, not a warning about the key', () => {
+  page({ job: job({ preview: { ...preview, archive: 'refused', canned_responses: 'refused' } }) });
+  const note = screen.getByText(/Freshdesk doesn’t let this plan read archived tickets/);
+  expect(note.closest('.warning-note')).toBeNull();
+  expect(note).toHaveTextContent('listed in the report so you can check them');
+  expect(note).toHaveTextContent('Everything else imports normally');
+  expect(screen.queryByText(/This key cannot read archived tickets/)).not.toBeInTheDocument();
+  // A key that cannot read something else still warns.
+  expect(screen.getByText(/cannot read canned responses/).closest('.warning-note')).not.toBeNull();
+});
+
+test('the preview gives an honest time range before Start import, and says the page can be closed', () => {
+  // 388 tickets x 2.4 requests = 931.2 requests, at 45 to 80 requests a minute on a 100-a-minute plan: 11.6 to 20.7 minutes.
+  page({ job: job({ preview: { ...preview, tickets_outside_archive: 388, highest_listed_ticket_id: 388, rate_limit_per_minute: 100 } }) });
+  expect(screen.getByText(/about 12 to 21 minutes/)).toBeInTheDocument();
+  expect(screen.getByText(/newest tickets arrive within the first minute/i)).toBeInTheDocument();
+  expect(screen.getByText(/use the inbox while it runs/)).toBeInTheDocument();
+  expect(screen.getByText(/You can close this page/)).toBeInTheDocument();
+});
+
+test('without a known rate limit the estimate assumes 50 to 100 requests a minute', () => {
+  // 931.2 requests at 22.5 to 80 a minute: 11.6 to 41.4 minutes.
+  page({ job: job({ preview: { ...preview, tickets_outside_archive: 388, highest_listed_ticket_id: 388, rate_limit_per_minute: 0 } }) });
+  expect(screen.getByText(/about 12 to 42 minutes/)).toBeInTheDocument();
+});
+
+test('a running import lists its steps with their state, offers the inbox and says the page can be closed', () => {
   const { onCancel } = page({ report: { status: 'INTERIM', interim: true, tickets: { source: 5, imported: 5, failed: 0 } }, job: job({ state: 'running', phase: 'full', has_interim_report: true,
     progress: { step: 'importing tickets', done: 25, total: 100, api_calls: 75, eta_seconds: 600, updated_at: '2026-10-22T08:05:00Z' } }) });
   const steps = screen.getByRole('list', { name: 'Import steps' });
-  expect(within(steps).getByText('Whole account')).toHaveAttribute('aria-current', 'step');
+  const items = within(steps).getAllByRole('listitem');
+  expect(items.map((item) => item.querySelector('[data-step-name]')?.textContent)).toEqual([
+    'Tickets from the last 90 days', 'Contacts and companies', 'Saved replies', 'Finding older tickets', 'Help center', 'Older tickets']);
+  expect(items.map((item) => item.getAttribute('data-state'))).toEqual(['done', 'done', 'done', 'done', 'done', 'current']);
+  expect(items[0]).toHaveTextContent('Done');
+  expect(items[0]).toHaveTextContent('5 tickets');
+  expect(items[5]).toHaveAttribute('aria-current', 'step');
+  expect(items[5]).toHaveTextContent('25 of 100');
+  expect(screen.getByRole('progressbar', { name: 'Older tickets' })).toHaveAttribute('aria-valuenow', '25');
   expect(screen.getByRole('status')).toHaveTextContent('The recent tickets are in');
-  expect(screen.getByRole('progressbar', { name: 'Copying tickets' })).toHaveAttribute('aria-valuenow', '25');
-  expect(screen.getByText('Copying tickets: 25 of 100')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Open the inbox' })).toHaveAttribute('href', '/');
   expect(screen.getByText(/About 10 minutes left/)).toBeInTheDocument();
+  expect(screen.getByText(/You can close this page/)).toBeInTheDocument();
+  expect(screen.getByText('75 requests to Freshdesk so far.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Stop import' }));
   expect(onCancel).toHaveBeenCalledWith(job().id);
+});
+
+test('the first pass shows the recent tickets as the current step and the rest as waiting', () => {
+  page({ job: job({ state: 'running', phase: 'recent', progress: { step: 'importing tickets', done: 3, total: 40, api_calls: 12, updated_at: '2026-10-22T08:05:00Z' } }) });
+  const items = within(screen.getByRole('list', { name: 'Import steps' })).getAllByRole('listitem');
+  expect(items.map((item) => item.getAttribute('data-state'))).toEqual(['current', 'waiting', 'waiting', 'waiting', 'waiting', 'waiting']);
+  expect(items[0]).toHaveTextContent('3 of 40');
+  expect(screen.getByRole('link', { name: 'Open the inbox' })).toHaveAttribute('href', '/');
+});
+
+test('a pause for Freshdesk’s rate limit is a quiet line that calls it normal', () => {
+  page({ job: job({ state: 'running', phase: 'full', progress: { step: 'importing tickets', done: 25, total: 100, api_calls: 75, rate_limit_until: '2999-01-01T00:00:00Z', updated_at: '2026-10-22T08:05:00Z' } }) });
+  expect(screen.getByText(/This is normal and automatic/)).toBeInTheDocument();
+  expect(screen.getByText(/the import is paused until/)).toBeInTheDocument();
 });
 
 test('a wait for Freshdesk says when the import tries again', () => {
@@ -140,7 +186,8 @@ test('the page is about the import still open, else the newest', () => {
 test('a finished step never shows a full bar, and a step of unknown size shows no bar', () => {
   page({ job: job({ state: 'running', phase: 'full', progress: { step: 'checking ticket ids', done: 1, total: 1, api_calls: 3, updated_at: '2026-10-22T08:05:00Z' } }) });
   expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  expect(screen.getByText('Checking ticket numbers: 1 of 1')).toBeInTheDocument();
+  expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Finding older tickets');
+  expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('1 of 1');
 });
 
 test('a key Freshdesk refused while reading the account is a preview to try again, not a stopped import', () => {
@@ -263,4 +310,39 @@ test('a wrong address is pointed at on its field', () => {
   fireEvent.change(field, { target: { value: 'acme.freshdesk.com' } });
   fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
   expect(screen.getByLabelText('API key of a Freshdesk admin')).toHaveAttribute('aria-invalid', 'true');
+});
+
+const archiveOnlyReport = (change: Partial<ImportReport> = {}): ImportReport => ({
+  status: 'UNVERIFIED', tickets: { source: 388, imported: 388, failed: 0, unresolved_ids: ['32', '34', '44'] },
+  verification: { tickets: { verified: false, cause: 'archive_refused' }, contacts: { verified: true }, saved_replies: { verified: true }, knowledge_base: { verified: true } }, ...change,
+});
+
+test('an import that only lacks the archive the plan refuses is done, with a short note on what to check', () => {
+  page({ job: job({ state: 'finished', phase: 'full', status: 'UNVERIFIED', has_report: true }), report: archiveOnlyReport() });
+  expect(screen.getByRole('heading', { name: 'Import done' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: /not verified/ })).not.toBeInTheDocument();
+  const note = screen.getByText(/Freshdesk doesn’t let this plan read archived tickets/);
+  expect(note).toHaveTextContent('3 ticket numbers');
+  expect(within(note).getByRole('link', { name: 'report' })).toHaveAttribute('href', `/api/v1/imports/${job().id}/report?format=markdown`);
+  expect(screen.getByRole('link', { name: 'Open the inbox' })).toHaveClass('primary-action');
+});
+
+test('an unverified import with any other cause keeps saying not verified', () => {
+  const other = archiveOnlyReport({ verification: { tickets: { verified: false, cause: 'archive_refused' }, contacts: { verified: false }, saved_replies: { verified: true }, knowledge_base: { verified: true } } });
+  page({ job: job({ state: 'finished', phase: 'full', status: 'UNVERIFIED', has_report: true }), report: other });
+  expect(screen.getByRole('heading', { name: 'Import done, not verified' })).toBeInTheDocument();
+  cleanup();
+  page({ job: job({ state: 'finished', phase: 'full', status: 'UNVERIFIED', has_report: true }), report: archiveOnlyReport({ verification: undefined }) });
+  expect(screen.getByRole('heading', { name: 'Import done, not verified' })).toBeInTheDocument();
+});
+
+test('undo is a quiet link below the report, not a button beside the downloads, and still asks first', () => {
+  const { onUndo } = page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK' } });
+  const undo = screen.getByRole('button', { name: 'Undo import' });
+  expect(undo).not.toHaveClass('danger-action');
+  expect(undo.closest('.import-actions')).toBeNull();
+  fireEvent.click(undo);
+  expect(onUndo).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove imported data' }));
+  expect(onUndo).toHaveBeenCalledWith(job().id);
 });

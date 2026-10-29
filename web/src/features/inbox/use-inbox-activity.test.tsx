@@ -143,7 +143,11 @@ test('a conversation returned by two polls is announced and counted once', async
   await tick(20_000);
   expect(notifications).toHaveLength(1);
   expect(document.title).toBe('(1) Colliedesk');
-  expect(invalidate).toHaveBeenCalledTimes(1);
+  const reloads = (key: string) => invalidate.mock.calls.filter(([filters]) => filters?.queryKey?.[0] === key).length;
+  expect(reloads('conversations')).toBe(1);
+  // The setup guide follows the same change, once.
+  expect(reloads('setup')).toBe(1);
+  expect(invalidate).toHaveBeenCalledTimes(2);
 });
 
 test('the same conversation is announced again when it is later assigned to me', async () => {

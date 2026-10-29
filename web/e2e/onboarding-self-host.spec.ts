@@ -39,9 +39,10 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
 
   const empty = page.getByRole('region', { name: 'Get started' });
   await expect(empty).toContainText('No conversations yet');
-  await expect(empty.getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings/channels/type/email');
-  await expect(empty.getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', /import-freshdesk/);
-  await expect(empty.getByRole('link', { name: 'Invite your team' })).toHaveAttribute('href', '/settings');
+  const guide = page.getByRole('region', { name: 'Finish setting up' });
+  await expect(guide.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
+  await expect(guide.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', /import-freshdesk/);
+  await expect(guide.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/settings');
   await expectReadablePage(page);
 
   // A failed list (server error) is reported with a retry, not as "No conversations yet".
@@ -55,7 +56,7 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
 
   // Next steps open inside the app (no full page load).
   await page.evaluate(() => { (window as unknown as { stillHere: boolean }).stillHere = true; });
-  await empty.getByRole('link', { name: 'Connect your support email' }).click();
+  await guide.getByRole('link', { name: /Receive customer email/ }).click();
   // The email channel's own page (Settings → Channels → Email).
   await expect(page.getByRole('heading', { name: 'Email', exact: true })).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere)).toBe(true);

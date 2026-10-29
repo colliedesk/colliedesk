@@ -193,7 +193,7 @@ func (w *Worker) recordError(ctx context.Context, workspaceID string, now time.T
 // stays unknown. A workspace with an in-app import still to finish is left alone: its tickets are
 // still arriving, and the finished run names the baseline itself (MarkImportFinished).
 func backfillBaseline(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
-	tag, err := tx.Exec(ctx, `UPDATE results_state s SET baseline_source=b.source,baseline_anchor_at=b.anchor,baseline_import_status=NULL,baseline_dirty=true
+	tag, err := tx.Exec(ctx, `UPDATE results_state s SET baseline_source=b.source,baseline_anchor_at=b.anchor,baseline_import_status=NULL,baseline_import_cause=NULL,baseline_dirty=true
 		FROM (SELECT i.source,COALESCE((SELECT min(j.finished_at) FROM import_jobs j
 				WHERE j.workspace_id=$1 AND j.kind='import' AND j.account_source=i.source AND j.status IS NOT NULL),max(i.updated_at)) AS anchor
 			FROM import_items i WHERE i.workspace_id=$1 AND i.entity='ticket' AND i.status='done' GROUP BY i.source
