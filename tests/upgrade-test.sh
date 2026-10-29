@@ -68,10 +68,23 @@ server_run() { dc run --rm --no-deps -T server "$@"; }
 # A migrate that prints exactly "migrations applied", as both releases do.
 migrate() { server_run '/app/collie migrate' 2>/dev/null | grep -qx 'migrations applied'; }
 
-# The install as install.sh lays it out: its compose file and database users, generated passwords.
-sed -n "/^cat >\"\$TARGET_DIR\/compose.yaml\" <<'COMPOSE'$/,/^COMPOSE$/p" "$ROOT/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
+# The install as the previous release's install.sh laid it out: its compose file, which still passes
+# the settings to the server in its environment, and its database users, generated passwords. The
+# upgrade keeps that compose file, as an operator who only changes the image does: the candidate
+# imports the settings into its database and warns that they are still in the environment.
+# PREVIOUS_INSTALL_SH names the file instead (a local image without a release tag).
+previous_tag=${PREVIOUS##*:}
+if [ -n "${PREVIOUS_INSTALL_SH:-}" ]; then
+  cp "$PREVIOUS_INSTALL_SH" "$TMP/install.sh"
+else
+  git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh" 2>/dev/null ||
+    { git -C "$ROOT" fetch -q --depth 1 origin "refs/tags/$previous_tag:refs/tags/$previous_tag" 2>/dev/null &&
+      git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh"; } ||
+    fail "cannot read install.sh of $previous_tag; set PREVIOUS_INSTALL_SH"
+fi
+sed -n "/^cat >\"\$TARGET_DIR\/compose.yaml\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
 mkdir -p "$TMP/initdb"
-sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$ROOT/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
+sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
 chmod 755 "$TMP/initdb/10-colliedesk-owner.sh"
 grep -q '^services:' "$TMP/compose.yaml" && grep -q 'CREATE ROLE colliedesk' "$TMP/initdb/10-colliedesk-owner.sh" ||
   fail 'could not read the compose file and database setup from install.sh'
@@ -87,6 +100,10 @@ owner_password=$(secret)
   echo "COLLIE_DESK_PORT=$PORT"
   echo "APP_ORIGIN=http://localhost:$PORT"
   echo 'DISABLE_TELEMETRY=true'
+  # Settings an older release read from the environment: the candidate imports them.
+  echo 'SMTP_HOST=smtp.invalid'
+  echo 'SMTP_PORT=2525'
+  echo 'TRUSTED_PROXIES=127.0.0.0/8,10.9.0.0/16'
 } >"$TMP/.env"
 use_image() {
   sed "s#^COLLIE_DESK_IMAGE=.*#COLLIE_DESK_IMAGE=$1#" "$TMP/.env" >"$TMP/.env.next" && mv "$TMP/.env.next" "$TMP/.env"
@@ -318,6 +335,25 @@ step 'serving the upgraded install'
 dc up -d --wait server >/dev/null 2>&1 || fail "$CANDIDATE did not become healthy on the upgraded database"
 check_inbox acme owner@acme.example
 check_inbox beta admin@beta.example
+
+# The settings the previous release read from the environment are in the database now, imported once,
+# and the doctor says they can go from the environment (exit 1: warnings, no error).
+[ "$(dc exec -T server /app/collie config get smtp.host 2>/dev/null)" = 'smtp.host=smtp.invalid' ] ||
+  fail 'the candidate did not import SMTP_HOST into its database'
+[ "$(dc exec -T server /app/collie config get trusted_proxies 2>/dev/null)" = 'trusted_proxies=127.0.0.0/8,10.9.0.0/16' ] ||
+  fail 'the candidate did not import TRUSTED_PROXIES into its database'
+imports=$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)
+[ "$imports" -ge 1 ] || fail 'the import from the environment left no audit line'
+doctor_status=0
+dc exec -T server /app/collie config doctor >"$TMP/doctor.out" 2>&1 || doctor_status=$?
+[ "$doctor_status" = 1 ] && grep -q 'SMTP_HOST is still set in the environment and equals' "$TMP/doctor.out" ||
+  { cat "$TMP/doctor.out" >&2; fail "collie config doctor exited $doctor_status, want 1 naming SMTP_HOST still in the environment"; }
+dc logs --no-color server 2>/dev/null | grep -q 'a setting is still in the environment' ||
+  fail 'the candidate did not warn that settings are still in the environment'
+dc restart server >/dev/null 2>&1 && dc up -d --wait server >/dev/null 2>&1 || fail "$CANDIDATE did not restart"
+[ "$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)" = "$imports" ] ||
+  fail 'a restart imported the environment again'
+step 'settings imported from the environment once; the doctor names the leftovers'
 
 if [ "$RESTORE" = after ]; then
   restore_one_workspace "$CANDIDATE"

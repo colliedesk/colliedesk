@@ -100,7 +100,8 @@ Security fixes go to the latest release and to `edge` only.
 
 ## Configure
 
-- [Environment variables](environment-variables.md)
+- [Environment variables and settings](environment-variables.md)
+- [Operator console and settings](operator-console.md)
 - [Running behind a proxy](running-behind-proxy.md)
 - [Configuring email](email.md)
 - [Autofix: the GitHub App](github-app.md)

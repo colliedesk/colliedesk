@@ -49,6 +49,25 @@ fi
 [ -n "$WORKSPACE_NAME" ] || fail 'Workspace name cannot be empty.'
 [ -n "$ADMIN_EMAIL" ] || fail 'Admin email cannot be empty.'
 
+# The settings the server keeps in its database (collie config, the operator console) instead of the
+# environment. An older .env may still set them: they are imported once, before the server starts.
+# server/cmd/collie/config_test.go keeps this list equal to the server's.
+MOVED_SETTINGS='AI_SERVER_PROVIDER AI_SERVER_API_KEY AI_SERVER_BASE_URL AI_SERVER_MODELS AI_SERVER_LABEL
+AI_SERVER_PRICES AI_SERVER_MONTHLY_ALLOWANCE SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD
+SMTP_STARTTLS EMAIL_FROM_POLICY MAIL_FROM_DOMAIN MAIL_FROM_INBOUND_SECRET
+EMAIL_TRUSTED_AUTHSERV_ID HOSTED_MAIL_DOMAIN RESEND_WEBHOOK_SECRET RESEND_API_KEY
+GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET MICROSOFT_OAUTH_CLIENT_ID
+MICROSOFT_OAUTH_CLIENT_SECRET MICROSOFT_OAUTH_TENANT GITHUB_APP_ID GITHUB_APP_SLUG
+GITHUB_APP_CLIENT_ID GITHUB_APP_PRIVATE_KEY GITHUB_APP_CLIENT_SECRET GITHUB_APP_WEBHOOK_SECRET
+POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_API_URL BILLING_ALERT_EMAIL RETENTION_DELETE
+RETENTION_MAX_DELETIONS_PER_DAY INTERNAL_SIGNUP_EMAILS INTERNAL_SIGNUP_NETWORKS TRUSTED_PROXIES
+CLOUD_AUTH_ISSUER CLOUD_AUTH_JWKS_URL CLOUD_AUTH_AUTHORIZED_PARTIES CLOUD_AUTH_EMAIL_CLAIM
+CLERK_PUBLISHABLE_KEY HELP_CENTER_DOMAIN AI_ALLOW_PRIVATE_BASE_URLS MAIL_IMAGE_CACHE_BYTES
+KB_VIDEO_MAX_BYTES PROBLEM_REPORT_WORKSPACE POLAR_PRODUCT_TEAM_MONTHLY POLAR_PRODUCT_TEAM_YEARLY
+POLAR_PRODUCT_FOUNDING POLAR_PRODUCT_SOLO_MONTHLY POLAR_PRODUCT_SOLO_YEARLY
+POLAR_PRODUCT_SMALL_MONTHLY POLAR_PRODUCT_SMALL_YEARLY POLAR_PRODUCT_TEAM25_MONTHLY
+POLAR_PRODUCT_TEAM25_YEARLY SIGNUP_HASH_KEY'
+
 mkdir -p "$TARGET_DIR"
 
 if [ ! -f "$TARGET_DIR/.env" ]; then
@@ -79,6 +98,28 @@ if [ ! -f "$TARGET_DIR/.env" ]; then
   )
 fi
 
+# Settings live in the server's database (collie config). Those an older install kept in .env move
+# there before the server starts; a group the database already holds is kept (docs/self-host/upgrade.md).
+# trusted_proxies gets what the older compose file passed when .env did not set it: the reverse proxy on
+# this host (loopback and the Docker bridge range). The server alone trusts no proxy.
+SETTINGS=
+for name in $MOVED_SETTINGS; do
+  line=$(grep -E "^$name=.+" "$TARGET_DIR/.env" | tail -n 1 || :)
+  [ -z "$line" ] || SETTINGS="$SETTINGS$line
+"
+done
+if ! grep -Eq '^TRUSTED_PROXIES=' "$TARGET_DIR/.env"; then
+  SETTINGS="${SETTINGS}TRUSTED_PROXIES=127.0.0.0/8,::1/128,172.16.0.0/12
+"
+fi
+# An older image cannot store settings and would run without the ones the new compose file no longer
+# passes: stop before changing anything.
+IMAGE=${COLLIE_DESK_IMAGE:-$(sed -n 's/^COLLIE_DESK_IMAGE=//p' "$TARGET_DIR/.env" | tail -n 1)}
+IMAGE=${IMAGE:-ghcr.io/colliedesk/colliedesk:latest}
+if ! "$DOCKER" run --rm --entrypoint /app/collie "$IMAGE" help 2>/dev/null | grep -q '|config|'; then
+  fail "The image $IMAGE is older than this installer. Pull a newer one (docker compose pull in $TARGET_DIR, or set COLLIE_DESK_IMAGE to a newer release), then run the installer again."
+fi
+
 mkdir -p "$TARGET_DIR/initdb"
 # Runs once, when PostgreSQL creates its volume. Installs from before the request login have no
 # COLLIEDESK_OWNER_PASSWORD and keep their existing volume, so nothing changes for them.
@@ -96,7 +137,7 @@ fi
 INITDB
 chmod 755 "$TARGET_DIR/initdb/10-colliedesk-owner.sh"
 
-cat >"$TARGET_DIR/compose.yaml" <<'COMPOSE'
+cat >"$TARGET_DIR/compose.yaml.next" <<'COMPOSE'
 name: colliedesk
 
 services:
@@ -122,22 +163,20 @@ services:
       DATABASE_REQUEST_URL: ${DATABASE_REQUEST_URL:-}
       APP_ORIGIN: ${APP_ORIGIN}
       LISTEN_ADDR: :8080
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
-      EMAIL_FROM_POLICY: ${EMAIL_FROM_POLICY:-verified}
-      MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:-}
-      MAIL_FROM_INBOUND_SECRET: ${MAIL_FROM_INBOUND_SECRET:-}
-      EMAIL_TRUSTED_AUTHSERV_ID: ${EMAIL_TRUSTED_AUTHSERV_ID:-}
-      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
-      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
-      MICROSOFT_OAUTH_CLIENT_ID: ${MICROSOFT_OAUTH_CLIENT_ID:-}
-      MICROSOFT_OAUTH_CLIENT_SECRET: ${MICROSOFT_OAUTH_CLIENT_SECRET:-}
-      MICROSOFT_OAUTH_TENANT: ${MICROSOFT_OAUTH_TENANT:-common}
       MAILBOX_TOKEN_KEYS: ${MAILBOX_TOKEN_KEYS:-}
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES-127.0.0.0/8,::1/128,172.16.0.0/12}
+      # Secrets stay readable from .env until a key ring seals them in the database (docs/self-host/environment-variables.md#no-key-ring).
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM_INBOUND_SECRET: ${MAIL_FROM_INBOUND_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+      AI_SERVER_API_KEY: ${AI_SERVER_API_KEY:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      MICROSOFT_OAUTH_CLIENT_SECRET: ${MICROSOFT_OAUTH_CLIENT_SECRET:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
+      GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
+      POLAR_ACCESS_TOKEN: ${POLAR_ACCESS_TOKEN:-}
+      POLAR_WEBHOOK_SECRET: ${POLAR_WEBHOOK_SECRET:-}
       ATTACHMENTS_DIR: /data/attachments
       DISABLE_TELEMETRY: ${DISABLE_TELEMETRY:-}
       DO_NOT_TRACK: ${DO_NOT_TRACK:-}
@@ -160,8 +199,18 @@ volumes:
   postgres-data:
   attachments-data:
 COMPOSE
+# The compose file this run replaces stays next to it, so the older image can run again with it.
+if [ -f "$TARGET_DIR/compose.yaml" ] && ! cmp -s "$TARGET_DIR/compose.yaml" "$TARGET_DIR/compose.yaml.next"; then
+  cp "$TARGET_DIR/compose.yaml" "$TARGET_DIR/compose.yaml.bak"
+fi
+mv "$TARGET_DIR/compose.yaml.next" "$TARGET_DIR/compose.yaml"
 
 cd "$TARGET_DIR"
+if [ -n "$SETTINGS" ]; then
+  "$DOCKER" compose up -d --wait postgres || fail 'PostgreSQL did not start. Run docker compose ps for details.'
+  printf '%s' "$SETTINGS" | "$DOCKER" compose run --rm -T server '/app/collie migrate && /app/collie config import --stdin --only-missing' ||
+    fail 'Importing the settings from .env failed. Run docker compose logs server for details.'
+fi
 "$DOCKER" compose up -d
 
 attempt=0

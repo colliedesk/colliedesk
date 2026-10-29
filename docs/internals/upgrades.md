@@ -7,8 +7,14 @@ job) and gates every release (`release.yml`, step "Upgrade from the previous rel
 
 ## What it does
 
-1. Lays out an install as `install.sh` does (its compose file and database users, read from
-   `install.sh` itself) running the previous release.
+1. Lays out an install as the previous release's `install.sh` did (its compose file and database
+   users, read from `git show <previous tag>:install.sh`, or `PREVIOUS_INSTALL_SH`) running the previous
+   release, with settings in `.env` (SMTP, trusted proxies) that release read from the environment. The
+   compose file stays the previous one through the upgrade and the rollback, as for an operator who only
+   changes the image: the candidate must import those settings into its database once (an `env.import`
+   audit line, not again on restart), warn that they are still in the environment, and `collie config
+   doctor` must exit 1 naming them; the previous release, rolled back, reads them from the environment
+   again.
 2. Builds the fixture database: the previous release's migrations one at a time, as the owner with
    `app.privileged` on (what `collie migrate` does), each followed by its fixture file
    (`tests/upgrade/fixture/<migration>.sql`), then writes the stored files the rows point at.

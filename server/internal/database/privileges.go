@@ -130,4 +130,9 @@ const (
 	// workspace ids, installation ids and yes or no leave the transaction; each event is then applied in
 	// its own workspace.
 	PrivilegeGitHubInstallation Privilege = "github-installation"
+	// PrivilegeServerConfig reads and writes the server's own configuration (server_config_versions and
+	// _values, server_config_state, server_processes, polar_products, operator_audit, and the sign-up hash
+	// key in server_secrets). None of these tables has a workspace_id or a grant to the app role; no
+	// workspace row is read.
+	PrivilegeServerConfig Privilege = "server-config"
 )

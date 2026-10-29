@@ -4,7 +4,7 @@ import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { IdentityProvider, identity, otherKey } from './support/identity-provider';
 
 // Journey 5: hosted cloud sign-in (docs/user/sign-in.md "Cloud sign-in") on a server configured
-// through the same CLOUD_AUTH_* environment an operator sets. Only the identity provider is local.
+// with the same cloud_auth.* settings an operator saves (collie config). Only the identity provider is local.
 const baseURL = servers.cloud;
 const exchangeURL = `${baseURL}/api/v1/auth/cloud/exchange`;
 const provider = new IdentityProvider();

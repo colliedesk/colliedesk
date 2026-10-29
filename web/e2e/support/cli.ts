@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkoutID, ports, scratchDir } from './checkout';
 import type { ChildProcess } from 'node:child_process';
@@ -121,12 +121,47 @@ export function withDatabase(url: string, database: string): string {
   return parsed.toString();
 }
 
+// What a server reads from its environment; every other variable a test gives a server is a setting,
+// which lives in the server's database (collie config), as on a real install.
+const bootstrap = new Set(['APP_ORIGIN', 'DATABASE_URL', 'DATABASE_REQUEST_URL', 'OPERATOR_ORIGIN', 'LISTEN_ADDR', 'ATTACHMENTS_DIR',
+  'MAILBOX_TOKEN_KEYS', 'DISABLE_TELEMETRY', 'DO_NOT_TRACK']);
+
+function isBootstrap(name: string): boolean {
+  return bootstrap.has(name) || name.startsWith('COLLIEDESK_E2E_') || name.startsWith('GO') || !/^[A-Z][A-Z0-9_]*$/.test(name);
+}
+
+// settingsFile writes the settings among env as the .env lines `collie config import` reads, and returns
+// its path, or '' when env holds no setting.
+export function settingsFile(name: string, env: Record<string, string>): string {
+  const lines = Object.entries(env).filter(([key]) => !isBootstrap(key))
+    .map(([key, value]) => `${key}=${/^[\w./:@,|=+-]*$/.test(value) ? value : JSON.stringify(value)}`);
+  if (lines.length === 0) return '';
+  mkdirSync(join(scratchDir, 'config'), { recursive: true });
+  const path = join(scratchDir, 'config', `${name}.env`);
+  writeFileSync(path, `${lines.join('\n')}\n`, { mode: 0o600 });
+  return path;
+}
+
+// bootstrapEnv keeps only what a server reads from its environment.
+export function bootstrapEnv(env: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => isBootstrap(key)));
+}
+
 // startServer runs `collie serve` on its own port and resolves once it answers; tags builds it with seams
 // (e2e: the local stand-ins).
+// Its settings are imported into its database first (collie config import --replace), the way an operator
+// configures a server.
 export async function startServer(port: number, env: Record<string, string>, tags = ''): Promise<ChildProcess> {
+  const file = settingsFile(`server-${port}`, env);
+  if (file) {
+    const imported = spawnSync(binary(tags), ['config', 'import', '--replace', file], {
+      encoding: 'utf8', env: { ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir, ...bootstrapEnv(env) },
+    });
+    if (imported.status !== 0) throw new Error(`collie config import failed: ${imported.stderr}${imported.stdout}`);
+  }
   const child = spawn(binary(tags), ['serve', '--listen', `127.0.0.1:${port}`], {
     stdio: ['ignore', 'inherit', 'inherit'],
-    env: { ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir, ...env },
+    env: { ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir, ...bootstrapEnv(env) },
   });
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {

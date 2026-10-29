@@ -23,6 +23,9 @@ type Products struct {
 	SoloYearly    string
 	SmallMonthly  string
 	SmallYearly   string
+	// Retired maps the products no longer on sale (polar_products) to their plan: a subscription bought
+	// as one still belongs to that plan.
+	Retired map[string]string
 }
 
 // PlanOf is the plan a Polar product buys, or "" when the product is not sold here. An unset
@@ -43,7 +46,7 @@ func (p Products) PlanOf(productID string) string {
 	case p.Founding:
 		return domain.PlanFounding
 	}
-	return ""
+	return p.Retired[productID]
 }
 
 // Config enables billing. The zero value means billing is off (self-hosted).

@@ -3564,13 +3564,13 @@ export interface components {
         };
         PublicConfig: {
             autofix: {
-                /** @description The operator set up the server's GitHub App (GITHUB_APP_*), so Autofix can be used; the web app hides it otherwise. */
+                /** @description The operator set up the server's GitHub App (operator console → Mailboxes & GitHub, github.*), so Autofix can be used; the web app hides it otherwise. */
                 available: boolean;
                 /** @description The settings the operator still needs; empty when available. */
                 missing_settings: string[];
             };
             ai: {
-                /** @description True when the operator configured an AI provider for every workspace (AI_SERVER_*). */
+                /** @description True when the operator configured an AI provider for every workspace (operator console → AI */
                 server_provider: boolean;
             };
             /** @description Where the web app reports which screens and buttons agents use. On by default on the cloud and self-hosted; `DISABLE_TELEMETRY` or `DO_NOT_TRACK` (and a development build) answer `enabled: false`, and then the web app never loads the analytics library. */
@@ -4079,7 +4079,7 @@ export interface components {
             assignee_agent_id: string | null;
         };
         AISettings: {
-            /** @description The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none. */
+            /** @description The server's provider, set by the operator in the operator console → AI (ai.server.*); null when the server has none. */
             server: null | {
                 kind: components["schemas"]["AIProviderKind"];
                 label: string;
@@ -5582,7 +5582,7 @@ export interface components {
         DeliveryStatus: "queued" | "sent" | "failed";
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
-            /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_not_connected (no channel of the type that carries the reply was connected, a web form without email; retry once it is), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused this server's own app credentials; the operator must update MICROSOFT_OAUTH_CLIENT_SECRET, and reconnecting does not help). Null for most email failures, whose words are in last_error. */
+            /** @description A fixed code beside last_error: channel_off (the channel was off; retry once it is on), channel_not_connected (no channel of the type that carries the reply was connected, a web form without email; retry once it is), channel_removed, no_recipient (the customer has no address on the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and reconnecting does not help). Null for most email failures, whose words are in last_error. */
             reason_code?: string | null;
             attempts: number;
             /** @description Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc) addresses it did not reach: refused by the relay or bounced later. A copy that misses never fails the reply to the contact. */
@@ -5763,7 +5763,7 @@ export interface components {
             admin_consent_url: string | null;
             /** @description From this total size of files the web app warns that Microsoft may refuse the reply. Microsoft documents no limit for sending; a refused reply fails with the reason and keeps its files. */
             large_attachment_bytes: number;
-            /** @description True while a reply of this channel waits because Microsoft refused this server's own app credentials (MICROSOFT_OAUTH_CLIENT_SECRET wrong or expired). The connection is fine; the operator must update the secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is false): missing_settings names what to set. */
+            /** @description True while a reply of this channel waits because Microsoft refused this server's own app credentials (microsoft.client_secret wrong or expired). The connection is fine; the operator must update the secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is false): missing_settings names what to set. */
             server_credentials_refused: boolean;
             /** @description The channel's Microsoft 365 connection; null when it has none (or sends through Gmail). */
             connection: null | components["schemas"]["MailboxConnection"];
@@ -6787,7 +6787,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Error code `signup_unavailable`. Sign-up is off because SIGNUP_HASH_KEY or TRUSTED_PROXIES is missing on the server (logged at start). */
+            /** @description Error code `signup_unavailable`. Sign-up is off because the server lacks its sign-up hash key or its trusted proxies (operator console → Security; logged at start). */
             503: {
                 headers: {
                     [name: string]: unknown;

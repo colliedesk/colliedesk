@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { scratchDir } from './e2e/support/checkout';
 import { defineConfig } from '@playwright/test';
-import { attachmentsDir, databaseFor, databaseNameFor, goEnv, postgresURL, servers } from './e2e/support/cli';
+import { attachmentsDir, bootstrapEnv, databaseFor, databaseNameFor, goEnv, postgresURL, servers, settingsFile } from './e2e/support/cli';
 import { identity, jwksURL } from './e2e/support/identity-provider';
 import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
 import { dnsFile } from './e2e/support/dns';
@@ -10,20 +10,23 @@ import { mailpit } from './e2e/support/mailpit';
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
 
-// Each server is the real `collie serve` on a database of its own, configured only through the
-// environment an operator sets. They differ in what is plugged in: nothing, an SMTP relay, cloud sign-in.
-// Every run starts each server on a new database and migrates it, as a fresh install does.
+// Each server is the real `collie serve` on a database of its own, configured the way an operator
+// configures one: the environment opens the database, and `collie config import` writes the settings
+// into it. They differ in what is plugged in: nothing, an SMTP relay, cloud sign-in. Every run starts
+// each server on a new database and migrates it, as a fresh install does.
 function server(origin: string, env: Record<string, string> = {}, tags = '') {
   const run = tags ? `go run -tags ${tags} ./cmd/collie` : 'go run ./cmd/collie';
   const serve = `${run} serve --listen 127.0.0.1:${new URL(origin).port}`;
   const name = databaseNameFor(origin);
   const fresh = `psql '${postgresURL}' -q -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS ${name} WITH (FORCE)' -c 'CREATE DATABASE ${name}'`;
+  const all = { EMAIL_TRUSTED_AUTHSERV_ID: 'mx.example.net', ...env };
+  const file = settingsFile(name, all);
   return {
-    command: `${fresh} && ${run} migrate && ${serve}`,
+    command: `${fresh} && ${run} migrate && ${run} config import --replace ${file} && ${serve}`,
     cwd: '../server',
     env: {
       ...process.env as Record<string, string>, ...goEnv,
-      APP_ORIGIN: origin, DATABASE_URL: databaseFor(origin), ATTACHMENTS_DIR: attachmentsDir, EMAIL_TRUSTED_AUTHSERV_ID: 'mx.example.net', ...env,
+      APP_ORIGIN: origin, DATABASE_URL: databaseFor(origin), ATTACHMENTS_DIR: attachmentsDir, ...bootstrapEnv(all),
     },
     url: origin,
     reuseExistingServer: false,

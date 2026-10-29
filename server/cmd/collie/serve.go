@@ -28,13 +28,9 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
-	"github.com/colliedesk/colliedesk/server/internal/github"
-	"github.com/colliedesk/colliedesk/server/internal/google"
-	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
-	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -74,14 +70,6 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	billing, err := polar.ConfigFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	billing, billingWarning := billingAtStart(billing, lockedScreenShipped)
-	if billingWarning != "" {
-		slog.Error(billingWarning)
-	}
 	requestPool := pool
 	if requestURL := os.Getenv("DATABASE_REQUEST_URL"); requestURL != "" {
 		opened, err := openPool(ctx, requestURL)
@@ -95,16 +83,19 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := db.Verify(ctx); err != nil {
 		return err
 	}
-	trustedProxies, err := httpapi.ParseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	configStore, err := openConfigStore(db)
 	if err != nil {
 		return err
 	}
-	internalSignups, err := httpapi.ParseInternalSignups(os.Getenv("INTERNAL_SIGNUP_EMAILS"), os.Getenv("INTERNAL_SIGNUP_NETWORKS"))
+	config, err := startConfig(ctx, configStore, slog.Default())
 	if err != nil {
 		return err
 	}
-	signupKey := os.Getenv("SIGNUP_HASH_KEY")
-	cloudAuth := cloudAuthConfig()
+	billing, billingWarning := billingAtStart(config.Billing, lockedScreenShipped)
+	if billingWarning != "" {
+		slog.Error(billingWarning)
+	}
+	trustedProxies, internalSignups, signupKey, cloudAuth := config.TrustedProxies, config.InternalSignups, config.SignupHashKey, config.CloudAuth
 	signupWarning := signupProblem(cloudAuth.Enabled(), billing.Enabled(), trustedProxies, signupKey)
 	if signupWarning != "" {
 		slog.Error(signupWarning)
@@ -116,36 +107,14 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
-	emailConfig, err := email.ConfigFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	googleConfig, err := google.ConfigFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	// Microsoft 365 seals its grants with the same ring (MAILBOX_TOKEN_KEYS), parsed once above.
-	microsoftConfig, err := microsoft.ConfigFromEnv(os.Getenv, googleConfig.Keys)
-	if err != nil {
-		return err
-	}
-	helpCenterDomain, err := helpcenter.DomainFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	aiServer, err := ai.ServerProviderFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
+	// Microsoft 365 seals its grants with the same ring as Gmail (MAILBOX_TOKEN_KEYS).
+	emailConfig, googleConfig, microsoftConfig, helpCenterDomain, aiServer := config.Email, config.Google, config.Microsoft, config.HelpCenterDomain, config.AIServer
 	if aiServer != nil && aiServer.Allowance != nil && aiServer.Kind != aiprovider.KindAnthropic {
 		slog.Warn("AI_SERVER_MONTHLY_ALLOWANCE holds only while the OpenAI-compatible server reports token usage; calls without usage cost nothing against it")
 	}
 	googleConfig.Base = googleBaseURL
 	microsoftConfig.Base = microsoftBaseURL
-	githubConfig := github.ConfigFromEnv(os.Getenv)
-	if err := githubConfig.Check(); err != nil {
-		return err
-	}
+	githubConfig := config.GitHub
 	githubConfig.Base = githubBaseURL
 	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
 	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
@@ -194,7 +163,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
-	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
+	telemetryConfig := telemetry.ConfigFromEnv(settings, origin, hostedCloud, version)
 	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
 	go sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage))
 	// The results page only reads numbers this worker computes (docs/internals/results.md). It also sends
@@ -211,19 +180,13 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			}})
 	}
 	go resultsWorker.Run(ctx)
-	mailImageCacheBytes, err := mailImageCacheBytesFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
+	mailImageCacheBytes := config.MailImageCacheBytes
 	go sweepMailImageCache(ctx, store.NewWithDB(db).WithObjects(storage), mailImageCacheBytes)
 	// What AI features may quote is built from a queue the database fills (docs/internals/ai-retrieval.md).
 	go store.NewWithDB(db).RunAIRetrieval(ctx, 2*time.Second, func(err error) { slog.Error("build AI retrieval", "error", err) })
-	kbVideoMaxBytes, err := kbVideoMaxBytesFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
+	kbVideoMaxBytes := config.KBVideoMaxBytes
 	if billing.Enabled() {
-		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
+		retentionService, err := newRetentionService(db, origin, billing, config.Retention)
 		if err != nil {
 			slog.Error("workspace retention is not running", "error", err)
 		} else {
@@ -231,19 +194,19 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		}
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
-	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1", PlanLimits: billing.Enabled()}
+	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: config.AllowPrivateBaseURLs, PlanLimits: billing.Enabled()}
 	// One Cursor client per process, so the API and the Autofix worker keep one call budget. The worker
 	// starts with the GitHub connection, which reads a repository on GitHub before a fix leaves for it.
 	fixCursor := &autofixworker.Cursor{Store: store.NewWithDB(db).WithSealKeys(googleConfig.Keys), Base: cursorBaseURL}
 	apiConfig := httpapi.Config{Cursor: fixCursor, AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
-		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
+		ProblemReportWorkspace: config.ProblemReportWorkspace}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {
 		apiConfig.ProductAnalytics = &httpapi.ProductAnalytics{Key: telemetryConfig.ProjectKey, Host: telemetryConfig.Endpoint, Realm: telemetryConfig.Realm}
 	}
 	if emailConfig.SMTP.Configured() {
-		apiConfig.AlertEmail = strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
+		apiConfig.AlertEmail = config.BillingAlertEmail
 		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
 	}
 	apiConfig.LookupCNAME, apiConfig.LookupTXT = lookupCNAME, lookupTXT
@@ -436,13 +399,13 @@ func attachmentStorage() (*attachments.LocalDisk, error) {
 	return attachments.NewLocalDisk(dir)
 }
 
-func cloudAuthConfig() cloudauth.Config {
+func cloudAuthConfig(getenv func(string) string) cloudauth.Config {
 	return cloudauth.Config{
-		Issuer:            os.Getenv("CLOUD_AUTH_ISSUER"),
-		JWKSURL:           os.Getenv("CLOUD_AUTH_JWKS_URL"),
-		AuthorizedParties: strings.Split(os.Getenv("CLOUD_AUTH_AUTHORIZED_PARTIES"), ","),
-		PublishableKey:    os.Getenv("CLERK_PUBLISHABLE_KEY"),
-		EmailClaim:        os.Getenv("CLOUD_AUTH_EMAIL_CLAIM"),
+		Issuer:            getenv("CLOUD_AUTH_ISSUER"),
+		JWKSURL:           getenv("CLOUD_AUTH_JWKS_URL"),
+		AuthorizedParties: strings.Split(getenv("CLOUD_AUTH_AUTHORIZED_PARTIES"), ","),
+		PublishableKey:    getenv("CLERK_PUBLISHABLE_KEY"),
+		EmailClaim:        getenv("CLOUD_AUTH_EMAIL_CLAIM"),
 	}
 }
 

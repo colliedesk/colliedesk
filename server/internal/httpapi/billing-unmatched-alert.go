@@ -59,7 +59,7 @@ func (a *API) alertUnmatchedPayment(ctx context.Context, event polar.Event, webh
 		return
 	}
 	if !a.operatorAlertReady() {
-		slog.Warn("paid subscription has no workspace and no operator alert is configured (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN)", "subscription_id", sub.ID, "webhook_id", webhookID)
+		slog.Warn("paid subscription has no workspace and no operator alert is configured (set billing.alert_email, smtp.host and mail_from.domain with collie config or the operator console)", "subscription_id", sub.ID, "webhook_id", webhookID)
 		return
 	}
 	if !a.alerted.first(sub.ID) {

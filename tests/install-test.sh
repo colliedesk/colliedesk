@@ -24,6 +24,17 @@ if [ "${1:-}" = inspect ]; then
   printf '%s\n' healthy
   exit
 fi
+if [ "${1:-}" = run ]; then
+  # The installer asks the image whether it stores settings (collie config).
+  [ "${STUB_MODE:-ok}" = old-image ] || printf '%s\n' 'Usage: collie <serve|migrate|config|create-workspace|pair>'
+  exit
+fi
+if [ "${1:-}" = compose ] && [ "${2:-}" = run ]; then
+  # The import of settings left in .env: record what the installer sends on stdin.
+  printf '%s\n' "$*" >>"$STUB_LOG"
+  cat >>"$STUB_LOG.stdin"
+  exit
+fi
 if [ "${1:-}" = compose ] && [ "${2:-}" = exec ]; then
   # Real `docker compose exec` forwards stdin even with -T; consume it the same way.
   cat >/dev/null || :
@@ -46,7 +57,8 @@ chmod +x "$BIN/docker" "$BIN/openssl"
 PATH=$BIN:$PATH
 export PATH
 SLEEP=:
-export SLEEP
+STUB_LOG=$TMP/docker.log
+export SLEEP STUB_LOG
 
 expect_failure() {
   expected=$1
@@ -70,6 +82,7 @@ output=$(sh "$ROOT/install.sh" --dir "$existing" --name Desk --email admin@examp
 printf '%s' "$output" | grep -F 'http://localhost:8080/sign-in?token=pairing-token' >/dev/null
 
 fresh=$TMP/fresh
+rm -f "$STUB_LOG" "$STUB_LOG.stdin"
 output=$(sh "$ROOT/install.sh" --dir "$fresh" --name Desk --email admin@example.com </dev/null)
 [ "$(stat -c %a "$fresh/.env")" = 600 ]
 grep -F "image: \${COLLIE_DESK_IMAGE}" "$fresh/compose.yaml" >/dev/null
@@ -97,6 +110,18 @@ grep -F 'DATABASE_REQUEST_URL: ${DATABASE_REQUEST_URL:-}' "$fresh/compose.yaml" 
 # The usage report opt-out set in .env (or the shell) must reach the server container.
 grep -F 'DISABLE_TELEMETRY: ${DISABLE_TELEMETRY:-}' "$fresh/compose.yaml" >/dev/null
 grep -F 'DO_NOT_TRACK: ${DO_NOT_TRACK:-}' "$fresh/compose.yaml" >/dev/null
+# Settings live in the database (collie config); the server's compose passes only what opens it.
+for moved in SMTP_HOST EMAIL_FROM_POLICY MAIL_FROM_DOMAIN GOOGLE_OAUTH_CLIENT_ID MICROSOFT_OAUTH_TENANT TRUSTED_PROXIES; do
+  if grep -F "$moved" "$fresh/compose.yaml" >/dev/null; then
+    printf 'compose.yaml still passes %s to the server\n' "$moved" >&2
+    exit 1
+  fi
+done
+grep -F 'MAILBOX_TOKEN_KEYS: ${MAILBOX_TOKEN_KEYS:-}' "$fresh/compose.yaml" >/dev/null
+# An install without a key ring keeps reading its secrets from .env, so the compose file still passes them.
+grep -F 'SMTP_PASSWORD: ${SMTP_PASSWORD:-}' "$fresh/compose.yaml" >/dev/null
+# A fresh install saves the reverse proxy on this host as trusted, as its compose file did before; nothing else.
+[ "$(cat "$STUB_LOG.stdin")" = 'TRUSTED_PROXIES=127.0.0.0/8,::1/128,172.16.0.0/12' ]
 # Installs whose .env predates the request login keep connecting as before.
 grep -F 'DATABASE_URL: ${DATABASE_URL:-postgres://colliedesk:${POSTGRES_PASSWORD}@postgres:5432/colliedesk?sslmode=disable}' "$existing/compose.yaml" >/dev/null
 grep -F 'POSTGRES_USER: ${POSTGRES_USER:-colliedesk}' "$existing/compose.yaml" >/dev/null
@@ -113,5 +138,45 @@ printf '%s' "$output" | grep -F 'http://localhost:8080/sign-in?token=pairing-tok
   printf 'piped install did not print the pairing URL:\n%s\n' "$output" >&2
   exit 1
 }
+
+# Running the installer again on an older install keeps its compose file as compose.yaml.bak (to go back to
+# the older image) and moves the settings still in .env into the database, once, before the server starts.
+upgrade=$TMP/upgrade
+mkdir -p "$upgrade"
+printf '%s\n' 'name: colliedesk' '# the older compose file' >"$upgrade/compose.yaml"
+printf '%s\n' 'POSTGRES_PASSWORD=pg' 'APP_ORIGIN=https://desk.example.com' 'SMTP_HOST=smtp.example.net' 'SMTP_PASSWORD=relay-pass' \
+  'INTERNAL_SIGNUP_EMAILS=@example.com' 'SMTP_PORT=' 'APP_SECRET=old' >"$upgrade/.env"
+touch "$upgrade/.initialized"
+rm -f "$STUB_LOG" "$STUB_LOG.stdin"
+sh "$ROOT/install.sh" --dir "$upgrade" --name Desk --email admin@example.com </dev/null >/dev/null
+grep -Fx '# the older compose file' "$upgrade/compose.yaml.bak" >/dev/null
+grep -F 'compose run --rm -T server' "$STUB_LOG" >/dev/null
+grep -F 'collie config import --stdin --only-missing' "$STUB_LOG" >/dev/null
+grep -Fx 'SMTP_HOST=smtp.example.net' "$STUB_LOG.stdin" >/dev/null
+grep -Fx 'SMTP_PASSWORD=relay-pass' "$STUB_LOG.stdin" >/dev/null
+grep -Fx 'INTERNAL_SIGNUP_EMAILS=@example.com' "$STUB_LOG.stdin" >/dev/null
+# Only settings: never the database password, never an empty value.
+if grep -E '^(POSTGRES_PASSWORD|APP_ORIGIN|APP_SECRET|SMTP_PORT)=' "$STUB_LOG.stdin" >/dev/null; then
+  printf 'the installer imported a line that is not a setting:\n%s\n' "$(cat "$STUB_LOG.stdin")" >&2
+  exit 1
+fi
+
+# .env that sets TRUSTED_PROXIES empty trusts no proxy, which the server does with nothing saved.
+grep -Fx 'TRUSTED_PROXIES=127.0.0.0/8,::1/128,172.16.0.0/12' "$STUB_LOG.stdin" >/dev/null
+noproxy=$TMP/noproxy
+mkdir -p "$noproxy"
+printf '%s\n' 'POSTGRES_PASSWORD=pg' 'TRUSTED_PROXIES=' >"$noproxy/.env"
+rm -f "$STUB_LOG" "$STUB_LOG.stdin"
+sh "$ROOT/install.sh" --dir "$noproxy" --name Desk --email admin@example.com </dev/null >/dev/null
+[ ! -f "$STUB_LOG.stdin" ]
+
+# An image without collie config stops the installer before it changes the compose file.
+old=$TMP/old
+mkdir -p "$old"
+printf '%s\n' 'name: colliedesk' '# kept' >"$old/compose.yaml"
+printf '%s\n' 'POSTGRES_PASSWORD=pg' 'SMTP_HOST=smtp.example.net' >"$old/.env"
+expect_failure 'is older than this installer' env STUB_MODE=old-image sh "$ROOT/install.sh" --dir "$old" --name Desk --email admin@example.com
+grep -Fx '# kept' "$old/compose.yaml" >/dev/null
+[ ! -f "$old/compose.yaml.bak" ]
 
 printf '%s\n' 'install tests passed'

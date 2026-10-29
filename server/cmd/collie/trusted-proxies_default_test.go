@@ -6,11 +6,11 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 )
 
 // The server trusts no proxy unless TRUSTED_PROXIES names one, exactly as sign-up requires. Unset
@@ -27,34 +27,37 @@ func TestUnsetTrustedProxiesTrustNobodyAndWarn(t *testing.T) {
 	}
 }
 
-var composeDefault = regexp.MustCompile(`TRUSTED_PROXIES: \$\{TRUSTED_PROXIES-([^}]*)\}`)
+// A server whose trusted_proxies is not set trusts no proxy, as when TRUSTED_PROXIES was unset.
+func TestUnsetTrustedProxiesTrustNoProxy(t *testing.T) {
+	snap := serverconfig.NewSnapshot(0, nil, nil, "", func(string) string { return "10.0.0.0/8" }, true)
+	if got := snap.Getenv("TRUSTED_PROXIES"); got != "" {
+		t.Fatalf("unset trusted_proxies reads %q, want no proxy", got)
+	}
+}
 
-// The shipped compose files bind the server to 127.0.0.1, so a reverse proxy on the host always
-// sits in front. Docker delivers that proxy's connections from the bridge gateway, not from
-// loopback, so the default must cover both or every visitor shares one rate-limit bucket.
-func TestShippedComposeFilesTrustTheLocalProxyByDefault(t *testing.T) {
-	for _, file := range []string{"compose.yaml", "install.sh"} {
-		raw, err := os.ReadFile(filepath.Join("..", "..", "..", file))
-		if err != nil {
-			t.Fatal(err)
+// The installer binds the server to 127.0.0.1, so a reverse proxy on the host always sits in front.
+// Docker delivers that proxy's connections from the bridge gateway, not from loopback, so what the
+// installer saves must cover both or every visitor shares one rate-limit bucket.
+func TestTheInstallerTrustsTheLocalProxy(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "TRUSTED_PROXIES="+serverconfig.InstallerTrustedProxies) {
+		t.Fatalf("install.sh does not save trusted_proxies=%s", serverconfig.InstallerTrustedProxies)
+	}
+	proxies, err := httpapi.ParseTrustedProxies(serverconfig.InstallerTrustedProxies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, peer := range []string{"127.0.0.1", "::1", "172.18.0.1"} {
+		if !covers(proxies, netip.MustParseAddr(peer)) {
+			t.Errorf("the installer's %v does not trust %s", proxies, peer)
 		}
-		match := composeDefault.FindSubmatch(raw)
-		if match == nil {
-			t.Fatalf("%s sets no default for TRUSTED_PROXIES", file)
-		}
-		proxies, err := httpapi.ParseTrustedProxies(string(match[1]))
-		if err != nil {
-			t.Fatalf("%s default %q: %v", file, match[1], err)
-		}
-		for _, peer := range []string{"127.0.0.1", "::1", "172.18.0.1"} {
-			if !covers(proxies, netip.MustParseAddr(peer)) {
-				t.Errorf("%s default %q does not trust %s", file, match[1], peer)
-			}
-		}
-		for _, stranger := range []string{"203.0.113.9", "2001:db8::1"} {
-			if covers(proxies, netip.MustParseAddr(stranger)) {
-				t.Errorf("%s default %q trusts the public address %s", file, match[1], stranger)
-			}
+	}
+	for _, stranger := range []string{"203.0.113.9", "2001:db8::1"} {
+		if covers(proxies, netip.MustParseAddr(stranger)) {
+			t.Errorf("the installer's %v trusts the public address %s", proxies, stranger)
 		}
 	}
 }
