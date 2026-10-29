@@ -14,14 +14,11 @@ import { saveState } from '../../features/settings/save-feedback';
 import { settingsMessages } from '../../features/settings/settings-messages';
 import { panelID, tabID, Tabs } from '../../ui/tabs';
 import { providerSteps } from './provider-instructions';
-import { recommended } from './setup-state';
+import { clockTime, recommended } from './setup-state';
 import type { Provider, RepliesChoice } from './setup-state';
 import { setupMessages as m } from './setup-messages';
 import { useInboundSecret, useMailbox } from './email-shared';
-
-// clockTime is the time of day an event happened, in the agent's timezone.
-export const clockTime = (value: string, timeZone: string) =>
-  new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone }).format(new Date(value));
+import { GmailConfirmation } from './forwarding-confirmation';
 
 // useRefetchOnActivity reloads the channel whenever the app's inbox poll (useInboxActivity) brings a new or
 // changed conversation: the first forwarded email shows here without a second poll. Only while active.
@@ -35,6 +32,7 @@ export function useRefetchOnActivity(channelID: string, active: boolean) {
       if (!data?.new_conversations?.length && !data?.updated?.length) return;
       void client.invalidateQueries({ queryKey: ['channel', channelID] });
       void client.invalidateQueries({ queryKey: ['channels'] });
+      void client.invalidateQueries({ queryKey: ['forwarding-confirmation', channelID] });
     });
   }, [client, channelID, active]);
 }
@@ -60,11 +58,9 @@ interface ForwardProps {
   onProvider: (provider: Provider) => void;
   onContinue: () => void;
   onSkip: () => void;
-  // confirmation: what the forwarding provider sent to confirm the address, when it can show here.
-  confirmation?: ReactNode;
 }
 
-export function ForwardStep({ channel, settings, canManage, timezone, provider, onProvider, onContinue, onSkip, confirmation }: ForwardProps) {
+export function ForwardStep({ channel, settings, canManage, timezone, provider, onProvider, onContinue, onSkip }: ForwardProps) {
   const client = useQueryClient();
   const refresh = () => Promise.all(['email-channel', 'channel', 'channels'].map((key) => client.invalidateQueries({ queryKey: key === 'channel' ? [key, channel.id] : [key] })));
   const hosted = settings.hosted_address;
@@ -92,7 +88,7 @@ export function ForwardStep({ channel, settings, canManage, timezone, provider, 
         <EmailChannelSection part="arrival" settings={settings} timezone={timezone} canManage={canManage} createdSecret={secret.created} onRotate={secret.onRotate} />
       </>}
     </div>
-    {confirmation}
+    {(tab === 'gmail' || tab === 'workspace') && <GmailConfirmation channelID={channel.id} timezone={timezone} waiting={!received} />}
     <p role="status" className={`setup-live ${received ? 'setup-live-ok' : ''}`}>
       {received ? m.firstEmail(channel.last_inbound_at ? clockTime(channel.last_inbound_at, timezone) : '') : m.waitingFirstEmail}</p>
     <div className="setup-actions">

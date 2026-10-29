@@ -54,6 +54,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.previewFix, a.sendFix, a.retryFix, a.cancelFix, a.markFixDeployed, a.unmarkFixDeployed, a.linkFixPullRequest, a.unlinkFixPullRequest,
 		a.enableFixConnector, a.disableFixConnector, a.checkFixConnector, a.setCursorKey, a.removeCursorKey,
 		a.sendTestMessage, a.sendTestMessage,
+		a.getForwardingConfirmation,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

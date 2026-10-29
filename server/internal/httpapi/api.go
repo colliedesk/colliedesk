@@ -618,6 +618,8 @@ func Routes() []Route {
 		// A test message from the signed-in agent, on the default email channel or one of several.
 		{http.MethodPost, "/api/v1/channels/email/test-message", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/channels/{id}/email/test-message", auth.PermissionConversationsWrite},
+		// What Gmail sent to confirm a new forwarding address, shown in the email setup.
+		{http.MethodGet, "/api/v1/channels/{id}/email/forwarding-confirmation", auth.PermissionAccessRead},
 	}
 }
 

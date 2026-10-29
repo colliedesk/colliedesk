@@ -26,6 +26,10 @@ export function writeMemory(channelID: string, memory: SetupMemory) {
   try { localStorage.setItem(key(channelID), JSON.stringify(memory)); } catch { /* storage off: the setup still works, it forgets on reload */ }
 }
 
+// clockTime is the time of day an event happened, in the agent's timezone.
+export const clockTime = (value: string, timeZone: string) =>
+  new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone }).format(new Date(value));
+
 const same = (a: string | null | undefined, b: string | null | undefined) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 
 // addressSaved: the channel has a support address of the team's own. A new cloud workspace's channel starts

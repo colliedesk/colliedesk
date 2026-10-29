@@ -454,6 +454,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{id}/email/forwarding-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The confirmation Gmail (or Google Workspace) sent when a mailbox was set to forward to this email channel, read from the newest email of `forwarding-noreply@google.com` with a "Forwarding Confirmation" subject that reached the channel in the last 24 hours. The email itself stays a normal conversation (`conversation_id`). `confirm_url` is Google's confirmation link only when it is https on `mail.google.com` or `mail-settings.google.com` and the message passed the sender check of the trusted receiving server (`EMAIL_TRUSTED_AUTHSERV_ID`); otherwise it is null and only the code is given, because anyone can send mail with that From line. 404 `not_found` when no such email arrived in the last 24 hours, or `channel_not_found` when the id names no email channel of this workspace. */
+        get: operations["getEmailForwardingConfirmation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{id}/email/domain-verification": {
         parameters: {
             query?: never;
@@ -5592,6 +5611,22 @@ export interface components {
                 content_type: string;
             }[];
         };
+        ForwardingConfirmation: {
+            /** @description The confirmation code the provider asks for, digits only. */
+            code: string;
+            /**
+             * Format: uri
+             * @description Google's confirmation link; null unless the sender check passed and the host is Google's.
+             */
+            confirm_url: string | null;
+            /** Format: date-time */
+            received_at: string;
+            /**
+             * Format: uuid
+             * @description The conversation the confirmation email opened.
+             */
+            conversation_id: string;
+        };
         TestMessageResult: {
             /** Format: uuid */
             conversation_id: string;
@@ -7750,6 +7785,30 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["EmailChannelSettings"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEmailForwardingConfirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest forwarding confirmation of the channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForwardingConfirmation"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };

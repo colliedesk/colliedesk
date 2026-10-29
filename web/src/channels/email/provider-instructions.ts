@@ -19,7 +19,7 @@ export const providerSteps: ProviderSteps[] = [
     steps: [
       'In Gmail, open Settings → See all settings → Forwarding and POP/IMAP.',
       'Select Add a forwarding address, paste the address above, then select Next → Proceed.',
-      'Gmail sends a confirmation email to Colliedesk. It opens a conversation in your inbox here: open it and select the confirmation link.',
+      'Gmail sends a confirmation email to Colliedesk. Its code and confirm link show below within a few seconds.',
       'Back in Gmail, choose Forward a copy of incoming mail to the address above, then Save Changes.',
     ],
   },
@@ -30,7 +30,7 @@ export const providerSteps: ProviderSteps[] = [
     steps: [
       'Sign in to Gmail as the support mailbox, then open Settings → See all settings → Forwarding and POP/IMAP.',
       'Select Add a forwarding address, paste the address above, then select Next → Proceed.',
-      'Google sends a confirmation email to Colliedesk. It opens a conversation in your inbox here: open it and select the confirmation link.',
+      'Google sends a confirmation email to Colliedesk. Its code and confirm link show below within a few seconds.',
       'Back in Gmail, choose Forward a copy of incoming mail to the address above, then Save Changes.',
     ],
   },

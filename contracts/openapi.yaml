@@ -972,6 +972,29 @@ paths:
         '200': {$ref: '#/components/responses/EmailChannelSettings'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/email/forwarding-confirmation:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getEmailForwardingConfirmation
+      x-permission: access:read
+      description: >-
+        The confirmation Gmail (or Google Workspace) sent when a mailbox was set to forward to this email
+        channel, read from the newest email of `forwarding-noreply@google.com` with a "Forwarding Confirmation"
+        subject that reached the channel in the last 24 hours. The email itself stays a normal conversation
+        (`conversation_id`). `confirm_url` is Google's confirmation link only when it is https on
+        `mail.google.com` or `mail-settings.google.com` and the message passed the sender check of the
+        trusted receiving server (`EMAIL_TRUSTED_AUTHSERV_ID`); otherwise it is null and only the code is
+        given, because anyone can send mail with that From line. 404 `not_found` when no such email arrived
+        in the last 24 hours, or `channel_not_found` when the id names no email channel of this workspace.
+      responses:
+        '200':
+          description: The newest forwarding confirmation of the channel
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ForwardingConfirmation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/channels/{id}/email/domain-verification:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -8538,6 +8561,14 @@ components:
             properties:
               filename: {type: string}
               content_type: {type: string}
+    ForwardingConfirmation:
+      type: object
+      required: [code, confirm_url, received_at, conversation_id]
+      properties:
+        code: {type: string, description: "The confirmation code the provider asks for, digits only."}
+        confirm_url: {type: [string, 'null'], format: uri, description: "Google's confirmation link; null unless the sender check passed and the host is Google's."}
+        received_at: {type: string, format: date-time}
+        conversation_id: {type: string, format: uuid, description: The conversation the confirmation email opened.}
     TestMessageResult:
       type: object
       required: [conversation_id, message_id, sent_to]

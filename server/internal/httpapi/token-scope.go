@@ -221,14 +221,17 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/channels/{id}":            alwaysAsk(auth.PermChannelsManageCredentials),
 	"POST /api/v1/channels/{id}/held/discard": alwaysAsk(auth.PermChannelsUpdate),
 	// One email channel of several: the same tiers as the routes of the default one.
-	"GET /api/v1/channels/{id}/email":                      grant(auth.PermChannelsRead),
-	"POST /api/v1/channels/{id}/email/domain-verification": grant(auth.PermChannelsUpdate),
-	"POST /api/v1/channels/{id}/email/secret":              alwaysAsk(auth.PermChannelsManageCredentials),
-	"POST " + channelGmailPath:                             alwaysAsk(auth.PermChannelsManageCredentials),
-	"DELETE " + channelGmailPath:                           alwaysAsk(auth.PermChannelsManageCredentials),
-	"POST " + channelMicrosoftPath:                         alwaysAsk(auth.PermChannelsManageCredentials),
-	"DELETE " + channelMicrosoftPath:                       alwaysAsk(auth.PermChannelsManageCredentials),
-	"GET /api/v1/channels/email":                           grant(auth.PermChannelsRead),
+	"GET /api/v1/channels/{id}/email": grant(auth.PermChannelsRead),
+	// The code and link Gmail sent to the channel: read like the channel's settings; the email itself is
+	// already a conversation every reader of the inbox sees.
+	"GET /api/v1/channels/{id}/email/forwarding-confirmation": grant(auth.PermChannelsRead),
+	"POST /api/v1/channels/{id}/email/domain-verification":    grant(auth.PermChannelsUpdate),
+	"POST /api/v1/channels/{id}/email/secret":                 alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST " + channelGmailPath:                                alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + channelGmailPath:                              alwaysAsk(auth.PermChannelsManageCredentials),
+	"POST " + channelMicrosoftPath:                            alwaysAsk(auth.PermChannelsManageCredentials),
+	"DELETE " + channelMicrosoftPath:                          alwaysAsk(auth.PermChannelsManageCredentials),
+	"GET /api/v1/channels/email":                              grant(auth.PermChannelsRead),
 	// A test message reaches nobody but the token's own agent: it opens a conversation, like a change
 	// that never reaches a customer (draft). Answering it is a reply, which needs send as always.
 	"POST /api/v1/channels/email/test-message":        grant(auth.PermConversationsUpdate),
