@@ -242,13 +242,13 @@ test('the type shortcut opens the connect form when the workspace has no channel
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/settings/channels/new/web_form', true));
 });
 
-test('connecting email creates the channel with its support address and opens it', async () => {
+test('connecting email creates the channel with its support address and opens its setup', async () => {
   channelsApi.create.mockResolvedValue({ ...channel('email'), config: withChannel.channel });
   const navigate = show('new/email');
   fireEvent.change(await screen.findByRole('textbox', { name: 'Support address' }), { target: { value: ' help@example.com ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save support address' }));
   await waitFor(() => expect(channelsApi.create).toHaveBeenCalledWith({ type: 'email', config: { support_address: 'help@example.com' } }, expect.any(String)));
-  await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${EMAIL}`, true));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${EMAIL}/setup`, true));
 });
 
 test('adding a web form creates it on, with its allowed origins, and opens it', async () => {

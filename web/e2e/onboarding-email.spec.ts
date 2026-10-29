@@ -26,8 +26,9 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
   const secret = await page.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
   const inboundURL = await page.getByRole('textbox', { name: 'Inbound URL' }).inputValue();
   expect(inboundURL).toBe(`${baseURL}/api/v1/channels/email/inbound`);
-  // How replies leave is on the channel's Replies tab.
-  await page.getByRole('tab', { name: 'Replies' }).click();
+  // How replies leave is the setup's step 3: with the server's relay it is done already, and opens again.
+  const replies = page.getByRole('group', { name: new RegExp(`Send replies from ${support}`) });
+  await replies.getByRole('button', { name: 'Change' }).click();
   // The relay's host and port are a server detail, folded away for admins.
   await page.locator('details', { hasText: 'Outgoing email (SMTP)' }).getByText('Server details').click();
   await expect(page.getByText(`127.0.0.1:${mailpit.smtpPort} · STARTTLS off · no login`)).toBeVisible();

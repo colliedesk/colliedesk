@@ -24,7 +24,7 @@ test('test message: a new cloud workspace sends itself a test message from the e
   await page.getByRole('region', { name: 'Get started' }).getByRole('link', { name: 'Connect your support email' }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(support);
   await page.getByRole('button', { name: 'Save support address' }).click();
-  await expect(page.getByRole('tab', { name: 'Connection' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Forward its mail to Colliedesk' })).toContainText('Step 2 of 4');
 
   // Back on the empty inbox, one click brings a conversation from the agent's own address.
   await page.getByRole('link', { name: 'Inbox' }).click();
@@ -54,6 +54,7 @@ test('the Connection tab sends one test message before an inbound secret exists 
   await page.getByRole('region', { name: 'Get started' }).getByRole('link', { name: 'Connect your support email' }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@acme.example`);
   await page.getByRole('button', { name: 'Save support address' }).click();
+  await page.getByRole('link', { name: 'Manage this address' }).click();
   await expect(page.getByRole('tab', { name: 'Connection' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create inbound secret' })).toBeVisible();
 

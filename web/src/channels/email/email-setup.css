@@ -1,0 +1,78 @@
+/* Settings → Email: the four setup steps beside what customers see, and the table of support addresses. */
+.setup-layout { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: var(--space-4); align-items: start; min-width: 0; }
+.setup-card { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.setup-steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.setup-step { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-3) var(--space-4); min-width: 0; }
+.setup-open { border-color: var(--line-strong); padding-bottom: var(--space-4); }
+.setup-step[aria-disabled="true"] { background: var(--surface-0); }
+.setup-step[aria-disabled="true"] .setup-step-head { color: var(--text-3); }
+.setup-step-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-height: 28px; }
+.setup-step-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.setup-num { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: var(--fs-label); font-weight: 600; }
+.setup-open .setup-num { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.setup-done .setup-num { border-color: var(--ok); color: var(--ok); }
+.setup-value { font-family: var(--font-mono); font-size: var(--fs-small); color: var(--text-2); overflow-wrap: anywhere; }
+.setup-of { margin-left: auto; color: var(--text-3); font-size: var(--fs-label); }
+.setup-change { margin-left: auto; }
+.setup-pill { display: inline-flex; align-items: center; gap: var(--space-1); border-radius: 999px; padding: 0 var(--space-2); background: var(--ok-soft, var(--surface-2)); color: var(--text-1); font-size: var(--fs-label); line-height: 1.8; }
+.setup-pill::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: var(--ok); }
+.setup-pill-muted::before { background: var(--line-control, var(--line-strong)); }
+.setup-body { display: grid; gap: var(--space-3); min-width: 0; padding-left: calc(24px + var(--space-3)); }
+.setup-body > .settings-body { padding: 0; }
+.setup-copy input { font-family: var(--font-mono); }
+.setup-instructions { margin: 0; padding-left: var(--space-5); list-style: decimal; }
+.setup-instructions li + li { margin-top: var(--space-2); }
+.setup-instructions li > .warning-note { margin: 0 0 var(--space-2); }
+.setup-provider { display: grid; gap: var(--space-3); min-width: 0; }
+.setup-live { display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; margin: 0; border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: var(--space-1) var(--space-3); color: var(--text-2); font-size: var(--fs-small); }
+.setup-live::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--pending); }
+.setup-live-ok { border-style: solid; border-color: var(--ok); color: var(--text-1); }
+.setup-live-ok::before { background: var(--ok); }
+.setup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.setup-actions button { min-height: var(--touch); }
+.setup-fold summary, .email-home-fold summary { cursor: pointer; font-weight: 600; font-size: var(--fs-small); min-height: var(--touch); display: flex; align-items: center; gap: var(--space-2); list-style: none; }
+.setup-fold summary::-webkit-details-marker, .email-home-fold summary::-webkit-details-marker { display: none; }
+.setup-fold summary::before, .email-home-fold summary::before { content: "▸"; color: var(--text-3); }
+.setup-fold[open] > summary::before, .email-home-fold[open] > summary::before { content: "▾"; }
+.setup-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: 0; padding: 0; border: 0; }
+.setup-choice { display: flex; gap: var(--space-2); align-items: flex-start; min-height: var(--touch); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-3); cursor: pointer; }
+.setup-choice:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.setup-choice input { margin-top: 3px; }
+.setup-choice > span { display: grid; gap: 2px; min-width: 0; }
+.setup-choice small { color: var(--text-3); font-size: var(--fs-small); }
+.setup-badge { justify-self: start; border-radius: var(--radius-sm); background: var(--accent); color: var(--on-accent); padding: 0 var(--space-1); font-size: var(--fs-label); font-weight: 600; }
+.setup-choice-body { display: grid; gap: var(--space-3); min-width: 0; }
+.setup-preview { position: sticky; top: var(--space-4); display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-4); }
+.setup-preview h3 { margin: 0; font-size: var(--fs-small); font-weight: 600; }
+.setup-preview-lines { display: grid; gap: 2px; margin: 0; font-family: var(--font-mono); font-size: var(--fs-label); overflow-wrap: anywhere; }
+
+.email-home { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.email-home-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.email-home-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+.email-home-table th { padding: var(--space-2); border-bottom: 1px solid var(--line); color: var(--text-3); font-weight: 500; text-align: left; white-space: nowrap; }
+.email-home-table td { padding: var(--space-3) var(--space-2); border-bottom: 1px solid var(--line); vertical-align: middle; }
+.email-home-table code { font-size: var(--fs-label); overflow-wrap: anywhere; }
+.email-home-name { display: block; color: var(--text-3); font-size: var(--fs-label); }
+.email-home-action { text-align: right; white-space: nowrap; }
+.email-home-action .button { min-height: var(--touch); display: inline-flex; align-items: center; }
+.email-home-folds { display: grid; }
+.email-home-fold { border-bottom: 1px solid var(--line); padding: 0 0 var(--space-2); }
+.email-home-fold[open] { padding-bottom: var(--space-4); }
+.email-home-fold > :not(summary) { margin-top: var(--space-2); }
+.email-home-danger summary { color: var(--danger, var(--text-1)); }
+.email-home-manage { margin: 0; padding-left: var(--space-5); }
+.email-home-manage a { display: inline-flex; align-items: center; min-height: var(--touch); }
+
+/* Links inside the steps are fingertip-sized on a phone. */
+@media (pointer: coarse), (max-width: 30rem) { .setup-body a, .setup-body .link-action { display: inline-flex; align-items: center; min-height: var(--touch); } }
+@media (max-width: 60rem) {
+  .setup-layout { grid-template-columns: minmax(0, 1fr); }
+  .setup-preview { position: static; }
+}
+@media (max-width: 40rem) {
+  .setup-step { padding: var(--space-3); }
+  .setup-body { padding-left: 0; }
+  .setup-choices { grid-template-columns: minmax(0, 1fr); }
+  .setup-of, .setup-change { margin-left: 0; }
+  .setup-change { min-height: var(--touch); }
+}
