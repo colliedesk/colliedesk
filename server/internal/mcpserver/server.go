@@ -5,11 +5,14 @@
 package mcpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -61,6 +64,10 @@ func Mount(config Config, next http.Handler) http.Handler {
 	})
 }
 
+// maxRequestBody bounds one MCP request: room for the 7,000,000 characters of base64 (5 MiB of bytes)
+// that a file argument takes, and the rest of the call. The SDK's default of 4 MiB refuses such a call.
+const maxRequestBody = 8 << 20
+
 // New returns the handler of Path. It panics when the catalog is inconsistent, which the tests catch.
 func New(config Config) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "colliedesk", Title: "Colliedesk", Version: config.Version},
@@ -76,8 +83,8 @@ func New(config Config) http.Handler {
 	// SDK's loopback Host check would refuse the public host name that a reverse proxy on the same
 	// machine forwards, and self-hosters run exactly that.
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
-		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true})
-	return requireBearer(config.Auth, streamable)
+		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true, MaxRequestBodyBytes: maxRequestBody})
+	return requireBearer(config.Auth, limitLarge(streamable, largeRequestSlots, largeRequestSlotsPerWorkspace, callTimeout, largeRequestReadTime))
 }
 
 const operatorInstructions = `Colliedesk's operator tools run the whole server: its settings, operators and requests, not a workspace's inbox.
@@ -119,6 +126,71 @@ func requireOperatorBearer(service *auth.OperatorService, next http.Handler) htt
 	})
 }
 
+const (
+	// largeRequest is the body size above which a request is one that carries a file. The SDK decodes a
+	// request several times, so one such call holds tens of MiB while it runs.
+	largeRequest = 1 << 20
+	// largeRequestSlots is how many such requests the server reads at once; the others wait.
+	largeRequestSlots = 4
+	// largeRequestSlotsPerWorkspace keeps one workspace from taking every slot.
+	largeRequestSlotsPerWorkspace = 2
+	// largeRequestReadTime is how long a request that holds a slot may take to send its body, so a
+	// client that stalls cannot keep the slot: 8 MiB in two minutes is about 70 KiB a second.
+	largeRequestReadTime = 2 * time.Minute
+)
+
+// limitLarge lets at most slots requests with a large or unknown-length body in at once, and at most
+// perWorkspace of one workspace, so many file calls together cannot exhaust the server's memory and
+// one workspace cannot hold every slot. A request waits for a slot before its body is read, gets
+// 503 after wait, and must send its body within readFor once it holds one. Small calls never wait.
+func limitLarge(next http.Handler, slots, perWorkspace int, wait, readFor time.Duration) http.Handler {
+	free := make(chan struct{}, slots)
+	var mu sync.Mutex
+	held := map[string]int{}
+	busy := func(response http.ResponseWriter) {
+		response.Header().Set("Retry-After", "10")
+		writeJSONError(response, http.StatusServiceUnavailable, "busy",
+			"Colliedesk is reading other calls with files right now. Nothing was sent or stored. Try again in a few seconds.")
+	}
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.ContentLength >= 0 && request.ContentLength <= largeRequest {
+			next.ServeHTTP(response, request)
+			return
+		}
+		workspace, _ := request.Context().Value(workspaceKey{}).(string)
+		mu.Lock()
+		if held[workspace] >= perWorkspace {
+			mu.Unlock()
+			busy(response)
+			return
+		}
+		held[workspace]++
+		mu.Unlock()
+		defer func() {
+			mu.Lock()
+			if held[workspace]--; held[workspace] == 0 {
+				delete(held, workspace)
+			}
+			mu.Unlock()
+		}()
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case free <- struct{}{}:
+			defer func() { <-free }()
+			// A writer without deadlines (a test recorder) has none to set; the server's connections do.
+			_ = http.NewResponseController(response).SetReadDeadline(time.Now().Add(readFor)) //nolint:errcheck // see above
+			next.ServeHTTP(response, request)
+		case <-timer.C:
+			busy(response)
+		case <-request.Context().Done():
+		}
+	})
+}
+
+// workspaceKey carries the workspace id of an authenticated MCP request.
+type workspaceKey struct{}
+
 // requireBearer answers 401 unless the request carries a valid agent token as a bearer. Cookies and
 // a person's own session are never accepted.
 func requireBearer(service *auth.Service, next http.Handler) http.Handler {
@@ -144,7 +216,7 @@ func requireBearer(service *auth.Service, next http.Handler) http.Handler {
 			unauthorized(response)
 			return
 		}
-		next.ServeHTTP(response, request)
+		next.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), workspaceKey{}, principal.Workspace.ID)))
 	})
 }
 
