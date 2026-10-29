@@ -162,7 +162,7 @@ rm -f "$STUB_LOG" "$STUB_LOG.stdin"
 sh "$ROOT/install.sh" --dir "$upgrade" --name Desk --email admin@example.com </dev/null >/dev/null
 grep -Fx '# the older compose file' "$upgrade/compose.yaml.bak" >/dev/null
 grep -F 'compose run --rm -T server' "$STUB_LOG" >/dev/null
-grep -F 'collie config import --stdin --only-missing' "$STUB_LOG" >/dev/null
+grep -F 'collie config import --stdin --only-missing --by installer' "$STUB_LOG" >/dev/null
 grep -Fx 'SMTP_HOST=smtp.example.net' "$STUB_LOG.stdin" >/dev/null
 grep -Fx 'SMTP_PASSWORD=relay-pass' "$STUB_LOG.stdin" >/dev/null
 grep -Fx 'INTERNAL_SIGNUP_EMAILS=@example.com' "$STUB_LOG.stdin" >/dev/null

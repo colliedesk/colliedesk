@@ -86,13 +86,18 @@ func configCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	return errors.New(configUsage)
 }
 
-// cliActor is who the audit log names for a command: --by, else the operating system user.
+// cliActor is who the audit log names for a command: --by, else the operating system user, else the
+// process's user id. The server image runs as a user without a name, so `docker compose exec server
+// /app/collie config set …` works as the docs show it and the audit still says it came from the shell.
 func cliActor(by string) (serverconfig.Actor, error) {
-	name, err := operatorName(by)
-	if err != nil {
-		return serverconfig.Actor{}, err
+	return serverconfig.Actor{Kind: "cli", Name: "cli:" + configActorName(by, operatorName, os.Getuid)}, nil
+}
+
+func configActorName(by string, named func(string) (string, error), uid func() int) string {
+	if name, err := named(by); err == nil {
+		return name
 	}
-	return serverconfig.Actor{Kind: "cli", Name: "cli:" + name}, nil
+	return "uid-" + strconv.Itoa(uid())
 }
 
 func configFlags(name string) (*flag.FlagSet, *string) {

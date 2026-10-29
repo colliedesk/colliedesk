@@ -436,3 +436,20 @@ func TestDoctorRefusesAConsoleOnTheAppOriginOfTheHostedCloud(t *testing.T) {
 		t.Fatalf("with its own host: %v", errs)
 	}
 }
+
+// The server image's user has no name: a config command still runs, and the audit names its user id.
+func TestConfigNamesAnUnnamedShellUserByItsID(t *testing.T) {
+	unnamed := func(by string) (string, error) {
+		if by != "" {
+			return by, nil
+		}
+		return "", errors.New("cannot tell who you are")
+	}
+	uid := func() int { return 65532 }
+	if got := configActorName("", unnamed, uid); got != "uid-65532" {
+		t.Fatalf("unnamed = %q", got)
+	}
+	if got := configActorName("ops", unnamed, uid); got != "ops" {
+		t.Fatalf("--by = %q", got)
+	}
+}

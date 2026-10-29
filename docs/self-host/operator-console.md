@@ -142,7 +142,7 @@ docker compose exec server /app/collie config <command>
 | `doctor` | Checks the configuration. Exit code 0: clean. 1: warnings (a setting still in the environment, a variable no release reads, a secret sealed with an older key, no key ring, a trial change that runs). 2: errors (a version the server refused). |
 | `reseal` | Seals every secret again with the first key of `MAILBOX_TOKEN_KEYS`, after you add a new key in front. |
 
-Every command that writes takes `--by NAME` for the audit log (default: your user name). A key is named
+Every command that writes takes `--by NAME` for the audit log (default: your user name, or `uid-<n>` in the server container, whose user has no name). A key is named
 by its dotted name (`smtp.host`) or by the variable it replaced (`SMTP_HOST`); the
 [settings table](environment-variables.md#settings) lists them all.
 

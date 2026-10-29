@@ -215,7 +215,7 @@ mv "$TARGET_DIR/compose.yaml.next" "$TARGET_DIR/compose.yaml"
 cd "$TARGET_DIR"
 if [ -n "$SETTINGS" ]; then
   "$DOCKER" compose up -d --wait postgres || fail 'PostgreSQL did not start. Run docker compose ps for details.'
-  if ! printf '%s' "$SETTINGS" | "$DOCKER" compose run --rm -T server '/app/collie migrate && /app/collie config import --stdin --only-missing'; then
+  if ! printf '%s' "$SETTINGS" | "$DOCKER" compose run --rm -T server '/app/collie migrate && /app/collie config import --stdin --only-missing --by installer'; then
     # The settings are still only in .env: put back the compose file that passes them to the server.
     [ -z "$REPLACED" ] || mv compose.yaml.bak compose.yaml
     fail 'Importing the settings from .env failed; the compose file was left as it was. Fix the lines it names in .env, then run the installer again.'
