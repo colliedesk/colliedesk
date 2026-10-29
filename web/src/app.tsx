@@ -119,9 +119,9 @@ function AppLayout() {
 // Settings sections link through the router, so moving between Settings and Plan and billing needs no reload.
 // exact + includeHash: otherwise every section link would count as current on any settings page.
 function settingsRouterLink(item: NavItem) {
-  const preload = item.to === '/settings/channels' ? channelsRoutePart.preload : undefined;
-  // /settings/channels is the channels route with an empty splat, a path the route types do not list.
-  return <Link to={item.to as Exclude<NavItem['to'], '/settings/channels'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
+  const preload = item.to.startsWith('/settings/channels') ? channelsRoutePart.preload : undefined;
+  // /settings/channels and the type homes under it are the channels route's splat, paths the route types do not list.
+  return <Link to={item.to as Exclude<NavItem['to'], `/settings/channels${string}`>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
     aria-current={item.current ? 'page' : undefined} onPointerEnter={preload} onFocus={preload}>{item.label}</Link>;
 }
 

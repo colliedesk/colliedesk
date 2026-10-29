@@ -3,7 +3,7 @@ import type { MouseEvent, ReactNode } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError } from '../../../api/client';
 import { channelsApi } from '../../../api/channels';
-import type { Channel, ChannelDetail, ChannelList, ChannelTypeInfo } from '../../../api/channels';
+import type { Channel, ChannelDetail, ChannelList, ChannelType, ChannelTypeInfo } from '../../../api/channels';
 import { channelTypes, channelUI, upcomingChannels } from '../../../channels/registry';
 import type { ChannelUI, ConnectProps } from '../../../channels/registry';
 import { formatDate } from '../../../lib/format-date';
@@ -15,18 +15,21 @@ import { panelID, tabID, Tabs } from '../../../ui/tabs';
 import { NameForm } from '../name-form';
 import { saveState } from '../save-feedback';
 import { SettingsNav } from '../settings-nav';
-import type { Shown } from '../settings-nav';
+import type { SettingsPath, Shown } from '../settings-nav';
 import { channelsMessages as m } from './channels-messages';
 import './channels.css';
 import { useCreateAction } from '../../../api/use-create';
+import { takeSetupReturn } from '../../../channels/setup-return';
 
 // The pages under /settings/channels. Everything a type adds comes from the web registry
 // (src/channels/registry.ts); nothing here names a type.
 //
 //   /settings/channels                 the list (?tab=history for the history of every channel)
 //   /settings/channels/<id>?tab=…      one channel: its type's tabs, then History
-//   /settings/channels/new/<type>      the type's connect form; the channel exists once it is saved
-//   /settings/channels/type/<type>     the workspace's channel of that type, or its connect form
+//   /settings/channels/<id>/setup      the type's guided setup of that channel, when the type has one
+//   /settings/channels/new/<type>      the type's setup or connect form; the channel exists once it is saved
+//   /settings/channels/type/<type>     the type's home when it has one; otherwise, and always with a tab or a
+//                                      mailbox outcome in the address, the workspace's channel of that type
 
 export interface ChannelsSearch { tab?: string; gmail?: string; gmail_error?: string; microsoft?: string; microsoft_error?: string }
 
@@ -55,17 +58,24 @@ export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
     billing: isAdmin && config.data?.billing.enabled === true, importData: isAdmin, ai: true };
   const [first, second] = path.split('/');
   const page = { navigate, isAdmin, timezone };
+  // The type a page belongs to names it and marks its place in the nav; a channel's type is read from the
+  // list the pages load anyway.
+  const onChannel = Boolean(first) && first !== 'new' && first !== 'type';
+  const listed = useQuery({ queryKey: ['channels'], queryFn: channelsApi.list, enabled: onChannel });
+  const type = first === 'new' || first === 'type' ? second : listed.data?.items.find((item) => item.id === first)?.type;
+  const typeHome = first === 'new' || first === 'type' || second === 'setup' ? channelUI(type ?? '') : undefined;
   let content: ReactNode;
   if (!me.data) content = <div className="ch-loading" aria-busy="true" />;
   else if (path === '') content = <ChannelsList {...page} tab={search.tab === 'history' ? 'history' : 'channels'} />;
   else if (first === 'new') content = <NewChannel {...page} type={second ?? ''} />;
-  else if (first === 'type') content = <TypeShortcut {...page} type={second ?? ''} search={search} />;
-  else content = <ChannelPage {...page} id={first} tab={search.tab} />;
+  else if (first === 'type') content = carriesChannelState(search) ? <TypeShortcut {...page} type={second ?? ''} search={search} /> : <TypeHome {...page} type={second ?? ''} search={search} />;
+  else if (second === 'setup') content = <ChannelSetup {...page} id={first} />;
+  else content = <ChannelPage {...page} id={first} tab={search.tab} search={search} />;
   return (
     <main className="settings-page panel channels-settings">
-      <header><h1>{m.heading}</h1><p>{m.description}</p></header>
+      <header><h1>{typeHome?.label ?? m.heading}</h1><p>{typeHome?.description ?? m.description}</p></header>
       <div className="settings-layout">
-        <SettingsNav page="/settings/channels" shown={shown} />
+        <SettingsNav page={navPage(path === '' ? undefined : type)} shown={shown} />
         <div className="settings-sections ch-page">{content}</div>
       </div>
     </main>
@@ -73,6 +83,13 @@ export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
 }
 
 interface PageProps { navigate: ChannelsRouteProps['navigate']; isAdmin: boolean; timezone: string }
+
+// navPage is the nav item of a page: its type's home, or Channels.
+const navPage = (type: string | undefined): SettingsPath => (type && channelUI(type) ? `${base}/type/${type}` as SettingsPath : base);
+
+// A tab or a mailbox provider's outcome in the address is about one channel (a link from the inbox, the
+// provider's redirect): those open that channel, never the type's home.
+const carriesChannelState = (search: ChannelsSearch) => Boolean(search.tab || search.gmail || search.gmail_error || search.microsoft || search.microsoft_error);
 
 function useChannels() {
   return useQuery({ queryKey: ['channels'], queryFn: channelsApi.list });
@@ -159,7 +176,6 @@ function ChannelsList({ navigate, isAdmin, timezone, tab }: PageProps & { tab: '
                     {attention.map((channel) => <span key={channel.id} className="ch-reason">{channel.name}: {m.reason(channel.status.reason_code, channel.status.message)}{' '}
                       <a href={`${base}/${channel.id}`}>{m.fix}</a></span>)}</span></div>}
                   {list.items.filter((channel) => channel.enabled && channel.unsent_count > 0).map((channel) => <Unsent key={channel.id} channel={channel} />)}
-                  {isAdmin && <TypeOverviews list={list} />}
                   <section className="panel ch-list" aria-label={m.tabChannels}>
                     {list.items.map((channel) => <ChannelRow key={channel.id} channel={channel} isAdmin={isAdmin}
                       markDefault={channel.is_default === true && typeCount(list, channel.type) > 1} />)}
@@ -246,28 +262,75 @@ function TypeShortcut({ type, search, navigate }: PageProps & { type: string; se
   return <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>;
 }
 
-function NewChannel({ type, navigate, isAdmin, timezone }: PageProps & { type: string }) {
+// useCreate adds a channel of a type and opens it: its setup when guided, else its page.
+function useCreate(type: string | undefined, navigate: PageProps['navigate']) {
   const client = useQueryClient();
   const createChannel = useCreateAction((input: Parameters<typeof channelsApi.create>[0], key: string) => channelsApi.create(input, key));
-  const ui = channelUI(type);
-  if (!ui) return <p role="alert" className="error-copy">{m.unknownType}</p>;
-  const create: ConnectProps['create'] = async (input) => {
-    const created = await createChannel.run({ type: ui.type, ...input });
+  return (guided: boolean): ConnectProps['create'] => async (input) => {
+    const created = await createChannel.run({ type: type as ChannelType, ...input });
     await client.invalidateQueries({ queryKey: ['channels'] });
-    navigate(`${base}/${created.id}`, true);
+    navigate(`${base}/${created.id}${guided ? '/setup' : ''}`, true);
     return created;
   };
+}
+
+const noChannels: ChannelList = { items: [], types: [] };
+
+function NewChannel({ type, navigate, isAdmin, timezone }: PageProps & { type: string }) {
+  const ui = channelUI(type);
+  const create = useCreate(ui?.type, navigate);
+  const channels = useChannels();
+  if (!ui) return <p role="alert" className="error-copy">{m.unknownType}</p>;
   return <>
     <a href={base} className="ch-back">{m.backToChannels}</a>
-    <section className="settings-card" aria-labelledby="ch-new-heading">
-      <div className="section-heading"><h2 id="ch-new-heading">{ui.label}</h2><p>{ui.description}</p>{!isAdmin && <p>{m.adminsOnly}</p>}</div>
-      <Part part={ui.panels} failed={<PartUnavailable />} render={({ Connect }) => <Connect canManage={isAdmin} timezone={timezone} create={create} />} />
-    </section>
+    <Part part={ui.panels} failed={<PartUnavailable />} render={({ Connect, Setup }) => (Setup
+      ? <Setup canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} named />
+      : <section className="settings-card" aria-labelledby="ch-new-heading">
+          <div className="section-heading"><h2 id="ch-new-heading">{ui.connectLabel}</h2>{!isAdmin && <p>{m.adminsOnly}</p>}</div>
+          <Connect canManage={isAdmin} timezone={timezone} create={create(false)} />
+        </section>)} />
   </>;
 }
 
-function ChannelPage({ id, tab, navigate, isAdmin, timezone }: PageProps & { id: string; tab?: string }) {
+// TypeHome is a type's own page when it has one; a type without it opens its channel, as before.
+function TypeHome({ type, search, navigate, isAdmin, timezone }: PageProps & { type: string; search: ChannelsSearch }) {
+  const ui = channelUI(type);
+  const create = useCreate(ui?.type, navigate);
+  const channels = useChannels();
+  const fallback = <TypeShortcut navigate={navigate} isAdmin={isAdmin} timezone={timezone} type={type} search={search} />;
+  if (!ui) return fallback;
+  if (channels.isError) return <LoadFailed onRetry={() => void channels.refetch()} />;
+  return <Part part={ui.panels} failed={<PartUnavailable />} render={({ Home }) => (!Home ? fallback
+    : channels.data ? <Home list={channels.data} canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} />
+      : <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>)} />;
+}
+
+// ChannelSetup is a channel's guided setup; a type without one shows the channel's page.
+function ChannelSetup({ id, navigate, isAdmin, timezone }: PageProps & { id: string }) {
+  const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
+  const channels = useChannels();
+  const channel = detail.data;
+  const ui = channel ? channelUI(channel.type) : undefined;
+  const create = useCreate(ui?.type, navigate);
+  if (isMissing(detail.error)) return <><p role="alert" className="error-copy">{m.notFound}</p><a href={base}>{m.backToChannels}</a></>;
+  if (detail.isError) return <LoadFailed onRetry={() => void detail.refetch()} />;
+  if (!channel || !ui) return <div className="ch-loading" aria-busy="true"><span className="sr-only">{m.loading}</span></div>;
+  return <>
+    <a href={`${base}/type/${ui.type}`} className="ch-back">{ui.label}</a>
+    <Part part={ui.panels} failed={<PartUnavailable />} render={({ Setup }) => (Setup
+      ? <Setup channel={channel} canManage={isAdmin} timezone={timezone} navigate={navigate} create={create(true)} list={channels.data ?? noChannels} />
+      : <ChannelPage id={id} navigate={navigate} isAdmin={isAdmin} timezone={timezone} search={{}} />)} />
+  </>;
+}
+
+function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps & { id: string; tab?: string; search: ChannelsSearch }) {
   const client = useQueryClient();
+  // A mailbox sign-in started in the channel's setup comes back here (the provider's redirect): it goes on
+  // in the setup, with the outcome.
+  const mailboxOutcome = search.gmail || search.gmail_error || search.microsoft || search.microsoft_error;
+  useEffect(() => {
+    if (mailboxOutcome && takeSetupReturn(id)) navigate(withSearch(`${base}/${id}/setup`, { ...search, tab: undefined }), true);
+  }, [mailboxOutcome, id, search, navigate]);
   const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
   const [removing, setRemoving] = useState(false);
   // What the last open or discard of held messages did; it stays after the notice of held messages goes.
@@ -417,11 +480,4 @@ function ChannelIdentity({ channel, label, isAdmin }: { channel: ChannelDetail; 
       {makeDefault.isError && <span role="alert" className="error-copy">{makeDefault.error instanceof InvalidRequestError ? makeDefault.error.message : m.actionFailed}</span>}
     </div>
   </div>;
-}
-
-// TypeOverviews are what a type shows about all its channels on the list, for an admin (the hosted
-// forwarding addresses of email).
-function TypeOverviews({ list }: { list: ChannelList }) {
-  return <>{addable(list).filter(({ info }) => info.count > 0 && info.default_channel_id).map(({ ui, info }) =>
-    <Part key={ui.type} part={ui.panels} failed={null} render={({ Overview }) => (Overview ? <Overview defaultChannelID={info.default_channel_id ?? ''} /> : null)} />)}</>;
 }

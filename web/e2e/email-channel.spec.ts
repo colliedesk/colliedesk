@@ -28,8 +28,8 @@ test('connects email, receives a customer email and shows why the reply is not e
   await page.getByRole('button', { name: 'Create inbound secret' }).click();
   const secret = await page.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
   expect(secret).toContain('.');
-  // How replies leave is on the channel's Replies tab.
-  await page.getByRole('tab', { name: 'Replies' }).click();
+  // How replies leave is the setup's step 3, reached by skipping forwarding for now.
+  await page.getByRole('group', { name: 'Forward its mail to Colliedesk' }).getByRole('button', { name: 'Skip for now' }).click();
   await expect(page.getByText(/Outgoing email is not configured/)).toBeVisible();
   await expect(page.getByText(/Replies cannot be emailed yet/)).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'TXT record name' })).toHaveValue(`_colliedesk.example.com`);

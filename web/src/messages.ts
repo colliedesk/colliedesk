@@ -69,6 +69,8 @@ export const messages = {
   aiSettings: 'Built-in AI',
   aiAgents: 'External AI agents',
   channels: 'Channels',
+  emailNav: 'Email',
+  webFormNav: 'Web form',
   connectAIAgent: 'Connect an AI agent',
   mcpURL: 'https://colliedesk.com/docs/mcp',
   conversationList: 'Conversation list',

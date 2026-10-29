@@ -52,7 +52,9 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
   await page.getByRole('dialog', { name: 'Add channel' }).getByRole('button', { name: /Connect your support email/ }).click();
   await page.getByRole('textbox', { name: 'Support address' }).fill(`support-${suffix}@example.com`);
   await page.getByRole('button', { name: 'Save support address' }).click();
+  // Saving opens the setup of the new address; its switch is on the address's own page.
   await expect(page.getByRole('heading', { name: 'Email', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Manage this address' }).click();
   await page.getByRole('switch', { name: 'Email' }).click();
   await page.getByRole('alertdialog', { name: 'Turn Email off?' }).getByRole('button', { name: 'Turn off' }).click();
   await expect(page.getByRole('switch', { name: 'Email' })).not.toBeChecked();
@@ -63,7 +65,11 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
   await expect(page.getByText('Email is off: this reply is saved but not sent until the channel is on.')).toBeVisible();
 
   // On again: the notice goes away.
+  // Settings → Email lists the address; the folded Change forwarding address or disconnect opens it.
   await page.goto(`${baseURL}/settings/channels/type/email`);
+  const change = page.locator('details', { hasText: 'Change forwarding address or disconnect' });
+  await change.getByText('Change forwarding address or disconnect').click();
+  await change.getByRole('link', { name: `Manage support-${suffix}@example.com` }).click();
   await page.getByRole('switch', { name: 'Email' }).click();
   await expect(page.getByRole('switch', { name: 'Email' })).toBeChecked();
   await page.getByRole('link', { name: 'Inbox' }).click();
@@ -88,10 +94,10 @@ test('channels: a second mailbox is its own channel, a new conversation leaves f
   await page.goto(`${mailURL}/settings/channels/new/email`);
   await page.getByRole('textbox', { name: 'Support address' }).fill(support);
   await page.getByRole('button', { name: 'Save support address' }).click();
-  // The channel exists once its page opens.
-  const channelPage = /\/settings\/channels\/[0-9a-f-]{36}/;
-  await page.waitForURL(channelPage);
-  const emailPage = page.url();
+  // The channel exists once its setup opens.
+  const channelSetup = /\/settings\/channels\/[0-9a-f-]{36}\/setup$/;
+  await page.waitForURL(channelSetup);
+  const emailPage = page.url().replace(/\/setup$/, '');
 
   // The same mailbox with a +tag is refused at the address, with the channel that has it.
   await page.goto(`${mailURL}/settings/channels`);
@@ -105,7 +111,8 @@ test('channels: a second mailbox is its own channel, a new conversation leaves f
   await expect(page.getByRole('link', { name: 'Open Email' })).toHaveAttribute('href', new URL(emailPage).pathname);
   await address.fill(billing);
   await page.getByRole('button', { name: 'Save support address' }).click();
-  await page.waitForURL(channelPage);
+  await page.waitForURL(channelSetup);
+  await page.getByRole('link', { name: 'Manage this address' }).click();
   await expect(page.getByRole('heading', { name: 'Billing', exact: true })).toBeVisible();
   const billingSecret = await secretOf();
   const inboundURL = await page.getByRole('textbox', { name: 'Inbound URL' }).inputValue();

@@ -1,9 +1,16 @@
 # Channels
 
 A channel is one way customers reach your workspace: your [support email](email-channel.md) or your
-website's [web form](web-form.md). **Settings → Channels** lists them with what each is doing, and
-lets an admin add one, turn it off and on, or remove it. Members of the team who are not admins see
-the list and cannot change it.
+website's [web form](web-form.md). In **Settings**, **Channels** has a page per type under it:
+
+- **Email** (`/settings/channels/type/email`): the setup of your support address, then the table of
+  your addresses with how each receives, how its replies leave and its state. See
+  [Email in Settings](email-channel.md#email-in-settings).
+- **Web form** (`/settings/channels/type/web_form`): your web form, or the form to add one.
+- **Channels** itself (`/settings/channels`) lists every channel with what each is doing, and lets an
+  admin add one, turn it off and on, or remove it, and its **History** tab lists what changed.
+
+Members of the team who are not admins see these pages and cannot change them.
 
 ## The list
 
@@ -28,8 +35,9 @@ and its state:
 
 Select **Add channel** and pick a type (with no channel yet, the page lists the types at once:
 **Connect your support email**, **Add a web form**). Live chat is listed as not available yet. The
-channel exists once you save its first settings: for email, a name and the support address; for the
-web form, its allowed origins.
+channel exists once you save its first settings: for email, a name and the support address (step 1 of
+the [email setup](email-channel.md#connect-your-support-email), which then goes on with forwarding);
+for the web form, its allowed origins.
 
 A workspace can have several channels of a type: a mailbox for support and one for billing, a form
 on your shop and one on your careers page. Pick the type again to add another.
@@ -48,8 +56,10 @@ on your shop and one on your careers page. Pick the type again to add another.
   a Gmail account sends for one email channel only. Two web forms may list the same website.
 
 Each channel has its own page with its type's tabs (email: **Connection**, how mail arrives, and
-**Replies**, how replies leave; web form: **Embed**) and **History**. Old links to the email and web
-form sections of Settings open these pages.
+**Replies**, how replies leave; web form: **Embed**) and **History**; on **Settings → Email** it is
+**Manage**. An email address still waiting for its first email also has its setup,
+`/settings/channels/<id>/setup` (**Continue setup**). Old links to the email and web form sections of
+Settings open the type's page; a bookmark to `/settings/channels/<id>` opens the same channel.
 
 ## Turn a channel off
 

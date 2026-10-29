@@ -42,13 +42,16 @@ async function signIn(page: Page, name: string): Promise<string> {
   return suffix;
 }
 
-// connectSupportAddress saves the email channel's support address and returns its inbound secret.
+// connectSupportAddress saves the email channel's support address in the setup, returns its inbound secret
+// and opens the channel's own page.
 async function connectSupportAddress(page: Page, address: string): Promise<string> {
   await page.goto(`${origin}/settings/channels/type/email`);
   await page.getByRole('textbox', { name: 'Support address' }).fill(address);
   await page.getByRole('button', { name: 'Save support address' }).click();
   await page.getByRole('button', { name: 'Create inbound secret' }).click();
-  return await page.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
+  const secret = await page.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
+  await page.getByRole('link', { name: 'Manage this address' }).click();
+  return secret;
 }
 
 // signInAtMicrosoft plays the person on the stand-in's sign-in page.
