@@ -49,10 +49,7 @@ func (r *run) importTicket(ctx context.Context, ref ticketRef) error {
 	var entries []fdTimeEntry
 	if ref.archived {
 		r.warn("archived_time_entries_unavailable", "Freshdesk documents no time entry endpoint for archived tickets; check them in Freshdesk before closing the account.", key)
-	} else if err := listAll(ctx, r.client, r.endpoint("/api/v2/tickets/"+key+"/time_entries", pageQuery()), func(e fdTimeEntry) error {
-		entries = append(entries, e)
-		return nil
-	}); err != nil {
+	} else if entries, err = r.ticketTimeEntries(ctx, ref.id); err != nil {
 		return r.ticketFailed(ctx, key, fmt.Errorf("read time entries: %w", err))
 	}
 	contactID, err := r.requesterContact(ctx, ticket.RequesterID)
