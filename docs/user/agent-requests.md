@@ -24,8 +24,12 @@ timezone: UTC → Asia/Tokyo" or "Change ada@example.com: role agent → admin".
 field the setting does not take is refused at once and nothing is saved, so a password pasted next
 to the real fields never sits in a request.
 
-A call that carries files cannot wait: the files would sit in storage for days. The agent is asked
-to send the text alone (it becomes a request) and attach the files after approval.
+A call that carries files cannot wait: the files would sit in storage for days. It is refused,
+nothing is stored or filed, and the agent is asked to send the text alone (it becomes a request);
+a person attaches the files after approval. Through MCP this applies to `files` on
+`colliedesk_note_add` with a read token, and on `colliedesk_reply_send` and
+`colliedesk_conversation_start` with a read or draft token. A reply draft (`colliedesk_reply_draft`,
+or `colliedesk_reply_send` below send) carries no files and no `ai_draft_id`.
 
 A token may file 100 requests in any hour and have 50 waiting at once; beyond that it is told to
 wait. In a locked workspace (hosted cloud, trial over) nothing is filed.

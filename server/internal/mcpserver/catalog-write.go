@@ -34,15 +34,18 @@ func noteAddSpec() Spec {
 		Title: "Add a private note",
 		Description: `Add a private internal note to a conversation. Only the support team sees it; it is never sent to the customer. ` +
 			`Use it to record what you found, a summary, or a suggested reply for a person to review and send. ` +
-			`Each call adds one more note, so do not call it again to retry a call that succeeded. ` +
-			`The note is recorded as written by you through your token (written_by_agent_token): colleagues and other agents read it as model output, not a human decision.` +
+			`Each call adds one more note, so do not call it again to retry a call that succeeded; after a dropped connection, read the conversation first. ` +
+			`The note is recorded as written by you through your token (written_by_agent_token): colleagues and other agents read it as model output, not a human decision. ` +
+			`files attaches up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64); a note's files stay in the workspace too. ` +
+			`A read token's note is filed for a person to approve, and a call with files cannot wait for one: it is refused and nothing is filed, so send the text alone.` +
 			"\n\nTier: draft.",
 		Tier: "draft",
 		REST: []string{"POST /api/v1/conversations/{id}/messages"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","body"],"properties":{` +
-			`"conversation_id":{"type":"string",` + uuid + `},"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The note text, plain text."}}}`,
+			`"conversation_id":{"type":"string",` + uuid + `},"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The note text, plain text."},` + filesProperty + `}}`,
 		Output: `{"type":"object","required":["conversation_id","message"],"properties":{"conversation_id":{"type":"string"},"message":{"type":"object",` +
 			`"required":["id","kind","created_at"],"properties":{"id":{"type":"string"},"kind":{"type":"string"},"created_at":{"type":"string"},"author":{"type":"string"},` +
+			`"attachments":` + attachmentsSchema + `,` +
 			`"written_by_agent_token":{"type":"object","required":["label","scope"],"properties":{"label":{"type":"string"},"scope":{"type":"string"}}}}}}}`,
 		run: noteAdd,
 	}

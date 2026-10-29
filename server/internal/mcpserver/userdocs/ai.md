@@ -232,7 +232,9 @@ Usage** sums a month per feature and provider. Both are in the [export](export.m
 Agents see these settings but only admins change them. An AI agent with a draft token asks for a
 reply draft, reads it and discards it like a person (`colliedesk_ai_draft_create`,
 `colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list`, `colliedesk_ai_draft_discard`); sending a
-reply still needs the send tier or a person's approval. With a draft token it reads, asks for, applies
+reply still needs the send tier or a person's approval. A send token that replies from a draft passes
+its id (`ai_draft_id` on `colliedesk_reply_send`), so the draft records how close the reply stayed to
+it, as when a person sends it. With a draft token it reads, asks for, applies
 and dismisses triage suggestions too (`colliedesk_ai_triage_get`, `_create`, `_accept`, `_dismiss`). Through [MCP](mcp.md), an AI agent with a read
 token can read them, and one with an admin token can add, check, change and delete providers (a token
 below admin is refused outright on the two calls that carry a key, so a key never waits in a request).

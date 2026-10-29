@@ -66,9 +66,11 @@ func conversationStartSpec() Spec {
 			`If the email is refused (no email channel, the channel is off, trial rules, cc rules) nothing is stored. The customer's answer joins the same conversation. ` +
 			`A workspace with several email channels starts from channel_id, or from its default one. ` +
 			`During the trial a new conversation reaches someone who never wrote in, so it is refused until the sending domain is verified or a plan is chosen. ` +
-			`Each call opens one more conversation and sends one more email, so never repeat a call that succeeded. ` +
+			`Each call opens one more conversation and sends one more email, so never repeat a call that succeeded; after a dropped connection, look for it with colliedesk_contact_get first. ` +
 			`Give contact_id for a customer found with colliedesk_contacts_find, or new_contact to add the customer in the same step (an address that is already a customer is refused and the error names that customer). ` +
-			`To open a conversation without emailing, use colliedesk_conversation_create.` +
+			`To open a conversation without emailing, use colliedesk_conversation_create. ` +
+			`files attaches up to 10 files to the first message, ` + inlineFilesLimitWords + ` in total per call (base64). ` +
+			`With a token below send the call is filed for a person to approve, and a call with files cannot wait for one: it is refused and nothing is filed, so send the text alone.` +
 			"\n\nTier: send.",
 		Tier: "send", Destructive: true,
 		REST: []string{"POST /api/v1/conversations", "GET /api/v1/conversations/{id}/messages"},
@@ -79,9 +81,9 @@ func conversationStartSpec() Spec {
 			`"subject":{"type":"string","minLength":1,"maxLength":500},` +
 			`"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The first message (Markdown)."},` +
 			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy, at most 10."},` +
-			`"channel_id":{"type":"string",` + uuid + `,"description":"The email channel it starts from (colliedesk_channels_list), which its replies keep leaving from. Leave out for the default one."}}}`,
+			`"channel_id":{"type":"string",` + uuid + `,"description":"The email channel it starts from (colliedesk_channels_list), which its replies keep leaving from. Leave out for the default one."},` + filesProperty + `}}`,
 		Output: `{"type":"object","required":["conversation"],"properties":{"conversation":` + stateSchema + `,` +
-			`"message":{"type":"object","required":["id"],"properties":{"id":{"type":"string"},"delivery":{"type":"string","description":"queued, sent or failed."}}}}}`,
+			`"message":{"type":"object","required":["id"],"properties":{"id":{"type":"string"},"delivery":{"type":"string","description":"queued, sent or failed."},"attachments":` + attachmentsSchema + `}}}}`,
 		run: conversationStart,
 	}
 }
