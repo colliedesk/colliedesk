@@ -74,6 +74,10 @@ migrate() { server_run '/app/collie migrate' 2>/dev/null | grep -qx 'migrations 
 # imports the settings into its database and warns that they are still in the environment.
 # PREVIOUS_INSTALL_SH names the file instead (a local image without a release tag).
 previous_tag=${PREVIOUS##*:}
+# Images are tagged 0.0.N, the release tags v0.0.N.
+case "$previous_tag" in
+  [0-9]*) previous_tag=v$previous_tag ;;
+esac
 if [ -n "${PREVIOUS_INSTALL_SH:-}" ]; then
   cp "$PREVIOUS_INSTALL_SH" "$TMP/install.sh"
 else
