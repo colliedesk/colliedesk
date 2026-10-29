@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +22,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 )
 
 // The help center's AI chat as end users reach it: routes of the help chat channel below every help
@@ -63,6 +67,12 @@ func (a *API) helpChatRoutes() []channels.HelpCenterRoute {
 		}}
 	}
 	return []channels.HelpCenterRoute{
+		route(http.MethodGet, "/chat", false, a.helpChatPage),
+		route(http.MethodGet, "/chat/chat.js", false, a.helpChatAsset("chat.js")),
+		route(http.MethodGet, "/chat/chat.css", false, a.helpChatAsset("chat.css")),
+		route(http.MethodGet, "/chat/widget.js", false, a.helpChatAsset("widget.js")),
+		route(http.MethodGet, "/chat/widget-config", false, a.helpChatWidgetConfig),
+		route(http.MethodPost, "/chat/transfer", true, a.helpChatTransfer),
 		route(http.MethodGet, "/chat/session", false, a.helpChatSession),
 		route(http.MethodPost, "/chat/session/end", true, a.helpChatEnd),
 		route(http.MethodPost, "/chat/turns", true, a.helpChatTurn),
@@ -312,9 +322,9 @@ func (a *API) helpChatPrewarm(c *helpChat) {
 // helpChatTurn answers a question as NDJSON, one event a line: turn, delta*, sources, done (or error).
 func (a *API) helpChatTurn(c *helpChat) {
 	var input struct {
-		Question         string `json:"question"`
-		ViewingArticleID string `json:"viewing_article_id"`
-		Surface          string `json:"surface"`
+		Question       string `json:"question"`
+		ViewingArticle int64  `json:"viewing_article_number"`
+		Surface        string `json:"surface"`
 	}
 	if err := json.NewDecoder(io.LimitReader(c.request.Body, 64<<10)).Decode(&input); err != nil {
 		writeError(c.response, http.StatusUnprocessableEntity, "invalid_request", "Send the question as JSON.")
@@ -340,7 +350,7 @@ func (a *API) helpChatTurn(c *helpChat) {
 	}
 	stream := &helpChatStream{chat: c, token: token}
 	err := a.ai.ChatTurn(c.request.Context(), c.at.WorkspaceID, ai.ChatTurnInput{Surface: c.chatSurface(), Browser: browser, Started: started,
-		Question: input.Question, ViewingArticleID: input.ViewingArticleID}, stream)
+		Question: input.Question, ViewingArticle: input.ViewingArticle}, stream)
 	if stream.started {
 		if err != nil {
 			slog.Error("help chat turn", "workspace_id", c.at.WorkspaceID, "error", err)
@@ -437,3 +447,155 @@ func (s *helpChatStream) Done(status string, links []string, redacted bool) {
 }
 
 func (s *helpChatStream) Error(code string) { s.line(map[string]any{"type": "error", "code": code}) }
+
+// helpChatConfig is what chat.js needs of the page it runs on (its data-config).
+func (c *helpChat) config(surface string) string {
+	look := c.at.Look
+	config := map[string]any{"surface": surface, "name": c.at.Name, "siteTitle": look.SiteTitle, "home": look.Home, "search": look.SearchURL,
+		"api": c.at.Base + "/chat", "channel": c.channel.ID, "page": c.at.Base + "/chat?channel=" + url.QueryEscape(c.channel.ID), "trial": c.at.Trial,
+		"greeting": c.surface.Greeting, "suggestions": c.surface.Suggestions}
+	if look.LogoURL != "" {
+		config["logo"] = map[string]any{"url": look.LogoURL, "alt": look.LogoAlt, "width": look.LogoWidth, "height": look.LogoHeight}
+	}
+	data, _ := json.Marshal(config)
+	return string(data)
+}
+
+func (c *helpChat) assetPath(name string) string {
+	file, _ := helpchat.Asset(name)
+	return c.at.Base + "/chat/" + name + "?v=" + file.Version
+}
+
+// helpChatPage is the chat page (/chat), or the chat in a site's frame (/chat?embed=1). A one-time code
+// (?t=, from the frame's Open full chat) moves the frame's chat to this page's own cookie first.
+func (a *API) helpChatPage(c *helpChat) {
+	query := c.request.URL.Query()
+	if code := query.Get("t"); code != "" {
+		token := newChatToken()
+		moved, err := a.ai.RedeemChatTransfer(c.request.Context(), c.at.WorkspaceID, c.channel.ID, tokenHash(code), tokenHash(token))
+		if err != nil {
+			a.helpChatFailed(c, err)
+			return
+		}
+		if moved {
+			c.setCookie(token, false)
+		}
+		// The code leaves the address bar and the history.
+		http.Redirect(c.response, c.request, c.at.Base+"/chat?channel="+url.QueryEscape(c.channel.ID), http.StatusSeeOther)
+		return
+	}
+	embed := query.Get("embed") == "1"
+	surface, ancestors := "page", ""
+	if embed {
+		surface = "embed"
+		ancestors = strings.Join(c.surface.WidgetOrigins, " ")
+	}
+	body := helpchat.RenderPage(helpchat.Page{Look: c.at.Look, Title: "Ask " + c.at.Name, Embed: embed, Config: c.config(surface),
+		Script: c.assetPath("chat.js"), Style: c.assetPath("chat.css")})
+	header := c.response.Header()
+	header.Set("Content-Security-Policy", helpcenter.ScriptPolicy(c.at.Address+"/chat/chat.js", ancestors))
+	header.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	header.Set("X-Robots-Tag", "noindex")
+	if !embed {
+		header.Set("X-Frame-Options", "DENY")
+	}
+	header.Set("Content-Type", "text/html; charset=utf-8")
+	header.Set("Content-Length", strconv.Itoa(len(body)))
+	c.response.WriteHeader(http.StatusOK)
+	if c.request.Method != http.MethodHead {
+		_, _ = c.response.Write(body)
+	}
+}
+
+// helpChatAsset serves one of the chat's files. Its address carries its version (?v=), so that one is
+// kept for a year; widget.js, whose address a site's page holds, is checked again after an hour.
+func (a *API) helpChatAsset(name string) func(*helpChat) {
+	return func(c *helpChat) {
+		file, _ := helpchat.Asset(name)
+		header := c.response.Header()
+		etag := `"` + file.Version + `"`
+		header.Set("Content-Type", file.ContentType)
+		header.Set("ETag", etag)
+		switch {
+		case c.request.URL.Query().Get("v") == file.Version:
+			header.Set("Cache-Control", "public, max-age=31536000, immutable")
+		case name == "widget.js":
+			header.Set("Cache-Control", "public, max-age=3600")
+		default:
+			header.Set("Cache-Control", "no-cache")
+		}
+		if c.request.Header.Get("If-None-Match") == etag {
+			c.response.WriteHeader(http.StatusNotModified)
+			return
+		}
+		header.Set("Content-Length", strconv.Itoa(len(file.Body)))
+		c.response.WriteHeader(http.StatusOK)
+		if c.request.Method != http.MethodHead {
+			_, _ = c.response.Write(file.Body)
+		}
+	}
+}
+
+// helpChatWidgetConfig tells widget.js on a company's site what to draw: only for a site the channel
+// lists (its Origin), with CORS for that site alone; any other site gets the help center's 404 and no
+// CORS header, so the widget draws nothing. brand is the help center's accent colors, null without.
+func (a *API) helpChatWidgetConfig(c *helpChat) {
+	origin := strings.ToLower(c.request.Header.Get("Origin"))
+	if origin == "" || !slices.Contains(c.surface.WidgetOrigins, origin) {
+		c.at.NotFound(c.response)
+		return
+	}
+	var brand any
+	if c.at.Look.Accent != "" {
+		brand = map[string]string{"accent": c.at.Look.Accent, "accent_ink": c.at.Look.AccentInk}
+	}
+	header := c.response.Header()
+	header.Set("Access-Control-Allow-Origin", origin)
+	header.Add("Vary", "Origin")
+	writeJSON(c.response, http.StatusOK, map[string]any{"name": c.at.Name, "greeting": c.surface.Greeting, "suggestions": c.surface.Suggestions, "brand": brand})
+}
+
+// helpChatTransfer makes a one-time code that moves the frame's chat to the help center's own page.
+func (a *API) helpChatTransfer(c *helpChat) {
+	browser, token := c.browser()
+	code := newChatToken()
+	found := false
+	if token != "" {
+		var err error
+		if found, err = a.ai.CreateChatTransfer(c.request.Context(), c.at.WorkspaceID, browser, tokenHash(code)); err != nil {
+			a.helpChatFailed(c, err)
+			return
+		}
+	}
+	page := c.at.Address + "/chat?channel=" + url.QueryEscape(c.channel.ID)
+	if found {
+		page += "&t=" + url.QueryEscape(code)
+	}
+	writeJSON(c.response, http.StatusOK, map[string]string{"url": page})
+}
+
+// helpChatAdditions is what the help chat adds to the help center's own pages while its default channel
+// and the AI chat feature are on: Ask AI in the header and on the home page, and an article's chat box.
+func (a *API) helpChatAdditions(kit channels.HelpCenterKit) func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error) {
+	return func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error) {
+		channel, found, err := kit.Channel(ctx, at.WorkspaceID, "")
+		if err != nil || !found || !channel.Enabled {
+			return channels.HelpCenterAdditions{}, err
+		}
+		if on, err := a.ai.ChatActive(ctx, at.WorkspaceID); err != nil || !on {
+			return channels.HelpCenterAdditions{}, err
+		}
+		config, err := a.store.ChannelConfigOf(ctx, channel)
+		if err != nil {
+			return channels.HelpCenterAdditions{}, err
+		}
+		surface, _ := config.(helpchat.Surface)
+		c := &helpChat{at: at, channel: channel, surface: surface}
+		box := c.config("article")
+		js, _ := helpchat.Asset("chat.js")
+		css, _ := helpchat.Asset("chat.css")
+		sum := sha256.Sum256([]byte(box + js.Version + css.Version))
+		return channels.HelpCenterAdditions{Link: "/chat", LinkLabel: "Ask AI", ArticleStyle: "/chat/chat.css?v=" + css.Version, ArticleScript: "/chat/chat.js?v=" + js.Version,
+			ArticleBox: true, BoxConfig: box, Version: hex.EncodeToString(sum[:8])}, nil
+	}
+}

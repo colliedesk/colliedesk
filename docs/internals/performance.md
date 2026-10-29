@@ -173,7 +173,10 @@ the chat and its turn, the set of articles and its fingerprint (read once per qu
 bodies), the excerpt search and the prompt, at or below 100 ms p95 (41 ms locally). Reading a chat back
 by its cookie (`GET …/chat/session`) stays at or below 50 ms p95 (4 ms locally). The first question
 measures the set of articles (and, with Claude, asks `count_tokens`) and is left out: it happens once
-per set of articles and model. The time the AI takes is the provider's, not the server's.
+per set of articles and model. The time the AI takes is the provider's, not the server's. The chat page
+and an article with its chat box are help center pages and keep the inbox's 200 ms p95 (4 ms and 6 ms
+locally). Their scripts have budgets of their own, gzip: chat.js 25 KB (11 KB), widget.js 6 KB (2 KB),
+chat.css 8 KB (6 KB), `TestTheChatFilesStayInTheirBudget`; none of them is in the web app's bundle.
 
 ## Results budget
 

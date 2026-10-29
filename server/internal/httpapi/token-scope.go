@@ -391,6 +391,12 @@ func TokenAccessTable() map[string]TokenAccess { return maps.Clone(tokenTiers) }
 // /api/v1/ai/chat. TestEveryHelpCenterRouteIsListedAndInTheContract keeps this list, the routes the
 // types register and the contract's HelpCenterChat paths equal.
 var helpCenterPublicRoutes = map[string]string{
+	"GET /chat":                             "the chat page an end user opens",
+	"GET /chat/chat.js":                     "the chat page's own script",
+	"GET /chat/chat.css":                    "the chat page's own style sheet",
+	"GET /chat/widget.js":                   "the script a company's site loads",
+	"GET /chat/widget-config":               "what that script draws, for a site the channel lists",
+	"POST /chat/transfer":                   "an end user moving the chat from a site's frame to the help center",
 	"GET /chat/session":                     "an end user's chat, read back by its cookie",
 	"POST /chat/session/end":                "an end user's New chat",
 	"POST /chat/turns":                      "an end user's question",

@@ -416,3 +416,125 @@ func TestAnAdminTriesTheChatWithoutStoringAChat(t *testing.T) {
 	wantResponse(t, request(t, d.api, http.MethodPost, "/api/v1/ai/chat/preview", map[string]any{"question": "When?", "channel_id": other.channel}, d.admin, nil),
 		http.StatusNotFound, "not_found")
 }
+
+// The chat page and an article's chat box load the chat's own script, allowed by its full address in
+// the Content-Security-Policy with Trusted Types; the page is framed only by the channel's sites with
+// embed=1. With the chat off, articles carry no script and the strict policy, and the help center's
+// pages change their ETag so none is served from before.
+func TestTheChatPageAndTheArticleBoxRunOnlyWhileTheChatIsOn(t *testing.T) {
+	d := newChatDesk(t, "Chat Lima", nil)
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/channels/"+d.channel, map[string]any{"config": map[string]any{"widget_origins": []string{"https://shop.lima.example"}}}, d.admin, http.StatusOK, nil)
+	script := testOrigin + d.base + "/chat/chat.js"
+	page := d.call(t, http.MethodGet, "/chat", nil)
+	csp := page.Header().Get("Content-Security-Policy")
+	if page.Code != http.StatusOK || !strings.Contains(csp, "script-src "+script+";") || !strings.Contains(csp, "require-trusted-types-for 'script'") ||
+		!strings.Contains(csp, "frame-ancestors 'none'") || page.Header().Get("X-Frame-Options") != "DENY" || !strings.Contains(page.Body.String(), `id="chat"`) ||
+		!strings.Contains(page.Body.String(), `data-config="{`) || !strings.Contains(page.Body.String(), `surface&#34;:&#34;page`) {
+		t.Fatalf("page status=%d csp=%q body=%.300s", page.Code, csp, page.Body.String())
+	}
+	embed := d.call(t, http.MethodGet, "/chat?embed=1", nil)
+	if csp := embed.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors https://shop.lima.example;") || embed.Header().Get("X-Frame-Options") != "" {
+		t.Fatalf("embed csp=%q xfo=%q", csp, embed.Header().Get("X-Frame-Options"))
+	}
+	asset := d.call(t, http.MethodGet, "/chat/chat.js?v=x", nil)
+	if asset.Code != http.StatusOK || asset.Header().Get("Content-Type") != "text/javascript; charset=utf-8" || asset.Header().Get("Cache-Control") != "no-cache" {
+		t.Fatalf("chat.js status=%d type=%q cache=%q", asset.Code, asset.Header().Get("Content-Type"), asset.Header().Get("Cache-Control"))
+	}
+
+	articlePath := d.base + "/a/" + num(d.article.Number) + "-" + d.article.Slug
+	on := helpCenterCall(d.site, http.MethodGet, testOriginHost, articlePath)
+	if on.Code != http.StatusOK || !strings.Contains(on.Body.String(), `<script src="`+d.base+`/chat/chat.js?v=`) || !strings.Contains(on.Body.String(), `class="chatbox"`) ||
+		!strings.Contains(on.Header().Get("Content-Security-Policy"), "script-src "+script+";") {
+		t.Fatalf("article with the chat on: status=%d csp=%q", on.Code, on.Header().Get("Content-Security-Policy"))
+	}
+	home := helpCenterCall(d.site, http.MethodGet, testOriginHost, d.base)
+	if !strings.Contains(home.Body.String(), `class="ask-link" href="`+d.base+`/chat"`) || strings.Contains(home.Body.String(), "<script src") ||
+		!strings.Contains(home.Header().Get("Content-Security-Policy"), "script-src 'none'") {
+		t.Fatalf("home with the chat on: %.400s", home.Body.String())
+	}
+
+	kbCall(t, d.api, http.MethodPut, "/api/v1/ai/slots/chat", map[string]any{"source": "server", "enabled": false}, d.admin, http.StatusOK, nil)
+	off := helpCenterCall(d.site, http.MethodGet, testOriginHost, articlePath)
+	if off.Code != http.StatusOK || strings.Contains(off.Body.String(), "<script src") || strings.Contains(off.Body.String(), "ask-link") ||
+		!strings.Contains(off.Header().Get("Content-Security-Policy"), "script-src 'none'") || off.Header().Get("ETag") == on.Header().Get("ETag") {
+		t.Fatalf("article with the chat off: csp=%q etag on=%s off=%s", off.Header().Get("Content-Security-Policy"), on.Header().Get("ETag"), off.Header().Get("ETag"))
+	}
+}
+
+// widget.js asks what to draw: a site the channel lists gets the name, greeting, suggestions and the
+// brand's accent (null without a brand color), with CORS for that site only; any other site gets the
+// help center's 404 without CORS, and the widget draws nothing.
+func TestTheWidgetDrawsOnlyOnItsSites(t *testing.T) {
+	d := newChatDesk(t, "Chat Mike", nil)
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/channels/"+d.channel, map[string]any{"config": map[string]any{"widget_origins": []string{"https://Shop.Mike.example"},
+		"suggestions": []string{"Where is my order?"}}}, d.admin, http.StatusOK, nil)
+	ask := func(origin string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, d.base+"/chat/widget-config", nil)
+		req.Host = testOriginHost
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		return serve(d.site, req)
+	}
+	var config struct {
+		Name        string            `json:"name"`
+		Suggestions []string          `json:"suggestions"`
+		Brand       map[string]string `json:"brand"`
+	}
+	allowed := ask("https://shop.mike.example")
+	decode(t, allowed, &config)
+	if allowed.Header().Get("Access-Control-Allow-Origin") != "https://shop.mike.example" || config.Name != "Chat Mike" || len(config.Suggestions) != 1 || config.Brand != nil {
+		t.Fatalf("allowed: %+v cors=%q", config, allowed.Header().Get("Access-Control-Allow-Origin"))
+	}
+	for _, origin := range []string{"https://evil.example", ""} {
+		refused := ask(origin)
+		if refused.Code != http.StatusNotFound || refused.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("origin %q: status=%d cors=%q", origin, refused.Code, refused.Header().Get("Access-Control-Allow-Origin"))
+		}
+	}
+	// A brand color: the button takes the accent the brand sheet has.
+	kbCall(t, d.api, http.MethodPut, "/api/v1/help-center/theme", map[string]any{"colors": map[string]any{"primary": "#0b5cad"}, "custom_css": nil}, d.admin, http.StatusOK, nil)
+	decode(t, ask("https://shop.mike.example"), &config)
+	if config.Brand["accent"] != "#0b5cad" || config.Brand["accent_ink"] == "" {
+		t.Fatalf("brand = %+v", config.Brand)
+	}
+}
+
+// Open full chat moves a chat from a site's frame (its partitioned cookie) to the help center's own
+// page once: the code works one time, then the page's own cookie reads the same chat.
+func TestAChatMovesFromASitesFrameToTheChatPage(t *testing.T) {
+	d := newChatDesk(t, "Chat November", nil)
+	d.fake.Script(chatReply("Orders ship in 2 days [#" + num(d.article.Number) + "]."))
+	framed := d.call(t, http.MethodPost, "/chat/turns?surface=widget", map[string]any{"question": "When?"})
+	chatEvents(t, framed)
+	frameCookie := chatCookie(t, framed)
+	var moved struct {
+		URL string `json:"url"`
+	}
+	decode(t, d.call(t, http.MethodPost, "/chat/transfer?surface=widget", nil, frameCookie), &moved)
+	at := strings.Index(moved.URL, "&t=")
+	if !strings.HasPrefix(moved.URL, testOrigin+d.base+"/chat?channel=") || at < 0 {
+		t.Fatalf("url = %q", moved.URL)
+	}
+	path := strings.TrimPrefix(moved.URL, testOrigin+d.base)
+	redeem := d.call(t, http.MethodGet, path, nil)
+	if redeem.Code != http.StatusSeeOther || strings.Contains(redeem.Header().Get("Location"), "t=") {
+		t.Fatalf("redeem status=%d location=%q", redeem.Code, redeem.Header().Get("Location"))
+	}
+	pageCookie := chatCookie(t, redeem)
+	if pageCookie.Name != "__Secure-cd_chat_"+d.slug+"_"+d.channel[:8] || pageCookie.Value == frameCookie.Value {
+		t.Fatalf("page cookie = %+v", pageCookie)
+	}
+	var session struct {
+		Turns []struct {
+			Question string `json:"question"`
+		} `json:"turns"`
+	}
+	decode(t, d.call(t, http.MethodGet, "/chat/session", nil, pageCookie), &session)
+	if len(session.Turns) != 1 || session.Turns[0].Question != "When?" {
+		t.Fatalf("moved chat = %+v", session)
+	}
+	if again := d.call(t, http.MethodGet, path, nil); len(again.Result().Cookies()) != 0 {
+		t.Fatal("a used code moved the chat again")
+	}
+}

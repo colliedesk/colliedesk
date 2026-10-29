@@ -541,6 +541,29 @@ func (a *API) channelHelpCenterRoutes() []helpcenter.ChannelRoute {
 	return routes
 }
 
+// channelHelpCenterAdditions asks each registered type what it adds to the help center's pages now; the
+// first type that adds a link or a box wins (one chat at a time).
+func (a *API) channelHelpCenterAdditions() func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error) {
+	var each []func(context.Context, channels.HelpCenter) (channels.HelpCenterAdditions, error)
+	for _, definition := range a.store.Channels().Definitions() {
+		if definition.HelpCenterAdditions != nil {
+			each = append(each, definition.HelpCenterAdditions(channelRouteKit{api: a, kind: definition.Type}))
+		}
+	}
+	if len(each) == 0 {
+		return nil
+	}
+	return func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error) {
+		for _, additions := range each {
+			found, err := additions(ctx, at)
+			if err != nil || found.Version != "" {
+				return found, err
+			}
+		}
+		return channels.HelpCenterAdditions{}, nil
+	}
+}
+
 // channelTypeRoutes are the routes the registered types declare, mounted under /api/v1 with the
 // permission each declares.
 func (a *API) channelTypeRoutes() []routeSpec {

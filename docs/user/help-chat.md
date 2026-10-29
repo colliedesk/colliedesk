@@ -26,7 +26,11 @@ a chat button.
 
   The button shows only on the sites you list under **Sites that may embed the chat** (exact origins
   such as `https://shop.example.com`, at most 20). It adds no cookie to your site and sends nothing
-  before a visitor presses it.
+  before a visitor presses it. The button takes your help center's brand color (ink without one).
+  **Open full chat** in the panel moves the chat to your help center's chat page in a new tab; the
+  link it opens works once, for 2 minutes.
+
+Without JavaScript the chat page says so and links to the article search; the articles never need it.
 
 ## Set it up
 

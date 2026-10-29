@@ -43,6 +43,9 @@ CREATE TABLE ai_chat_sessions (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     channel_id uuid NOT NULL,
     token_hash bytea NOT NULL CHECK (octet_length(token_hash) = 32),
+    -- A chat moved from a site's frame to the help center's own page answers a second token there: the
+    -- frame's cookie is partitioned by the site, so it never reaches the page.
+    page_token_hash bytea CHECK (octet_length(page_token_hash) = 32),
     -- Where it started: the chat page, the chat box of an article, or a site's widget.
     surface text NOT NULL CHECK (surface IN ('help_center', 'article', 'widget')),
     status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'ended', 'handed_off')),
@@ -55,6 +58,7 @@ CREATE TABLE ai_chat_sessions (
     ended_at timestamptz,
     UNIQUE (workspace_id, id),
     UNIQUE (workspace_id, channel_id, token_hash),
+    UNIQUE (workspace_id, channel_id, page_token_hash),
     FOREIGN KEY (workspace_id, channel_id) REFERENCES channels(workspace_id, id) ON DELETE CASCADE,
     FOREIGN KEY (workspace_id, conversation_id) REFERENCES conversations(workspace_id, id) ON DELETE SET NULL (conversation_id),
     CHECK ((status = 'ended') = (ended_at IS NOT NULL))

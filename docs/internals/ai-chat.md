@@ -54,6 +54,32 @@ The help center's AI chat: end users ask, an AI answers from the published artic
   of the stream. A chat that ended or expired gives its token hash up (it is rehashed) so the same
   browser starts a new chat.
 
+## The end user's pages and scripts
+
+- `GET /chat` (the page, `helpchat/web/page.html`), `/chat/chat.js`, `/chat/chat.css`, `/chat/widget.js`
+  are embedded in `channels/helpchat` (`web.go`); their addresses carry `?v=<sha256 prefix>` and are
+  kept a year with it, `widget.js` (whose address a site holds) an hour without it. Budgets (gzip):
+  chat.js 25 KB, widget.js 6 KB, chat.css 8 KB, `TestTheChatFilesStayInTheirBudget`, which also refuses
+  `innerHTML` and friends in chat.js and a color of chat.css's own (it uses only site.css's properties,
+  so the theme and custom CSS apply).
+- **CSP**: `helpcenter.ScriptPolicy` allows the script by its full address (`script-src
+  <help center>/chat/chat.js`, not `'self'`: a custom CSS file or an attachment on the same origin must
+  never run), `connect-src 'self'` and `require-trusted-types-for 'script'` (chat.js writes the DOM with
+  elements and `textContent` only). The page sends `X-Frame-Options: DENY` and `frame-ancestors 'none'`;
+  `?embed=1` drops both for `frame-ancestors <the channel's widget_origins>`.
+- **Help center pages**: the frame's `Definition.HelpCenterAdditions` asks the help chat what to add
+  (`helpChatAdditions`): with the default channel on and `ChatActive`, the **Ask AI** link (header and
+  home), and on an article the chat box with chat.js and chat.css. Every other page and every page
+  with the chat off keeps `script-src 'none'`; the additions' `Version` enters the pages' ETag, so
+  turning the chat on or off is never served from a cache.
+- **Widget config** (`GET /chat/widget-config`): only for an `Origin` in `widget_origins`, with
+  `Access-Control-Allow-Origin` for it alone and `Vary: Origin`; anything else is the help center's 404
+  without CORS, and widget.js draws nothing. `brand` is the theme's accent (`HelpCenterLook.Accent`).
+- **Open full chat**: the frame's cookie is partitioned by the site, so the help center's own page never
+  sees it. `POST /chat/transfer` stores the SHA-256 of a one-time code (`ai_chat_transfers`, 2 minutes);
+  `GET /chat?t=` uses it once on the same channel, gives the chat a second token (`page_token_hash`) in
+  the page's own cookie and answers 303 to the page without the code.
+
 ## Streaming
 
 `POST …/chat/turns` answers NDJSON (`turn`, `delta`*, `sources`, `done` or `error`), `X-Accel-Buffering:

@@ -310,6 +310,17 @@ func ChatKBArticles(ctx context.Context, tx pgx.Tx, workspaceID string, withBodi
 	})
 }
 
+// ChatKBArticleIDOf is the id of the article the help center shows under a number, when ChatKBArticles
+// holds it; "" otherwise.
+func ChatKBArticleIDOf(ctx context.Context, tx pgx.Tx, workspaceID string, number int64) (string, error) {
+	var id string
+	err := tx.QueryRow(ctx, `SELECT a.id::text FROM kb_articles a WHERE `+publishedKBArticle+` AND NOT a.ai_excluded AND a.number=$2`, workspaceID, number).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
 // ChatKBArticleByID reads one article of ChatKBArticles, with its body; found is false for one the
 // help center does not show or that is kept away from AI.
 func ChatKBArticleByID(ctx context.Context, tx pgx.Tx, workspaceID, id string) (ChatKBArticle, bool, error) {

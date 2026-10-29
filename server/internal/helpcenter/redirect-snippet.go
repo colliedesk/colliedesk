@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 )
 
 // A team on <name>.freshdesk.com with no custom domain cannot answer 301 from the old addresses. It
@@ -52,7 +54,7 @@ func (s *Site) LegacyRedirects(ctx context.Context, workspaceID, accountSource s
 			redirects.Articles[item.SourceID] = ArticlePath(item.Number, item.Slug)
 		case item.CollectionID != "":
 			if t.byID == nil {
-				if t, err = s.loadTree(ctx, s.newView(site, "")); err != nil {
+				if t, err = s.loadTree(ctx, s.newView(site, "", channels.HelpCenterAdditions{})); err != nil {
 					return LegacyRedirects{}, err
 				}
 			}

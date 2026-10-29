@@ -142,7 +142,8 @@ func (s *Service) findChat(ctx context.Context, tx pgx.Tx, workspaceID string, b
 	if len(browser.TokenHash) != 32 || !isUUID(browser.ChannelID) {
 		return "", "", time.Time{}, false, nil
 	}
-	query := `SELECT id::text,status,last_turn_at FROM ai_chat_sessions WHERE workspace_id=$1 AND channel_id=$2 AND token_hash=$3 AND status<>'ended' AND last_turn_at>$4`
+	query := `SELECT id::text,status,last_turn_at FROM ai_chat_sessions WHERE workspace_id=$1 AND channel_id=$2 AND (token_hash=$3 OR page_token_hash=$3)
+		AND status<>'ended' AND last_turn_at>$4`
 	if lock {
 		query += ` FOR UPDATE`
 	}
@@ -266,8 +267,8 @@ type ChatTurnInput struct {
 	Browser  ChatBrowser
 	Started  string // where a new chat starts: SurfaceHelpCenter, SurfaceArticle or SurfaceWidget
 	Question string
-	// ViewingArticleID is the article the end user reads, when they ask about it.
-	ViewingArticleID string
+	// ViewingArticle is the number of the article the end user reads, when they ask about it.
+	ViewingArticle int64
 }
 
 // chatTurnStart is what the first transaction of a turn decided.
@@ -323,7 +324,9 @@ func (s *Service) startChatTurn(ctx context.Context, workspaceID string, in Chat
 				surface = SurfaceHelpCenter
 			}
 			// A chat that ended or expired under the same token gives its token up first.
-			if _, err := tx.Exec(ctx, `UPDATE ai_chat_sessions SET token_hash=sha256(token_hash||id::text::bytea) WHERE workspace_id=$1 AND channel_id=$2 AND token_hash=$3`,
+			if _, err := tx.Exec(ctx, `UPDATE ai_chat_sessions SET token_hash=sha256(token_hash||id::text::bytea),
+				page_token_hash=CASE WHEN page_token_hash=$3 THEN NULL ELSE page_token_hash END
+				WHERE workspace_id=$1 AND channel_id=$2 AND (token_hash=$3 OR page_token_hash=$3)`,
 				workspaceID, in.Browser.ChannelID, in.Browser.TokenHash); err != nil {
 				return err
 			}
@@ -356,11 +359,9 @@ func (s *Service) startChatTurn(ctx context.Context, workspaceID string, in Chat
 		if turns >= ChatTurnsPerSession {
 			return ErrChatFull
 		}
-		if in.ViewingArticleID != "" {
-			if _, found, err := store.ChatKBArticleByID(ctx, tx, workspaceID, in.ViewingArticleID); err != nil {
+		if in.ViewingArticle > 0 {
+			if start.viewing, err = store.ChatKBArticleIDOf(ctx, tx, workspaceID, in.ViewingArticle); err != nil {
 				return err
-			} else if found {
-				start.viewing = in.ViewingArticleID
 			}
 		}
 		return tx.QueryRow(ctx, `INSERT INTO ai_chat_turns(workspace_id,session_id,seq,question,viewing_kb_article_id,status,created_at)
@@ -636,4 +637,48 @@ func (s *Service) ChatPreview(ctx context.Context, workspaceID string, actor Act
 	}
 	collector.result.Answer, collector.result.TookMS = collector.answer.String(), int(time.Since(started).Milliseconds())
 	return collector.result, nil
+}
+
+// ChatTransferFor is how long a code that moves a chat to the help center's page works.
+const ChatTransferFor = 2 * time.Minute
+
+// CreateChatTransfer makes a one-time code that moves the browser's chat (in a site's frame) to the help
+// center's own page; found is false without a chat. Only the code's hash is stored.
+func (s *Service) CreateChatTransfer(ctx context.Context, workspaceID string, browser ChatBrowser, codeHash []byte) (bool, error) {
+	var found bool
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		id, _, _, ok, err := s.findChat(ctx, tx, workspaceID, browser, false)
+		if err != nil || !ok {
+			return err
+		}
+		found = true
+		_, err = tx.Exec(ctx, `INSERT INTO ai_chat_transfers(workspace_id,session_id,code_hash,expires_at) VALUES($1,$2,$3,$4)`,
+			workspaceID, id, codeHash, s.now().UTC().Add(ChatTransferFor))
+		return err
+	})
+	return found, err
+}
+
+// RedeemChatTransfer uses a code once, within its time, on the channel it was made on: the chat answers
+// pageTokenHash from now on (the page's own cookie). ok is false for a code that is unknown, used,
+// expired or of another channel.
+func (s *Service) RedeemChatTransfer(ctx context.Context, workspaceID, channelID string, codeHash, pageTokenHash []byte) (bool, error) {
+	var ok bool
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		var sessionID string
+		err := tx.QueryRow(ctx, `UPDATE ai_chat_transfers t SET used_at=$4 FROM ai_chat_sessions s
+			WHERE t.workspace_id=$1 AND t.code_hash=$2 AND t.used_at IS NULL AND t.expires_at>$4
+				AND s.workspace_id=t.workspace_id AND s.id=t.session_id AND s.channel_id=$3 AND s.status<>'ended'
+			RETURNING t.session_id::text`, workspaceID, codeHash, channelID, s.now().UTC()).Scan(&sessionID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		ok = true
+		_, err = tx.Exec(ctx, `UPDATE ai_chat_sessions SET page_token_hash=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, sessionID, pageTokenHash)
+		return err
+	})
+	return ok, err
 }

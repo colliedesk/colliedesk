@@ -52,7 +52,8 @@ const ThreadKeyPrefix = "chat-session:"
 // Config is what the type needs of the server: the help center routes of the chat, built by the
 // server around the ai package. Nil serves none.
 type Config struct {
-	HelpCenterRoutes []channels.HelpCenterRoute
+	HelpCenterRoutes    []channels.HelpCenterRoute
+	HelpCenterAdditions func(kit channels.HelpCenterKit) func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error)
 }
 
 // Adapter is the help chat channel type.
@@ -69,7 +70,7 @@ func (a *Adapter) Definition() channels.Definition {
 		Defaults: channels.Settings{JoinPolicy: channels.JoinPolicy{Kind: channels.JoinAlwaysReopen}, DefaultTags: []string{Tag},
 			RateLimits: channels.RateLimits{WindowSeconds: int(store.InboundRateWindow.Seconds()), PerSender: PerAddress, NewConversations: NewConversationLimit,
 				Scope: channels.ScopeChannel}},
-		HelpCenterRoutes: a.config.HelpCenterRoutes}
+		HelpCenterRoutes: a.config.HelpCenterRoutes, HelpCenterAdditions: a.config.HelpCenterAdditions}
 }
 
 func (a *Adapter) Config() channels.ConfigPart     { return config{} }

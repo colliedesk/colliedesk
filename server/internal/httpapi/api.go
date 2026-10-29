@@ -323,7 +323,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
 			WithSealKeys(config.Google.Keys)}
-	api.store = api.store.WithChannels(Channels(config, outbound, helpchat.Config{HelpCenterRoutes: api.helpChatRoutes()}, api.revokeSealed))
+	api.store = api.store.WithChannels(Channels(config, outbound, helpchat.Config{HelpCenterRoutes: api.helpChatRoutes(), HelpCenterAdditions: api.helpChatAdditions}, api.revokeSealed))
 	api.pipeline = pipeline.New(api.store, clock)
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	importKeys := config.ImportKeys

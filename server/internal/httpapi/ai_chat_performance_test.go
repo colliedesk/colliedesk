@@ -100,6 +100,14 @@ func TestAIChatTurnSetupLatencyBudget(t *testing.T) {
 		sort.Slice(list, func(a, b int) bool { return list[a] < list[b] })
 		return list[(len(list)*95+99)/100-1]
 	}
+	// The chat page and an article with its chat box are help center pages: the pages' budget.
+	for name, path := range map[string]string{"chat page": d.base + "/chat", "article with the chat box": d.base + "/a/1000-article-1000"} {
+		pageP95 := helpCenterP95(t, d.site, path)
+		t.Logf("%s p95=%s", name, pageP95)
+		if pageP95 > inboxLatencyBudget {
+			t.Errorf("%s p95 %s exceeds %s", name, pageP95, inboxLatencyBudget)
+		}
+	}
 	setupP95, readP95 := p95(setup), p95(reads)
 	t.Logf("chat turn setup p95=%s, chat read p95=%s", setupP95, readP95)
 	if setupP95 > chatSetupBudget {

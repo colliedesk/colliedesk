@@ -1,0 +1,315 @@
+/* AI chat for the public help center: the chat page, the article chatbox and the widget frame.
+   Loaded after site.css and before the workspace's brand sheet, only while AI chat is on. It defines no
+   colour and no font: every one is a site.css custom property (--paper … --footer-ring, --font-body,
+   --font-head), so the white-label ink and paper default, dark mode and a workspace's brand (colours,
+   fonts, custom CSS) apply to the chat exactly as to the rest of the help center. */
+:root {
+  --dock: 21.25rem;                /* the article chatbox docked beside the article: 340 px, 360 from 60rem, 400 from 75rem */
+  --pop: 0 1px 2px rgba(0, 0, 0, 0.06), 0 12px 32px -8px rgba(0, 0, 0, 0.22);   /* floating layers only */
+  --field-line: color-mix(in srgb, var(--ink) 60%, var(--paper));                 /* a field's outline: >= 3:1 on any palette */
+}
+@media (min-width: 60rem) { :root { --dock: 22.5rem; } }
+@media (min-width: 75rem) { :root { --dock: 25rem; } }
+
+/* ---------- Shared pieces ---------- */
+[hidden] { display: none !important; }
+.btn {
+  font: 600 0.9375rem/1 var(--font-body); display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  min-height: 2.75rem; padding: 0 1rem; border-radius: 999px; cursor: pointer; text-decoration: none;
+  border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.btn:hover { border-color: var(--field-line); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.icon-btn {
+  width: 2.75rem; height: 2.75rem; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 999px; flex: none;
+  background: transparent; color: var(--muted); cursor: pointer; text-decoration: none; transition: background-color 150ms ease, color 150ms ease;
+}
+.icon-btn:hover { background: var(--tab); color: var(--ink); }
+.icon-btn svg, .btn svg { width: 1.25rem; height: 1.25rem; flex: none; }
+svg.i { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.link { background: none; border: 0; padding: 0; font: inherit; color: var(--link); cursor: pointer; text-decoration: underline; text-underline-offset: 0.18em; }
+
+/* ---------- The chat frame: one column used by the page, the chatbox and the widget ---------- */
+.chat { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--paper); color: var(--ink); font-family: var(--font-body); }
+/* The top bar is the help center's header band: the brand's header colours, logo and ring. */
+.chat-top {
+  flex: none; display: flex; align-items: center; gap: 0.25rem; min-height: 4rem; padding: 0 0.5rem 0 0.75rem;
+  background: var(--header); color: var(--header-ink); border-bottom: 1px solid var(--rule); --ring: var(--header-ring);
+}
+.chat-top .icon-btn { color: var(--header-ink); }
+.chat-top .icon-btn:hover { background: color-mix(in srgb, var(--header-ink) 12%, transparent); color: var(--header-hover); }
+.chat-top .brand { font: 600 1.125rem/1.2 var(--font-head); color: var(--header-ink); text-decoration: none; display: inline-flex; align-items: center; min-height: 2.75rem; min-width: 0; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-top .brand:hover { color: var(--header-hover); }
+.chat-top .brand-logo { max-height: 2rem; }
+.chat-title { margin: 0 auto 0 0.25rem; min-width: 0; display: flex; align-items: center; gap: 0.5rem; font: 600 1.125rem/1.2 var(--font-head); }
+.chat-title > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-top .brand + .chat-title { padding-left: 0.75rem; border-left: 1px solid color-mix(in srgb, var(--header-ink) 30%, transparent); }
+/* The visible "AI" mark: every surface says it is an AI before anyone types. */
+.ai-tag { flex: none; font: 600 0.75rem/1 var(--font-body); letter-spacing: 0.04em; padding: 0.25rem 0.4rem; border-radius: 4px; border: 1px solid currentColor; }
+.top-actions { display: flex; gap: 0.25rem; align-items: center; }
+.top-actions .btn { background: transparent; border-color: color-mix(in srgb, var(--header-ink) 35%, transparent); color: var(--header-ink); }
+.top-actions .btn:hover { border-color: var(--header-ink); }
+.top-actions .btn-quiet { border-color: transparent; }
+
+.chat-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.thread { width: 100%; max-width: 45rem; margin: 0 auto; padding: 1.5rem 1rem 2rem; display: flex; flex-direction: column; gap: 2rem; }
+
+/* Welcome: the admin's greeting and suggestions, under a fixed line that says what answers */
+.welcome { padding-top: 10vh; }
+.welcome h2 { font: 600 clamp(1.75rem, 4vw, 2.5rem)/1.12 var(--font-head); letter-spacing: -0.015em; margin: 0 0 0.5rem; overflow-wrap: anywhere; }
+.welcome .who { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; color: var(--muted); font-size: 0.9375rem; }
+.welcome .greet { margin: 0 0 1.5rem; max-width: 34rem; white-space: pre-line; }
+.suggest { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.625rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
+.suggest button {
+  width: 100%; min-height: 3.25rem; padding: 0.75rem 1rem; text-align: left; font: 400 0.9375rem/1.4 var(--font-body); color: var(--ink);
+  background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; transition: border-color 150ms ease;
+}
+.suggest button::after { content: "→"; color: var(--muted); }
+.suggest button:hover { border-color: var(--accent); }
+.chat-compact .welcome { padding-top: 0.25rem; }
+.chat-compact .welcome h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.chat-compact .suggest { grid-template-columns: 1fr; gap: 0.5rem; }
+.chat-compact .suggest button { min-height: 2.75rem; padding: 0.5rem 0.875rem; }
+
+/* A turn: the customer's question, then the answer set as text on the page */
+.turn { display: flex; flex-direction: column; gap: 1rem; }
+.q { align-self: flex-end; max-width: min(85%, 34rem); margin: 0; padding: 0.625rem 1rem; background: var(--accent-soft); border-radius: 1.125rem 1.125rem 0.25rem 1.125rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.a { min-width: 0; }
+.a-body { font-size: 1.0625rem; line-height: 1.7; overflow-wrap: break-word; }
+.chat-compact .a-body { font-size: 1rem; line-height: 1.6; }
+.a-body p, .a-body ul, .a-body ol { margin: 0 0 0.875rem; }
+.a-body ul, .a-body ol { padding-left: 1.375rem; }
+.a-body > :last-child { margin-bottom: 0; }
+.a-body a:not(.cite) { color: var(--link); }
+.s-new { animation: s-in 260ms ease-out both; }
+@keyframes s-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Citation pill: a dot while the answer streams, the source's number once sources arrive.
+   In the sentence it is a link the mouse can use (tabindex -1); the keyboard path is the source tabs. */
+.cite {
+  display: inline-grid; place-items: center; min-width: 1.25rem; height: 1.25rem; margin: 0 0.125rem; padding: 0 0.3rem; vertical-align: 0.15em;
+  border-radius: 999px; background: var(--accent-soft); color: var(--ink); font: 600 0.6875rem/1 var(--font-body); text-decoration: none;
+}
+a.cite:hover { background: var(--accent); color: var(--accent-ink); }
+.cite-wait { min-width: 0.5rem; width: 0.5rem; height: 0.5rem; padding: 0; vertical-align: 0.2em; background: var(--rule); }
+.redacted { color: var(--muted); font-style: italic; }
+
+/* Signature: the sources are divider tabs filed under the answer, as the topic cards on the home page. */
+.sources { margin-top: 1.25rem; }
+.sources-label { font: 600 0.875rem/1.4 var(--font-body); color: var(--muted); margin: 0 0 0.5rem; }
+.tabs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px solid var(--rule); }
+.tabs li { display: flex; min-width: 0; max-width: 100%; margin-bottom: -1px; }
+.tab {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 0.625rem;
+  min-height: 3.25rem; max-width: 20rem; padding: 0.375rem 0.875rem 0.375rem 0.5rem; text-decoration: none; color: var(--ink);
+  background: var(--tab); border: 1px solid var(--rule); border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: inset 0 3px 0 transparent; transition: box-shadow 150ms ease, background-color 150ms ease;
+}
+.tab:hover { background: var(--surface); box-shadow: inset 0 3px 0 var(--accent); border-bottom-color: var(--surface); }
+.tab .cite { grid-row: span 2; margin: 0; }
+.tab-folder { font-size: 0.75rem; line-height: 1.3; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-title { font: 600 0.9375rem/1.3 var(--font-head); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Narrow frames (chatbox, widget, phone): the tabs stack into one card */
+.chat-compact .tabs { flex-direction: column; gap: 0; border-bottom: 0; }
+.chat-compact .tabs li { margin: 0 0 -1px; }
+.chat-compact .tab { max-width: none; width: 100%; border-radius: 0; }
+.chat-compact .tabs li:first-child .tab { border-radius: var(--radius) var(--radius) 0 0; }
+.chat-compact .tabs li:last-child .tab { border-radius: 0 0 var(--radius) var(--radius); }
+.chat-compact .tabs li:only-child .tab { border-radius: var(--radius); }
+@media (max-width: 39.99rem) {
+  .tabs { flex-direction: column; gap: 0; border-bottom: 0; }
+  .tabs li { margin: 0 0 -1px; }
+  .tab { max-width: none; width: 100%; border-radius: 0; }
+  .tabs li:first-child .tab { border-radius: var(--radius) var(--radius) 0 0; }
+  .tabs li:last-child .tab { border-radius: 0 0 var(--radius) var(--radius); }
+  .tabs li:only-child .tab { border-radius: var(--radius); }
+}
+
+/* Answer tools: helpful, not helpful, copy */
+.a-tools { display: flex; align-items: center; gap: 0.125rem; margin-top: 0.5rem; color: var(--muted); }
+.a-tools .icon-btn { width: 2.5rem; height: 2.5rem; }
+.a-tools .icon-btn[aria-pressed="true"] { color: var(--ink); background: var(--accent-soft); }
+.a-tools .icon-btn[aria-pressed="true"] svg { fill: currentColor; fill-opacity: 0.2; }
+.a-tools .done { font-size: 0.8125rem; margin-left: 0.25rem; }
+
+.typing { display: inline-flex; gap: 0.3rem; padding: 0.75rem 0; }
+.typing i { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--muted); opacity: 0.35; animation: dot 1.2s infinite ease-in-out; }
+.typing i:nth-child(2) { animation-delay: 0.15s; }
+.typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dot { 0%, 80%, 100% { opacity: 0.35; transform: none; } 40% { opacity: 1; transform: translateY(-3px); } }
+.caret::after { content: ""; display: inline-block; width: 0.5rem; height: 1.05em; margin-left: 0.15rem; vertical-align: -0.15em; background: var(--ink); border-radius: 1px; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Notes in the thread. No status colours on a white-label page: an icon and a bold first sentence say
+   what happened; a problem gets a heavier ink edge. */
+.note {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.25rem 0.75rem; align-items: start;
+  padding: 0.875rem 1rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); font-size: 0.9375rem;
+}
+.note > svg { width: 1.25rem; height: 1.25rem; margin-top: 0.125rem; color: var(--muted); }
+.note p { margin: 0; }
+.note strong { font-weight: 600; }
+.note .more { color: var(--muted); }
+.note .note-actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+.note-problem { border-color: var(--ink); box-shadow: inset 3px 0 0 var(--ink); }
+.note-problem > svg { color: var(--ink); }
+.note-inline { margin-top: 1rem; }
+.note .index { border-top: 1px solid var(--rule); margin-top: 0.5rem; grid-column: 2; }
+.note .index a { padding: 0.625rem 0; font-size: 0.9375rem; display: flex; justify-content: space-between; gap: 0.75rem; }
+.note .index small { color: var(--muted); }
+.ref { font: 600 0.875rem/1 var(--mono); }
+.status-line { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.9375rem; }
+.spin { width: 1rem; height: 1rem; border-radius: 999px; border: 2px solid var(--rule); border-top-color: var(--ink); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Continue your previous chat? (after 24 h; shows nothing of the old chat until Continue) */
+.resume { margin: 10vh auto 0; width: 100%; max-width: 28rem; text-align: center; }
+.chat-compact .resume { margin-top: 1rem; }
+.resume h2 { font: 600 1.5rem/1.2 var(--font-head); margin: 0 0 0.5rem; }
+.resume p { color: var(--muted); margin: 0 0 1.25rem; }
+.resume .ghost { display: grid; gap: 0.5rem; margin: 0 0 1.5rem; }
+.resume .ghost i { display: block; height: 0.75rem; border-radius: 999px; background: var(--rule); }
+.resume .ghost i:nth-child(odd) { width: 55%; justify-self: end; background: var(--accent-soft); }
+.resume .ghost i:nth-child(even) { width: 85%; }
+.resume-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.5rem; }
+
+/* ---------- Composer ---------- */
+.composer-wrap { flex: none; background: var(--paper); padding: 0.5rem 1rem calc(0.75rem + env(safe-area-inset-bottom)); }
+.composer-in { max-width: 45rem; margin: 0 auto; }
+.composer { display: flex; align-items: flex-end; gap: 0.5rem; padding: 0.375rem 0.375rem 0.375rem 1rem; background: var(--surface); border: 1px solid var(--field-line); border-radius: 1.5rem; }
+.composer:focus-within { outline: 3px solid var(--ring); outline-offset: 1px; }
+.composer textarea {
+  flex: 1; min-width: 0; min-height: 2.75rem; max-height: 12rem; padding: 0.625rem 0; resize: none; border: 0; outline: 0;
+  background: transparent; color: var(--ink); font: 400 1rem/1.5 var(--font-body); overflow-y: auto; field-sizing: content;
+}
+.composer textarea::placeholder { color: var(--muted); opacity: 1; }
+.composer textarea:disabled { cursor: not-allowed; }
+.send { width: 2.75rem; height: 2.75rem; flex: none; border: 0; border-radius: 999px; display: grid; place-items: center; cursor: pointer; background: var(--accent); color: var(--accent-ink); }
+.send:hover:not(:disabled) { background: var(--accent-hover); }
+.send:disabled { background: var(--tab); color: var(--muted); cursor: not-allowed; }
+.send:focus-visible { outline-color: var(--accent-ink); outline-offset: -5px; }
+.send svg { width: 1.25rem; height: 1.25rem; }
+.composer.too-long { border-width: 2px; border-color: var(--ink); }
+.composer-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0 1rem; margin: 0.375rem 0.5rem 0; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); }
+.composer-meta p { margin: 0; flex: 1 1 18rem; }
+.composer-meta .link { font-weight: 600; min-height: 2.75rem; }
+.count { font-variant-numeric: tabular-nums; margin-left: auto; }
+.count.over { color: var(--ink); font-weight: 700; }
+.wait-line { display: flex; align-items: center; gap: 0.375rem; margin: 0 0.5rem 0.5rem; font-size: 0.875rem; font-weight: 600; }
+.wait-line svg { width: 1rem; height: 1rem; }
+.chat-compact .composer-wrap { padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom)); }
+.chat-compact .composer-meta { font-size: 0.75rem; }
+
+/* Talk to a person: replaces the composer in the same frame; scrolls inside on a short screen */
+.composer-wrap:has(.handoff) { flex-shrink: 1; min-height: 0; max-height: 80%; overflow-y: auto; }
+.chat-compact .composer-wrap:has(.handoff) { max-height: 65%; }
+.handoff { max-width: 45rem; margin: 0 auto; padding: 1rem; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--pop); }
+.handoff h2 { font: 600 1.1875rem/1.25 var(--font-head); margin: 0 0 0.25rem; }
+.handoff > p { margin: 0 0 1rem; color: var(--muted); font-size: 0.9375rem; }
+.field { display: grid; gap: 0.25rem; margin-bottom: 0.875rem; }
+.field label { font-weight: 600; font-size: 0.9375rem; }
+.field label span { font-weight: 400; color: var(--muted); }
+.field input, .field textarea { font: 400 1rem/1.5 var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--field-line); border-radius: 8px; min-height: 2.75rem; padding: 0.5rem 0.75rem; width: 100%; }
+.field textarea { resize: vertical; min-height: 4.5rem; }
+.field input:focus-visible, .field textarea:focus-visible { outline: 3px solid var(--ring); outline-offset: 1px; }
+.field [aria-invalid="true"] { border-width: 2px; border-color: var(--ink); }
+.field-error { display: flex; gap: 0.375rem; align-items: flex-start; font-size: 0.875rem; font-weight: 600; margin: 0; }
+.field-error svg { width: 1rem; height: 1rem; flex: none; margin-top: 0.125rem; }
+.field-hint { color: var(--muted); font-size: 0.8125rem; margin: 0; }
+.form-error { display: flex; gap: 0.5rem; align-items: center; border: 1px solid var(--ink); box-shadow: inset 3px 0 0 var(--ink); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.9375rem; font-weight: 600; margin: 0 0 0.875rem; }
+.form-error svg { width: 1.125rem; height: 1.125rem; flex: none; }
+.handoff-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; }
+
+.confirm { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--surface); color: var(--ink); padding: 1.25rem; width: min(24rem, calc(100vw - 2rem)); box-shadow: var(--pop); font-family: var(--font-body); }
+.confirm::backdrop { background: rgba(0, 0, 0, 0.4); }
+.confirm h2 { font: 600 1.25rem/1.25 var(--font-head); margin: 0 0 0.375rem; }
+.confirm p { margin: 0 0 1.25rem; color: var(--muted); }
+
+.sr-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Chat page ---------- */
+/* --vvh follows the visual viewport (chat.js sets it), so the on-screen keyboard never covers the composer. */
+.chat-page { height: var(--vvh, 100dvh); min-height: 0; overflow: hidden; }
+.chat-page .chat { height: var(--vvh, 100dvh); }
+@media (min-width: 40rem) { .chat-top { padding: 0 1rem; } .chat-page .thread { padding-top: 2rem; } }
+/* Phone: "Talk to a person" is an icon in the bar, and again a link under the composer */
+.top-actions .person-icon { display: none; }
+@media (max-width: 39.99rem) {
+  .top-actions .person { display: none; }
+  .top-actions .person-icon { display: inline-grid; }
+  .top-actions .new .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .top-actions .new { width: 2.75rem; padding: 0; border-color: transparent; }   /* same as the person icon beside it */
+  .chat-top .brand { display: none; }   /* a phone keeps the title; the arrow leads home */
+  .chat-top .brand + .chat-title { padding-left: 0; border-left: 0; }
+}
+@media (min-width: 40rem) { .chat-top .chat-back { display: none; } }
+@media (min-width: 40rem) { .chat-page .composer-meta .person { display: none; } }
+
+/* ---------- Article chatbox ---------- */
+.ask-launch {
+  position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom)); z-index: 30;
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: 3.5rem; padding: 0 1.25rem 0 1rem; border: 0; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font: 600 1rem/1 var(--font-body); cursor: pointer; box-shadow: var(--pop);
+}
+.ask-launch:hover { background: var(--accent-hover); }
+.ask-launch:focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+.ask-launch svg { width: 1.375rem; height: 1.375rem; }
+.ask-launch[aria-expanded="true"] { display: none; }
+.chatbox { position: fixed; z-index: 40; display: none; background: var(--paper); }
+.chatbox.open { display: flex; flex-direction: column; }
+.chatbox .chat { height: 100%; }
+.chatbox .chat-top, .embed .chat-top { min-height: 3.5rem; padding: 0 0.25rem 0 0.75rem; }
+.chatbox .chat-title, .embed .chat-title { font-size: 1.0625rem; }
+/* The 340 px column (768–959 px) has no room for the long title: "This article" (the chip names it) */
+.t-short { display: none; }
+@media (min-width: 48rem) and (max-width: 59.99rem) { .chatbox .t-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } .chatbox .t-short { display: inline; } }
+.chip-row { flex: none; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--rule); background: var(--surface); }
+.chip { display: inline-flex; align-items: center; gap: 0.25rem; max-width: 100%; min-height: 2.75rem; padding: 0 0 0 0.875rem; border-radius: 999px; background: var(--accent-soft); font-size: 0.875rem; }
+.chip b { font-weight: 400; color: var(--muted); flex: none; }
+.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; min-width: 0; }
+.chip .icon-btn svg { width: 1rem; height: 1rem; }
+/* Phone and small tablet (< 768 px): a sheet over the whole page, modal */
+@media (max-width: 47.99rem) {
+  .chatbox { inset: 0; height: var(--vvh, 100dvh); }
+  .ask-launch { width: 3.5rem; padding: 0; justify-content: center; }
+  .ask-launch .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .chatbox.open { animation: sheet 220ms ease-out both; }
+}
+@keyframes sheet { from { transform: translateY(2rem); opacity: 0; } to { transform: none; opacity: 1; } }
+/* From 768 px: a column docked on the right that pushes the article over and never covers it.
+   The document stays the scroller, so opening or closing keeps the reader's place. */
+@media (min-width: 48rem) {
+  .chatbox { top: 0; right: 0; bottom: 0; width: var(--dock); border-left: 1px solid var(--rule); }
+  body.docked { margin-right: var(--dock); }
+  body.docked .ask-launch { display: none; }
+}
+@media (min-width: 48rem) and (max-width: 59.99rem) {
+  /* the article column is ~420 px: the header's search takes its own row so the brand is not cut */
+  body.docked .masthead-row { flex-wrap: wrap; padding-top: 0.75rem; padding-bottom: 0.75rem; gap: 0.75rem; }
+  body.docked .search-compact, body.docked .site-link { flex: 1 1 100%; margin-left: 0; }
+  body.docked .prose { font-size: 1rem; }
+}
+@media (min-width: 48rem) and (max-width: 89.99rem) {
+  body.docked .rail { display: none; }
+  body.docked .article-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- Widget frame (/chat?embed=1) ---------- */
+.embed { height: var(--vvh, 100dvh); min-height: 0; overflow: hidden; }
+.embed .chat { height: var(--vvh, 100dvh); }
+
+@media (pointer: coarse) {
+  .a-tools .icon-btn { width: 2.75rem; height: 2.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .s-new, .chatbox.open { animation: none; }
+  .typing i, .caret::after, .spin { animation: none; }
+  .typing i { opacity: 0.6; }
+}
+@media (forced-colors: active) {
+  .tab, .cite, .q, .composer, .ai-tag { border: 1px solid CanvasText; }
+}

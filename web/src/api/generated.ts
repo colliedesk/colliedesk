@@ -24,6 +24,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/chat": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+                /** @description The chat in a site's frame (the widget): only the channel's sites may frame it (frame-ancestors). */
+                embed?: "1";
+                /** @description A one-time code from Open full chat: moves the frame's chat to this page, then 303 to the page without it. */
+                t?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The chat page, in the help center's look (its style sheets, logo, colors), loading chat.js and chat.css of the help center itself. Its Content-Security-Policy allows that one script, calls to the help center's own origin and Trusted Types; it is never framed except by the channel's sites with embed=1. */
+        get: operations["getHelpChatPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/chat.js": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The chat's script. With `?v=<version>` (the address the pages use) it is kept a year. */
+        get: operations["getHelpChatScript"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/chat.css": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The chat's style sheet: only the help center's own custom properties, so its theme and custom CSS apply. */
+        get: operations["getHelpChatStyle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/widget.js": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The script a company's site loads to show the chat button: it asks widget-config first and draws nothing unless the site is one of the channel's; it reads nothing of the page and sets no cookie on the site. Checked again after an hour. */
+        get: operations["getHelpChatWidget"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/widget-config": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What widget.js draws, for a site the channel lists (its Origin), with CORS for that origin alone. Any other site gets the help center's 404 and no CORS header. */
+        get: operations["getHelpChatWidgetConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/chat/transfer": {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Open full chat, from a site's frame: a one-time code (2 minutes) that moves the browser's chat to the help center's own page, whose cookie the frame's partitioned cookie never reaches. Without a chat, the page's address. */
+        post: operations["transferHelpChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/chat/session/end": {
         parameters: {
             query?: {
@@ -3868,6 +3992,16 @@ export interface components {
              */
             drafts_reserved_until: string | null;
         };
+        HelpChatWidgetConfig: {
+            name: string;
+            greeting: string;
+            suggestions: string[];
+            /** @description The help center's brand accent (#rrggbb) and the color on it; null when its theme sets no color (the button is ink #171717). */
+            brand: null | {
+                accent: string;
+                accent_ink: string;
+            };
+        };
         /** @description One line of an answer's stream. `turn` first; `delta` a checked sentence; `sources` the cited articles (or, `over_limit`, related ones); `done` last; `error` instead of `done`. */
         HelpChatEvent: {
             /** @enum {string} */
@@ -7031,6 +7165,222 @@ export interface operations {
             };
         };
     };
+    getHelpChatPage: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+                /** @description The chat in a site's frame (the widget): only the channel's sites may frame it (frame-ancestors). */
+                embed?: "1";
+                /** @description A one-time code from Open full chat: moves the frame's chat to this page, then 303 to the page without it. */
+                t?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description A code moved the chat; the page without it. */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The chat is off (the help center's own 404 page). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getHelpChatScript: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The script */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/javascript": string;
+                };
+            };
+            /** @description Not modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The chat is off. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getHelpChatStyle: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The style sheet */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/css": string;
+                };
+            };
+            /** @description Not modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The chat is off. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getHelpChatWidget: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The script */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/javascript": string;
+                };
+            };
+            /** @description Not modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The chat is off. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getHelpChatWidgetConfig: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The chat's name, greeting, suggestions and the help center's brand colors */
+            200: {
+                headers: {
+                    "Access-Control-Allow-Origin"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpChatWidgetConfig"];
+                };
+            };
+            /** @description Not a site of the channel, or the chat is off. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    transferHelpChat: {
+        parameters: {
+            query?: {
+                /** @description The help chat channel; its type's default when left out. */
+                channel?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where to open the chat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        url: string;
+                    };
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description The chat is off. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     endHelpChat: {
         parameters: {
             query?: {
@@ -7076,11 +7426,8 @@ export interface operations {
             content: {
                 "application/json": {
                     question: string;
-                    /**
-                     * Format: uuid
-                     * @description The article the end user reads, when they ask about it.
-                     */
-                    viewing_article_id?: string;
+                    /** @description The number of the article the end user reads, when they ask about it. */
+                    viewing_article_number?: number;
                     /**
                      * @description Where a new chat starts.
                      * @enum {string}

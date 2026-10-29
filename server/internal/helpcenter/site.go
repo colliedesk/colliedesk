@@ -5,6 +5,7 @@
 package helpcenter
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -52,6 +53,19 @@ const (
 var contentSecurityPolicy = "default-src 'none'; img-src 'self'; style-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
 	"; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 
+// ScriptPolicy is contentSecurityPolicy for a page that runs one script of the help center's own
+// (a channel type's, such as the chat): that script by its full address and nothing else, calls to the
+// help center's own origin, Trusted Types so the script cannot write HTML, and the pages allowed to frame
+// it (frameAncestors, 'none' when empty).
+func ScriptPolicy(script, frameAncestors string) string {
+	if frameAncestors == "" {
+		frameAncestors = "'none'"
+	}
+	return "default-src 'none'; img-src 'self'; style-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
+		"; media-src 'self'; script-src " + script + "; connect-src 'self'; require-trusted-types-for 'script'; form-action 'self'; frame-ancestors " +
+		frameAncestors + "; base-uri 'none'"
+}
+
 // slugShape is the shape the workspaces table enforces; anything else cannot be a workspace.
 var slugShape = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -77,6 +91,9 @@ type Config struct {
 	Client func(request *http.Request) string
 	// ChannelRoutes are the channel types' routes below every open help center (channels.HelpCenterRoute).
 	ChannelRoutes []ChannelRoute
+	// Additions says what the channel types add to the help center's pages now (an Ask AI link, an
+	// article's chat box); nil adds nothing.
+	Additions func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error)
 }
 
 // ChannelRoute is a channel type's help center route with the handler the API built for it.
@@ -291,14 +308,22 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		s.writeNotFound(response, base == "")
 		return
 	}
+	view := s.newView(site, base, channels.HelpCenterAdditions{})
+	reached := s.helpCenterAt(view, base)
 	if route != nil {
-		address := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
-		at := channels.HelpCenter{WorkspaceID: site.WorkspaceID, Slug: site.Slug, Name: site.Name, Trial: site.Trial, Address: address, Base: base,
-			NotFound: func(response http.ResponseWriter) { s.writeNotFound(response, base == "") }}
-		route.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), helpCenterKey{}, at)))
+		route.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), helpCenterKey{}, reached)))
 		return
 	}
-	view := s.newView(site, base)
+	if s.config.Additions != nil && (sub == "/" || sub == "" || sub == "/search" || strings.HasPrefix(sub, "/c/") || strings.HasPrefix(sub, "/a/")) {
+		additions, err := s.config.Additions(ctx, reached)
+		if err != nil {
+			s.writeError(response, err)
+			return
+		}
+		if additions.Version != "" {
+			view = s.newView(site, base, additions)
+		}
+	}
 	switch {
 	case sub == "/" || sub == "":
 		// One address for the home page: no trailing slash below /help/, no query.
@@ -383,9 +408,28 @@ type view struct {
 	// address is the help center's public address, for canonical links.
 	address string
 	brand   brand
+	// additions are what the channel types add to its pages now.
+	additions channels.HelpCenterAdditions
 }
 
-func (s *Site) newView(site domain.HelpCenterSite, base string) view {
+// helpCenterAt is the help center as a channel type's route sees it.
+func (s *Site) helpCenterAt(v view, base string) channels.HelpCenter {
+	data := s.page(v, "", nil)
+	look := channels.HelpCenterLook{Lang: data.Lang, SiteTitle: data.SiteTitle, Home: data.Home, SearchURL: data.SearchURL, Style: data.Style,
+		BrandStyle: data.BrandStyle, Favicon: data.Favicon, LightOnly: data.LightOnly, NoIndex: data.NoIndex}
+	if data.Logo != nil {
+		look.LogoURL, look.LogoAlt, look.LogoWidth, look.LogoHeight = data.Logo.URL, data.Logo.Alt, data.Logo.Width, data.Logo.Height
+	}
+	if colorsSet(v.site.Theme.Colors) {
+		palette := domain.ThemeBrandPalette(v.site.Theme.Colors)
+		look.Accent, look.AccentInk = palette.Accent.Hex(), palette.AccentInk.Hex()
+	}
+	site := v.site
+	return channels.HelpCenter{WorkspaceID: site.WorkspaceID, Slug: site.Slug, Name: site.Name, Trial: site.Trial, Address: v.address, Base: base,
+		NotFound: func(response http.ResponseWriter) { s.writeNotFound(response, base == "") }, Look: look}
+}
+
+func (s *Site) newView(site domain.HelpCenterSite, base string, additions channels.HelpCenterAdditions) view {
 	home := base
 	if home == "" {
 		home = "/"
@@ -396,8 +440,8 @@ func (s *Site) newView(site domain.HelpCenterSite, base string) view {
 	brand := newBrand(site)
 	address := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
 	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
-		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, brand.key}, "\x00")))
-	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: address, brand: brand}
+		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, brand.key, additions.Version}, "\x00")))
+	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: address, brand: brand, additions: additions}
 }
 
 func (v view) title() string {
@@ -433,6 +477,10 @@ func securityHeaders(header http.Header) {
 func (s *Site) writePage(response http.ResponseWriter, request *http.Request, v view, status int, body []byte) {
 	header := response.Header()
 	securityHeaders(header)
+	if v.additions.ArticleScript != "" && v.additions.ArticleBox && bytes.Contains(body, []byte(`<script src="`)) {
+		script, _, _ := strings.Cut(v.additions.ArticleScript, "?")
+		header.Set("Content-Security-Policy", ScriptPolicy(v.address+script, ""))
+	}
 	header.Set("Content-Type", "text/html; charset=utf-8")
 	header.Set("Content-Length", strconv.Itoa(len(body)))
 	if v.site.Trial {
