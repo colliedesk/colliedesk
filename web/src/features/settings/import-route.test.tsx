@@ -84,7 +84,7 @@ test('a later people action clears what an earlier one said', async () => {
   api.invites.mockResolvedValue({ items: [] });
   api.createInvite.mockRejectedValue(new InvalidRequestError('No seat left for an invite'));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ImportRoute /></QueryClientProvider>);
-  fireEvent.click(await screen.findByRole('button', { name: 'Invite Bob' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Invite Bob by email' }));
   expect(await screen.findByText('No seat left for an invite')).toBeInTheDocument();
   fireEvent.change(await screen.findByRole('combobox', { name: 'Link Bob to' }), { target: { value: sam.id } });
   fireEvent.click(screen.getByRole('button', { name: 'Link Bob to the chosen agent' }));

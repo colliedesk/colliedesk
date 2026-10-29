@@ -32,7 +32,7 @@ test('each Freshdesk agent says whether an agent here takes over their replies, 
   fireEvent.click(within(samRow).getByRole('button', { name: 'Unlink Sam F' }));
   expect(onUnlink).toHaveBeenCalledWith('101');
   expect(bob).toHaveTextContent('Inactive in Freshdesk');
-  fireEvent.click(within(bob).getByRole('button', { name: 'Invite Bob' }));
+  fireEvent.click(within(bob).getByRole('button', { name: 'Invite Bob by email' }));
   expect(onInvite).toHaveBeenCalledWith('bob@old.example');
   expect(within(bob).getByRole('button', { name: 'Link Bob to the chosen agent' })).toBeDisabled();
   fireEvent.change(within(bob).getByRole('combobox', { name: 'Link Bob to' }), { target: { value: sam.id } });
@@ -78,4 +78,10 @@ test('each invite made on the page keeps its own link, and a refused copy says s
   expect(within(dan).getByLabelText('One-time invite link')).toHaveValue('https://desk.example.com/join?token=dan');
   fireEvent.click(within(bob).getByRole('button', { name: 'Copy link' }));
   expect(await within(bob).findByRole('alert')).toHaveTextContent('did not let the page copy');
+});
+
+test('the list says that inviting sends an email and that agents link by themselves on joining', () => {
+  show([{ external_id: '2', name: 'Bob Old', email: 'bob@old.example', active: true, linked_agent_id: null, linked_by_email: false, pending: false, updated_at: '2026-10-22T08:00:00Z' }]);
+  expect(screen.getByText(/Invite by email sends a real invitation from Colliedesk/)).toBeInTheDocument();
+  expect(screen.getByText(/links by itself when they join Colliedesk with the same email as in Freshdesk/)).toBeInTheDocument();
 });
