@@ -182,6 +182,8 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/results/share-link":          grant(auth.PermResultsShare),
 	"POST /api/v1/results/shared":                notForPeople,
 	"PATCH /api/v1/agents/me/results-email":      grant(auth.PermProfileUpdate),
+	"GET /api/v1/workspace/setup":                grant(auth.PermConversationsRead),
+	"PUT /api/v1/agents/me/setup-guide":          grant(auth.PermProfileUpdate),
 	"POST /api/v1/tags":                          grant(auth.PermTagsCreate),
 	"PATCH /api/v1/tags/{id}":                    grant(auth.PermTagsUpdate),
 	"DELETE /api/v1/tags/{id}":                   grant(auth.PermTagsDelete),

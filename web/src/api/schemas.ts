@@ -187,10 +187,21 @@ export const inviteSchema = z.object({
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
+const setupStepKeys = ['email', 'import', 'invite', 'first_reply'] as const;
+export type SetupStepKey = (typeof setupStepKeys)[number];
+export const setupProgressSchema = z.object({
+  steps: z.array(z.object({ key: z.enum(setupStepKeys), state: z.enum(['none', 'waiting', 'working', 'needs_attention', 'running', 'done', 'alone', 'invited', 'joined', 'sent']), detail: z.string().nullable() })),
+  complete: z.boolean(),
+  recommended: z.enum(['email', 'import', 'invite']).nullable(),
+}) satisfies z.ZodType<Generated<'SetupProgress'>>;
+export type SetupProgress = z.infer<typeof setupProgressSchema>;
+export const setupGuideHiddenSchema = z.object({ hidden: z.boolean() }) satisfies z.ZodType<JsonResponse<'setSetupGuideHidden', 200>>;
 export const meSchema = z.object({
   agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: tokenScopeSchema.nullable(), permissions: z.array(z.string()).catch([]),
   // An older server sends no goal; a goal this client does not know yet orders nothing.
   onboarding_goal: onboardingGoalSchema.nullable().catch(null),
+  // An older server has no setup guide to hide.
+  setup_guide_hidden: z.boolean().catch(false),
   // An older server offers no AI feature.
   ai_features: z.object({ triage: z.boolean(), draft: z.boolean() }).catch({ triage: false, draft: false }),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean() }).nullable(),

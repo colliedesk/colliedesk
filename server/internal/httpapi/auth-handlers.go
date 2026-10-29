@@ -103,7 +103,7 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 	}
 	writeJSON(response, http.StatusOK, map[string]any{
 		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "scope": scope, "permissions": permissions, "plan": plan,
-		"onboarding_goal": goal, "ai_features": features,
+		"onboarding_goal": goal, "ai_features": features, "setup_guide_hidden": identity.Agent.SetupGuideHidden,
 	})
 }
 
