@@ -1,4 +1,4 @@
-.PHONY: test build e2e dev clean sync-user-docs docs-mcp
+.PHONY: test build e2e eval-chat dev clean sync-user-docs docs-mcp
 
 GO_ENV := GOPATH=/tmp/colliedesk-gopath GOMODCACHE=/tmp/colliedesk-gopath/pkg/mod GOCACHE=/tmp/colliedesk-go-cache
 TEST_DATABASE_URL ?= postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable
@@ -25,6 +25,12 @@ build:
 e2e:
 	cd web && corepack pnpm build
 	cd web && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' corepack pnpm e2e $(E2E_ARGS)
+
+# The AI chat eval asks Claude the questions of server/internal/ai/testdata/chat-eval.json with the real
+# prompt (a few cents; never in CI). It needs PostgreSQL and ANTHROPIC_API_KEY; AI_CHAT_EVAL_MODEL picks
+# another model. Record the results in docs/internals/ai-chat.md.
+eval-chat:
+	cd server && AI_CHAT_EVAL=1 TEST_DATABASE_URL='$(TEST_DATABASE_URL)' $(GO_ENV) go test ./internal/ai -run TestChatEval -count=1 -v
 
 # The server embeds a copy of docs/user for its documentation search tool (go:embed cannot reach
 # outside the Go module). Run this after editing a guide; a Go test fails when the copy is stale.

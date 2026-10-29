@@ -19,6 +19,8 @@ const (
 	FeatureCheck  = "check"
 	FeatureTriage = "triage"
 	FeatureDraft  = "draft"
+	// FeatureChat is the help center's AI chat: answers, pre-warms and the admin's previews.
+	FeatureChat = "chat"
 )
 
 // Who pays for a call.
