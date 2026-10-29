@@ -22,7 +22,6 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
-	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/github"
 	"github.com/colliedesk/colliedesk/server/internal/google"
@@ -32,6 +31,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -105,6 +105,9 @@ type Config struct {
 	// LookupCNAME returns the end of a host name's CNAME chain, for the help center's custom domain
 	// check; nil uses the system resolver.
 	LookupCNAME func(ctx context.Context, host string) (string, error)
+	// HelpCenterProbe fetches a help center page under a domain on trial (D12) and returns its HTTP status;
+	// nil uses an HTTP client with a short timeout.
+	HelpCenterProbe func(ctx context.Context, url string) (int, error)
 	// MaxConcurrentExports caps workspace exports running at once on this server (default 2);
 	// more get 429. ExportWriteTimeout is how long one write to a slow client may block
 	// (default 60 s) before the export is aborted and its database connection released.
@@ -136,6 +139,18 @@ type Config struct {
 	// reports as conversations (PROBLEM_REPORT_WORKSPACE). Empty answers 404 not_configured, so the web app
 	// offers a GitHub issue instead.
 	ProblemReportWorkspace string
+	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
+	Carry *Carry
+	// OperatorOrigin is OPERATOR_ORIGIN: the operator console's own host. Empty serves it at Origin/operator.
+	OperatorOrigin string
+	// Operators signs the operators of the server in; nil makes one with the Gmail key ring.
+	Operators *auth.OperatorService
+	// ServerConfig is the server's own configuration, for the operator console; CheckConfig builds a
+	// snapshot the way serve does (nil checks nothing); Environ reads the process environment (bootstrap
+	// and leftovers; nil reads nothing).
+	ServerConfig *serverconfig.Store
+	CheckConfig  func(serverconfig.Snapshot) error
+	Environ      func(string) string
 }
 
 // ProductAnalytics names the PostHog project key and host the web app sends usage events to, and
@@ -163,12 +178,15 @@ type API struct {
 	// the reconcile pass.
 	githubSync *githubsync.Service
 	// dispatches counts the fixes being sent to GitHub by goroutines of this process.
-	dispatches sync.WaitGroup
+	dispatches *sync.WaitGroup
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
+	// db and preview count, across workspaces, what an operator's change would do (numbers only).
+	db      *database.DB
+	preview *serverconfig.Preview
 	// alerted dedupes the operator alert for paid subscriptions without a workspace.
-	alerted alertedSubscriptions
+	alerted *alertedSubscriptions
 	auth    *auth.Service
 	cloud   *cloudauth.Verifier
 	store   *store.Store
@@ -192,6 +210,8 @@ type API struct {
 	liveChecks *helpcenter.LiveChecks
 	// certificateNotes lets the certificate question record a certificate once an hour per host name.
 	certificateNotes *webFormLimiter
+	// operatorSignIns limits the tries of operator links, tickets and client addresses.
+	operatorSignIns, operatorSignInIPs *webFormLimiter
 	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
 	helpCenterHostLookups *webFormLimiter
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
@@ -208,13 +228,13 @@ type API struct {
 	polar        *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
-	founding foundingState
+	founding *foundingState
 	now      func() time.Time
 	// kbUploads serializes the parts of one video upload and bounds the parts a workspace sends at once.
-	kbUploads kbUploadGate
+	kbUploads *kbUploadGate
 	// kbUploadStart lets one upload start at a time, so each disk check counts the uploads started
 	// before it (the server runs as one process).
-	kbUploadStart sync.Mutex
+	kbUploadStart *sync.Mutex
 	// imports starts and reads in-app imports; the worker in `collie serve` runs them.
 	imports *importjobs.Service
 	// ai reads and changes the workspace's AI providers and features.
@@ -238,6 +258,9 @@ type Server struct {
 	http.Handler
 	api *API
 }
+
+// Operators signs in the operators of the server, for the operator MCP endpoint.
+func (s *Server) Operators() *auth.OperatorService { return s.api.config.Operators }
 
 // AI is the service of the workspaces' AI settings and task queue, which the worker of the process shares.
 func (s *Server) AI() *ai.Service { return s.api.ai }
@@ -293,14 +316,15 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	limits := config.Billing.Enabled()
-	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
-		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
-		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
-		cursorCalls:     newWindowLimiter(cursorCallsPerMinute, webFormMaxKeys, time.Minute),
-		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
-		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
-		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
-		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
+	carry := config.Carry
+	if carry == nil {
+		carry = NewCarry(config)
+	}
+	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
+		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
+		testMessages: carry.testMessages, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
+		helpCenterHostLookups: carry.helpCenterHostLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
+		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding,
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
 			WithSealKeys(config.Google.Keys)}
@@ -335,7 +359,6 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if api.mailImageFetcher == nil {
 		api.mailImageFetcher = mailimage.NewFetcher(mailimage.Options{})
 	}
-	api.mailImageLimits = newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait)
 	if config.Email.ResendAPIKey != "" {
 		api.resend = &resend.Client{APIKey: config.Email.ResendAPIKey, Base: config.Email.ResendAPIBase}
 	}
@@ -356,8 +379,18 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 			slog.Error("autofix: the GitHub App settings do not work", "error", err)
 		}
 	}
+	if api.config.Operators == nil {
+		base := strings.TrimRight(config.Origin, "/") + "/operator"
+		if config.OperatorOrigin != "" {
+			base = config.OperatorOrigin
+		}
+		api.config.Operators = auth.NewOperatorService(db, config.Google.Keys, base, func() bool { return api.hot().RequireTOTP }).WithClock(clock)
+	}
+	if api.config.ServerConfig == nil {
+		api.config.ServerConfig = serverconfig.NewStore(db, config.Google.Keys, api.environ())
+	}
+	api.db, api.preview = db, serverconfig.NewPreview(db)
 	api.helpCenter = api.newHelpCenter()
-	api.liveChecks = helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock)
 	mux := http.NewServeMux()
 	api.mux = mux
 	for _, route := range append(api.routeSpecs(), api.channelTypeRoutes()...) {
@@ -367,12 +400,43 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		if route.Pattern == resendWebhookPath && config.Email.ResendWebhookSecret == "" {
 			continue
 		}
+		if route.Permission == auth.PermissionOperator {
+			mux.Handle(route.Method+" "+route.Pattern, api.authorizeOperator(route.Route, route.handler))
+			continue
+		}
+		if route.Pattern == "/api/v1/agent-requests/{id}/approve" || route.Pattern == "/api/v1/agent-requests/{id}/reject" {
+			// The two approval routes serve both realms: the console names the operator realm, and a
+			// workspace credential is never looked up for it (docs/internals/operator-console.md).
+			workspace, operator := api.authorize(route.Route, route.handler), api.decideOperatorRequest(strings.HasSuffix(route.Pattern, "/approve"))
+			mux.HandleFunc(route.Method+" "+route.Pattern, func(response http.ResponseWriter, request *http.Request) {
+				if request.Header.Get("X-Colliedesk-Realm") == "operator" {
+					operator(response, request)
+					return
+				}
+				workspace(response, request)
+			})
+			continue
+		}
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
-	return &Server{Handler: withRequestID(mux), api: api}
+	return &Server{Handler: withRequestID(api.observeTrial(mux)), api: api}
+}
+
+// observeTrial counts, while a trial change runs, the distinct client addresses this process sees, so the
+// operator can tell whether trusted proxies read them right (one address for everyone is a sign they do not).
+func (a *API) observeTrial(next http.Handler) http.Handler {
+	if a.config.Carry == nil || a.config.Carry.Hot == nil {
+		return next
+	}
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if version := a.config.Carry.Hot.Trial(); version != 0 {
+			a.config.Carry.trial.observe(version, clientIP(request, a.config.TrustedProxies))
+		}
+		next.ServeHTTP(response, request)
+	})
 }
 
 func Routes() []Route {
@@ -381,6 +445,30 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
 		{http.MethodPost, cloudSignupPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/operator/auth/redeem", auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/operator/auth/totp", auth.PermissionPublic},
+		{http.MethodGet, "/api/v1/operator/auth/me", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/auth/logout", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/tokens", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/status", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/config", auth.PermissionOperator},
+		{http.MethodPatch, "/api/v1/operator/config", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/config/check", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/config/versions", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/config/versions/{id}/restore", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/config/trial/confirm", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/config/trial/revert", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/billing/products", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/billing/products", auth.PermissionOperator},
+		{http.MethodPatch, "/api/v1/operator/billing/products/{id}", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/audit", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/requests", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/requests/{id}", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/requests/{id}/cancel", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/operators", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/operators", auth.PermissionOperator},
+		{http.MethodDelete, "/api/v1/operator/operators/{id}", auth.PermissionOperator},
+		{http.MethodDelete, "/api/v1/operator/sessions/{id}", auth.PermissionOperator},
 		{http.MethodPost, "/api/v1/auth/logout", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/me", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/sessions", auth.PermissionAccessRead},

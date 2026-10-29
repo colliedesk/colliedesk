@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"encoding/json"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"net/http"
 	"net/url"
 	"strings"
@@ -92,6 +93,10 @@ type filedRequest struct {
 // It is a result, not an error: the call did what Colliedesk allows, and the model must know nothing
 // changed yet and how to follow the request.
 func requestedOutput(c *call, filed *agentRequested) filedOut {
+	if c.spec.Tier == auth.ScopeOperator {
+		return filedOut{AgentRequest: filedRequest{ID: filed.RequestID, Kind: "operator", Status: filed.Status, Summary: filed.Summary, ExpiresAt: filed.ExpiresAt},
+			Next: "Nothing changed yet: an operator must approve this in the operator console (Requests), within seven days. Tell the user it is waiting. Do not repeat the call: each call files another request."}
+	}
 	next := []string{"Colliedesk did not do this yet: a person must approve it in Colliedesk (Requests) first, within seven days. " +
 		"Tell the user it is waiting for approval. Follow it with colliedesk_request_get (request_id " + filed.RequestID + "); withdraw it with colliedesk_request_cancel. " +
 		"Do not repeat the call: each call files another request."}

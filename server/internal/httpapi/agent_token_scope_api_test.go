@@ -15,6 +15,29 @@ var tierRank = map[string]int{"read": 1, "draft": 2, "send": 3, "admin": 4}
 // (person_only). No route is closed to every token.
 // It is written out by hand so a route added later fails here until someone classifies it.
 var routeTiers = map[string]string{
+	// The operator console: no workspace token reaches it, whatever its tier (401).
+	"GET /api/v1/operator/auth/me":                                     "operator",
+	"POST /api/v1/operator/auth/logout":                                "operator",
+	"POST /api/v1/operator/tokens":                                     "operator",
+	"GET /api/v1/operator/status":                                      "operator",
+	"GET /api/v1/operator/config":                                      "operator",
+	"PATCH /api/v1/operator/config":                                    "operator",
+	"POST /api/v1/operator/config/check":                               "operator",
+	"GET /api/v1/operator/config/versions":                             "operator",
+	"POST /api/v1/operator/config/versions/{id}/restore":               "operator",
+	"POST /api/v1/operator/config/trial/confirm":                       "operator",
+	"POST /api/v1/operator/config/trial/revert":                        "operator",
+	"GET /api/v1/operator/billing/products":                            "operator",
+	"POST /api/v1/operator/billing/products":                           "operator",
+	"PATCH /api/v1/operator/billing/products/{id}":                     "operator",
+	"GET /api/v1/operator/audit":                                       "operator",
+	"GET /api/v1/operator/requests":                                    "operator",
+	"GET /api/v1/operator/requests/{id}":                               "operator",
+	"POST /api/v1/operator/requests/{id}/cancel":                       "operator",
+	"GET /api/v1/operator/operators":                                   "operator",
+	"POST /api/v1/operator/operators":                                  "operator",
+	"DELETE /api/v1/operator/operators/{id}":                           "operator",
+	"DELETE /api/v1/operator/sessions/{id}":                            "operator",
 	"POST /api/v1/auth/logout":                                         "read",
 	"GET /api/v1/auth/me":                                              "read",
 	"GET /api/v1/auth/sessions":                                        "read",
@@ -272,6 +295,10 @@ func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 				response = serve(fixture.api, kbImageRequest(token, nil))
 			}
 			switch {
+			case want == "operator":
+				if response.Code != http.StatusUnauthorized {
+					t.Errorf("%s with a %s token: status=%d body=%s, want 401 (operator routes take operator credentials only)", key, tier, response.Code, response.Body.String())
+				}
 			case (key == "POST "+kbImagesPath || kbFileRouteKeys[key]) && tierRank[tier] < tierRank[want]:
 				// Bytes never wait for approval: a lower tier is refused, not filed.
 				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "files_need_approval") {

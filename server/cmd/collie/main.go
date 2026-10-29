@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -17,6 +18,13 @@ func main() {
 		origin = "http://localhost:8080"
 	}
 	if err := run(ctx, os.Args[1:], os.Stdout, databaseURL, origin); err != nil {
+		var code exitCode
+		if errors.As(err, &code) {
+			if code.message != "" {
+				fmt.Fprintf(os.Stderr, "collie: %v\n", err)
+			}
+			os.Exit(code.code)
+		}
 		fmt.Fprintf(os.Stderr, "collie: %v\n", err)
 		os.Exit(1)
 	}

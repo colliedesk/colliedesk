@@ -148,6 +148,10 @@ var routeAccess = httpapi.TokenAccessTable()
 // handler decides by the body, the least it needs). A route that always waits for a person is open
 // to call: the call becomes a request.
 func toolOpen(spec Spec, who auth.Principal) bool {
+	// Operator tools never open to a workspace token, whatever it holds: they are served on OperatorPath only.
+	if spec.Tier == auth.ScopeOperator {
+		return false
+	}
 	if spec.Tier == "any" {
 		return true
 	}

@@ -256,6 +256,40 @@ Many clients also ask you before such a call.
 Tools read and change data through the same API as the web app, so a tool can do nothing the token
 could not do with the API directly. Another workspace is never visible.
 
+## Operator tools
+
+The people who run a Colliedesk server (operators, see [operator console](../self-host/operator-console.md))
+can give an AI client an operator token (`cdop_…`, made in the operator console). It connects to `/mcp/operator`, never to `/mcp`, and a workspace token
+never reaches `/mcp/operator`. An operator token reads; every change it asks for waits until an operator
+approves it in the console with their authenticator code.
+
+<!-- generated:operator-tools -->
+| Tool | What it does | Tier |
+|---|---|---|
+| `colliedesk_operator_whoami` | Shows the operator the token acts as, what it may ask for and where the console is | `operator` |
+| `colliedesk_operator_sign_out` | Ends this operator token. Cannot be undone | `operator` |
+| `colliedesk_operator_token_create` | Asks an operator for another operator token | `operator` |
+| `colliedesk_operator_status` | Shows the server's release, the configuration each process runs and what needs attention | `operator` |
+| `colliedesk_operator_config_get` | Reads every setting, without secrets | `operator` |
+| `colliedesk_operator_config_check` | Checks a settings change without saving it and says what saving it would ask | `operator` |
+| `colliedesk_operator_config_change` | Asks an operator to change settings | `operator` |
+| `colliedesk_operator_config_history` | Lists the configuration versions and what each changed | `operator` |
+| `colliedesk_operator_config_restore` | Asks an operator to restore an older configuration version | `operator` |
+| `colliedesk_operator_trial_confirm` | Asks an operator to keep the trial change that runs | `operator` |
+| `colliedesk_operator_trial_revert` | Asks an operator to end the trial change that runs now | `operator` |
+| `colliedesk_operator_products` | Lists the Polar products the server sells or once sold | `operator` |
+| `colliedesk_operator_product_add` | Asks an operator to add a Polar product | `operator` |
+| `colliedesk_operator_product_on_sale` | Asks an operator to put a Polar product on or off sale | `operator` |
+| `colliedesk_operator_audit` | Reads the operator audit log | `operator` |
+| `colliedesk_operator_requests` | Lists the requests this token made | `operator` |
+| `colliedesk_operator_request_get` | Shows one request this token made | `operator` |
+| `colliedesk_operator_request_cancel` | Withdraws a request this token made | `operator` |
+| `colliedesk_operator_team` | Lists operators, sessions and tokens | `operator` |
+| `colliedesk_operator_invite` | Asks an operator to invite another operator | `operator` |
+| `colliedesk_operator_revoke` | Asks an operator to revoke an operator | `operator` |
+| `colliedesk_operator_session_revoke` | Asks an operator to end a session or token | `operator` |
+<!-- /generated -->
+
 ## What the agent sees
 
 - Names, not ids: the assignee, the customer and the tags appear by name. Times are UTC, with the

@@ -6,7 +6,8 @@
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "dev": "vite",
-    "build": "corepack pnpm check:api && tsc --noEmit && vite build",
+    "build": "corepack pnpm check:api && tsc --noEmit && corepack pnpm build:web",
+    "build:web": "vite build && vite build -c vite.operator.config.ts",
     "bundle:check": "node scripts/check-bundle-budget.mjs",
     "typecheck": "corepack pnpm check:api && tsc --noEmit && tsc --noEmit -p e2e",
     "test": "vitest run",

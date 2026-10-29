@@ -130,4 +130,17 @@ const (
 	// workspace ids, installation ids and yes or no leave the transaction; each event is then applied in
 	// its own workspace.
 	PrivilegeGitHubInstallation Privilege = "github-installation"
+	// PrivilegeServerConfig reads and writes the server's own configuration (server_config_versions and
+	// _values, server_config_state, server_processes, polar_products, operator_audit, and the sign-up hash
+	// key in server_secrets). None of these tables has a workspace_id or a grant to the app role; no
+	// workspace row is read.
+	PrivilegeServerConfig Privilege = "server-config"
+	// PrivilegeOperator signs in the people who run the server (operators, operator_links,
+	// operator_sessions, operator_requests) and writes their audit lines (operator_audit). None of these
+	// tables has a workspace_id or a grant to the app role; no workspace row is read.
+	PrivilegeOperator Privilege = "operator"
+	// PrivilegeOperatorPreview counts, for the operator console's previews, what a change would do across
+	// workspaces: how many lock when billing turns on, and whether a workspace slug exists. Only a count or
+	// a yes or no leaves the transaction; no row is returned.
+	PrivilegeOperatorPreview Privilege = "operator-preview"
 )

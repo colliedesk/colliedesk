@@ -125,7 +125,9 @@ func TestEveryRouteOutsideTheAllowlistIsLockedAfterTheTrial(t *testing.T) {
 	const someID = "00000000-0000-0000-0000-000000000001"
 	gated := 0
 	for _, route := range httpapi.Routes() {
-		if route.Permission == auth.PermissionPublic || route.Permission == auth.PermissionChannelInbound {
+		// The operator console belongs to no workspace: a workspace's lock never reaches it, and its
+		// routes refuse a workspace session outright (TestOperatorRealmIsSeparate).
+		if route.Permission == auth.PermissionPublic || route.Permission == auth.PermissionChannelInbound || route.Permission == auth.PermissionOperator {
 			continue
 		}
 		key := route.Method + " " + route.Pattern

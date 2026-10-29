@@ -68,6 +68,7 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		}
 	}
 	email, err := a.cloud.Verify(request.Context(), token)
+	a.countTrialSignIn(err == nil)
 	if err != nil {
 		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
 		return

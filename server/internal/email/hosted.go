@@ -14,12 +14,12 @@ var hostedLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // every one-label name that has its own DNS record under the hosted domain belongs here: such a record
 // wins over the wildcard and would send the workspace's mail and help center elsewhere. Add the name
 // here whenever such a record is added (colliedesk.com today: app, www, mx, mail, send, rsend, staging,
-// and Clerk's clerk, accounts and clkmail). Reserving a name refuses it for a new or changed slug and
+// and Clerk's clerk, accounts and clkmail; ops, operator and console for the operator console). Reserving a name refuses it for a new or changed slug and
 // gives it no hosted address or help center host; a workspace that already has it keeps signing in,
 // its data, and its help center on the path address.
 var reservedSlugs = map[string]bool{
 	"abuse": true, "account": true, "accounts": true, "admin": true, "api": true, "app": true, "autoconfig": true,
-	"autodiscover": true, "billing": true, "bounce": true, "bounces": true, "em": true, "resend": true, "rsend": true, "send": true, "blog": true, "cdn": true, "clerk": true, "clkmail": true, "dashboard": true, "dkim": true, "dmarc": true,
+	"autodiscover": true, "billing": true, "console": true, "operator": true, "ops": true, "bounce": true, "bounces": true, "em": true, "resend": true, "rsend": true, "send": true, "blog": true, "cdn": true, "clerk": true, "clkmail": true, "dashboard": true, "dkim": true, "dmarc": true,
 	"docs": true, "ftp": true, "help": true, "hostmaster": true, "imap": true, "in": true, "inbound": true, "login": true,
 	"mail": true, "mx": true, "ns": true, "ns1": true, "ns2": true, "postmaster": true, "root": true, "security": true,
 	"sales": true, "signin": true, "smtp": true, "spf": true, "staging": true, "static": true, "status": true, "support": true, "test": true,

@@ -8,7 +8,8 @@ type Spec struct {
 	// Doc is one Markdown sentence for people: the "What it does" of the tool table in the user guide.
 	Doc string
 	// Tier is the lowest agent token tier that may call the tool: read, draft, send or admin. "any" means
-	// every valid token, because the tool needs nothing a read token lacks.
+	// every valid token, because the tool needs nothing a read token lacks. "operator" is an operator token
+	// on OperatorPath, never a workspace token.
 	Tier       string
 	ReadOnly   bool
 	Idempotent bool
@@ -64,6 +65,7 @@ func Catalog() []Spec {
 		fixPreviewSpec(), fixSendRequestSpec(), fixRetryRequestSpec(), fixCancelSpec(), fixDeployedSpec(), fixUndeployedSpec(), fixPRLinkSpec(), fixPRUnlinkSpec(),
 		codingAgentEnableRequestSpec(), codingAgentDisableSpec(), codingAgentCheckSpec(), cursorKeySetSpec(), cursorKeyRemoveSpec(),
 	}
+	specs = append(specs, operatorSpecs()...)
 	for i := range specs {
 		specs[i].Doc = toolDocs[specs[i].Name]
 	}

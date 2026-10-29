@@ -27,18 +27,28 @@ Behind a reverse proxy, Colliedesk must know the proxy to read the visitor's add
 `X-Forwarded-For`. Rate limits, for example those of the [web form](../user/web-form.md), count per
 visitor address.
 
-The server trusts **no** proxy unless `TRUSTED_PROXIES` names one, whether the variable is unset or
-empty. The shipped `compose.yaml` and installer file set it to loopback and the Docker bridge range
-(`127.0.0.0/8,::1/128,172.16.0.0/12`) when you do not, which fits a proxy on the same host. For
-another setup, set it to your proxy's addresses or ranges, comma separated, for example
-`TRUSTED_PROXIES=10.0.0.5,10.1.0.0/16`. With no trusted proxy the server logs a warning at startup,
-and behind a proxy every visitor counts as the proxy and shares one limit.
+The server trusts **no** proxy until `trusted_proxies` names one. The installer sets it to loopback and
+the Docker bridge range (`127.0.0.0/8,::1/128,172.16.0.0/12`), which fits a proxy on the same host, as its
+compose file did before settings moved into the database. For another setup, set it to your proxy's
+addresses or ranges, comma separated:
+
+```sh
+docker compose exec server /app/collie config set trusted_proxies=10.0.0.5,10.1.0.0/16 --yes
+```
+
+With no trusted proxy the server logs a warning at startup, and behind a proxy every visitor counts as
+the proxy and shares one limit. `collie config history` and `collie config restore <version>` bring an
+earlier value back; `collie config reset trusted_proxies` trusts no proxy again.
+
+In the operator console (Security & network) a change of trusted proxies is a trial: the review shows
+what your own address would read as, and the change reverts by itself after 10 minutes unless you confirm
+it from the console ([trial changes](operator-console.md#trial-changes)).
 
 **Warning:** do not publish the server port on `0.0.0.0` (or any public address) without a proxy
-in front while the compose default is active. A client inside a trusted range, or one that
+in front while the installer's value is set. A client inside a trusted range, or one that
 reaches the server directly through Docker's bridge, could then send a fake `X-Forwarded-For` and
 pick its own address for the limits. The shipped files publish on `127.0.0.1` only. If you
-expose the port directly, set `TRUSTED_PROXIES=` (empty).
+expose the port directly, run `collie config reset trusted_proxies`.
 
 ## Large uploads
 
@@ -51,7 +61,7 @@ the proxy, and do not compress `video/*` (Caddy's `encode` leaves video alone; w
 `video/mp4` and `video/webm` out of `gzip_types`).
 
 A help center sends at most 4 videos at once to one reader's address and 64 in all (503 with
-`Retry-After` beyond). Set `TRUSTED_PROXIES` so the address is the reader's: behind a proxy that is
+`Retry-After` beyond). Set `trusted_proxies` so the address is the reader's: behind a proxy that is
 not trusted, every reader has the proxy's address and the whole site plays 4 videos at once. The 64
 are a safety valve: a few addresses holding slow connections can still take them all. A help center
 video never changes under its address (`Cache-Control: public, immutable`), so a caching proxy or
@@ -68,7 +78,7 @@ Every workspace's [help center](../user/knowledge-base.md#public-help-center) wo
 example `acme.help.example.com`:
 
 1. Point a wildcard DNS record, `*.help.example.com`, at the proxy.
-2. Set `HELP_CENTER_DOMAIN=help.example.com` and restart the server. The help center then answers
+2. Set `help_center.domain=help.example.com` and restart the server. The help center then answers
    on `<slug>.help.example.com` with the scheme and port of `APP_ORIGIN`, and `APP_ORIGIN/help/<slug>`
    redirects there (301). A slug that cannot be a host name (for example `www`, `mail` or `support`)
    keeps the path address. On those host names the server answers only help center pages: the
@@ -100,14 +110,14 @@ a more specific site wins over the wildcard.
 
 A workspace can also serve its help center on a domain of its own, such as `help.example.com`
 ([custom domain](../user/knowledge-base.md#custom-domain)). It works with or without
-`HELP_CENTER_DOMAIN`:
+`help_center.domain`:
 
-- **With `HELP_CENTER_DOMAIN`**, the owner points the name with a `CNAME` to the target the card
-  shows, `hc-<claim>.<HELP_CENTER_DOMAIN>`, which also proves the workspace owns it. The target is
+- **With `help_center.domain`**, the owner points the name with a `CNAME` to the target the card
+  shows, `hc-<claim>.<help_center.domain>`, which also proves the workspace owns it. The target is
   random, made when the domain is set and kept until it is removed or replaced, and no workspace
   slug can take its shape; the wildcard record already covers it, so there is nothing to add for it.
-  The workspace's own `<slug>.<HELP_CENTER_DOMAIN>` proves nothing: a slug can be renamed and then
-  taken by another workspace. The wildcard record of `HELP_CENTER_DOMAIN` must be `A`/`AAAA` records,
+  The workspace's own `<slug>.<help_center.domain>` proves nothing: a slug can be renamed and then
+  taken by another workspace. The wildcard record of `help_center.domain` must be `A`/`AAAA` records,
   not a `CNAME`: the check reads where the name's `CNAME` chain ends, and a wildcard that is itself a
   `CNAME` makes every chain end elsewhere. The owner can always use the `TXT` record instead.
 - **Without it**, the owner points the name at the server (the card shows a `CNAME` to `APP_ORIGIN`'s
@@ -153,7 +163,7 @@ write through that process changes it. With several server processes behind one 
 has just become active through one of them may therefore get the help center's `404` on another for
 up to 30 seconds, and API answers there may give the previous address for as long. A host name the
 server does not know costs one database lookup; each client address may cause at most 10 a minute
-(the help center's busy page beyond), so set [`TRUSTED_PROXIES`](#trusted-proxies) or every visitor
+(the help center's busy page beyond), so set [`trusted_proxies`](#trusted-proxies) or every visitor
 shares the proxy's 10.
 
 The server checks every active custom domain at start and then daily. A domain whose records no

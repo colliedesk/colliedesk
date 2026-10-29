@@ -268,7 +268,7 @@ the agent and select **Link**; **Unlink** takes it back. A link is applied withi
 
 When an import ends on its own (complete, incomplete or stopped by an error), the admins of the
 workspace and the person who started it get an email with the result and a link to the page, on
-Colliedesk Cloud and on a server with outgoing email (`SMTP_HOST` and `MAIL_FROM_DOMAIN`). A preview and
+Colliedesk Cloud and on a server whose operator set up outgoing email (SMTP and the mail domain). A preview and
 an import you stop yourself send none.
 
 **Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or

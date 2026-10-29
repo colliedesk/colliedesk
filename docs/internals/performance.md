@@ -226,6 +226,14 @@ Measured on a local stack with 304 conversations, cold page load of a ticket by 
 
 Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB HTML report, Chrome, local stack, medians of 16 to 20 runs): the first open of a ticket in a page costs 118 to 146 ms and an open of a ticket seen a moment before costs 47 to 54 ms, the same at `ed2400b` (plain-text view) and at the head (formatted view: 143/50 ms and 140/52 ms by click, 140/52 ms and 118/54 ms by `history.pushState`). A report of 70 ms "warm" against 192 ms came from comparing runs with a warm cache against all runs including each ticket's first open; they are different measurements. `inbox-route.test.tsx` pins what keeps the warm open fast: a ticket opened from the list renders its header and composer from the row and makes no detail request, and an address that is in the list does not wait for a pending detail.
 
+## Configuration reload cost
+
+Each `collie serve` reads which configuration version it should run every 5 seconds (one privileged
+transaction: the state row, the current version's values, the products) and writes its heartbeat
+(`server_processes`, one upsert and one delete): about 0.4 queries a second per process on the owner
+pool, and one idle connection held by `LISTEN colliedesk_config`. A request never waits on it: the handler
+swap is an atomic pointer, and settings read at each use are an atomic load.
+
 ## Web bundle budget
 
 `corepack pnpm bundle:check` reads the production Vite output. The largest JavaScript asset must be at most 200 KiB gzip. The largest CSS asset must be at most 30 KiB gzip. `make test` builds the bundle before running this gate; in CI it runs in the e2e job, after that job's Vite build of the same commit, and a failure fails CI like any other step.
@@ -258,6 +266,20 @@ The same day its Usage tab, the paused and allowance notices and the automatic-r
 On 2026-10-23 the results page (#100) became its own lazy part, `results-route` (its strings, schemas, page and CSS); the first bundle keeps the rail link with its chart icon, the route, the `result` inbox filter, the public share page's route and the strings of a refreshed list: 201,489 → 202,056 bytes (+567); the share page is a lazy part of its own. Its CSS went from 15,890 to 15,893: the mobile filter chips now wrap instead of scrolling sideways, so a filter is never out of view.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
+
+## Operator console bundle
+
+The operator console is a build of its own (`web/vite.operator.config.ts`, served under `/operator/`): none
+of it is in the workspace app's bundle, and the workspace app's code is not in it. `corepack pnpm
+bundle:check` also measures the console's first bundle (the JavaScript and CSS `operator.html` loads)
+against its own ceilings, set on 2026-10-29 to the first measurement plus 5%: 78,652 bytes of JavaScript
+and 9,076 of CSS gzip (`OPERATOR_JS_LIMIT`, `OPERATOR_CSS_LIMIT` in `web/scripts/check-bundle-budget.mjs`).
+Never raise them to pass; move a screen into a lazy part. Measured then: 75,443 and 8,734 bytes; History,
+Requests, the audit log and Operators are lazy parts of 0.8 to 2 KB each. The workspace app's first
+bundle is unchanged (199,617 bytes). With the dangerous groups (the review's server guards in the first
+bundle; the trial band and the Polar products table as lazy parts): 76,691 and 8,774. Measured with
+Playwright on a local `collie serve` (Chromium, 1,440 px, an Apple M4, median of 5): a full load of the
+overview to its numbers 41 ms; from a nav link to a settings page 16 ms.
 
 ## Reply box lists (saved replies, articles)
 

@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -43,19 +42,22 @@ func billingCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outp
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 {
 		return errors.New(billingUsage)
 	}
-	billing, err := polar.ConfigFromEnv(os.Getenv)
+	if _, err := useServerConfig(ctx, pool); err != nil {
+		return err
+	}
+	billing, err := billingConfig()
 	if err != nil {
 		return err
 	}
 	if !billing.Enabled() {
-		return errors.New("billing is not configured on this instance (POLAR_* variables), so there is nothing to reconcile")
+		return errors.New("billing is not configured on this instance (polar.* settings, `collie config list --group billing`), so there is nothing to reconcile")
 	}
-	emailConfig, err := email.ConfigFromEnv(os.Getenv)
+	emailConfig, err := email.ConfigFromEnv(settings)
 	if err != nil {
 		return err
 	}
 	now := clock().UTC()
-	alertTo := strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
+	alertTo := strings.TrimSpace(settings("BILLING_ALERT_EMAIL"))
 	alertReady := alertTo != "" && emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != ""
 	report, runErr := billingreconcile.Run(ctx, polar.NewClient(billing), reconcileData(pool), billing.Products, now, *dryRun)
 	if runErr != nil && len(report.Changes) == 0 {
@@ -75,7 +77,7 @@ func billingCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outp
 		}
 	}
 	if *requireAlert && !alertReady {
-		failures = append(failures, errors.New("--require-alert: no alert can be sent (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN)"))
+		failures = append(failures, errors.New("--require-alert: no alert can be sent (set billing.alert_email, smtp.host and mail_from.domain)"))
 	}
 	return errors.Join(failures...)
 }
@@ -85,7 +87,7 @@ func billingCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outp
 // command, so a timer does not look healthy while nobody hears.
 func mailReconcileReport(ctx context.Context, report billingreconcile.Report, config email.Config, to string, ready bool, now time.Time) error {
 	if !ready {
-		_, err := fmt.Fprintln(stderr, "billing reconcile found items but no alert is configured (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN); the list above is the only report")
+		_, err := fmt.Fprintln(stderr, "billing reconcile found items but no alert is configured (set billing.alert_email, smtp.host and mail_from.domain); the list above is the only report")
 		return err
 	}
 	from := "noreply@" + config.MailFromDomain

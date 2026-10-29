@@ -205,7 +205,12 @@ func TokenPermissions() []TokenPermission { return slices.Clone(tokenPermissions
 func ValidPermission(name string) bool { return permissionPreset[name] != "" }
 
 // PermissionPreset is the lowest tier that holds the permission, or "" for an unknown one.
-func PermissionPreset(name string) string { return permissionPreset[name] }
+func PermissionPreset(name string) string {
+	if slices.Contains(OperatorPermissions, name) {
+		return ScopeOperator
+	}
+	return permissionPreset[name]
+}
 
 // PresetPermissions lists the permissions a tier holds, in the form's order.
 func PresetPermissions(scope string) []string {

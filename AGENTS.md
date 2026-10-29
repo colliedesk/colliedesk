@@ -69,7 +69,7 @@ real server, CLI, PostgreSQL and a browser; only external services are local sta
 API, identity provider JWKS, Mailpit as the SMTP relay). They run on every PR in the CI jobs
 `onboarding` and `install-smoke`. A change to an onboarding surface (`install.sh`,
 `create-workspace` / `pair`, redeem, invites, sessions, cloud sign-in, the email channel,
-`import freshdesk` / `import undo`, the empty inbox) must keep them green. Never skip, weaken or
+`import freshdesk` / `import undo`, the empty inbox, `operator pair` and the operator console) must keep them green. Never skip, weaken or
 untag one; fix the product instead. `corepack pnpm test` fails when this list and the
 `@onboarding` tests in `web/e2e/` differ.
 
@@ -86,12 +86,14 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 - `golden path: a new team signs up on the cloud, imports Freshdesk in the app, reconcile OK, answers its first conversation by email` (`web/e2e/onboarding-golden-path.spec.ts`; #99 adds its step to this test)
 - `link errors: expired, reused, revoked, mistyped, missing and another workspace's link explain themselves` (`web/e2e/onboarding-link-errors.spec.ts`)
 - `test message: a new cloud workspace sends itself a test message from the empty inbox, answers it on the trial, and the reply is delivered` (`web/e2e/onboarding-test-message.spec.ts`)
+- `operator console: the installer's operator link signs in, the operator sets SMTP and sends a test, the change applies without a restart, history restores the previous version` (`web/e2e/onboarding-operator-console.spec.ts`)
 
 Also: `tests/install-smoke.sh` (real `install.sh` with Docker against the image built from the
 commit; the printed link must sign in) and `tests/install-test.sh` (installer with stubbed Docker).
 
-Ports and temp files derive from the checkout path (`web/e2e/support/checkout.ts`), so two
-checkouts can run them at once; `COLLIEDESK_E2E_PORT_BASE` overrides the ports.
+Ports, databases and temp files derive from the checkout path (`web/e2e/support/checkout.ts`), so two
+checkouts can run them at once; `COLLIEDESK_E2E_PORT_BASE` overrides the ports. Each test server
+(main, mail, cloud) runs on a new database of its own, named after `TEST_DATABASE_URL`'s.
 Run locally: `docker compose --profile test up -d postgres mailpit`, then
 `make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
 `docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.
@@ -101,12 +103,17 @@ Run locally: `docker compose --profile test up -d postgres mailpit`, then
 Colliedesk Cloud (`app.colliedesk.com`) is production. Every sign-up there counts as a customer
 trial in the funnel and emails the team. Test locally or with the e2e suite first.
 
-- **Sign up on Cloud only with a team address.** The server reads `INTERNAL_SIGNUP_EMAILS`
+- **Sign up on Cloud only with a team address.** The server reads the setting `internal_signup.emails`
   (`@colliedesk.com`, `@hclabs.co`, `@hclabs.colliedesk.com` on Cloud) and sends `trial_started` with `internal: true` for a
-  match, and for any sign-up from a network in `INTERNAL_SIGNUP_NETWORKS` (the team's agent hosts).
+  match, and for any sign-up from a network in `internal_signup.networks` (the team's agent hosts).
   Never use a personal mailbox: it is counted as a customer. If you must, add that exact
-  address to `INTERNAL_SIGNUP_EMAILS` first (HC Labs `infra` repo,
-  `hosts/collie-01/colliedesk/compose.yaml`) and wait for the deploy.
+  address to `internal_signup.emails` first: an operator does it in the operator console (Sign-ups) or
+  with `collie config set internal_signup.emails=…` on the server; it applies at once, no deploy. The
+  settings live in the server's database (docs/self-host/operator-console.md); the variables
+  `INTERNAL_SIGNUP_EMAILS` / `_NETWORKS` in the HC Labs `infra` compose file were imported once and are
+  ignored once they differ from the database. Until Cloud runs a release with the operator console
+  (`version` in `GET /api/v1/config`), edit `INTERNAL_SIGNUP_EMAILS` in the `infra` repo
+  (`hosts/collie-01/colliedesk/compose.yaml`) and wait for the deploy, as before.
 - **Name a test workspace for what it is** (`e2e-…`, `test-…`), so a person reading the database
   sees it at once.
 - **Every count of trials, activation or payments leaves out internal sign-ups.** Only
@@ -115,7 +122,7 @@ trial in the funnel and emails the team. Test locally or with the e2e suite firs
   workspace id from an internal `trial_started`. A new query, alert or report that skips this
   inflates the funnel.
 - `TestInternalSignupIsMarkedOnTrialStarted` guards the flag. Never weaken it; a new place that
-  starts a trial sets the flag through `Config.InternalSignups` too.
+  starts a trial sets the flag through the API's hot settings (`InternalSignups`) too.
 
 ## Releases
 

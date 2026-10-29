@@ -2,47 +2,30 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
 	"fmt"
-	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
-	"github.com/colliedesk/colliedesk/server/internal/channels"
-	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
-	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
-	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/ai"
-	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
+	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
-	"github.com/colliedesk/colliedesk/server/internal/email"
-	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
-	"github.com/colliedesk/colliedesk/server/internal/github"
-	"github.com/colliedesk/colliedesk/server/internal/google"
-	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/importjobs"
-	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
-	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
-	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
-	"github.com/colliedesk/colliedesk/server/internal/resend"
-	"github.com/colliedesk/colliedesk/server/internal/results"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
-	"github.com/colliedesk/colliedesk/server/internal/telemetry"
-	"github.com/colliedesk/colliedesk/server/internal/webui"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -74,14 +57,6 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	billing, err := polar.ConfigFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	billing, billingWarning := billingAtStart(billing, lockedScreenShipped)
-	if billingWarning != "" {
-		slog.Error(billingWarning)
-	}
 	requestPool := pool
 	if requestURL := os.Getenv("DATABASE_REQUEST_URL"); requestURL != "" {
 		opened, err := openPool(ctx, requestURL)
@@ -95,180 +70,52 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := db.Verify(ctx); err != nil {
 		return err
 	}
-	trustedProxies, err := httpapi.ParseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	configStore, err := openConfigStore(db)
 	if err != nil {
 		return err
 	}
-	internalSignups, err := httpapi.ParseInternalSignups(os.Getenv("INTERNAL_SIGNUP_EMAILS"), os.Getenv("INTERNAL_SIGNUP_NETWORKS"))
+	config, loaded, err := startConfig(ctx, configStore, slog.Default())
 	if err != nil {
 		return err
-	}
-	signupKey := os.Getenv("SIGNUP_HASH_KEY")
-	cloudAuth := cloudAuthConfig()
-	signupWarning := signupProblem(cloudAuth.Enabled(), billing.Enabled(), trustedProxies, signupKey)
-	if signupWarning != "" {
-		slog.Error(signupWarning)
-	}
-	if cloudAuth.Enabled() && billing.Enabled() && signupWarning == "" {
-		go sweepSignupAddresses(ctx, auth.NewWithDB(db, origin))
 	}
 	storage, err := attachmentStorage()
 	if err != nil {
 		return err
 	}
-	emailConfig, err := email.ConfigFromEnv(os.Getenv)
+	// What lives as long as the process: in-app import keys (sealed with MAILBOX_TOKEN_KEYS, or only in
+	// memory without it), one Cursor client so the API and the Autofix worker keep one call budget, and
+	// the API state a new configuration must not reset.
+	hot := httpapi.NewHot(hotSettings(config))
+	carry := httpapi.NewCarry(httpapi.Config{})
+	carry.Hot = hot
+	p := &process{pool: pool, requestPool: requestPool, db: db, origin: origin, storage: storage, carry: carry, configStore: configStore,
+		importKeys: importjobs.NewKeys(configStore.Keys()),
+		cursor:     &autofixworker.Cursor{Store: store.NewWithDB(db).WithSealKeys(configStore.Keys()), Base: cursorBaseURL}}
+	p.operatorOrigin, err = operatorOrigin(origin)
 	if err != nil {
-		return err
+		slog.Error("the operator console stays at APP_ORIGIN/operator/", "error", err)
 	}
-	googleConfig, err := google.ConfigFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	// Microsoft 365 seals its grants with the same ring (MAILBOX_TOKEN_KEYS), parsed once above.
-	microsoftConfig, err := microsoft.ConfigFromEnv(os.Getenv, googleConfig.Keys)
-	if err != nil {
-		return err
-	}
-	helpCenterDomain, err := helpcenter.DomainFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	aiServer, err := ai.ServerProviderFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	if aiServer != nil && aiServer.Allowance != nil && aiServer.Kind != aiprovider.KindAnthropic {
-		slog.Warn("AI_SERVER_MONTHLY_ALLOWANCE holds only while the OpenAI-compatible server reports token usage; calls without usage cost nothing against it")
-	}
-	googleConfig.Base = googleBaseURL
-	microsoftConfig.Base = microsoftBaseURL
-	githubConfig := github.ConfigFromEnv(os.Getenv)
-	if err := githubConfig.Check(); err != nil {
-		return err
-	}
-	githubConfig.Base = githubBaseURL
-	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
-	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
-	// replies that need them fail with the reason. The journal worker processes what Async channels received.
-	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing}
-	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig))).
-		WithSealKeys(googleConfig.Keys).WithPlanLimits(billing.Enabled())
-	var sender emailoutbox.Sender
-	if emailConfig.SMTP.Configured() {
-		sender = email.SMTPSender{Config: emailConfig.SMTP}
-	}
-	if emailConfig.SMTP.Configured() || googleConfig.Enabled() || microsoftConfig.Enabled() {
-		// A server with a mailbox provider and no relay still sends email; replies that need SMTP fail with the reason.
-		worker := emailoutbox.New(channelStore, sender,
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig, Microsoft: &microsoftConfig})
-		go worker.Run(ctx, 5*time.Second)
-		// A quiet Microsoft 365 mailbox would lose its grant after 90 days unused; this refreshes it weekly
-		// and shows a revoked one before a customer waits for a reply.
-		if microsoftConfig.Enabled() {
-			go worker.RunKeepAlive(ctx, time.Hour)
-		}
-	} else {
-		// Without either, email waits for a server that can send it; every other channel is sent here.
-		go outbox.New(channelStore, outbox.Options{Skip: []channels.Type{channelemail.Type}}).Run(ctx, 5*time.Second)
-	}
-	go pipeline.New(channelStore, nil).Run(ctx, 2*time.Second)
-	if emailConfig.ResendAPIKey != "" {
-		// Provider domains a workspace stopped using, or left behind by being deleted, free their slots here.
-		client := &resend.Client{APIKey: emailConfig.ResendAPIKey, Base: emailConfig.ResendAPIBase}
-		go providerdomain.New(store.NewWithDB(db), client, providerdomain.Options{}).Run(ctx, time.Minute)
-	}
-	// In-app imports run here, on the owner pool like the CLI. Their keys are sealed with the Gmail ring
-	// (MAILBOX_TOKEN_KEYS); without one they stay in this process's memory.
-	importKeys := importjobs.NewKeys(googleConfig.Keys)
-	var importPlans []string
-	if billing.Enabled() {
-		importPlans = billing.PlansOnSale()
-	}
-	importOptions := importjobs.WorkerOptions{Pool: pool, DB: db, Keys: importKeys, Storage: storage,
-		Cloud: billing.Enabled(), PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork, Origin: origin, HelpCenterDomain: helpCenterDomain}
-	// The admins hear when an import ends, from the platform address, as for retention notices.
-	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
-		importOptions.Mailer, importOptions.MailFrom = email.SMTPSender{Config: emailConfig.SMTP}, "noreply@"+emailConfig.MailFromDomain
-	}
-	go importjobs.NewWorker(importOptions).Run(ctx)
-	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
-	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.
-	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
-	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
-	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
-	go sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage))
-	// The results page only reads numbers this worker computes (docs/internals/results.md). It also sends
-	// the weekly email to admins, from the platform address, when the server can send mail.
-	resultsWorker := results.NewWorker(db)
-	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
-		resultsWorker.WithMail(results.Mail{Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain, Origin: origin,
-			Locked: func(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error) {
-				if !billing.Enabled() {
-					return false, nil
-				}
-				access, err := store.WorkspaceAccess(ctx, tx, workspaceID, now)
-				return access.Locked, err
-			}})
-	}
-	go resultsWorker.Run(ctx)
-	mailImageCacheBytes, err := mailImageCacheBytesFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	go sweepMailImageCache(ctx, store.NewWithDB(db).WithObjects(storage), mailImageCacheBytes)
+	p.operators = auth.NewOperatorService(db, configStore.Keys(), consoleBase(origin), func() bool { return hot.Load().RequireTOTP })
+	processCtx, stopProcess := context.WithCancel(ctx)
+	defer stopProcess()
+	p.Go(processCtx, func(ctx context.Context) { sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage)) })
+	p.Go(processCtx, func(ctx context.Context) {
+		sweepMailImageCache(ctx, store.NewWithDB(db).WithObjects(storage), func() int64 { return hot.Load().MailImageCacheBytes })
+	})
 	// What AI features may quote is built from a queue the database fills (docs/internals/ai-retrieval.md).
-	go store.NewWithDB(db).RunAIRetrieval(ctx, 2*time.Second, func(err error) { slog.Error("build AI retrieval", "error", err) })
-	kbVideoMaxBytes, err := kbVideoMaxBytesFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-	if billing.Enabled() {
-		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
-		if err != nil {
-			slog.Error("workspace retention is not running", "error", err)
-		} else {
-			go sweepRetention(ctx, retentionService)
-		}
-	}
-	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
-	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1", PlanLimits: billing.Enabled()}
-	// One Cursor client per process, so the API and the Autofix worker keep one call budget. The worker
-	// starts with the GitHub connection, which reads a repository on GitHub before a fix leaves for it.
-	fixCursor := &autofixworker.Cursor{Store: store.NewWithDB(db).WithSealKeys(googleConfig.Keys), Base: cursorBaseURL}
-	apiConfig := httpapi.Config{Cursor: fixCursor, AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
-		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
-	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
-	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
-	if telemetryConfig.Enabled() {
-		apiConfig.ProductAnalytics = &httpapi.ProductAnalytics{Key: telemetryConfig.ProjectKey, Host: telemetryConfig.Endpoint, Realm: telemetryConfig.Realm}
-	}
-	if emailConfig.SMTP.Configured() {
-		apiConfig.AlertEmail = strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
-		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
-	}
-	apiConfig.LookupCNAME, apiConfig.LookupTXT = lookupCNAME, lookupTXT
-	api := httpapi.New(pool, apiConfig)
-	go recheckHelpCenterDomainsDaily(ctx, api)
-	// AI tasks run in this process with the API's service, so a queued task wakes the worker at once.
-	aiWorker := ai.NewWorker(api.AI(), db, ai.WorkerOptions{})
-	aiWorker.Handle(ai.SlotDraft, api.AI().DraftHandler())
-	aiWorker.Handle(ai.SlotTriage, api.AI().TriageHandler())
-	go aiWorker.Run(ctx)
-	// Autofix follows GitHub every ten minutes too, for a server the App's webhook cannot reach.
-	if sync := api.GitHubSync(); sync != nil {
-		go sync.Run(ctx, githubsync.ReconcileEvery)
-		// Fixes sent to Cursor: the worker reads each repository on GitHub before a fix leaves for it.
-		go (&autofixworker.Worker{Cursor: fixCursor, Repos: sync}).Run(ctx, 5*time.Second)
-	}
-	if billing.Enabled() {
-		go refreshFoundingAtStart(ctx, api)
-	}
-	server := &http.Server{
-		Addr: *address,
-		// The help center is outermost: a request to a help center host never reaches the app, the API or MCP.
-		Handler:           api.WrapHelpCenter(mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version}, webui.Handler(api))),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	p.Go(processCtx, func(ctx context.Context) {
+		store.NewWithDB(db).RunAIRetrieval(ctx, 2*time.Second, func(err error) { slog.Error("build AI retrieval", "error", err) })
+	})
+	first := newGeneration(p, loaded, config, slog.Default())
+	first.Start(processCtx)
+	handler := &swapHandler{}
+	handler.Store(first.Handler())
+	hostname, _ := os.Hostname()
+	reload := newReloader(configStore, func(next serverconfig.Loaded, built builtConfig) (served, error) {
+		return newGeneration(p, next, built, slog.Default()), nil
+	}, hot, handler, first, loaded, serverconfig.Process{InstanceID: newInstanceID(), Hostname: hostname, BinaryVersion: version, StartedAt: time.Now()}, slog.Default())
+	p.Go(processCtx, reload.Run)
+	server := &http.Server{Addr: *address, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()
 	select {
@@ -283,15 +130,24 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		if err := server.Shutdown(shutdown); err != nil {
 			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
+		reload.Stop(stopWorkersWithin)
+		_ = configStore.Leave(context.WithoutCancel(ctx), reload.process.InstanceID)
 		// Fixes being sent to GitHub finish (or time out) and revoke the person's token before the process ends.
 		sent := make(chan struct{})
-		go func() { api.WaitForAutofixSends(); close(sent) }()
+		go func() { carry.WaitForAutofixSends(); close(sent) }()
 		select {
 		case <-sent:
 		case <-time.After(githubsync.DispatchTimeout):
 		}
 		return nil
 	}
+}
+
+// newInstanceID names this process in server_processes.
+func newInstanceID() string {
+	raw := make([]byte, 16)
+	_, _ = rand.Read(raw)
+	return hex.EncodeToString(raw)
 }
 
 // refreshFoundingAtStart counts the Founding slots once so the state survives a restart. A failure
@@ -436,14 +292,8 @@ func attachmentStorage() (*attachments.LocalDisk, error) {
 	return attachments.NewLocalDisk(dir)
 }
 
-func cloudAuthConfig() cloudauth.Config {
-	return cloudauth.Config{
-		Issuer:            os.Getenv("CLOUD_AUTH_ISSUER"),
-		JWKSURL:           os.Getenv("CLOUD_AUTH_JWKS_URL"),
-		AuthorizedParties: strings.Split(os.Getenv("CLOUD_AUTH_AUTHORIZED_PARTIES"), ","),
-		PublishableKey:    os.Getenv("CLERK_PUBLISHABLE_KEY"),
-		EmailClaim:        os.Getenv("CLOUD_AUTH_EMAIL_CLAIM"),
-	}
+func cloudAuthConfig(getenv func(string) string) cloudauth.Config {
+	return cloudauth.ConfigFromEnv(getenv)
 }
 
 // lockedScreenShipped says the web app shows a locked workspace (trial over, nothing paid) instead

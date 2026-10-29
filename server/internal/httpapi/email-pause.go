@@ -16,7 +16,7 @@ func (a *API) pauseOnComplaints(ctx context.Context, workspaceID string) error {
 	}
 	slog.Warn("email sending paused after spam complaints", "workspace", workspaceID, "slug", paused.Slug, "reason", paused.Pause.Reason)
 	if !a.operatorAlertReady() {
-		slog.Warn("no operator alert is configured for the email pause (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN)", "workspace", workspaceID, "slug", paused.Slug)
+		slog.Warn("no operator alert is configured for the email pause (set billing.alert_email, smtp.host and mail_from.domain with collie config or the operator console)", "workspace", workspaceID, "slug", paused.Slug)
 		return nil
 	}
 	body := fmt.Sprintf(`Email sending was paused for a workspace after spam complaints. Its replies stay queued and are not sent.

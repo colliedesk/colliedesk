@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ports, scratchDir } from './checkout';
+import { checkoutID, ports, scratchDir } from './checkout';
 import type { ChildProcess } from 'node:child_process';
 
 // Ports and URLs shared with playwright.config.ts.
@@ -11,8 +11,29 @@ export const servers = {
   mail: `http://localhost:${ports.mail}`,
 } as const;
 
-export const databaseURL = process.env.TEST_DATABASE_URL
+const testDatabaseURL = process.env.TEST_DATABASE_URL
   ?? 'postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable';
+
+// Each server has its own database, named after TEST_DATABASE_URL's and the checkout, as a server of
+// its own would: what one server's workers do (send a queued reply, run an AI task, import) never
+// happens on another, and two checkouts never share one. The user of TEST_DATABASE_URL creates them.
+const databaseBase = `${new URL(testDatabaseURL).pathname.slice(1)}_${checkoutID}`;
+
+// databaseNameFor is the database of the server at origin; any other origin is the main server's.
+export function databaseNameFor(origin: string): string {
+  if (origin === servers.mail) return `${databaseBase}_mail`;
+  if (origin === servers.cloud) return `${databaseBase}_cloud`;
+  return `${databaseBase}_main`;
+}
+
+export function databaseFor(origin: string): string {
+  return withDatabase(testDatabaseURL, databaseNameFor(origin));
+}
+
+// The main server's database: the default of every query below.
+export const databaseURL = databaseFor(servers.main);
+// The maintenance database, for creating and dropping the others.
+export const postgresURL = withDatabase(testDatabaseURL, 'postgres');
 
 // Scratch Go paths by default; CI exports the caches setup-go restored so the servers reuse them.
 export const goEnv = {
@@ -50,7 +71,7 @@ export function colliedesk(args: string[], options: CommandOptions = {}): Comman
     encoding: 'utf8', timeout: 300_000,
     env: {
       ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir,
-      APP_ORIGIN: options.origin ?? servers.main, DATABASE_URL: options.databaseURL ?? databaseURL, ...options.env,
+      APP_ORIGIN: options.origin ?? servers.main, DATABASE_URL: options.databaseURL ?? databaseFor(options.origin ?? servers.main), ...options.env,
     },
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
@@ -62,7 +83,7 @@ export function colliedeskAsync(args: string[], options: CommandOptions = {}): P
     const child = spawn(binary(options.tags), args, {
       env: {
         ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir,
-        APP_ORIGIN: options.origin ?? servers.main, DATABASE_URL: options.databaseURL ?? databaseURL, ...options.env,
+        APP_ORIGIN: options.origin ?? servers.main, DATABASE_URL: options.databaseURL ?? databaseFor(options.origin ?? servers.main), ...options.env,
       },
     });
     let stdout = '';
@@ -100,12 +121,47 @@ export function withDatabase(url: string, database: string): string {
   return parsed.toString();
 }
 
+// What a server reads from its environment; every other variable a test gives a server is a setting,
+// which lives in the server's database (collie config), as on a real install.
+const bootstrap = new Set(['APP_ORIGIN', 'DATABASE_URL', 'DATABASE_REQUEST_URL', 'OPERATOR_ORIGIN', 'LISTEN_ADDR', 'ATTACHMENTS_DIR',
+  'MAILBOX_TOKEN_KEYS', 'DISABLE_TELEMETRY', 'DO_NOT_TRACK']);
+
+function isBootstrap(name: string): boolean {
+  return bootstrap.has(name) || name.startsWith('COLLIEDESK_E2E_') || name.startsWith('GO') || !/^[A-Z][A-Z0-9_]*$/.test(name);
+}
+
+// settingsFile writes the settings among env as the .env lines `collie config import` reads, and returns
+// its path, or '' when env holds no setting.
+export function settingsFile(name: string, env: Record<string, string>): string {
+  const lines = Object.entries(env).filter(([key]) => !isBootstrap(key))
+    .map(([key, value]) => `${key}=${/^[\w./:@,|=+-]*$/.test(value) ? value : JSON.stringify(value)}`);
+  if (lines.length === 0) return '';
+  mkdirSync(join(scratchDir, 'config'), { recursive: true });
+  const path = join(scratchDir, 'config', `${name}.env`);
+  writeFileSync(path, `${lines.join('\n')}\n`, { mode: 0o600 });
+  return path;
+}
+
+// bootstrapEnv keeps only what a server reads from its environment.
+export function bootstrapEnv(env: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => isBootstrap(key)));
+}
+
 // startServer runs `collie serve` on its own port and resolves once it answers; tags builds it with seams
 // (e2e: the local stand-ins).
+// Its settings are imported into its database first (collie config import --replace), the way an operator
+// configures a server.
 export async function startServer(port: number, env: Record<string, string>, tags = ''): Promise<ChildProcess> {
+  const file = settingsFile(`server-${port}`, env);
+  if (file) {
+    const imported = spawnSync(binary(tags), ['config', 'import', '--replace', file], {
+      encoding: 'utf8', env: { ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir, ...bootstrapEnv(env) },
+    });
+    if (imported.status !== 0) throw new Error(`collie config import failed: ${imported.stderr}${imported.stdout}`);
+  }
   const child = spawn(binary(tags), ['serve', '--listen', `127.0.0.1:${port}`], {
     stdio: ['ignore', 'inherit', 'inherit'],
-    env: { ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir, ...env },
+    env: { ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir, ...bootstrapEnv(env) },
   });
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {

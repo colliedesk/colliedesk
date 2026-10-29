@@ -128,7 +128,7 @@ paths:
           description: Error code `rate_limited`. This client address already started 3 trials in the last 24 hours.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '503':
-          description: Error code `signup_unavailable`. Sign-up is off because SIGNUP_HASH_KEY or TRUSTED_PROXIES is missing on the server (logged at start).
+          description: Error code `signup_unavailable`. Sign-up is off because the server lacks its sign-up hash key or its trusted proxies (operator console → Security; logged at start).
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/auth/redeem:
     post:
@@ -315,6 +315,629 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/operator/auth/redeem:
+    post:
+      operationId: redeemOperatorLink
+      security: []
+      x-permission: public
+      description: >-
+        Uses a one-time operator link (`collie operator pair`, 15 minutes). The console calls it when the
+        operator presses Continue, never on page load, so a link scanner cannot spend it. Without an
+        authenticator required or set up it signs the operator in (`step: done`, a `colliedesk_operator`
+        cookie, `__Host-colliedesk_operator` on https); otherwise it returns a ticket for the code (`code`),
+        and the first time the key to add (`enroll`, with a QR code drawn by the server). 404
+        `operator_link_invalid`, 410 `operator_link_expired`, 409 `operator_link_used`, 423
+        `operator_locked` with `locked_until`, 429 after 5 tries a minute. A repeat with the same
+        Idempotency-Key is refused like any second use of the link (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Where the sign-in stands
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorSignInStep'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+        '429': {$ref: '#/components/responses/OperatorTooManyTries'}
+  /api/v1/operator/auth/totp:
+    post:
+      operationId: confirmOperatorCode
+      security: []
+      x-permission: public
+      description: >-
+        Checks the authenticator code of a sign-in ticket and signs the operator in (a cookie). A wrong code
+        answers 400 `operator_code_wrong` with `tries_left` and keeps the ticket; ten wrong codes lock sign-in
+        for 15 minutes (423 `operator_locked`). A repeat after success is refused like any second use of the
+        ticket (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket, code]
+              properties:
+                ticket: {type: string, minLength: 1, maxLength: 200}
+                code: {type: string, minLength: 1, maxLength: 12}
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorSignInStep'}}}
+        '400': {$ref: '#/components/responses/OperatorCodeWrong'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+        '429': {$ref: '#/components/responses/OperatorTooManyTries'}
+  /api/v1/operator/auth/me:
+    get:
+      operationId: getOperatorMe
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The operator of this session or operator token. A workspace session or agent token is refused (401).
+      responses:
+        '200':
+          description: Current operator
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorMe'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/auth/logout:
+    post:
+      operationId: operatorLogout
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: Ends this operator session (and its cookie) or this operator token. A repeat finds it ended (401).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '204': {description: Signed out}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/operator/tokens:
+    post:
+      operationId: createOperatorToken
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Creates an operator token (`cdop_…`) for an AI agent: it always reads, and holds the permissions
+        given; it expires after 30 days. It works on `/mcp/operator` and the operator routes only, never in a
+        workspace. Needs the operator's authenticator code (`reauth_code`; 400 `reauth_required` or
+        `reauth_code_invalid`, nothing saved); an operator without an authenticator passes within 15 minutes
+        of signing in, else 403 `reauth_needs_new_link`. An operator token's call is a request a person
+        approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: {type: string, minLength: 1, maxLength: 100}
+                permissions: {type: array, items: {$ref: '#/components/schemas/OperatorPermission'}}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500, description: 'Why an operator token asks for this, shown to the approver'}
+      responses:
+        '201':
+          description: The token, shown once
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorToken'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/operator/status:
+    get:
+      operationId: getOperatorStatus
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        The server at a glance: its release and newest migration, the configuration version each running
+        process runs and the one they should, what needs attention (settings left in the environment, a
+        refused version, an import a change waits for, the console sharing the app's address), and how many
+        operator requests wait.
+      responses:
+        '200':
+          description: Status
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorStatus'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/config:
+    get:
+      operationId: getOperatorConfig
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Every setting: its value (a secret only says whether it is set, when and by whom), its default, where
+        its value came from, how a change applies and what saving it asks for; and the bootstrap variables
+        of the environment, passwords masked. Names of environment variables appear only as data (`env_name`).
+      responses:
+        '200':
+          description: The configuration
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfig'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    patch:
+      operationId: changeOperatorConfig
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Saves a change as a new version, checked the way the server reads it at start; a running server
+        applies it within seconds. `base_version` is the version the change was made on (409 `config_changed`
+        when another was saved since). Secrets go in `secrets`, never in `set` (400 `secret_in_set`). The
+        server enforces what the console asks for: `reauth_code` for a secret or a key that needs it
+        (400 `reauth_required` / `reauth_code_invalid`), the secret an endpoint is bound to entered again
+        (400 `reenter_secret`, `error.fields` names it), and the phrase typed to confirm (400
+        `confirm_mismatch`, `error.guards` lists what the change does and asks). What a change asks depends on
+        what it does (turning billing on, not rotating its token); `POST /config/check` returns the same
+        `guards` first. A change of trusted proxies, cloud sign-in or the help center domain is saved as a
+        trial (`applies: trial`): unless confirmed before `trial_expires_at`, it reverts by itself; while it
+        runs every other save answers 409 `trial_pending`. Turning the authenticator off answers 400
+        `setting_not_changeable` (the CLI only); a change that does not build answers 422 `config_invalid`
+        with `error.fields` per key. Nothing is saved on a refusal. An operator token's call is a request a person approves (202); it may only name the
+        secrets it needs (`"secrets": {"smtp.password": null}`), never send one (400 `secret_in_request`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OperatorConfigChange'}
+      responses:
+        '200':
+          description: Saved
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/config/check:
+    post:
+      operationId: checkOperatorConfig
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask
+        (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address
+        through the relay of the change; `polar` asks Polar about the Team and Founding products with the
+        change's token; `jwks` fetches the cloud sign-in keys; `ai` sends one short request to the server AI
+        provider of the change (its first model, a few output tokens). A help center domain without a
+        wildcard DNS record is refused in `errors`. Nothing is saved. A live test sends the server's stored
+        secrets, so an operator token gets 403 `test_needs_a_person` for one, and a change that moves an
+        endpoint answers `test.ok: false` until the secret bound to it is typed again in `secrets`. A repeat with the same Idempotency-Key checks again (nothing is stored).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                set: {type: object, additionalProperties: {type: string}}
+                unset: {type: array, items: {type: string}}
+                secrets: {type: object, additionalProperties: {type: [string, 'null']}}
+                test: {type: string, enum: [smtp, polar, jwks, ai]}
+      responses:
+        '200':
+          description: The result of the checks
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigCheck'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/operator/config/versions:
+    get:
+      operationId: listOperatorConfigVersions
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The versions, newest first, each with what it changed from the one before (a secret only says it was replaced).
+      parameters:
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, running_version]
+                properties:
+                  running_version: {type: integer}
+                  items: {type: array, items: {$ref: '#/components/schemas/OperatorConfigVersion'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/config/versions/{id}/restore:
+    parameters: [{name: id, in: path, required: true, schema: {type: integer, minimum: 1}}]
+    post:
+      operationId: restoreOperatorConfigVersion
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Saves an older version again as the newest one (secrets copied sealed). Needs `reauth_code`.
+        `base_version` as for a change (409 `config_changed`). A version that does not build answers 422.
+        It passes the guards of what it changes from the version that runs: a phrase in `confirm` (400
+        `confirm_mismatch` with `error.guards`), and a trial when it changes trusted proxies, cloud sign-in or
+        the help center domain (`applies: trial`).
+        An operator token's call is a request a person approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base_version]
+              properties:
+                base_version: {type: integer}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+                confirm: {type: object, additionalProperties: {type: string}, description: 'Per key, the phrase typed to confirm'}
+      responses:
+        '201':
+          description: Restored as a new version
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '200':
+          description: The version an earlier request with the same Idempotency-Key saved
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/config/trial/confirm:
+    post:
+      operationId: confirmOperatorConfigTrial
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Keeps the trial change `version` (D12): it becomes an ordinary version. Needs `reauth_code`. A version
+        that is not the trial that runs answers 400 `no_trial`. An operator token's call is a request a person
+        approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: integer, minimum: 1}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '201':
+          description: Confirmed
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '200':
+          description: The answer of an earlier request with the same Idempotency-Key
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/config/trial/revert:
+    post:
+      operationId: revertOperatorConfigTrial
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Ends the trial change `version` now: the version before it is saved again as the newest one. Needs
+        `reauth_code`. A version that is not the trial that runs answers 400 `no_trial`. An operator token's
+        call is a request a person approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: integer, minimum: 1}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '201':
+          description: Reverted as a new version
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '200':
+          description: The answer of an earlier request with the same Idempotency-Key
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/billing/products:
+    get:
+      operationId: listOperatorProducts
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The Polar products this server sells or once sold, oldest first. A product is never removed nor changed, only taken off sale, so an old subscription always maps to its plan.
+      responses:
+        '200':
+          description: The products
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/OperatorProduct'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: addOperatorProduct
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Adds a Polar product. On sale, it takes the product of the same plan and period off sale. A product id
+        already listed answers 409. Needs `reauth_code`. An operator token's call is a request a person approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, plan, period]
+              properties:
+                product_id: {type: string, minLength: 1, maxLength: 200}
+                plan: {type: string, enum: [team, founding, solo, small, team25]}
+                period: {type: string, enum: [monthly, yearly, single]}
+                on_sale: {type: boolean, default: true}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '201':
+          description: Added
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorProduct'}}}
+        '200':
+          description: The product an earlier request with the same Idempotency-Key added
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorProduct'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/billing/products/{id}:
+    parameters: [{name: id, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 200}}]
+    patch:
+      operationId: setOperatorProductOnSale
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Puts a product on sale (taking the other of its plan and period off) or off sale; nothing else of a
+        product changes. Needs `reauth_code`. An operator token's call is a request a person approves (202).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [on_sale]
+              properties:
+                on_sale: {type: boolean}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '200':
+          description: The product
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorProduct'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/audit:
+    get:
+      operationId: listOperatorAudit
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: What changed the server's configuration and its operators, newest first; never a secret's value. `format=csv` answers the same as CSV.
+      parameters:
+        - {name: key, in: query, required: false, schema: {type: string, maxLength: 100}}
+        - {name: actor, in: query, required: false, schema: {type: string, maxLength: 200}}
+        - {name: since, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
+        - {name: format, in: query, required: false, schema: {type: string, enum: [json, csv], default: json}}
+      responses:
+        '200':
+          description: Audit log
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/OperatorAuditEntry'}}
+            text/csv: {schema: {type: string}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/requests:
+    get:
+      operationId: listOperatorRequests
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: Operator requests, newest first. An operator token sees only its own; an operator's session sees all.
+      responses:
+        '200':
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/OperatorRequest'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/requests/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getOperatorRequest
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: One operator request (another token's answers 404).
+      responses:
+        '200':
+          description: The request
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorRequest'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/operator/requests/{id}/cancel:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: cancelOperatorRequest
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: Withdraws a pending request. The token that made it, or an operator's session, may (another token gets 404); a decided request answers 409. A repeat finds it cancelled (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: The cancelled request
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorRequest'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/operator/operators:
+    get:
+      operationId: listOperators
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The operators and their sessions and tokens; never a token or a link.
+      responses:
+        '200':
+          description: Operators
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operators, sessions]
+                properties:
+                  operators: {type: array, items: {$ref: '#/components/schemas/Operator'}}
+                  sessions: {type: array, items: {$ref: '#/components/schemas/OperatorSession'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: inviteOperator
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Invites an operator (or lets a revoked one in again): a one-time sign-in link, shown once, 15 minutes.
+        Needs `reauth_code`. An operator token's call is a request a person approves (202); the link is shown
+        only to the approver.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, minLength: 3, maxLength: 320}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '201':
+          description: The link, shown once
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email, link, expires_at]
+                properties:
+                  email: {type: string}
+                  link: {type: string}
+                  expires_at: {type: string, format: date-time}
+        '200':
+          description: The invite an earlier request with the same Idempotency-Key made, without its link
+          content: {application/json: {schema: {type: object, required: [email], properties: {email: {type: string}, expires_at: {type: string, format: date-time}}}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/operators/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    delete:
+      operationId: revokeOperator
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Ends an operator's access: every session and token stops at once. Inviting them again lets them back
+        in. Needs `reauth_code` (query or `X-Colliedesk-Reauth` header). An operator token's call is a request (202).
+      parameters:
+        - {name: X-Colliedesk-Reauth, in: header, required: false, schema: {type: string, maxLength: 12}}
+      responses:
+        '204': {description: Revoked}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/sessions/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    delete:
+      operationId: revokeOperatorSession
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Ends one operator session or token. Ending your own browser session needs no code; any other needs
+        `X-Colliedesk-Reauth`. An operator token's call is a request (202).
+      parameters:
+        - {name: X-Colliedesk-Reauth, in: header, required: false, schema: {type: string, maxLength: 12}}
+      responses:
+        '204': {description: Ended}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
   /api/v1/conversations:
     get:
       operationId: listConversations
@@ -3838,6 +4461,8 @@ paths:
     post:
       operationId: approveAgentRequest
       x-permission: authenticated
+      parameters:
+        - {$ref: '#/components/parameters/OperatorRealm'}
       description: >-
         People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving
         person: their role, the workspace lock and every check of the route apply. The answer is 200 with
@@ -3854,6 +4479,13 @@ paths:
         `seen_reply_number` is the newest reply the approving person had on screen: when someone replied
         since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so
         it can be read again and approved with the new number.
+
+        With `X-Colliedesk-Realm: operator` the route decides an operator request instead, for an operator's
+        browser session only (no workspace credential, no operator token: 401 / 403 `person_only`): it needs
+        `reauth_code`, and `secrets` carries the secrets the request names; they are used for this one call
+        and never stored, and `confirm` carries the phrases a configuration change asks to type (400
+        `confirm_mismatch` names them in `error.guards`, and the request keeps waiting). An agent request's id
+        answers 404 there, and an operator request's id answers 404 without the header.
       requestBody:
         required: false
         content:
@@ -3869,6 +4501,9 @@ paths:
                   items: {type: string}
                   description: The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise).
                 seen_reply_number: {type: integer, minimum: 0, description: 'Reply drafts only: the newest reply number on the approver''s screen.'}
+                reauth_code: {type: string, maxLength: 12, description: 'Operator realm: the approver''s authenticator code'}
+                secrets: {type: object, additionalProperties: {type: string}, description: 'Operator realm: the secrets the request names, used once'}
+                confirm: {type: object, additionalProperties: {type: string}, description: 'Operator realm: the phrases a configuration change asks the approver to type; a token never fills them'}
       responses:
         '200':
           description: The decided request and the answer of its call
@@ -3878,7 +4513,7 @@ paths:
                 type: object
                 required: [request, result]
                 properties:
-                  request: {$ref: '#/components/schemas/AgentRequest'}
+                  request: {oneOf: [{$ref: '#/components/schemas/AgentRequest'}, {$ref: '#/components/schemas/OperatorRequest'}]}
                   result: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: The JSON answer of the approved call; null when it had none or was too large.}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -3891,7 +4526,11 @@ paths:
     post:
       operationId: rejectAgentRequest
       x-permission: authenticated
-      description: People only. Refuses the request (a discarded reply draft); nothing runs, and it can never run later.
+      description: >-
+        People only. Refuses the request (a discarded reply draft); nothing runs, and it can never run later.
+        With `X-Colliedesk-Realm: operator` it refuses an operator request (an operator's session, with `reauth_code`).
+      parameters:
+        - {$ref: '#/components/parameters/OperatorRealm'}
       requestBody:
         required: false
         content:
@@ -3901,10 +4540,11 @@ paths:
               additionalProperties: false
               properties:
                 reason: {type: string, maxLength: 1000, description: Shown to the agent that asked}
+                reauth_code: {type: string, maxLength: 12, description: 'Operator realm: the approver''s authenticator code'}
       responses:
         '200':
           description: The rejected request
-          content: {application/json: {schema: {$ref: '#/components/schemas/AgentRequest'}}}
+          content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/AgentRequest'}, {$ref: '#/components/schemas/OperatorRequest'}]}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
@@ -5987,6 +6627,7 @@ components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
     sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
+    operatorCookie: {type: apiKey, in: cookie, name: colliedesk_operator, description: '__Host-colliedesk_operator when the console is served over https'}
     inboundSecret: {type: apiKey, in: header, name: X-Colliedesk-Inbound-Secret}
     polarWebhook: {type: apiKey, in: header, name: webhook-signature}
     resendWebhook: {type: apiKey, in: header, name: svix-signature}
@@ -6007,6 +6648,12 @@ components:
         is accepted (202) and stores nothing new; the same key with other words is a new submission. Without
         a key every request is a submission. A malformed key is 400. Repeats still count against the limits.
       schema: {type: string, minLength: 1, maxLength: 200}
+    OperatorRealm:
+      name: X-Colliedesk-Realm
+      in: header
+      required: false
+      description: '`operator`: the request is an operator request, decided with an operator''s session (the operator console sends it).'
+      schema: {type: string, enum: [operator]}
     CreateIdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -6106,6 +6753,31 @@ components:
       description: The workspace ran 10 provider checks in the last minute; try again shortly.
       headers:
         Retry-After: {schema: {type: integer}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Gone:
+      description: The link or ticket expired
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    OperatorLocked:
+      description: Operator sign-in is locked after ten wrong codes; `error.locked_until` says until when
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorLockedError'}}}
+    OperatorTooManyTries:
+      description: More than 5 tries a minute
+      headers:
+        Retry-After: {schema: {type: integer}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    OperatorCodeWrong:
+      description: The code did not match (`operator_code_wrong`, `error.tries_left`) or the body is invalid
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorCodeError'}}}
+    OperatorRequestAccepted:
+      description: >-
+        An operator token asked for a change: nothing happened yet. It waits as an operator request a
+        person approves in the console (with their authenticator code); it expires after seven days.
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorRequestAccepted'}}}
+    OperatorConfigRefused:
+      description: >-
+        Nothing was saved. `error.code` says why (`secret_in_set`, `reauth_required`, `reauth_code_invalid`,
+        `reenter_secret`, `confirm_mismatch`, `setting_not_changeable`, `unknown_setting`, `config_invalid`,
+        `secret_in_request`, `no_trial`); `error.fields` names the settings, never a value.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Unauthorized: {$ref: '#/components/responses/Error401'}
     Forbidden: {$ref: '#/components/responses/Error403'}
@@ -6427,13 +7099,13 @@ components:
           type: object
           required: [available, missing_settings]
           properties:
-            available: {type: boolean, description: 'The operator set up the server''s GitHub App (GITHUB_APP_*), so Autofix can be used; the web app hides it otherwise.'}
+            available: {type: boolean, description: 'The operator set up the server''s GitHub App (operator console → Mailboxes & GitHub, github.*), so Autofix can be used; the web app hides it otherwise.'}
             missing_settings: {type: array, items: {type: string}, description: The settings the operator still needs; empty when available.}
         ai:
           type: object
           required: [server_provider]
           properties:
-            server_provider: {type: boolean, description: True when the operator configured an AI provider for every workspace (AI_SERVER_*).}
+            server_provider: {type: boolean, description: 'True when the operator configured an AI provider for every workspace (operator console → AI: ai.server.*).'}
         product_analytics:
           type: object
           description: >
@@ -6879,7 +7551,7 @@ components:
       required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate]
       properties:
         server:
-          description: The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none.
+          description: The server's provider, set by the operator in the operator console → AI (ai.server.*); null when the server has none.
           anyOf:
             - type: 'null'
             - type: object
@@ -8514,7 +9186,7 @@ components:
             channel_not_connected (no channel of the type that carries the reply was connected, a web form
             without email; retry once it is), channel_removed, no_recipient (the customer has no address on
             the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused
-            this server's own app credentials; the operator must update MICROSOFT_OAUTH_CLIENT_SECRET, and
+            this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and
             reconnecting does not help).
             Null for most email failures, whose words are in last_error.
         attempts: {type: integer, minimum: 0}
@@ -8746,7 +9418,7 @@ components:
           type: boolean
           description: >-
             True while a reply of this channel waits because Microsoft refused this server's own app credentials
-            (MICROSOFT_OAUTH_CLIENT_SECRET wrong or expired). The connection is fine; the operator must update the
+            (microsoft.client_secret wrong or expired). The connection is fine; the operator must update the
             secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is
             false): missing_settings names what to set.
         connection:
@@ -9094,6 +9766,326 @@ components:
           type: array
           maxItems: 30
           items: {type: string, maxLength: 60}
+    OperatorPermission:
+      type: string
+      enum: [operator:read, operator_requests:cancel, operator_config:write, operator:manage]
+    OperatorSignInStep:
+      type: object
+      required: [step, email]
+      properties:
+        step: {type: string, enum: [code, enroll, done]}
+        email: {type: string}
+        ticket: {type: string, description: 'For POST /api/v1/operator/auth/totp, 10 minutes, once'}
+        key: {type: string, description: 'enroll: the authenticator key as text (base32)'}
+        otpauth_url: {type: string, description: 'enroll: the key as an otpauth:// URL'}
+        qr_svg: {type: [string, 'null'], description: 'enroll: the URL as a QR code, an SVG image'}
+        totp_required: {type: boolean, description: 'done: whether this server requires an authenticator'}
+    OperatorLockedError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, locked_until]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            locked_until: {type: string, format: date-time}
+    OperatorCodeError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            tries_left: {type: integer}
+            fields: {type: object, additionalProperties: {type: string}}
+    OperatorSession:
+      type: object
+      required: [id, operator_id, email, kind, label, permissions, created_at, last_seen_at, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        operator_id: {type: string, format: uuid}
+        email: {type: string}
+        kind: {type: string, enum: [cookie, token]}
+        label: {type: string}
+        permissions: {type: array, items: {$ref: '#/components/schemas/OperatorPermission'}}
+        created_at: {type: string, format: date-time}
+        last_seen_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        revoked_at: {type: [string, 'null'], format: date-time}
+    OperatorMe:
+      type: object
+      required: [operator, session, console]
+      properties:
+        operator:
+          type: object
+          required: [id, email, totp_enabled]
+          properties:
+            id: {type: string, format: uuid}
+            email: {type: string}
+            totp_enabled: {type: boolean}
+        session: {$ref: '#/components/schemas/OperatorSession'}
+        console:
+          type: object
+          required: [origin, path_mode]
+          properties:
+            origin: {type: string, description: 'Where the console is served: OPERATOR_ORIGIN, or APP_ORIGIN/operator'}
+            path_mode: {type: boolean, description: 'True when the console shares the workspace app''s address'}
+    OperatorToken:
+      type: object
+      required: [token, session]
+      properties:
+        token: {type: string, description: 'Starts with cdop_; shown once'}
+        session: {$ref: '#/components/schemas/OperatorSession'}
+    OperatorRequestAccepted:
+      type: object
+      required: [request_id, status, summary, expires_at, message]
+      properties:
+        request_id: {type: string, format: uuid}
+        status: {type: string, enum: [pending]}
+        summary: {type: string}
+        expires_at: {type: string, format: date-time}
+        message: {type: string}
+    OperatorWarning:
+      type: object
+      required: [code, severity]
+      properties:
+        code: {type: string, enum: [env_differs, env_same, env_dead, no_key_ring, secret_stale_key, version_refused, waiting_for_import, path_mode, origin_invalid, requests_waiting]}
+        severity: {type: string, enum: [error, warning]}
+        env_name: {type: string, description: 'The environment variable it is about, as data (never written in the web app)'}
+        key: {type: string}
+        version: {type: integer}
+        detail: {type: string}
+    OperatorProcess:
+      type: object
+      required: [instance_id, hostname, binary_version, running_version, started_at, heartbeat_at]
+      properties:
+        instance_id: {type: string}
+        hostname: {type: string}
+        binary_version: {type: string}
+        running_version: {type: integer}
+        started_at: {type: string, format: date-time}
+        heartbeat_at: {type: string, format: date-time}
+        last_error: {type: string}
+        waiting_for: {type: string}
+    OperatorStatus:
+      type: object
+      required: [binary_version, migration, desired_version, processes, warnings, requests_waiting, console]
+      properties:
+        binary_version: {type: string}
+        migration: {type: string, description: The newest migration applied}
+        desired_version: {type: integer, description: The configuration version every process should run; 0 before the first}
+        last_good_version: {type: integer}
+        processes: {type: array, items: {$ref: '#/components/schemas/OperatorProcess'}}
+        warnings: {type: array, items: {$ref: '#/components/schemas/OperatorWarning'}}
+        requests_waiting: {type: integer}
+        trial:
+          description: 'A trial change in progress (D12); null when none'
+          oneOf: [{$ref: '#/components/schemas/OperatorTrial'}, {type: 'null'}]
+        console:
+          type: object
+          required: [origin, path_mode]
+          properties:
+            origin: {type: string}
+            path_mode: {type: boolean}
+    OperatorSetting:
+      type: object
+      required: [key, group, secret, hot, guards, set, source, editable]
+      properties:
+        key: {type: string}
+        env_name: {type: string, description: 'The variable it replaced, as data'}
+        group: {type: string, enum: [ai, email, mailboxes, billing, signups, security, limits, operator]}
+        secret: {type: boolean}
+        hot: {type: boolean, description: 'Applies at once; otherwise in a few seconds'}
+        default: {type: string}
+        value: {type: [string, 'null'], description: 'The value; null for a secret and when not set'}
+        set: {type: boolean}
+        source: {type: string, enum: [default, env-import, console, cli, apply-file, restore, trial-auto-revert, request, environment]}
+        set_by: {type: string}
+        set_at: {type: string, format: date-time}
+        version: {type: integer}
+        key_id: {type: string, description: 'A secret: the key of MAILBOX_TOKEN_KEYS it is sealed with'}
+        locked: {type: string, enum: ['', no_key_ring, stale_key, env_off, cloud], description: 'Why the field cannot be changed here'}
+        guards: {type: array, items: {type: string, enum: [reauth, reenter_secret, preview, type_to_confirm, trial]}}
+        reenter: {type: string, description: 'The secret reenter_secret asks for'}
+        editable: {type: boolean, description: 'False for a setting this console does not change yet'}
+    OperatorConfig:
+      type: object
+      required: [version, settings, bootstrap, key_ring]
+      properties:
+        version: {type: integer}
+        settings: {type: array, items: {$ref: '#/components/schemas/OperatorSetting'}}
+        bootstrap:
+          type: array
+          items:
+            type: object
+            required: [env_name, set]
+            properties:
+              env_name: {type: string}
+              set: {type: boolean}
+              value: {type: [string, 'null'], description: 'Masked: a database URL shows its host and database, never its password; MAILBOX_TOKEN_KEYS shows its key ids'}
+        key_ring:
+          type: object
+          required: [configured, key_ids]
+          properties:
+            configured: {type: boolean}
+            key_ids: {type: array, items: {type: string}}
+            current: {type: string}
+        telemetry_env_off: {type: boolean}
+        operator_email: {type: string}
+    OperatorConfigChange:
+      type: object
+      required: [base_version]
+      properties:
+        base_version: {type: integer, minimum: 0}
+        set: {type: object, additionalProperties: {type: string}}
+        unset: {type: array, items: {type: string}}
+        secrets: {type: object, additionalProperties: {type: [string, 'null']}, description: 'Secrets to save; a token names them with null'}
+        confirm: {type: object, additionalProperties: {type: string}, description: 'Per key, the phrase typed to confirm'}
+        reauth_code: {type: string, maxLength: 12}
+        note: {type: string, maxLength: 500}
+    OperatorConfigSaved:
+      type: object
+      required: [version, applies]
+      properties:
+        version: {type: integer}
+        applies: {type: string, enum: [at_once, in_seconds, trial]}
+        changed: {type: array, items: {type: string}}
+        trial_expires_at: {type: string, format: date-time, description: 'A trial: when it reverts by itself unless confirmed'}
+    OperatorConfigCheck:
+      type: object
+      required: [ok, errors]
+      properties:
+        ok: {type: boolean}
+        errors: {type: object, additionalProperties: {type: string}}
+        test:
+          type: object
+          required: [name, ok, message]
+          properties:
+            name: {type: string}
+            ok: {type: boolean}
+            message: {type: string}
+        guards: {type: array, items: {$ref: '#/components/schemas/OperatorConfigGuard'}}
+    OperatorConfigGuard:
+      type: object
+      required: [key]
+      description: What a change of a key does and asks before it is saved; never a secret's value.
+      properties:
+        key: {type: string}
+        preview: {type: string, description: 'What the change does, with numbers'}
+        phrase: {type: string, description: 'What to type in `confirm[key]`'}
+        trial: {type: boolean, description: 'The change is tried and reverts by itself unless confirmed (D12)'}
+        refused: {type: string, description: Why the change cannot be saved as it is}
+    OperatorTrial:
+      type: object
+      required: [version, parent_version, started_at, expires_at, started_by, keys, evidence]
+      properties:
+        version: {type: integer}
+        parent_version: {type: integer}
+        started_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        started_by: {type: string}
+        keys: {type: array, items: {type: string}}
+        evidence:
+          type: object
+          required: [your_ip, client_ips, cloud_sign_ins_ok, cloud_sign_ins_refused]
+          description: What this process saw since the trial started, to judge it before confirming.
+          properties:
+            your_ip: {type: string, description: This request's client address under the trial's proxies}
+            client_ips: {type: integer, description: Distinct client addresses seen; only one is a sign the proxies are wrong}
+            cloud_sign_ins_ok: {type: integer}
+            cloud_sign_ins_refused: {type: integer}
+            help_center:
+              type: object
+              required: [ok]
+              description: A help center domain on trial; one open help center fetched under it, as a visitor would
+              properties:
+                url: {type: string}
+                status: {type: integer}
+                ok: {type: boolean}
+                message: {type: string}
+    OperatorProduct:
+      type: object
+      required: [product_id, plan, period, on_sale]
+      properties:
+        product_id: {type: string}
+        plan: {type: string, enum: [team, founding, solo, small, team25]}
+        period: {type: string, enum: [monthly, yearly, single]}
+        on_sale: {type: boolean}
+    OperatorConfigChangeItem:
+      type: object
+      required: [key, secret]
+      properties:
+        key: {type: string}
+        secret: {type: boolean}
+        before: {type: [string, 'null']}
+        after: {type: [string, 'null']}
+    OperatorConfigVersion:
+      type: object
+      required: [id, created_at, created_by, source, note, status, changes]
+      properties:
+        id: {type: integer}
+        created_at: {type: string, format: date-time}
+        created_by: {type: string}
+        source: {type: string}
+        parent_id: {type: [integer, 'null']}
+        note: {type: string}
+        status: {type: string, enum: [saved, trial, confirmed, reverted, rejected]}
+        rejected_reason: {type: string}
+        changes: {type: array, items: {$ref: '#/components/schemas/OperatorConfigChangeItem'}}
+    OperatorAuditEntry:
+      type: object
+      required: [id, at, actor_kind, actor, action, keys, detail]
+      properties:
+        id: {type: integer}
+        at: {type: string, format: date-time}
+        actor_kind: {type: string, enum: [operator, cli, server, token]}
+        actor: {type: string}
+        action: {type: string}
+        version_id: {type: [integer, 'null']}
+        keys: {type: array, items: {type: string}}
+        detail: {type: object, additionalProperties: true}
+        ip: {type: string}
+    OperatorRequest:
+      type: object
+      required: [id, session_id, token_label, email, method, route, path, summary, note, needs_secrets, status, created_at, expires_at]
+      properties:
+        guards: {type: array, items: {$ref: '#/components/schemas/OperatorConfigGuard'}, description: 'A configuration change waiting for a person: what it does and the phrases to type at approval'}
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        token_label: {type: string}
+        email: {type: string}
+        method: {type: string}
+        route: {type: string}
+        path: {type: string}
+        body: {type: [object, 'null'], additionalProperties: true}
+        summary: {type: string}
+        note: {type: string}
+        needs_secrets: {type: array, items: {type: string}}
+        status: {type: string, enum: [pending, approved, rejected, expired, failed, cancelled]}
+        decided_by: {type: string}
+        decided_at: {type: [string, 'null'], format: date-time}
+        result_status: {type: [integer, 'null']}
+        result: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+    Operator:
+      type: object
+      required: [id, email, created_at, created_by, link_unused]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        created_at: {type: string, format: date-time}
+        created_by: {type: string}
+        revoked_at: {type: [string, 'null'], format: date-time}
+        totp_enabled_at: {type: [string, 'null'], format: date-time}
+        link_unused: {type: boolean}
     Error:
       type: object
       required: [error]

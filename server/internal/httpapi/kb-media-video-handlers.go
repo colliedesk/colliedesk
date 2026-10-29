@@ -63,8 +63,8 @@ func (g *kbUploadGate) leave(workspaceID, id string) {
 }
 
 func (a *API) kbVideoMaxBytes() int64 {
-	if a.config.KBVideoMaxBytes > 0 {
-		return a.config.KBVideoMaxBytes
+	if size := a.hot().KBVideoMaxBytes; size > 0 {
+		return size
 	}
 	return domain.MaxKBVideoBytes
 }

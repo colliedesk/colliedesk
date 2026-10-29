@@ -15,9 +15,11 @@ import (
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/billingreconcile"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -107,12 +109,10 @@ type reconcileEnv struct {
 func newReconcileEnv(t *testing.T, name string, pages ...[]map[string]any) *reconcileEnv {
 	t.Helper()
 	env := &reconcileEnv{trialEnv: newTrialEnv(t, name), polar: newFakePolar(t, pages...), mailer: &recordingMailer{}}
-	for key, value := range map[string]string{"POLAR_ACCESS_TOKEN": "polar-test-token", "POLAR_WEBHOOK_SECRET": "whsec_test",
+	configure(t, env.databaseURL, map[string]string{"POLAR_ACCESS_TOKEN": "polar-test-token", "POLAR_WEBHOOK_SECRET": "whsec_test",
 		"POLAR_PRODUCT_TEAM_MONTHLY": "prod_team_m", "POLAR_PRODUCT_TEAM_YEARLY": "prod_team_y", "POLAR_PRODUCT_FOUNDING": "prod_founding",
 		"POLAR_API_URL": env.polar.server.URL, "SMTP_HOST": "smtp.invalid", "MAIL_FROM_DOMAIN": "mail.example.com",
-		"BILLING_ALERT_EMAIL": "ops@example.com"} {
-		t.Setenv(key, value)
-	}
+		"BILLING_ALERT_EMAIL": "ops@example.com"})
 	previousMailer := reconcileMailer
 	reconcileMailer = func(email.SMTPConfig) alertMailer { return env.mailer }
 	t.Cleanup(func() { reconcileMailer = previousMailer })
@@ -318,7 +318,7 @@ func TestReconcileWithoutAlertConfigurationStillAppliesAndWarnsOnStderr(t *testi
 	env := newReconcileEnv(t, "No Alert")
 	env.seed("sub_n", "incomplete", "2026-10-16T09:00:00Z")
 	env.polar.pages = [][]map[string]any{{polarSub("sub_n", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z", nil)}}
-	t.Setenv("BILLING_ALERT_EMAIL", "")
+	configureUnset(t, env.databaseURL, "billing.alert_email")
 	var warned bytes.Buffer
 	previous := stderr
 	stderr = &warned
@@ -327,8 +327,8 @@ func TestReconcileWithoutAlertConfigurationStillAppliesAndWarnsOnStderr(t *testi
 	if got := env.billing(); got.Status != "active" {
 		t.Fatalf("status %q, want active", got.Status)
 	}
-	if !strings.Contains(warned.String(), "BILLING_ALERT_EMAIL") || len(env.mails()) != 0 {
-		t.Fatalf("want a stderr warning naming BILLING_ALERT_EMAIL and no mail: stderr=%q mails=%d", warned.String(), len(env.mails()))
+	if !strings.Contains(warned.String(), "billing.alert_email") || len(env.mails()) != 0 {
+		t.Fatalf("want a stderr warning naming billing.alert_email and no mail: stderr=%q mails=%d", warned.String(), len(env.mails()))
 	}
 }
 
@@ -359,9 +359,14 @@ func TestReconcileNeedsBillingAndRejectsBadArguments(t *testing.T) {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	for _, key := range []string{"POLAR_ACCESS_TOKEN", "POLAR_WEBHOOK_SECRET", "POLAR_PRODUCT_TEAM_MONTHLY", "POLAR_PRODUCT_TEAM_YEARLY", "POLAR_PRODUCT_FOUNDING", "POLAR_API_URL"} {
-		t.Setenv(key, "")
+	// Taking every product off sale and removing the Polar settings turns billing off.
+	if err := database.New(env.pool).Privileged(context.Background(), database.PrivilegeServerConfig, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), `UPDATE polar_products SET on_sale=false`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
 	}
+	configureUnset(t, env.databaseURL, "polar.access_token", "polar.webhook_secret", "polar.api_url")
 	if _, err := env.run("billing", "reconcile"); err == nil || !strings.Contains(err.Error(), "billing is not configured") {
 		t.Fatalf("want billing is not configured, got %v", err)
 	}
@@ -399,12 +404,12 @@ func TestReconcileRequireAlertFailsWithoutAlertConfigurationEvenWhenInSync(t *te
 	if _, err := env.run("billing", "reconcile", "--require-alert"); err != nil {
 		t.Fatalf("configured alert, in sync: %v", err)
 	}
-	t.Setenv("BILLING_ALERT_EMAIL", "")
+	configureUnset(t, env.databaseURL, "billing.alert_email")
 	if _, err := env.run("billing", "reconcile"); err != nil {
 		t.Fatalf("default keeps self-hosters working: %v", err)
 	}
-	if _, err := env.run("billing", "reconcile", "--require-alert"); err == nil || !strings.Contains(err.Error(), "BILLING_ALERT_EMAIL") {
-		t.Fatalf("want an error naming BILLING_ALERT_EMAIL, got %v", err)
+	if _, err := env.run("billing", "reconcile", "--require-alert"); err == nil || !strings.Contains(err.Error(), "billing.alert_email") {
+		t.Fatalf("want an error naming billing.alert_email, got %v", err)
 	}
 }
 
