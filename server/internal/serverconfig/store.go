@@ -752,3 +752,81 @@ func newSignupKey() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
+
+// Process is one running `collie serve` as server_processes records it.
+type Process struct {
+	InstanceID     string    `json:"instance_id"`
+	Hostname       string    `json:"hostname"`
+	BinaryVersion  string    `json:"binary_version"`
+	RunningVersion int64     `json:"running_version"`
+	StartedAt      time.Time `json:"started_at"`
+	HeartbeatAt    time.Time `json:"heartbeat_at"`
+	LastError      string    `json:"last_error,omitempty"`
+	WaitingFor     string    `json:"waiting_for,omitempty"`
+}
+
+// processExpiry is how long a process without a heartbeat stays listed.
+const processExpiry = 10 * time.Minute
+
+// Heartbeat records what this process runs, and forgets the processes silent for 10 minutes.
+func (s *Store) Heartbeat(ctx context.Context, process Process) error {
+	return s.privileged(ctx, func(tx pgx.Tx) error {
+		var running *int64
+		if process.RunningVersion != 0 {
+			running = &process.RunningVersion
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO server_processes(instance_id, hostname, binary_version, running_version, started_at, heartbeat_at, last_error, waiting_for)
+			VALUES($1,$2,$3,$4,$5,now(),nullif($6,''),nullif($7,''))
+			ON CONFLICT (instance_id) DO UPDATE SET running_version=excluded.running_version, heartbeat_at=now(),
+				last_error=excluded.last_error, waiting_for=excluded.waiting_for`,
+			process.InstanceID, process.Hostname, process.BinaryVersion, running, process.StartedAt, truncate(process.LastError, 2000), truncate(process.WaitingFor, 500)); err != nil {
+			return fmt.Errorf("record this process: %w", err)
+		}
+		_, err := tx.Exec(ctx, `DELETE FROM server_processes WHERE heartbeat_at < now() - $1::interval`, fmt.Sprintf("%d seconds", int(processExpiry.Seconds())))
+		return err
+	})
+}
+
+// Leave removes this process from the list at a graceful stop.
+func (s *Store) Leave(ctx context.Context, instanceID string) error {
+	return s.privileged(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `DELETE FROM server_processes WHERE instance_id=$1`, instanceID)
+		return err
+	})
+}
+
+// Processes lists the processes with a heartbeat in the last 10 minutes.
+func (s *Store) Processes(ctx context.Context) ([]Process, error) {
+	var processes []Process
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT instance_id, hostname, binary_version, coalesce(running_version,0), started_at, heartbeat_at, coalesce(last_error,''), coalesce(waiting_for,'')
+			FROM server_processes ORDER BY started_at, instance_id`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var process Process
+			if err := rows.Scan(&process.InstanceID, &process.Hostname, &process.BinaryVersion, &process.RunningVersion, &process.StartedAt, &process.HeartbeatAt, &process.LastError, &process.WaitingFor); err != nil {
+				return err
+			}
+			processes = append(processes, process)
+		}
+		return rows.Err()
+	})
+	return processes, err
+}
+
+// Listen wakes notify whenever the configuration or the products change (pg_notify colliedesk_config).
+func (s *Store) Listen(ctx context.Context, notify chan<- struct{}) error {
+	return s.db.Listen(ctx, "colliedesk_config", notify)
+}
+
+// Fingerprint names the polar_products rows, so a poll sees a product change that made no version.
+func Fingerprint(products []ProductRow) string {
+	var text strings.Builder
+	for _, row := range products {
+		fmt.Fprintf(&text, "%s/%s/%s/%v;", row.ProductID, row.Plan, row.Period, row.OnSale)
+	}
+	return text.String()
+}

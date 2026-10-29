@@ -222,11 +222,11 @@ func billingConfig() (polar.Config, error) {
 // startConfig imports what the environment still holds, then loads the version to run. It never stops the
 // server over its configuration: a version that does not build is refused (recorded, logged) and the last
 // one that ran is used, else every default (docs/internals/operator-console.md › Start).
-func startConfig(ctx context.Context, store *serverconfig.Store, logger *slog.Logger) (builtConfig, error) {
+func startConfig(ctx context.Context, store *serverconfig.Store, logger *slog.Logger) (builtConfig, serverconfig.Loaded, error) {
 	by := serverconfig.Actor{Kind: "server", Name: "serve " + version + " (env)"}
 	imported, err := store.ImportEnv(ctx, os.Getenv, importGroupCheck, by, serverconfig.ImportOptions{Hosted: func(snap serverconfig.Snapshot) bool { return hostedCloud(snap.Getenv) }})
 	if err != nil {
-		return builtConfig{}, fmt.Errorf("import settings from the environment: %w", err)
+		return builtConfig{}, serverconfig.Loaded{}, fmt.Errorf("import settings from the environment: %w", err)
 	}
 	for _, group := range imported.Imported {
 		logger.Info("imported settings from the environment into the database", "group", group)
@@ -242,7 +242,7 @@ func startConfig(ctx context.Context, store *serverconfig.Store, logger *slog.Lo
 	}
 	loaded, err := store.Current(ctx)
 	if err != nil {
-		return builtConfig{}, err
+		return builtConfig{}, serverconfig.Loaded{}, err
 	}
 	if len(loaded.Unopened) > 0 {
 		logger.Error("secrets are sealed with a key MAILBOX_TOKEN_KEYS no longer has: they read as unset; set them again", "keys", strings.Join(loaded.Unopened, ","))
@@ -263,28 +263,28 @@ func startConfig(ctx context.Context, store *serverconfig.Store, logger *slog.Lo
 	built, buildErr := checkSnapshot(loaded.Snapshot)
 	if buildErr == nil {
 		settings = loaded.Getenv
-		return built, store.MarkGood(ctx, loaded.Version)
+		return built, loaded, store.MarkGood(ctx, loaded.Version)
 	}
 	logger.Error("the configuration does not make a valid setting; running the last one that did", "version", loaded.Version, "error", buildErr)
 	if err := store.Reject(ctx, loaded.Version, buildErr.Error(), by); err != nil {
-		return builtConfig{}, err
+		return builtConfig{}, serverconfig.Loaded{}, err
 	}
 	if good := loaded.State.LastGood; good != 0 && good != loaded.Version {
 		previous, err := store.Load(ctx, good)
 		if err != nil {
-			return builtConfig{}, err
+			return builtConfig{}, serverconfig.Loaded{}, err
 		}
 		if built, err := checkSnapshot(previous.Snapshot); err == nil {
 			settings = previous.Getenv
-			return built, nil
+			return built, previous, nil
 		}
 	}
 	defaults, err := store.Load(ctx, 0)
 	if err != nil {
-		return builtConfig{}, err
+		return builtConfig{}, serverconfig.Loaded{}, err
 	}
 	logger.Error("no earlier configuration runs either; running with every default")
 	settings = defaults.Getenv
 	built, err = checkSnapshot(defaults.Snapshot)
-	return built, err
+	return built, defaults, err
 }

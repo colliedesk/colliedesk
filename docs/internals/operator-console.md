@@ -43,6 +43,34 @@ usage report off.
 - **The server never refuses to start over its configuration.** A version that does not build is marked
   `rejected` (once, with an audit line) and the last good one runs, else every default.
 
+## Re-serve
+
+`collie serve` is a process (`cmd/collie/generation.go` `process`: pools, attachment store, the in-app
+import keys, one Cursor client, `httpapi.Carry`) running one generation at a time (`generation`: the API
+and every worker built from one version). The `http.Server` and its listener never change; its handler is
+a `swapHandler` (atomic pointer). `reloader` reads `server_config_state.desired_version` every 5 seconds
+and on `LISTEN colliedesk_config`:
+
+1. Same version and same products fingerprint: heartbeat only. A product change makes no version, so the
+   poll compares `Fingerprint(products)` too.
+2. The new version does not build: `rejected` (once), `last_error` on the process, the generation keeps
+   running.
+3. Only `Hot` keys changed: `httpapi.Hot.Store` and done (the API reads them through `API.hot()`).
+4. The generation runs an in-app import (`importjobs.Worker.Running`): only the hot settings apply,
+   `waiting_for` says why, and the next poll tries again (a red log after 6 hours). Stopping the
+   generation would cancel the import.
+5. Otherwise: build the new generation (starts nothing), stop the old one's workers (30 seconds at most),
+   start the new ones, swap the handler, `config.apply` in the audit log.
+
+`httpapi.Carry` keeps what a rebuilt API must not reset: every rate limiter, the export limiter and links,
+the alert dedupe, the video upload gate, the Founding state, and the WaitGroup of GitHub sends (shutdown
+waits for every generation's). Config-independent loops (daily sweep, AI retrieval, the image cache sweep,
+the reloader) run at process level (`process.Go`); `TestServeStartsWorkersOnlyThroughAGenerationOrTheProcess`
+fails on a bare `go` statement elsewhere in serve. The environment is imported only at process start.
+
+AI prices and the monthly allowance, retention and telemetry apply by re-serve, not at once: the AI
+service and the retention sweeper take them at construction. A few seconds later than "hot", but correct.
+
 ## Traps
 
 - A moved variable left in the environment is never read. It is logged at every start (error when it

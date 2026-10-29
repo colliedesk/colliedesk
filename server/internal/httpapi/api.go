@@ -22,7 +22,6 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
-	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/github"
 	"github.com/colliedesk/colliedesk/server/internal/google"
@@ -136,6 +135,8 @@ type Config struct {
 	// reports as conversations (PROBLEM_REPORT_WORKSPACE). Empty answers 404 not_configured, so the web app
 	// offers a GitHub issue instead.
 	ProblemReportWorkspace string
+	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
+	Carry *Carry
 }
 
 // ProductAnalytics names the PostHog project key and host the web app sends usage events to, and
@@ -163,12 +164,12 @@ type API struct {
 	// the reconcile pass.
 	githubSync *githubsync.Service
 	// dispatches counts the fixes being sent to GitHub by goroutines of this process.
-	dispatches sync.WaitGroup
+	dispatches *sync.WaitGroup
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
 	// alerted dedupes the operator alert for paid subscriptions without a workspace.
-	alerted alertedSubscriptions
+	alerted *alertedSubscriptions
 	auth    *auth.Service
 	cloud   *cloudauth.Verifier
 	store   *store.Store
@@ -208,13 +209,13 @@ type API struct {
 	polar        *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
-	founding foundingState
+	founding *foundingState
 	now      func() time.Time
 	// kbUploads serializes the parts of one video upload and bounds the parts a workspace sends at once.
-	kbUploads kbUploadGate
+	kbUploads *kbUploadGate
 	// kbUploadStart lets one upload start at a time, so each disk check counts the uploads started
 	// before it (the server runs as one process).
-	kbUploadStart sync.Mutex
+	kbUploadStart *sync.Mutex
 	// imports starts and reads in-app imports; the worker in `collie serve` runs them.
 	imports *importjobs.Service
 	// ai reads and changes the workspace's AI providers and features.
@@ -293,14 +294,15 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	limits := config.Billing.Enabled()
-	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
-		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
-		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
-		cursorCalls:     newWindowLimiter(cursorCallsPerMinute, webFormMaxKeys, time.Minute),
-		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
-		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
-		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
-		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
+	carry := config.Carry
+	if carry == nil {
+		carry = NewCarry(config)
+	}
+	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
+		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
+		testMessages: carry.testMessages, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
+		helpCenterHostLookups: carry.helpCenterHostLookups, certificateNotes: carry.certificateNotes, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
+		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding,
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
 			WithSealKeys(config.Google.Keys)}
@@ -335,7 +337,6 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if api.mailImageFetcher == nil {
 		api.mailImageFetcher = mailimage.NewFetcher(mailimage.Options{})
 	}
-	api.mailImageLimits = newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait)
 	if config.Email.ResendAPIKey != "" {
 		api.resend = &resend.Client{APIKey: config.Email.ResendAPIKey, Base: config.Email.ResendAPIBase}
 	}
@@ -357,7 +358,6 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		}
 	}
 	api.helpCenter = api.newHelpCenter()
-	api.liveChecks = helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock)
 	mux := http.NewServeMux()
 	api.mux = mux
 	for _, route := range append(api.routeSpecs(), api.channelTypeRoutes()...) {

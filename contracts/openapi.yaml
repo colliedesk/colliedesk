@@ -6433,7 +6433,7 @@ components:
           type: object
           required: [server_provider]
           properties:
-            server_provider: {type: boolean, description: True when the operator configured an AI provider for every workspace (operator console → AI, ai.server.*).}
+            server_provider: {type: boolean, description: 'True when the operator configured an AI provider for every workspace (operator console → AI: ai.server.*).'}
         product_analytics:
           type: object
           description: >

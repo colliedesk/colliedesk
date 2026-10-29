@@ -33,12 +33,22 @@ by its dotted name (`smtp.host`) or by the variable it replaced (`SMTP_HOST`); t
 ## How a change applies
 
 A change is checked the way the server reads it at start: a group set only in part is refused and names
-what is missing, and nothing is saved. A saved version becomes the one to run; restart the server to
-apply it (`docker compose restart server`).
+what is missing, and nothing is saved. A saved version becomes the one to run, and every running server
+applies it within a few seconds (it checks every 5 seconds and is woken at once by the database), without
+closing its port:
+
+1. Settings read at each use apply at once: internal sign-up addresses and networks, the billing alert
+   address, the problem report workspace, the video and email image limits.
+2. The others restart the server's workers inside the process (re-serve): requests in progress finish,
+   new ones use the new settings, and email, AI and sync pause for a moment (their queues are in the
+   database). A long MCP connection keeps the old settings until its client connects again.
+3. While an import runs in the app on that server, the restart waits for it to end (the settings of 1.
+   apply anyway) and then happens by itself.
 
 A version that does not build (written by an older tool, for example) never stops the server: it is
-refused, `collie config doctor` exits 2 and says why, and the server runs the last version that did, or
-every default when none did.
+refused, `collie config doctor` exits 2 and says why, and the server keeps running the version before it
+(at start: the last version that ran, else every default). Each running server records the version it
+runs; `server_processes` lists them.
 
 ## Secrets
 

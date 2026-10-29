@@ -169,6 +169,10 @@ func (w *Worker) startRelinks(ctx context.Context) {
 // Wait blocks until every job this worker started has stopped.
 func (w *Worker) Wait() { w.wg.Wait() }
 
+// Running is how many jobs this worker runs now. A process applies a new configuration only when it is 0,
+// so no import is cut off by the restart of its worker.
+func (w *Worker) Running() int { return len(w.slots) }
+
 // errCancelRequested and errLeaseLost end a run's context; context.Cause tells them apart.
 var errCancelRequested = errors.New("cancel requested")
 

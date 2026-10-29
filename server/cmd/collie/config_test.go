@@ -211,7 +211,7 @@ func TestStartRunsTheLastGoodVersionWhenTheNewestDoesNotBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := startConfig(ctx, store, quiet); err != nil {
+	if _, _, err := startConfig(ctx, store, quiet); err != nil {
 		t.Fatal(err)
 	}
 	// Written past the checks, as an older binary or a hand edit could.
@@ -221,7 +221,7 @@ func TestStartRunsTheLastGoodVersionWhenTheNewestDoesNotBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	var logged bytes.Buffer
-	built, err := startConfig(ctx, store, slog.New(slog.NewTextHandler(&logged, nil)))
+	built, _, err := startConfig(ctx, store, slog.New(slog.NewTextHandler(&logged, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

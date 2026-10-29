@@ -3570,7 +3570,7 @@ export interface components {
                 missing_settings: string[];
             };
             ai: {
-                /** @description True when the operator configured an AI provider for every workspace (operator console → AI */
+                /** @description True when the operator configured an AI provider for every workspace (operator console → AI: ai.server.*). */
                 server_provider: boolean;
             };
             /** @description Where the web app reports which screens and buttons agents use. On by default on the cloud and self-hosted; `DISABLE_TELEMETRY` or `DO_NOT_TRACK` (and a development build) answer `enabled: false`, and then the web app never loads the analytics library. */

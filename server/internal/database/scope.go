@@ -176,6 +176,28 @@ func (d *DB) TryAdvisoryLock(ctx context.Context, key string) (func(), error) {
 	}, nil
 }
 
+// Listen sends on notify (without blocking) each time channel is notified, on its own pooled connection,
+// until ctx ends or the connection fails. It reads no table, so it needs no workspace scope.
+func (d *DB) Listen(ctx context.Context, channel string, notify chan<- struct{}) error {
+	conn, err := d.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, "LISTEN "+pgx.Identifier{channel}.Sanitize()); err != nil {
+		return fmt.Errorf("listen %s: %w", channel, err)
+	}
+	for {
+		if _, err := conn.Conn().WaitForNotification(ctx); err != nil {
+			return err
+		}
+		select {
+		case notify <- struct{}{}:
+		default:
+		}
+	}
+}
+
 // Verify refuses to serve when row-level security could be skipped: the app role must exist, must
 // not be a superuser or BYPASSRLS, and the request connection must be able to switch to it. With a
 // separate request login, that login must not be a superuser, BYPASSRLS or a member of the owner.
