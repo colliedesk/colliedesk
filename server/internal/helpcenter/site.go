@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/kbhtml"
@@ -74,6 +75,14 @@ type Config struct {
 	// Client names the address a request comes from (behind trusted proxies), for the bound on videos
 	// sent at once; nil uses the connection's address.
 	Client func(request *http.Request) string
+	// ChannelRoutes are the channel types' routes below every open help center (channels.HelpCenterRoute).
+	ChannelRoutes []ChannelRoute
+}
+
+// ChannelRoute is a channel type's help center route with the handler the API built for it.
+type ChannelRoute struct {
+	Method, Path string
+	Handler      channels.HelpCenterHandler
 }
 
 // Site serves every workspace's help center.
@@ -89,6 +98,8 @@ type Site struct {
 	videos *streams
 	// hosts finds the workspaces of custom domains (custom-host.go).
 	hosts *customHosts
+	// routes matches the channel types' routes on the path below a help center's root.
+	routes *http.ServeMux
 }
 
 // New builds the help center from its configuration. It panics when a template is broken, which the
@@ -96,7 +107,14 @@ type Site struct {
 func New(config Config) *Site {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	config.Domain = strings.ToLower(strings.TrimSpace(config.Domain))
-	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams(), hosts: newCustomHosts(time.Now)}
+	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams(), hosts: newCustomHosts(time.Now), routes: http.NewServeMux()}
+	for _, route := range config.ChannelRoutes {
+		handler := route.Handler
+		// Two types claiming one route is a programming error: the mux panics.
+		site.routes.HandleFunc(route.Method+" "+route.Path, func(response http.ResponseWriter, request *http.Request) {
+			handler(response, request, request.Context().Value(helpCenterKey{}).(channels.HelpCenter))
+		})
+	}
 	if parsed, err := url.Parse(config.Origin); err == nil {
 		site.originHost = strings.ToLower(parsed.Hostname())
 	}
@@ -213,7 +231,8 @@ func (s *Site) movedTo(request *http.Request, at address, site domain.HelpCenter
 // serve answers one request to the help center at address at.
 func (s *Site) serve(response http.ResponseWriter, request *http.Request, at address) {
 	slug, base, sub := at.slug, at.base, at.sub
-	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+	route := s.channelRoute(request, sub)
+	if route == nil && request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		securityHeaders(response.Header())
 		response.Header().Set("Cache-Control", "no-store")
@@ -251,8 +270,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	// A claim's CNAME target is only where the custom domain's DNS points: a visitor who opens it
 	// moves to the help center's address, the custom domain once it is active.
 	case at.claim && open:
-		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, s.movedTo(request, at, site), http.StatusMovedPermanently)
+		s.redirect(response, request, s.movedTo(request, at, site), base == "")
 		return
 	// A custom domain removed or replaced in another process may still be remembered here; the
 	// workspace's own row decides.
@@ -261,18 +279,23 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		return
 	// An open help center with an active custom domain serves only there; its other addresses move.
 	case at.host == "" && open && site.CustomHost != "":
-		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, s.movedTo(request, at, site), http.StatusMovedPermanently)
+		s.redirect(response, request, s.movedTo(request, at, site), base == "")
 		return
 	// A server with a help center domain serves each help center on its own host; the path address
 	// moves there, whether or not the workspace exists, so the redirect tells nothing about it.
 	case base != "" && s.config.Domain != "" && email.ValidateHostedSlug(slug) == nil:
-		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, s.movedTo(request, at, domain.HelpCenterSite{Slug: slug}), http.StatusMovedPermanently)
+		s.redirect(response, request, s.movedTo(request, at, domain.HelpCenterSite{Slug: slug}), base == "")
 		return
 	// Unknown, off and locked are one answer, and none of them ever reaches the ETag.
 	case !open:
 		s.writeNotFound(response, base == "")
+		return
+	}
+	if route != nil {
+		address := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
+		at := channels.HelpCenter{WorkspaceID: site.WorkspaceID, Slug: site.Slug, Name: site.Name, Trial: site.Trial, Address: address, Base: base,
+			NotFound: func(response http.ResponseWriter) { s.writeNotFound(response, base == "") }}
+		route.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), helpCenterKey{}, at)))
 		return
 	}
 	view := s.newView(site, base)
@@ -309,6 +332,46 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		}
 		s.writeSiteNotFound(response, view)
 	}
+}
+
+// helpCenterKey holds the channels.HelpCenter of a request to a channel type's route.
+type helpCenterKey struct{}
+
+// channelRoute is the channel types' route that answers a request at sub, the path below the help
+// center's root, or nil. The built-in pages never move: a type cannot claim one of their paths.
+func (s *Site) channelRoute(request *http.Request, sub string) http.Handler {
+	if sub == "" || sub == "/" || sub == "/search" || sub == "/robots.txt" {
+		return nil
+	}
+	for _, prefix := range []string{"/c/", "/a/", "/images/", "/media/", stylePath} {
+		if strings.HasPrefix(sub, prefix) {
+			return nil
+		}
+	}
+	probe := request.Clone(request.Context())
+	probe.URL.Path, probe.URL.RawPath = sub, ""
+	if _, pattern := s.routes.Handler(probe); pattern == "" {
+		return nil
+	}
+	// The mux serves the probe's path, so the route reads its wildcards (PathValue).
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		routed := request.Clone(request.Context())
+		routed.URL.Path, routed.URL.RawPath = sub, ""
+		s.routes.ServeHTTP(response, routed)
+	})
+}
+
+// redirect moves a request to target with a 301, which a browser follows with a GET. A write to a
+// channel type's route (a chat's question) is never turned into a GET: on an address that moves it
+// gets the 404 of a help center that is not there, and the page it came from posts to the help
+// center's current address.
+func (s *Site) redirect(response http.ResponseWriter, request *http.Request, target string, onHost bool) {
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		s.writeNotFound(response, onHost)
+		return
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	http.Redirect(response, request, target, http.StatusMovedPermanently)
 }
 
 // view is one help center as its pages show it.

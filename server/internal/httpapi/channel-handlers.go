@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
@@ -507,6 +508,37 @@ func (k channelRouteKit) FindChannel(ctx context.Context, account string) (chann
 
 func (k channelRouteKit) WriteError(w http.ResponseWriter, status int, code, message string) {
 	writeError(w, status, code, message)
+}
+
+func (k channelRouteKit) Channel(ctx context.Context, workspaceID, id string) (channels.Channel, bool, error) {
+	if id == "" {
+		channel, found, err := k.api.store.DefaultChannelOfType(ctx, workspaceID, k.kind)
+		return channel, found && channel.Live(), err
+	}
+	if !uuidShape.MatchString(id) {
+		return channels.Channel{}, false, nil
+	}
+	channel, err := k.api.store.GetChannel(ctx, workspaceID, id)
+	if errors.Is(err, channels.ErrNotFound) {
+		return channels.Channel{}, false, nil
+	}
+	if err != nil {
+		return channels.Channel{}, false, err
+	}
+	return channel, channel.Type == k.kind && channel.Live(), nil
+}
+
+// channelHelpCenterRoutes are the help center routes the registered types declare, with their handlers;
+// the help center mounts them below every address of an open help center.
+func (a *API) channelHelpCenterRoutes() []helpcenter.ChannelRoute {
+	var routes []helpcenter.ChannelRoute
+	for _, definition := range a.store.Channels().Definitions() {
+		for _, route := range definition.HelpCenterRoutes {
+			routes = append(routes, helpcenter.ChannelRoute{Method: route.Method, Path: route.Path,
+				Handler: route.Handler(channelRouteKit{api: a, kind: definition.Type})})
+		}
+	}
+	return routes
 }
 
 // channelTypeRoutes are the routes the registered types declare, mounted under /api/v1 with the

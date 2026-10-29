@@ -136,6 +136,9 @@ type Config struct {
 	// reports as conversations (PROBLEM_REPORT_WORKSPACE). Empty answers 404 not_configured, so the web app
 	// offers a GitHub issue instead.
 	ProblemReportWorkspace string
+	// ExtraChannelTypes are channel types run after the registered ones; tests prove the frame with a
+	// type no server ships (channeltest.Loopback). Each needs its channel_types row.
+	ExtraChannelTypes []channels.Adapter
 }
 
 // ProductAnalytics names the PostHog project key and host the web app sends usage events to, and
@@ -271,7 +274,20 @@ func Channels(config Config, outbound store.OutboundPolicy, revoke ...func(*stor
 	if len(revoke) > 0 {
 		email.RevokeGrant = revoke[0]
 	}
-	return registry.New(registry.Config{Email: email})
+	registered := registry.New(registry.Config{Email: email})
+	if len(config.ExtraChannelTypes) == 0 {
+		return registered
+	}
+	adapters := make([]channels.Adapter, 0, len(registered.Types())+len(config.ExtraChannelTypes))
+	for _, kind := range registered.Types() {
+		adapter, _ := registered.Adapter(kind)
+		adapters = append(adapters, adapter)
+	}
+	extended, err := channels.NewRegistry(append(adapters, config.ExtraChannelTypes...)...)
+	if err != nil {
+		panic(err) // a programming error of the test that added the type
+	}
+	return extended
 }
 
 func New(pool *pgxpool.Pool, config Config) *Server {
