@@ -94,3 +94,43 @@ test('email setup: a new workspace saves its address, the first forwarded mail f
   await expect(row).toContainText('Working');
   await expect(row.getByRole('link', { name: `Manage ${support}` })).toBeVisible();
 });
+
+// Gmail's confirmation email (SYNTHETIC, written from Google's documented format) reaches the channel through
+// the inbound route with a passing sender check from the trusted receiving server: step 2 shows its code and
+// Google's confirm link within one 5 s poll, and the email still opens its conversation.
+test('email setup: Gmail\'s forwarding confirmation shows its code and confirm link in step 2', async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const support = `support-${suffix}@acme.example`;
+  await redeemLink(page, createWorkspace(`Confirm Desk ${suffix}`, `admin-${suffix}@acme.example`, baseURL));
+  await page.goto(`${baseURL}/settings/channels/type/email`);
+  await page.getByRole('textbox', { name: 'Support address' }).fill(support);
+  await page.getByRole('button', { name: 'Save support address' }).click();
+  const forward = page.getByRole('group', { name: 'Forward its mail to Colliedesk' });
+  await forward.getByRole('button', { name: 'Create inbound secret' }).click();
+  const secret = await forward.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
+  const inboundURL = await forward.getByRole('textbox', { name: 'Inbound URL' }).inputValue();
+  await forward.getByRole('tab', { name: 'Gmail' }).click();
+  const box = forward.getByRole('region', { name: "Gmail's confirmation email" });
+  await expect(box).toContainText('Waiting');
+
+  const confirm = `https://mail-settings.google.com/mail/vf-%5BSYNTHETIC${suffix.replace(/[^0-9a-z]/gi, '')}%5D-abc`;
+  const inbound = await page.request.post(inboundURL, {
+    headers: { 'Content-Type': 'message/rfc822', 'X-Colliedesk-Inbound-Secret': secret },
+    data: Buffer.from([
+      'Authentication-Results: mx.example.net; spf=pass smtp.mailfrom=google.com; dkim=pass header.d=google.com; dmarc=pass header.from=google.com',
+      'From: Gmail Team <forwarding-noreply@google.com>', `To: ${support}`,
+      `Subject: (#482913557) Gmail Forwarding Confirmation - Receive Mail from ${support}`, `Message-ID: <confirm-${suffix}@google.com>`,
+      'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', '',
+      `${support} has requested to automatically forward mail to your email address.`, 'Confirmation code: 482913557', '',
+      'To allow it, please click the link below to confirm the request:', '', confirm, '',
+    ].join('\r\n')),
+  });
+  expect(inbound.status()).toBe(200);
+  const { conversation_id: conversation } = await inbound.json() as { conversation_id: string };
+  await expect(box).toContainText('Confirmation code 482913557', { timeout: 10_000 });
+  const link = box.getByRole('link', { name: /Open confirm link/ });
+  await expect(link).toHaveAttribute('href', confirm);
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noreferrer');
+  await expect(box.getByRole('link', { name: 'Open its conversation' })).toHaveAttribute('href', `/conversations/${conversation}`);
+});

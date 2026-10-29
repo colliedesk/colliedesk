@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => {
   const api = { me: vi.fn(), config: vi.fn(), updateWorkspaceSlug: vi.fn(), messages: vi.fn() };
   const channelsApi = { list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), events: vi.fn(), email: vi.fn(), emailSecret: vi.fn(),
     emailVerifyDomain: vi.fn(), emailConnectGmail: vi.fn(), emailDisconnectGmail: vi.fn(), emailConnectMicrosoft: vi.fn(), emailDisconnectMicrosoft: vi.fn(),
-    emailTestMessage: vi.fn(), replayHeld: vi.fn(), discardHeld: vi.fn() };
+    emailTestMessage: vi.fn(), emailForwardingConfirmation: vi.fn(), replayHeld: vi.fn(), discardHeld: vi.fn() };
   return { api, channelsApi, InvalidRequestError, ConflictError };
 });
 vi.mock('../../../api/client', () => ({ api: mocks.api, InvalidRequestError: mocks.InvalidRequestError, ConflictError: mocks.ConflictError }));
@@ -63,6 +63,7 @@ beforeEach(() => {
   api.config.mockResolvedValue({ billing: { enabled: false }, cloud_sign_in: { enabled: false, publishable_key: null }, product_analytics: { enabled: false, key: null, host: null, realm: 'self-hosted' } });
   api.messages.mockResolvedValue({ items: [] });
   channelsApi.events.mockResolvedValue({ items: [], next_cursor: null });
+  channelsApi.emailForwardingConfirmation.mockRejectedValue(new Error('API 404'));
 });
 
 // waitingChannel is a channel whose support address is saved and that has received nothing yet.
@@ -299,4 +300,47 @@ test('back from Google during the setup, the channel page sends the browser back
   sessionStorage.setItem('colliedesk.email-setup.return', MAIN);
   const { navigate } = show(MAIN, { tab: 'replies', gmail: 'connected' });
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${MAIN}/setup?gmail=connected`, true));
+});
+
+test('step 2 waits for Gmail\'s confirmation email, then shows its code, the confirm link in a new tab and its conversation', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    waitingChannel();
+    show(`${MAIN}/setup`);
+    const forward = await screen.findByRole('group', { name: /Forward its mail to Colliedesk/ });
+    const box = within(forward).getByRole('region', { name: "Gmail's confirmation email" });
+    expect(box).toHaveTextContent('Waiting');
+    await waitFor(() => expect(channelsApi.emailForwardingConfirmation).toHaveBeenCalledWith(MAIN));
+    channelsApi.emailForwardingConfirmation.mockResolvedValue({ code: '482913557', confirm_url: 'https://mail-settings.google.com/mail/vf-abc',
+      received_at: '2026-10-29T00:31:00Z', conversation_id: CONVERSATION });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await waitFor(() => expect(box).toHaveTextContent('Confirmation code 482913557'));
+    const link = within(box).getByRole('link', { name: /Open confirm link/ });
+    expect(link).toHaveAttribute('href', 'https://mail-settings.google.com/mail/vf-abc');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noreferrer');
+    expect(within(box).getByRole('link', { name: 'Open its conversation' })).toHaveAttribute('href', `/conversations/${CONVERSATION}`);
+    // Found: the step stops asking.
+    const calls = channelsApi.emailForwardingConfirmation.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(channelsApi.emailForwardingConfirmation.mock.calls.length).toBe(calls);
+  } finally { vi.useRealTimers(); }
+});
+
+test('a confirmation that failed the sender check shows its code and conversation, never a confirm link', async () => {
+  waitingChannel();
+  channelsApi.emailForwardingConfirmation.mockResolvedValue({ code: '482913557', confirm_url: null, received_at: '2026-10-29T00:31:00Z', conversation_id: CONVERSATION });
+  show(`${MAIN}/setup`);
+  const box = await screen.findByRole('region', { name: "Gmail's confirmation email" });
+  await waitFor(() => expect(box).toHaveTextContent('482913557'));
+  expect(within(box).queryByRole('link', { name: /Open confirm link/ })).toBeNull();
+  expect(within(box).getByRole('link', { name: 'Open its conversation' })).toBeInTheDocument();
+});
+
+test('the confirmation is asked for only while step 2 is open: never on another step or another provider', async () => {
+  waitingChannel();
+  localStorage.setItem(`colliedesk.email-setup.${MAIN}`, JSON.stringify({ provider: 'microsoft', skipped: ['forward'] }));
+  show(`${MAIN}/setup`);
+  await screen.findByRole('group', { name: /Send replies from/ });
+  expect(channelsApi.emailForwardingConfirmation).not.toHaveBeenCalled();
 });
