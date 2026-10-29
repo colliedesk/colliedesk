@@ -11,7 +11,9 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -40,6 +42,8 @@ func newOperatorEnv(t *testing.T, requireTOTP bool) *operatorEnv {
 		carry := httpapi.NewCarry(*config)
 		carry.Hot = hot
 		config.Carry = carry
+		// serve builds with every parser (cmd/collie buildConfig); the email parser is enough here.
+		config.CheckConfig = func(snap serverconfig.Snapshot) error { _, err := email.ConfigFromEnv(snap.Getenv); return err }
 	})
 	bearer := createSession(t, api, workspaces, "Operator Realm", "admin@realm.example.com")
 	return &operatorEnv{t: t, api: api, pool: pool, hot: hot, workspace: bearer,

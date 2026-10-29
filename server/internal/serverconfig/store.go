@@ -52,6 +52,16 @@ type Version struct {
 	Rejected  string    `json:"rejected_reason,omitempty"`
 	// Changed lists the keys whose value differs from the version before it (secrets by name only).
 	Changed []string `json:"changed"`
+	// Changes says how: a setting's value before and after; a secret only that it changed.
+	Changes []ChangeItem `json:"changes"`
+}
+
+// ChangeItem is one key a version changed; Before and After are nil for a secret and when not set.
+type ChangeItem struct {
+	Key    string  `json:"key"`
+	Secret bool    `json:"secret"`
+	Before *string `json:"before"`
+	After  *string `json:"after"`
 }
 
 // State is which version should run and which last ran without an error.
@@ -69,15 +79,19 @@ type Actor struct {
 
 // Change is one save.
 type Change struct {
-	// Base is the version the change was made on; 0 skips the check (the CLI and imports).
-	Base   int64
-	Set    map[string]string
-	Unset  []string
-	Source string
-	Note   string
-	Actor  Actor
+	// Base is the version the change was made on, checked when CheckBase (the console; 0 is "no version
+	// yet"). The CLI checks it itself with 0 meaning "skip"; imports never.
+	Base      int64
+	CheckBase bool
+	Set       map[string]string
+	Unset     []string
+	Source    string
+	Note      string
+	Actor     Actor
 	// AllowNoChange saves nothing and returns the current version when the change changes nothing.
 	AllowNoChange bool
+	// RequestID is the operator request an approved change came from.
+	RequestID string
 }
 
 // Store reads and writes the configuration on the owner connection.
@@ -306,7 +320,7 @@ func (s *Store) save(ctx context.Context, tx pgx.Tx, change Change) (int64, erro
 	if err != nil {
 		return 0, err
 	}
-	if change.Base != 0 && change.Base != state.Desired {
+	if (change.CheckBase || change.Base != 0) && change.Base != state.Desired {
 		return 0, ErrConflict
 	}
 	current, err := readValues(ctx, tx, state.Desired)
@@ -365,8 +379,12 @@ func (s *Store) insertVersion(ctx context.Context, tx pgx.Tx, parent int64, valu
 		by = "unknown"
 	}
 	var version int64
-	if err := tx.QueryRow(ctx, `INSERT INTO server_config_versions(created_by, source, parent_id, note) VALUES($1,$2,$3,$4) RETURNING id`,
-		by, change.Source, parentID, change.Note).Scan(&version); err != nil {
+	var requestID *string
+	if change.RequestID != "" {
+		requestID = &change.RequestID
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO server_config_versions(created_by, source, parent_id, note, request_id) VALUES($1,$2,$3,$4,$5) RETURNING id`,
+		by, change.Source, parentID, change.Note, requestID).Scan(&version); err != nil {
 		return 0, fmt.Errorf("save configuration: %w", err)
 	}
 	for key, item := range values {
@@ -504,46 +522,44 @@ func (s *Store) Restore(ctx context.Context, from int64, base int64, actor Actor
 	return version, err
 }
 
-// History lists versions, newest first, each with the keys it changed.
+// History lists versions, newest first, each with the keys it changed from its parent, in one query.
 func (s *Store) History(ctx context.Context, limit int) ([]Version, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	var versions []Version
 	err := s.privileged(ctx, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT id, created_at, created_by, source, parent_id, note, status, coalesce(rejected_reason,'')
-			FROM server_config_versions ORDER BY id DESC LIMIT $1`, limit)
+		rows, err := tx.Query(ctx, `
+			WITH page AS (
+				SELECT id, created_at, created_by, source, parent_id, note, status, coalesce(rejected_reason,'') AS rejected
+				FROM server_config_versions ORDER BY id DESC LIMIT $1
+			), pairs AS (
+				SELECT p.id, coalesce(c.key, b.key) AS key, (c.sealed IS NOT NULL OR b.sealed IS NOT NULL) AS secret,
+					CASE WHEN c.sealed IS NULL AND b.sealed IS NULL THEN b.value END AS before,
+					CASE WHEN c.sealed IS NULL AND b.sealed IS NULL THEN c.value END AS after
+				FROM page p
+				JOIN server_config_values c ON c.version_id = p.id
+				FULL JOIN (SELECT p2.id AS id, v.key, v.value, v.sealed, v.seal_key_id FROM page p2 JOIN server_config_values v ON v.version_id = p2.parent_id) b
+					ON b.id = c.version_id AND b.key = c.key
+				WHERE c.version_id IS NULL OR b.id IS NULL
+					OR c.value IS DISTINCT FROM b.value OR c.sealed IS DISTINCT FROM b.sealed OR c.seal_key_id IS DISTINCT FROM b.seal_key_id
+			)
+			SELECT p.id, p.created_at, p.created_by, p.source, p.parent_id, p.note, p.status, p.rejected,
+				coalesce((SELECT array_agg(DISTINCT x.key ORDER BY x.key) FROM pairs x WHERE x.id = p.id), '{}'),
+				coalesce((SELECT json_agg(json_build_object('key', x.key, 'secret', x.secret, 'before', x.before, 'after', x.after) ORDER BY x.key) FROM pairs x WHERE x.id = p.id), '[]')
+			FROM page p ORDER BY p.id DESC`, limit)
 		if err != nil {
 			return err
 		}
+		defer rows.Close()
 		for rows.Next() {
 			var item Version
-			if err := rows.Scan(&item.ID, &item.CreatedAt, &item.CreatedBy, &item.Source, &item.ParentID, &item.Note, &item.Status, &item.Rejected); err != nil {
-				rows.Close()
+			if err := rows.Scan(&item.ID, &item.CreatedAt, &item.CreatedBy, &item.Source, &item.ParentID, &item.Note, &item.Status, &item.Rejected, &item.Changed, &item.Changes); err != nil {
 				return err
 			}
 			versions = append(versions, item)
 		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		for index := range versions {
-			parent := int64(0)
-			if versions[index].ParentID != nil {
-				parent = *versions[index].ParentID
-			}
-			before, err := readValues(ctx, tx, parent)
-			if err != nil {
-				return err
-			}
-			after, err := readValues(ctx, tx, versions[index].ID)
-			if err != nil {
-				return err
-			}
-			versions[index].Changed = changedKeys(before, after)
-		}
-		return nil
+		return rows.Err()
 	})
 	return versions, err
 }
@@ -829,4 +845,13 @@ func Fingerprint(products []ProductRow) string {
 		fmt.Fprintf(&text, "%s/%s/%s/%v;", row.ProductID, row.Plan, row.Period, row.OnSale)
 	}
 	return text.String()
+}
+
+// LatestMigration names the newest migration applied.
+func (s *Store) LatestMigration(ctx context.Context) (string, error) {
+	var name string
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT coalesce(max(name), '') FROM schema_migrations`).Scan(&name)
+	})
+	return name, err
 }

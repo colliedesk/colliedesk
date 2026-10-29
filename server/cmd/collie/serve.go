@@ -89,7 +89,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	hot := httpapi.NewHot(hotSettings(config))
 	carry := httpapi.NewCarry(httpapi.Config{})
 	carry.Hot = hot
-	p := &process{pool: pool, requestPool: requestPool, db: db, origin: origin, storage: storage, carry: carry,
+	p := &process{pool: pool, requestPool: requestPool, db: db, origin: origin, storage: storage, carry: carry, configStore: configStore,
 		importKeys: importjobs.NewKeys(configStore.Keys()),
 		cursor:     &autofixworker.Cursor{Store: store.NewWithDB(db).WithSealKeys(configStore.Keys()), Base: cursorBaseURL}}
 	p.operatorOrigin, err = operatorOrigin(origin)

@@ -50,6 +50,33 @@ reaches it ([operator tools](../user/mcp.md#operator-tools)). A token reads; eve
 as a request an operator approves with their code. A token never sends a secret: it names the secrets a
 change needs, and the operator types them when approving.
 
+## The console's screens
+
+A dark band on top is always there: the console's host and the version every process runs
+(**Running v12 · 2 of 2 processes**, **Applying v13…** while a save reaches them, **v13 refused** when a
+process could not use it). On a phone it keeps the host and the version.
+
+- **Overview**: the release and database, the version to run and how many processes run it, what needs
+  attention (a variable that still differs from the database, a secret sealed with an old key, a request
+  waiting), each process, and the server environment (read at start; change it in `.env` and restart).
+- **Configuration pages** (AI and pricing, Email, Mailboxes and GitHub, Billing and retention, Sign-ups,
+  Security and network, Limits and telemetry): each setting with its key, where its value comes from, and
+  when a save applies. Changes stay in the tab until **Review and save**; the review lists every change
+  and asks for what it needs (your code, a secret entered again, a typed confirmation). **Escape** or
+  **Cancel** applies nothing. Email has **Send a test email**, which tries the settings on the page
+  before anything is saved. If someone saved another version meanwhile, nothing is saved and your
+  changes are kept to apply on the newest one. A session that ends keeps them in the tab too.
+- **Requests**: changes an operator token asked for; approve (with your code and any secret it needs)
+  or reject.
+- **History**: every version, who saved it and which keys changed (secret values never show). Restoring
+  one saves it again as the newest version.
+- **Audit log**: who changed the server and its operators, filtered by setting, person or date, and
+  exported as CSV.
+- **Operators and sessions**: invite and revoke operators, see and end sessions, create tokens (shown once).
+
+Billing, security and the operator sign-in settings are changed with `collie config` on the server for
+now; their rows say so.
+
 ## Settings
 
 The server's settings (email, AI, mailboxes, GitHub, billing, proxies, limits) live in its database,

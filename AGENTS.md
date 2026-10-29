@@ -69,7 +69,7 @@ real server, CLI, PostgreSQL and a browser; only external services are local sta
 API, identity provider JWKS, Mailpit as the SMTP relay). They run on every PR in the CI jobs
 `onboarding` and `install-smoke`. A change to an onboarding surface (`install.sh`,
 `create-workspace` / `pair`, redeem, invites, sessions, cloud sign-in, the email channel,
-`import freshdesk` / `import undo`, the empty inbox) must keep them green. Never skip, weaken or
+`import freshdesk` / `import undo`, the empty inbox, `operator pair` and the operator console) must keep them green. Never skip, weaken or
 untag one; fix the product instead. `corepack pnpm test` fails when this list and the
 `@onboarding` tests in `web/e2e/` differ.
 
@@ -86,6 +86,7 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 - `golden path: a new team signs up on the cloud, imports Freshdesk in the app, reconcile OK, answers its first conversation by email` (`web/e2e/onboarding-golden-path.spec.ts`; #99 adds its step to this test)
 - `link errors: expired, reused, revoked, mistyped, missing and another workspace's link explain themselves` (`web/e2e/onboarding-link-errors.spec.ts`)
 - `test message: a new cloud workspace sends itself a test message from the empty inbox, answers it on the trial, and the reply is delivered` (`web/e2e/onboarding-test-message.spec.ts`)
+- `operator console: the installer's operator link signs in, the operator sets SMTP and sends a test, the change applies without a restart, history restores the previous version` (`web/e2e/onboarding-operator-console.spec.ts`)
 
 Also: `tests/install-smoke.sh` (real `install.sh` with Docker against the image built from the
 commit; the printed link must sign in) and `tests/install-test.sh` (installer with stubbed Docker).

@@ -267,6 +267,17 @@ On 2026-10-23 the results page (#100) became its own lazy part, `results-route` 
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
+## Operator console bundle
+
+The operator console is a build of its own (`web/vite.operator.config.ts`, served under `/operator/`): none
+of it is in the workspace app's bundle, and the workspace app's code is not in it. `corepack pnpm
+bundle:check` also measures the console's first bundle (the JavaScript and CSS `operator.html` loads)
+against its own ceilings, set on 2026-10-29 to the first measurement plus 5%: 78,652 bytes of JavaScript
+and 9,076 of CSS gzip (`OPERATOR_JS_LIMIT`, `OPERATOR_CSS_LIMIT` in `web/scripts/check-bundle-budget.mjs`).
+Never raise them to pass; move a screen into a lazy part. Measured then: 75,438 and 8,725 bytes; History,
+Requests, the audit log and Operators are lazy parts of 0.8 to 2 KB each. The workspace app's first
+bundle went from 199,617 to 199,618 bytes (the shared dialog's optional first-field focus).
+
 ## Reply box lists (saved replies, articles)
 
 Measured on 2026-10-21 against a local `collie serve`, Chromium, a new browser context with the cache disabled for each run, median of 5: open a conversation by its address, wait until the reply box is enabled, then a programmatic click, timed with `performance.now` in the page until the first option shows. The list's box (loading state or list) shows in the same frame as the click in every run (2–10 ms), so nothing moves when the list arrives.

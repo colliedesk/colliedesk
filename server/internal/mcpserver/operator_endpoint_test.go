@@ -17,7 +17,21 @@ import (
 
 // operatorToolNames is what an operator token sees on /mcp/operator, written out by hand.
 var operatorToolNames = []string{
+	"colliedesk_operator_audit",
+	"colliedesk_operator_config_change",
+	"colliedesk_operator_config_check",
+	"colliedesk_operator_config_get",
+	"colliedesk_operator_config_history",
+	"colliedesk_operator_config_restore",
+	"colliedesk_operator_invite",
+	"colliedesk_operator_request_cancel",
+	"colliedesk_operator_request_get",
+	"colliedesk_operator_requests",
+	"colliedesk_operator_revoke",
+	"colliedesk_operator_session_revoke",
 	"colliedesk_operator_sign_out",
+	"colliedesk_operator_status",
+	"colliedesk_operator_team",
 	"colliedesk_operator_token_create",
 	"colliedesk_operator_whoami",
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/microsoft"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -141,6 +142,12 @@ type Config struct {
 	OperatorOrigin string
 	// Operators signs the operators of the server in; nil makes one with the Gmail key ring.
 	Operators *auth.OperatorService
+	// ServerConfig is the server's own configuration, for the operator console; CheckConfig builds a
+	// snapshot the way serve does (nil checks nothing); Environ reads the process environment (bootstrap
+	// and leftovers; nil reads nothing).
+	ServerConfig *serverconfig.Store
+	CheckConfig  func(serverconfig.Snapshot) error
+	Environ      func(string) string
 }
 
 // ProductAnalytics names the PostHog project key and host the web app sends usage events to, and
@@ -373,6 +380,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		}
 		api.config.Operators = auth.NewOperatorService(db, config.Google.Keys, base, func() bool { return api.hot().RequireTOTP }).WithClock(clock)
 	}
+	if api.config.ServerConfig == nil {
+		api.config.ServerConfig = serverconfig.NewStore(db, config.Google.Keys, api.environ())
+	}
 	api.helpCenter = api.newHelpCenter()
 	mux := http.NewServeMux()
 	api.mux = mux
@@ -385,6 +395,19 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		}
 		if route.Permission == auth.PermissionOperator {
 			mux.Handle(route.Method+" "+route.Pattern, api.authorizeOperator(route.Route, route.handler))
+			continue
+		}
+		if route.Pattern == "/api/v1/agent-requests/{id}/approve" || route.Pattern == "/api/v1/agent-requests/{id}/reject" {
+			// The two approval routes serve both realms: the console names the operator realm, and a
+			// workspace credential is never looked up for it (docs/internals/operator-console.md).
+			workspace, operator := api.authorize(route.Route, route.handler), api.decideOperatorRequest(strings.HasSuffix(route.Pattern, "/approve"))
+			mux.HandleFunc(route.Method+" "+route.Pattern, func(response http.ResponseWriter, request *http.Request) {
+				if request.Header.Get("X-Colliedesk-Realm") == "operator" {
+					operator(response, request)
+					return
+				}
+				workspace(response, request)
+			})
 			continue
 		}
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
@@ -406,6 +429,20 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/operator/auth/me", auth.PermissionOperator},
 		{http.MethodPost, "/api/v1/operator/auth/logout", auth.PermissionOperator},
 		{http.MethodPost, "/api/v1/operator/tokens", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/status", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/config", auth.PermissionOperator},
+		{http.MethodPatch, "/api/v1/operator/config", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/config/check", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/config/versions", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/config/versions/{id}/restore", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/audit", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/requests", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/requests/{id}", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/requests/{id}/cancel", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/operators", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/operators", auth.PermissionOperator},
+		{http.MethodDelete, "/api/v1/operator/operators/{id}", auth.PermissionOperator},
+		{http.MethodDelete, "/api/v1/operator/sessions/{id}", auth.PermissionOperator},
 		{http.MethodPost, "/api/v1/auth/logout", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/me", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/sessions", auth.PermissionAccessRead},

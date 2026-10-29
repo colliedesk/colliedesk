@@ -13,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/qrsvg"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -145,6 +146,7 @@ func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Re
 	var shape struct {
 		Note    string         `json:"note"`
 		Secrets map[string]any `json:"secrets"`
+		Set     map[string]any `json:"set"`
 	}
 	var stored json.RawMessage
 	if len(bytes.TrimSpace(body)) > 0 {
@@ -153,6 +155,12 @@ func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Re
 			return
 		}
 		_ = json.Unmarshal(body, &shape)
+		for name := range shape.Set {
+			if key, ok := serverconfig.Lookup(name); ok && key.Secret {
+				writeError(response, http.StatusBadRequest, "secret_in_request", "A token cannot send a secret. Ask for it with null in secrets; the person who approves types it.")
+				return
+			}
+		}
 		stored = body
 	}
 	var needs []string
@@ -175,6 +183,16 @@ func operatorRequestSummary(route Route, path, note string) string {
 	switch route.Method + " " + route.Pattern {
 	case "POST /api/v1/operator/tokens":
 		return "Create an operator token"
+	case "PATCH /api/v1/operator/config":
+		return "Change the server's settings"
+	case "POST /api/v1/operator/config/versions/{id}/restore":
+		return "Restore configuration version " + path[strings.LastIndex(strings.TrimSuffix(path, "/restore"), "/")+1:strings.LastIndex(path, "/")]
+	case "POST /api/v1/operator/operators":
+		return "Invite an operator"
+	case "DELETE /api/v1/operator/operators/{id}":
+		return "Revoke an operator"
+	case "DELETE /api/v1/operator/sessions/{id}":
+		return "End an operator session or token"
 	}
 	return route.Method + " " + path
 }
@@ -297,7 +315,7 @@ func (a *API) getOperatorMe(response http.ResponseWriter, request *http.Request)
 		permissions = auth.OperatorPermissions
 	}
 	session := auth.OperatorSession{ID: who.SessionID, OperatorID: who.Operator.ID, Email: who.Operator.Email, Kind: who.Kind, Permissions: permissions,
-		CreatedAt: who.CreatedAt, LastSeenAt: a.now(), ExpiresAt: who.CreatedAt}
+		CreatedAt: who.CreatedAt, LastSeenAt: a.now(), ExpiresAt: who.ExpiresAt}
 	writeJSON(response, http.StatusOK, map[string]any{
 		"operator": map[string]any{"id": who.Operator.ID, "email": who.Operator.Email, "totp_enabled": who.Operator.TOTPEnabledAt != nil},
 		"session":  operatorSessionJSON(session),

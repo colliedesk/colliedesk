@@ -82,19 +82,37 @@ func TestOperatorOriginMustBeItsOwnHttpsHost(t *testing.T) {
 // With OPERATOR_ORIGIN each host serves only its own routes, before the help center can take a host.
 func TestOperatorHostServesOnlyItsRoutes(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "inner") })
-	handler := operatorHost("https://desk.example.com", "https://ops.example.com", inner)
+	console := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "console") })
+	// The operator host's API never goes through the app's chain, whose help center would take that host.
+	operatorAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "operator api") })
+	handler := operatorHost("https://desk.example.com", "https://ops.example.com", inner, operatorAPI, console)
+	decide := func(host, path string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, path, nil)
+		request.Host = host
+		request.Header.Set("X-Colliedesk-Realm", "operator")
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+	if got := decide("ops.example.com", "/api/v1/agent-requests/x/approve"); got.Code != 200 {
+		t.Errorf("an operator decision on the operator host: %d", got.Code)
+	}
+	if got := decide("desk.example.com", "/api/v1/agent-requests/x/reject"); got.Code != 404 {
+		t.Errorf("an operator decision on the app host: %d", got.Code)
+	}
 	for _, c := range []struct {
 		host, path string
 		status     int
 		code       string
 	}{
-		{"ops.example.com", "/api/v1/operator/auth/me", 200, ""},
-		{"ops.example.com", "/mcp/operator", 200, ""},
+		{"ops.example.com", "/api/v1/operator/auth/me", 200, "operator api"},
+		{"ops.example.com", "/mcp/operator", 200, "operator api"},
 		{"ops.example.com", "/api/v1/conversations", 404, "not_found"},
 		{"ops.example.com", "/mcp", 404, "not_found"},
+		{"ops.example.com", "/sign-in", 200, "console"},
 		{"desk.example.com", "/api/v1/operator/auth/me", 404, "operator_console_elsewhere"},
 		{"desk.example.com", "/mcp/operator", 404, "operator_console_elsewhere"},
-		{"desk.example.com", "/operator/sign-in", 404, "operator_console_elsewhere"},
+		{"desk.example.com", "/operator/sign-in", 404, "The operator console has its own address"},
 		{"desk.example.com", "/api/v1/conversations", 200, ""},
 		{"acme.help.example.com", "/", 200, ""},
 	} {
@@ -106,7 +124,7 @@ func TestOperatorHostServesOnlyItsRoutes(t *testing.T) {
 			t.Errorf("%s%s: %d %s", c.host, c.path, recorder.Code, recorder.Body.String())
 		}
 	}
-	if same := operatorHost("https://desk.example.com", "", inner); same == nil {
+	if same := operatorHost("https://desk.example.com", "", inner, inner, console); same == nil {
 		t.Fatal("no handler without OPERATOR_ORIGIN")
 	}
 }

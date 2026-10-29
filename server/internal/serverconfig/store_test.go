@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/database/databasetest"
@@ -366,5 +368,34 @@ func TestEveryKeyCanBeSaved(t *testing.T) {
 	}
 	if _, err := store.Save(context.Background(), serverconfig.Change{Set: set, Source: "cli", Actor: cli}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The console's history reads 100 versions in one query: 300 versions of every key stay within the
+// 200 ms budget (docs/internals/performance.md).
+func TestConfigHistoryStaysFast(t *testing.T) {
+	ctx := context.Background()
+	store := newStore(t, databasetest.Pool(t), ring(t, testRing), nil)
+	set := map[string]string{}
+	for _, key := range serverconfig.Keys() {
+		set[key.Name] = "x"
+	}
+	for i := 0; i < 300; i++ {
+		set["smtp.host"] = fmt.Sprintf("smtp%d.example.net", i)
+		if _, err := store.Save(ctx, serverconfig.Change{Set: set, Source: "cli", Actor: cli}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	best := time.Hour
+	for i := 0; i < 5; i++ {
+		started := time.Now()
+		versions, err := store.History(ctx, 100)
+		if err != nil || len(versions) != 100 || strings.Join(versions[0].Changed, ",") != "smtp.host" {
+			t.Fatalf("history: %d %v", len(versions), err)
+		}
+		best = min(best, time.Since(started))
+	}
+	if best > 200*time.Millisecond {
+		t.Fatalf("history of 100 versions took %s, over 200 ms", best)
 	}
 }

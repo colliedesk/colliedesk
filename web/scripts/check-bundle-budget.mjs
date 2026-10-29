@@ -38,9 +38,30 @@ export async function checkBundleBudget(buildDirectory = defaultBuildDirectory) 
   );
 }
 
+// The operator console is its own build (build/operator). Its first bundle (the assets operator.html loads) has its
+// own ceilings: the first measurement plus 5% (docs/internals/performance.md › Operator console bundle). Never raise
+// them to pass: move a screen into a lazy part instead.
+export const OPERATOR_JS_LIMIT = 78652;
+export const OPERATOR_CSS_LIMIT = 9076;
+
+export async function checkOperatorBundle(buildDirectory = path.join(defaultBuildDirectory, 'operator')) {
+  const page = await readFile(path.join(buildDirectory, 'operator.html'), 'utf8');
+  const entries = [...page.matchAll(/(?:src|href)="\/operator\/assets\/([^"]+\.(?:js|css))"/g)].map((match) => match[1]);
+  let javascript = 0;
+  let css = 0;
+  for (const name of entries) {
+    const bytes = gzipSync(await readFile(path.join(buildDirectory, 'assets', name))).byteLength;
+    if (name.endsWith('.js')) javascript += bytes;
+    else css += bytes;
+  }
+  if (javascript > OPERATOR_JS_LIMIT) throw new Error(`Operator console JS gzip budget exceeded: ${javascript} bytes; limit is ${OPERATOR_JS_LIMIT}`);
+  if (css > OPERATOR_CSS_LIMIT) throw new Error(`Operator console CSS gzip budget exceeded: ${css} bytes; limit is ${OPERATOR_CSS_LIMIT}`);
+  process.stdout.write(`operator console budget passed: JS ${javascript}/${OPERATOR_JS_LIMIT} bytes, CSS ${css}/${OPERATOR_CSS_LIMIT} bytes gzip\n`);
+}
+
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : '';
 if (import.meta.url === invokedPath) {
-  checkBundleBudget(process.argv[2]).catch((error) => {
+  checkBundleBudget(process.argv[2]).then(() => checkOperatorBundle(process.argv[2] && path.join(process.argv[2], 'operator'))).catch((error) => {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
   });

@@ -91,6 +91,7 @@ type OperatorPrincipal struct {
 	Kind        string // cookie or token
 	Permissions []string
 	CreatedAt   time.Time
+	ExpiresAt   time.Time
 	ReauthAt    *time.Time
 	ViaCookie   bool
 }
@@ -164,6 +165,10 @@ func operatorAudit(ctx context.Context, tx pgx.Tx, actorKind, actor, action stri
 // Pair makes a one-time sign-in link for email, creating the operator or opening a revoked one again. With
 // resetTOTP the link replaces the operator's authenticator: the shell is the root of trust.
 func (s *OperatorService) Pair(ctx context.Context, email string, resetTOTP bool, by string) (string, error) {
+	return s.pair(ctx, email, resetTOTP, "cli", by)
+}
+
+func (s *OperatorService) pair(ctx context.Context, email string, resetTOTP bool, kind, by string) (string, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !strings.Contains(email, "@") || len(email) < 3 {
 		return "", errors.New("an operator needs an email address")
@@ -191,7 +196,7 @@ func (s *OperatorService) Pair(ctx context.Context, email string, resetTOTP bool
 			if _, err := tx.Exec(ctx, `UPDATE operators SET revoked_at=NULL, failed_codes=0, locked_until=NULL WHERE id=$1`, id); err != nil {
 				return err
 			}
-			if err := operatorAudit(ctx, tx, "cli", by, "operator.restore", map[string]any{"operator": email}); err != nil {
+			if err := operatorAudit(ctx, tx, kind, by, "operator.restore", map[string]any{"operator": email}); err != nil {
 				return err
 			}
 		}
@@ -199,7 +204,7 @@ func (s *OperatorService) Pair(ctx context.Context, email string, resetTOTP bool
 			id, hash, purpose, s.now().Add(operatorLinkLifetime), by); err != nil {
 			return fmt.Errorf("make operator link: %w", err)
 		}
-		return operatorAudit(ctx, tx, "cli", by, "operator.pair", map[string]any{"operator": email, "reset_totp": resetTOTP})
+		return operatorAudit(ctx, tx, kind, by, "operator.pair", map[string]any{"operator": email, "reset_totp": resetTOTP})
 	})
 	if err != nil {
 		return "", err
@@ -411,9 +416,9 @@ func (s *OperatorService) Authenticate(ctx context.Context, raw string, viaCooki
 		err := tx.QueryRow(ctx, `UPDATE operator_sessions s SET last_seen_at=$2
 			FROM operators o
 			WHERE s.token_hash=$1 AND o.id = s.operator_id AND s.revoked_at IS NULL AND o.revoked_at IS NULL AND s.expires_at > $2
-			RETURNING s.id, s.kind, s.permissions, s.created_at, s.reauth_at, o.id, o.email, o.created_at, o.created_by, o.totp_enabled_at`,
+			RETURNING s.id, s.kind, s.permissions, s.created_at, s.expires_at, s.reauth_at, o.id, o.email, o.created_at, o.created_by, o.totp_enabled_at`,
 			operatorTokenHash(raw), s.now()).
-			Scan(&principal.SessionID, &principal.Kind, &principal.Permissions, &principal.CreatedAt, &principal.ReauthAt,
+			Scan(&principal.SessionID, &principal.Kind, &principal.Permissions, &principal.CreatedAt, &principal.ExpiresAt, &principal.ReauthAt,
 				&principal.Operator.ID, &principal.Operator.Email, &principal.Operator.CreatedAt, &principal.Operator.CreatedBy, &principal.Operator.TOTPEnabledAt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: unknown, revoked or expired", ErrInvalidCredential)
@@ -754,4 +759,158 @@ func (s *OperatorService) FileRequest(ctx context.Context, principal OperatorPri
 		return operatorAudit(ctx, tx, "token", principal.Operator.Email, "request.file", map[string]any{"request": request.ID, "route": request.Route})
 	})
 	return request, err
+}
+
+// ErrOperatorRequestDecided means the request is no longer pending.
+var ErrOperatorRequestDecided = errors.New("the request was decided, cancelled or expired")
+
+const operatorRequestColumns = `r.id, r.session_id, s.label, o.email, r.method, r.route, r.path, r.body, r.summary, r.note, r.needs_secrets,
+	CASE WHEN r.status = 'pending' AND r.expires_at <= $1 THEN 'expired' ELSE r.status END,
+	coalesce(d.email, ''), r.decided_at, r.result_status, r.result, r.created_at, r.expires_at`
+
+const operatorRequestJoins = `FROM operator_requests r JOIN operator_sessions s ON s.id = r.session_id JOIN operators o ON o.id = s.operator_id
+	LEFT JOIN operators d ON d.id = r.decided_by`
+
+func scanOperatorRequest(row pgx.Row) (OperatorRequest, error) {
+	var request OperatorRequest
+	var body, result []byte
+	err := row.Scan(&request.ID, &request.SessionID, &request.TokenLabel, &request.Email, &request.Method, &request.Route, &request.Path, &body,
+		&request.Summary, &request.Note, &request.NeedsSecrets, &request.Status, &request.DecidedBy, &request.DecidedAt, &request.ResultStatus, &result,
+		&request.CreatedAt, &request.ExpiresAt)
+	request.Body, request.Result = body, result
+	if request.NeedsSecrets == nil {
+		request.NeedsSecrets = []string{}
+	}
+	return request, err
+}
+
+// Requests lists operator requests, newest first: a token sees its own, an operator's session all.
+func (s *OperatorService) Requests(ctx context.Context, principal OperatorPrincipal) ([]OperatorRequest, error) {
+	var requests []OperatorRequest
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT `+operatorRequestColumns+` `+operatorRequestJoins+`
+			WHERE ($2 = '' OR r.session_id::text = $2) ORDER BY r.created_at DESC LIMIT 200`, s.now(), tokenFilter(principal))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			request, err := scanOperatorRequest(rows)
+			if err != nil {
+				return err
+			}
+			requests = append(requests, request)
+		}
+		return rows.Err()
+	})
+	return requests, err
+}
+
+func tokenFilter(principal OperatorPrincipal) string {
+	if principal.IsToken() {
+		return principal.SessionID
+	}
+	return ""
+}
+
+// Request finds one request the principal may see; pgx.ErrNoRows when none.
+func (s *OperatorService) Request(ctx context.Context, principal OperatorPrincipal, id string) (OperatorRequest, error) {
+	var request OperatorRequest
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		var err error
+		request, err = scanOperatorRequest(tx.QueryRow(ctx, `SELECT `+operatorRequestColumns+` `+operatorRequestJoins+`
+			WHERE r.id::text = $3 AND ($2 = '' OR r.session_id::text = $2)`, s.now(), tokenFilter(principal), id))
+		return err
+	})
+	return request, err
+}
+
+// PendingRequests counts the requests waiting for a person.
+func (s *OperatorService) PendingRequests(ctx context.Context) (int, error) {
+	var count int
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT count(*) FROM operator_requests WHERE status='pending' AND expires_at > $1`, s.now()).Scan(&count)
+	})
+	return count, err
+}
+
+// CancelRequest withdraws a pending request: its own token, or an operator's session.
+func (s *OperatorService) CancelRequest(ctx context.Context, principal OperatorPrincipal, id string) (OperatorRequest, error) {
+	return s.decide(ctx, principal, id, "cancelled", "request.cancel")
+}
+
+// RejectRequest refuses a pending request; nothing runs.
+func (s *OperatorService) RejectRequest(ctx context.Context, principal OperatorPrincipal, id string) (OperatorRequest, error) {
+	return s.decide(ctx, principal, id, "rejected", "request.reject")
+}
+
+// ClaimRequest marks a pending request approved before its call runs, so two approvals run it once.
+func (s *OperatorService) ClaimRequest(ctx context.Context, principal OperatorPrincipal, id string) (OperatorRequest, error) {
+	return s.decide(ctx, principal, id, "approved", "request.approve")
+}
+
+func (s *OperatorService) decide(ctx context.Context, principal OperatorPrincipal, id, status, action string) (OperatorRequest, error) {
+	var request OperatorRequest
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		var current string
+		var expires time.Time
+		err := tx.QueryRow(ctx, `SELECT status, expires_at FROM operator_requests WHERE id::text=$1 AND ($2 = '' OR session_id::text = $2) FOR UPDATE`,
+			id, tokenFilter(principal)).Scan(&current, &expires)
+		if err != nil {
+			return err
+		}
+		if current != "pending" || !s.now().Before(expires) {
+			return ErrOperatorRequestDecided
+		}
+		var decider *string
+		if !principal.IsToken() {
+			decider = &principal.Operator.ID
+		}
+		if _, err := tx.Exec(ctx, `UPDATE operator_requests SET status=$2, decided_by=$3, decided_at=$4 WHERE id::text=$1`, id, status, decider, s.now()); err != nil {
+			return err
+		}
+		if err := operatorAudit(ctx, tx, actorKind(principal), principal.Operator.Email, action, map[string]any{"request": id}); err != nil {
+			return err
+		}
+		request, err = scanOperatorRequest(tx.QueryRow(ctx, `SELECT `+operatorRequestColumns+` `+operatorRequestJoins+` WHERE r.id::text = $2`, s.now(), id))
+		return err
+	})
+	return request, err
+}
+
+// FinishRequest records the outcome of an approved request's call; result is nil when it holds a credential.
+func (s *OperatorService) FinishRequest(ctx context.Context, id string, status int, result json.RawMessage) (OperatorRequest, error) {
+	var request OperatorRequest
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		outcome := "approved"
+		if status < 200 || status > 299 {
+			outcome = "failed"
+		}
+		var stored any
+		if len(result) > 0 {
+			stored = result
+		}
+		if _, err := tx.Exec(ctx, `UPDATE operator_requests SET status=$2, result_status=$3, result=$4 WHERE id::text=$1`, id, outcome, status, stored); err != nil {
+			return err
+		}
+		var err error
+		request, err = scanOperatorRequest(tx.QueryRow(ctx, `SELECT `+operatorRequestColumns+` `+operatorRequestJoins+` WHERE r.id::text = $2`, s.now(), id))
+		return err
+	})
+	return request, err
+}
+
+// MarkReauthenticated records a fresh code on the principal, for a call replayed after the approver's code.
+func (p OperatorPrincipal) MarkReauthenticated(at time.Time) OperatorPrincipal {
+	p.ReauthAt = &at
+	return p
+}
+
+// Now is the service's clock.
+func (s *OperatorService) Now() time.Time { return s.now() }
+
+// Invite makes a sign-in link for an operator another operator adds (or lets a revoked one in again).
+func (s *OperatorService) Invite(ctx context.Context, principal OperatorPrincipal, email string) (string, time.Time, error) {
+	link, err := s.pair(ctx, email, false, actorKind(principal), principal.Operator.Email)
+	return link, s.now().Add(operatorLinkLifetime), err
 }

@@ -7,6 +7,8 @@ func (a *API) routeSpecs() []routeSpec {
 	handlers := []http.HandlerFunc{
 		a.getConfig, a.exchangeCloudSession, a.signUpCloud,
 		a.redeem, a.redeemOperatorLink, a.confirmOperatorCode, a.getOperatorMe, a.operatorLogout, a.createOperatorToken,
+		a.getOperatorStatus, a.getOperatorConfig, a.changeOperatorConfig, a.checkOperatorConfig, a.listOperatorConfigVersions, a.restoreOperatorConfigVersion,
+		a.listOperatorAudit, a.listOperatorRequests, a.getOperatorRequest, a.cancelOperatorRequest, a.listOperators, a.inviteOperator, a.revokeOperator, a.revokeOperatorSession,
 		a.logout, a.me, a.listSessions, a.revokeSession, a.createAgentToken,
 		a.createInvite, a.listInvites, a.revokeInvite,
 		a.listConversations, a.createConversation, a.bulkUpdateConversations, a.getConversation, a.updateConversation,

@@ -83,7 +83,8 @@ test('the brand orange appears only in the logo', () => {
     const url = new URL(name, dir);
     return statSync(url).isDirectory() ? files(new URL(`${name}/`, dir)) : [url];
   });
-  const allowed = ['styles/tokens.css', 'ui/logo.tsx'];
+  // The operator console draws the same mark coloured by class (its CSP allows no inline style).
+  const allowed = ['styles/tokens.css', 'ui/logo.tsx', 'operator/operator.css'];
   const offenders = files(root)
     .filter((url) => /\.(css|tsx?)$/.test(url.pathname) && !url.pathname.endsWith('.test.tsx') && !url.pathname.endsWith('.test.ts'))
     .map((url) => url.pathname.slice(root.pathname.length))

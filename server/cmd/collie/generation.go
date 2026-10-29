@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -48,6 +49,7 @@ type process struct {
 	// operatorOrigin is OPERATOR_ORIGIN when valid; operators signs operators in for every generation.
 	operatorOrigin string
 	operators      *auth.OperatorService
+	configStore    *serverconfig.Store
 	wait           sync.WaitGroup
 }
 
@@ -231,7 +233,8 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: config.MailImageCacheBytes,
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,
 		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
-		ProblemReportWorkspace: config.ProblemReportWorkspace, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators}
+		ProblemReportWorkspace: config.ProblemReportWorkspace, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
+		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {
@@ -261,6 +264,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		g.Go(func(ctx context.Context) { refreshFoundingAtStart(ctx, api) })
 	}
 	// The help center is outermost: a request to a help center host never reaches the app, the API or MCP.
-	g.handler = operatorHost(origin, p.operatorOrigin, api.WrapHelpCenter(mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators}, webui.Handler(api))))
+	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators}, webui.Handler(api))
+	g.handler = operatorHost(origin, p.operatorOrigin, api.WrapHelpCenter(inner), inner, webui.OperatorHandler(""))
 	return g
 }

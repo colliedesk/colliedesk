@@ -269,6 +269,20 @@ approves it in the console with their authenticator code.
 | `colliedesk_operator_whoami` | Shows the operator the token acts as, what it may ask for and where the console is | `operator` |
 | `colliedesk_operator_sign_out` | Ends this operator token. Cannot be undone | `operator` |
 | `colliedesk_operator_token_create` | Asks an operator for another operator token | `operator` |
+| `colliedesk_operator_status` | Shows the server's release, the configuration each process runs and what needs attention | `operator` |
+| `colliedesk_operator_config_get` | Reads every setting, without secrets | `operator` |
+| `colliedesk_operator_config_check` | Checks a settings change without saving it, and can send a test email | `operator` |
+| `colliedesk_operator_config_change` | Asks an operator to change settings | `operator` |
+| `colliedesk_operator_config_history` | Lists the configuration versions and what each changed | `operator` |
+| `colliedesk_operator_config_restore` | Asks an operator to restore an older configuration version | `operator` |
+| `colliedesk_operator_audit` | Reads the operator audit log | `operator` |
+| `colliedesk_operator_requests` | Lists the requests this token made | `operator` |
+| `colliedesk_operator_request_get` | Shows one request this token made | `operator` |
+| `colliedesk_operator_request_cancel` | Withdraws a request this token made | `operator` |
+| `colliedesk_operator_team` | Lists operators, sessions and tokens | `operator` |
+| `colliedesk_operator_invite` | Asks an operator to invite another operator | `operator` |
+| `colliedesk_operator_revoke` | Asks an operator to revoke an operator | `operator` |
+| `colliedesk_operator_session_revoke` | Asks an operator to end a session or token | `operator` |
 <!-- /generated -->
 
 ## What the agent sees

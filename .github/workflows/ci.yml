@@ -232,7 +232,7 @@ jobs:
       - name: Build the app and compile the test servers in the background
         run: |
           sh .github/scripts/ci-background.sh start app sh -c \
-            'cd web && corepack pnpm exec vite build && cd ../server && go build -tags e2e -o /dev/null ./cmd/collie && go build -o /dev/null ./cmd/collie'
+            'cd web && corepack pnpm build:web && cd ../server && go build -tags e2e -o /dev/null ./cmd/collie && go build -o /dev/null ./cmd/collie'
       # The API drift and TypeScript checks of the web app, go vet and migration validation run here,
       # in the background while Chromium installs and the database starts: this job finished at 56
       # seconds, while each of them made the job it ran in end later (the web job, the Go shards).
@@ -359,7 +359,7 @@ jobs:
         working-directory: web
         env:
           JOURNEY_PATTERN: ${{ matrix.pattern }}
-        run: corepack pnpm exec vite build && corepack pnpm e2e --grep "$JOURNEY_PATTERN"
+        run: corepack pnpm build:web && corepack pnpm e2e --grep "$JOURNEY_PATTERN"
   # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
   # On main the image is pushed as sha-<commit>; publish-edge.yml retags that digest after CI.
   image:
