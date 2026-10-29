@@ -178,6 +178,7 @@ var requestTitles = map[string]string{
 	"PATCH /api/v1/workspace/name":                               "Rename the workspace",
 	"PATCH /api/v1/agents/me/timezone":                           "Change my timezone",
 	"PATCH /api/v1/agents/me/results-email":                      "Turn my weekly results email on or off",
+	"PUT /api/v1/agents/me/setup-guide":                          "Hide or show my setup guide",
 	"GET /api/v1/results/share-link":                             "Show the results share link",
 	"POST /api/v1/results/share-link":                            "Create a share link of the results page",
 	"DELETE /api/v1/results/share-link":                          "Turn off the results share link",

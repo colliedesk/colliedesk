@@ -169,6 +169,19 @@ test('theme and desktop notifications live together under Preferences', () => {
   vi.unstubAllGlobals();
 });
 
+test('Preferences offers the setup guide, ticked while it shows, and a change is reported', () => {
+  const onSetSetupGuideHidden = vi.fn();
+  const { rerender } = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" setupGuideHidden={false} onSetSetupGuideHidden={onSetSetupGuideHidden} />);
+  const box = within(screen.getByRole('region', { name: 'Preferences' })).getByRole('checkbox', { name: 'Show the setup guide' });
+  expect(box).toBeChecked();
+  fireEvent.click(box);
+  expect(onSetSetupGuideHidden).toHaveBeenLastCalledWith(true);
+  rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" setupGuideHidden onSetSetupGuideHidden={onSetSetupGuideHidden} />);
+  expect(screen.getByRole('checkbox', { name: 'Show the setup guide' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Show the setup guide' }));
+  expect(onSetSetupGuideHidden).toHaveBeenLastCalledWith(false);
+});
+
 test('a chosen workspace timezone is saved when the list is left, no Save button', () => {
   const onSetWorkspaceTimezone = vi.fn();
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace workspaceTimezone="UTC" onSetWorkspaceTimezone={onSetWorkspaceTimezone} />);

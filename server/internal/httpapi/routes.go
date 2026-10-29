@@ -42,6 +42,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.createAIDraft, a.listAIDrafts, a.getAIDraft, a.discardAIDraft,
 		a.getAITriage, a.createAITriage, a.acceptAITriage, a.dismissAITriage, a.undoAITriage,
 		a.getResults, a.getResultsShareLink, a.createResultsShareLink, a.revokeResultsShareLink, a.getSharedResults, a.setResultsEmail,
+		a.getSetupProgress, a.setSetupGuideHidden,
 		a.listChannels, a.createChannel, a.listChannelEvents, a.getChannel, a.updateChannel, a.removeChannel, a.setChannelCredential, a.checkChannel,
 		a.replayHeldChannelMessages, a.discardHeldChannelMessages,
 		a.getEmailChannel, a.verifyEmailDomain, a.rotateEmailSecret, a.connectGmail, a.disconnectGmail, a.submitWebForm,

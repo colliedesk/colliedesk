@@ -6,7 +6,7 @@ import { settingsMessages } from './settings-messages';
 import { NotificationsSetting } from './notifications-setting';
 
 // Preferences are per-browser choices: saved locally, not on the agent profile.
-export function PreferencesSection() {
+export function PreferencesSection({ setupGuideHidden = false, onSetSetupGuideHidden }: { setupGuideHidden?: boolean; onSetSetupGuideHidden?: (hidden: boolean) => void }) {
   const [theme, setTheme] = useState<Theme>(storedTheme);
   // Another tab saved a different theme: follow it, and show it as the choice.
   useEffect(() => onThemeChange((next) => { setTheme(next); applyTheme(next); }), []);
@@ -24,6 +24,10 @@ export function PreferencesSection() {
           </fieldset>
         </div>
         <NotificationsSetting />
+        {onSetSetupGuideHidden && <div className="field">
+          <label className="field-inline"><input type="checkbox" checked={!setupGuideHidden} onChange={(event) => onSetSetupGuideHidden(!event.target.checked)} />
+            <span>{settingsMessages.showSetupGuide}</span></label>
+        </div>}
       </div>
     </section>
   );
