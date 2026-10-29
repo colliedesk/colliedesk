@@ -61,6 +61,49 @@ func TestOperatorPairListRevokeAndTokens(t *testing.T) {
 	}
 }
 
+// collie operator add lets an operator in without a link (they sign in with their email on the hosted
+// cloud); list shows them, revoke takes them out, and the audit log says who did each.
+func TestOperatorAddWithoutALink(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("MAILBOX_TOKEN_KEYS", cliTestRing)
+	t.Setenv("OPERATOR_ORIGIN", "https://ops.example.com")
+	runOperator := func(args ...string) (string, error) {
+		var output strings.Builder
+		err := run(context.Background(), append([]string{"operator"}, args...), &output, databaseURL, "https://desk.example.com")
+		return output.String(), err
+	}
+	added, err := runOperator("add", "--email", "Long@HCLabs.co", "--by", "chinh")
+	if err != nil || strings.Contains(added, "token=") || !strings.Contains(added, "added long@hclabs.co") || !strings.Contains(added, "https://ops.example.com/sign-in") {
+		t.Fatalf("add = %q, %v", added, err)
+	}
+	if again, err := runOperator("add", "--email", "long@hclabs.co", "--by", "chinh"); err != nil || !strings.Contains(again, "already an operator") {
+		t.Fatalf("add again = %q, %v", again, err)
+	}
+	if list, _ := runOperator("list"); !strings.Contains(list, "long@hclabs.co\tactive\tno authenticator\tadded ") || !strings.Contains(list, "by cli:chinh") {
+		t.Fatalf("list = %q", list)
+	}
+	if _, err := runOperator("revoke", "long@hclabs.co", "--by", "chinh"); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := runOperator("list"); !strings.Contains(list, "long@hclabs.co\trevoked") {
+		t.Fatalf("list after revoke = %q", list)
+	}
+	if back, err := runOperator("add", "--email", "long@hclabs.co", "--by", "chinh"); err != nil || !strings.Contains(back, "added long@hclabs.co") {
+		t.Fatalf("add after revoke = %q, %v", back, err)
+	}
+	if _, err := runOperator("add", "--by", "chinh"); err == nil {
+		t.Fatal("add without an email")
+	}
+	pool := cliPool(t, databaseURL)
+	var actions string
+	if err := pool.QueryRow(context.Background(), `SELECT string_agg(action || ':' || actor_kind || ':' || actor, ',' ORDER BY id) FROM operator_audit WHERE action LIKE 'operator.%'`).Scan(&actions); err != nil {
+		t.Fatal(err)
+	}
+	if actions != "operator.add:cli:cli:chinh,operator.revoke:cli:cli:chinh,operator.restore:cli:cli:chinh" {
+		t.Fatalf("audit = %s", actions)
+	}
+}
+
 func TestOperatorOriginMustBeItsOwnHttpsHost(t *testing.T) {
 	for value, ok := range map[string]bool{
 		"":                          true,

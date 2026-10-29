@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api, onSessionEnded } from './api';
+import { api, cloudPublishableKey, onSessionEnded } from './api';
 import type { Config, Me, Status } from './api';
 import { CommandLine } from './copy';
 import { groupOrder } from './fields';
@@ -84,8 +84,18 @@ export function App() {
 function Ended() {
   return <div className="ops-page-inner ended" role="alert">
     <header className="page-head"><div><h1 id="page-title">{m.signedOutTitle}</h1><p>{m.signedOutLead}</p></div></header>
+    {cloudPublishableKey() && <div className="button-row"><button type="button" className="primary-action" onClick={() => window.location.assign(href('/sign-in'))}>{m.signInWithEmail}</button></div>}
     <CommandLine command="docker compose exec server /app/collie operator pair --email <your email>" />
   </div>;
+}
+
+// signOut ends the console's session. With cloud sign-in the sign-in page is loaded in full, under its own
+// content policy, and ends the identity provider's session in this browser too (signed_out).
+function signOut() {
+  void api.logout().finally(() => {
+    if (cloudPublishableKey()) window.location.assign(href('/sign-in?signed_out=1'));
+    else navigate('/sign-in', true);
+  });
 }
 
 function NavLink({ to, path, icon, children, count }: { to: string; path: string; icon: ReactNode; children: string; count?: number }) {
@@ -142,7 +152,7 @@ function Shell({ data, ended, path, reload, children }: { data: { me: Me; status
           {menu && <div id="ops-account-menu" className="ops-account-menu" onKeyDown={(event) => { if (event.key === 'Escape') { setMenu(false); menuButton.current?.focus(); } }}>
             <p>{m.account}<span>{data.me.operator.email}</span></p>
             <button type="button" onClick={() => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); setThemeState(next); }}>{theme === 'dark' ? m.lightTheme : m.darkTheme}</button>
-            <button type="button" onClick={() => { void api.logout().finally(() => navigate('/sign-in', true)); }}>{m.signOut}</button>
+            <button type="button" onClick={signOut}>{m.signOut}</button>
           </div>}
         </div>}
       </header>

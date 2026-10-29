@@ -78,6 +78,9 @@ export const m = {
   wrongHostTitle: 'The operator console has its own address',
   noLinkTitle: 'Open the console with a sign-in link',
   noLinkLead: 'The console opens with a one-time link from the server. A link is spent once opened, also when the page was reloaded while turning on an authenticator: print a new one.',
+  cloudSignInLead: 'Sign in with your email. Only the operators of this server get in, and your authenticator then asks for a code.',
+  signInWithEmail: 'Sign in with your email',
+  orWithLink: 'Sign in with a link from the server instead',
   // Overview
   overviewLead: 'This server at a glance.',
   server: 'Server',
@@ -275,6 +278,7 @@ export const m = {
   done: "I've stored it",
   inviteLink: 'One-time link (15 minutes)',
   inviteAgain: 'If it expires, invite them again.',
+  inviteCloud: 'They can also sign in with this email at the console, without the link; their authenticator is set up on the first sign-in.',
   onlyOperator: 'You are the only operator. Invite a second one so someone can approve requests while you are away.',
   ended: 'Ended',
   expires: 'Expires',

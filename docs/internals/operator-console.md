@@ -71,6 +71,27 @@ Operators (`operators`, `operator_links`, `operator_sessions`, `operator_request
   the key being enrolled, sealed, until a code proves it. Codes are RFC 6238 with the used step stored.
   Limits: 5 tries a minute per link or ticket, 60 per client address (only a second layer: wrong trusted
   proxies put every client behind one address), and 10 wrong codes lock the operator for 15 minutes.
+- Cloud sign-in (`POST /operator/auth/cloud`, `OperatorService.CloudSignIn`): the bearer is the identity
+  provider's session token, checked by the app's own verifier (`cloudauth`) built a second time with
+  `Config.ForParty(operatorOrigin)`: the same issuer, keys and email claim, but `azp` must be the console's
+  origin. `cloud_auth.authorized_parties` stays the app's, so a token issued to `app.` never opens the
+  console and one issued to `ops.` never the app. Without `OPERATOR_ORIGIN` the two origins are one and so
+  is the token; the hosted cloud cannot run so (`config doctor` error), and a self-hosted server in path
+  mode still needs an operator's email and its authenticator. Every refusal (no operator, revoked, bad
+  token of any kind) is the same 401 `operator_sign_in_refused`; a verified email that is refused writes
+  `operator.sign_in_refused`, an unverifiable token only a log line, so junk traffic writes no rows.
+- A cloud sign-in always ends at the authenticator, even with `operator.require_totp` off: `Reauth` lets a
+  session without one through for 15 minutes because it assumes a fresh link from the shell, which a
+  mailbox is not. It never replaces an authenticator (`--reset-totp` stays shell-only). The ticket's
+  `created_by` (`cloud-sign-in`) makes the session's `operator.sign_in` line say `via: cloud`. Trap: from
+  `collie operator add` (or an invite) until the first sign-in, whoever holds the mailbox enrolls the
+  authenticator (trust on first use, as with a link sent by mail); add operators just before they sign in.
+- The console's content policy forbids every other host and inline style; Clerk's form needs its Frontend
+  API host, bot protection and inline styles. Only `/sign-in`, and only with a publishable key that names a
+  host (`cloudauth.FrontendHost`), gets `signInCSP`, and the page names the key in
+  `<meta name="colliedesk-operator-clerk">` (the console's host serves no `/api/v1/config`). A cloud sign-in
+  ends with a full load and sign-out goes to `/sign-in?signed_out=1` by a full load, so no signed-in screen
+  runs with the provider's scripts. The form is the app's `ClerkSession` in a lazy part with its own strings.
 - The QR code is drawn on the server (`internal/qrsvg`, byte mode, level M, versions 1–10) so the console's
   first bundle carries no QR library; the key is always shown as text too.
 - An operator token's call to an `alwaysAsk` route is filed in `operator_requests` (`fileOperatorRequest`,

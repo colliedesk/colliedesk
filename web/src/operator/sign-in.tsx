@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { ApiError, api } from './api';
+import { ApiError, api, cloudPublishableKey } from './api';
 import type { SignInStep } from './api';
 import { CommandLine, when } from './copy';
 import { ConsoleLogo } from './logo';
 import { m } from './messages';
-import { navigate } from './router';
+import { href, navigate } from './router';
+
+// The identity provider's form, loaded only when the server offers cloud sign-in on this console.
+const CloudSignIn = lazy(() => import('./cloud-sign-in'));
 
 // takeToken reads the link's token once and takes it out of the address at once, so it never stays in the
 // history, a bookmark or a Referer (design ops-uiux, decision 6).
@@ -27,7 +30,8 @@ type State =
   | { kind: 'no-totp' }
   | { kind: 'locked'; until: string; email?: string }
   | { kind: 'link'; title: string; used?: boolean; ring?: boolean }
-  | { kind: 'no-link' };
+  | { kind: 'no-link' }
+  | { kind: 'cloud' };
 
 const pairCommand = (email = '<your email>', reset = false) => `docker compose exec server /app/collie operator pair --email ${email}${reset ? ' --reset-totp' : ''}`;
 
@@ -52,21 +56,34 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const [state, setState] = useState<State>({ kind: 'continue' });
   const [code, setCode] = useState('');
   const main = useRef<HTMLElement>(null);
+  const publishableKey = cloudPublishableKey();
+  // Right after signing out, the identity provider's session in this browser ends too (ClerkSession).
+  const [endSession] = useState(() => new URLSearchParams(window.location.search).has('signed_out'));
+  // A sign-in begun with the identity provider ends with a full load, so the signed-in console runs under its
+  // own content policy, without the provider's scripts.
+  const viaCloud = useRef(false);
   useEffect(() => {
     token.current = takeToken();
-    if (!token.current) setState({ kind: 'no-link' });
-  }, []);
+    if (!token.current) setState({ kind: publishableKey ? 'cloud' : 'no-link' });
+  }, [publishableKey]);
   useEffect(() => { main.current?.focus(); }, [state.kind]);
 
   const finish = (step: SignInStep) => {
     if (step.step === 'done') {
-      if (step.totp_required === false) setState({ kind: 'no-totp' });
+      if (viaCloud.current) window.location.assign(href('/'));
+      else if (step.totp_required === false) setState({ kind: 'no-totp' });
       else { onSignedIn(); navigate('/', true); }
       return;
     }
     setCode('');
     setState({ kind: 'code', step });
   };
+  const cloudStep = useCallback((step: SignInStep) => {
+    viaCloud.current = true;
+    setCode('');
+    setState({ kind: 'code', step });
+  }, []);
+  const cloudError = useCallback((error: ApiError) => { setState(linkError(error)); }, []);
   const redeem = async () => {
     setState({ kind: 'busy' });
     try {
@@ -146,6 +163,17 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         <p>{state.ring ? m.ringMissingLead : m.linkHelp}</p>
         <CommandLine command={pairCommand()} />
         {state.used && <><p>{m.usedHelp}</p><CommandLine command="docker compose exec server /app/collie operator sessions" /></>}
+        {publishableKey && <button type="button" onClick={() => setState({ kind: 'cloud' })}>{m.signInWithEmail}</button>}
+      </>;
+      break;
+    case 'cloud':
+      body = <>
+        <h1 id="sign-title">{m.signInTitle}</h1>
+        <p>{m.cloudSignInLead}</p>
+        <Suspense fallback={<p>{m.continuing}</p>}>
+          <CloudSignIn publishableKey={publishableKey} endSession={endSession} onStep={cloudStep} onError={cloudError} />
+        </Suspense>
+        <details><summary>{m.orWithLink}</summary><CommandLine command={pairCommand()} /></details>
       </>;
       break;
     case 'no-link':

@@ -298,6 +298,12 @@ bundle; the trial band and the Polar products table as lazy parts): 76,691 and 8
 Playwright on a local `collie serve` (Chromium, 1,440 px, an Apple M4, median of 5): a full load of the
 overview to its numbers 41 ms; from a nav link to a settings page 16 ms.
 
+On 2026-10-29 cloud sign-in on the console (email and code, then the authenticator) kept in the first
+bundle only the sign-in page's branch, the meta read and a few strings: 77,416 → 77,843 bytes (+427), CSS
+unchanged at 9,006. Clerk's form with its strings is the lazy part `cloud-sign-in`, loaded only by the
+sign-in page of a server with cloud sign-in. The workspace app's first bundle: 200,409 → 200,411 (its cloud
+sign-in now uses the shared `ClerkSession`).
+
 ## Reply box lists (saved replies, articles)
 
 Measured on 2026-10-21 against a local `collie serve`, Chromium, a new browser context with the cache disabled for each run, median of 5: open a conversation by its address, wait until the reply box is enabled, then a programmatic click, timed with `performance.now` in the page until the first option shows. The list's box (loading state or list) shows in the same frame as the click in every run (2–10 ms), so nothing moves when the list arrives.

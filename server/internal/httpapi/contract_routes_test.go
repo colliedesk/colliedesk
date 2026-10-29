@@ -168,6 +168,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/config":                                         {"/api/v1/config", nil, "", 200, ""},
 		"POST /api/v1/operator/auth/redeem":                          {"/api/v1/operator/auth/redeem", map[string]any{"token": f.operatorLink}, "", 200, ""},
 		"POST /api/v1/operator/auth/totp":                            {"/api/v1/operator/auth/totp", map[string]any{"ticket": "no-such-ticket", "code": "123456"}, "", 404, ""},
+		"POST /api/v1/operator/auth/cloud":                           {"/api/v1/operator/auth/cloud", nil, "disabled-cloud-token", 404, ""},
 		"GET /api/v1/operator/auth/me":                               {"/api/v1/operator/auth/me", nil, f.operatorToken, 200, ""},
 		"POST /api/v1/operator/auth/logout":                          {"/api/v1/operator/auth/logout", nil, f.operatorLogoutToken, 204, ""},
 		"POST /api/v1/operator/tokens":                               {"/api/v1/operator/tokens", map[string]any{"label": "contract"}, f.operatorToken, 202, ""},
