@@ -111,7 +111,7 @@ leaves still gets the answer stored and metered, and reads it back with `GET …
   at 200 characters or 1.5 s, at the last space that does not split a run of number groups (`+84 912
   345` waits for `678`). An email address, a run of 6 or more digits (compared digits only, so
   `10.000.000` and `10,000,000` are the same) or a link (scheme, `www.`, a domain with a path, or a
-  common top-level domain; compared without scheme and `www.`, a translated `<placeholder>` keeps the
+  bare lower-case domain under any top-level domain of letters, not a file name such as `invoice.pdf`; compared without scheme and `www.`, a translated `<placeholder>` keeps the
   part before it) that the articles the AI read do not hold replaces its whole sentence with
   `[contact details hidden — not in the articles]`. The 20 answers of the eval keep every word
   (`TestRealAnswersFromTheArticlesAreNeverHidden`).
@@ -128,7 +128,10 @@ out of what the team spent and holds. On the cloud's own provider (plan limits) 
 the month's or the day's answers or spend are reached; elsewhere only the slot's own monthly limit and a
 tenth of it a day. A chat call on a workspace's key is priced at `AI_SERVER_PRICES` when its model has a
 price there, so that limit can count; a limit on a model without a price is refused when it is set
-(400 naming the model).
+(400 naming the model). The month counts what was spent plus what running calls hold (the most a call
+can cost: every token of its prompt at the full input price), so it is never passed; the day counts
+only what was spent, so a question is not refused for a cost the cache mostly saves (one answer may
+pass the day's tenth).
 
 - **Pre-warm**: `POST …/chat/prewarm` (the chat page, when the end user first focuses the question)
   sends the turn's own prefix with `max_tokens: 0`, not streamed (a stream refuses 0), only to a

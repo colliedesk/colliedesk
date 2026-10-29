@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,11 @@ const (
 	ChatKeptFor = 30 * 24 * time.Hour
 	// chatAnswerTimeout bounds one answer, whether or not the end user still waits for it.
 	chatAnswerTimeout = 60 * time.Second
+	// chatStoreTimeout bounds storing an answer, after its own time.
+	chatStoreTimeout = 10 * time.Second
+	// ChatInterruptedAfter: a turn still streaming this long after it began was cut (a crash, a deploy);
+	// the sweep marks it failed so it is not read back as on its way for ever.
+	ChatInterruptedAfter = 5 * time.Minute
 	// Answers streaming at once: per workspace and per process.
 	chatPerWorkspace = 3
 	chatPerProcess   = 32
@@ -117,10 +123,12 @@ type ChatTurnView struct {
 
 // ChatSessionView is a browser's chat.
 type ChatSessionView struct {
-	ID        string         `json:"-"`
-	Status    string         `json:"status"`
-	IdleHours int            `json:"idle_hours"`
-	Turns     []ChatTurnView `json:"turns"`
+	ID string `json:"-"`
+	// HandedOffAt is the last hand-off, nil before one.
+	HandedOffAt *time.Time     `json:"-"`
+	Status      string         `json:"status"`
+	IdleHours   int            `json:"idle_hours"`
+	Turns       []ChatTurnView `json:"turns"`
 }
 
 // ChatEvents receive one answer as it is written. A call after the end user left is harmless.
@@ -164,6 +172,9 @@ func (s *Service) ChatSessionOf(ctx context.Context, workspaceID string, browser
 			return err
 		}
 		found, view.ID, view.Status, view.IdleHours = true, id, status, int(s.now().UTC().Sub(last).Hours())
+		if err := tx.QueryRow(ctx, `SELECT handed_off_at FROM ai_chat_sessions WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&view.HandedOffAt); err != nil {
+			return err
+		}
 		turns, err := readChatTurns(ctx, tx, workspaceID, id)
 		view.Turns = make([]ChatTurnView, 0, len(turns))
 		for _, turn := range turns {
@@ -305,7 +316,11 @@ func (s *Service) ChatTurn(ctx context.Context, workspaceID string, in ChatTurnI
 	}
 	events.Turn(start.turnID, start.created)
 	// The answer goes on without the end user: it is stored and metered either way.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatAnswerTimeout)
+	timeout := s.config.ChatAnswerTimeout
+	if timeout <= 0 {
+		timeout = chatAnswerTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 	return s.answerChatTurn(ctx, workspaceID, binding, in, question, start, events)
 }
@@ -394,16 +409,19 @@ func (s *Service) answerChatTurn(ctx context.Context, workspaceID string, bindin
 		outcome = s.streamChat(ctx, workspaceID, binding, prompt, events)
 		outcome.cut = prompt.Cut > 0
 	}
+	// The answer is stored even once its time ran out: the outcome says so, and the store has its own.
+	store, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatStoreTimeout)
+	defer cancel()
 	if outcome.status == ChatOverLimit {
-		related, err := s.chatRelated(ctx, workspaceID, question)
+		related, err := s.chatRelated(store, workspaceID, question)
 		if err != nil {
-			return err
+			slog.Error("ai chat: related articles", "workspace_id", workspaceID, "error", err)
 		}
 		outcome.sources = related
 		events.Sources(related)
 		events.Done(ChatOverLimit, nil, false)
 	}
-	return s.finishChatTurn(ctx, workspaceID, start, prompt, outcome)
+	return s.finishChatTurn(store, workspaceID, start, prompt, outcome)
 }
 
 // streamChat calls the provider and hands the answer out sentence by sentence, checked.
@@ -494,7 +512,7 @@ func (s *Service) chatRelated(ctx context.Context, workspaceID, question string)
 // finishChatTurn stores the outcome, its sources, and the chat's last turn.
 func (s *Service) finishChatTurn(ctx context.Context, workspaceID string, start chatTurnStart, prompt ChatPrompt, outcome chatOutcome) error {
 	now := s.now().UTC()
-	return s.db.InWorkspace(context.WithoutCancel(ctx), workspaceID, func(tx pgx.Tx) error {
+	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		var input, cacheRead, cacheWrite, output *int64
 		if outcome.usage.Reported {
 			input, cacheRead, cacheWrite, output = &outcome.usage.InputTokens, &outcome.usage.CacheReadTokens, &outcome.usage.CacheWriteTokens, &outcome.usage.OutputTokens
@@ -547,7 +565,11 @@ func (s *Service) ChatPrewarm(ctx context.Context, workspaceID string, surface C
 	request.Warm, request.MaxOutput = true, 0
 	call := binding.call
 	call.Feature = FeatureChat
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), chatAnswerTimeout)
+	timeout := s.config.ChatAnswerTimeout
+	if timeout <= 0 {
+		timeout = chatAnswerTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 	if _, err := s.Metered(ctx, call, binding.Provider, request); err != nil {
 		if errors.Is(err, ErrChatLimit) {
@@ -689,8 +711,8 @@ func (s *Service) ChatHandedOff(ctx context.Context, workspaceID, sessionID, con
 		return nil
 	}
 	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE ai_chat_sessions SET status='handed_off',conversation_id=$3 WHERE workspace_id=$1 AND id=$2 AND status<>'ended'`,
-			workspaceID, sessionID, conversationID)
+		_, err := tx.Exec(ctx, `UPDATE ai_chat_sessions SET status='handed_off',conversation_id=$3,handed_off_at=$4 WHERE workspace_id=$1 AND id=$2 AND status<>'ended'`,
+			workspaceID, sessionID, conversationID, s.now().UTC())
 		return err
 	})
 }

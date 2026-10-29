@@ -67,7 +67,7 @@ AI_SERVER_MODELS=triage=claude-haiku-5-5,draft=claude-sonnet-5-5|claude-opus-5-5
 AI_SERVER_LABEL=Company AI              # optional; the name workspaces see (default "Server provider")
 ```
 
-`AI_SERVER_MODELS` lists, per feature (`triage`, `draft`), the models a workspace may pick, separated
+`AI_SERVER_MODELS` lists, per feature (`triage`, `draft`, `chat`), the models a workspace may pick, separated
 by `|`; the first is the default. A feature left out cannot use the server's provider. If some of
 these variables are set but not all that are needed, the server does not start and says which are
 missing. The server's provider can reach any address, your own network included: you chose it. No
@@ -82,7 +82,8 @@ AI_SERVER_MONTHLY_ALLOWANCE=10                 # per workspace, or agent=3,trial
 ```
 
 A price is `input:output[:cache_read[:cache_write]]` dollars per million tokens, as your provider bills
-them. Each call's cost is computed with the prices of the day it ran and stored, so changing a price
+them. A cache price left out is a share of the input price, as Anthropic bills it: a read a tenth, a
+write (five minutes) 1.25 times; write `0` to make one free. Each call's cost is computed with the prices of the day it ran and stored, so changing a price
 never rewrites a past month. An allowance needs a price for every model in `AI_SERVER_MODELS` (the server
 says which are missing); a model that answers without a price (a provider's fallback) is charged at
 the highest price you declared. Allowances reset on the first day of each UTC month. Without

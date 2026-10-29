@@ -64,8 +64,18 @@ func TestTheChatStopsAtItsOwnMonthlyLimit(t *testing.T) {
 	if _, err := e.service.MeteredStream(ctx, call, e.fake, streamRequest(), func(string) {}); err != nil {
 		t.Fatalf("first question: %v", err)
 	}
+	// Close to the day's limit, a question whose most possible cost would pass it is still answered:
+	// the day counts what was spent.
 	if _, err := e.pool.Exec(ctx, `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_kind,provider_label,model,status,started_at,finished_at,cost_micro_usd)
-		VALUES($1,'chat','workspace_key','anthropic','Team key','claude-haiku-5-5','ok',now(),now(),10000)`, e.a.id); err != nil {
+		VALUES($1,'chat','workspace_key','anthropic','Team key','claude-haiku-5-5','ok',now(),now(),9900)`, e.a.id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.service.MeteredStream(ctx, call, e.fake, streamRequest(), func(string) {}); err != nil {
+		t.Fatalf("a question near the day's limit: %v", err)
+	}
+	requests++
+	if _, err := e.pool.Exec(ctx, `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_kind,provider_label,model,status,started_at,finished_at,cost_micro_usd)
+		VALUES($1,'chat','workspace_key','anthropic','Team key','claude-haiku-5-5','ok',now(),now(),100)`, e.a.id); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.service.MeteredStream(ctx, call, e.fake, streamRequest(), func(string) {}); !errors.Is(err, ai.ErrChatLimit) {

@@ -12,17 +12,19 @@ import './ai-settings.css';
 // The team's side of the help center's AI chat: the month's use (admins), the chats and a chat's
 // transcript. Every member reads chats; only an admin deletes one.
 
-const money = (micro: number) => `$${(micro / 1e6).toFixed(2)}`;
+// Dollars with cents; an amount under a cent keeps its first two digits ($0.00044), never $0.00.
+const dollars = (micro: number) => (micro > 0 && micro < 10_000 ? (micro / 1e6).toPrecision(2) : (micro / 1e6).toFixed(2));
+const money = (micro: number) => `$${dollars(micro)}`;
 const statusClass: Record<AIChatStatus, string> = { open: 'status-open', handed_off: 'status-pending', ended: 'status-closed' };
 // A 404 fails a request as Error('API 404') (api/client.ts).
 const missing = (error: unknown) => error instanceof Error && error.message === 'API 404';
 
-// cited writes an answer's markers ([#article number]) as the numbers of its sources, as the customer saw
-// them; a marker of no source goes.
-function cited(turn: AIChatTurn) {
-  return (turn.answer ?? '').replace(/\s*\[#(\d+)\]/g, (_, number: string) => {
-    const source = turn.sources.find((item) => String(item.number) === number);
-    return source ? ` [${source.ordinal}]` : '';
+// cited writes an answer's markers ([#article number]) as the numbers of its sources in their order, as
+// the customer saw them; a marker of no source goes.
+function cited(answer: string, sources: Array<{ number: number }>) {
+  return answer.replace(/\s*\[#(\d+)\]/g, (_, number: string) => {
+    const at = sources.findIndex((item) => String(item.number) === number);
+    return at < 0 ? '' : ` [${at + 1}]`;
   });
 }
 
@@ -50,15 +52,15 @@ function Notices({ usage }: { usage: AIChatUsage }) {
 
 // CapForm sets the AI chat feature's own monthly spend limit, on a provider the workspace pays for.
 function CapForm({ slot, onSave }: { slot: AISlot; onSave: (cap: number | null) => Promise<unknown> }) {
-  const [value, setValue] = useState(slot.monthly_cap_micro_usd === null ? '' : (slot.monthly_cap_micro_usd / 1e6).toFixed(2));
+  const [value, setValue] = useState(slot.monthly_cap_micro_usd === null ? '' : dollars(slot.monthly_cap_micro_usd));
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'invalid' | 'failed'>('idle');
   const id = useId();
   const save = () => {
     const text = value.trim();
-    const dollars = Number(text);
-    if (text !== '' && !(Number.isFinite(dollars) && dollars > 0)) { setState('invalid'); return; }
+    const amount = Number(text);
+    if (text !== '' && !(Number.isFinite(amount) && amount > 0)) { setState('invalid'); return; }
     setState('saving');
-    onSave(text === '' ? null : Math.round(dollars * 1e6)).then(() => setState('saved'), () => setState('failed'));
+    onSave(text === '' ? null : Math.round(amount * 1e6)).then(() => setState('saved'), () => setState('failed'));
   };
   return <form className="aic-cap" onSubmit={(event) => { event.preventDefault(); if (state !== 'saving') save(); }}>
     <label className="field" htmlFor={id}><span>{m.capLabel}</span>
@@ -115,9 +117,9 @@ function TryIt({ on }: { on: boolean }) {
         </form>}
     {ask.isError && !off && <p role="alert" className="error-copy">{m.tryFailed}</p>}
     {answer && <div className="aic-turn" aria-live="polite">
-      {answer.answer && <div className="aic-said"><b>{m.ai}</b><p>{answer.answer}</p></div>}
-      {answer.sources.length > 0 && <ul className="aic-sources" aria-label={m.sources}>{answer.sources.map((source) =>
-        <li key={source.number}>{source.folder && <small>{source.folder}</small>}{source.title}</li>)}</ul>}
+      {answer.answer && <div className="aic-said"><b>{m.ai}</b><p>{cited(answer.answer, answer.sources)}</p></div>}
+      {answer.sources.length > 0 && <ul className="aic-sources" aria-label={m.sources}>{answer.sources.map((source, at) =>
+        <li key={source.number}>{source.folder && <small>{source.folder}</small>}{`${at + 1}. ${source.title}`}</li>)}</ul>}
       <p className="aic-turn-foot">{answer.status === 'no_source' ? m.tryNoSource : answer.status === 'over_limit' ? m.tryOver
         : m.tryMeta((answer.took_ms / 1000).toFixed(1), answer.whole, answer.articles)}</p>
     </div>}
@@ -196,7 +198,7 @@ export function AIChatPanel({ timezone, onOpen, slot, onSetCap, isAdmin = true }
 function Turn({ turn, timezone }: { turn: AIChatTurn; timezone: string }) {
   return <li className="aic-turn">
     <div className="aic-said"><b>{m.customer}</b><p>{turn.question ?? m.textGone}</p></div>
-    {turn.answer !== null && <div className="aic-said"><b>{m.ai}</b><p>{cited(turn)}</p></div>}
+    {turn.answer !== null && <div className="aic-said"><b>{m.ai}</b><p>{cited(turn.answer, [...turn.sources].sort((a, b) => a.ordinal - b.ordinal))}</p></div>}
     {turn.sources.length > 0 && <ul className="aic-sources" aria-label={m.sources}>{turn.sources.map((source) =>
       <li key={source.ordinal}>{source.folder && <small>{source.folder}</small>}{source.title ?? `#${source.number}`}</li>)}</ul>}
     <div className="aic-turn-foot"><span className={`status ${turnClass(turn.status)}`}>{m.turnStatus[turn.status]}</span>

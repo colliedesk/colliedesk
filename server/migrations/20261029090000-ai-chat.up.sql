@@ -48,6 +48,8 @@ CREATE TABLE ai_chat_sessions (
     status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'ended', 'handed_off')),
     -- The conversation a hand-off opened; it outlives the chat and keeps its own copy.
     conversation_id uuid,
+    -- The last hand-off: a later one sends the team only the turns after it.
+    handed_off_at timestamptz,
     -- The oldest turns before this moment no longer fit what the AI reads (cut by blocks of ten).
     history_cut_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),

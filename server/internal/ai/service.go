@@ -57,6 +57,8 @@ type Config struct {
 	Build func(Spec) (aiprovider.Provider, error)
 	// CheckTimeout bounds one check; zero is 20 seconds.
 	CheckTimeout time.Duration
+	// ChatAnswerTimeout bounds one chat answer; zero is 60 seconds.
+	ChatAnswerTimeout time.Duration
 	// PlanLimits is true on the hosted cloud, where a trial and a lock apply: the allowance reads
 	// the plan, and the worker cancels the tasks of a locked workspace.
 	PlanLimits bool

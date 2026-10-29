@@ -234,6 +234,10 @@ func sweepChats(ctx context.Context, tx pgx.Tx, now time.Time) error {
 		WHERE t.workspace_id=o.workspace_id AND t.id=o.turn_id AND s.last_turn_at<$1 AND (o.title IS NOT NULL OR o.folder IS NOT NULL)`, expired); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(ctx, `UPDATE ai_chat_turns SET status='failed',error_code='interrupted',finished_at=$1 WHERE status='streaming' AND created_at<$2`,
+		now, now.Add(-ChatInterruptedAfter)); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, `DELETE FROM ai_chat_sessions WHERE last_turn_at<$1`, now.Add(-chatSessionKept)); err != nil {
 		return err
 	}

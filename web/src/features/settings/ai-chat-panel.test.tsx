@@ -134,8 +134,8 @@ test('an admin tries the chat and reads the whole answer with what it read', asy
   wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} />);
   fireEvent.change(await screen.findByRole('textbox', { name: 'Ask as a customer would' }), { target: { value: 'When does it ship?' } });
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
-  expect(await screen.findByText('Orders ship in 2 days [#12].')).toBeTruthy();
-  expect(screen.getByText('1.4 s · whole help center (38 articles) · counts as 1 answer')).toBeTruthy();
+  expect(await screen.findByText('Orders ship in 2 days [1].')).toBeTruthy();
+  expect(screen.getByText('1.4 s · whole help center (38 articles) · its cost counts toward the limit')).toBeTruthy();
   expect(aiApi.chatPreview).toHaveBeenCalledWith('When does it ship?', expect.any(String));
 });
 

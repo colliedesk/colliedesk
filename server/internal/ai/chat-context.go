@@ -349,7 +349,25 @@ func (s *Service) chatExcerpts(ctx context.Context, workspaceID, question string
 		}
 		var err error
 		docs, err = store.AIRetrieve(ctx, tx, workspaceID, store.AIRetrievalQuery{Text: text, KBLimit: chatExcerptArticles})
-		return err
+		if err != nil {
+			return err
+		}
+		// The search may match an article by a translation, which the help center does not show: the
+		// excerpt is always the article's own text.
+		for i, doc := range docs {
+			if doc.Kind != store.AIRetrievedKBArticle || doc.KBLocale == "" {
+				continue
+			}
+			original, found, err := store.ChatKBArticleByID(ctx, tx, workspaceID, doc.KBArticleID)
+			if err != nil {
+				return err
+			}
+			docs[i].Text, docs[i].KBLocale = "", ""
+			if found {
+				docs[i].Text = original.Body
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return "", "", nil, err

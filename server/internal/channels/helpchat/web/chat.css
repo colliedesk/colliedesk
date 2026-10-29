@@ -313,3 +313,15 @@ a.cite:hover { background: var(--accent); color: var(--accent-ink); }
 @media (forced-colors: active) {
   .tab, .cite, .q, .composer, .ai-tag { border: 1px solid CanvasText; }
 }
+
+/* The chat's own scrolling areas: thin rounded thumbs in the help center's colours (site.css styles
+   the rest of the page the same way; a theme's custom CSS may change the page's, not these). */
+.chat-scroll::-webkit-scrollbar, .composer textarea::-webkit-scrollbar, .composer-wrap::-webkit-scrollbar, .handoff textarea::-webkit-scrollbar { width: 6px; height: 6px; }
+.chat-scroll::-webkit-scrollbar-track, .composer textarea::-webkit-scrollbar-track, .composer-wrap::-webkit-scrollbar-track, .handoff textarea::-webkit-scrollbar-track { background: transparent; }
+.chat-scroll::-webkit-scrollbar-thumb, .composer textarea::-webkit-scrollbar-thumb, .composer-wrap::-webkit-scrollbar-thumb, .handoff textarea::-webkit-scrollbar-thumb { background: var(--thumb); border-radius: 999px; }
+.chat-scroll::-webkit-scrollbar-thumb:hover, .composer textarea::-webkit-scrollbar-thumb:hover, .composer-wrap::-webkit-scrollbar-thumb:hover, .handoff textarea::-webkit-scrollbar-thumb:hover { background: var(--thumb-hover); }
+.chat-scroll::-webkit-scrollbar-corner, .composer textarea::-webkit-scrollbar-corner, .composer-wrap::-webkit-scrollbar-corner, .handoff textarea::-webkit-scrollbar-corner { background: transparent; }
+.chat-scroll::-webkit-scrollbar-button, .composer textarea::-webkit-scrollbar-button, .composer-wrap::-webkit-scrollbar-button, .handoff textarea::-webkit-scrollbar-button { display: none; }
+@supports not selector(::-webkit-scrollbar) {
+  .chat-scroll, .composer textarea, .composer-wrap, .handoff textarea { scrollbar-width: thin; scrollbar-color: var(--thumb) transparent; }
+}

@@ -236,8 +236,9 @@
   .aic-table td:not(.aic-question)::before { content: attr(data-label) ": "; color: var(--text-3); font-size: var(--fs-label); }
   .aic-question { max-width: none; }
 }
-.aic-transcript { display: grid; gap: var(--space-4); }
-.aic-transcript-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); }
+.aic-transcript { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.aic-transcript-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; align-content: flex-start; gap: var(--space-3); }
+.aic-transcript-head .button-row { align-items: center; }
 .aic-transcript-head h2 { margin: 0; font-family: var(--font-display); }
 .aic-transcript-head p { margin: var(--space-1) 0 0; }
 .aic-turns { display: grid; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }

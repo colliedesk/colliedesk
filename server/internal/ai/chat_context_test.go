@@ -173,7 +173,12 @@ func TestALargeKnowledgeBaseSendsTheBestExcerpts(t *testing.T) {
 	for i := 1; i <= 4; i++ {
 		kb.article(t, e.a, i, fmt.Sprintf("Filler %d", i), filler, "published", false, 1)
 	}
-	kb.article(t, e.a, 9, "Passport renewal", "Renew your passport online in ten minutes.", "published", false, 1)
+	passport := kb.article(t, e.a, 9, "Passport renewal", "Renew your passport online in ten minutes.", "published", false, 1)
+	// A translation (not on the help center) that matches the question better than the article.
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) VALUES($1,$2,'vi','Gia hạn hộ chiếu','Gia hạn hộ chiếu trực tuyến, bản dịch riêng.')`,
+		e.a.id, passport); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.New(e.pool).BuildAIRetrieval(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -187,5 +192,14 @@ func TestALargeKnowledgeBaseSendsTheBestExcerpts(t *testing.T) {
 	last := prompt.Request.Messages[len(prompt.Request.Messages)-1].Text
 	if _, ok := prompt.Articles[9]; !ok || !strings.Contains(last, "Renew your passport online") || strings.Contains(systemText(prompt.Request), "Renew your passport") {
 		t.Fatalf("articles=%v last=%.200q", prompt.Articles, last)
+	}
+	// Asked in the translation's words, the excerpt is still the article's own text.
+	prompt, err = e.service.ChatPrompt(context.Background(), chatBinding(e), e.a.id, ai.ChatPromptInput{WorkspaceName: "Acme", Question: "Gia hạn hộ chiếu trực tuyến?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	last = prompt.Request.Messages[len(prompt.Request.Messages)-1].Text
+	if strings.Contains(last, "bản dịch riêng") || !strings.Contains(last, "Renew your passport online") {
+		t.Fatalf("translation excerpt: last=%.300q", last)
 	}
 }

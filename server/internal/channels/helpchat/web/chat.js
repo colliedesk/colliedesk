@@ -302,7 +302,7 @@
   Chat.prototype.ask = function (q) {
     var self = this;
     if (this.busy || this.locked || !q) return;
-    var welcome = this.thread.querySelector('.welcome'); if (welcome) welcome.remove();
+    var welcome = this.thread.querySelector('.welcome'); if (welcome) welcome.hidden = true;
     var turn = this.turnEl(q);
     var dots = el('div', { 'class': 'typing', role: 'img', 'aria-label': 'Answer on its way' }, [el('i'), el('i'), el('i')]);
     turn.a.appendChild(dots);
@@ -311,7 +311,14 @@
     var body = { question: q, surface: this.c.surface === 'article' ? 'article' : this.c.surface === 'embed' ? 'widget' : 'help_center' };
     if (this.article) body.viewing_article_number = this.article.number;
     var sources = [], ended = false;
-    function back(problem) { turn.t.remove(); self.busy = false; self.input.value = q; self.onInput(); self.thread.appendChild(problem); self.bottom(); }
+    // Not sent: the question goes back in the box, and a new chat shows its welcome again.
+    function back(problem) {
+      turn.t.remove(); self.busy = false; self.input.value = q; self.onInput();
+      var old = self.thread.querySelector('.note-sent-back'); if (old) old.remove();
+      problem.classList.add('note-sent-back');
+      if (welcome && !self.thread.querySelector('.turn')) welcome.hidden = false;
+      self.thread.appendChild(problem); self.bottom();
+    }
     this.api.call('POST', '/turns', body).then(function (response) {
       if (response.status === 404) { turn.t.remove(); self.busy = false; return self.unavailable(); }
       if (response.status === 429) { back(note('', 'clock', 'Too many questions, wait a minute.', 'Your question was not sent. Ask it again when the timer ends.', null, 'status')); return self.wait(response.headers.get('Retry-After')); }
@@ -468,6 +475,8 @@
     this.handoffOpener = opener;
     var email = el('input', { id: id + '-email', type: 'email', autocomplete: 'email', inputmode: 'email', required: true, maxlength: '254', 'aria-describedby': id + '-email-err' });
     var name = el('input', { id: id + '-name', type: 'text', autocomplete: 'name', maxlength: '120' });
+    // A second hand-off of this page keeps what was typed the first time (in memory only).
+    email.value = this.sentEmail || ''; name.value = this.sentName || '';
     var text = el('textarea', { id: id + '-note', rows: '3', maxlength: '2000', 'aria-describedby': id + '-note-hint' });
     var err = el('p', { 'class': 'field-error', id: id + '-email-err', hidden: true });
     var formErr = el('div', { 'class': 'form-error', role: 'alert', hidden: true });
@@ -483,7 +492,7 @@
       err.hidden = true; email.setAttribute('aria-invalid', 'false'); formErr.hidden = true;
       sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
       self.api.call('POST', '/handoff', { email: address, name: name.value.trim() || undefined, note: text.value.trim() || undefined }).then(function (response) {
-        if (response.status === 201) return response.json().then(function (sent) { self.closeHandoff(false); self.handedOff(sent); });
+        if (response.status === 201) return response.json().then(function (sent) { self.sentEmail = address; self.sentName = name.value.trim(); self.closeHandoff(false); self.handedOff(sent); });
         sendBtn.disabled = false; sendBtn.textContent = 'Send to ' + self.c.name;
         if (response.status === 422) return fieldError('Enter an email address like name@example.com.');
         if (response.status === 429) return formError('Too many requests, try again in a minute.');
@@ -525,6 +534,8 @@
       document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector('dialog[open]')) c.onClose(); });
     }
     var chat = new Chat(page, c);
+    // With the chat drawn, the skip link leads to its question box.
+    var skip = document.querySelector('.skip'); if (skip) skip.setAttribute('href', '#' + chat.input.id);
     chat.load().then(function () { if (!chat.locked) chat.input.focus(); });
     return;
   }
@@ -544,11 +555,13 @@
     else { box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); launch.setAttribute('aria-haspopup', 'dialog'); }
     outside.forEach(function (n) { if (sheet) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });
   }
-  function open() {
+  // restored: the box opens again by itself on the next article, docked only and without taking the
+  // focus (the reader starts at the page, its skip link first).
+  function open(restored) {
     if (!boxChat) { bc.onClose = close; boxChat = new Chat(box, bc); boxChat.load(); }
     box.classList.add('open'); launch.setAttribute('aria-expanded', 'true'); mode();
     try { sessionStorage.setItem('cd_chat_open', '1'); } catch (e) {}
-    if (!document.querySelector('dialog[open]') && !boxChat.handoffOpen) boxChat.input.focus();
+    if (restored !== true && !document.querySelector('dialog[open]') && !boxChat.handoffOpen) boxChat.input.focus();
   }
   function close() {
     box.classList.remove('open'); launch.setAttribute('aria-expanded', 'false'); mode();
@@ -556,9 +569,10 @@
     launch.focus();
   }
   launch.hidden = false; mode();
-  launch.addEventListener('click', open);
+  launch.addEventListener('click', function () { open(); });
   box.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !e.defaultPrevented && !box.querySelector('dialog[open]')) { e.preventDefault(); close(); } });
   wide.addEventListener('change', mode);
   var reopen = false; try { reopen = sessionStorage.getItem('cd_chat_open') === '1'; } catch (e) {}
-  if (reopen) open();
+  // Under 768 px the box is a sheet over the article: a source opened from it shows the article.
+  if (reopen && wide.matches) open(true);
 })();

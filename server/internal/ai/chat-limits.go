@@ -56,7 +56,10 @@ func (s *Service) chatRoom(ctx context.Context, tx pgx.Tx, call Call, model stri
 		if hold != nil {
 			held = *hold
 		}
-		if spent >= *limits.microUSD || spent+held > *limits.microUSD || spentToday+held > *limits.microUSD/10 {
+		// The month never goes past its limit: a call must fit with what it may cost. The day spreads the
+		// month out: it counts what was spent, so a question is never refused for the most it might cost
+		// (the whole articles at the full price, though most of them are read from the cache).
+		if spent >= *limits.microUSD || spent+held > *limits.microUSD || spentToday >= *limits.microUSD/10 {
 			return nil, ErrChatLimit
 		}
 	}

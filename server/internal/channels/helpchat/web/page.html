@@ -17,8 +17,8 @@
 <script src="{{.Script}}" defer></script>
 </head>
 <body class="{{if .Embed}}embed{{else}}chat-page{{end}}">
-<a class="skip" href="#q-{{if .Embed}}embed{{else}}page{{end}}">Skip to the question box</a>
-<div id="chat" class="chat-mount" data-config="{{.Config}}"></div>
-<noscript><p class="wrap">AI chat needs JavaScript. <a href="{{.Look.SearchURL}}">Search the articles</a> instead.</p></noscript>
+<a class="skip" href="#chat">Skip to the chat</a>
+<div id="chat" class="chat-mount" data-config="{{.Config}}" tabindex="-1"></div>
+<noscript><p class="wrap">AI chat needs JavaScript. <a href="{{.Look.SearchURL}}">Search the articles</a> or go back to <a href="{{.Look.Home}}">{{.Look.SiteTitle}}</a>.</p></noscript>
 </body>
 </html>

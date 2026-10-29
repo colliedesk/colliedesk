@@ -756,3 +756,36 @@ func TestOldChatTextsAreErasedAndOldChatsRemoved(t *testing.T) {
 		t.Fatalf("a chat 401 days old is still there")
 	}
 }
+
+// A turn still "streaming" well after it began was cut (a crash, a deploy): the sweep marks it failed,
+// so the end user reading it back is told, and leaves one just begun alone.
+func TestAChatTurnCutMidwayIsMarkedFailed(t *testing.T) {
+	q := newQueueEnv(t, nil)
+	ctx := context.Background()
+	now := q.clock.Now()
+	turn := func(began time.Time) string {
+		var id string
+		if err := q.pool.QueryRow(ctx, `WITH c AS (INSERT INTO channels(workspace_id,type,name) SELECT $1,'help_chat','Chat '||gen_random_uuid() RETURNING id),
+				s AS (INSERT INTO ai_chat_sessions(workspace_id,channel_id,token_hash,surface,created_at,last_turn_at)
+					SELECT $1,c.id,sha256(gen_random_uuid()::text::bytea),'help_center',$2,$2 FROM c RETURNING id)
+			INSERT INTO ai_chat_turns(workspace_id,session_id,seq,question,status,created_at) SELECT $1,s.id,1,'Where?','streaming',$2 FROM s RETURNING id::text`,
+			q.a.id, began).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	cut, running := turn(now.Add(-ai.ChatInterruptedAfter-time.Minute)), turn(now.Add(-time.Minute))
+	q.tick(t)
+	status := func(id string) (status, code string) {
+		if err := q.pool.QueryRow(ctx, `SELECT status,COALESCE(error_code,'') FROM ai_chat_turns WHERE id=$1`, id).Scan(&status, &code); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if s, c := status(cut); s != "failed" || c != "interrupted" {
+		t.Fatalf("cut turn = %s/%s, want failed/interrupted", s, c)
+	}
+	if s, _ := status(running); s != "streaming" {
+		t.Fatalf("running turn = %s, want streaming", s)
+	}
+}

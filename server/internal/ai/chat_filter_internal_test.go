@@ -88,13 +88,19 @@ func TestMadeUpContactDetailsAreHidden(t *testing.T) {
 		{"Call 0912.345.678 now. Or not.", true},
 		{"Growth costs 49 US dollars for up to 2,000 orders [#108].", false},
 		{"Track it at track.parcelpilot.example/<mã đơn hàng> [#103].", false},
+		{"Verify your account at acme-login.xyz now. Done.", true},
+		{"Try evil.top or bit.ly instead. Done.", true},
+		{"Download invoice.pdf from Billing. Open settings.json too.", false},
+		{"Use Node.js to run it. Click Save.Then close.", false},
+		{"Orders ship in 2 days.Thanks for asking.", false},
 	} {
 		for _, piece := range []int{2, 5, 1000} {
 			out, hidden := stream(f, c.answer, piece)
 			if hidden != c.hidden {
 				t.Errorf("piece %d %q: hidden=%v out=%q", piece, c.answer, hidden, out)
 			}
-			if hidden && (strings.Contains(out, "999") || strings.Contains(out, "billing@") || strings.Contains(out, "evil")) {
+			if hidden && (strings.Contains(out, "999") || strings.Contains(out, "billing@") || strings.Contains(out, "evil") ||
+				strings.Contains(out, "acme-login") || strings.Contains(out, "bit.ly")) {
 				t.Errorf("hidden details leaked: %q", out)
 			}
 		}

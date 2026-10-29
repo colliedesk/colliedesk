@@ -11,6 +11,7 @@ export const aiMessages = {
   columnAutomatic: 'Automatic runs',
   automaticRuns: (day: number, minute: number) => `${day} a day · ${minute} a minute`,
   noAutomatic: 'None: only when an agent asks',
+  chatRuns: 'When a customer asks, within the AI chat limit',
   change: 'Change',
   changeAutomatic: 'Change the automatic limits',
   pausedHeading: (until: string) => `Automatic suggestions paused until ${until}.`,

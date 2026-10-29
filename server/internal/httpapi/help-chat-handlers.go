@@ -653,7 +653,7 @@ func (a *API) helpChatHandoff(c *helpChat) {
 		}
 	}
 	if handoff.Transcript == "" {
-		handoff.Transcript = "(No questions yet.)"
+		handoff.Transcript = "(No new questions.)"
 	}
 	body, err := json.Marshal(handoff)
 	if err != nil {
@@ -701,10 +701,20 @@ var chatMarker = regexp.MustCompile(`\s*\[#\d+\]`)
 
 // transcript is the chat as the team reads it: each question and answer, with the articles cited.
 func (c *helpChat) transcript(view ai.ChatSessionView) string {
+	// Each line a paragraph of its own: the inbox shows plain text by paragraphs. After a first hand-off
+	// only the turns since go: the conversation already holds the rest.
 	var text strings.Builder
+	if view.HandedOffAt != nil {
+		text.WriteString("Since the last message:\n\n")
+	}
+	turns := 0
 	for _, turn := range view.Turns {
+		if view.HandedOffAt != nil && !turn.CreatedAt.After(*view.HandedOffAt) {
+			continue
+		}
+		turns++
 		if turn.Question != nil {
-			text.WriteString("Customer: " + *turn.Question + "\n")
+			text.WriteString("Customer: " + *turn.Question + "\n\n")
 		}
 		answer := "(no answer)"
 		switch {
@@ -713,16 +723,18 @@ func (c *helpChat) transcript(view ai.ChatSessionView) string {
 		case turn.Answer != nil && strings.TrimSpace(*turn.Answer) != "":
 			answer = strings.TrimSpace(chatMarker.ReplaceAllString(*turn.Answer, ""))
 		}
-		text.WriteString("AI: " + answer + "\n")
+		text.WriteString("AI: " + answer + "\n\n")
 		for _, source := range turn.Sources {
 			s := c.source(source.Number, source.Title, source.Folder)
 			link := s.URL
 			if strings.HasPrefix(link, "/") {
 				link = c.at.Address + link
 			}
-			text.WriteString("  Source: " + s.Title + " " + link + "\n")
+			text.WriteString("Source: " + s.Title + " " + link + "\n\n")
 		}
-		text.WriteString("\n")
+	}
+	if turns == 0 {
+		return ""
 	}
 	return strings.TrimSpace(text.String())
 }

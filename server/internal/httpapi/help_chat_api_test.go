@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
@@ -633,6 +634,8 @@ func TestTalkToAPersonOpensOneConversationPerChat(t *testing.T) {
 		}
 	}
 
+	d.fake.Script(chatReply("Orders ship in 2 days [#" + num(d.article.Number) + "]."))
+	chatEvents(t, d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "Can I pick it up?"}, cookie))
 	again := d.call(t, http.MethodPost, "/chat/handoff", map[string]any{"email": "reader@example.com"}, cookie)
 	if again.Code != http.StatusCreated {
 		t.Fatalf("second handoff status=%d", again.Code)
@@ -641,6 +644,10 @@ func TestTalkToAPersonOpensOneConversationPerChat(t *testing.T) {
 	kbCall(t, d.api, http.MethodGet, "/api/v1/conversations/"+conversation+"/messages", nil, d.admin, http.StatusOK, &timeline)
 	if len(conversations.Items) != 1 || len(timeline.Items) != 2 {
 		t.Fatalf("second hand-off: %d conversations, %d messages; want it joined", len(conversations.Items), len(timeline.Items))
+	}
+	// The second message holds only what was asked since the first: the conversation has the rest.
+	if second := timeline.Items[1].Body; !strings.Contains(second, "Customer: Can I pick it up?") || strings.Contains(second, "When does my order ship?") {
+		t.Fatalf("second hand-off message:\n%s", second)
 	}
 	var chats struct {
 		Items []struct {
@@ -742,4 +749,120 @@ func TestTrialRepliesToHelpChatConversationsAreRefused(t *testing.T) {
 	}
 	decode(t, request(t, f.api, http.MethodGet, "/api/v1/conversations", nil, d.admin, nil), &page)
 	wantStatus(t, f.reply(t, d.admin, page.Items[0].ID), http.StatusForbidden, restrictedCode, "trial reply to a help chat conversation")
+}
+
+// An answer that runs out of its time is stored as failed (timeout) with what was written, never left
+// "streaming": the end user who reads it back is told, and the chat's turns count right.
+func TestAChatAnswerOutOfTimeIsStoredAsFailed(t *testing.T) {
+	d := newChatDesk(t, "Chat Victor", func(config *httpapi.Config) { config.AI.ChatAnswerTimeout = 300 * time.Millisecond })
+	never := chatReply("Orders ship ", "in 2 days.")
+	never.Hold = make(chan struct{})
+	d.fake.Script(never)
+	response := d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "When?"})
+	events := chatEvents(t, response)
+	var turn struct {
+		Status    string `json:"status"`
+		ErrorCode string `json:"error_code"`
+	}
+	decode(t, d.call(t, http.MethodGet, "/chat/turns/"+events[0].TurnID, nil, chatCookie(t, response)), &turn)
+	if turn.Status != "failed" || turn.ErrorCode != "timeout" {
+		t.Fatalf("turn = %+v, want failed/timeout", turn)
+	}
+}
+
+// On Colliedesk Cloud the chat's limits are the plan's: a trial answers 5 questions a UTC day (50 a
+// month); past them the end user gets the matching articles and nothing is sent to the AI. A paid plan
+// has its own, larger limits, and the usage the admin reads says which.
+func TestTheCloudPlanSetsTheChatsLimits(t *testing.T) {
+	fake := &aiprovider.Fake{FakeKind: aiprovider.KindAnthropic}
+	f := newLimitsFixtureConfigured(t, true, nil, func(config *httpapi.Config) {
+		config.AI = fakeAIConfig(fake)
+		config.AI.Server = chatServerProvider()
+	})
+	d := newChatDeskOn(t, f.api, f.billing.service, f.pool, fake, "Chat Whiskey")
+	var usage struct {
+		AnswerLimit    *int `json:"answer_limit"`
+		DayAnswerLimit *int `json:"day_answer_limit"`
+	}
+	kbCall(t, d.api, http.MethodGet, "/api/v1/ai/chat/usage", nil, d.admin, http.StatusOK, &usage)
+	if usage.AnswerLimit == nil || *usage.AnswerLimit != 50 || usage.DayAnswerLimit == nil || *usage.DayAnswerLimit != 5 {
+		t.Fatalf("trial usage limits = %v/%v, want 50/5", usage.AnswerLimit, usage.DayAnswerLimit)
+	}
+	// Five answers today already.
+	if _, err := f.pool.Exec(context.Background(), `WITH s AS (INSERT INTO ai_chat_sessions(workspace_id,channel_id,token_hash,surface,created_at,last_turn_at)
+			VALUES($1,$2,sha256('earlier'::bytea),'help_center',$3,$3) RETURNING id)
+		INSERT INTO ai_chat_turns(workspace_id,session_id,seq,question,answer,status,created_at,finished_at)
+		SELECT $1,s.id,n,'Earlier?','Yes.','answered',$3,$3 FROM s, generate_series(1,5) n`, d.ws, d.channel, f.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	requests := len(fake.Requests())
+	events := chatEvents(t, d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "When does my order ship?"}))
+	last := events[len(events)-1]
+	if last.Type != "done" || last.Status != "over_limit" || len(fake.Requests()) != requests {
+		t.Fatalf("trial past its day: last=%+v, provider requests %d → %d", last, requests, len(fake.Requests()))
+	}
+	sources := 0
+	for _, event := range events {
+		if event.Type == "sources" {
+			sources = len(event.Sources)
+		}
+	}
+	if sources == 0 {
+		t.Fatal("a paused chat offered no article")
+	}
+
+	f.billing.grantComp(t, d.ws, nil)
+	kbCall(t, d.api, http.MethodGet, "/api/v1/ai/chat/usage", nil, d.admin, http.StatusOK, &usage)
+	if usage.AnswerLimit == nil || *usage.AnswerLimit != 1500 {
+		t.Fatalf("team usage limit = %v, want 1500", usage.AnswerLimit)
+	}
+	fake.Script(chatReply("Orders ship in 2 days [#" + num(d.article.Number) + "]."))
+	events = chatEvents(t, d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "When does my order ship?"}))
+	if last := events[len(events)-1]; last.Status != "answered" {
+		t.Fatalf("team plan: last=%+v, want answered", last)
+	}
+}
+
+// The export carries every chat with its turns, sources and feedback, in pages: 250 chats (more than
+// one page) come out whole, oldest first, and only this workspace's.
+func TestTheExportCarriesEveryChatInPages(t *testing.T) {
+	d := newChatDesk(t, "Chat Xray", nil)
+	other := newChatDeskOn(t, d.api, auth.New(d.pool, testOrigin), d.pool, d.fake, "Chat Yankee")
+	ctx := context.Background()
+	if _, err := d.pool.Exec(ctx, `WITH s AS (INSERT INTO ai_chat_sessions(workspace_id,channel_id,token_hash,surface,created_at,last_turn_at)
+			SELECT $1,$2,sha256(n::text::bytea),'help_center',now()-make_interval(mins=>300-n),now() FROM generate_series(1,250) n RETURNING id),
+		t AS (INSERT INTO ai_chat_turns(workspace_id,session_id,seq,question,answer,status,created_at)
+			SELECT $1,s.id,k,'Q'||k,'A [#1]','answered',now() FROM s, generate_series(1,2) k RETURNING id)
+		INSERT INTO ai_chat_sources(workspace_id,turn_id,ordinal,article_number,article_version,title,folder) SELECT $1,t.id,1,1,1,'Shipping','Orders' FROM t`,
+		d.ws, d.channel); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.pool.Exec(ctx, `INSERT INTO ai_chat_sessions(workspace_id,channel_id,token_hash,surface,created_at,last_turn_at) VALUES($1,$2,sha256('b'::bytea),'help_center',now(),now())`,
+		other.ws, other.channel); err != nil {
+		t.Fatal(err)
+	}
+	response := request(t, d.api, http.MethodGet, "/api/v1/export", nil, d.admin, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("export status=%d", response.Code)
+	}
+	chats := ndjsonLines(t, unzip(t, response.Body.Bytes())["ai-chat-sessions.ndjson"])
+	if len(chats) != 250 {
+		t.Fatalf("exported %d chats, want 250", len(chats))
+	}
+	previous := ""
+	for _, chat := range chats {
+		turns, _ := chat["turns"].([]any)
+		if len(turns) != 2 {
+			t.Fatalf("chat %v has %d turns", chat["id"], len(turns))
+		}
+		sources, _ := turns[1].(map[string]any)["sources"].([]any)
+		if len(sources) != 1 {
+			t.Fatalf("turn has %d sources", len(sources))
+		}
+		created, _ := chat["created_at"].(string)
+		if created < previous {
+			t.Fatalf("chats out of order: %s after %s", created, previous)
+		}
+		previous = created
+	}
 }

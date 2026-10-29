@@ -457,6 +457,7 @@ type AIChatSession struct {
 	Surface        string       `json:"surface"`
 	Status         string       `json:"status"`
 	ConversationID *string      `json:"conversation_id"`
+	HandedOffAt    *time.Time   `json:"handed_off_at"`
 	HistoryCutAt   *time.Time   `json:"history_cut_at"`
 	CreatedAt      time.Time    `json:"created_at"`
 	LastTurnAt     time.Time    `json:"last_turn_at"`

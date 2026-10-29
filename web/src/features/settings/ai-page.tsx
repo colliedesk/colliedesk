@@ -260,7 +260,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
         {slot.slot === 'triage' || slot.automatic ? <><span>{slot.slot === 'triage' ? m.automaticRuns(settings.automatic.per_day, settings.automatic.per_minute)
           : m.draftLimits(settings.automatic.draft_per_day)}</span>
           {isAdmin && <button type="button" className="link-button" onClick={onOpenAutomatic} aria-label={m.changeAutomatic}>{m.change}</button>}</>
-          : <span className="muted-copy">{m.noAutomatic}</span>}
+          : <span className="muted-copy">{slot.slot === 'chat' ? m.chatRuns : m.noAutomatic}</span>}
       </div>
       <label className="switch"><input type="checkbox" role="switch" aria-label={m.switchFor(name)} checked={slot.enabled} disabled={locked || !choice}
         onChange={(event) => save({ enabled: event.target.checked })} /></label>

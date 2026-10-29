@@ -97,8 +97,11 @@ func earlyCut(buffer string) int {
 var (
 	chatEmail = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`)
 	chatPhone = regexp.MustCompile(`\+?\(?\d[\d\s().-]{4,}\d`)
-	// chatLink: a scheme, www., a domain with a path, or a domain under a common top-level domain.
-	chatLink     = regexp.MustCompile(`(?i)\b(?:https?://\S+|www\.[a-z0-9.-]+\S*|(?:[a-z0-9-]+\.)+[a-z]{2,}/\S*|(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|app|dev|info|biz|me|us|uk|vn|de|fr|au|ca|ai|shop|store|example)\b)`)
+	// chatLink: a scheme, www., a domain with a path, or a bare lower-case domain under any top-level
+	// domain of letters (acme-login.xyz, bit.ly). A capitalised word after a missing space ("Save.Then")
+	// is no domain, and a file name (invoice.pdf) is left to chatFileName.
+	chatLink     = regexp.MustCompile(`\b(?:(?i:https?://\S+|www\.[a-z0-9.-]+\S*|(?:[a-z0-9-]+\.)+[a-z]{2,}/\S*)|(?:[a-z0-9-]+\.)+[a-z]{2,24}\b)`)
+	chatFileName = regexp.MustCompile(`^[^/]*\.(?:pdf|csv|png|jpe?g|gif|svg|webp|json|js|ts|txt|zip|docx?|xlsx?|pptx?|md|html?|css|py|xml|ya?ml|exe|dmg|apk|mp4|mp3)$`)
 	chatCitation = regexp.MustCompile(`\[#(\d{1,18})\]`)
 )
 
@@ -153,7 +156,7 @@ func (f *chatFilter) check(sentence string) (string, bool, []string) {
 	}
 	var links []string
 	for _, link := range chatLink.FindAllString(sentence, -1) {
-		if chatEmail.MatchString(link) {
+		if chatEmail.MatchString(link) || chatFileName.MatchString(strings.ToLower(link)) {
 			continue
 		}
 		clean := cleanLink(link)

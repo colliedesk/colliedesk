@@ -48,6 +48,10 @@ export interface ChannelUI {
   fieldLabel?: (field: string) => string | undefined;
   // waitingHelp says how to send the first test message while nothing has arrived; a type without it gets the shared words.
   waitingHelp?: string;
+  // defaultHelp says what this type's channels are and what its default does; a type without it gets the shared words.
+  defaultHelp?: string;
+  // defaultBadge names the default channel of this type; a type without it gets "Default <label> channel".
+  defaultBadge?: string;
   // caches: the query keys of the type's own settings, reloaded when the channel is turned on or off.
   caches?: string[];
 }
