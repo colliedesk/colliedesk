@@ -245,9 +245,7 @@ const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/import-freshdesk',
   component: function Import() {
-    const navigate = useNavigate();
-    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute onOpenInbox={() => void navigate({ to: '/' })}
-      onOpenBilling={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />} />;
+    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
   },
 });
 const aiRoute = createRoute({

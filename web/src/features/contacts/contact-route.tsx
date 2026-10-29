@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import { contactApi } from './contact-api';
 import type { Contact, ContactMerge } from '../../api/schemas';
@@ -12,7 +12,6 @@ export const contactHistoryPageSize = 25;
 export function ContactRoute() {
   const { contactId } = useParams({ strict: false }) as { contactId: string };
   const client = useQueryClient();
-  const navigate = useNavigate();
   const [paged, setPaged] = useState({ contactId, page: 1 });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const contact = useQuery({ queryKey: ['contact', contactId], queryFn: () => contactApi.contact(contactId) });
@@ -34,7 +33,5 @@ export function ContactRoute() {
     loading={contact.isPending} failed={contact.isError} historyLoading={history.isPending}
     onRename={async (name: string) => { await contactApi.renameContact(contactId, name); await changed(); }}
     onMerge={async (duplicate: Contact) => { await contactApi.mergeContact(contactId, duplicate.id); await changed(); }}
-    onUndoMerge={async (merge: ContactMerge) => { await contactApi.undoMerge(contactId, merge.id); await changed(); }}
-    onOpenConversation={(id) => void navigate({ to: '/conversations/$conversationId', params: { conversationId: id } })}
-    onOpenContact={(id) => void navigate({ to: '/contacts/$contactId', params: { contactId: id } })} />;
+    onUndoMerge={async (merge: ContactMerge) => { await contactApi.undoMerge(contactId, merge.id); await changed(); }} />;
 }

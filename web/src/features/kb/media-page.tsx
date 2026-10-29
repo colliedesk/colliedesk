@@ -6,7 +6,6 @@ import { api } from '../../api/client';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatDate } from '../../lib/format-date';
 import { SearchIcon } from '../../ui/icons';
-import { RouterLink } from '../../ui/router-link';
 import { typingDelayMs } from '../inbox/inbox-filters';
 import { Icon } from './editor/icons';
 import { kbApi } from './kb-api';
@@ -67,7 +66,7 @@ export function MediaRoute({ view, search }: { view: MediaView; search: MediaSea
   return (
     <main className="kb-frame media-page" aria-labelledby="kb-heading" {...drop} data-dragging={dragging ? 'true' : undefined} data-view={view}>
       <KBHead current="media" heading={heading} articles={articles} actions={<>
-        {view !== 'trash' && <RouterLink className="button-link" href={viewPath.trash} label={mediaMessages.trash} onFollow={() => go('trash')}><Icon name="trash" /><span className="kb-label">{mediaMessages.trash}</span></RouterLink>}
+        {view !== 'trash' && <a className="button-link" href={viewPath.trash} aria-label={mediaMessages.trash}><Icon name="trash" /><span className="kb-label">{mediaMessages.trash}</span></a>}
         {view === 'library' && <button type="button" className="primary-action" title={mediaMessages.uploadHint} aria-describedby="media-upload-hint" onClick={choose}><Icon name="upload" />{mediaMessages.upload}</button>}
         <span id="media-upload-hint" className="sr-only">{mediaMessages.uploadHint}</span>
         <input ref={file} type="file" hidden multiple accept={accept} onChange={(event) => { add(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
@@ -75,8 +74,8 @@ export function MediaRoute({ view, search }: { view: MediaView; search: MediaSea
       {dragging && <p className="media-drop" aria-hidden="true">{mediaMessages.dropHere}</p>}
       {view === 'library' && <Library search={search} go={go} onChanged={() => void refresh()} onUpload={choose}
         tray={<UploadTray queue={queue} rows={rows} onShow={(id) => go('library', { item: id })} />} />}
-      {view === 'unused' && <Unused go={go} onChanged={() => void refresh()} />}
-      {view === 'trash' && <Trash go={go} onChanged={() => void refresh()} />}
+      {view === 'unused' && <Unused onChanged={() => void refresh()} />}
+      {view === 'trash' && <Trash onChanged={() => void refresh()} />}
     </main>
   );
 }
@@ -288,7 +287,7 @@ function Library({ search, go, onChanged, onUpload, tray }: { search: MediaSearc
         <h2 id="media-list-heading" className="sr-only">{mediaMessages.libraryHeading}</h2>
         {summary && all > 0 && <p className="media-ledger">
           <span><strong>{mediaMessages.notUsedCount(all)}</strong> · {formatBytes(summary.bytes + summary.kept_bytes)}{summary.kept_count > 0 ? `, ${mediaMessages.ofThemKept(summary.kept_count)}` : ''}</span>
-          <RouterLink className="media-review" href={viewPath.unused} onFollow={() => go('unused')}>{mediaMessages.reviewNotUsed}</RouterLink>
+          <a className="media-review" href={viewPath.unused}>{mediaMessages.reviewNotUsed}</a>
         </p>}
         {!empty && <div className="media-toolbar" role="search">
           <label className="search-field media-search">
@@ -387,7 +386,7 @@ function SelectBar({ chosen, total, onAll, onClear, children }: { chosen: KBMedi
 type Show = 'all' | 'auto' | 'kept';
 interface Confirming { all: boolean; count: number; bytes: number }
 
-function Unused({ go, onChanged }: { go: Go; onChanged: () => void }) {
+function Unused({ onChanged }: { onChanged: () => void }) {
   // The moment the page opened: "Move all" leaves out what was uploaded after it.
   const [opened] = useState(() => new Date().toISOString());
   const list = useMediaList({ usage: 'unused', sort: 'largest' });
@@ -465,7 +464,7 @@ function Unused({ go, onChanged }: { go: Go; onChanged: () => void }) {
   return (
     <section className="media-unused" aria-labelledby="kb-heading">
       <nav className="kb-crumbs" aria-label={mediaMessages.breadcrumb}>
-        <RouterLink href={viewPath.library} onFollow={() => go('library')}>{mediaMessages.heading}</RouterLink><span aria-hidden="true">/</span>
+        <a href={viewPath.library}>{mediaMessages.heading}</a><span aria-hidden="true">/</span>
         <span aria-current="page" className="media-crumb-title">{mediaMessages.unusedHeading}</span>
       </nav>
       {summary && <div className="kb-panel media-explain">
@@ -577,7 +576,7 @@ function LostIn({ items }: { items: KBMedia[] }) {
   return trashed + older > 0 ? <p>{mediaMessages.lostIn(trashed, older)}</p> : null;
 }
 
-function Trash({ go, onChanged }: { go: Go; onChanged: () => void }) {
+function Trash({ onChanged }: { onChanged: () => void }) {
   const list = useInfiniteQuery({
     queryKey: ['kb-media-trash'],
     queryFn: ({ pageParam }) => mediaApi.trash(pageParam),
@@ -620,7 +619,7 @@ function Trash({ go, onChanged }: { go: Go; onChanged: () => void }) {
   return (
     <section className="media-unused" aria-labelledby="kb-heading">
       <nav className="kb-crumbs" aria-label={mediaMessages.breadcrumb}>
-        <RouterLink href={viewPath.library} onFollow={() => go('library')}>{mediaMessages.heading}</RouterLink><span aria-hidden="true">/</span>
+        <a href={viewPath.library}>{mediaMessages.heading}</a><span aria-hidden="true">/</span>
         <span aria-current="page" className="media-crumb-title">{mediaMessages.trashHeading}</span>
       </nav>
       <p className="muted-copy media-trash-help">{mediaMessages.trashDescription}</p>

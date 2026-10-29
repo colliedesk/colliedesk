@@ -8,7 +8,6 @@ import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
 import { SearchIcon } from '../../ui/icons';
 import { typingDelayMs } from '../inbox/inbox-filters';
-import { RouterLink } from '../../ui/router-link';
 import { editorPart } from './editor-part';
 import { SavedReplyTrash } from '../settings/saved-reply-panels';
 import { CollectionForm, CollectionTree } from './collection-panel';
@@ -61,6 +60,14 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   current.current = search;
   const setSearch = (change: Partial<KnowledgeSearch>, replace = false) =>
     void navigate({ to: '/knowledge', search: { ...current.current, ...change }, replace });
+  // A collection in the tree keeps the other filters, as choosing it always did.
+  const collectionHref = (collection?: KBCollection) => {
+    const params = new URLSearchParams();
+    if (search.q) params.set('q', search.q);
+    if (search.status) params.set('status', search.status);
+    if (collection) params.set('collection', collection.id);
+    return `/knowledge${params.size > 0 ? `?${params}` : ''}`;
+  };
   // The search box writes the address as the person types, a moment after the last key.
   const [text, setText] = useState(search.q ?? '');
   useEffect(() => setText(search.q ?? ''), [search.q]);
@@ -155,13 +162,12 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
       <KBHead current="articles" heading={kbMessages.heading} articles={collections.isSuccess ? total : undefined} actions={<>
         <button type="button" aria-haspopup="dialog" aria-label={kbMessages.trash} onClick={() => setTrashOpen(true)}><Icon name="trash" /><span className="kb-label">{kbMessages.trash}</span></button>
         {/* A pointer or the focus on New article loads the editor's chunk ahead of the click (editor-part.ts). */}
-        {!noCollections && <span onPointerOver={editorPart.preload} onFocus={editorPart.preload}><RouterLink className="button-link primary-action" href={newArticle}
-          onFollow={() => void navigate({ to: '/knowledge/new', search: selected ? { collection: selected.collection.id } : {} })}><Icon name="plus" />{kbMessages.newArticle}</RouterLink></span>}
+        {!noCollections && <span onPointerOver={editorPart.preload} onFocus={editorPart.preload}><a className="button-link primary-action" href={newArticle}><Icon name="plus" />{kbMessages.newArticle}</a></span>}
       </>} />
       {publicNow === false && <div className="kb-notice" role="status">
         <Icon name="globe" />
         <span><strong>{kbMessages.helpCenterIsOff}</strong> {kbMessages.helpCenterIsOffDetail}</span>
-        <RouterLink className="button-link" href="/settings#help-center-heading" onFollow={() => void navigate({ to: '/settings', hash: 'help-center-heading' })}>{kbMessages.turnOnInSettings}</RouterLink>
+        <a className="button-link" href="/settings#help-center-heading">{kbMessages.turnOnInSettings}</a>
       </div>}
       {trashOpen && <KBTrash timezone={timezone} onChanged={() => void refresh()} onClose={closeTrash} />}
       <OrderAnnouncement message={moves.message} />
@@ -175,7 +181,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             <button type="button" className="link-action" onClick={() => void collections.refetch()}>{kbMessages.retry}</button></p>}
           {(form === 'new' || (noCollections && form === null)) && <CollectionForm tree={tree} onSubmit={save} onCancel={() => setForm(null)} />}
           {noCollections && <p className="muted-copy">{kbMessages.noCollections}</p>}
-          {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} onSelect={(collection) => setSearch({ collection: collection?.id })} /></div>}
+          {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} hrefTo={collectionHref} /></div>}
         </nav>
         <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined}>
           {selected && <CollectionHead node={selected} tree={tree} form={form} confirming={confirming} problem={problem}
@@ -217,8 +223,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
               {items.map((article) => <ArticleRow key={article.id} article={article} timezone={timezone} isPublic={publicNow}
                 collection={names.get(article.collection_id)}
                 order={ordered && <OrderButtons ids={articleIds} id={article.id} name={article.title} more={articles.hasNextPage} busy={moves.moving} onAnnounce={moves.announce}
-                  focus={moves.focus} onMove={(_next, step) => moveArticle(ordered, article.id, step)} />}
-                onOpen={() => void navigate({ to: '/knowledge/articles/$articleId', params: { articleId: article.id } })} />)}
+                  focus={moves.focus} onMove={(_next, step) => moveArticle(ordered, article.id, step)} />} />)}
               {articles.hasNextPage && <li className="kb-more-row"><button type="button" className="kb-more" disabled={articles.isFetchingNextPage} onClick={() => void articles.fetchNextPage()}>
                 {articles.isFetchingNextPage ? messages.loading : kbMessages.loadMore}</button></li>}
             </ul>}
@@ -282,17 +287,16 @@ interface ArticleRowProps {
   isPublic?: boolean;
   // order holds the buttons that move the article in its collection, while the list is the whole order.
   order?: ReactNode;
-  onOpen: () => void;
 }
 
-function ArticleRow({ article, collection, timezone, isPublic, order, onOpen }: ArticleRowProps) {
+function ArticleRow({ article, collection, timezone, isPublic, order }: ArticleRowProps) {
   const change = article.last_change;
   const published = article.status === 'published';
   // Readers can open it only while it is published and the help center is on.
   const open = published && isPublic === true;
   return (
     <li className="kb-article-item">
-      <RouterLink className="kb-article-row" href={`/knowledge/articles/${article.id}`} onFollow={onOpen}>
+      <a className="kb-article-row" href={`/knowledge/articles/${article.id}`}>
         <span className="kb-article-main">
           <span className="kb-article-title">{article.title}</span>
           <span className="kb-article-meta">{[collection, kbMessages.articleNumber(article.number)].filter(Boolean).join(' · ')}</span>
@@ -303,7 +307,7 @@ function ArticleRow({ article, collection, timezone, isPublic, order, onOpen }: 
         </span>
         <span className="kb-article-when"><time dateTime={article.updated_at}>{formatDate(article.updated_at, timezone)}</time>
           {change && <small>{savedReplyChangeText(change)}</small>}</span>
-      </RouterLink>
+      </a>
       {open
         ? <a className="kb-article-open icon-button" href={article.url} target="_blank" rel="noreferrer" aria-label={kbMessages.openPublic(article.title)} data-tip={kbMessages.openOnHelpCenter}><Icon name="external" /></a>
         : <span className="kb-article-open" aria-hidden="true" title={published ? kbMessages.turnOnToOpen : undefined}><Icon name="external" /></span>}
