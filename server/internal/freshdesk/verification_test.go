@@ -129,3 +129,25 @@ func TestAbsentVerdictWithoutAConfirmedArchiveIsProbedAgain(t *testing.T) {
 	}
 	env.target(t, "ticket", "3")
 }
+
+func TestArchiveRefusedIsNamedAsTheOnlyCauseOfUnverified(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.archiveForbidden = true
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusUnverified || report.Verification.Tickets.Cause != freshdesk.CauseArchiveRefused {
+		t.Fatalf("status=%s ticket verification=%+v", report.Status, report.Verification.Tickets)
+	}
+	if !report.Verification.Contacts.Verified || report.Verification.Contacts.Cause != "" {
+		t.Fatalf("contact verification=%+v", report.Verification.Contacts)
+	}
+}
+
+func TestArchiveRefusedWithAnotherMismatchHasNoSingleCause(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.archiveForbidden = true
+	env.fake.searchTicketTotal = 9
+	report := env.mustRun(t)
+	if report.Verification.Tickets.Verified || report.Verification.Tickets.Cause != "" {
+		t.Fatalf("ticket verification=%+v, want unverified with no archive-only cause", report.Verification.Tickets)
+	}
+}
