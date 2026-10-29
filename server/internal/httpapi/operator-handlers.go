@@ -306,7 +306,8 @@ func (a *API) redeemOperatorLink(response http.ResponseWriter, request *http.Req
 
 // signInOperatorWithCloud starts an operator's sign-in with a session token of the cloud's identity
 // provider, issued to the console's origin (a.operatorCloud). It goes on to the authenticator as a link
-// does. Every token that does not sign an operator in gets the same answer: an unknown email, a revoked
+// does. A refusal is logged, never audited (anyone can make a verified identity). Every token that does
+// not sign an operator in gets the same answer: an unknown email, a revoked
 // operator, another party, issuer or key, an expired or unverified token, a workspace session.
 func (a *API) signInOperatorWithCloud(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Cache-Control", "no-store")
@@ -337,6 +338,7 @@ func (a *API) signInOperatorWithCloud(response http.ResponseWriter, request *htt
 	}
 	step, err := a.config.Operators.CloudSignIn(request.Context(), email)
 	if errors.Is(err, auth.ErrOperatorNotAllowed) {
+		slog.Warn("operator cloud sign-in refused", "reason", "not an operator", "email", email)
 		refuse()
 		return
 	}

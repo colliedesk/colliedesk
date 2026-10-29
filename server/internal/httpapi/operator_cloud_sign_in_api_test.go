@@ -154,10 +154,11 @@ func TestOperatorCloudSignInRefusesEveryOtherTokenTheSameWay(t *testing.T) {
 	if !strings.Contains(want, `"code":"operator_sign_in_refused"`) {
 		t.Fatalf("refusal = %s", want)
 	}
-	// A verified identity that is no operator leaves a line in the audit log; junk tokens leave none.
+	// Anyone can make a verified identity, and the audit log keeps every line for good: a refusal writes
+	// none, only a log line (review ADR, PR #316).
 	var refused int
-	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM operator_audit WHERE action='operator.sign_in_refused' AND detail->>'email' IN ('stranger@example.com','gone@example.com')`).Scan(&refused); err != nil || refused != 2 {
-		t.Fatalf("refused sign-ins audited = %d, %v", refused, err)
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM operator_audit WHERE action LIKE '%refused%'`).Scan(&refused); err != nil || refused != 0 {
+		t.Fatalf("refused sign-ins in the audit log = %d, %v", refused, err)
 	}
 	// The console's own origin only: a page elsewhere cannot use a token it holds.
 	if response := e.cloudSignIn(e.identity(nil), testOrigin); response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "csrf_rejected") {

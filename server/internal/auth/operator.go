@@ -264,7 +264,12 @@ const (
 )
 
 // ticket makes the ticket for the authenticator code; with enroll, also a new key the operator adds first.
+// It ends the operator's tickets not used yet: one kept by whoever held the mailbox a while must not set up
+// an authenticator later (review ADR, PR #316).
 func (s *OperatorService) ticket(ctx context.Context, tx pgx.Tx, step *SignInStep, operatorID, email string, enroll bool, by string) error {
+	if err := s.endTickets(ctx, tx, operatorID, ""); err != nil {
+		return err
+	}
 	ticket, ticketHash, err := newToken()
 	if err != nil {
 		return err
@@ -292,6 +297,13 @@ func (s *OperatorService) ticket(ctx context.Context, tx pgx.Tx, step *SignInSte
 	return err
 }
 
+// endTickets marks the operator's unused code tickets used, but keep.
+func (s *OperatorService) endTickets(ctx context.Context, tx pgx.Tx, operatorID, keep string) error {
+	_, err := tx.Exec(ctx, `UPDATE operator_links SET used_at=$2 WHERE operator_id=$1 AND purpose='totp-ticket' AND used_at IS NULL AND id::text <> $3`,
+		operatorID, s.now(), keep)
+	return err
+}
+
 // ErrOperatorNotAllowed refuses a cloud sign-in of an email that is no operator, or a revoked one; it says
 // no more than that, to anyone.
 var ErrOperatorNotAllowed = errors.New("this identity is not an operator")
@@ -309,14 +321,11 @@ func (s *OperatorService) CloudSignIn(ctx context.Context, email string) (SignIn
 		var revoked, locked, enabled *time.Time
 		err := tx.QueryRow(ctx, `SELECT id, revoked_at, locked_until, totp_enabled_at FROM operators WHERE email=$1 FOR UPDATE`, email).
 			Scan(&operatorID, &revoked, &locked, &enabled)
+		// No audit line: anyone can make a verified identity, and the audit log keeps every line for good
+		// (review ADR, PR #316). The handler logs the refusal.
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && revoked != nil {
 			refused = true
-			// The audit's actor holds 200 characters; an email claim can be longer, and is kept whole in detail.
-			actor := email
-			if len(actor) > 200 {
-				actor = strings.ToValidUTF8(actor[:200], "")
-			}
-			return operatorAudit(ctx, tx, "operator", actor, "operator.sign_in_refused", map[string]any{"email": email, "via": "cloud"})
+			return nil
 		}
 		if err != nil {
 			return err
@@ -460,6 +469,10 @@ func (s *OperatorService) ConfirmTOTP(ctx context.Context, ticket, code string) 
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE operator_links SET used_at=$2 WHERE id=$1`, linkID, s.now()); err != nil {
+			return err
+		}
+		// Once in, no other ticket of the operator works: one left open could replace the authenticator.
+		if err := s.endTickets(ctx, tx, operatorID, linkID); err != nil {
 			return err
 		}
 		step.Step = "done"

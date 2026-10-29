@@ -78,14 +78,16 @@ Operators (`operators`, `operator_links`, `operator_sessions`, `operator_request
   console and one issued to `ops.` never the app. Without `OPERATOR_ORIGIN` the two origins are one and so
   is the token; the hosted cloud cannot run so (`config doctor` error), and a self-hosted server in path
   mode still needs an operator's email and its authenticator. Every refusal (no operator, revoked, bad
-  token of any kind) is the same 401 `operator_sign_in_refused`; a verified email that is refused writes
-  `operator.sign_in_refused`, an unverifiable token only a log line, so junk traffic writes no rows.
+  token of any kind) is the same 401 `operator_sign_in_refused`, and only a log line: anyone can make a
+  verified identity, and `operator_audit` keeps every row for good, so a refusal never writes one.
 - A cloud sign-in always ends at the authenticator, even with `operator.require_totp` off: `Reauth` lets a
   session without one through for 15 minutes because it assumes a fresh link from the shell, which a
   mailbox is not. It never replaces an authenticator (`--reset-totp` stays shell-only). The ticket's
   `created_by` (`cloud-sign-in`) makes the session's `operator.sign_in` line say `via: cloud`. Trap: from
   `collie operator add` (or an invite) until the first sign-in, whoever holds the mailbox enrolls the
   authenticator (trust on first use, as with a link sent by mail); add operators just before they sign in.
+  A ticket ends the operator's tickets not used yet, and signing in ends every other: a ticket kept from
+  that window could otherwise replace the authenticator the operator set up later (`endTickets`).
 - The console's content policy forbids every other host and inline style; Clerk's form needs its Frontend
   API host, bot protection and inline styles. Only `/sign-in`, and only with a publishable key that names a
   host (`cloudauth.FrontendHost`), gets `signInCSP`, and the page names the key in
