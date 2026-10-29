@@ -11,6 +11,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/retention"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -136,7 +137,11 @@ func newRetentionService(db *database.DB, origin string, billing polar.Config, r
 	if err != nil {
 		return nil, err
 	}
-	config := retention.Config{DB: db, Storage: storage, Origin: origin, Polar: polar.NewClient(billing),
+	helpCenterDomain, err := helpcenter.DomainFromEnv(settings)
+	if err != nil {
+		return nil, err
+	}
+	config := retention.Config{DB: db, Storage: storage, Origin: origin, HelpCenterDomain: helpCenterDomain, Polar: polar.NewClient(billing),
 		DeleteEnabled: retentionSet.DeleteEnabled, MaxDeletionsPerDay: retentionSet.MaxDeletionsPerDay}
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
 		config.Mailer = email.SMTPSender{Config: emailConfig.SMTP}

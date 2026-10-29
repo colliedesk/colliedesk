@@ -65,11 +65,15 @@ func (a *API) helpCenterHome(response http.ResponseWriter, request *http.Request
 }
 
 // WrapHelpCenter serves the public help centers in front of next (the web app and the API).
-func (s *Server) WrapHelpCenter(next http.Handler) http.Handler { return s.api.helpCenter.Wrap(next) }
+// A page of the app loaded on APP_ORIGIN with a session of a workspace that has its own host moves there.
+func (s *Server) WrapHelpCenter(next http.Handler) http.Handler {
+	return s.api.helpCenter.Wrap(s.api.handOffAppPages(next))
+}
 
-// askHelpCenterCertificate answers the reverse proxy's on-demand TLS question: 200 only for a host
-// name the server serves a help center on that is open (on, workspace not locked): <slug>.<HELP_CENTER_DOMAIN>,
-// a claim's CNAME target hc-<claim>.<HELP_CENTER_DOMAIN> (which redirects), an active custom domain, or a
+// askHelpCenterCertificate answers the reverse proxy's on-demand TLS question: 200 only for a workspace's
+// own host name <slug>.<HELP_CENTER_DOMAIN> (its root leads to the desk's sign-in, so every existing
+// workspace has one, whatever its help center), or a host name the server serves a help center on that
+// is open (on, workspace not locked): a claim's CNAME target hc-<claim>.<HELP_CENTER_DOMAIN> (which redirects), an active custom domain, or a
 // pending one whose DNS check passes now. Every other case is the same 404, so the proxy never gets a
 // certificate for a name nobody serves, and the answer tells nothing about why. A claim target or custom
 // domain is looked up through helpcenter.Site.CertifyHost: names nobody claims are remembered, and a
@@ -83,7 +87,7 @@ func (a *API) askHelpCenterCertificate(response http.ResponseWriter, request *ht
 	var open bool
 	var err error
 	if slug, ok := helpcenter.DomainSlug(name, a.config.HelpCenterDomain); ok {
-		_, open, err = a.store.OpenHelpCenter(request.Context(), slug)
+		_, open, err = a.store.WorkspaceForMailSlug(request.Context(), slug)
 	} else if claim, ok := helpcenter.DomainClaim(name, a.config.HelpCenterDomain); ok {
 		open, err = a.helpCenter.CertifyHost(request, helpcenter.ClaimHost(a.config.HelpCenterDomain, claim),
 			func(ctx context.Context) (bool, bool, error) { return a.certifyClaimHost(ctx, claim) })

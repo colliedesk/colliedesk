@@ -21,6 +21,8 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		SessionType   string `json:"session_type"`
 		// Timezone is the browser's IANA zone: a first sign-in starts the agent on it.
 		Timezone string `json:"timezone"`
+		// Next is the page a browser signing in on APP_ORIGIN opens on its workspace's host.
+		Next string `json:"next"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Token == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A one-time token is required.")
@@ -33,7 +35,7 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Session type must be cookie or bearer.")
 		return
 	}
-	result, err := a.auth.Redeem(request.Context(), input.Token, input.RequestedRole, input.Label)
+	result, err := a.auth.Redeem(request.Context(), input.Token, input.RequestedRole, input.Label, input.SessionType == "cookie")
 	if writePlanLimit(response, err) {
 		return
 	}
@@ -47,9 +49,8 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		slog.Error("link imported Freshdesk agent", "workspace_id", result.Workspace.ID, "error", err)
 	}
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
-	if input.SessionType == "cookie" {
-		setSessionCookie(response, result.Token)
-		result.Token = ""
+	if input.SessionType == "cookie" && !a.finishBrowserSignIn(response, request, &result, input.Next) {
+		return
 	}
 	writeJSON(response, http.StatusOK, result)
 }
@@ -66,8 +67,12 @@ func (a *API) logout(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusInternalServerError, "internal_error", "The session could not be revoked.")
 		return
 	}
-	http.SetCookie(response, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	clearSessionCookie(response)
 	response.WriteHeader(http.StatusNoContent)
+}
+
+func clearSessionCookie(response http.ResponseWriter) {
+	http.SetCookie(response, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 }
 
 func (a *API) me(response http.ResponseWriter, request *http.Request) {

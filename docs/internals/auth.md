@@ -249,7 +249,12 @@ CLOUD_AUTH_EMAIL_CLAIM=email
 CLERK_PUBLISHABLE_KEY=pk_live_...
 ```
 
-`CLOUD_AUTH_AUTHORIZED_PARTIES` is a comma-separated list of exact origins. The email claim defaults
+`CLOUD_AUTH_AUTHORIZED_PARTIES` is a comma-separated list of exact origins. With `HELP_CENTER_DOMAIN`, a
+token exchanged on a workspace host may also name that host's own origin (`https://<slug>.<domain>`),
+and no other workspace host's: list only `APP_ORIGIN` here. A Clerk production instance on the root
+domain works on every subdomain; keep its "allowed subdomains" list off (or wildcard), since workspace
+hosts are made at sign-up. Passkeys registered on one subdomain do not work on a sibling subdomain. The
+email claim defaults
 to `email`. `CLERK_PUBLISHABLE_KEY` is returned only by the public config endpoint and is safe for the
 browser; no Clerk Secret Key is required because Colliedesk never calls Clerk's Backend API.
 

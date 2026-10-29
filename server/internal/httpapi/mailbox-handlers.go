@@ -129,6 +129,11 @@ func mailboxResultPath(p mailboxProvider, result mailboxResult, outcome string) 
 // sender's workspace. It redoes here what authorize would do for a session route, and answers every
 // outcome with a redirect the settings page explains; the provider's own error text is never echoed.
 func (a *API) finishMailboxConnect(p mailboxProvider, response http.ResponseWriter, request *http.Request) {
+	if a.toWorkspaceHost(response, request, func(ctx context.Context) (string, error) {
+		return a.store.CallbackStateSlug(ctx, p.name(), request.URL.Query().Get("state"), a.now())
+	}) {
+		return
+	}
 	var result mailboxResult
 	outcome := a.finishMailboxConsent(p, request, &result)
 	http.Redirect(response, request, mailboxResultPath(p, result, outcome), http.StatusSeeOther)

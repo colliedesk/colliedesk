@@ -47,8 +47,8 @@ func TestTemplatesCarryNoBrandingScriptOrInlineStyle(t *testing.T) {
 func TestAddresses(t *testing.T) {
 	cases := []struct{ origin, domain, slug, want string }{
 		{"https://desk.example.com/", "", "acme", "https://desk.example.com/help/acme"},
-		{"https://app.example.com", "help.example.com", "acme", "https://acme.help.example.com"},
-		{"http://127.0.0.1:8080", "help.test", "acme", "http://acme.help.test:8080"},
+		{"https://app.example.com", "help.example.com", "acme", "https://acme.help.example.com/help"},
+		{"http://127.0.0.1:8080", "help.test", "acme", "http://acme.help.test:8080/help"},
 		// A slug that cannot be a host name stays on the path address.
 		{"https://app.example.com", "help.example.com", "www", "https://app.example.com/help/www"},
 	}

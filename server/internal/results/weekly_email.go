@@ -9,6 +9,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -23,7 +24,9 @@ type Mail struct {
 	Mailer Mailer
 	From   string
 	Origin string
-	Locked func(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error)
+	// HelpCenterDomain gives each workspace its own host; the email links there.
+	HelpCenterDomain string
+	Locked           func(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error)
 }
 
 // WithMail makes the worker send the weekly email; without it (no outgoing mail settings) none is sent.
@@ -103,9 +106,9 @@ func (w *Worker) claimWeek(ctx context.Context, workspaceID string, start time.T
 }
 
 type weeklyContent struct {
-	workspace string
-	page      Page
-	to        []string
+	workspace, slug string
+	page            Page
+	to              []string
 }
 
 func (w *Worker) sendWorkspaceWeekly(ctx context.Context, candidate weeklyCandidate, start, now time.Time) error {
@@ -130,7 +133,7 @@ func (w *Worker) sendWorkspaceWeekly(ctx context.Context, candidate weeklyCandid
 			return nil
 		}
 		content = &weeklyContent{page: page}
-		if err := tx.QueryRow(ctx, `SELECT name FROM workspaces WHERE id=$1`, candidate.workspaceID).Scan(&content.workspace); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT name, slug FROM workspaces WHERE id=$1`, candidate.workspaceID).Scan(&content.workspace, &content.slug); err != nil {
 			return err
 		}
 		rows, err := tx.Query(ctx, `SELECT lower(email) FROM agents WHERE workspace_id=$1 AND role='admin' AND deactivated_at IS NULL AND results_email ORDER BY 1`, candidate.workspaceID)
@@ -161,9 +164,10 @@ func (w *Worker) composeWeekly(content *weeklyContent, timezone, to string, now 
 	if err != nil {
 		return nil, err
 	}
-	subject, body := WeeklyText(content.workspace, content.page, timezone, strings.TrimRight(w.mail.Origin, "/"), now)
+	origin := workspacehost.Origin(w.mail.Origin, w.mail.HelpCenterDomain, content.slug)
+	subject, body := WeeklyText(content.workspace, content.page, timezone, origin, now)
 	return email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: to, Subject: subject, Body: body,
-		MessageID: id, Date: now.Truncate(time.Second), Standalone: true, Unsubscribe: strings.TrimRight(w.mail.Origin, "/") + "/results#weekly-email"})
+		MessageID: id, Date: now.Truncate(time.Second), Standalone: true, Unsubscribe: origin + "/results#weekly-email"})
 }
 
 // WeeklyText is the weekly email: the last 30 days next to the baseline's, last week's volume and the AI

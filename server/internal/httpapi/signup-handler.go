@@ -53,6 +53,7 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		Role          *string `json:"role"`
 		Source        *string `json:"source"`
 		Timezone      string  `json:"timezone"`
+		Next          string  `json:"next"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A workspace name is required.")
@@ -117,7 +118,8 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	}
 	a.recordFunnel("trial_started", workspace.ID, properties)
 	a.startOnBrowserTimezone(request.Context(), &result, input.Timezone)
-	setSessionCookie(response, result.Token)
-	result.Token = ""
+	if !a.finishBrowserSignIn(response, request, &result, input.Next) {
+		return
+	}
 	writeJSON(response, http.StatusCreated, result)
 }

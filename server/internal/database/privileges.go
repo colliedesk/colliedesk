@@ -130,6 +130,11 @@ const (
 	// workspace ids, installation ids and yes or no leave the transaction; each event is then applied in
 	// its own workspace.
 	PrivilegeGitHubInstallation Privilege = "github-installation"
+	// PrivilegeCallbackRouting finds the workspace of a provider's callback that arrived on APP_ORIGIN:
+	// the workspace of a live mailbox consent or GitHub authorization state (by its hash), or of an email
+	// channel id (Microsoft admin consent). Only the slug leaves the transaction, to send the browser to
+	// that workspace's host, where the callback checks the session and spends the state in its workspace.
+	PrivilegeCallbackRouting Privilege = "callback-routing"
 	// PrivilegeServerConfig reads and writes the server's own configuration (server_config_versions and
 	// _values, server_config_state, server_processes, polar_products, operator_audit, and the sign-up hash
 	// key in server_secrets). None of these tables has a workspace_id or a grant to the app role; no

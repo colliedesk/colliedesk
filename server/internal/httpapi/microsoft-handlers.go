@@ -75,6 +75,11 @@ func (a *API) disconnectMicrosoft(response http.ResponseWriter, request *http.Re
 // (state), when that channel is in the session's workspace.
 func (a *API) finishMicrosoftAdminConsent(response http.ResponseWriter, request *http.Request) {
 	query := request.URL.Query()
+	if uuidShape.MatchString(query.Get("state")) && a.toWorkspaceHost(response, request, func(ctx context.Context) (string, error) {
+		return a.store.ChannelSlug(ctx, query.Get("state"))
+	}) {
+		return
+	}
 	approved := query.Get("error") == "" && query.Get("admin_consent") == "True"
 	if page, ok := a.adminConsentReturn(request, query.Get("state")); ok {
 		outcome := "microsoft=admin_consent_done"

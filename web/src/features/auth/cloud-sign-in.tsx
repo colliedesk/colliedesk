@@ -15,6 +15,9 @@ interface CloudSignInProps {
   onSignUp?: (token: string, workspaceName: string, answers: SignupAnswers) => Promise<void>;
   // buying is true when the visitor came to buy a plan; sign-up then leads to payment.
   buying?: boolean;
+  // findWorkspaceAt is APP_ORIGIN's sign-in page, given on a workspace's own host: an email that is not an
+  // agent of this workspace is sent there to find its own.
+  findWorkspaceAt?: string;
   // endSession is true right after the Colliedesk session ended (ClerkSession).
   endSession?: boolean;
 }
@@ -26,7 +29,7 @@ const copy = {
 
 const isNotAnAgent = (error: unknown) => error instanceof NotAnAgentError;
 
-export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying, endSession }: CloudSignInProps) {
+export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying, findWorkspaceAt, endSession }: CloudSignInProps) {
   // A verified email of no workspace: sign up where the server offers it, else say so.
   const noWorkspace = ({ leave, getToken, signOutFailed }: RefusedIdentity) => {
     if (onSignUp) {
@@ -37,7 +40,8 @@ export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying, 
       </>;
     }
     return <div className="cloud-signup">
-      <p role="alert" className="error-copy">{signupMessages.noWorkspaceForEmail}</p>
+      <p role="alert" className="error-copy">{findWorkspaceAt ? signupMessages.notAnAgentHere : signupMessages.noWorkspaceForEmail}</p>
+      {findWorkspaceAt && <a href={findWorkspaceAt}>{signupMessages.findYourWorkspace}</a>}
       <button type="button" onClick={() => void leave()}>{signupMessages.useAnotherAccount}</button>
       {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
     </div>;

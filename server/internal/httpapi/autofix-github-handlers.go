@@ -122,6 +122,11 @@ func (a *API) connectGitHub(response http.ResponseWriter, request *http.Request)
 // attaches an installation to the sender's workspace. Every outcome is a redirect the page explains;
 // GitHub's own error text is never echoed.
 func (a *API) finishGitHubAuthorization(response http.ResponseWriter, request *http.Request) {
+	if a.toWorkspaceHost(response, request, func(ctx context.Context) (string, error) {
+		return a.store.CallbackStateSlug(ctx, "github", request.URL.Query().Get("state"), a.now())
+	}) {
+		return
+	}
 	outcome, location := a.finishGitHubInstall(request)
 	if location == "" {
 		key := "github"

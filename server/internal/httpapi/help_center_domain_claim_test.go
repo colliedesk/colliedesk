@@ -127,7 +127,7 @@ func TestTheClaimsCNAMETargetLeadsToItsHelpCenter(t *testing.T) {
 			t.Fatalf("the target while %s: status=%d location=%q", want, response.Code, response.Header().Get("Location"))
 		}
 	}
-	moved("https://" + slug + ".help.example.net/c/guides?page=2")
+	moved("https://" + slug + ".help.example.net/help/c/guides?page=2")
 	if code := askCertificate(t, api, target); code != http.StatusOK {
 		t.Fatalf("tls-ask for the target = %d", code)
 	}

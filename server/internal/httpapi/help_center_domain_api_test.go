@@ -244,10 +244,10 @@ func TestHelpCenterDomainsNeverCrossWorkspaces(t *testing.T) {
 		t.Fatalf("the host serves %s", page)
 	}
 	// Alpha's slug addresses still serve alpha, and only beta's redirect to the custom domain.
-	if response := visit(site, "/", "192.0.2.81", "Host", slugAlpha+".help.example.net"); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Alpha answers") {
+	if response := visit(site, "/help", "192.0.2.81", "Host", slugAlpha+".help.example.net"); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Alpha answers") {
 		t.Fatalf("alpha's own host status=%d", response.Code)
 	}
-	if response := visit(site, "/", "192.0.2.81", "Host", slugBeta+".help.example.net"); response.Header().Get("Location") != "https://"+host+"/" {
+	if response := visit(site, "/help", "192.0.2.81", "Host", slugBeta+".help.example.net"); response.Header().Get("Location") != "https://"+host+"/" {
 		t.Fatalf("beta's slug host location=%q", response.Header().Get("Location"))
 	}
 	// Alpha removing its claim leaves beta's domain alone.
@@ -324,8 +324,8 @@ func TestOldAddressesMoveToTheCustomDomain(t *testing.T) {
 				{"desk.example.com", "/help/" + slug + "/a/1-x%0d%0aSet-Cookie:%20a=b", "https://" + host + "/a/1-x%0d%0aSet-Cookie:%20a=b"},
 			}
 			if mode.domain != "" {
-				olds = append(olds, old{slug + ".help.example.net", "/c/guides?page=2", "https://" + host + "/c/guides?page=2"},
-					old{slug + ".help.example.net", "//evil.example/%2e%2e/x", "https://" + host + "//evil.example/%2e%2e/x"})
+				olds = append(olds, old{slug + ".help.example.net", "/help/c/guides?page=2", "https://" + host + "/c/guides?page=2"},
+					old{slug + ".help.example.net", "/help//evil.example/%2e%2e/x", "https://" + host + "//evil.example/%2e%2e/x"})
 			}
 			for _, o := range olds {
 				req := newRequest(t, http.MethodGet, "/", nil, "", nil)
@@ -345,7 +345,7 @@ func TestOldAddressesMoveToTheCustomDomain(t *testing.T) {
 			if mode.domain == "" {
 				wantPage(t, visit(site, "/help/"+slug, "192.0.2.84"), http.StatusOK, []string{"Moving help"}, nil)
 			} else {
-				wantPage(t, visit(site, "/", "192.0.2.84", "Host", slug+".help.example.net"), http.StatusOK, []string{"Moving help"}, nil)
+				wantPage(t, visit(site, "/help", "192.0.2.84", "Host", slug+".help.example.net"), http.StatusOK, []string{"Moving help"}, nil)
 			}
 		})
 	}
@@ -361,7 +361,7 @@ func TestCustomDomainChangesEveryAddressTheServerHandsOut(t *testing.T) {
 	enableHelpCenter(t, api, admin, "Address help", true)
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Start here", "status": "published", "body_md": "Hello"})
-	slugPage := visit(site, "/", "192.0.2.85", "Host", slug+".help.example.net")
+	slugPage := visit(site, "/help", "192.0.2.85", "Host", slug+".help.example.net")
 	const host = "help.address.example"
 	view := setDomain(t, api, admin, host, http.StatusOK)
 	dns.setCNAME(host, view.cnameTarget())

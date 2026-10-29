@@ -33,58 +33,58 @@ func TestHelpCenterHostServesItsOwnRobotsSitemapAndLLMsFiles(t *testing.T) {
 	bravoArticle := kbArticle(t, f.api, f.adminB, map[string]any{"collection_id": bravo.ID, "title": "Bravo only", "status": "published", "body_md": "bravo"})
 	f.upgrade(t, f.workspaceA, "sub_seo_alpha")
 
-	startURL := fmt.Sprintf("https://%s/a/%d-%s", hostA, start.Number, start.Slug)
+	startURL := fmt.Sprintf("https://%s/help/a/%d-%s", hostA, start.Number, start.Slug)
 	robots := visit(site, "/robots.txt", "192.0.2.80", "Host", hostA)
-	if robots.Code != http.StatusOK || robots.Body.String() != "User-agent: *\nDisallow:\n\nSitemap: https://"+hostA+"/sitemap.xml\n" {
+	if robots.Code != http.StatusOK || robots.Body.String() != "User-agent: *\nDisallow:\n\nSitemap: https://"+hostA+"/help/sitemap.xml\n" {
 		t.Fatalf("robots.txt status=%d body=%q", robots.Code, robots.Body.String())
 	}
-	sitemap := visit(site, "/sitemap.xml", "192.0.2.80", "Host", hostA)
+	sitemap := visit(site, "/help/sitemap.xml", "192.0.2.80", "Host", hostA)
 	if !strings.HasPrefix(sitemap.Header().Get("Content-Type"), "application/xml") {
 		t.Fatalf("sitemap type=%q", sitemap.Header().Get("Content-Type"))
 	}
 	wantPage(t, sitemap, http.StatusOK, []string{`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
-		"<loc>https://" + hostA + "/</loc>", "<loc>https://" + hostA + "/c/guides</loc>", "<loc>" + startURL + "</loc>", "<lastmod>"},
+		"<loc>https://" + hostA + "/help</loc>", "<loc>https://" + hostA + "/help/c/guides</loc>", "<loc>" + startURL + "</loc>", "<lastmod>"},
 		[]string{hostB, testOriginHost, "Secret draft", fmt.Sprintf("/a/%d-", draft.Number) + draft.Slug, "Bravo"})
 	if got := strings.Count(sitemap.Body.String(), "<url>"); got != 3 {
 		t.Fatalf("sitemap lists %d addresses, want 3:\n%s", got, sitemap.Body.String())
 	}
-	llms := visit(site, "/llms.txt", "192.0.2.80", "Host", hostA)
+	llms := visit(site, "/help/llms.txt", "192.0.2.80", "Host", hostA)
 	if !strings.HasPrefix(llms.Header().Get("Content-Type"), "text/plain") {
 		t.Fatalf("llms.txt type=%q", llms.Header().Get("Content-Type"))
 	}
 	wantPage(t, llms, http.StatusOK, []string{"# Alpha help\n", "\n## Guides\n", "- [Start here](" + startURL + ".md)"},
 		[]string{hostB, testOriginHost, "Secret draft", "Bravo"})
 
-	md := visit(site, fmt.Sprintf("/a/%d-%s.md", start.Number, start.Slug), "192.0.2.80", "Host", hostA)
+	md := visit(site, fmt.Sprintf("/help/a/%d-%s.md", start.Number, start.Slug), "192.0.2.80", "Host", hostA)
 	if !strings.HasPrefix(md.Header().Get("Content-Type"), "text/markdown") || md.Header().Get("Link") != "<"+startURL+`>; rel="canonical"` {
 		t.Fatalf("markdown type=%q link=%q", md.Header().Get("Content-Type"), md.Header().Get("Link"))
 	}
-	wantPage(t, md, http.StatusOK, []string{"# Start here\n", "Sign in **first**.", "![Form](https://" + hostA + "/images/" + image.ID + ")"},
+	wantPage(t, md, http.StatusOK, []string{"# Start here\n", "Sign in **first**.", "![Form](https://" + hostA + "/help/images/" + image.ID + ")"},
 		[]string{"/api/v1/", "internal: ask Sam", testOriginHost})
 	// The number finds the article; another slug moves to the current Markdown address.
-	if moved := visit(site, fmt.Sprintf("/a/%d-old.md", start.Number), "192.0.2.80", "Host", hostA); moved.Code != http.StatusMovedPermanently ||
-		moved.Header().Get("Location") != fmt.Sprintf("/a/%d-%s.md", start.Number, start.Slug) {
+	if moved := visit(site, fmt.Sprintf("/help/a/%d-old.md", start.Number), "192.0.2.80", "Host", hostA); moved.Code != http.StatusMovedPermanently ||
+		moved.Header().Get("Location") != fmt.Sprintf("/help/a/%d-%s.md", start.Number, start.Slug) {
 		t.Fatalf("old markdown address status=%d location=%q", moved.Code, moved.Header().Get("Location"))
 	}
 	// Another workspace's article and a draft have no Markdown on this host.
 	for _, path := range []string{fmt.Sprintf("/a/%d-%s.md", draft.Number, draft.Slug), fmt.Sprintf("/a/%d-%s.md", bravoArticle.Number+50, bravoArticle.Slug)} {
-		wantPage(t, visit(site, path, "192.0.2.80", "Host", hostA), http.StatusNotFound, nil, []string{"Bravo only", "marigold"})
+		wantPage(t, visit(site, "/help"+path, "192.0.2.80", "Host", hostA), http.StatusNotFound, nil, []string{"Bravo only", "marigold"})
 	}
 
 	// B is still on its trial: nothing for crawlers.
 	if robots := visit(site, "/robots.txt", "192.0.2.81", "Host", hostB); robots.Body.String() != "User-agent: *\nDisallow: /\n" {
 		t.Fatalf("trial robots.txt=%q", robots.Body.String())
 	}
-	trialMap := visit(site, "/sitemap.xml", "192.0.2.81", "Host", hostB)
+	trialMap := visit(site, "/help/sitemap.xml", "192.0.2.81", "Host", hostB)
 	wantPage(t, trialMap, http.StatusOK, []string{"<urlset"}, []string{"<url>", "Bravo"})
-	trialLLMs := visit(site, "/llms.txt", "192.0.2.81", "Host", hostB)
+	trialLLMs := visit(site, "/help/llms.txt", "192.0.2.81", "Host", hostB)
 	wantPage(t, trialLLMs, http.StatusOK, []string{"# Bravo help"}, []string{"Bravo only"})
-	trialMD := visit(site, fmt.Sprintf("/a/%d-%s.md", bravoArticle.Number, bravoArticle.Slug), "192.0.2.81", "Host", hostB)
+	trialMD := visit(site, fmt.Sprintf("/help/a/%d-%s.md", bravoArticle.Number, bravoArticle.Slug), "192.0.2.81", "Host", hostB)
 	if trialMD.Code != http.StatusOK || trialMD.Header().Get("X-Robots-Tag") != "noindex" || trialMap.Header().Get("X-Robots-Tag") != "noindex" {
 		t.Fatalf("trial markdown status=%d robots=%q, sitemap robots=%q", trialMD.Code, trialMD.Header().Get("X-Robots-Tag"), trialMap.Header().Get("X-Robots-Tag"))
 	}
 	// The path addresses move to the host, files included.
-	if moved := visit(site, "/help/"+slugA+"/sitemap.xml", "192.0.2.82"); moved.Code != http.StatusMovedPermanently || moved.Header().Get("Location") != "https://"+hostA+"/sitemap.xml" {
+	if moved := visit(site, "/help/"+slugA+"/sitemap.xml", "192.0.2.82"); moved.Code != http.StatusMovedPermanently || moved.Header().Get("Location") != "https://"+hostA+"/help/sitemap.xml" {
 		t.Fatalf("path sitemap status=%d location=%q", moved.Code, moved.Header().Get("Location"))
 	}
 }
@@ -114,11 +114,26 @@ func TestHelpCenterPagesNameOnlyTheirServingHost(t *testing.T) {
 	pages := []string{"/", "/c/guides", "/c/guides/cards", articlePath, articlePath + ".md", "/search?q=card", "/nothing-here",
 		"/robots.txt", "/sitemap.xml", "/llms.txt"}
 
-	walk := func(host string) {
+	// base is where the help center lives on host: /help on the workspace's own host name, the root of a
+	// custom domain. robots.txt is always at the root.
+	walk := func(host, base string) {
 		t.Helper()
-		forbidden := []string{testOriginHost, otherSlug + "." + seoHost, "/help/"}
+		forbidden := []string{testOriginHost, otherSlug + "." + seoHost}
+		if base == "" {
+			forbidden = append(forbidden, "/help/")
+		}
+		at := func(path string) string {
+			if path == "/robots.txt" {
+				return path
+			}
+			if path == "/" && base != "" {
+				return base
+			}
+			return base + path
+		}
+		home := "https://" + host + at("/")
 		for _, path := range pages {
-			response := visit(site, path, "192.0.2.90", "Host", host)
+			response := visit(site, at(path), "192.0.2.90", "Host", host)
 			if response.Code != http.StatusOK && path != "/nothing-here" {
 				t.Fatalf("%s%s status=%d", host, path, response.Code)
 			}
@@ -134,32 +149,33 @@ func TestHelpCenterPagesNameOnlyTheirServingHost(t *testing.T) {
 				}
 			}
 		}
-		home := visit(site, "/", "192.0.2.90", "Host", host).Body.String()
-		for _, want := range []string{`<link rel="canonical" href="https://` + host + `/">`, `<meta property="og:url" content="https://` + host + `/">`,
-			`<link rel="alternate" hreflang="en" href="https://` + host + `/">`, `<link rel="alternate" hreflang="x-default" href="https://` + host + `/">`} {
-			if !strings.Contains(home, want) {
-				t.Errorf("home on %s lacks %s:\n%s", host, want, home)
+		homePage := visit(site, at("/"), "192.0.2.90", "Host", host).Body.String()
+		for _, want := range []string{`<link rel="canonical" href="` + home + `">`, `<meta property="og:url" content="` + home + `">`,
+			`<link rel="alternate" hreflang="en" href="` + home + `">`, `<link rel="alternate" hreflang="x-default" href="` + home + `">`} {
+			if !strings.Contains(homePage, want) {
+				t.Errorf("home on %s lacks %s:\n%s", host, want, homePage)
 			}
 		}
-		page := visit(site, articlePath, "192.0.2.90", "Host", host).Body.String()
-		for _, want := range []string{`<link rel="canonical" href="https://` + host + articlePath + `">`,
-			`<link rel="alternate" hreflang="en" href="https://` + host + articlePath + `">`,
-			`<link rel="alternate" type="text/markdown" href="https://` + host + articlePath + `.md">`} {
+		page := visit(site, at(articlePath), "192.0.2.90", "Host", host).Body.String()
+		for _, want := range []string{`<link rel="canonical" href="https://` + host + at(articlePath) + `">`,
+			`<link rel="alternate" hreflang="en" href="https://` + host + at(articlePath) + `">`,
+			`<link rel="alternate" type="text/markdown" href="https://` + host + at(articlePath) + `.md">`} {
 			if !strings.Contains(page, want) {
 				t.Errorf("article on %s lacks %s", host, want)
 			}
 		}
 	}
-	walk(slug + "." + seoHost)
+	walk(slug+"."+seoHost, "/help")
 
 	const custom = "help.walk-alpha.example"
 	view := setDomain(t, api, admin, custom, http.StatusOK)
 	dns.set("_help-center-verify."+custom, view.token())
 	checkDomain(t, api, admin, http.StatusOK)
-	walk(custom)
-	// The slug host now moves to the custom domain, every file with it.
-	for _, path := range []string{"/", "/robots.txt", "/sitemap.xml", "/llms.txt", articlePath + ".md"} {
-		moved := visit(site, path, "192.0.2.91", "Host", slug+"."+seoHost)
+	walk(custom, "")
+	// The workspace's host now moves its help center to the custom domain, every file with it.
+	for old, path := range map[string]string{"/help": "/", "/robots.txt": "/robots.txt", "/help/sitemap.xml": "/sitemap.xml", "/help/llms.txt": "/llms.txt",
+		"/help" + articlePath + ".md": articlePath + ".md"} {
+		moved := visit(site, old, "192.0.2.91", "Host", slug+"."+seoHost)
 		if moved.Code != http.StatusMovedPermanently || moved.Header().Get("Location") != "https://"+custom+path {
 			t.Errorf("slug host %s status=%d location=%q", path, moved.Code, moved.Header().Get("Location"))
 		}

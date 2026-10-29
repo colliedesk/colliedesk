@@ -7,13 +7,13 @@ to the public address (see [environment variables](environment-variables.md)).
 ## The Host header
 
 The proxy **must** pass the visitor's `Host` header on unchanged: the server decides from it what to
-answer. It serves the app, the API, MCP and attachments only when `Host` is `APP_ORIGIN`'s host name,
+answer. It serves the app, the API, MCP and attachments when `Host` is `APP_ORIGIN`'s host name,
 `localhost`, or an IP address (the shipped health check calls `http://127.0.0.1:8080/`, and Caddy asks
-its certificate question on `127.0.0.1`). Every other host name belongs to the
-[help center](#help-center-host-names): a workspace's help center host name or
-[custom domain](#custom-help-center-domains) serves it, and any other name gets the help center's
-`404`, never the app. A name the server does not own therefore never shows the sign-in page, even if
-its DNS still points at the proxy.
+its certificate question on `127.0.0.1`), and, with `HELP_CENTER_DOMAIN`, on each workspace's own host
+`<slug>.<HELP_CENTER_DOMAIN>` for that workspace only ([workspace host names](#workspace-host-names)).
+A [custom domain](#custom-help-center-domains) serves only its help center, and any other name gets
+the help center's `404`, never the app. A name the server does not own therefore never shows the
+sign-in page, even if its DNS still points at the proxy.
 
 - **Caddy** keeps `Host` by default.
 - **nginx** sends the upstream's name unless told otherwise; add `proxy_set_header Host $host;` to
@@ -88,20 +88,32 @@ Caddy streams it as it is. Do not compress `application/x-ndjson` (a compressing
 back). An answer takes up to 90 seconds; keep the proxy's read timeout above that. Set `TRUSTED_PROXIES`
 so the chat's limit of 10 questions a minute per address counts readers, not the proxy.
 
-## Help center host names
+## Workspace host names
 
-Every workspace's [help center](../user/knowledge-base.md#public-help-center) works at
-`APP_ORIGIN/help/<slug>` with no extra setup. To give each one its own host name instead, for
-example `acme.help.example.com`:
+Without extra setup, everything runs on `APP_ORIGIN`, and each workspace's
+[help center](../user/knowledge-base.md#public-help-center) is at `APP_ORIGIN/help/<slug>`. To give
+each workspace its own host name instead, for example `acme.example.com`:
 
-1. Point a wildcard DNS record, `*.help.example.com`, at the proxy.
-2. Set `help_center.domain=help.example.com` and restart the server. The help center then answers
-   on `<slug>.help.example.com` with the scheme and port of `APP_ORIGIN`, and `APP_ORIGIN/help/<slug>`
-   redirects there (301). A slug that cannot be a host name (for example `www`, `mail` or `support`)
-   keeps the path address. On those host names the server answers only help center pages: the
-   app, the API and MCP stay on `APP_ORIGIN`.
+1. Point a wildcard DNS record, `*.example.com`, at the proxy.
+2. Set `help_center.domain=example.com` (`collie config set` or the operator console). Each workspace
+   then has the host name `<slug>.example.com`, with the scheme and port of `APP_ORIGIN`. A slug that
+   cannot be a host name (for example `www`, `mail`, `admin` or `ops`) keeps everything on
+   `APP_ORIGIN`, and the [operator console's own address](operator-console.md#its-own-address) is
+   served before any workspace host:
+   - `https://acme.example.com/` runs the workspace's desk: the inbox, every page of the app, its
+     API and MCP. The team works there every day.
+   - `https://acme.example.com/help` is the workspace's help center. `APP_ORIGIN/help/acme` redirects
+     there (301), and so do the help center's addresses from before it moved under `/help`
+     (`https://acme.example.com/a/12-reset` moves to `https://acme.example.com/help/a/12-reset`).
+     `robots.txt` stays at the root of the host.
+   - `APP_ORIGIN` keeps sign-up, "find your workspace" (sign in there, choose the workspace) and the
+     fixed callback addresses of Google, Microsoft, GitHub and Polar. A browser signed in on
+     `APP_ORIGIN` moves to the same page on its workspace's host, signed in there by a one-time token
+     that works once, for one minute, only on that host. A callback that arrives on `APP_ORIGIN` is
+     sent, with its query, to the same callback on the host of the workspace that started it, which
+     finishes it for the person signed in there.
 3. Give the proxy certificates for the host names. With Caddy, get each one on demand and let the
-   server say which names it serves; it answers `200` only for a help center that is on, and
+   server say which names it serves; it answers `200` for an existing workspace's host name, and
    `404` for everything else:
 
 ```caddyfile
@@ -111,13 +123,30 @@ example `acme.help.example.com`:
 	}
 }
 
-*.help.example.com {
+*.example.com {
 	tls {
 		on_demand
 	}
 	reverse_proxy 127.0.0.1:8080
 }
 ```
+
+**Sessions belong to a host.** The session cookie has no `Domain` attribute, so a browser sends it
+only to the host that set it. On a workspace host the server accepts only that workspace's sessions
+and agent tokens: another workspace's session gets `401` and its cookie is cleared, and a write made
+with the cookie must come from that host's own origin. Cloud sign-in on a workspace host signs in to
+that workspace only, whatever the browser asks for.
+
+**Names that never become workspace hosts.** A slug that cannot be a host name (a reserved name such as
+`www`, `mail`, `support` or `help-staging`) keeps everything on `APP_ORIGIN`. `APP_ORIGIN`'s own host is
+never a workspace's, also when it is inside `HELP_CENTER_DOMAIN` (`APP_ORIGIN=https://app.example.com`
+beside `HELP_CENTER_DOMAIN=example.com`) or is `HELP_CENTER_DOMAIN` itself
+(`APP_ORIGIN=https://staging.example.com` beside `HELP_CENTER_DOMAIN=staging.example.com`, workspaces on
+`<slug>.staging.example.com`). Give every one-label name that has its own DNS record under the domain a
+reserved slug, or the explicit record would take a workspace's host.
+
+**Changing `HELP_CENTER_DOMAIN`** changes every workspace's host name and every custom domain's `CNAME`
+target (`hc-<claim>.<HELP_CENTER_DOMAIN>`). The server answers only the names of the current value.
 
 Let's Encrypt issues at most 50 certificates per registered domain a week; a wildcard certificate
 (DNS challenge) avoids that limit if you serve many workspaces. Keep `APP_ORIGIN`'s own site block:

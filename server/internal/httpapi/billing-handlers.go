@@ -134,7 +134,7 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		return
 	}
 	url, err := a.polar.CreateCheckout(request.Context(), polar.CheckoutRequest{
-		ProductID: product, CustomerID: customerID, SuccessURL: a.config.Origin + "/settings/billing?checkout=success", EmbedOrigin: a.config.Origin,
+		ProductID: product, CustomerID: customerID, SuccessURL: a.workspaceOrigin(who.Workspace.Slug) + "/settings/billing?checkout=success", EmbedOrigin: a.requestOrigin(request),
 	})
 	if err != nil {
 		writeBillingProviderError(response, err)
@@ -146,7 +146,8 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 // createPortal opens the Polar customer portal, where the customer changes the card, downloads
 // invoices or cancels. It stays available after a subscription ends.
 func (a *API) createPortal(response http.ResponseWriter, request *http.Request) {
-	workspaceID := principal(request).Workspace.ID
+	who := principal(request)
+	workspaceID := who.Workspace.ID
 	known, err := a.store.HasBillingCustomer(request.Context(), workspaceID)
 	if err != nil {
 		writeInternalError(response, err)
@@ -156,7 +157,7 @@ func (a *API) createPortal(response http.ResponseWriter, request *http.Request) 
 		writeError(response, http.StatusNotFound, "not_found", "This workspace has no billing account yet.")
 		return
 	}
-	url, err := a.polar.CreatePortalSession(request.Context(), workspaceID, a.config.Origin+"/settings/billing")
+	url, err := a.polar.CreatePortalSession(request.Context(), workspaceID, a.workspaceOrigin(who.Workspace.Slug)+"/settings/billing")
 	if errors.Is(err, polar.ErrCustomerNotFound) {
 		writeError(response, http.StatusNotFound, "not_found", "This workspace has no billing account yet.")
 		return

@@ -30,6 +30,12 @@ type gmailDesk struct {
 
 func newGmailDesk(t *testing.T, name string) gmailDesk {
 	t.Helper()
+	return newGmailDeskWith(t, name, nil)
+}
+
+// newGmailDeskWith is newGmailDesk with the server config adjusted by mutate.
+func newGmailDeskWith(t *testing.T, name string, mutate func(*httpapi.Config)) gmailDesk {
+	t.Helper()
 	fake := googletest.New("client-1", "not-a-secret")
 	server := fake.Start()
 	t.Cleanup(server.Close)
@@ -39,6 +45,9 @@ func newGmailDesk(t *testing.T, name string) gmailDesk {
 	}
 	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Google = google.Config{ClientID: "client-1", ClientSecret: "not-a-secret", Keys: keys, Base: server.URL}
+		if mutate != nil {
+			mutate(config)
+		}
 	})
 	desk := gmailDesk{api: api, service: service, pool: pool, fake: fake}
 	desk.admin = createSession(t, api, service, name, "admin@"+slugOf(name)+".example.com")

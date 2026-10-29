@@ -57,6 +57,8 @@ type Config struct {
 	From string
 	// Origin is the web address of the app, quoted in notices.
 	Origin string
+	// HelpCenterDomain gives each workspace its own host; a notice quotes the workspace's.
+	HelpCenterDomain string
 	// DeleteEnabled turns deletion on. Off, the pass still sends notices and logs what it would delete.
 	DeleteEnabled bool
 	// MaxDeletionsPerDay caps deletions in any rolling 24 hours; 0 deletes nothing.

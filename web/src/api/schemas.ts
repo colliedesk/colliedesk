@@ -15,6 +15,7 @@ export const conversationSortSchema = z.enum(['updated_desc', 'updated_asc', 'cr
 export const workspaceSchema = z.object({
   id: z.string().uuid(), slug: z.string(), name: z.string(), timezone: z.string(),
 }) satisfies z.ZodType<Generated<'Workspace'>>;
+export const renamedWorkspaceSchema = workspaceSchema.extend({ continue_url: z.string().url().optional() }) satisfies z.ZodType<Generated<'RenamedWorkspace'>>;
 export const workspaceChoiceSchema = z.object({ slug: z.string(), name: z.string() }) satisfies z.ZodType<Generated<'WorkspaceChoice'>>;
 export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema).min(2) }) satisfies z.ZodType<Generated<'CloudWorkspaceChoices'>>;
 export const publicConfigSchema = z.object({
@@ -27,6 +28,9 @@ export const publicConfigSchema = z.object({
   ai: z.object({ server_provider: z.boolean() }),
   // Autofix needs the server's GitHub App; a server from before Autofix reads as without it.
   autofix: z.object({ available: z.boolean(), missing_settings: z.array(z.string()) }).default({ available: false, missing_settings: [] }),
+  // A server from before workspace hosts runs everything on one origin.
+  app_origin: z.string().default(''),
+  workspace_hosts: z.boolean().default(false),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const checkoutPlanSchema = z.enum(['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
 export const planSchema = z.enum(['trial', 'solo', 'small', 'team', 'team25', 'founding', 'none']);
@@ -185,7 +189,7 @@ export const inviteSchema = z.object({
   created_at: z.string().datetime(), expires_at: z.string().datetime(), used_at: nullableDate, revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Invite'>>;
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
-export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema }) satisfies z.ZodType<Generated<'Redeemed'>>;
+export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema, continue_url: z.string().url().optional() }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
 const setupStepKeys = ['email', 'import', 'invite', 'first_reply'] as const;
 export type SetupStepKey = (typeof setupStepKeys)[number];
@@ -240,6 +244,7 @@ export type TeamMember = Generated<'TeamMember'>;
 export type Billing = Generated<'Billing'>;
 export type CheckoutPlan = Generated<'CheckoutPlan'>;
 export type Me = Generated<'Me'>;
+export type PublicConfig = z.infer<typeof publicConfigSchema>;
 export type OnboardingGoal = Generated<'OnboardingGoal'>;
 export type Attachment = Generated<'Attachment'>;
 export type ConversationOrigin = Generated<'ConversationOrigin'>;

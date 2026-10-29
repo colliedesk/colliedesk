@@ -163,9 +163,10 @@ func TestOldFreshdeskAddressesAnswerOnEveryHelpCenterAddress(t *testing.T) {
 	slugHost := slug + ".help.example.net"
 	page := fmt.Sprintf("/a/%d-reset-password", article.Number)
 
-	wantMove(t, site, "/help/"+slug+path, http.StatusMovedPermanently, "https://"+slugHost+path)
-	wantMove(t, site, path, http.StatusMovedPermanently, "https://"+slugHost+page, "Host", slugHost)
-	wantMove(t, site, "/de/support/solutions/articles/9999-gone", http.StatusFound, "https://"+slugHost+"/search?q=gone", "Host", slugHost)
+	wantMove(t, site, "/help/"+slug+path, http.StatusMovedPermanently, "https://"+slugHost+"/help"+path)
+	wantMove(t, site, path, http.StatusMovedPermanently, "https://"+slugHost+"/help"+page, "Host", slugHost)
+	wantMove(t, site, "/help"+path, http.StatusMovedPermanently, "https://"+slugHost+"/help"+page, "Host", slugHost)
+	wantMove(t, site, "/de/support/solutions/articles/9999-gone", http.StatusFound, "https://"+slugHost+"/help/search?q=gone", "Host", slugHost)
 
 	const custom = "help.legacy-hosts.example"
 	if _, err := pool.Exec(context.Background(), `INSERT INTO help_center_domains (workspace_id, hostname, claim, token, status, verified_at)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/mcpbridge"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -148,7 +149,14 @@ func createWorkspace(ctx context.Context, pool *pgxpool.Pool, origin string, arg
 	if err := database.Migrate(ctx, pool); err != nil {
 		return err
 	}
-	workspace, link, err := auth.New(pool, origin).CreateWorkspace(ctx, *name, *email)
+	if _, err := useServerConfig(ctx, pool); err != nil {
+		return err
+	}
+	domain, err := helpcenter.DomainFromEnv(settings)
+	if err != nil {
+		return err
+	}
+	workspace, link, err := auth.New(pool, origin).WithWorkspaceHosts(domain).CreateWorkspace(ctx, *name, *email)
 	if err != nil {
 		return err
 	}
@@ -168,7 +176,14 @@ func pairAgent(ctx context.Context, pool *pgxpool.Pool, origin string, args []st
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	link, err := auth.New(pool, origin).Pair(ctx, *workspace, *email)
+	if _, err := useServerConfig(ctx, pool); err != nil {
+		return err
+	}
+	domain, err := helpcenter.DomainFromEnv(settings)
+	if err != nil {
+		return err
+	}
+	link, err := auth.New(pool, origin).WithWorkspaceHosts(domain).Pair(ctx, *workspace, *email)
 	if err != nil {
 		return err
 	}
