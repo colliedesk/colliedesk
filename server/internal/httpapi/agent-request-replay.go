@@ -150,7 +150,7 @@ func approvalPermission(item domain.AgentRequest) string {
 
 // ownerRoutes act on the person the token belongs to (the "me" of the path). Approving one replays it
 // as the approver, so only that person may approve it; anyone else would change their own settings.
-var ownerRoutes = map[string]bool{"PATCH /api/v1/agents/me/timezone": true, "PATCH /api/v1/agents/me/display-name": true}
+var ownerRoutes = map[string]bool{"PATCH /api/v1/agents/me/timezone": true, "PATCH /api/v1/agents/me/display-name": true, "PUT /api/v1/agents/me/setup-guide": true}
 
 // ownerOnly reports whether only the token's person may approve item.
 func ownerOnly(item domain.AgentRequest) bool { return ownerRoutes[item.Method+" "+item.Route] }
