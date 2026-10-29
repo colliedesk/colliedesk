@@ -60,7 +60,14 @@ type Verification struct {
 	Verified bool   `json:"verified"`
 	Method   string `json:"method"`
 	Detail   string `json:"detail"`
+	// Cause names the one reason a total is unverified when it is a limit of the Freshdesk plan and
+	// nothing else is wrong (CauseArchiveRefused); empty otherwise.
+	Cause string `json:"cause,omitempty"`
 }
+
+// CauseArchiveRefused: Freshdesk refused the archived-ticket endpoint, and the search total agrees
+// with every ticket found outside the archive.
+const CauseArchiveRefused = "archive_refused"
 
 type Verifications struct {
 	Tickets       Verification `json:"tickets"`

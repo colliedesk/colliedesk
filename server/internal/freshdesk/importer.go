@@ -67,8 +67,11 @@ type run struct {
 	// read stay and a run only fills tickets without them.
 	statsFrozen        bool
 	archiveUnavailable atomic.Bool
-	verification       Verifications
-	progress           *progress
+	// timeEntriesByTicket holds the account's time entries once listed; nil when the list was refused.
+	timeEntriesByTicket map[int64][]fdTimeEntry
+	timeEntriesTried    bool
+	verification        Verifications
+	progress            *progress
 
 	cannedFolders      int
 	cannedIDs          []string
