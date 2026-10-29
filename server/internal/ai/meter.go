@@ -128,6 +128,14 @@ func estimateTokens(request aiprovider.Request) (input, output int64) {
 	return int64(size/3 + 1), int64(request.MaxOutput)
 }
 
+// operatorCheck is the one provider call that is not metered: the operator console's check of the server
+// provider of a change not saved yet. It belongs to no workspace, so there is no usage row to write; it is
+// one check request (at most 256 tokens out), run only by a person signed in to the console.
+func operatorCheck(ctx context.Context, provider aiprovider.Provider, model string) error {
+	_, err := provider.Check(ctx, model)
+	return err
+}
+
 // meteredCheck is Metered for a provider check.
 func (s *Service) meteredCheck(ctx context.Context, call Call, provider aiprovider.Provider, model string) (aiprovider.Response, error) {
 	call.Feature = FeatureCheck
@@ -203,7 +211,7 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 		if response.Usage.Reported && s.priced(call, model) {
 			value, known := costMicroUSD(s.config.Server.Prices, response.Hops)
 			if !known {
-				slog.Warn("an AI model without a price in AI_SERVER_PRICES answered; charged at the highest declared price", "model", response.Model)
+				slog.Warn("an AI model without a price in ai.server.prices answered; charged at the highest declared price", "model", response.Model)
 			}
 			cost = &value
 		}

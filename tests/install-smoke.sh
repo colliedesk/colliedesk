@@ -42,11 +42,15 @@ url=$(printf '%s\n' "$output" | grep -E "^http://localhost:$PORT/sign-in\?token=
 [ -n "$url" ] || fail "installer printed no pairing URL for port $PORT"
 printf '%s' "$output" | grep -F 'collie pair --workspace smoke-desk --email admin@smoke.example' >/dev/null ||
   fail 'installer output does not say how to print a new link'
-# Every generated secret: *_PASSWORD, APP_SECRET, and the passwords inside the DATABASE*_URL values.
-secrets=$( { sed -n 's/^[A-Z_]*_PASSWORD=//p; s/^APP_SECRET=//p' "$TMP/.env"
+# Every generated password: *_PASSWORD and the passwords inside the DATABASE*_URL values.
+secrets=$( { sed -n 's/^[A-Z_]*_PASSWORD=//p' "$TMP/.env"
   sed -n 's/^DATABASE[A-Z_]*_URL=postgres:\/\/[^:]*:\([^@]*\)@.*/\1/p' "$TMP/.env"; } | sort -u)
-[ "$(printf '%s\n' "$secrets" | grep -c .)" = 4 ] || fail "expected 4 distinct generated secrets in .env, found: $(printf '%s\n' "$secrets" | grep -c .)"
-for secret in $secrets; do
+[ "$(printf '%s\n' "$secrets" | grep -c .)" = 3 ] || fail "expected 3 distinct generated passwords in .env, found: $(printf '%s\n' "$secrets" | grep -c .)"
+grep -q APP_SECRET "$TMP/.env" && fail 'installer generated APP_SECRET, which the server does not read'
+# The key ring is generated too, and never printed either.
+token_key=$(sed -n 's/^MAILBOX_TOKEN_KEYS=k1://p' "$TMP/.env")
+[ -n "$token_key" ] || fail 'installer generated no MAILBOX_TOKEN_KEYS'
+for secret in $secrets $token_key; do
   case $output in *"$secret"*) fail 'installer printed a generated secret' ;; esac
 done
 
@@ -70,10 +74,27 @@ status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://localhost:$PORT
   -H 'Content-Type: application/json' -d "{\"token\":\"$token\"}")
 [ "$status" = 401 ] || fail "a used pairing link answered $status, want 401"
 
+# The installer also printed the operator console's one-time link; it signs the operator in.
+operator_url=$(printf '%s\n' "$output" | sed -n "s#^Operator console (one-time link): \(http://localhost:$PORT/operator/sign-in?token=[A-Za-z0-9_-]*\)\$#\1#p" | tail -n 1)
+[ -n "$operator_url" ] || fail "installer printed no operator console link for port $PORT"
+operator_token=${operator_url#*token=}
+cookies=$TMP/operator-cookies
+redeemed=$(curl -fsS -c "$cookies" -X POST "http://localhost:$PORT/api/v1/operator/auth/redeem" -H 'Content-Type: application/json' \
+  -d "{\"token\":\"$operator_token\"}") || fail 'the operator link did not redeem'
+printf '%s' "$redeemed" | grep -F '"step":"done"' >/dev/null || fail "operator redeem did not sign in: $redeemed"
+# The cookie is Secure; send it by hand so the check does not depend on curl's rules for http://localhost.
+session=$(awk '$6 == "colliedesk_operator" { print $7 }' "$cookies")
+[ -n "$session" ] || fail 'operator redeem set no colliedesk_operator cookie'
+operator=$(curl -fsS -H "Cookie: colliedesk_operator=$session" "http://localhost:$PORT/api/v1/operator/auth/me") || fail 'the operator session was refused'
+printf '%s' "$operator" | grep -F '"email":"admin@smoke.example"' >/dev/null || fail "signed in as the wrong operator: $operator"
+# The link never reaches the server's log.
+(cd "$TMP" && docker compose logs --no-color server 2>&1) | grep -F "$operator_token" >/dev/null && fail 'the operator link is in the server log'
+
 # Re-running the installer keeps the workspace and .env.
 before=$(sha256sum "$TMP/.env")
 again=$(sh "$ROOT/install.sh" --dir "$TMP" --name "Smoke Desk" --email admin@smoke.example </dev/null 2>&1) || fail "re-run failed: $again"
 printf '%s' "$again" | grep -F 'Existing workspace initialization was kept.' >/dev/null || fail "re-run did not keep the workspace: $again"
+printf '%s' "$again" | grep -F 'Operator console' >/dev/null && fail "re-run printed another operator link: $again"
 [ "$(sha256sum "$TMP/.env")" = "$before" ] || fail 're-run changed .env'
 curl -fsS "http://localhost:$PORT/api/v1/auth/me" -H "Authorization: Bearer $bearer" >/dev/null || fail 'session lost after re-run'
 

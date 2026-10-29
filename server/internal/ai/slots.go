@@ -278,7 +278,7 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 			if s.config.Server == nil {
 				return invalid("This server has no AI provider of its own, so it has no price for %s and cannot count what AI chat spends: no limit in dollars can be set.", *next.model)
 			}
-			return invalid("This server has no price for %s, so it cannot count what AI chat spends. Ask its operator to add one to AI_SERVER_PRICES.", *next.model)
+			return invalid("This server has no price for %s, so it cannot count what AI chat spends. Ask its operator to add one to the setting ai.server.prices.", *next.model)
 		}
 		updatedBy := nullable(actor.AgentID)
 		var row slotRow

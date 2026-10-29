@@ -180,7 +180,7 @@ function ChatRow({ chat, timezone, onOpen }: { chat: AIChatSummary; timezone: st
 
 // AIChatPanel is the AI chat tab of Settings → Built-in AI. slot is the AI chat feature, whose own monthly
 // limit onSetCap changes where the plan sets none.
-// serverPrices: the server has an AI provider of its own, whose AI_SERVER_PRICES can price the chat's model.
+// serverPrices: the server has an AI provider of its own, whose ai.server.prices setting can price the chat's model.
 export function AIChatPanel({ timezone, onOpen, slot, onSetCap, isAdmin = true, serverPrices = true }: {
   timezone: string; onOpen: (id: string) => void; slot?: AISlot; onSetCap?: (cap: number | null) => Promise<unknown>; isAdmin?: boolean; serverPrices?: boolean;
 }) {

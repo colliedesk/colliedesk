@@ -748,3 +748,26 @@ func (s *Service) RemoveProvider(ctx context.Context, workspaceID string, actor 
 	}
 	return turnedOff, err
 }
+
+// PingServer sends one provider check to a server provider (the operator console's check before a change is
+// saved) with the first model of the first slot that has one. It returns the model asked.
+func (s *Service) PingServer(ctx context.Context, server *ServerProvider) (string, error) {
+	if server == nil {
+		return "", errors.New("the server has no AI provider")
+	}
+	model := ""
+	for _, slot := range Slots {
+		if models := server.ModelsFor(slot); len(models) > 0 {
+			model = models[0]
+			break
+		}
+	}
+	if model == "" {
+		return "", errors.New("the server AI provider offers no model")
+	}
+	provider, err := s.build(Spec{Kind: server.Kind, BaseURL: server.BaseURL, APIKey: server.APIKey, Server: true})
+	if err != nil {
+		return model, err
+	}
+	return model, operatorCheck(ctx, provider, model)
+}

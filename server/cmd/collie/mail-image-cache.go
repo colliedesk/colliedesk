@@ -29,12 +29,12 @@ func mailImageCacheBytesFromEnv(getenv func(string) string) (int64, error) {
 }
 
 // sweepMailImageCache keeps the email image cache under its cap and removes images older than their
-// lifetime, at start and then hourly until ctx ends.
-func sweepMailImageCache(ctx context.Context, data *store.Store, maxBytes int64) {
+// lifetime, at start and then hourly until ctx ends. maxBytes is read at each pass (mail_image_cache.max_bytes).
+func sweepMailImageCache(ctx context.Context, data *store.Store, maxBytes func() int64) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
-		if removed, err := data.SweepMailImageCache(ctx, httpapi.MailImageLifetime, maxBytes); err != nil && ctx.Err() == nil {
+		if removed, err := data.SweepMailImageCache(ctx, httpapi.MailImageLifetime, maxBytes()); err != nil && ctx.Err() == nil {
 			slog.Error("sweep the email image cache", "error", err)
 		} else if removed > 0 {
 			slog.Info("evicted cached email images", "count", removed)

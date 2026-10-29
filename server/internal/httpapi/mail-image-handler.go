@@ -46,8 +46,8 @@ func (a *API) mailImageKey() []byte {
 }
 
 func (a *API) mailImageCacheBytes() int64 {
-	if a.config.MailImageCacheBytes > 0 {
-		return a.config.MailImageCacheBytes
+	if size := a.hot().MailImageCacheBytes; size > 0 {
+		return size
 	}
 	return DefaultMailImageCacheBytes
 }

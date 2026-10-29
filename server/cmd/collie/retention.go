@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"strconv"
 	"time"
 
@@ -24,6 +23,9 @@ const defaultMaxDeletionsPerDay = 5
 
 // retentionSettings are the fail-safes of the job that deletes workspaces. Deletion is off until
 // RETENTION_DELETE=on; the cap bounds the damage of a wrong decision.
+// maxDeletionsPerDayCeiling bounds the daily cap itself: a typo cannot let a wrong decision delete hundreds.
+const maxDeletionsPerDayCeiling = 20
+
 type retentionSettings struct {
 	DeleteEnabled      bool
 	MaxDeletionsPerDay int
@@ -40,8 +42,8 @@ func retentionSettingsFromEnv(getenv func(string) string) (retentionSettings, er
 	}
 	if value := getenv("RETENTION_MAX_DELETIONS_PER_DAY"); value != "" {
 		max, err := strconv.Atoi(value)
-		if err != nil || max < 0 {
-			return retentionSettings{}, errors.New("RETENTION_MAX_DELETIONS_PER_DAY must be a whole number of 0 or more")
+		if err != nil || max < 0 || max > maxDeletionsPerDayCeiling {
+			return retentionSettings{}, fmt.Errorf("RETENTION_MAX_DELETIONS_PER_DAY must be a whole number from 0 to %d", maxDeletionsPerDayCeiling)
 		}
 		settings.MaxDeletionsPerDay = max
 	}
@@ -74,7 +76,10 @@ func retentionCommand(ctx context.Context, pool *pgxpool.Pool, origin string, ar
 	default:
 		return errors.New(retentionUsage)
 	}
-	billing, err := polar.ConfigFromEnv(os.Getenv)
+	if _, err := useServerConfig(ctx, pool); err != nil {
+		return err
+	}
+	billing, err := billingConfig()
 	if err != nil {
 		return err
 	}
@@ -82,15 +87,15 @@ func retentionCommand(ctx context.Context, pool *pgxpool.Pool, origin string, ar
 	if !billing.Enabled() {
 		return errors.New("retention applies to the hosted cloud only: billing is not configured on this instance, so no workspace is ever locked or deleted")
 	}
-	settings, err := retentionSettingsFromEnv(os.Getenv)
+	retentionSet, err := retentionSettingsFromEnv(settings)
 	if err != nil {
 		return err
 	}
-	service, err := newRetentionService(database.New(pool), origin, billing, settings)
+	service, err := newRetentionService(database.New(pool), origin, billing, retentionSet)
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(output, "deletion %s, at most %d a day\n", map[bool]string{true: "on", false: "off (RETENTION_DELETE)"}[settings.DeleteEnabled], settings.MaxDeletionsPerDay); err != nil {
+	if _, err := fmt.Fprintf(output, "deletion %s, at most %d a day\n", map[bool]string{true: "on", false: "off (retention.delete)"}[retentionSet.DeleteEnabled], retentionSet.MaxDeletionsPerDay); err != nil {
 		return err
 	}
 	return runRetention(ctx, service, apply, output)
@@ -122,17 +127,17 @@ func runRetention(ctx context.Context, service *retention.Service, apply bool, o
 // newRetentionService opens the attachment store, the Polar client and, when SMTP and
 // MAIL_FROM_DOMAIN are set, the platform mailer. Without a mailer notices fail with a clear error
 // and nothing is deleted.
-func newRetentionService(db *database.DB, origin string, billing polar.Config, settings retentionSettings) (*retention.Service, error) {
+func newRetentionService(db *database.DB, origin string, billing polar.Config, retentionSet retentionSettings) (*retention.Service, error) {
 	storage, err := attachmentStorage()
 	if err != nil {
 		return nil, err
 	}
-	emailConfig, err := email.ConfigFromEnv(os.Getenv)
+	emailConfig, err := email.ConfigFromEnv(settings)
 	if err != nil {
 		return nil, err
 	}
 	config := retention.Config{DB: db, Storage: storage, Origin: origin, Polar: polar.NewClient(billing),
-		DeleteEnabled: settings.DeleteEnabled, MaxDeletionsPerDay: settings.MaxDeletionsPerDay}
+		DeleteEnabled: retentionSet.DeleteEnabled, MaxDeletionsPerDay: retentionSet.MaxDeletionsPerDay}
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
 		config.Mailer = email.SMTPSender{Config: emailConfig.SMTP}
 		config.From = "noreply@" + emailConfig.MailFromDomain

@@ -6,11 +6,14 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/cursor/cursortest"
 	"html"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
@@ -20,6 +23,11 @@ import (
 )
 
 type contractFixture struct {
+	// The operator console: a link to redeem, a token that reads and asks, one to sign out, and a
+	// browser session.
+	operatorLink, operatorToken, operatorLogoutToken, operatorCookie string
+	// operatorRequestID is a request the operator token filed; operatorCancelID one it withdraws.
+	operatorRequestID, operatorCancelID string
 	// github is the Autofix GitHub App's stand-in and what the fixture connected through it.
 	github                    contractGitHub
 	api                       http.Handler
@@ -96,6 +104,8 @@ func newContractFixture(t *testing.T) contractFixture {
 		config.Cursor = &autofixworker.Cursor{Base: cursorStandIn.URL()}
 	})
 	createSession(t, api, service, "Contract Support", "support@contract-support.example.com")
+	operatorLink, operatorToken, operatorLogoutToken, operatorCookie := contractOperators(t, api, pool)
+	operatorRequestID, operatorCancelID := contractOperatorRequest(t, api, operatorToken), contractOperatorRequest(t, api, operatorToken)
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")
 	contactID := create(t, api, adminToken, "/api/v1/contacts", map[string]any{
 		"name": "Contract Contact", "email": "contact@contract-all.example.com",
@@ -273,7 +283,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
-	return contractFixture{github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }
@@ -376,4 +386,43 @@ func seedChatSession(t *testing.T, pool *pgxpool.Pool, workspaceID, conversation
 		t.Fatal(err)
 	}
 	return chatID
+}
+
+// contractOperators makes an operator, a link for the redeem case, a browser session and two tokens.
+func contractOperators(t *testing.T, api http.Handler, pool *pgxpool.Pool) (link, token, logoutToken, cookie string) {
+	t.Helper()
+	service := auth.NewOperatorService(database.New(pool), tokenseal.Keys{}, testOrigin+"/operator", nil)
+	linkFor := func() string {
+		raw, err := service.Pair(context.Background(), "ops@contract.example.com", false, "contract")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw[strings.Index(raw, "token=")+len("token="):]
+	}
+	redeemed := request(t, api, http.MethodPost, "/api/v1/operator/auth/redeem", map[string]any{"token": linkFor()}, "", nil)
+	for _, made := range redeemed.Result().Cookies() {
+		cookie = made.Value
+	}
+	if cookie == "" {
+		t.Fatalf("operator redeem: %d %s", redeemed.Code, redeemed.Body.String())
+	}
+	makeToken := func(label string) string {
+		req := newRequest(t, http.MethodPost, "/api/v1/operator/tokens", map[string]any{"label": label, "permissions": auth.OperatorPermissions}, "", &http.Cookie{Name: "__Host-colliedesk_operator", Value: cookie})
+		req.Header.Set("Origin", testOrigin)
+		response := serve(api, req)
+		var made struct{ Token string }
+		decode(t, response, &made)
+		return made.Token
+	}
+	return linkFor(), makeToken("contract reader"), makeToken("contract sign out"), cookie
+}
+
+// contractOperatorRequest files an operator request with the token and returns its id.
+func contractOperatorRequest(t *testing.T, api http.Handler, token string) string {
+	t.Helper()
+	var filed struct {
+		RequestID string `json:"request_id"`
+	}
+	decode(t, request(t, api, http.MethodPatch, "/api/v1/operator/config", map[string]any{"base_version": 0, "set": map[string]any{"internal_signup.emails": "@contract.example"}}, token, nil), &filed)
+	return filed.RequestID
 }

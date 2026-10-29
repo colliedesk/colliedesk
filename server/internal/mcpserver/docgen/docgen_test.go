@@ -35,7 +35,8 @@ func generated(t *testing.T) map[string]string {
 	}
 	mcpGuide := string(page)
 	for name, body := range map[string]string{
-		"tools": docgen.ToolTable(mcpserver.Catalog()), "versions": docgen.Versions(data), "hosts": docgen.HostLinks(),
+		"tools": docgen.ToolTable(mcpserver.Catalog()), "operator-tools": docgen.OperatorToolTable(mcpserver.Catalog()),
+		"versions": docgen.Versions(data), "hosts": docgen.HostLinks(),
 	} {
 		if mcpGuide, err = docgen.Replace(mcpGuide, name, body); err != nil {
 			t.Fatal(err)

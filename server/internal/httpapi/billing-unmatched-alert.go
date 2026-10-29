@@ -59,7 +59,7 @@ func (a *API) alertUnmatchedPayment(ctx context.Context, event polar.Event, webh
 		return
 	}
 	if !a.operatorAlertReady() {
-		slog.Warn("paid subscription has no workspace and no operator alert is configured (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN)", "subscription_id", sub.ID, "webhook_id", webhookID)
+		slog.Warn("paid subscription has no workspace and no operator alert is configured (set billing.alert_email, smtp.host and mail_from.domain with collie config or the operator console)", "subscription_id", sub.ID, "webhook_id", webhookID)
 		return
 	}
 	if !a.alerted.first(sub.ID) {
@@ -93,26 +93,27 @@ Create or find the buyer's workspace and apply the plan (collie plan), or refund
 // domain to send from.
 func (a *API) operatorAlertReady() bool {
 	config := a.config
-	return config.AlertEmail != "" && config.AlertMailer != nil && config.Email.MailFromDomain != ""
+	return a.hot().AlertEmail != "" && config.AlertMailer != nil && config.Email.MailFromDomain != ""
 }
 
-// sendOperatorAlert mails the operator address (BILLING_ALERT_EMAIL) from noreply@MAIL_FROM_DOMAIN. The
+// sendOperatorAlert mails the operator address (billing.alert_email) from noreply@<mail_from.domain>. The
 // send outlives the request that caused it, so a client that gives up does not drop the alert.
 func (a *API) sendOperatorAlert(ctx context.Context, subject, body string) error {
 	config := a.config
+	alertEmail := a.hot().AlertEmail
 	from := "noreply@" + config.Email.MailFromDomain
 	messageID, err := email.NewMessageID(config.Email.MailFromDomain)
 	if err != nil {
 		return fmt.Errorf("compose operator alert: %w", err)
 	}
-	message, err := email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: config.AlertEmail,
+	message, err := email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: alertEmail,
 		Subject: subject, Body: body, MessageID: messageID, Date: a.now(), Standalone: true})
 	if err != nil {
 		return fmt.Errorf("compose operator alert: %w", err)
 	}
 	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), alertSendTimeout)
 	defer cancel()
-	return config.AlertMailer.Send(sendCtx, from, []string{config.AlertEmail}, message)
+	return config.AlertMailer.Send(sendCtx, from, []string{alertEmail}, message)
 }
 
 func valueOrDash(value string) string {

@@ -58,6 +58,8 @@ var (
 	// anyToken: the token's own session (who am I, sign out) and a problem report; every token may.
 	anyToken     = TokenAccess{Tier: auth.ScopeRead}
 	notForPeople = TokenAccess{Closed: NotForPeople}
+	// anyOperatorToken: an operator token's own session (who am I, sign out).
+	anyOperatorToken = TokenAccess{Tier: auth.ScopeOperator}
 )
 
 // tokenTiers classifies every route in Routes(), keyed "METHOD pattern". gateToken lets a token
@@ -200,6 +202,33 @@ var tokenTiers = map[string]TokenAccess{
 	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
 	"PUT /api/v1/conversations/{id}/presence":               grant(auth.PermConversationsRead),
 	"DELETE /api/v1/conversations/{id}/presence/{clientId}": grant(auth.PermConversationsRead),
+
+	// The operator console: no workspace token reaches these (401); an operator token reads, and asks a
+	// person for every change (operator requests, docs/internals/operator-console.md).
+	"POST /api/v1/operator/auth/redeem":                  notForPeople,
+	"POST /api/v1/operator/auth/totp":                    notForPeople,
+	"GET /api/v1/operator/auth/me":                       anyOperatorToken,
+	"POST /api/v1/operator/auth/logout":                  anyOperatorToken,
+	"POST /api/v1/operator/tokens":                       alwaysAsk(auth.PermOperatorManage),
+	"GET /api/v1/operator/status":                        grant(auth.PermOperatorRead),
+	"GET /api/v1/operator/config":                        grant(auth.PermOperatorRead),
+	"PATCH /api/v1/operator/config":                      alwaysAsk(auth.PermOperatorConfigWrite),
+	"POST /api/v1/operator/config/check":                 grant(auth.PermOperatorRead),
+	"GET /api/v1/operator/config/versions":               grant(auth.PermOperatorRead),
+	"POST /api/v1/operator/config/versions/{id}/restore": alwaysAsk(auth.PermOperatorConfigWrite),
+	"POST /api/v1/operator/config/trial/confirm":         alwaysAsk(auth.PermOperatorConfigWrite),
+	"POST /api/v1/operator/config/trial/revert":          alwaysAsk(auth.PermOperatorConfigWrite),
+	"GET /api/v1/operator/billing/products":              grant(auth.PermOperatorRead),
+	"POST /api/v1/operator/billing/products":             alwaysAsk(auth.PermOperatorConfigWrite),
+	"PATCH /api/v1/operator/billing/products/{id}":       alwaysAsk(auth.PermOperatorConfigWrite),
+	"GET /api/v1/operator/audit":                         grant(auth.PermOperatorRead),
+	"GET /api/v1/operator/requests":                      grant(auth.PermOperatorRead),
+	"GET /api/v1/operator/requests/{id}":                 grant(auth.PermOperatorRead),
+	"POST /api/v1/operator/requests/{id}/cancel":         grant(auth.PermOperatorRequestsCancel),
+	"GET /api/v1/operator/operators":                     grant(auth.PermOperatorRead),
+	"POST /api/v1/operator/operators":                    alwaysAsk(auth.PermOperatorManage),
+	"DELETE /api/v1/operator/operators/{id}":             alwaysAsk(auth.PermOperatorManage),
+	"DELETE /api/v1/operator/sessions/{id}":              alwaysAsk(auth.PermOperatorManage),
 
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
 	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),

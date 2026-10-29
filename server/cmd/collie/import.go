@@ -13,7 +13,6 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
-	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -46,10 +45,13 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	if err := database.Migrate(ctx, pool); err != nil {
 		return err
 	}
+	if _, err := useServerConfig(ctx, pool); err != nil {
+		return err
+	}
 	// Old Freshdesk help center links are pointed at the help center's address, built as the server
 	// builds it. The origin is APP_ORIGIN as set, never the local default other commands fall back to:
 	// without it the import rewrites no link and says so, instead of writing a local address for good.
-	if options.HelpCenterDomain, err = helpcenter.DomainFromEnv(os.Getenv); err != nil {
+	if options.HelpCenterDomain, err = helpcenter.DomainFromEnv(settings); err != nil {
 		return err
 	}
 	options.Origin = strings.TrimSpace(os.Getenv("APP_ORIGIN"))
@@ -171,7 +173,7 @@ func parseSince(value string) (time.Time, error) {
 // this build serves it (the same decision serve makes at start).
 // plansOnSale lists the plans the configured Polar products sell, for import refusals to name an upgrade.
 func plansOnSale() []string {
-	config, err := polar.ConfigFromEnv(os.Getenv)
+	config, err := billingConfig()
 	if err != nil || !config.Enabled() {
 		return nil
 	}
@@ -179,7 +181,7 @@ func plansOnSale() []string {
 }
 
 func billingEnabled() bool {
-	config, err := polar.ConfigFromEnv(os.Getenv)
+	config, err := billingConfig()
 	if err != nil {
 		return false
 	}

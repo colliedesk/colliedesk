@@ -7,7 +7,8 @@ import { themeTokens } from './check-contrast.mjs';
 // select, checkbox and radio from tokens, so a control never falls back to the browser look or to a colour that stays
 // fixed when the theme changes.
 const read = (name) => readFileSync(new URL(`../src/styles/${name}`, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-const base = read('base.css');
+// base.css is Tailwind and base-plain.css, which the operator console imports without Tailwind.
+const base = read('base.css') + read('base-plain.css');
 const components = read('components.css');
 const tokens = readFileSync(new URL('../src/styles/tokens.css', import.meta.url), 'utf8');
 

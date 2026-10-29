@@ -46,7 +46,7 @@ an admin can set a **monthly spend limit** for AI chat on the **AI chat** tab of
 no limit. **Settings → Built-in AI → AI chat** shows the month's answers, spend, chats, hand-offs and
 how many answers were rated helpful, with a warning at 80% and when answers are paused.
 
-Spend is counted at the server's prices (`AI_SERVER_PRICES`, see
+Spend is counted at the server's prices (the setting `ai.server.prices`, see
 [environment variables](../self-host/environment-variables.md#ai-provider)). When the server has no price for the AI chat's model, the tab
 says **Price unknown** instead of a spend, and a monthly spend limit cannot be set until the operator adds one. A server
 without an AI provider of its own has no prices at all: on your own key, your provider's dashboard shows the spend.

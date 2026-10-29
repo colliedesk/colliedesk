@@ -7,8 +7,14 @@ job) and gates every release (`release.yml`, step "Upgrade from the previous rel
 
 ## What it does
 
-1. Lays out an install as `install.sh` does (its compose file and database users, read from
-   `install.sh` itself) running the previous release.
+1. Lays out an install as the previous release's `install.sh` did (its compose file and database
+   users, read from `git show <previous tag>:install.sh`, or `PREVIOUS_INSTALL_SH`) running the previous
+   release, with settings in `.env` (SMTP, trusted proxies) that release read from the environment. The
+   compose file stays the previous one through the upgrade, as for an operator who only changes the
+   image: the candidate must import those settings into its database once (an `env.import`
+   audit line, not again on restart), warn that they are still in the environment, and `collie config
+   doctor` must exit 1 naming them; the previous release, rolled back, reads them from the environment
+   again.
 2. Builds the fixture database: the previous release's migrations one at a time, as the owner with
    `app.privileged` on (what `collie migrate` does), each followed by its fixture file
    (`tests/upgrade/fixture/<migration>.sql`), then writes the stored files the rows point at.
@@ -29,6 +35,12 @@ job) and gates every release (`release.yml`, step "Upgrade from the previous rel
 7. Starts the candidate and, for two workspaces, signs in with `collie pair`, loads the inbox, and
    checks it lists its own conversations, no conversation or contact of another workspace, and
    that another workspace's conversation answers 404.
+   Then runs the checkout's `install.sh` again on the same directory, as an operator who upgrades with
+   the installer: it must keep the existing install (no new workspace, no new operator link), keep the
+   compose file it replaces as `compose.yaml.bak`, write one that no longer passes moved settings, import
+   through `--stdin` a setting `.env` holds that the database lacks (`INTERNAL_SIGNUP_EMAILS`) while
+   keeping a group the database already holds (SMTP), and serve the inbox again. The rollback that
+   follows puts `compose.yaml.bak` back, as the guide says.
 8. Restores one workspace with `restore-workspace.sh` after deleting some of its conversations and
    files: refused without `--replace`, then twice with it. The workspace must equal the backup as the
    script's scratch database has it, have its conversations back and no valid session, while the

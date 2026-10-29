@@ -126,7 +126,7 @@ leaves still gets the answer stored and metered, and reads it back with `GET …
 out of what the team spent and holds. On the cloud's own provider (plan limits) a call is refused
 (`ErrChatLimit`: the turn is `over_limit`, the end user gets 3 related articles, nothing is sent) once
 the month's or the day's answers or spend are reached; elsewhere only the slot's own monthly limit and a
-tenth of it a day. A chat call on a workspace's key is priced at `AI_SERVER_PRICES` when its model has a
+tenth of it a day. A chat call on a workspace's key is priced at `ai.server.prices` when its model has a
 price there, so that limit can count; a limit on a model without a price is refused when it is set
 (400 naming the model). The month counts what was spent plus what running calls hold (the most a call
 can cost: every token of its prompt at the full input price), so it is never passed; the day counts
