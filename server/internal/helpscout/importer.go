@@ -88,7 +88,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	// The results page measures its baseline from the first import to finish. Help Scout has no
 	// resolve times to read, so that baseline has first response, volume and handle time only.
 	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
-		return results.MarkImportFinished(ctx, tx, r.workspaceID, r.ledger.source, report.Status, r.now())
+		return results.MarkImportFinished(ctx, tx, r.workspaceID, r.ledger.source, report.Status, "", r.now())
 	}); err != nil {
 		log.Printf("helpscout import: results baseline not marked for workspace %s: %v", options.WorkspaceSlug, err)
 	}

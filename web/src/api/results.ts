@@ -19,7 +19,7 @@ const resultsWindowSchema = z.object({
 });
 const snapshotSchema = z.object({
   id: z.string().uuid(), computed_at: date, measured_at: date, history_since: date.optional(), source: z.string().optional(),
-  import_status: z.enum(['OK', 'FAILED', 'UNVERIFIED', '']).optional(), end: date.optional(), stats_read: count.optional(),
+  import_status: z.enum(['OK', 'FAILED', 'UNVERIFIED', '']).optional(), import_cause: z.literal('archive_refused').optional(), end: date.optional(), stats_read: count.optional(),
   windows: z.object({ '30d': resultsWindowSchema, '7d': resultsWindowSchema }),
 });
 const hoursSavedSchema = z.object({ hours: z.number(), conversations: count, median_handle_minutes: count }).nullable();

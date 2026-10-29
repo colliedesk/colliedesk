@@ -3845,6 +3845,11 @@ export interface components {
              */
             import_status?: "OK" | "FAILED" | "UNVERIFIED" | "";
             /**
+             * @description Baseline only: present when the import is UNVERIFIED only because the Freshdesk plan refuses the archive API and every other total was confirmed.
+             * @enum {string}
+             */
+            import_cause?: "archive_refused";
+            /**
              * Format: date-time
              * @description Baseline only: where its windows end (the newest ticket created by the anchor).
              */

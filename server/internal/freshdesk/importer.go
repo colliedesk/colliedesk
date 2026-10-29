@@ -212,7 +212,7 @@ func (r *run) finish(ctx context.Context, report *Report) (*Report, error) {
 	// A full run finished: the results page measures its baseline from it. The import is committed;
 	// a failure here is logged and the next run marks it again.
 	if options.Mode != ModeRecent {
-		if err := r.markResults(ctx, report.Status); err != nil {
+		if err := r.markResults(ctx, report.Status, report.UnverifiedCause()); err != nil {
 			log.Printf("freshdesk import: results baseline not marked for workspace %s: %v", options.WorkspaceSlug, err)
 		}
 	}

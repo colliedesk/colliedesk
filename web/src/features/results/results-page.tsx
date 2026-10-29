@@ -105,9 +105,10 @@ export function ResultsPage(props: ResultsPageProps) {
   const helpScout = baseline?.source?.startsWith('helpscout:') === true;
   const sourceName = helpScout ? 'Help Scout' : 'Freshdesk';
   const status = baseline?.import_status;
+  const archiveLimit = status === 'UNVERIFIED' && baseline?.import_cause === 'archive_refused';
   const before: Side = {
     label: shared ? (helpScout ? m.share.beforeHelpScout : m.share.before) : helpScout ? m.beforeHelpScout : m.before, window: baseline?.windows[key], snapshot: baseline, key,
-    blocked: status === 'FAILED' ? m.failedCell : undefined, badge: status === 'UNVERIFIED' ? m.unverifiedBadge : undefined,
+    blocked: status === 'FAILED' ? m.failedCell : undefined, badge: status === 'UNVERIFIED' && !archiveLimit ? m.unverifiedBadge : undefined,
   };
   const after: Side = { label: m.now, window: current?.windows[key], snapshot: current, key };
   const withBaseline = results.baseline_state === 'ready' && baseline !== undefined;
@@ -212,7 +213,9 @@ export function ResultsPage(props: ResultsPageProps) {
   if (isAdmin && results.error) notices.push(<p key="error" className="results-notice results-notice-danger" role="alert">{m.computeError(results.error.message)}</p>);
   if (!current) notices.push(<p key="first" className="results-notice" role="status">{m.firstCompute}</p>);
   if (results.baseline_state === 'computing') notices.push(<p key="computing" className="results-notice" role="status">{m.computing}</p>);
-  if (withBaseline && status === 'UNVERIFIED') notices.push(<div key="unverified" className="results-notice results-notice-warn"><p>{m.unverified}</p>{importLink}</div>);
+  if (withBaseline && status === 'UNVERIFIED') notices.push(archiveLimit
+    ? <div key="unverified" className="results-notice"><p>{m.archiveLimit}</p>{importLink}</div>
+    : <div key="unverified" className="results-notice results-notice-warn"><p>{m.unverified}</p>{importLink}</div>);
   if (withBaseline && status === 'FAILED') notices.push(<div key="failed" className="results-notice results-notice-danger"><p>{m.failed}</p>{importLink}</div>);
   if (oldImport) notices.push(<div key="old" className="results-notice"><p>{m.oldImport}</p>{importLink}</div>);
   if (available && key === '30d' && current?.history_since) {

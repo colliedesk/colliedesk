@@ -6666,6 +6666,10 @@ components:
           type: string
           enum: [OK, FAILED, UNVERIFIED, '']
           description: 'Baseline only: the reconcile status of the import''s latest run; empty for an import made before results existed.'
+        import_cause:
+          type: string
+          enum: [archive_refused]
+          description: 'Baseline only: present when the import is UNVERIFIED only because the Freshdesk plan refuses the archive API and every other total was confirmed.'
         end: {type: string, format: date-time, description: 'Baseline only: where its windows end (the newest ticket created by the anchor).'}
         stats_read: {type: integer, description: 'Baseline only: tickets whose resolve times were read; 0 means run the import again for them.'}
         windows:
