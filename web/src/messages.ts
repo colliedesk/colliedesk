@@ -70,6 +70,8 @@ export const messages = {
   aiSettings: 'Built-in AI',
   aiAgents: 'External AI agents',
   channels: 'Channels',
+  emailNav: 'Email',
+  webFormNav: 'Web form',
   importFreshdeskURL: 'https://colliedesk.com/docs/import-freshdesk',
   inviteTeam: 'Invite your team',
   connectAIAgent: 'Connect an AI agent',
