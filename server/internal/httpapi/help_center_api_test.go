@@ -310,11 +310,11 @@ func TestHelpCenterOnItsOwnHostAndTheCertificateQuestion(t *testing.T) {
 	if robots.Code != http.StatusOK || robots.Body.String() != "User-agent: *\nDisallow: /\n" {
 		t.Fatalf("trial robots.txt status=%d body=%q", robots.Code, robots.Body.String())
 	}
-	// Nothing of the app is reachable on a workspace's host: an app path moves below /help, where it is
-	// the help center's 404.
+	// The rest of the workspace's host is its desk, not the help center; below /help, an app path is the
+	// help center's 404.
 	for _, path := range []string{"/api/v1/config", "/mcp", "/inbox"} {
-		if response := visit(site, path, "192.0.2.50", "Host", host); response.Code != http.StatusMovedPermanently || response.Header().Get("Location") != "/help"+path {
-			t.Errorf("%s on the workspace host status=%d location=%q", path, response.Code, response.Header().Get("Location"))
+		if response := visit(site, path, "192.0.2.50", "Host", host); response.Header().Get("Location") != "" || strings.Contains(response.Body.String(), "Alpha help") {
+			t.Errorf("%s on the workspace host status=%d location=%q, want the desk", path, response.Code, response.Header().Get("Location"))
 		}
 		if response := visit(site, "/help"+path, "192.0.2.50", "Host", host); response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "Alpha help") {
 			t.Errorf("/help%s on the workspace host status=%d", path, response.Code)
