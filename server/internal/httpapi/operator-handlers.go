@@ -338,7 +338,7 @@ func (a *API) signInOperatorWithCloud(response http.ResponseWriter, request *htt
 	}
 	step, err := a.config.Operators.CloudSignIn(request.Context(), email)
 	if errors.Is(err, auth.ErrOperatorNotAllowed) {
-		slog.Warn("operator cloud sign-in refused", "reason", "not an operator", "email", email)
+		slog.Warn("operator cloud sign-in refused", "reason", "not an operator")
 		refuse()
 		return
 	}
