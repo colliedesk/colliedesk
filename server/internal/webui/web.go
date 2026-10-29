@@ -38,6 +38,7 @@ func Handler(api http.Handler, signIn ConsoleSignIn) http.Handler {
 			console.ServeHTTP(response, request)
 			return
 		}
+		setAppHeaders(response.Header())
 		path := strings.TrimPrefix(request.URL.Path, "/")
 		if path != "" {
 			if file, err := served.Open(path); err == nil {
@@ -50,6 +51,16 @@ func Handler(api http.Handler, signIn ConsoleSignIn) http.Handler {
 		clone.URL.Path = "/"
 		files.ServeHTTP(response, clone)
 	})
+}
+
+// setAppHeaders guards the workspace app's pages and files: no other site may frame a signed-in agent's inbox
+// (clickjacking), and no browser may sniff a file into script. Framing stays allowed for the app's own origin
+// because its email and help-center previews are srcdoc frames.
+func setAppHeaders(header http.Header) {
+	header.Set("Content-Security-Policy", "frame-ancestors 'self'")
+	header.Set("X-Frame-Options", "SAMEORIGIN")
+	header.Set("X-Content-Type-Options", "nosniff")
+	header.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 }
 
 // operatorCSP is the console's content policy: its own scripts, styles and fonts only (no inline script, so the

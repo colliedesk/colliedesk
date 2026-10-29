@@ -17,6 +17,11 @@ center, or the help center's 404. Caddy keeps the `Host` header by default. With
 `proxy_set_header Host $host;`; a proxy that rewrites it to an internal name such as `colliedesk:8080`
 now gets 404 for everything. See [running behind a proxy](docs/self-host/running-behind-proxy.md#the-host-header).
 
+**The workspace app can no longer be framed by another site.** Its pages send
+`Content-Security-Policy: frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`
+and `Referrer-Policy: strict-origin-when-cross-origin`, so no other origin can load a signed-in agent's inbox in a
+hidden frame. Help centers and the chat widget keep their own framing rules.
+
 API changes in the email view (the full notes will be on the releases page):
 
 - `GET /contacts/{id}` no longer embeds `conversations` (an unpaged list). It returns

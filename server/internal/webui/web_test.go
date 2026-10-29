@@ -89,3 +89,34 @@ func TestOperatorConsoleOpensItsPolicyToCloudSignInOnTheSignInPageOnly(t *testin
 		}
 	}
 }
+
+// The workspace app and its files carry the headers that stop another site from framing a signed-in agent's
+// inbox (clickjacking) and stop a browser from sniffing a file into script; the API keeps its own headers.
+func TestWorkspaceAppSendsFramingAndSniffingHeaders(t *testing.T) {
+	api := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		http.NotFound(response, request)
+	})
+	handler := Handler(api, ConsoleSignIn{})
+	for _, path := range []string{"/", "/conversations/123", "/settings/email"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		header := recorder.Header()
+		if got := header.Get("Content-Security-Policy"); got != "frame-ancestors 'self'" {
+			t.Errorf("%s: Content-Security-Policy %q, want frame-ancestors 'self'", path, got)
+		}
+		if got := header.Get("X-Frame-Options"); got != "SAMEORIGIN" {
+			t.Errorf("%s: X-Frame-Options %q, want SAMEORIGIN", path, got)
+		}
+		if got := header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s: X-Content-Type-Options %q, want nosniff", path, got)
+		}
+		if got := header.Get("Referrer-Policy"); got != "strict-origin-when-cross-origin" {
+			t.Errorf("%s: Referrer-Policy %q, want strict-origin-when-cross-origin", path, got)
+		}
+	}
+	apiResponse := httptest.NewRecorder()
+	handler.ServeHTTP(apiResponse, httptest.NewRequest(http.MethodGet, "/api/v1/missing", nil))
+	if got := apiResponse.Header().Get("Content-Security-Policy"); got != "" {
+		t.Errorf("API: Content-Security-Policy %q, want none from the web app", got)
+	}
+}
