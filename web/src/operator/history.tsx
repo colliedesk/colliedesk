@@ -3,7 +3,7 @@ import { ApiError, api } from './api';
 import type { Version } from './api';
 import type { ConsoleData } from './app';
 import { when } from './copy';
-import { Dialog } from '../ui/dialog';
+import { ConsoleDialog } from './dialog';
 import { m } from './messages';
 
 export function History({ data }: { data: ConsoleData }) {
@@ -47,10 +47,10 @@ function Restore({ data, version, onClose, onDone }: { data: ConsoleData; versio
       setError(problem instanceof ApiError ? problem.message : m.nothingSaved);
     }
   };
-  return <Dialog focusFirst title={m.restoreAs(version, data.config.version + 1)} onClose={onClose} closeLabel={m.cancel} onSubmit={() => void submit()}
+  return <ConsoleDialog title={m.restoreAs(version, data.config.version + 1)} onClose={onClose} closeLabel={m.cancel} onSubmit={() => void submit()}
     footer={<><button type="button" onClick={onClose}>{m.cancel}</button><button type="submit" className="primary-action" disabled={totp && !/^\d{6}$/.test(code)}>{m.restoreVersion(version)}</button></>}>
     {totp && <div className="field"><label className="field-label" htmlFor="restore-code">{m.confirmItsYou}: {m.authenticatorCode}</label>
       <input id="restore-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></div>}
     {error && <p className="error-copy" role="alert">{error}</p>}
-  </Dialog>;
+  </ConsoleDialog>;
 }

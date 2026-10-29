@@ -74,8 +74,40 @@ process could not use it). On a phone it keeps the host and the version.
   exported as CSV.
 - **Operators and sessions**: invite and revoke operators, see and end sessions, create tokens (shown once).
 
-Billing, security and the operator sign-in settings are changed with `collie config` on the server for
-now; their rows say so.
+The billing page also lists the **Polar products** the server sells. A product is added and put on or
+taken off sale (one per plan and period is on sale), never removed or changed, so an old subscription
+always maps to its plan.
+
+## What a dangerous change asks
+
+What a change asks depends on what it does, and the server checks it again when it saves (a token's
+request and the API pass the same gates). The review shows each of these with its numbers before anything
+is saved:
+
+| Change | What the review shows | What you type |
+|---|---|---|
+| Billing on (`polar.access_token` set where it was empty) | how many workspaces whose trial ended without a plan lock at once | `billing on` |
+| Billing off | every workspace gets full access, no trial and no lock | `billing off` |
+| `retention.delete` on, with billing on | how many workspaces locked for 12 months are due now, and the daily cap (at most 20) | that number |
+| `email.from_policy` = any | any workspace may send as any address through your relay | `any` |
+| A mail domain already in use changed | replies to mail sent before stop threading | the new domain |
+| `ai.allow_private_base_urls` on | workspace admins can point the AI provider inside your network | `allow private addresses` |
+| `problem_report.workspace` | reports of every workspace become conversations there (a slug nobody has is refused) | — |
+
+Rotating the Polar token while billing stays on, turning these back off, and the other settings ask only
+for your code when they need it. The authenticator, once required, is turned off on the server only.
+
+## Trial changes
+
+A change of **trusted proxies**, **cloud sign-in** or the **help center domain** can lock everyone out, so it
+is tried first: saved as a trial, it runs for 10 minutes with a countdown under the band. Confirm it from
+the console (that it still answers proves you can reach it) or revert it at once; if nobody confirms in
+time, any running server saves the version before it again by itself (`trial-auto-revert` in History),
+and a server that starts after the time is up reverts it before serving. While a trial runs, nothing else
+is saved. The band shows what the server saw meanwhile: your own address under the new proxies and how
+many addresses it saw (one for everyone means the list is wrong), and the cloud sign-ins that worked or were
+refused. From the shell: `collie config trial` shows it, `collie config trial confirm` keeps it and
+`collie config trial revert` ends it now.
 
 ## Settings
 
@@ -102,7 +134,8 @@ docker compose exec server /app/collie config <command>
 | `apply FILE [--dry-run]` | Makes the configuration match a JSON file (as `export --format json` writes it) and prints the difference. Settings the file leaves out are unset; secrets it leaves out are kept. Running it again changes nothing. |
 | `history` | Lists the versions: number, time, how (`env-import`, `cli`, `apply-file`, `restore`…), who, status, settings changed. |
 | `restore VERSION` | Saves an older version again as the newest one. |
-| `doctor` | Checks the configuration. Exit code 0: clean. 1: warnings (a setting still in the environment, a variable no release reads, a secret sealed with an older key, no key ring). 2: errors (a version the server refused). |
+| `trial [confirm\|revert]` | Shows the trial change that runs (a console change of trusted proxies, cloud sign-in or the help center domain), keeps it, or ends it now. Nothing else is saved while one runs. |
+| `doctor` | Checks the configuration. Exit code 0: clean. 1: warnings (a setting still in the environment, a variable no release reads, a secret sealed with an older key, no key ring, a trial change that runs). 2: errors (a version the server refused). |
 | `reseal` | Seals every secret again with the first key of `MAILBOX_TOKEN_KEYS`, after you add a new key in front. |
 
 Every command that writes takes `--by NAME` for the audit log (default: your user name). A key is named

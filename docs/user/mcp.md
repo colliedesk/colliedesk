@@ -275,6 +275,11 @@ approves it in the console with their authenticator code.
 | `colliedesk_operator_config_change` | Asks an operator to change settings | `operator` |
 | `colliedesk_operator_config_history` | Lists the configuration versions and what each changed | `operator` |
 | `colliedesk_operator_config_restore` | Asks an operator to restore an older configuration version | `operator` |
+| `colliedesk_operator_trial_confirm` | Asks an operator to keep the trial change that runs | `operator` |
+| `colliedesk_operator_trial_revert` | Asks an operator to end the trial change that runs now | `operator` |
+| `colliedesk_operator_products` | Lists the Polar products the server sells or once sold | `operator` |
+| `colliedesk_operator_product_add` | Asks an operator to add a Polar product | `operator` |
+| `colliedesk_operator_product_on_sale` | Asks an operator to put a Polar product on or off sale | `operator` |
 | `colliedesk_operator_audit` | Reads the operator audit log | `operator` |
 | `colliedesk_operator_requests` | Lists the requests this token made | `operator` |
 | `colliedesk_operator_request_get` | Shows one request this token made | `operator` |

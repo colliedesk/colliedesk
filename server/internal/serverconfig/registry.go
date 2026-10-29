@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-// A Guard is a check a change must pass before it is saved (docs/self-host/operator-console.md).
+// A Guard is a check a change of the key may ask for before it is saved (docs/self-host/operator-console.md).
+// Which ones a change asks depends on what it does (httpapi configGuards): turning billing on, not rotating its token.
 type Guard string
 
 const (
@@ -65,11 +66,11 @@ var keys = []Key{
 	{Name: "smtp.username", Env: "SMTP_USERNAME", Group: GroupEmail, Import: "email"},
 	{Name: "smtp.password", Env: "SMTP_PASSWORD", Secret: true, Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth}},
 	{Name: "smtp.starttls", Env: "SMTP_STARTTLS", Default: "true", Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth, GuardReenterSecret}, Reenter: "smtp.password"},
-	{Name: "email.from_policy", Env: "EMAIL_FROM_POLICY", Default: "verified", Group: GroupEmail, Import: "email"},
-	{Name: "mail_from.domain", Env: "MAIL_FROM_DOMAIN", Group: GroupEmail, Import: "email"},
+	{Name: "email.from_policy", Env: "EMAIL_FROM_POLICY", Default: "verified", Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth, GuardPreview, GuardTypeToConfirm}},
+	{Name: "mail_from.domain", Env: "MAIL_FROM_DOMAIN", Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth, GuardPreview, GuardTypeToConfirm}},
 	{Name: "mail_from.inbound_secret", Env: "MAIL_FROM_INBOUND_SECRET", Secret: true, Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth}},
 	{Name: "email.trusted_authserv_id", Env: "EMAIL_TRUSTED_AUTHSERV_ID", Group: GroupEmail, Import: "email"},
-	{Name: "hosted_mail.domain", Env: "HOSTED_MAIL_DOMAIN", Group: GroupEmail, Import: "email"},
+	{Name: "hosted_mail.domain", Env: "HOSTED_MAIL_DOMAIN", Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth, GuardPreview, GuardTypeToConfirm}},
 	{Name: "resend.webhook_secret", Env: "RESEND_WEBHOOK_SECRET", Secret: true, Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth}},
 	{Name: "resend.api_key", Env: "RESEND_API_KEY", Secret: true, Group: GroupEmail, Import: "email", Guards: []Guard{GuardReauth}},
 
@@ -103,7 +104,7 @@ var keys = []Key{
 	{Name: "cloud_auth.email_claim", Env: "CLOUD_AUTH_EMAIL_CLAIM", Default: "email", Group: GroupSecurity, Import: "cloud-auth", Guards: []Guard{GuardReauth, GuardTypeToConfirm, GuardTrial}},
 	{Name: "clerk.publishable_key", Env: "CLERK_PUBLISHABLE_KEY", Group: GroupSecurity, Import: "cloud-auth", Guards: []Guard{GuardReauth, GuardTypeToConfirm, GuardTrial}},
 	{Name: "help_center.domain", Env: "HELP_CENTER_DOMAIN", Group: GroupSecurity, Import: "help-center", Guards: []Guard{GuardReauth, GuardPreview, GuardTrial}},
-	{Name: "ai.allow_private_base_urls", Env: "AI_ALLOW_PRIVATE_BASE_URLS", Group: GroupSecurity, Import: "ai-private"},
+	{Name: "ai.allow_private_base_urls", Env: "AI_ALLOW_PRIVATE_BASE_URLS", Group: GroupSecurity, Import: "ai-private", Guards: []Guard{GuardReauth, GuardPreview, GuardTypeToConfirm}},
 
 	{Name: "mail_image_cache.max_bytes", Env: "MAIL_IMAGE_CACHE_BYTES", Default: "1073741824", Hot: true, Group: GroupLimits, Import: "limits"},
 	{Name: "kb_video.max_bytes", Env: "KB_VIDEO_MAX_BYTES", Default: "209715200", Hot: true, Group: GroupLimits, Import: "limits", Guards: []Guard{GuardPreview}},

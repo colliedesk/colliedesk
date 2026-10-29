@@ -20,6 +20,8 @@ const Requests = lazy(() => import('./requests').then((module) => ({ default: mo
 const History = lazy(() => import('./history').then((module) => ({ default: module.History })));
 const Audit = lazy(() => import('./audit').then((module) => ({ default: module.Audit })));
 const Operators = lazy(() => import('./operators').then((module) => ({ default: module.Operators })));
+// Loaded only while a trial change runs (D12).
+const TrialStrip = lazy(() => import('./trial'));
 
 // The console's data, read once for every screen: switching pages reads nothing again (design §10.5).
 export interface ConsoleData {
@@ -76,7 +78,7 @@ export function App() {
   else if (path === '/audit') page = <Audit />;
   else if (path === '/operators') page = <Operators data={shared} />;
   else page = <Overview data={shared} />;
-  return <Shell data={data} ended={false} path={path}><Suspense fallback={<div className="ops-page-inner" aria-busy="true"><div className="skeleton" /></div>}>{page}</Suspense></Shell>;
+  return <Shell data={data} ended={false} path={path} reload={load}><Suspense fallback={<div className="ops-page-inner" aria-busy="true"><div className="skeleton" /></div>}>{page}</Suspense></Shell>;
 }
 
 function Ended() {
@@ -117,7 +119,7 @@ function MiniLedger({ status }: { status: Status }) {
   return <span className="ops-mini" title={text}><span className="ops-dot" data-tone={tone} />{status.desired_version ? m.runningShort(status.desired_version) : m.noVersion}</span>;
 }
 
-function Shell({ data, ended, path, children }: { data: { me: Me; status: Status } | null; ended: boolean; path: string; children: ReactNode }) {
+function Shell({ data, ended, path, reload, children }: { data: { me: Me; status: Status } | null; ended: boolean; path: string; reload?: () => void; children: ReactNode }) {
   const [menu, setMenu] = useState(false);
   const [theme, setThemeState] = useState(storedTheme);
   const main = useRef<HTMLElement>(null);
@@ -144,6 +146,9 @@ function Shell({ data, ended, path, children }: { data: { me: Me; status: Status
           </div>}
         </div>}
       </header>
+      {/* The shell's second row: the strips every screen shares (empty most of the time). */}
+      <div className="ops-strips">{data?.status.trial && !ended && <Suspense fallback={null}>
+        <TrialStrip trial={data.status.trial} totp={data.me.operator.totp_enabled} onDecided={() => reload?.()} /></Suspense>}</div>
       <div className="ops-body">
         <nav className="ops-nav" aria-label={m.consoleName}>
           <div><p className="settings-group-label">{m.navServer}</p><ul><NavLink to="/" path={path} icon={<HomeIcon />}>{m.overview}</NavLink></ul></div>

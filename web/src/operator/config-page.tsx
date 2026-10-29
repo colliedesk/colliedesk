@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { ApiError, api } from './api';
-import type { Setting } from './api';
+import type { Guard, Setting } from './api';
 import type { ConsoleData } from './app';
 import { CommandLine, when } from './copy';
 import { fields, sections } from './fields';
 import type { Draft } from './guards';
-import { changedKeys, confirmMatches, emptyDraft, missing, needs, validCode } from './guards';
-import { Dialog } from '../ui/dialog';
+import { changedKeys, confirmMatches, emptyDraft, mayAskToType, missing, needs, validCode } from './guards';
+import { ConsoleDialog } from './dialog';
 import { m } from './messages';
 import { href, navigate } from './router';
 
@@ -86,7 +86,9 @@ function SettingRow({ setting, draft, setDraft, error }: { setting: Setting; dra
   } else if (info.kind === 'switch') {
     const value = currentValue(setting, draft) || setting.default || 'false';
     const on = value === 'true' || value === '1';
-    control = <label className="switch"><input id={id} type="checkbox" role="switch" checked={on} disabled={disabled} aria-describedby={describedBy}
+    // The authenticator, once required, is turned off on the server only (collie config).
+    const oneWay = setting.key === 'operator.require_totp' && on && !(setting.key in draft.set);
+    control = <label className="switch"><input id={id} type="checkbox" role="switch" checked={on} disabled={disabled || oneWay} aria-describedby={describedBy}
       onChange={(event) => change(setDraft, setting, event.target.checked ? 'true' : 'false')} /><span>{on ? m.on : m.off}</span></label>;
   } else if (info.kind === 'select') {
     control = <select id={id} value={currentValue(setting, draft)} disabled={disabled} aria-describedby={describedBy} onChange={(event) => change(setDraft, setting, event.target.value)}>
@@ -113,17 +115,20 @@ function asks(draft: Draft, settings: Setting[]): string[] {
   const need = needs(draft, settings);
   const out: string[] = [];
   if (need.reenter.length) out.push(m.askReenter);
-  if (Object.keys(need.confirm).length) out.push(m.askConfirm);
+  if (mayAskToType(draft, settings)) out.push(m.askConfirm);
   if (need.reauth) out.push(m.askReauth);
   return out;
 }
+
+// The products table, on the billing page only.
+const ProductsSection = lazy(() => import('./products'));
 
 export function ConfigPage({ group, data, draft, setDraft }: { group: string; data: ConsoleData; draft: Draft; setDraft: SetDraft }) {
   const settings = data.config.settings;
   const byKey = new Map(settings.map((setting) => [setting.key, setting]));
   const [review, setReview] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [saved, setSaved] = useState<{ version: number; atOnce: boolean } | null>(null);
+  const [saved, setSaved] = useState<{ version: number; applies: string } | null>(null);
   const [conflict, setConflict] = useState(false);
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
@@ -142,7 +147,7 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
   };
   return <div className="ops-page-inner">
     <header className="page-head"><div><h1 id="page-title">{m.groups[group]}</h1><p>{m.groupLead[group]}</p></div></header>
-    {saved && <p className="apply-line" role="status"><span className="dot" data-tone="ok" /><span>{m.saved(saved.version, saved.atOnce)}</span>
+    {saved && <p className="apply-line" role="status"><span className="dot" data-tone="ok" /><span>{saved.applies === 'trial' ? m.savedTrial(saved.version) : m.saved(saved.version, saved.applies === 'at_once')}</span>
       <a className="link-button" href={href('/history')} onClick={(event) => { event.preventDefault(); navigate('/history'); }}>{m.undoInHistory}</a></p>}
     {conflict && <section className="ops-strip" data-tone="danger" role="alert"><span><strong>{m.conflictTitle}.</strong> {m.conflictLead}</span>
       <div className="button-row"><button type="button" className="primary-action" onClick={() => { setConflict(false); setReview(true); }}>{m.applyMine}</button>
@@ -158,13 +163,14 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
         </div>}
       </div>
     </section>)}
+    {group === 'billing' && <Suspense fallback={null}><ProductsSection totp={data.me.operator.totp_enabled} /></Suspense>}
     {changed.length > 0 && <div className="save-bar" role="region" aria-label={m.unsavedChanges(changed.length)}>
       <span><strong>{m.unsavedChanges(changed.length)}</strong>{asks(draft, settings).length > 0 && <> · {m.savingAsksFor} {asks(draft, settings).join(' · ')}</>}</span>
       <div className="button-row"><button type="button" onClick={() => { setDraft(emptyDraft()); setErrors({}); }}>{m.discard}</button>
         <button type="button" className="primary-action" onClick={() => setReview(true)}>{m.reviewAndSave}</button></div>
     </div>}
     {review && <Review data={data} draft={draft} onClose={() => setReview(false)}
-      onSaved={(version, atOnce) => { setReview(false); setDraft(emptyDraft()); setErrors({}); setSaved({ version, atOnce }); void data.reload(); }}
+      onSaved={(version, applies) => { setReview(false); setDraft(emptyDraft()); setErrors({}); setSaved({ version, applies }); void data.reload(); }}
       onInvalid={(fieldErrors) => { setReview(false); setErrors(fieldErrors); }}
       onConflict={() => { setReview(false); setConflict(true); void data.reload(); }} />}
   </div>;
@@ -174,12 +180,27 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
 // secret entered again, the phrase typed, the code. Its button works only when everything is filled, and Escape
 // only closes it: nothing is applied without the button.
 export function Review({ data, draft, onClose, onSaved, onInvalid, onConflict }: {
-  data: ConsoleData; draft: Draft; onClose: () => void; onSaved: (version: number, atOnce: boolean) => void;
+  data: ConsoleData; draft: Draft; onClose: () => void; onSaved: (version: number, applies: string) => void;
   onInvalid: (errors: Record<string, string>) => void; onConflict: () => void;
 }) {
   const settings = data.config.settings;
   const byKey = new Map(settings.map((setting) => [setting.key, setting]));
-  const need = needs(draft, settings);
+  // What the change does and asks comes from the server (the same check PATCH runs); until it answers, the
+  // review waits and its button stays off.
+  const [guards, setGuards] = useState<Guard[] | null>(null);
+  // The parent passes a new callback on each render; the check runs once per draft.
+  const invalid = useRef(onInvalid);
+  useEffect(() => { invalid.current = onInvalid; }, [onInvalid]);
+  useEffect(() => {
+    let live = true;
+    api.check({ set: draft.set, unset: draft.unset, secrets: draft.secrets }).then((result) => {
+      if (!live) return;
+      if (!result.ok) invalid.current(result.errors);
+      else setGuards(result.guards ?? []);
+    }, () => { if (live) setGuards([]); });
+    return () => { live = false; };
+  }, [draft]);
+  const need = needs(draft, settings, guards ?? []);
   const totp = data.me.operator.totp_enabled;
   const [code, setCode] = useState('');
   const [typed, setTyped] = useState<Record<string, string>>({});
@@ -187,7 +208,7 @@ export function Review({ data, draft, onClose, onSaved, onInvalid, onConflict }:
   const [busy, setBusy] = useState(false);
   const [codeError, setCodeError] = useState('');
   const [cli, setCli] = useState(false);
-  const lacking = missing(need, code, typed, again, totp);
+  const lacking = guards === null ? [m.checkingChange] : missing(need, code, typed, again, totp);
   const submit = async () => {
     if (lacking.length || busy) return;
     setBusy(true);
@@ -195,7 +216,7 @@ export function Review({ data, draft, onClose, onSaved, onInvalid, onConflict }:
     try {
       const saved = await api.change({ base_version: data.config.version, set: draft.set, unset: draft.unset, secrets: { ...draft.secrets, ...again },
         confirm: typed, reauth_code: need.reauth ? code.replace(/\s/g, '') : undefined });
-      onSaved(saved.version, saved.applies === 'at_once');
+      onSaved(saved.version, saved.applies);
     } catch (error) {
       if (!(error instanceof ApiError)) { setCodeError(m.keptChanges); return; }
       if (error.code === 'reauth_code_invalid' || error.code === 'reauth_required') { setCodeError(m.keptChanges); setCode(''); return; }
@@ -207,7 +228,7 @@ export function Review({ data, draft, onClose, onSaved, onInvalid, onConflict }:
       setBusy(false);
     }
   };
-  return <Dialog focusFirst title={m.reviewChanges(need.changed.length)} help={m.willBeSaved(data.config.version + 1)} onClose={onClose} closeLabel={m.cancel} onSubmit={() => void submit()}
+  return <ConsoleDialog title={m.reviewChanges(need.changed.length)} help={m.willBeSaved(data.config.version + 1)} onClose={onClose} closeLabel={m.cancel} onSubmit={() => void submit()}
     footer={<>
       {lacking.length > 0 && <span className="help" aria-live="polite">{m.fillEveryCheck(lacking.join(', '))}</span>}
       <button type="button" onClick={onClose}>{m.cancel}</button>
@@ -221,6 +242,8 @@ export function Review({ data, draft, onClose, onSaved, onInvalid, onConflict }:
       return <li className="diff-row" key={key}><div>{fields[key]?.label ?? key}<code className="key">{key}</code></div>
         {secret ? <div className="diff-vals">{m.replaced}</div> : <div className="diff-vals"><del>{setting?.value || setting?.default || '—'}</del><ins>{after || '—'}</ins></div>}</li>;
     })}</ul>
+    {guards === null && <p className="help" aria-busy="true">{m.checkingChange}…</p>}
+    {need.preview.length > 0 && <div className="warning-note"><h3>{m.whatItDoes}</h3><ul>{need.preview.map((text) => <li key={text}>{text}</li>)}</ul></div>}
     {need.reenter.map((secret) => <div className="field" key={secret}>
       <label className="field-label" htmlFor={`again-${secret}`}>{m.enterSecretAgain}: <code>{secret}</code></label>
       <input id={`again-${secret}`} type="password" autoComplete="off" value={again[secret] ?? ''} onChange={(event) => setAgain({ ...again, [secret]: event.target.value })} />
@@ -241,5 +264,5 @@ export function Review({ data, draft, onClose, onSaved, onInvalid, onConflict }:
     {(cli || (need.reauth && !totp && codeError)) && <div className="warning-note" role="alert"><p>{m.reauthCLI}</p>
       <CommandLine command={`docker compose exec server /app/collie operator pair --email ${data.me.operator.email}`} /></div>}
     {!need.reauth && codeError && <p className="error-copy" role="alert">{codeError}</p>}
-  </Dialog>;
+  </ConsoleDialog>;
 }

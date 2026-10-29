@@ -31,6 +31,7 @@ type Carry struct {
 	kbUploadStart                       *sync.Mutex
 	dispatches                          *sync.WaitGroup
 	founding                            *foundingState
+	trial                               *trialEvidence
 	// Hot holds the settings read at each use; Store applies a change at once.
 	Hot *Hot
 }
@@ -64,7 +65,7 @@ func NewCarry(config Config) *Carry {
 		mailImageLimits:   newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait),
 		liveChecks:        helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
 		alerted:           &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},
-		founding: &foundingState{},
+		founding: &foundingState{}, trial: &trialEvidence{},
 	}
 }
 
@@ -82,8 +83,17 @@ type HotSettings struct {
 	RequireTOTP bool
 }
 
-// Hot holds the current HotSettings of a process.
-type Hot struct{ current atomic.Pointer[HotSettings] }
+// Hot holds the current HotSettings of a process, and the trial change it runs (D12), if any.
+type Hot struct {
+	current atomic.Pointer[HotSettings]
+	trial   atomic.Int64
+}
+
+// SetTrial records the version of the trial change the process runs; 0 when none.
+func (h *Hot) SetTrial(version int64) { h.trial.Store(version) }
+
+// Trial is the version of the trial change the process runs; 0 when none.
+func (h *Hot) Trial() int64 { return h.trial.Load() }
 
 // NewHot holds settings.
 func NewHot(settings HotSettings) *Hot {

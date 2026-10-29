@@ -1,7 +1,8 @@
-import type { Setting } from './api';
+import type { Guard, Setting } from './api';
 
-// What saving a change asks for, worked out from the settings it touches, so the save bar says it before the
-// person presses Save and the review dialog asks for exactly that. The server checks the same.
+// What saving a change asks for. The settings it touches say what it may ask (the save bar shows it before the
+// person presses Save); the server says what it does ask, from what the change does (POST /config/check
+// guards: the preview, the phrase to type, a trial), and checks the same when it saves.
 export interface Draft {
   set: Record<string, string>;
   unset: string[];
@@ -13,6 +14,7 @@ export interface Needs {
   reenter: string[];
   confirm: Record<string, string>;
   preview: string[];
+  trial: boolean;
   changed: string[];
 }
 
@@ -48,21 +50,25 @@ export function changedKeys(draft: Draft): string[] {
   return [...new Set([...Object.keys(draft.set), ...draft.unset, ...Object.keys(draft.secrets)])].sort();
 }
 
-export function needs(draft: Draft, settings: Setting[]): Needs {
+export function needs(draft: Draft, settings: Setting[], guards: Guard[] = []): Needs {
   const byKey = new Map(settings.map((setting) => [setting.key, setting]));
   const changed = changedKeys(draft);
-  const result: Needs = { reauth: false, reenter: [], confirm: {}, preview: [], changed };
+  const result: Needs = { reauth: false, reenter: [], confirm: {}, preview: [], trial: false, changed };
+  for (const guard of guards) {
+    if (guard.phrase) result.confirm[guard.key] = guard.phrase;
+    if (guard.preview) result.preview.push(guard.preview);
+    if (guard.trial) result.trial = true;
+    if (guard.phrase || guard.preview || guard.trial) result.reauth = true;
+  }
   for (const key of changed) {
     const setting = byKey.get(key);
     if (!setting) continue;
     if (setting.secret && key in draft.secrets) result.reauth = true;
     if (setting.guards.includes('reauth')) result.reauth = true;
-    if (setting.guards.includes('preview')) result.preview.push(key);
     if (setting.guards.includes('reenter_secret') && setting.reenter) {
       const secret = byKey.get(setting.reenter);
       if (secret?.set && !(setting.reenter in draft.secrets) && !result.reenter.includes(setting.reenter)) result.reenter.push(setting.reenter);
     }
-    if (setting.guards.includes('type_to_confirm')) result.confirm[key] = draft.set[key] || key;
   }
   return result;
 }
@@ -83,4 +89,10 @@ export function missing(need: Needs, code: string, typed: Record<string, string>
   for (const [key, phrase] of Object.entries(need.confirm)) if (!confirmMatches(typed[key] ?? '', phrase)) out.push(`type ${phrase}`);
   if (need.reauth && totp && !validCode(code)) out.push('your 6-digit code');
   return out;
+}
+
+// mayAskToType says whether one of the changed settings can ask for a typed phrase, for the save bar.
+export function mayAskToType(draft: Draft, settings: Setting[]): boolean {
+  const changed = new Set(changedKeys(draft));
+  return settings.some((setting) => changed.has(setting.key) && setting.guards.includes('type_to_confirm'));
 }

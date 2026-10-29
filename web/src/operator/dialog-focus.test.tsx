@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import type { ConsoleData } from './app';
 import type { Setting } from './api';
 import { Review } from './config-page';
+
+afterEach(() => vi.restoreAllMocks());
 
 // UI review risk a: a console dialog takes the focus when it opens, so Escape closes it at once and Tab stays inside.
 const setting = (key: string, extra: Partial<Setting> = {}): Setting => ({ key, group: 'email', secret: false, hot: false, guards: [], set: false, source: 'default', editable: true, ...extra });
@@ -17,6 +19,7 @@ test('the review takes the focus on its first field, and Escape from there close
   const opener = document.createElement('button');
   document.body.append(opener);
   opener.focus();
+  vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ ok: true, errors: {}, guards: [] }), { status: 200 })));
   const closed = vi.fn();
   render(<Review data={data} draft={{ set: { 'smtp.host': 'mail.example.org' }, unset: [], secrets: {} }} onClose={closed} onSaved={() => {}} onInvalid={() => {}} onConflict={() => {}} />);
   expect(document.activeElement).toBe(screen.getByLabelText(/Authenticator code/));

@@ -23,6 +23,9 @@ const defaultMaxDeletionsPerDay = 5
 
 // retentionSettings are the fail-safes of the job that deletes workspaces. Deletion is off until
 // RETENTION_DELETE=on; the cap bounds the damage of a wrong decision.
+// maxDeletionsPerDayCeiling bounds the daily cap itself: a typo cannot let a wrong decision delete hundreds.
+const maxDeletionsPerDayCeiling = 20
+
 type retentionSettings struct {
 	DeleteEnabled      bool
 	MaxDeletionsPerDay int
@@ -39,8 +42,8 @@ func retentionSettingsFromEnv(getenv func(string) string) (retentionSettings, er
 	}
 	if value := getenv("RETENTION_MAX_DELETIONS_PER_DAY"); value != "" {
 		max, err := strconv.Atoi(value)
-		if err != nil || max < 0 {
-			return retentionSettings{}, errors.New("RETENTION_MAX_DELETIONS_PER_DAY must be a whole number of 0 or more")
+		if err != nil || max < 0 || max > maxDeletionsPerDayCeiling {
+			return retentionSettings{}, fmt.Errorf("RETENTION_MAX_DELETIONS_PER_DAY must be a whole number from 0 to %d", maxDeletionsPerDayCeiling)
 		}
 		settings.MaxDeletionsPerDay = max
 	}

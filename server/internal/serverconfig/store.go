@@ -31,6 +31,10 @@ var (
 	ErrNoChange = errors.New("nothing changes")
 	// ErrUnknownKey: the name is not a setting.
 	ErrUnknownKey = errors.New("unknown setting")
+	// ErrTrialPending: a trial runs (D12); it is confirmed or reverted before anything else is saved.
+	ErrTrialPending = errors.New("a trial change runs: confirm or revert it first (collie config trial confirm|revert)")
+	// ErrNoTrial: the version is not a trial that still runs.
+	ErrNoTrial = errors.New("no trial of that version runs")
 )
 
 // stored is one key of one version as the database holds it.
@@ -92,6 +96,8 @@ type Change struct {
 	AllowNoChange bool
 	// RequestID is the operator request an approved change came from.
 	RequestID string
+	// Trial saves the version as a trial (D12): unless confirmed within it, it is reverted by itself.
+	Trial time.Duration
 }
 
 // Store reads and writes the configuration on the owner connection.
@@ -323,6 +329,10 @@ func (s *Store) save(ctx context.Context, tx pgx.Tx, change Change) (int64, erro
 	if (change.CheckBase || change.Base != 0) && change.Base != state.Desired {
 		return 0, ErrConflict
 	}
+	trial, err := readTrial(ctx, tx, state.Desired)
+	if err != nil {
+		return 0, err
+	}
 	current, err := readValues(ctx, tx, state.Desired)
 	if err != nil {
 		return 0, err
@@ -366,6 +376,10 @@ func (s *Store) save(ctx context.Context, tx pgx.Tx, change Change) (int64, erro
 		}
 		return 0, ErrNoChange
 	}
+	// An import at start only fills groups the database lacks; it must never stop a server from starting.
+	if trial && change.Source != "env-import" {
+		return 0, ErrTrialPending
+	}
 	return s.insertVersion(ctx, tx, state.Desired, next, change, changed)
 }
 
@@ -383,8 +397,13 @@ func (s *Store) insertVersion(ctx context.Context, tx pgx.Tx, parent int64, valu
 	if change.RequestID != "" {
 		requestID = &change.RequestID
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO server_config_versions(created_by, source, parent_id, note, request_id) VALUES($1,$2,$3,$4,$5) RETURNING id`,
-		by, change.Source, parentID, change.Note, requestID).Scan(&version); err != nil {
+	status, trialSeconds := "saved", 0.0
+	if change.Trial > 0 {
+		status, trialSeconds = "trial", change.Trial.Seconds()
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO server_config_versions(created_by, source, parent_id, note, request_id, status, trial_expires_at)
+		VALUES($1,$2,$3,$4,$5,$6, CASE WHEN $7::float8 > 0 THEN now() + make_interval(secs => $7::float8) END) RETURNING id`,
+		by, change.Source, parentID, change.Note, requestID, status, trialSeconds).Scan(&version); err != nil {
 		return 0, fmt.Errorf("save configuration: %w", err)
 	}
 	for key, item := range values {
@@ -404,8 +423,13 @@ func (s *Store) insertVersion(ctx context.Context, tx pgx.Tx, parent int64, valu
 	if change.Source == "env-import" {
 		action = "env.import"
 	}
-	if change.Source == "restore" {
+	switch {
+	case change.Source == "trial-auto-revert":
+		action = "trial.auto_revert"
+	case change.Source == "restore":
 		action = "config.restore"
+	case change.Trial > 0:
+		action = "trial.start"
 	}
 	if err := appendAudit(ctx, tx, change.Actor, action, &version, changed, nil); err != nil {
 		return 0, err
@@ -493,6 +517,11 @@ func (s *Store) Restore(ctx context.Context, from int64, base int64, actor Actor
 		}
 		if base != 0 && base != state.Desired {
 			return ErrConflict
+		}
+		if trial, err := readTrial(ctx, tx, state.Desired); err != nil {
+			return err
+		} else if trial {
+			return ErrTrialPending
 		}
 		var exists bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM server_config_versions WHERE id=$1)`, from).Scan(&exists); err != nil {
@@ -854,4 +883,151 @@ func (s *Store) LatestMigration(ctx context.Context) (string, error) {
 		return tx.QueryRow(ctx, `SELECT coalesce(max(name), '') FROM schema_migrations`).Scan(&name)
 	})
 	return name, err
+}
+
+// readTrial reports whether version is a trial that still runs (not confirmed nor reverted).
+func readTrial(ctx context.Context, tx pgx.Tx, version int64) (bool, error) {
+	if version == 0 {
+		return false, nil
+	}
+	var trial bool
+	if err := tx.QueryRow(ctx, `SELECT status = 'trial' FROM server_config_versions WHERE id=$1`, version).Scan(&trial); err != nil {
+		return false, fmt.Errorf("read the trial: %w", err)
+	}
+	return trial, nil
+}
+
+// TrialRun is a trial change that still runs (D12).
+type TrialRun struct {
+	Version   int64     `json:"version"`
+	Parent    int64     `json:"parent_version"`
+	StartedAt time.Time `json:"started_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	StartedBy string    `json:"started_by"`
+	Keys      []string  `json:"keys"`
+}
+
+// Trial returns the trial that runs, if the version to run is one.
+func (s *Store) Trial(ctx context.Context) (TrialRun, bool, error) {
+	var run TrialRun
+	found := false
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		var parent *int64
+		err := tx.QueryRow(ctx, `SELECT v.id, v.parent_id, v.created_at, v.trial_expires_at, v.created_by FROM server_config_state st
+			JOIN server_config_versions v ON v.id = st.desired_version WHERE v.status = 'trial'`).Scan(&run.Version, &parent, &run.StartedAt, &run.ExpiresAt, &run.StartedBy)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read the trial: %w", err)
+		}
+		found = true
+		if parent != nil {
+			run.Parent = *parent
+		}
+		before, err := readValues(ctx, tx, run.Parent)
+		if err != nil {
+			return err
+		}
+		after, err := readValues(ctx, tx, run.Version)
+		if err != nil {
+			return err
+		}
+		run.Keys = changedKeys(before, after)
+		return nil
+	})
+	return run, found, err
+}
+
+// ConfirmTrial keeps a trial: it becomes an ordinary version.
+func (s *Store) ConfirmTrial(ctx context.Context, version int64, actor Actor) error {
+	return s.privileged(ctx, func(tx pgx.Tx) error {
+		if err := lock(ctx, tx); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `UPDATE server_config_versions SET status='confirmed' WHERE id=$1 AND status='trial'
+			AND id = (SELECT desired_version FROM server_config_state)`, version)
+		if err != nil {
+			return fmt.Errorf("confirm the trial: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNoTrial
+		}
+		return appendAudit(ctx, tx, actor, "trial.confirm", &version, nil, nil)
+	})
+}
+
+// RevertTrial ends a trial now: the version before it is saved again as the newest one.
+func (s *Store) RevertTrial(ctx context.Context, version int64, actor Actor) (int64, error) {
+	var reverted int64
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		if err := lock(ctx, tx); err != nil {
+			return err
+		}
+		var err error
+		reverted, err = s.revertTrial(ctx, tx, version, false, Change{Source: "restore", Note: fmt.Sprintf("reverts the trial v%d", version), Actor: actor})
+		return err
+	})
+	return reverted, err
+}
+
+// RevertExpiredTrial reverts the trial that runs once its time is up, and returns the new version (0 when
+// nothing was due). Every process calls it; the advisory lock lets one of them do it.
+func (s *Store) RevertExpiredTrial(ctx context.Context) (int64, error) {
+	var reverted int64
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		if err := lock(ctx, tx); err != nil {
+			return err
+		}
+		var version int64
+		err := tx.QueryRow(ctx, `SELECT v.id FROM server_config_state st JOIN server_config_versions v ON v.id = st.desired_version
+			WHERE v.status = 'trial' AND v.trial_expires_at <= now()`).Scan(&version)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read the trial: %w", err)
+		}
+		reverted, err = s.revertTrial(ctx, tx, version, true, Change{Source: "trial-auto-revert",
+			Note: fmt.Sprintf("v%d was not confirmed in time", version), Actor: Actor{Kind: "server", Name: "server"}})
+		return err
+	})
+	return reverted, err
+}
+
+func (s *Store) revertTrial(ctx context.Context, tx pgx.Tx, version int64, expiredOnly bool, change Change) (int64, error) {
+	state, err := readState(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+	var parent *int64
+	err = tx.QueryRow(ctx, `SELECT parent_id FROM server_config_versions WHERE id=$1 AND id=$2 AND status='trial'
+		AND (NOT $3 OR trial_expires_at <= now())`, version, state.Desired, expiredOnly).Scan(&parent)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNoTrial
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read the trial: %w", err)
+	}
+	var before int64
+	if parent != nil {
+		before = *parent
+	}
+	old, err := readValues(ctx, tx, before)
+	if err != nil {
+		return 0, err
+	}
+	current, err := readValues(ctx, tx, version)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE server_config_versions SET status='reverted' WHERE id=$1`, version); err != nil {
+		return 0, fmt.Errorf("end the trial: %w", err)
+	}
+	if change.Source == "restore" {
+		if err := appendAudit(ctx, tx, change.Actor, "trial.revert", &version, nil, nil); err != nil {
+			return 0, err
+		}
+	}
+	return s.insertVersion(ctx, tx, version, old, change, changedKeys(current, old))
 }

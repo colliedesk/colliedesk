@@ -108,6 +108,27 @@ fails on a bare `go` statement elsewhere in serve. The environment is imported o
 AI prices and the monthly allowance, retention and telemetry apply by re-serve, not at once: the AI
 service and the retention sweeper take them at construction. A few seconds later than "hot", but correct.
 
+## Guards and trials
+
+Guards are worked out from what a change does, by the server (`httpapi/operator-config-guards.go`
+`configGuards`): turning billing on asks to type `billing on`, rotating its token does not. `POST
+/config/check` returns them so the review shows them; PATCH computes them again and refuses a phrase that
+does not match, so the console, the API and an approved token's request pass the same gates. A phrase never
+comes from a secret's value. A count (workspaces billing would lock, workspaces retention would delete) is
+read at PATCH time through `PrivilegeOperatorPreview` (counts only) and `retention.Service.Plan`; if it
+moved, the phrase moved with it and the save is refused with the new number.
+
+A token's request never carries what only the approver gives: `confirm` and `reauth_code` are dropped when
+it is filed, and the approver types the phrases at approve time (checked before the request is claimed, so a
+wrong phrase leaves it waiting).
+
+A trial (D12) is a version with `status = 'trial'` and `trial_expires_at`. Only a console or approved
+change of a trial key starts one; the CLI and imports never do (the installer's `collie config set
+trusted_proxies=…` must not revert itself). While one runs every save but an import at start is refused
+(`ErrTrialPending`). Every process calls `RevertExpiredTrial` on each reload and before it serves; the
+store's advisory lock lets exactly one write the `trial-auto-revert` version. The evidence the band shows
+(distinct client addresses, cloud sign-ins) is counted in memory per process, only while a trial runs.
+
 ## Traps
 
 - A moved variable left in the environment is never read. It is logged at every start (error when it

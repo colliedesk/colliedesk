@@ -226,6 +226,12 @@ func billingConfig() (polar.Config, error) {
 // one that ran is used, else every default (docs/internals/operator-console.md › Start).
 func startConfig(ctx context.Context, store *serverconfig.Store, logger *slog.Logger) (builtConfig, serverconfig.Loaded, error) {
 	by := serverconfig.Actor{Kind: "server", Name: "serve " + version + " (env)"}
+	// A trial whose time ran out while no process ran is reverted before anything is served with it (D12).
+	if reverted, err := store.RevertExpiredTrial(ctx); err != nil {
+		logger.Error("revert an expired trial change", "error", err)
+	} else if reverted != 0 {
+		logger.Warn("a trial change was not confirmed in time and was reverted", "version", reverted)
+	}
 	imported, err := store.ImportEnv(ctx, os.Getenv, importGroupCheck, by, serverconfig.ImportOptions{Hosted: func(snap serverconfig.Snapshot) bool { return hostedCloud(snap.Getenv) }})
 	if err != nil {
 		return builtConfig{}, serverconfig.Loaded{}, fmt.Errorf("import settings from the environment: %w", err)

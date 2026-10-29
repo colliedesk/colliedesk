@@ -109,8 +109,9 @@ func SVG(text, accessibleName string) (string, error) {
 		}
 	}
 	name := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(accessibleName)
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" role="img" aria-label="%s" shape-rendering="crispEdges">`+
-		`<rect width="%d" height="%d" fill="#fff"/><path d="%s" fill="#000"/></svg>`, size, size, name, size, size, path.String()), nil
+	// Drawn at 6 pixels a module (quiet zone included), so a phone camera and a decoder read it as shown.
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="%s" shape-rendering="crispEdges">`+
+		`<rect width="%d" height="%d" fill="#fff"/><path d="%s" fill="#000"/></svg>`, size*6, size*6, size, size, name, size, size, path.String()), nil
 }
 
 type bitBuffer []bool

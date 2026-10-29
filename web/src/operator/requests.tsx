@@ -3,7 +3,7 @@ import { ApiError, api } from './api';
 import type { OperatorRequest } from './api';
 import type { ConsoleData } from './app';
 import { when } from './copy';
-import { Dialog } from '../ui/dialog';
+import { ConsoleDialog } from './dialog';
 import { m } from './messages';
 
 export function Requests({ data }: { data: ConsoleData }) {
@@ -48,7 +48,7 @@ function Decide({ request, data, onClose, onDone }: { request: OperatorRequest; 
       setBusy(false);
     }
   };
-  return <Dialog focusFirst title={request.summary} onClose={onClose} closeLabel={m.notNow} onSubmit={() => { if (ready) void decide('approve'); }}
+  return <ConsoleDialog title={request.summary} onClose={onClose} closeLabel={m.notNow} onSubmit={() => { if (ready) void decide('approve'); }}
     footer={<>
       <button type="button" className="danger-action" disabled={busy || (totp && !/^\d{6}$/.test(code))} onClick={() => void decide('reject')}>{m.reject}</button>
       <button type="button" onClick={onClose}>{m.notNow}</button>
@@ -63,5 +63,5 @@ function Decide({ request, data, onClose, onDone }: { request: OperatorRequest; 
     {totp && <div className="field"><label className="field-label" htmlFor="decide-code">{m.confirmItsYou}: {m.authenticatorCode}</label>
       <input id="decide-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} spellCheck={false} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></div>}
     {error && <p className="error-copy" role="alert">{error}</p>}
-  </Dialog>;
+  </ConsoleDialog>;
 }

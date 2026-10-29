@@ -51,7 +51,7 @@ export const fields: Record<string, FieldInfo> = {
   'polar.webhook_secret': { label: 'Polar webhook secret', kind: 'secret' },
   'polar.api_url': { label: 'Polar API address', kind: 'text' },
   'billing.alert_email': { label: 'Billing alert email', kind: 'text' },
-  'retention.delete': { label: 'Delete workspaces locked for 12 months', kind: 'select', options: [['', 'Off'], ['off', 'Off'], ['on', 'On']] },
+  'retention.delete': { label: 'Delete workspaces locked for 12 months', kind: 'select', options: [['off', 'Off'], ['on', 'On']] },
   'retention.max_deletions_per_day': { label: 'Most deletions a day', kind: 'number' },
   'internal_signup.emails': { label: 'Team addresses', kind: 'text', help: '@domain or one mailbox, comma separated: their sign-ups are the team\'s own tests.' },
   'internal_signup.networks': { label: 'Team networks', kind: 'text', help: 'CIDR ranges, comma separated.' },

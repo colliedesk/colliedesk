@@ -403,3 +403,7 @@ code, .mono { font-family: var(--font-mono); font-size: var(--fs-label); }
 /* The test button names the operator's address, which can be long: it wraps instead of widening the page. */
 .ops-check > button { max-width: 100%; height: auto; min-height: 36px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .ops-page-inner > .warning-note { margin-bottom: var(--space-4); }
+.dialog-frame { display: contents; }
+.section-heading > button { margin-top: var(--space-3); }
+/* The authenticator QR code: shown at its own size (5 px a module), never wider than the column. */
+.qr-code { display: block; max-width: 100%; height: auto; border-radius: var(--radius); box-shadow: var(--shadow-1); image-rendering: pixelated; }

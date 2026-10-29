@@ -1,25 +1,16 @@
-import { useEffect, useId, useRef } from 'react';
+import { useId, useRef } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from './dialog-keys';
 import './controls.css';
 
 // Dialog is the frame of a form dialog: Escape closes, Tab stays inside, focus returns to what opened it.
-// alert makes it an alertdialog without a close button (a confirmation). focusFirst moves the focus, when no
-// autoFocus control took it, to the first field (else the first footer button), so Escape and Tab work at once.
-export function Dialog({ title, help, onClose, children, footer, onSubmit, alert, closeLabel, className = '', focusFirst = false }: {
+// alert makes it an alertdialog without a close button (a confirmation).
+export function Dialog({ title, help, onClose, children, footer, onSubmit, alert, closeLabel, className = '' }: {
   title: string; help?: string; onClose: () => void; children: ReactNode; footer: ReactNode; onSubmit?: (event: FormEvent) => void; alert?: boolean;
-  closeLabel: string; className?: string; focusFirst?: boolean;
+  closeLabel: string; className?: string;
 }) {
   useReturnFocus();
   const root = useRef<HTMLFormElement>(null);
-  useEffect(() => {
-    const form = root.current;
-    if (!focusFirst || !form || form.contains(document.activeElement)) return;
-    const target = form.querySelector<HTMLElement>('.form-dialog-body :is(input, select, textarea):not(:disabled)')
-      ?? form.querySelector<HTMLElement>('.form-dialog-footer button:not(:disabled)') ?? form;
-    if (target === form) form.tabIndex = -1;
-    target.focus();
-  }, [focusFirst]);
   const titleId = useId();
   return (
     <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>

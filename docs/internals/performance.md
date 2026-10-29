@@ -274,9 +274,12 @@ of it is in the workspace app's bundle, and the workspace app's code is not in i
 bundle:check` also measures the console's first bundle (the JavaScript and CSS `operator.html` loads)
 against its own ceilings, set on 2026-10-29 to the first measurement plus 5%: 78,652 bytes of JavaScript
 and 9,076 of CSS gzip (`OPERATOR_JS_LIMIT`, `OPERATOR_CSS_LIMIT` in `web/scripts/check-bundle-budget.mjs`).
-Never raise them to pass; move a screen into a lazy part. Measured then: 75,438 and 8,725 bytes; History,
+Never raise them to pass; move a screen into a lazy part. Measured then: 75,443 and 8,734 bytes; History,
 Requests, the audit log and Operators are lazy parts of 0.8 to 2 KB each. The workspace app's first
-bundle went from 199,617 to 199,618 bytes (the shared dialog's optional first-field focus).
+bundle is unchanged (199,617 bytes). With the dangerous groups (the review's server guards in the first
+bundle; the trial band and the Polar products table as lazy parts): 76,691 and 8,774. Measured with
+Playwright on a local `collie serve` (Chromium, 1,440 px, an Apple M4, median of 5): a full load of the
+overview to its numbers 41 ms; from a nav link to a settings page 16 ms.
 
 ## Reply box lists (saved replies, articles)
 

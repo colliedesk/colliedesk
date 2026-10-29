@@ -139,4 +139,8 @@ const (
 	// operator_sessions, operator_requests) and writes their audit lines (operator_audit). None of these
 	// tables has a workspace_id or a grant to the app role; no workspace row is read.
 	PrivilegeOperator Privilege = "operator"
+	// PrivilegeOperatorPreview counts, for the operator console's previews, what a change would do across
+	// workspaces: how many lock when billing turns on, and whether a workspace slug exists. Only a count or
+	// a yes or no leaves the transaction; no row is returned.
+	PrivilegeOperatorPreview Privilege = "operator-preview"
 )

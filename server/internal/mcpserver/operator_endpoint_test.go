@@ -24,6 +24,9 @@ var operatorToolNames = []string{
 	"colliedesk_operator_config_history",
 	"colliedesk_operator_config_restore",
 	"colliedesk_operator_invite",
+	"colliedesk_operator_product_add",
+	"colliedesk_operator_product_on_sale",
+	"colliedesk_operator_products",
 	"colliedesk_operator_request_cancel",
 	"colliedesk_operator_request_get",
 	"colliedesk_operator_requests",
@@ -33,6 +36,8 @@ var operatorToolNames = []string{
 	"colliedesk_operator_status",
 	"colliedesk_operator_team",
 	"colliedesk_operator_token_create",
+	"colliedesk_operator_trial_confirm",
+	"colliedesk_operator_trial_revert",
 	"colliedesk_operator_whoami",
 }
 

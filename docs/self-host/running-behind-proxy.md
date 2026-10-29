@@ -40,6 +40,10 @@ With no trusted proxy the server logs a warning at startup, and behind a proxy e
 the proxy and shares one limit. `collie config history` and `collie config restore <version>` bring an
 earlier value back; `collie config reset trusted_proxies` trusts no proxy again.
 
+In the operator console (Security & network) a change of trusted proxies is a trial: the review shows
+what your own address would read as, and the change reverts by itself after 10 minutes unless you confirm
+it from the console ([trial changes](operator-console.md#trial-changes)).
+
 **Warning:** do not publish the server port on `0.0.0.0` (or any public address) without a proxy
 in front while the installer's value is set. A client inside a trusted range, or one that
 reaches the server directly through Docker's bridge, could then send a fake `X-Forwarded-For` and

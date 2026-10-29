@@ -306,7 +306,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Saves a change as a new version, checked the way the server reads it at start; a running server applies it within seconds. `base_version` is the version the change was made on (409 `config_changed` when another was saved since). Secrets go in `secrets`, never in `set` (400 `secret_in_set`). The server enforces what the console asks for: `reauth_code` for a secret or a key that needs it (400 `reauth_required` / `reauth_code_invalid`), the secret an endpoint is bound to entered again (400 `reenter_secret`, `error.fields` names it), and the phrase typed to confirm (400 `confirm_mismatch`). A setting not changeable here yet answers 400 `setting_not_changeable`; one that does not build answers 422 `config_invalid` with `error.fields` per key. Nothing is saved on a refusal. An operator token's call is a request a person approves (202); it may only name the secrets it needs (`"secrets": {"smtp.password": null}`), never send one (400 `secret_in_request`). */
+        /** @description Saves a change as a new version, checked the way the server reads it at start; a running server applies it within seconds. `base_version` is the version the change was made on (409 `config_changed` when another was saved since). Secrets go in `secrets`, never in `set` (400 `secret_in_set`). The server enforces what the console asks for: `reauth_code` for a secret or a key that needs it (400 `reauth_required` / `reauth_code_invalid`), the secret an endpoint is bound to entered again (400 `reenter_secret`, `error.fields` names it), and the phrase typed to confirm (400 `confirm_mismatch`, `error.guards` lists what the change does and asks). What a change asks depends on what it does (turning billing on, not rotating its token); `POST /config/check` returns the same `guards` first. A change of trusted proxies, cloud sign-in or the help center domain is saved as a trial (`applies: trial`): unless confirmed before `trial_expires_at`, it reverts by itself; while it runs every other save answers 409 `trial_pending`. Turning the authenticator off answers 400 `setting_not_changeable` (the CLI only); a change that does not build answers 422 `config_invalid` with `error.fields` per key. Nothing is saved on a refusal. An operator token's call is a request a person approves (202); it may only name the secrets it needs (`"secrets": {"smtp.password": null}`), never send one (400 `secret_in_request`). */
         patch: operations["changeOperatorConfig"];
         trace?: never;
     };
@@ -361,6 +361,77 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/config/trial/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Keeps the trial change `version` (D12): it becomes an ordinary version. Needs `reauth_code`. A version that is not the trial that runs answers 400 `no_trial`. An operator token's call is a request a person approves (202). */
+        post: operations["confirmOperatorConfigTrial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/config/trial/revert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Ends the trial change `version` now: the version before it is saved again as the newest one. Needs `reauth_code`. A version that is not the trial that runs answers 400 `no_trial`. An operator token's call is a request a person approves (202). */
+        post: operations["revertOperatorConfigTrial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/billing/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The Polar products this server sells or once sold, oldest first. A product is never removed nor changed, only taken off sale, so an old subscription always maps to its plan. */
+        get: operations["listOperatorProducts"];
+        put?: never;
+        /** @description Adds a Polar product. On sale, it takes the product of the same plan and period off sale. A product id already listed answers 409. Needs `reauth_code`. An operator token's call is a request a person approves (202). */
+        post: operations["addOperatorProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/billing/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Puts a product on sale (taking the other of its plan and period off) or off sale; nothing else of a product changes. Needs `reauth_code`. An operator token's call is a request a person approves (202). */
+        patch: operations["setOperatorProductOnSale"];
         trace?: never;
     };
     "/api/v1/operator/audit": {
@@ -2467,7 +2538,7 @@ export interface paths {
         put?: never;
         /**
          * @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. `seen_reply_number` is the newest reply the approving person had on screen: when someone replied since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so it can be read again and approved with the new number.
-         *     With `X-Colliedesk-Realm: operator` the route decides an operator request instead, for an operator's browser session only (no workspace credential, no operator token: 401 / 403 `person_only`): it needs `reauth_code`, and `secrets` carries the secrets the request names; they are used for this one call and never stored. An agent request's id answers 404 there, and an operator request's id answers 404 without the header.
+         *     With `X-Colliedesk-Realm: operator` the route decides an operator request instead, for an operator's browser session only (no workspace credential, no operator token: 401 / 403 `person_only`): it needs `reauth_code`, and `secrets` carries the secrets the request names; they are used for this one call and never stored, and `confirm` carries the phrases a configuration change asks to type (400 `confirm_mismatch` names them in `error.guards`, and the request keeps waiting). An agent request's id answers 404 there, and an operator request's id answers 404 without the header.
          */
         post: operations["approveAgentRequest"];
         delete?: never;
@@ -6460,8 +6531,8 @@ export interface components {
             processes: components["schemas"]["OperatorProcess"][];
             warnings: components["schemas"]["OperatorWarning"][];
             requests_waiting: number;
-            /** @description A 10-minute trial in progress (operator console › Security); null when none */
-            trial?: Record<string, never> | null;
+            /** @description A trial change in progress (D12); null when none */
+            trial?: components["schemas"]["OperatorTrial"] | null;
             console: {
                 origin: string;
                 path_mode: boolean;
@@ -6536,8 +6607,13 @@ export interface components {
         OperatorConfigSaved: {
             version: number;
             /** @enum {string} */
-            applies: "at_once" | "in_seconds";
+            applies: "at_once" | "in_seconds" | "trial";
             changed?: string[];
+            /**
+             * Format: date-time
+             * @description A trial: when it reverts by itself unless confirmed
+             */
+            trial_expires_at?: string;
         };
         OperatorConfigCheck: {
             ok: boolean;
@@ -6549,6 +6625,46 @@ export interface components {
                 ok: boolean;
                 message: string;
             };
+            guards?: components["schemas"]["OperatorConfigGuard"][];
+        };
+        /** @description What a change of a key does and asks before it is saved; never a secret's value. */
+        OperatorConfigGuard: {
+            key: string;
+            /** @description What the change does, with numbers */
+            preview?: string;
+            /** @description What to type in `confirm[key]` */
+            phrase?: string;
+            /** @description The change is tried and reverts by itself unless confirmed (D12) */
+            trial?: boolean;
+            /** @description Why the change cannot be saved as it is */
+            refused?: string;
+        };
+        OperatorTrial: {
+            version: number;
+            parent_version: number;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            started_by: string;
+            keys: string[];
+            /** @description What this process saw since the trial started, to judge it before confirming. */
+            evidence: {
+                /** @description This request's client address under the trial's proxies */
+                your_ip: string;
+                /** @description Distinct client addresses seen; only one is a sign the proxies are wrong */
+                client_ips: number;
+                cloud_sign_ins_ok: number;
+                cloud_sign_ins_refused: number;
+            };
+        };
+        OperatorProduct: {
+            product_id: string;
+            /** @enum {string} */
+            plan: "team" | "founding" | "solo" | "small" | "team25";
+            /** @enum {string} */
+            period: "monthly" | "yearly" | "single";
+            on_sale: boolean;
         };
         OperatorConfigChangeItem: {
             key: string;
@@ -7203,7 +7319,7 @@ export interface components {
                 "application/json": components["schemas"]["OperatorRequestAccepted"];
             };
         };
-        /** @description Nothing was saved. `error.code` says why (`secret_in_set`, `reauth_required`, `reauth_code_invalid`, `reenter_secret`, `confirm_mismatch`, `setting_not_changeable`, `unknown_setting`, `config_invalid`, `secret_in_request`); `error.fields` names the settings, never a value. */
+        /** @description Nothing was saved. `error.code` says why (`secret_in_set`, `reauth_required`, `reauth_code_invalid`, `reenter_secret`, `confirm_mismatch`, `setting_not_changeable`, `unknown_setting`, `config_invalid`, `secret_in_request`, `no_trial`); `error.fields` names the settings, never a value. */
         OperatorConfigRefused: {
             headers: {
                 [name: string]: unknown;
@@ -8067,6 +8183,208 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["OperatorConfigRefused"];
+            423: components["responses"]["OperatorLocked"];
+        };
+    };
+    confirmOperatorConfigTrial: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    reauth_code?: string;
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The answer of an earlier request with the same Idempotency-Key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigSaved"];
+                };
+            };
+            /** @description Confirmed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigSaved"];
+                };
+            };
+            202: components["responses"]["OperatorRequestAccepted"];
+            400: components["responses"]["OperatorConfigRefused"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            423: components["responses"]["OperatorLocked"];
+        };
+    };
+    revertOperatorConfigTrial: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    reauth_code?: string;
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The answer of an earlier request with the same Idempotency-Key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigSaved"];
+                };
+            };
+            /** @description Reverted as a new version */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorConfigSaved"];
+                };
+            };
+            202: components["responses"]["OperatorRequestAccepted"];
+            400: components["responses"]["OperatorConfigRefused"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            423: components["responses"]["OperatorLocked"];
+        };
+    };
+    listOperatorProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["OperatorProduct"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    addOperatorProduct: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    product_id: string;
+                    /** @enum {string} */
+                    plan: "team" | "founding" | "solo" | "small" | "team25";
+                    /** @enum {string} */
+                    period: "monthly" | "yearly" | "single";
+                    /** @default true */
+                    on_sale?: boolean;
+                    reauth_code?: string;
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The product an earlier request with the same Idempotency-Key added */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorProduct"];
+                };
+            };
+            /** @description Added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorProduct"];
+                };
+            };
+            202: components["responses"]["OperatorRequestAccepted"];
+            400: components["responses"]["OperatorConfigRefused"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            423: components["responses"]["OperatorLocked"];
+        };
+    };
+    setOperatorProductOnSale: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    on_sale: boolean;
+                    reauth_code?: string;
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The product */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorProduct"];
+                };
+            };
+            202: components["responses"]["OperatorRequestAccepted"];
+            400: components["responses"]["OperatorConfigRefused"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             423: components["responses"]["OperatorLocked"];
         };
     };
@@ -12592,6 +12910,10 @@ export interface operations {
                     reauth_code?: string;
                     /** @description Operator realm: the secrets the request names, used once */
                     secrets?: {
+                        [key: string]: string;
+                    };
+                    /** @description Operator realm: the phrases a configuration change asks the approver to type; a token never fills them */
+                    confirm?: {
                         [key: string]: string;
                     };
                 };

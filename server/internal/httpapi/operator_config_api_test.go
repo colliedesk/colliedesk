@@ -74,11 +74,11 @@ func TestOperatorConfigChangeEnforcesItsGuards(t *testing.T) {
 		want string
 	}{
 		"secret in set":         {map[string]any{"base_version": base, "set": map[string]any{"smtp.password": "x"}}, "secret_in_set"},
-		"trusted proxies":       {map[string]any{"base_version": base, "set": map[string]any{"trusted_proxies": "10.0.0.0/8"}}, "setting_not_changeable"},
-		"billing":               {map[string]any{"base_version": base, "secrets": map[string]any{"polar.access_token": "tok"}}, "setting_not_changeable"},
+		"trusted proxies":       {map[string]any{"base_version": base, "set": map[string]any{"trusted_proxies": "10.0.0.0/8"}}, "reauth_required"},
+		"billing untyped":       {map[string]any{"base_version": base, "secrets": map[string]any{"polar.access_token": "tok"}}, "confirm_mismatch"},
 		"authenticator off":     {map[string]any{"base_version": base, "set": map[string]any{"operator.require_totp": "false"}}, "setting_not_changeable"},
 		"authenticator unset":   {map[string]any{"base_version": base, "unset": []string{"operator.require_totp"}}, "setting_not_changeable"},
-		"any sender":            {map[string]any{"base_version": base, "set": map[string]any{"email.from_policy": "any"}}, "setting_not_changeable"},
+		"any sender untyped":    {map[string]any{"base_version": base, "set": map[string]any{"email.from_policy": "any"}}, "confirm_mismatch"},
 		"unknown":               {map[string]any{"base_version": base, "set": map[string]any{"smtp.hots": "x"}}, "unknown_setting"},
 		"a secret without code": {map[string]any{"base_version": base, "secrets": map[string]any{"smtp.password": "pw"}}, "reauth_required"},
 		"a wrong code":          {map[string]any{"base_version": base, "secrets": map[string]any{"smtp.password": "pw"}, "reauth_code": "000000"}, "reauth_code_invalid"},

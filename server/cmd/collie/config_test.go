@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
@@ -341,5 +342,39 @@ func TestConfigImportOfAFileNeverGeneratesTheSignupKey(t *testing.T) {
 	}
 	if got := mustConfig(t, databaseURL, "SIGNUP_HASH_KEY=from-the-file-0123456789abcdef0123456789\n", "import", "--stdin"); !strings.Contains(got, "sign-up hash key imported") {
 		t.Fatalf("import with the key = %q", got)
+	}
+}
+
+// D12 from the shell: a trial shows in doctor and is kept or ended with collie config trial.
+func TestConfigTrialFromTheShell(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("MAILBOX_TOKEN_KEYS", cliTestRing)
+	mustConfig(t, databaseURL, "", "set", "trusted_proxies=10.0.0.0/8", "--yes")
+	store, err := openConfigStore(database.New(cliPool(t, databaseURL)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	trial, err := store.Save(context.Background(), serverconfig.Change{Set: map[string]string{"trusted_proxies": "192.168.0.0/16"}, Source: "console",
+		Actor: serverconfig.Actor{Kind: "operator", Name: "ops@example.com"}, Trial: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runConfig(t, databaseURL, "", "set", "internal_signup.emails=@example.com"); err == nil || !strings.Contains(err.Error(), "trial") {
+		t.Fatalf("a save during the trial: %v, want the trial named", err)
+	}
+	if shown := mustConfig(t, databaseURL, "", "trial"); !strings.Contains(shown, fmt.Sprintf("v%d is tried until", trial)) {
+		t.Fatalf("trial = %q", shown)
+	}
+	output, err := runConfig(t, databaseURL, "", "doctor")
+	var code exitCode
+	if !errors.As(err, &code) || code.code != 1 || !strings.Contains(output, fmt.Sprintf("v%d is a trial change", trial)) {
+		t.Fatalf("doctor during a trial: %v %q", err, output)
+	}
+	mustConfig(t, databaseURL, "", "trial", "revert")
+	if value := mustConfig(t, databaseURL, "", "get", "trusted_proxies"); strings.TrimSpace(value) != "trusted_proxies=10.0.0.0/8" {
+		t.Fatalf("after revert trusted_proxies = %q", value)
+	}
+	if shown := mustConfig(t, databaseURL, "", "trial"); strings.TrimSpace(shown) != "no trial change runs" {
+		t.Fatalf("trial = %q", shown)
 	}
 }

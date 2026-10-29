@@ -40,6 +40,12 @@ function linkError(error: unknown): State {
   return { kind: 'link', title: m.linkInvalid };
 }
 
+// qrSize shows the code at 5 CSS pixels a module (at least 4 keeps it readable by a phone camera and a decoder).
+function qrSize(svg: string): number {
+  const modules = Number(/viewBox="0 0 (\d+)/.exec(svg)?.[1] ?? 49);
+  return modules * 5;
+}
+
 export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const token = useRef<string>('');
   const [state, setState] = useState<State>({ kind: 'continue' });
@@ -102,7 +108,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         <h1 id="sign-title">{enroll ? m.enrollTitle : m.codeTitle}</h1>
         <p>{enroll ? m.enrollLead : m.codeLead}</p>
         {enroll && <div className="ops-enroll">
-          {state.step.qr_svg && <img className="qr" alt={m.qrLabel} src={`data:image/svg+xml;utf8,${encodeURIComponent(state.step.qr_svg)}`} width={176} height={176} />}
+          {state.step.qr_svg && <img className="qr-code" alt={m.qrLabel} src={`data:image/svg+xml;utf8,${encodeURIComponent(state.step.qr_svg)}`} width={qrSize(state.step.qr_svg)} height={qrSize(state.step.qr_svg)} />}
           <CommandLine command={(state.step.key ?? '').replace(/(.{4})/g, '$1 ').trim()} label={m.copyKey} />
         </div>}
         <div className="field">

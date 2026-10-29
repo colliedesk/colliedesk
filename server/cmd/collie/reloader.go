@@ -110,9 +110,22 @@ func (r *reloader) Reload(ctx context.Context) {
 }
 
 func (r *reloader) reload(ctx context.Context) error {
+	// Every process looks for a trial past its time; the store's lock lets one of them revert it (D12).
+	if reverted, err := r.store.RevertExpiredTrial(ctx); err != nil {
+		r.logger.Error("revert an expired trial change", "error", err)
+	} else if reverted != 0 {
+		r.logger.Warn("a trial change was not confirmed in time and was reverted", "version", reverted)
+	}
 	next, err := r.store.Current(ctx)
 	if err != nil {
 		return err
+	}
+	if run, ok, err := r.store.Trial(ctx); err == nil {
+		if ok && run.Version == next.Version {
+			r.hot.SetTrial(run.Version)
+		} else {
+			r.hot.SetTrial(0)
+		}
 	}
 	products := serverconfig.Fingerprint(next.Products())
 	if next.Version == r.running.Version && products == r.products {

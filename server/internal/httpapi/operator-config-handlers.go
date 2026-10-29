@@ -29,24 +29,9 @@ import (
 // numbers, a typed phrase or a 10-minute trial (billing, retention, mail domains in use, trusted proxies,
 // cloud sign-in, the help center domain, private AI addresses, any sender) are changed with the CLI until
 // their guards ship; a version that would change them is refused here.
-func consoleEditable(key serverconfig.Key, value string, current serverconfig.Snapshot) (bool, string) {
-	switch key.Group {
-	case serverconfig.GroupBilling, serverconfig.GroupSecurity:
-		return false, "changed with collie config until the console's guards for it ship"
-	}
-	switch key.Name {
-	case "email.from_policy":
-		if strings.TrimSpace(value) == "any" {
-			return false, "allowing any sender is changed with collie config set email.from_policy=any --yes"
-		}
-	case "mail_from.domain", "hosted_mail.domain":
-		if old, set := current.Get(key.Name); set && old != "" && old != value {
-			return false, "changing a mail domain in use is done with collie config set --yes: replies to the old domain stop threading"
-		}
-	case "operator.require_totp":
-		if strings.TrimSpace(value) != "true" {
-			return false, "an authenticator can be turned off only with collie config, and never on the hosted cloud"
-		}
+func consoleEditable(key serverconfig.Key, value string) (bool, string) {
+	if key.Name == "operator.require_totp" && strings.TrimSpace(value) != "true" {
+		return false, "an authenticator can be turned off only with collie config, and never on the hosted cloud"
 	}
 	return true, ""
 }
@@ -99,17 +84,6 @@ func friendlyConfigError(err error) (string, map[string]string) {
 // confirmMatches compares a typed phrase as the console does: trimmed, case-insensitive.
 func confirmMatches(typed, phrase string) bool {
 	return strings.EqualFold(strings.TrimSpace(typed), strings.TrimSpace(phrase))
-}
-
-// confirmPhrase is what a key asks the operator to type; empty when it asks nothing.
-func confirmPhrase(key serverconfig.Key, value string) string {
-	if !slices.Contains(key.Guards, serverconfig.GuardTypeToConfirm) {
-		return ""
-	}
-	if value != "" {
-		return value
-	}
-	return key.Name
 }
 
 func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.Request) {
@@ -174,7 +148,7 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 	reenter := map[string]string{}
 	for _, key := range touched {
 		value := set[key.Name]
-		if ok, why := consoleEditable(key, value, current.Snapshot); !ok {
+		if ok, why := consoleEditable(key, value); !ok {
 			writeRefused(response, http.StatusBadRequest, "setting_not_changeable", "This setting is not changed in the console yet. Nothing was saved.", map[string]string{key.Name: why})
 			return
 		}
@@ -187,10 +161,6 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 					reenter[key.Reenter] = "Enter it again: it goes to the new " + key.Name + "."
 				}
 			}
-		}
-		if phrase := confirmPhrase(key, value); phrase != "" && !confirmMatches(input.Confirm[key.Name], phrase) {
-			writeRefused(response, http.StatusBadRequest, "confirm_mismatch", "Type the phrase to confirm. Nothing was saved.", map[string]string{key.Name: "Type " + phrase + " to confirm."})
-			return
 		}
 	}
 	if len(reenter) > 0 {
@@ -205,6 +175,27 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 			return
 		}
 	}
+	names := make([]string, 0, len(touched))
+	for _, key := range touched {
+		names = append(names, key.Name)
+	}
+	guards := a.configGuards(request.Context(), request, current.Snapshot, next, names)
+	for _, guard := range guards {
+		if guard.Refused != "" {
+			writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", guard.Refused+" Nothing was saved.", map[string]string{guard.Key: guard.Refused})
+			return
+		}
+	}
+	for _, guard := range guards {
+		if guard.Phrase != "" && !confirmMatches(input.Confirm[guard.Key], guard.Phrase) {
+			writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "confirm_mismatch",
+				"message": "Type the phrase to confirm. Nothing was saved.", "fields": map[string]string{guard.Key: "Type " + guard.Phrase + " to confirm."}, "guards": guards}})
+			return
+		}
+		if guard.Preview != "" || guard.Trial {
+			needsReauth = true
+		}
+	}
 	if needsReauth && !a.reauthorized(response, request, input.ReauthCode) {
 		return
 	}
@@ -214,8 +205,14 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 	if requestID, ok := operatorRequestIDOf(request.Context()); ok {
 		change.Source, change.RequestID = "request", requestID
 	}
+	if guardsTrial(guards) {
+		change.Trial = TrialDuration
+	}
 	version, err := a.config.ServerConfig.Save(request.Context(), change)
 	switch {
+	case errors.Is(err, serverconfig.ErrTrialPending):
+		writeRefused(response, http.StatusConflict, "trial_pending", "A trial change runs: confirm or revert it before saving another. Nothing was saved.", nil)
+		return
 	case errors.Is(err, serverconfig.ErrConflict):
 		writeJSON(response, http.StatusConflict, map[string]any{"error": map[string]any{"code": "config_changed",
 			"message": "Someone saved another version since you read this one. Nothing was saved.", "version": current.Version}})
@@ -237,7 +234,11 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 		}
 	}
 	slices.Sort(changed)
-	writeJSON(response, http.StatusOK, map[string]any{"version": version, "applies": applies, "changed": slices.Compact(changed)})
+	out := map[string]any{"version": version, "applies": applies, "changed": slices.Compact(changed)}
+	if change.Trial > 0 {
+		out["applies"], out["trial_expires_at"] = "trial", a.now().Add(change.Trial).UTC()
+	}
+	writeJSON(response, http.StatusOK, out)
 }
 
 type operatorRequestIDKey struct{}
@@ -297,9 +298,6 @@ func (a *API) getOperatorConfig(response http.ResponseWriter, request *http.Requ
 			row["locked"] = "stale_key"
 		case key.Name == "telemetry.enabled" && (environ("DISABLE_TELEMETRY") != "" || environ("DO_NOT_TRACK") != ""):
 			row["locked"] = "env_off"
-		}
-		if ok, _ := consoleEditable(key, "", serverconfig.Snapshot{}); !ok && key.Name != "operator.require_totp" && key.Name != "email.from_policy" {
-			row["editable"] = false
 		}
 		settings = append(settings, row)
 	}
@@ -391,8 +389,18 @@ func (a *API) getOperatorStatus(response http.ResponseWriter, request *http.Requ
 	if waiting > 0 {
 		warnings = append(warnings, map[string]any{"code": "requests_waiting", "severity": "warning", "detail": strconv.Itoa(waiting)})
 	}
+	var trial any
+	if run, ok, err := a.config.ServerConfig.Trial(ctx); err == nil && ok {
+		var addresses, signedIn, refused int
+		if a.config.Carry != nil {
+			addresses, signedIn, refused = a.config.Carry.trial.read(run.Version)
+		}
+		trial = map[string]any{"version": run.Version, "parent_version": run.Parent, "started_at": run.StartedAt.UTC(), "expires_at": run.ExpiresAt.UTC(),
+			"started_by": run.StartedBy, "keys": run.Keys, "evidence": map[string]any{"your_ip": clientIP(request, a.config.TrustedProxies),
+				"client_ips": addresses, "cloud_sign_ins_ok": signedIn, "cloud_sign_ins_refused": refused}}
+	}
 	writeJSON(response, http.StatusOK, map[string]any{"binary_version": a.config.Version, "migration": migration, "desired_version": current.State.Desired,
-		"last_good_version": current.State.LastGood, "processes": process, "warnings": warnings, "requests_waiting": waiting, "trial": nil,
+		"last_good_version": current.State.LastGood, "processes": process, "warnings": warnings, "requests_waiting": waiting, "trial": trial,
 		"console": map[string]any{"origin": a.config.Operators.ConsoleBase(), "path_mode": a.config.OperatorOrigin == ""}})
 }
 
@@ -433,6 +441,29 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			}
 			out["ok"], out["errors"] = false, fields
 		}
+	}
+	if out["ok"] == true {
+		var names []string
+		for name := range set {
+			names = append(names, name)
+		}
+		for _, name := range input.Unset {
+			if key, ok := serverconfig.Lookup(name); ok {
+				names = append(names, key.Name)
+			}
+		}
+		slices.Sort(names)
+		guards := a.configGuards(request.Context(), request, current.Snapshot, next, names)
+		for _, guard := range guards {
+			if guard.Refused != "" {
+				out["ok"] = false
+				out["errors"].(map[string]string)[guard.Key] = guard.Refused
+			}
+		}
+		if guards == nil {
+			guards = []configGuard{}
+		}
+		out["guards"] = guards
 	}
 	if input.Test == "smtp" && out["ok"] == true {
 		out["test"] = a.sendTestEmail(request.Context(), next, operatorPrincipal(request).Operator.Email)
@@ -545,7 +576,7 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 	for name := range diffKeys(current.Snapshot, old.Snapshot) {
 		key, _ := serverconfig.Lookup(name)
 		value, _ := old.Get(name)
-		if ok, why := consoleEditable(key, value, current.Snapshot); !ok {
+		if ok, why := consoleEditable(key, value); !ok {
 			writeRefused(response, http.StatusBadRequest, "setting_not_changeable", "This version changes a setting the console does not change yet; restore it with collie config restore. Nothing was saved.", map[string]string{key.Name: why})
 			return
 		}
@@ -808,6 +839,7 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 		var input struct {
 			ReauthCode string            `json:"reauth_code"`
 			Secrets    map[string]string `json:"secrets"`
+			Confirm    map[string]string `json:"confirm"`
 			Reason     string            `json:"reason"`
 		}
 		if request.ContentLength != 0 {
@@ -848,12 +880,19 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 				return
 			}
 		}
+		if pending.Route == "PATCH /api/v1/operator/config" {
+			if guards, mismatch := a.requestGuards(request, pending.Body, input.Secrets, input.Confirm); mismatch != "" {
+				writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "confirm_mismatch",
+					"message": "Type the phrase to confirm. The request keeps waiting.", "fields": map[string]string{mismatch: "Type the phrase to confirm."}, "guards": guards}})
+				return
+			}
+		}
 		claimed, err := a.config.Operators.ClaimRequest(ctx, who, id)
 		if err != nil {
 			writeError(response, http.StatusConflict, "request_decided", "The request was decided, cancelled or expired.")
 			return
 		}
-		status, body := a.replayOperatorRequest(ctx, who, claimed, input.Secrets)
+		status, body := a.replayOperatorRequest(ctx, who, claimed, input.Secrets, input.Confirm)
 		kept := json.RawMessage(body)
 		if operatorWithheld[claimed.Route] || !json.Valid(body) {
 			kept = nil
@@ -873,7 +912,7 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 
 // replayOperatorRequest runs the stored call once, as the approver who just gave their code. The secrets
 // the approver typed reach the call in memory only: never the stored body, the result or the log.
-func (a *API) replayOperatorRequest(ctx context.Context, approver auth.OperatorPrincipal, stored auth.OperatorRequest, secrets map[string]string) (int, []byte) {
+func (a *API) replayOperatorRequest(ctx context.Context, approver auth.OperatorPrincipal, stored auth.OperatorRequest, secrets, confirm map[string]string) (int, []byte) {
 	body := map[string]any{}
 	if len(stored.Body) > 0 {
 		_ = json.Unmarshal(stored.Body, &body)
@@ -886,6 +925,10 @@ func (a *API) replayOperatorRequest(ctx context.Context, approver auth.OperatorP
 		body["secrets"] = filled
 	}
 	delete(body, "reauth_code")
+	delete(body, "confirm")
+	if len(confirm) > 0 {
+		body["confirm"] = confirm
+	}
 	encoded, _ := json.Marshal(body)
 	request := httptest.NewRequestWithContext(context.WithoutCancel(ctx), stored.Method, stored.Path, strings.NewReader(string(encoded)))
 	request.Header.Set("Content-Type", "application/json")
@@ -895,4 +938,44 @@ func (a *API) replayOperatorRequest(ctx context.Context, approver auth.OperatorP
 	a.mux.ServeHTTP(recorder, request.WithContext(replayCtx))
 	out, _ := io.ReadAll(recorder.Result().Body)
 	return recorder.Code, out
+}
+
+// requestGuards works out what a filed configuration change asks the approver to type, with the secrets
+// they entered, and names the first phrase that does not match (empty when every one does).
+func (a *API) requestGuards(request *http.Request, body json.RawMessage, secrets, confirm map[string]string) ([]configGuard, string) {
+	var change operatorConfigChange
+	if len(body) > 0 && json.Unmarshal(body, &change) != nil {
+		return nil, ""
+	}
+	current, err := a.operatorCurrent(request.Context())
+	if err != nil {
+		return nil, ""
+	}
+	set := map[string]string{}
+	var names []string
+	for name, value := range change.Set {
+		if key, ok := serverconfig.Lookup(name); ok && !key.Secret {
+			set[key.Name] = strings.TrimSpace(value)
+			names = append(names, key.Name)
+		}
+	}
+	for name, value := range secrets {
+		if key, ok := serverconfig.Lookup(name); ok && key.Secret {
+			set[key.Name] = value
+			names = append(names, key.Name)
+		}
+	}
+	for _, name := range change.Unset {
+		if key, ok := serverconfig.Lookup(name); ok {
+			names = append(names, key.Name)
+		}
+	}
+	slices.Sort(names)
+	guards := a.configGuards(request.Context(), request, current.Snapshot, current.With(set, change.Unset), names)
+	for _, guard := range guards {
+		if guard.Phrase != "" && !confirmMatches(confirm[guard.Key], guard.Phrase) {
+			return guards, guard.Key
+		}
+	}
+	return guards, ""
 }

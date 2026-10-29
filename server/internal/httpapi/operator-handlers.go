@@ -161,7 +161,7 @@ func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Re
 				return
 			}
 		}
-		stored = body
+		stored = withoutApproverFields(body)
 	}
 	var needs []string
 	for name := range shape.Secrets {
@@ -176,6 +176,22 @@ func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Re
 	}
 	writeJSON(response, http.StatusAccepted, map[string]any{"request_id": filed.ID, "status": filed.Status, "summary": filed.Summary,
 		"expires_at": filed.ExpiresAt, "message": "Nothing changed yet: an operator approves or rejects this in the console."})
+}
+
+// withoutApproverFields drops what only the approving person gives: a phrase typed to confirm and an
+// authenticator code. A token that filled them in (an injected prompt, say) gains nothing.
+func withoutApproverFields(body []byte) json.RawMessage {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) != nil || fields == nil {
+		return body
+	}
+	delete(fields, "confirm")
+	delete(fields, "reauth_code")
+	cleaned, err := json.Marshal(fields)
+	if err != nil {
+		return body
+	}
+	return cleaned
 }
 
 // operatorRequestSummary says what a filed call would do, for the operator deciding.
@@ -398,6 +414,20 @@ func (a *API) operatorOnce(response http.ResponseWriter, request *http.Request, 
 }
 
 func operatorCreateError(response http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, serverconfig.ErrConflict):
+		writeError(response, http.StatusConflict, "config_changed", "Someone saved another version since you read this one. Nothing was saved.")
+		return
+	case errors.Is(err, serverconfig.ErrTrialPending):
+		writeError(response, http.StatusConflict, "trial_pending", "A trial change runs: confirm or revert it first. Nothing was saved.")
+		return
+	case errors.Is(err, serverconfig.ErrNoTrial):
+		writeError(response, http.StatusBadRequest, "no_trial", "That version is not a trial that still runs.")
+		return
+	case errors.Is(err, serverconfig.ErrNoChange):
+		writeError(response, http.StatusBadRequest, "nothing_to_save", "That version is what runs already.")
+		return
+	}
 	var invalid *auth.InvalidTokenError
 	if errors.As(err, &invalid) {
 		writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)

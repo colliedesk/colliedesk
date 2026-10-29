@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
@@ -33,6 +34,7 @@ const configUsage = `usage: collie config <command>
   apply FILE [--dry-run] [--by B]   make the configuration match a JSON file (as export writes it)
   history                           list the versions
   restore VERSION [--by B]          save an older version again as the newest
+  trial [confirm|revert] [--by B]   show the trial change that runs, keep it, or end it now
   doctor                            check the configuration; exit 0 clean, 1 warnings, 2 errors
   reseal [--by B]                   seal every secret again with the first key of MAILBOX_TOKEN_KEYS`
 
@@ -74,6 +76,8 @@ func configCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 		return configHistory(ctx, store, output)
 	case "restore":
 		return configRestore(ctx, store, rest, output)
+	case "trial":
+		return configTrial(ctx, store, rest, output)
 	case "doctor":
 		return configDoctor(ctx, store, output)
 	case "reseal":
@@ -671,6 +675,47 @@ func configRestore(ctx context.Context, store *serverconfig.Store, args []string
 	return reportSaved(output, version)
 }
 
+// configTrial shows the trial change that runs (D12), keeps it, or reverts it now.
+func configTrial(ctx context.Context, store *serverconfig.Store, args []string, output io.Writer) error {
+	flags, by := configFlags("trial")
+	positional, err := parseFlagsAnywhere(flags, args)
+	if err != nil || len(positional) > 1 {
+		return errors.New("usage: collie config trial [confirm|revert] [--by NAME]")
+	}
+	run, ok, err := store.Trial(ctx)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		_, err := fmt.Fprintln(output, "no trial change runs")
+		return err
+	}
+	if len(positional) == 0 {
+		_, err := fmt.Fprintf(output, "v%d is tried until %s (by %s; %s); it reverts to v%d unless confirmed\n",
+			run.Version, run.ExpiresAt.UTC().Format(time.RFC3339), run.StartedBy, strings.Join(run.Keys, ", "), run.Parent)
+		return err
+	}
+	actor, err := cliActor(*by)
+	if err != nil {
+		return err
+	}
+	switch positional[0] {
+	case "confirm":
+		if err := store.ConfirmTrial(ctx, run.Version, actor); err != nil {
+			return err
+		}
+		_, err := fmt.Fprintf(output, "v%d is kept\n", run.Version)
+		return err
+	case "revert":
+		version, err := store.RevertTrial(ctx, run.Version, actor)
+		if err != nil {
+			return err
+		}
+		return reportSaved(output, version)
+	}
+	return errors.New("usage: collie config trial [confirm|revert] [--by NAME]")
+}
+
 // doctorFindings checks the configuration: warnings can wait, errors need a person now.
 func doctorFindings(ctx context.Context, store *serverconfig.Store, environ func(string) string) (warnings, errs []string, err error) {
 	loaded, err := store.Current(ctx)
@@ -686,6 +731,9 @@ func doctorFindings(ctx context.Context, store *serverconfig.Store, environ func
 	}
 	for _, name := range serverconfig.Dead(environ) {
 		warnings = append(warnings, name+" is set but no release reads it: remove it")
+	}
+	if run, ok, err := store.Trial(ctx); err == nil && ok {
+		warnings = append(warnings, fmt.Sprintf("v%d is a trial change until %s: confirm or revert it (collie config trial confirm|revert)", run.Version, run.ExpiresAt.UTC().Format(time.RFC3339)))
 	}
 	for _, key := range loaded.Unopened {
 		warnings = append(warnings, key+" is sealed with a key MAILBOX_TOKEN_KEYS no longer has: set it again")

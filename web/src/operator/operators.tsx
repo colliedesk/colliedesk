@@ -3,7 +3,7 @@ import { ApiError, api } from './api';
 import type { Operator, OperatorSession } from './api';
 import type { ConsoleData } from './app';
 import { CommandLine, when } from './copy';
-import { Dialog } from '../ui/dialog';
+import { ConsoleDialog } from './dialog';
 import { m } from './messages';
 
 const allPermissions = ['operator_config:write', 'operator:manage', 'operator_requests:cancel'];
@@ -73,7 +73,7 @@ function Act({ data, dialog, onClose, onShown, onDone }: { data: ConsoleData; di
   };
   const title = dialog === 'invite' ? m.inviteOperator : dialog === 'token' ? m.createToken : 'revoke' in dialog ? m.revokeOperatorTitle(dialog.revoke.email) : m.revoke;
   const ready = codeReady && (dialog !== 'invite' || email.includes('@')) && (dialog !== 'token' || label.trim() !== '');
-  return <Dialog focusFirst title={title} help={typeof dialog === 'object' && 'revoke' in dialog ? m.revokeOperatorLead : undefined} onClose={onClose} closeLabel={m.cancel}
+  return <ConsoleDialog title={title} help={typeof dialog === 'object' && 'revoke' in dialog ? m.revokeOperatorLead : undefined} onClose={onClose} closeLabel={m.cancel}
     alert={typeof dialog === 'object'} onSubmit={() => { if (ready) void run(); }}
     footer={<><button type="button" onClick={onClose}>{m.cancel}</button>
       <button type="submit" className={typeof dialog === 'object' ? 'danger-action' : 'primary-action'} disabled={!ready}>{dialog === 'invite' ? m.invite : dialog === 'token' ? m.createToken : m.revoke}</button></>}>
@@ -90,17 +90,17 @@ function Act({ data, dialog, onClose, onShown, onDone }: { data: ConsoleData; di
     {totp && <div className="field"><label className="field-label" htmlFor="act-code">{m.confirmItsYou}: {m.authenticatorCode}</label>
       <input id="act-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} /></div>}
     {error && <p className="error-copy" role="alert">{error}</p>}
-  </Dialog>;
+  </ConsoleDialog>;
 }
 
 // ShownOnce shows a link or token that will never be shown again: no close button, and Escape or a click
 // outside only says to copy it first (design ops-uiux, review 2).
 export function ShownOnce({ title, value, note, onClose }: { title: string; value: string; note: string; onClose: () => void }) {
   const [reminded, setReminded] = useState(false);
-  return <Dialog focusFirst title={title} alert onClose={() => setReminded(true)} closeLabel={m.done}
+  return <ConsoleDialog title={title} alert onClose={() => setReminded(true)} closeLabel={m.done}
     footer={<button type="button" className="primary-action" onClick={onClose}>{m.done}</button>}>
     <CommandLine command={value} />
     <p>{note}</p>
     {reminded && <p className="error-copy" role="alert">{m.copyBeforeClose}</p>}
-  </Dialog>;
+  </ConsoleDialog>;
 }

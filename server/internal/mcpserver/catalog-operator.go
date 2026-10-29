@@ -77,7 +77,9 @@ func operatorSpecs() []Spec {
 		operatorRead("colliedesk_operator_config_get", "Read the server's settings", "Read every setting: its value (a secret only says whether it is set), default, where it came from and what changing it asks for.", "/api/v1/operator/config", nil),
 		operatorCheckSpec(), operatorConfigChangeSpec(),
 		operatorRead("colliedesk_operator_config_history", "List configuration versions", "List the configuration versions, newest first, with what each changed (a secret only says it was replaced).", "/api/v1/operator/config/versions", []string{"limit"}),
-		operatorRestoreSpec(),
+		operatorRestoreSpec(), operatorTrialSpec(true), operatorTrialSpec(false),
+		operatorRead("colliedesk_operator_products", "List the Polar products", "List the Polar products this server sells or once sold; a product is never removed or changed, only taken off sale.", "/api/v1/operator/billing/products", nil),
+		operatorProductAddSpec(), operatorProductOnSaleSpec(),
 		operatorRead("colliedesk_operator_audit", "Read the operator audit log", "Read who changed the server's settings and operators, newest first; filter by setting (key) or person (actor).", "/api/v1/operator/audit", []string{"key", "actor", "since", "limit"}),
 		operatorRead("colliedesk_operator_requests", "List your operator requests", "List the changes this token asked for and what became of them.", "/api/v1/operator/requests", nil),
 		operatorRequestGetSpec(), operatorRequestCancelSpec(),
@@ -244,6 +246,57 @@ func operatorSessionRevokeSpec() Spec {
 		Output:      `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
 		run: func(c *call, arguments map[string]any) (any, error) {
 			return ask(c, http.MethodDelete, "/api/v1/operator/sessions/"+url.PathEscape(fmt.Sprint(arguments["session_id"])), nil)
+		},
+	}
+}
+
+// operatorTrialSpec asks an operator to keep (confirm) or end (revert) the trial change that runs (D12).
+func operatorTrialSpec(confirm bool) Spec {
+	name, title, path := "colliedesk_operator_trial_revert", "Ask to revert the trial change", "/api/v1/operator/config/trial/revert"
+	description := `Ask an operator to end the trial change that runs now (trusted proxies, cloud sign-in or the help center domain): the version before it is saved again. Read the trial's version in colliedesk_operator_status.`
+	if confirm {
+		name, title, path = "colliedesk_operator_trial_confirm", "Ask to keep the trial change", "/api/v1/operator/config/trial/confirm"
+		description = `Ask an operator to keep the trial change that runs, which otherwise reverts by itself. Read the trial's version and what it saw (client addresses, cloud sign-ins) in colliedesk_operator_status first.`
+	}
+	return Spec{
+		Name: name, Title: title, Description: description + ` It always becomes a request an operator approves.` + operatorToolNote,
+		Tier:   auth.ScopeOperator,
+		REST:   []string{"POST " + path},
+		Input:  `{"type":"object","additionalProperties":false,"required":["version"],"properties":{"version":{"type":"integer","minimum":1},"note":{"type":"string","maxLength":500}}}`,
+		Output: `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
+		run: func(c *call, arguments map[string]any) (any, error) {
+			return ask(c, http.MethodPost, path, arguments)
+		},
+	}
+}
+
+func operatorProductAddSpec() Spec {
+	return Spec{
+		Name: "colliedesk_operator_product_add", Title: "Ask to add a Polar product",
+		Description: `Ask an operator to add a Polar product the server sells. On sale, it takes the product of the same plan and period off sale. Products are never removed or changed, only taken off sale. It always becomes a request.` + operatorToolNote,
+		Tier:        auth.ScopeOperator,
+		REST:        []string{"POST /api/v1/operator/billing/products"},
+		Input: `{"type":"object","additionalProperties":false,"required":["product_id","plan","period"],"properties":{"product_id":{"type":"string","minLength":1,"maxLength":200},` +
+			`"plan":{"type":"string","enum":["team","founding","solo","small","team25"]},"period":{"type":"string","enum":["monthly","yearly","single"]},"on_sale":{"type":"boolean"},"note":{"type":"string","maxLength":500}}}`,
+		Output: `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
+		run: func(c *call, arguments map[string]any) (any, error) {
+			return ask(c, http.MethodPost, "/api/v1/operator/billing/products", arguments)
+		},
+	}
+}
+
+func operatorProductOnSaleSpec() Spec {
+	return Spec{
+		Name: "colliedesk_operator_product_on_sale", Title: "Ask to put a Polar product on or off sale",
+		Description: `Ask an operator to put a Polar product on sale (taking the other of its plan and period off) or off sale. Nothing else of a product changes. It always becomes a request.` + operatorToolNote,
+		Tier:        auth.ScopeOperator,
+		REST:        []string{"PATCH /api/v1/operator/billing/products/{id}"},
+		Input:       `{"type":"object","additionalProperties":false,"required":["product_id","on_sale"],"properties":{"product_id":{"type":"string","minLength":1,"maxLength":200},"on_sale":{"type":"boolean"},"note":{"type":"string","maxLength":500}}}`,
+		Output:      `{"type":"object","required":["agent_request"],"properties":{"agent_request":{"type":"object"},"next":{"type":"string"}}}`,
+		run: func(c *call, arguments map[string]any) (any, error) {
+			id := fmt.Sprint(arguments["product_id"])
+			delete(arguments, "product_id")
+			return ask(c, http.MethodPatch, "/api/v1/operator/billing/products/"+url.PathEscape(id), arguments)
 		},
 	}
 }

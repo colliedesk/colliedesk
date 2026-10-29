@@ -13,6 +13,9 @@ export type AuditEntry = Schemas['OperatorAuditEntry'];
 export type Operator = Schemas['Operator'];
 export type OperatorSession = Schemas['OperatorSession'];
 export type SignInStep = Schemas['OperatorSignInStep'];
+export type Guard = Schemas['OperatorConfigGuard'];
+export type Trial = Schemas['OperatorTrial'];
+export type Product = Schemas['OperatorProduct'];
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string, readonly body: Record<string, unknown> = {}) {
@@ -58,6 +61,12 @@ export const api = {
   change: (body: Schemas['OperatorConfigChange']) => call<Schemas['OperatorConfigSaved']>('PATCH', '/api/v1/operator/config', body),
   check: (body: unknown) => call<Schemas['OperatorConfigCheck']>('POST', '/api/v1/operator/config/check', body),
   versions: () => call<{ running_version: number; items: Version[] }>('GET', '/api/v1/operator/config/versions'),
+  trial: (action: 'confirm' | 'revert', body: { version: number; reauth_code?: string }) =>
+    call<Schemas['OperatorConfigSaved']>('POST', action === 'confirm' ? '/api/v1/operator/config/trial/confirm' : '/api/v1/operator/config/trial/revert', body),
+  products: () => call<{ items: Product[] }>('GET', '/api/v1/operator/billing/products'),
+  addProduct: (body: { product_id: string; plan: Product['plan']; period: Product['period']; on_sale: boolean; reauth_code?: string }) =>
+    call<Product>('POST', '/api/v1/operator/billing/products', body),
+  setOnSale: (id: string, body: { on_sale: boolean; reauth_code?: string }) => call<Product>('PATCH', `/api/v1/operator/billing/products/${encodeURIComponent(id)}`, body),
   restore: (id: number, body: { base_version: number; reauth_code?: string }) => call<Schemas['OperatorConfigSaved']>('POST', `/api/v1/operator/config/versions/${id}/restore`, body),
   audit: (query: string) => call<{ items: AuditEntry[] }>('GET', `/api/v1/operator/audit${query}`),
   requests: () => call<{ items: OperatorRequest[] }>('GET', '/api/v1/operator/requests'),

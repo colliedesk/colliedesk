@@ -179,6 +179,9 @@ type API struct {
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
+	// db and preview count, across workspaces, what an operator's change would do (numbers only).
+	db      *database.DB
+	preview *serverconfig.Preview
 	// alerted dedupes the operator alert for paid subscriptions without a workspace.
 	alerted *alertedSubscriptions
 	auth    *auth.Service
@@ -383,6 +386,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if api.config.ServerConfig == nil {
 		api.config.ServerConfig = serverconfig.NewStore(db, config.Google.Keys, api.environ())
 	}
+	api.db, api.preview = db, serverconfig.NewPreview(db)
 	api.helpCenter = api.newHelpCenter()
 	mux := http.NewServeMux()
 	api.mux = mux
@@ -415,7 +419,21 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	mux.HandleFunc("OPTIONS "+webFormChannelPattern, api.preflightWebForm)
-	return &Server{Handler: withRequestID(mux), api: api}
+	return &Server{Handler: withRequestID(api.observeTrial(mux)), api: api}
+}
+
+// observeTrial counts, while a trial change runs, the distinct client addresses this process sees, so the
+// operator can tell whether trusted proxies read them right (one address for everyone is a sign they do not).
+func (a *API) observeTrial(next http.Handler) http.Handler {
+	if a.config.Carry == nil || a.config.Carry.Hot == nil {
+		return next
+	}
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if version := a.config.Carry.Hot.Trial(); version != 0 {
+			a.config.Carry.trial.observe(version, clientIP(request, a.config.TrustedProxies))
+		}
+		next.ServeHTTP(response, request)
+	})
 }
 
 func Routes() []Route {
@@ -435,6 +453,11 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/operator/config/check", auth.PermissionOperator},
 		{http.MethodGet, "/api/v1/operator/config/versions", auth.PermissionOperator},
 		{http.MethodPost, "/api/v1/operator/config/versions/{id}/restore", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/config/trial/confirm", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/config/trial/revert", auth.PermissionOperator},
+		{http.MethodGet, "/api/v1/operator/billing/products", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/billing/products", auth.PermissionOperator},
+		{http.MethodPatch, "/api/v1/operator/billing/products/{id}", auth.PermissionOperator},
 		{http.MethodGet, "/api/v1/operator/audit", auth.PermissionOperator},
 		{http.MethodGet, "/api/v1/operator/requests", auth.PermissionOperator},
 		{http.MethodGet, "/api/v1/operator/requests/{id}", auth.PermissionOperator},

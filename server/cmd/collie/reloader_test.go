@@ -316,3 +316,29 @@ func TestServeStartsWorkersOnlyThroughAGenerationOrTheProcess(t *testing.T) {
 		}
 	}
 }
+
+// D12: a trial nobody confirmed is reverted by the next reload of any process, and that process then runs the
+// version before it.
+func TestReloadRevertsATrialPastItsTime(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	env := newReloadEnv(t, databaseURL, "a")
+	before := env.save(map[string]string{"trusted_proxies": "10.0.0.0/8"})
+	env.reload.Reload(context.Background())
+	trial, err := env.store.Save(context.Background(), serverconfig.Change{Set: map[string]string{"trusted_proxies": "192.168.0.0/16"}, Source: "console",
+		Actor: serverconfig.Actor{Kind: "operator", Name: "ops@example.com"}, Trial: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.reload.Reload(context.Background())
+	if env.get() != fmt.Sprintf("v%d", trial) {
+		t.Fatalf("the trial v%d does not run: %s", trial, env.get())
+	}
+	if _, err := cliPool(t, databaseURL).Exec(context.Background(), `UPDATE server_config_versions SET trial_expires_at = now() WHERE id=$1`, trial); err != nil {
+		t.Fatal(err)
+	}
+	env.reload.Reload(context.Background())
+	loaded, err := env.store.Current(context.Background())
+	if err != nil || loaded.Version <= trial || loaded.Getenv("TRUSTED_PROXIES") != "10.0.0.0/8" || env.get() != fmt.Sprintf("v%d", loaded.Version) {
+		t.Fatalf("after the trial's time: v%d %q runs %s (v%d before), want the value of v%d running", loaded.Version, loaded.Getenv("TRUSTED_PROXIES"), env.get(), trial, before)
+	}
+}
