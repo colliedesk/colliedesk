@@ -557,6 +557,8 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/results/share-link", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/results/shared", auth.PermissionPublic},
 		{http.MethodPatch, "/api/v1/agents/me/results-email", auth.PermissionAuthenticated},
+		{http.MethodGet, "/api/v1/workspace/setup", auth.PermissionAuthenticated},
+		{http.MethodPut, "/api/v1/agents/me/setup-guide", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/channels", auth.PermissionAccessRead},
 		{http.MethodPost, "/api/v1/channels", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/channels/events", auth.PermissionAccessRead},
@@ -616,6 +618,8 @@ func Routes() []Route {
 		// A test message from the signed-in agent, on the default email channel or one of several.
 		{http.MethodPost, "/api/v1/channels/email/test-message", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/channels/{id}/email/test-message", auth.PermissionConversationsWrite},
+		// What Gmail sent to confirm a new forwarding address, shown in the email setup.
+		{http.MethodGet, "/api/v1/channels/{id}/email/forwarding-confirmation", auth.PermissionAccessRead},
 	}
 }
 

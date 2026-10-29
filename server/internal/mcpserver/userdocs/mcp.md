@@ -172,6 +172,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address or the sender name | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
 | `colliedesk_email_test_message_send` | Sends your own address a test email that opens a conversation you can answer | `draft` |
+| `colliedesk_email_forwarding_confirmation_get` | Reads the code and link Gmail sent to confirm forwarding to an email channel | `read` |
 | `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `admin` |
 | `colliedesk_imports_list` | Lists imports | `admin` |
 | `colliedesk_import_get` | Shows one import with its progress and why it failed or waits | `admin` |
@@ -208,6 +209,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_results_share_link_create` | Asks a person to create a share link of the results page; the old link stops working | `read` |
 | `colliedesk_results_share_link_revoke` | Turns off the results page's share link | `admin` |
 | `colliedesk_results_email_set` | Turns your weekly results email on or off (admins only) | `draft` |
+| `colliedesk_setup_progress_get` | Shows the four getting-started steps (email, import, invite, first reply) and where each stands | `read` |
+| `colliedesk_setup_guide_set` | Hides the [setup guide](setup-guide.md) from your inbox, or shows it again | `draft` |
 | `colliedesk_channels_list` | Lists the channels with their state and the channel types the server runs | `read` |
 | `colliedesk_channels_get` | Shows one channel and its configuration | `read` |
 | `colliedesk_channels_events` | Shows the history of the channels | `read` |

@@ -203,3 +203,24 @@ func TestResultsBaselineLeavesWithTheExport(t *testing.T) {
 		t.Fatalf("exported baseline numbers = %v", lines[0]["numbers"])
 	}
 }
+
+// The page says why a baseline is unverified when the only reason is the plan's archive limit.
+func TestResultsBaselineNamesAnArchiveLimitAsTheOnlyUnverifiedCause(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Archive Limit Desk", "admin@archive-limit.example.com")
+	if _, err := pool.Exec(context.Background(), `INSERT INTO results_state(workspace_id,baseline_source,baseline_anchor_at,baseline_import_status,baseline_import_cause,baseline_dirty)
+		VALUES($1,'freshdesk:account:9',now() - interval '3 days','UNVERIFIED','archive_refused',true)`, workspaceID(t, api, admin)); err != nil {
+		t.Fatal(err)
+	}
+	runResultsWorker(t, pool)
+	var page struct {
+		Baseline struct {
+			ImportStatus string `json:"import_status"`
+			ImportCause  string `json:"import_cause"`
+		} `json:"baseline"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/results", nil, admin, nil), &page)
+	if page.Baseline.ImportStatus != "UNVERIFIED" || page.Baseline.ImportCause != "archive_refused" {
+		t.Fatalf("baseline = %+v", page.Baseline)
+	}
+}

@@ -125,9 +125,10 @@ test('settings is split into your account and the workspace, with a link to ever
   expect(links).toEqual([
     ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'],
     ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'],
-    ['Built-in AI', '/settings/ai'], ['Autofix', '/settings/autofix'], ['External AI agents', '#agents-heading'], ['Sessions', '#sessions-heading'], ['Channels', '/settings/channels'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
+    ['Built-in AI', '/settings/ai'], ['Autofix', '/settings/autofix'], ['External AI agents', '#agents-heading'], ['Sessions', '#sessions-heading'], ['Channels', '/settings/channels'],
+    ['Email', '/settings/channels/type/email'], ['Web form', '/settings/channels/type/web_form'], ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
   ]);
-  // Built-in AI, Channels and the import have their own pages; every other link is a section of this one.
+  // Built-in AI, Channels (with Email and Web form) and the import have their own pages; every other link is a section of this one.
   for (const [, href] of links.filter(([, href]) => href!.startsWith('#'))) expect(document.getElementById(href!.slice(1))).not.toBeNull();
   localStorage.removeItem('colliedesk.autofix');
 });
@@ -166,6 +167,19 @@ test('theme and desktop notifications live together under Preferences', () => {
   expect(within(preferences).getByRole('radio', { name: 'Dark' })).toBeInTheDocument();
   expect(within(preferences).getByRole('checkbox', { name: /desktop notifications/i })).toBeInTheDocument();
   vi.unstubAllGlobals();
+});
+
+test('Preferences offers the setup guide, ticked while it shows, and a change is reported', () => {
+  const onSetSetupGuideHidden = vi.fn();
+  const { rerender } = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" setupGuideHidden={false} onSetSetupGuideHidden={onSetSetupGuideHidden} />);
+  const box = within(screen.getByRole('region', { name: 'Preferences' })).getByRole('checkbox', { name: 'Show the setup guide' });
+  expect(box).toBeChecked();
+  fireEvent.click(box);
+  expect(onSetSetupGuideHidden).toHaveBeenLastCalledWith(true);
+  rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" setupGuideHidden onSetSetupGuideHidden={onSetSetupGuideHidden} />);
+  expect(screen.getByRole('checkbox', { name: 'Show the setup guide' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Show the setup guide' }));
+  expect(onSetSetupGuideHidden).toHaveBeenLastCalledWith(false);
 });
 
 test('a chosen workspace timezone is saved when the list is left, no Save button', () => {

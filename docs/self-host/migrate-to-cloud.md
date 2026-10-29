@@ -26,7 +26,7 @@ inbound secret. On the Cloud workspace:
 1. Each agent signs in again with their email address.
 2. Create new [agent tokens](../user/sessions.md#agent-tokens) and update the tools that use them.
 3. Point your mail forwarder at the Cloud workspace address. See
-   [forward to your address](../user/email-channel.md#colliedesk-cloud-forward-to-your-address).
+   [forward to your address](../user/email-channel.md#2-forward-its-mail-to-colliedesk).
 4. Turn the [web form](../user/web-form.md) on again with your allowed origins, and change the form
    on your site to send to the Cloud address.
 5. When mail arrives in Cloud, stop the self-hosted server and keep its last backup.

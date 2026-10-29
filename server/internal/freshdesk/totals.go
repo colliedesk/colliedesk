@@ -35,6 +35,9 @@ func (r *run) verifyTotals(ctx context.Context) error {
 		tickets.Detail += fmt.Sprintf("Freshdesk search reports %d tickets outside the archive, but only %d were found.", total, accounted)
 	default:
 		tickets.Detail += fmt.Sprintf("Freshdesk search reports %d tickets outside the archive; %d were found.", total, accounted)
+		if !tickets.Verified {
+			tickets.Cause = CauseArchiveRefused
+		}
 	}
 	r.verification.Tickets = tickets
 

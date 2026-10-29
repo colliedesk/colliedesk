@@ -5,8 +5,10 @@ import type { SettingsSection } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
 
-export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai' | '/settings/autofix' | '/settings/channels';
-export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean }
+export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk' | '/settings/ai' | '/settings/autofix' | '/settings/channels'
+  | '/settings/channels/type/email' | '/settings/channels/type/web_form';
+// sub: the pages under an item, listed below it (Channels: one per channel type).
+export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean; sub?: NavItem[] }
 interface NavGroup { label: string; items: NavItem[] }
 
 // hrefFor links a section on the same page by its anchor alone, and one on the other settings page by path and anchor.
@@ -20,7 +22,7 @@ const sectionByHash: Record<string, SettingsSection> = {
   'invites-heading': 'invites', 'agents-heading': 'agents', 'sessions-heading': 'sessions',
   'saved-replies-heading': 'saved_replies', 'help-center-heading': 'help_center', 'export-heading': 'export',
 };
-const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : item.to === '/settings/ai' ? 'ai' : item.to === '/settings/channels' ? 'channels' : undefined);
+const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : item.to === '/settings/ai' ? 'ai' : item.to.startsWith('/settings/channels') ? 'channels' : undefined);
 
 type RenderLink = (item: NavItem, page: SettingsPath) => ReactNode;
 const plainLink: RenderLink = (item, page) =>
@@ -46,7 +48,10 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...(shown.autofix !== false && autofixPreviewOn() ? [{ label: messages.autofix, to: '/settings/autofix' as const, current: page === '/settings/autofix' }] : []),
       ...section(messages.aiAgents, 'agents-heading', shown.agents),
       ...section(messages.sessions, 'sessions-heading'),
-      ...(shown.channels ? [{ label: messages.channels, to: '/settings/channels' as const, current: page === '/settings/channels' }] : []),
+      ...(shown.channels ? [{ label: messages.channels, to: '/settings/channels' as const, current: page === '/settings/channels', sub: [
+        { label: messages.emailNav, to: '/settings/channels/type/email' as const, current: page === '/settings/channels/type/email' },
+        { label: messages.webFormNav, to: '/settings/channels/type/web_form' as const, current: page === '/settings/channels/type/web_form' },
+      ] }] : []),
       ...section(messages.savedReplies, 'saved-replies-heading', shown.savedReplies),
       ...section(messages.helpCenter, 'help-center-heading', shown.helpCenter),
       ...section(messages.exportHeading, 'export-heading', shown.exportData),
@@ -68,7 +73,8 @@ export function SettingsNav({ shown, page }: { shown: Shown; page: SettingsPath 
   return (
     <nav ref={nav} className="settings-nav" aria-label={messages.settingsSections}>
       {settingsNavGroups(shown, page).map((group) => <div key={group.label}><p className="settings-group-label">{group.label}</p>
-        <ul>{group.items.map((item) => <li key={item.label} onClick={() => { const section = sectionOf(item); if (section) track('settings_section_opened', { section }); }}>{renderLink(item, page)}</li>)}</ul>
+        <ul>{group.items.map((item) => <li key={item.label} className={item.sub ? 'settings-nav-parent' : undefined} onClick={() => { const section = sectionOf(item); if (section) track('settings_section_opened', { section }); }}>{renderLink(item, page)}
+          {item.sub && <ul className="settings-nav-sub" aria-label={item.label}>{item.sub.map((sub) => <li key={sub.label}>{renderLink(sub, page)}</li>)}</ul>}</li>)}</ul>
       </div>)}
     </nav>
   );

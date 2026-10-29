@@ -46,8 +46,10 @@ interface EmailChannelSectionProps {
   mailboxError?: string;
   mailboxReturned?: MailboxReturn;
   // part shows one half of the channel as a channel tab does, without the section frame: how mail arrives
-  // (connection) or how replies leave (replies). All, the default, is the whole section.
-  part?: 'all' | 'connection' | 'replies';
+  // (connection) or how replies leave (replies). All, the default, is the whole section. The setup steps and
+  // the Email page take single blocks: how mail arrives without the address (arrival), how replies leave now
+  // (sending), the sender name, the domain and the mailbox connection.
+  part?: 'all' | 'connection' | 'replies' | 'arrival' | 'sending' | 'sender' | 'domain' | 'mailbox';
 }
 
 export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, senderNameSave, slugSave, onSave, onSaveSenderName, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending,
@@ -178,6 +180,11 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   </>;
   const repliesPart = <>{domainPart}{pausePart}{sendingPart}{gmailBlock}{smtpPart}</>;
   if (part === 'connection') return <div className="settings-body">{addressPart}{arrivalPart}</div>;
+  if (part === 'arrival') return <div className="settings-body">{arrivalPart}</div>;
+  if (part === 'sending') return <div className="settings-body">{pausePart}{sendingPart}{smtpPart}</div>;
+  if (part === 'sender') return <div className="settings-body">{senderPart}</div>;
+  if (part === 'domain') return <div className="settings-body">{domainPart}</div>;
+  if (part === 'mailbox') return <div className="settings-body">{gmailBlock}</div>;
   // The Replies tab groups the same blocks under headings: how replies leave now first, then the name,
   // the domain and the mailbox.
   if (part === 'replies') return <div className="settings-body email-replies">

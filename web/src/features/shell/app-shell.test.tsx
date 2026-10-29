@@ -8,7 +8,7 @@ const me = {
   timezone: 'UTC',
   scope: null, permissions: [],
   plan: null,
-  ai_features: { triage: false, draft: false }, onboarding_goal: null,
+  ai_features: { triage: false, draft: false }, onboarding_goal: null, setup_guide_hidden: false,
 };
 
 test('shows the page content next to the rail', () => {

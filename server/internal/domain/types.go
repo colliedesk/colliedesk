@@ -19,6 +19,8 @@ type Agent struct {
 	DisplayName      string  `json:"display_name"`
 	Role             string  `json:"role"`
 	TimezoneOverride *string `json:"timezone_override"`
+	// SetupGuideHidden is read with the session; GET /auth/me returns it beside the agent.
+	SetupGuideHidden bool `json:"-"`
 }
 
 // Session is a sign-in. Scope is the tier of an agent token (read, draft or send); nil for a

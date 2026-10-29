@@ -5,7 +5,6 @@ import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { contactAddress, contactMessages } from './contact-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
-import { RouterLink } from '../../ui/router-link';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { StatusLabel } from '../inbox/conversation-labels';
 import { ContactPicker } from './contact-picker';
@@ -24,11 +23,9 @@ interface ContactPageProps {
   onRename?: (name: string) => Promise<unknown>;
   onMerge?: (duplicate: Contact) => Promise<unknown>;
   onUndoMerge?: (merge: ContactMerge) => Promise<unknown>;
-  onOpenConversation?: (id: string) => void;
-  onOpenContact?: (id: string) => void;
 }
 
-export function ContactPage({ contact, conversations = [], page, pageSize, onPage, timezone = 'UTC', loading, failed, historyLoading, onRename, onMerge, onUndoMerge, onOpenConversation, onOpenContact }: ContactPageProps) {
+export function ContactPage({ contact, conversations = [], page, pageSize, onPage, timezone = 'UTC', loading, failed, historyLoading, onRename, onMerge, onUndoMerge }: ContactPageProps) {
   const [merging, setMerging] = useState(false);
   // What the last change did, for screen readers; the region stays mounted so each change is announced.
   const [notice, setNotice] = useState('');
@@ -72,11 +69,11 @@ export function ContactPage({ contact, conversations = [], page, pageSize, onPag
         </dl>
       </header>
       {merged && <p role="status" className="contact-merged-notice">{contactMessages.mergedIntoNotice(merged.name, contactAddress(merged))}{' '}
-        <RouterLink href={`/contacts/${merged.id}`} onFollow={onOpenContact && (() => onOpenContact(merged.id))}>{contactMessages.openMergedInto}</RouterLink></p>}
+        <a href={`/contacts/${merged.id}`}>{contactMessages.openMergedInto}</a></p>}
       {!merged && onMerge && <div className="button-row">
         <button type="button" ref={mergeButton} data-opens="merge-dialog" onClick={() => setMerging(true)}>{contactMessages.mergeDuplicate}</button>
       </div>}
-      {contact.merges.length > 0 && <MergeList merges={contact.merges} timezone={timezone} onUndo={undo} onOpenContact={onOpenContact} />}
+      {contact.merges.length > 0 && <MergeList merges={contact.merges} timezone={timezone} onUndo={undo} />}
       {/* A merged contact's conversations are with the contact it joined; its own history would read "none". */}
       {!merged && <section className="contact-history" aria-labelledby="contact-history-title">
         <h2 id="contact-history-title" ref={historyHeading} tabIndex={-1}>{contactMessages.contactHistory}</h2>
@@ -86,14 +83,14 @@ export function ContactPage({ contact, conversations = [], page, pageSize, onPag
         <ul className="contact-history-list">
           {conversations.map((item) => (
             <li key={item.id}>
-              <RouterLink className="contact-history-row" href={`/conversations/${item.id}`} onFollow={onOpenConversation && (() => onOpenConversation(item.id))}>
+              <a className="contact-history-row" href={`/conversations/${item.id}`}>
                 <span className="contact-history-subject">{item.subject}</span>
                 <span className="contact-history-meta">
                   <StatusLabel status={item.status} />
                   {item.origin && <span className="badge">{contactMessages.importedBadge}</span>}
                   <time dateTime={item.updated_at}>{formatDate(item.updated_at, timezone)}</time>
                 </span>
-              </RouterLink>
+              </a>
             </li>
           ))}
         </ul>
@@ -154,7 +151,7 @@ function ContactName({ contact, onRename, onSaved }: { contact: ContactDetail; o
   );
 }
 
-function MergeList({ merges, timezone, onUndo, onOpenContact }: { merges: ContactMerge[]; timezone: string; onUndo?: (merge: ContactMerge) => Promise<unknown>; onOpenContact?: (id: string) => void }) {
+function MergeList({ merges, timezone, onUndo }: { merges: ContactMerge[]; timezone: string; onUndo?: (merge: ContactMerge) => Promise<unknown> }) {
   const [busy, setBusy] = useState<string>();
   const [failed, setFailed] = useState<string>();
   const undo = async (merge: ContactMerge) => {
@@ -175,7 +172,7 @@ function MergeList({ merges, timezone, onUndo, onOpenContact }: { merges: Contac
       <ul>
         {merges.map((merge) => (
           <li key={merge.id}>
-            <span><RouterLink href={`/contacts/${merge.merged_contact.id}`} onFollow={onOpenContact && (() => onOpenContact(merge.merged_contact.id))}>{merge.merged_contact.name}</RouterLink>{' '}
+            <span><a href={`/contacts/${merge.merged_contact.id}`}>{merge.merged_contact.name}</a>{' '}
               {contactMessages.mergedLine(contactAddress(merge.merged_contact), merge.conversation_ids.length)}{' '}
               <time className="muted-copy" dateTime={merge.merged_at}>{formatDate(merge.merged_at, timezone)}</time></span>
             {onUndo && <button type="button" aria-label={contactMessages.undoMergeLabel(contactAddress(merge.merged_contact))} disabled={busy !== undefined}

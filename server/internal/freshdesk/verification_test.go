@@ -129,3 +129,54 @@ func TestAbsentVerdictWithoutAConfirmedArchiveIsProbedAgain(t *testing.T) {
 	}
 	env.target(t, "ticket", "3")
 }
+
+func TestArchiveRefusedIsNamedAsTheOnlyCauseOfUnverified(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.archiveForbidden = true
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusUnverified || report.Verification.Tickets.Cause != freshdesk.CauseArchiveRefused {
+		t.Fatalf("status=%s ticket verification=%+v", report.Status, report.Verification.Tickets)
+	}
+	if !report.Verification.Contacts.Verified || report.Verification.Contacts.Cause != "" {
+		t.Fatalf("contact verification=%+v", report.Verification.Contacts)
+	}
+}
+
+func TestArchiveRefusedWithAnotherMismatchHasNoSingleCause(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.archiveForbidden = true
+	env.fake.searchTicketTotal = 9
+	report := env.mustRun(t)
+	if report.Verification.Tickets.Verified || report.Verification.Tickets.Cause != "" {
+		t.Fatalf("ticket verification=%+v, want unverified with no archive-only cause", report.Verification.Tickets)
+	}
+}
+
+func TestResultsBaselineRemembersThatOnlyTheArchiveWasRefused(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.archiveForbidden = true
+	if report := env.mustRun(t); report.Status != freshdesk.StatusUnverified {
+		t.Fatalf("status = %s", report.Status)
+	}
+	var status, cause *string
+	if err := env.pool.QueryRow(context.Background(), `SELECT baseline_import_status,baseline_import_cause FROM results_state WHERE workspace_id=$1`, env.workspaceID).Scan(&status, &cause); err != nil {
+		t.Fatal(err)
+	}
+	if status == nil || *status != "UNVERIFIED" || cause == nil || *cause != "archive_refused" {
+		t.Fatalf("baseline status=%v cause=%v, want UNVERIFIED by archive_refused", status, cause)
+	}
+}
+
+func TestResultsBaselineKeepsNoCauseWhenAnotherTotalDisagrees(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.archiveForbidden = true
+	env.fake.searchTicketTotal = 9
+	env.mustRun(t)
+	var cause *string
+	if err := env.pool.QueryRow(context.Background(), `SELECT baseline_import_cause FROM results_state WHERE workspace_id=$1`, env.workspaceID).Scan(&cause); err != nil {
+		t.Fatal(err)
+	}
+	if cause != nil {
+		t.Fatalf("cause = %q, want none", *cause)
+	}
+}

@@ -90,10 +90,8 @@ test('a new customer goes with the conversation; a refusal keeps every field, an
 });
 
 test('on the trial without a verified domain the window says why, links to the way out, and takes no input', () => {
-  const onOpenSettings = vi.fn();
-  const onChoosePlan = vi.fn();
   const onClose = vi.fn();
-  wrap(<NewConversationDialog blocked="trial" onStart={vi.fn()} onClose={onClose} onOpenSettings={onOpenSettings} onChoosePlan={onChoosePlan} />);
+  wrap(<NewConversationDialog blocked="trial" onStart={vi.fn()} onClose={onClose} />);
   const dialog = screen.getByRole('dialog', { name: 'Start a conversation' });
   const status = within(dialog).getByRole('status');
   expect(status).toHaveTextContent(/trial/);
@@ -102,11 +100,14 @@ test('on the trial without a verified domain the window says why, links to the w
   expect(status).toHaveTextContent(/You can still reply to customers who email your support address/);
   expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
   expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
-  fireEvent.click(within(dialog).getByRole('link', { name: 'Choose a plan' }));
-  expect(onClose).toHaveBeenCalled();
-  expect(onChoosePlan).toHaveBeenCalled();
-  fireEvent.click(within(dialog).getByRole('link', { name: 'Verify your sending domain in Settings' }));
-  expect(onOpenSettings).toHaveBeenCalled();
+  const plan = within(dialog).getByRole('link', { name: 'Choose a plan' });
+  expect(plan).toHaveAttribute('href', '/settings/billing');
+  fireEvent.click(plan);
+  expect(onClose).toHaveBeenCalledTimes(1);
+  const domain = within(dialog).getByRole('link', { name: 'Verify your sending domain in Settings' });
+  expect(domain).toHaveAttribute('href', '/settings/channels/type/email?tab=replies');
+  fireEvent.click(domain);
+  expect(onClose).toHaveBeenCalledTimes(2);
 });
 
 test('without an email channel the window links to Settings to connect one', () => {

@@ -454,6 +454,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/{id}/email/forwarding-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The confirmation Gmail (or Google Workspace) sent when a mailbox was set to forward to this email channel, read from the newest email of `forwarding-noreply@google.com` with a "Forwarding Confirmation" subject that reached the channel in the last 24 hours. The email itself stays a normal conversation (`conversation_id`). `confirm_url` is Google's confirmation link only when it is https on `mail.google.com` or `mail-settings.google.com` and the message passed the sender check of the trusted receiving server (`EMAIL_TRUSTED_AUTHSERV_ID`); otherwise it is null and only the code is given, because anyone can send mail with that From line. 404 `not_found` when no such email arrived in the last 24 hours, or `channel_not_found` when the id names no email channel of this workspace. */
+        get: operations["getEmailForwardingConfirmation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{id}/email/domain-verification": {
         parameters: {
             query?: never;
@@ -1773,6 +1792,40 @@ export interface paths {
         head?: never;
         /** @description Turns the weekly results email on or off for the caller. It goes to admins only, every Monday at 8:00 in the workspace's timezone, when the server can send email. */
         patch: operations["setResultsEmail"];
+        trace?: never;
+    };
+    "/api/v1/workspace/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Where the workspace stands on getting started: receive customer email, import from Freshdesk, invite the team, answer the first email. The steps come in the order the sign-up goal suggests; first_reply is always last. States only, computed on every call. */
+        get: operations["getSetupProgress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/me/setup-guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Hides the setup guide from the inbox of the caller, or shows it again. It is a choice of the person; other agents keep their own. */
+        put: operations["setSetupGuideHidden"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/ai/usage": {
@@ -3792,6 +3845,11 @@ export interface components {
              */
             import_status?: "OK" | "FAILED" | "UNVERIFIED" | "";
             /**
+             * @description Baseline only: present when the import is UNVERIFIED only because the Freshdesk plan refuses the archive API and every other total was confirmed.
+             * @enum {string}
+             */
+            import_cause?: "archive_refused";
+            /**
              * Format: date-time
              * @description Baseline only: where its windows end (the newest ticket created by the anchor).
              */
@@ -4291,6 +4349,27 @@ export interface components {
             /** @default UTC */
             timezone: string;
         };
+        SetupProgress: {
+            steps: components["schemas"]["SetupStep"][];
+            /** @description True when every step is done. */
+            complete: boolean;
+            /**
+             * @description The step the sign-up goal puts first while it is not done; null for a goal without one.
+             * @enum {string|null}
+             */
+            recommended: "email" | "import" | "invite" | null;
+        };
+        SetupStep: {
+            /** @enum {string} */
+            key: "email" | "import" | "invite" | "first_reply";
+            /**
+             * @description email none, waiting, working or needs_attention; import none, running or done; invite alone, invited or joined; first_reply none or sent.
+             * @enum {string}
+             */
+            state: "none" | "waiting" | "working" | "needs_attention" | "running" | "done" | "alone" | "invited" | "joined" | "sent";
+            /** @description A reason code for needs_attention; null otherwise. */
+            detail: string | null;
+        };
         Agent: {
             /** Format: uuid */
             id: string;
@@ -4344,6 +4423,8 @@ export interface components {
          */
         OnboardingSource: "x" | "email" | "search" | "ai_chatgpt" | "ai_claude" | "ai_gemini" | "ai_perplexity" | "ai_other" | "tiktok" | "youtube" | "reddit" | "github" | "referral" | "other";
         Me: {
+            /** @description True when this agent hid the setup guide in the inbox. */
+            setup_guide_hidden: boolean;
             /** @description Which AI features can run now in the workspace (on, with a working provider); the web app offers only those. */
             ai_features: {
                 triage: boolean;
@@ -5534,6 +5615,22 @@ export interface components {
                 filename: string;
                 content_type: string;
             }[];
+        };
+        ForwardingConfirmation: {
+            /** @description The confirmation code the provider asks for, digits only. */
+            code: string;
+            /**
+             * Format: uri
+             * @description Google's confirmation link; null unless the sender check passed and the host is Google's.
+             */
+            confirm_url: string | null;
+            /** Format: date-time */
+            received_at: string;
+            /**
+             * Format: uuid
+             * @description The conversation the confirmation email opened.
+             */
+            conversation_id: string;
         };
         TestMessageResult: {
             /** Format: uuid */
@@ -7693,6 +7790,30 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["EmailChannelSettings"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getEmailForwardingConfirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest forwarding confirmation of the channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForwardingConfirmation"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
@@ -10406,6 +10527,59 @@ export interface operations {
                 content: {
                     "application/json": {
                         weekly: boolean;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getSetupProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The setup steps and whether all are done */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupProgress"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    setSetupGuideHidden: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    hidden: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's choice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        hidden: boolean;
                     };
                 };
             };

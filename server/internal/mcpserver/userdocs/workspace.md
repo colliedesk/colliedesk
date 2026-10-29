@@ -23,7 +23,7 @@ contact us if it is your own brand.
 
 The workspace address (the slug in `support@<address>.colliedesk.com` and the help center address)
 is separate. It is changed under **Workspace address name** in
-[Email channel](email-channel.md#colliedesk-cloud-forward-to-your-address).
+[Email channel](email-channel.md#2-forward-its-mail-to-colliedesk).
 
 ## API and AI agents
 

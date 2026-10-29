@@ -19,12 +19,14 @@ import { BookIcon, ChartIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui
 import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
+import { channelsRoutePart, preloadChannelsPage } from './features/settings/channels/channels-preload';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
 import { forgetAllDrafts } from './features/inbox/reply-draft-storage';
 import { inboxQueryFromSearch } from './lib/inbox-query';
 import { signInFormReady } from './lib/sign-in-ready';
+import { useInAppLinks } from './lib/in-app-links';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
 // Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
@@ -32,7 +34,6 @@ const settingsRoutePart = lazyPart(() => import('./features/settings/settings-ro
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const aiRoutePart = lazyPart(() => import('./features/settings/ai-route'));
-const channelsRoutePart = lazyPart(() => import('./features/settings/channels/channels-route'));
 // Results is its own chunk too: the rail link starts loading it on hover and focus.
 const resultsRoutePart = lazyPart(() => import('./features/results/results-route'));
 // Agent requests are their own chunk too: the rail link starts loading it on hover and focus.
@@ -43,6 +44,8 @@ const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
+  // A bare link to a page of the app opens without reloading, wherever it is written.
+  useInAppLinks();
   // The public page of a results share link has no session and no rail.
   const onSignIn = path === '/sign-in' || path === '/r';
   // An address that matches no page is no rail destination either.
@@ -116,9 +119,9 @@ function AppLayout() {
 // Settings sections link through the router, so moving between Settings and Plan and billing needs no reload.
 // exact + includeHash: otherwise every section link would count as current on any settings page.
 function settingsRouterLink(item: NavItem) {
-  const preload = item.to === '/settings/channels' ? channelsRoutePart.preload : undefined;
-  // /settings/channels is the channels route with an empty splat, a path the route types do not list.
-  return <Link to={item.to as Exclude<NavItem['to'], '/settings/channels'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
+  const preload = item.to.startsWith('/settings/channels') ? channelsRoutePart.preload : undefined;
+  // /settings/channels and the type homes under it are the channels route's splat, paths the route types do not list.
+  return <Link to={item.to as Exclude<NavItem['to'], `/settings/channels${string}`>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
     aria-current={item.current ? 'page' : undefined} onPointerEnter={preload} onFocus={preload}>{item.label}</Link>;
 }
 
@@ -242,9 +245,7 @@ const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/import-freshdesk',
   component: function Import() {
-    const navigate = useNavigate();
-    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute onOpenInbox={() => void navigate({ to: '/' })}
-      onOpenBilling={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />} />;
+    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
   },
 });
 const aiRoute = createRoute({
@@ -262,6 +263,9 @@ const channelsSearch = (search: Record<string, unknown>) => search as ChannelsSe
 function ChannelsSettings({ path, search }: { path: string; search: ChannelsSearch }) {
   const navigate = useNavigate();
   const go = useCallback((href: string, replace?: boolean) => void navigate({ href, replace }), [navigate]);
+  // A page opened without a hover first (a typed address, a redirect) still asks for everything at once.
+  const client = useQueryClient();
+  useEffect(() => { preloadChannelsPage(client, `/settings/channels/${path}`); }, [client, path]);
   return <Part part={channelsRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ChannelsRoute }) => <ChannelsRoute path={path} search={search} navigate={go} />} />;
 }
 // /settings/channels itself is this route with an empty splat.

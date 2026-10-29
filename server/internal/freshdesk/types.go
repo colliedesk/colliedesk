@@ -102,6 +102,7 @@ type fdConversation struct {
 
 type fdTimeEntry struct {
 	ID         int64      `json:"id"`
+	TicketID   int64      `json:"ticket_id"`
 	AgentID    *int64     `json:"agent_id"`
 	Billable   bool       `json:"billable"`
 	Note       string     `json:"note"`

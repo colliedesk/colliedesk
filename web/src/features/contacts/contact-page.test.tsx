@@ -25,8 +25,7 @@ const row = (id: string, subject: string, imported = false): Conversation => ({ 
 });
 
 test('the contact page shows who the customer is and every conversation, imported ones marked, each opening its conversation', () => {
-  const onOpenConversation = vi.fn();
-  wrap(<ContactPage contact={contact()} conversations={[row('c1', 'Refund'), row('c2', 'Old ticket', true)]} page={1} pageSize={25} onPage={vi.fn()} onOpenConversation={onOpenConversation} />);
+  wrap(<ContactPage contact={contact()} conversations={[row('c1', 'Refund'), row('c2', 'Old ticket', true)]} page={1} pageSize={25} onPage={vi.fn()} />);
   expect(screen.getByRole('heading', { level: 1, name: 'Mai Linh' })).toBeInTheDocument();
   expect(screen.getByText('mai@customer.example')).toBeInTheDocument();
   expect(screen.getByText('Acme Ltd')).toBeInTheDocument();
@@ -34,8 +33,6 @@ test('the contact page shows who the customer is and every conversation, importe
   const old = screen.getByRole('link', { name: /Old ticket/ });
   expect(old).toHaveAttribute('href', '/conversations/c2');
   expect(within(old).getByText('Imported')).toBeInTheDocument();
-  fireEvent.click(old);
-  expect(onOpenConversation).toHaveBeenCalledWith('c2');
 });
 
 test('the history comes in pages counted from the total', () => {
@@ -95,16 +92,14 @@ test('a merge is listed with what it moved and can be undone; a merged contact p
   expect(screen.getByText('Merge of mai@home.example undone.')).toBeInTheDocument();
   unmount();
 
-  const onOpenContact = vi.fn();
   wrap(<ContactPage contact={contact({ id: duplicate.id, name: duplicate.name, email: duplicate.email, merged_into_id: contact().id, merged_into: contact(), conversation_count: 0 })}
-    page={1} pageSize={25} onPage={vi.fn()} onRename={vi.fn()} onMerge={vi.fn()} onOpenContact={onOpenContact} />);
+    page={1} pageSize={25} onPage={vi.fn()} onRename={vi.fn()} onMerge={vi.fn()} />);
   expect(screen.getByText(/merged into Mai Linh \(mai@customer.example\)/)).toBeInTheDocument();
   // Its conversations are with the contact it joined: no history of its own that would read "none".
   expect(screen.queryByRole('heading', { name: 'Conversations' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Merge a duplicate…' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('link', { name: 'Open that customer' }));
-  expect(onOpenContact).toHaveBeenCalledWith(contact().id);
+  expect(screen.getByRole('link', { name: 'Open that customer' })).toHaveAttribute('href', `/contacts/${contact().id}`);
 });
 
 test('a click on the merge window\'s backdrop keeps the focus in it, so Escape closes it back to its button', async () => {

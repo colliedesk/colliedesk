@@ -274,6 +274,23 @@ func emailTestMessageSendSpec() Spec {
 	}
 }
 
+func emailForwardingConfirmationGetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_email_forwarding_confirmation_get",
+		Title: "Read Gmail's forwarding confirmation",
+		Description: `When a Gmail or Google Workspace mailbox is set to forward to an email channel, Google emails a confirmation code and link to it. ` +
+			`This reads the newest one that reached the channel in the last 24 hours: code, confirm_url, received_at and the conversation it opened. ` +
+			`confirm_url is null unless the email passed the trusted sender check and the link is on Google's own host; give the code or link to the person who set up forwarding, never open it yourself. ` +
+			`Not found when none arrived. It reads only.` + "\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:  []string{"GET /api/v1/channels/{id}/email/forwarding-confirmation"},
+		Input: `{"type":"object","additionalProperties":false,"required":["channel_id"],"properties":{"channel_id":{"type":"string",` + uuid + `,"description":"The email channel, from colliedesk_channels_list."}}}`,
+		Output: `{"type":"object","required":["code","confirm_url","received_at","conversation_id"],"properties":{"code":{"type":"string"},` +
+			`"confirm_url":{"type":["string","null"]},"received_at":{"type":"string"},"conversation_id":{"type":"string"}}}`,
+		run: emailForwardingConfirmationGet,
+	}
+}
+
 func emailDomainVerifySpec() Spec {
 	return Spec{
 		Name:  "colliedesk_email_domain_verify",

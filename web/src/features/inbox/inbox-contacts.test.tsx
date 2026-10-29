@@ -23,12 +23,9 @@ beforeAll(async () => {
 });
 
 test('the open conversation names its customer and opens their page', () => {
-  const onOpenContact = vi.fn();
-  render(<InboxPage selected={conversation} conversations={[conversation]} onOpenContact={onOpenContact} />);
+  render(<InboxPage selected={conversation} conversations={[conversation]} />);
   const link = within(screen.getByRole('region', { name: /timeline/i })).getByRole('link', { name: "Open Mai Linh's page" });
   expect(link).toHaveAttribute('href', `/contacts/${mai.id}`);
-  fireEvent.click(link);
-  expect(onOpenContact).toHaveBeenCalledWith(mai.id);
 });
 
 test('the customers a search finds go under the filters, above the conversations', () => {

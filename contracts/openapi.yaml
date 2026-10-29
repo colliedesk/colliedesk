@@ -972,6 +972,29 @@ paths:
         '200': {$ref: '#/components/responses/EmailChannelSettings'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/{id}/email/forwarding-confirmation:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getEmailForwardingConfirmation
+      x-permission: access:read
+      description: >-
+        The confirmation Gmail (or Google Workspace) sent when a mailbox was set to forward to this email
+        channel, read from the newest email of `forwarding-noreply@google.com` with a "Forwarding Confirmation"
+        subject that reached the channel in the last 24 hours. The email itself stays a normal conversation
+        (`conversation_id`). `confirm_url` is Google's confirmation link only when it is https on
+        `mail.google.com` or `mail-settings.google.com` and the message passed the sender check of the
+        trusted receiving server (`EMAIL_TRUSTED_AUTHSERV_ID`); otherwise it is null and only the code is
+        given, because anyone can send mail with that From line. 404 `not_found` when no such email arrived
+        in the last 24 hours, or `channel_not_found` when the id names no email channel of this workspace.
+      responses:
+        '200':
+          description: The newest forwarding confirmation of the channel
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ForwardingConfirmation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/channels/{id}/email/domain-verification:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -3172,6 +3195,50 @@ paths:
                 required: [weekly]
                 properties:
                   weekly: {type: boolean}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/workspace/setup:
+    get:
+      operationId: getSetupProgress
+      x-permission: authenticated
+      description: >-
+        Where the workspace stands on getting started: receive customer email, import from Freshdesk,
+        invite the team, answer the first email. The steps come in the order the sign-up goal suggests;
+        first_reply is always last. States only, computed on every call.
+      responses:
+        '200':
+          description: The setup steps and whether all are done
+          content: {application/json: {schema: {$ref: '#/components/schemas/SetupProgress'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/agents/me/setup-guide:
+    put:
+      operationId: setSetupGuideHidden
+      x-permission: authenticated
+      description: >-
+        Hides the setup guide from the inbox of the caller, or shows it again. It is a choice of the
+        person; other agents keep their own.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [hidden]
+              properties:
+                hidden: {type: boolean}
+      responses:
+        '200':
+          description: The caller's choice
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hidden]
+                properties:
+                  hidden: {type: boolean}
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -6599,6 +6666,10 @@ components:
           type: string
           enum: [OK, FAILED, UNVERIFIED, '']
           description: 'Baseline only: the reconcile status of the import''s latest run; empty for an import made before results existed.'
+        import_cause:
+          type: string
+          enum: [archive_refused]
+          description: 'Baseline only: present when the import is UNVERIFIED only because the Freshdesk plan refuses the archive API and every other total was confirmed.'
         end: {type: string, format: date-time, description: 'Baseline only: where its windows end (the newest ticket created by the anchor).'}
         stats_read: {type: integer, description: 'Baseline only: tickets whose resolve times were read; 0 means run the import again for them.'}
         windows:
@@ -7084,6 +7155,32 @@ components:
         slug: {type: string}
         name: {type: string}
         timezone: {type: string, default: UTC}
+    SetupProgress:
+      type: object
+      required: [steps, complete, recommended]
+      properties:
+        steps:
+          type: array
+          items: {$ref: '#/components/schemas/SetupStep'}
+        complete: {type: boolean, description: True when every step is done.}
+        recommended:
+          description: The step the sign-up goal puts first while it is not done; null for a goal without one.
+          type: [string, 'null']
+          enum: [email, import, invite, null]
+    SetupStep:
+      type: object
+      required: [key, state, detail]
+      properties:
+        key: {type: string, enum: [email, import, invite, first_reply]}
+        state:
+          type: string
+          description: >-
+            email none, waiting, working or needs_attention; import none, running or done; invite alone,
+            invited or joined; first_reply none or sent.
+          enum: [none, waiting, working, needs_attention, running, done, alone, invited, joined, sent]
+        detail:
+          description: A reason code for needs_attention; null otherwise.
+          type: [string, 'null']
     Agent:
       type: object
       required: [id, email, display_name, role, timezone_override]
@@ -7140,8 +7237,9 @@ components:
       description: Where the person heard of Colliedesk.
     Me:
       type: object
-      required: [agent, workspace, timezone, scope, permissions, plan, onboarding_goal, ai_features]
+      required: [agent, workspace, timezone, scope, permissions, plan, onboarding_goal, ai_features, setup_guide_hidden]
       properties:
+        setup_guide_hidden: {type: boolean, description: True when this agent hid the setup guide in the inbox.}
         ai_features:
           type: object
           description: Which AI features can run now in the workspace (on, with a working provider); the web app offers only those.
@@ -8467,6 +8565,14 @@ components:
             properties:
               filename: {type: string}
               content_type: {type: string}
+    ForwardingConfirmation:
+      type: object
+      required: [code, confirm_url, received_at, conversation_id]
+      properties:
+        code: {type: string, description: "The confirmation code the provider asks for, digits only."}
+        confirm_url: {type: [string, 'null'], format: uri, description: "Google's confirmation link; null unless the sender check passed and the host is Google's."}
+        received_at: {type: string, format: date-time}
+        conversation_id: {type: string, format: uuid, description: The conversation the confirmation email opened.}
     TestMessageResult:
       type: object
       required: [conversation_id, message_id, sent_to]

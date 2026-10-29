@@ -20,7 +20,7 @@ imported. That import is the **baseline**:
   days of tickets.
 - Undoing that import removes the baseline. The next import to finish becomes the new one.
 - An import that ended **FAILED** shows no before numbers: some tickets did not arrive, so the
-  numbers would be wrong. An **UNVERIFIED** import shows its numbers with a label saying so. Fix
+  numbers would be wrong. An **UNVERIFIED** import shows its numbers with a label saying so; when the only reason is an archive that the Freshdesk plan does not let Colliedesk read, the page shows a plain note instead of a warning. Fix
   what its report names and run the import again.
 - Help Scout imports give a baseline too, without resolve times (Help Scout does not share them).
 - Freshdesk shares no reopen history, so there is no "before" reopen rate.

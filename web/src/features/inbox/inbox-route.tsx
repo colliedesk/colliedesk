@@ -21,6 +21,8 @@ import { usePendingRequests } from '../requests/use-pending-requests';
 import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
 import { autofixPreviewOn } from '../autofix/autofix-preview';
+import { preloadSetupGuide, SetupGuide } from '../onboarding/setup-guide';
+import { guideHasWork } from '../onboarding/setup-steps';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -125,6 +127,18 @@ export function InboxRoute() {
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
   const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
+  // The setup guide: what is left to receive and answer email. The activity poll refreshes it; it has no
+  // poll of its own. A hidden guide is not even asked for.
+  // Until the session answers the guide is assumed to be wanted, so its data and its chunk go out with the
+  // session and the list instead of after the session; a guide the session says is hidden is dropped at once.
+  const guideHidden = me.data?.setup_guide_hidden ?? false;
+  const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: !guideHidden });
+  useEffect(() => { if (!guideHidden) preloadSetupGuide(); }, [guideHidden]);
+  const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
+    onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
+  const isAdmin = me.data?.agent?.role === 'admin';
+  const guide = !guideHidden && setup.data && guideHasWork(setup.data, isAdmin)
+    ? <SetupGuide progress={setup.data} admin={isAdmin} goal={me.data?.onboarding_goal} onHide={() => hideGuide.mutate()} /> : undefined;
   const activeID = selectedId ?? params.conversationId;
   const listed = conversations.data?.items.find((item) => item.id === activeID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
@@ -216,7 +230,6 @@ export function InboxRoute() {
     if (params.conversationId && listIsBehind(params.conversationId)) window.history.back();
     else void navigate({ to: '/', search: filters });
   };
-  const openContact = (contactId: string) => void navigate({ to: '/contacts/$contactId', params: { contactId } });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const agentId = me.data?.agent?.id;
@@ -271,7 +284,7 @@ export function InboxRoute() {
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };
   return <><InboxPage hosted={config?.billing.enabled ?? false} workspaceId={me.data?.workspace?.id} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
-    agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} onboardingGoal={me.data?.onboarding_goal}
+    agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} guide={guide}
     onTestMessage={mailboxes > 0 ? () => testMessage.run().then((test) => {
       void client.invalidateQueries({ queryKey: ['conversations'] });
       openConversation(test.conversation_id);
@@ -299,7 +312,7 @@ export function InboxRoute() {
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError && (conversations.error.message === 'API 410' ? 'results_refreshed' : true)} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
-    canManage={me.data?.agent?.role === 'admin'} onOpenSettings={(to = '/settings') => void navigate({ href: to })}
+    canManage={me.data?.agent?.role === 'admin'}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
@@ -323,8 +336,7 @@ export function InboxRoute() {
       setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
     }}
     onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }}
-    contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} onOpenContact={openContact} />} />}
-    onOpenContact={openContact}
+    contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} />} />}
     onNewConversation={() => setStarting(true)} />
     {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
       render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={openConversation} />} />}

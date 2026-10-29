@@ -11,7 +11,7 @@ the banner at the top, and nothing else about billing.
 Every new cloud workspace starts a 14-day free trial of the full Team plan. No card is needed.
 
 - A banner under the workspace name shows "Trial: N days left". Admins get a **Choose a plan**
-  button in it. In a new workspace the empty inbox's first step stays the main button; Choose a plan is
+  button in it. In a new workspace the [setup guide](setup-guide.md)'s next step stays the main button; Choose a plan is
   a plain one.
 - A workspace that imports its history from Freshdesk gets a longer trial: 30 days in total, once.
   The banner then says the trial was extended.
@@ -41,7 +41,7 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
   - The mail was posted to your **inbound URL** (on your own forwarder) instead of arriving at your
     Colliedesk **forwarding address**, so nothing proves who sent it (API reason
     `mail_not_via_hosted_address`). Forward your mailbox to the forwarding address shown in
-    **Settings → Channels → Email**; mail that arrives there counts.
+    **Settings → Email**; mail that arrives there counts.
   - The mail failed sender verification (SPF, DKIM or DMARC), so it may not come from that address
     (API reason `sender_authentication_failed`).
 

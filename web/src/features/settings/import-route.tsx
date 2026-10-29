@@ -23,8 +23,7 @@ export function currentJob(items: ImportJob[], justAsked?: string): ImportJob | 
   return items.find((job) => open.has(job.state)) ?? items.find((job) => job.id === justAsked && ended(job)) ?? items.find((job) => !ended(job)) ?? items[0];
 }
 
-// onOpenInbox follows the inbox link through the router.
-export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () => void; onOpenBilling?: () => void } = {}) {
+export function ImportRoute() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
@@ -100,7 +99,7 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
       onInvite={onlyPeople(invite)} onRevokeInvite={onlyPeople(revokeInvite)} onLink={(externalId, agentId) => onlyPeople(link)({ externalId, agentId })} onUnlink={onlyPeople(unlink)} />
     : undefined;
   const peopleError = peopleFailed ? (peopleFailed instanceof InvalidRequestError ? peopleFailed.message : importMessages.actionFailed) : undefined;
-  return <ImportPage isAdmin={isAdmin} peopleSection={peopleSection} onOpenInbox={onOpenInbox} onOpenBilling={onOpenBilling} showBilling={isAdmin && config.data?.billing.enabled === true}
+  return <ImportPage isAdmin={isAdmin} peopleSection={peopleSection} showBilling={isAdmin && config.data?.billing.enabled === true}
     job={job} report={reportReady && parsed.success && job?.kind !== 'undo' ? importReportSchema.parse(report.data) : undefined}
     undoReport={reportReady && parsed.success && job?.kind === 'undo' ? undoReportSchema.parse(report.data) : undefined} history={items} timezone={me.data?.timezone ?? 'UTC'}
     loadFailed={imports.isError} error={error ?? peopleError} busy={busy} connecting={connecting}
