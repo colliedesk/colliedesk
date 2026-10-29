@@ -83,7 +83,6 @@ owner_password=$(secret)
   echo "COLLIEDESK_OWNER_PASSWORD=$owner_password"
   echo "DATABASE_URL=postgres://colliedesk:$owner_password@postgres:5432/colliedesk?sslmode=disable"
   echo "DATABASE_REQUEST_URL=postgres://colliedesk_request:$(secret)@postgres:5432/colliedesk?sslmode=disable"
-  echo "APP_SECRET=$(secret)"
   echo "COLLIE_DESK_IMAGE=$PREVIOUS"
   echo "COLLIE_DESK_PORT=$PORT"
   echo "APP_ORIGIN=http://localhost:$PORT"

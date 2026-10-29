@@ -58,11 +58,10 @@ if [ ! -f "$TARGET_DIR/.env" ]; then
   POSTGRES_PASSWORD=$("$OPENSSL" rand -hex 32)
   OWNER_PASSWORD=$("$OPENSSL" rand -hex 32)
   REQUEST_PASSWORD=$("$OPENSSL" rand -hex 32)
-  APP_SECRET=$("$OPENSSL" rand -hex 32)
   # Seals Gmail grants and the Freshdesk API key of an in-app import. Written once: a replaced ring
   # cannot open what the old one sealed.
   TOKEN_KEY=$("$OPENSSL" rand -base64 32)
-  [ -n "$POSTGRES_PASSWORD" ] && [ -n "$OWNER_PASSWORD" ] && [ -n "$REQUEST_PASSWORD" ] && [ -n "$APP_SECRET" ] && [ -n "$TOKEN_KEY" ] ||
+  [ -n "$POSTGRES_PASSWORD" ] && [ -n "$OWNER_PASSWORD" ] && [ -n "$REQUEST_PASSWORD" ] && [ -n "$TOKEN_KEY" ] ||
     fail 'Secret generation failed.'
   (
     umask 077
@@ -72,7 +71,6 @@ if [ ! -f "$TARGET_DIR/.env" ]; then
       printf 'COLLIEDESK_OWNER_PASSWORD=%s\n' "$OWNER_PASSWORD"
       printf 'DATABASE_URL=postgres://colliedesk:%s@postgres:5432/colliedesk?sslmode=disable\n' "$OWNER_PASSWORD"
       printf 'DATABASE_REQUEST_URL=postgres://colliedesk_request:%s@postgres:5432/colliedesk?sslmode=disable\n' "$REQUEST_PASSWORD"
-      printf 'APP_SECRET=%s\n' "$APP_SECRET"
       printf 'MAILBOX_TOKEN_KEYS=k1:%s\n' "$TOKEN_KEY"
       printf 'COLLIE_DESK_IMAGE=%s\n' "${COLLIE_DESK_IMAGE:-ghcr.io/colliedesk/colliedesk:latest}"
       printf 'COLLIE_DESK_PORT=%s\n' "${COLLIE_DESK_PORT:-8080}"
@@ -123,7 +121,6 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://colliedesk:${POSTGRES_PASSWORD}@postgres:5432/colliedesk?sslmode=disable}
       DATABASE_REQUEST_URL: ${DATABASE_REQUEST_URL:-}
       APP_ORIGIN: ${APP_ORIGIN}
-      APP_SECRET: ${APP_SECRET}
       LISTEN_ADDR: :8080
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

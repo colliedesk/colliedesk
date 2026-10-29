@@ -42,11 +42,15 @@ url=$(printf '%s\n' "$output" | grep -E "^http://localhost:$PORT/sign-in\?token=
 [ -n "$url" ] || fail "installer printed no pairing URL for port $PORT"
 printf '%s' "$output" | grep -F 'collie pair --workspace smoke-desk --email admin@smoke.example' >/dev/null ||
   fail 'installer output does not say how to print a new link'
-# Every generated secret: *_PASSWORD, APP_SECRET, and the passwords inside the DATABASE*_URL values.
-secrets=$( { sed -n 's/^[A-Z_]*_PASSWORD=//p; s/^APP_SECRET=//p' "$TMP/.env"
+# Every generated password: *_PASSWORD and the passwords inside the DATABASE*_URL values.
+secrets=$( { sed -n 's/^[A-Z_]*_PASSWORD=//p' "$TMP/.env"
   sed -n 's/^DATABASE[A-Z_]*_URL=postgres:\/\/[^:]*:\([^@]*\)@.*/\1/p' "$TMP/.env"; } | sort -u)
-[ "$(printf '%s\n' "$secrets" | grep -c .)" = 4 ] || fail "expected 4 distinct generated secrets in .env, found: $(printf '%s\n' "$secrets" | grep -c .)"
-for secret in $secrets; do
+[ "$(printf '%s\n' "$secrets" | grep -c .)" = 3 ] || fail "expected 3 distinct generated passwords in .env, found: $(printf '%s\n' "$secrets" | grep -c .)"
+grep -q APP_SECRET "$TMP/.env" && fail 'installer generated APP_SECRET, which the server does not read'
+# The key ring is generated too, and never printed either.
+token_key=$(sed -n 's/^MAILBOX_TOKEN_KEYS=k1://p' "$TMP/.env")
+[ -n "$token_key" ] || fail 'installer generated no MAILBOX_TOKEN_KEYS'
+for secret in $secrets $token_key; do
   case $output in *"$secret"*) fail 'installer printed a generated secret' ;; esac
 done
 

@@ -80,6 +80,11 @@ grep -E '^DATABASE_REQUEST_URL=postgres://colliedesk_request:[0-9a-f]{64}@postgr
 grep -E '^COLLIEDESK_OWNER_PASSWORD=[0-9a-f]{64}$' "$fresh/.env" >/dev/null
 # A fresh install gets a key ring, so Gmail grants and in-app import keys are sealed and survive restarts.
 grep -Ex 'MAILBOX_TOKEN_KEYS=k1:[A-Za-z0-9+/]{43}=' "$fresh/.env" >/dev/null
+# The server never read APP_SECRET: a fresh install neither generates it nor passes it to the server.
+if grep -F APP_SECRET "$fresh/.env" "$fresh/compose.yaml" >/dev/null; then
+  printf '%s\n' 'installer still writes APP_SECRET, which the server does not read' >&2
+  exit 1
+fi
 [ -f "$fresh/initdb/10-colliedesk-owner.sh" ]
 # The owner password reaches psql through its environment, never its argv (visible in ps).
 grep -F '\getenv owner_password COLLIEDESK_OWNER_PASSWORD' "$fresh/initdb/10-colliedesk-owner.sh" >/dev/null
