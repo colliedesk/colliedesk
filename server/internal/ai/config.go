@@ -44,6 +44,15 @@ type ServerProvider struct {
 	Allowance *Allowance
 }
 
+// PriceOf returns the server's price for a model; false when it declares none (or there is no server provider).
+func (s *ServerProvider) PriceOf(model string) (Price, bool) {
+	if s == nil {
+		return Price{}, false
+	}
+	price, ok := s.Prices[model]
+	return price, ok
+}
+
 // ModelsFor returns the models the server offers for a slot.
 func (s *ServerProvider) ModelsFor(slot string) []string {
 	if s == nil {

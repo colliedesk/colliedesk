@@ -27,8 +27,22 @@ func TestTheChatFeatureTakesAMonthlyLimitOfItsOwn(t *testing.T) {
 	refused := request(t, unpriced.api, http.MethodPut, "/api/v1/ai/slots/chat", map[string]any{"source": "provider", "provider_id": unpriced.providerA, "enabled": true,
 		"monthly_cap_micro_usd": 5_000_000}, unpriced.adminA, nil)
 	wantResponse(t, refused, http.StatusBadRequest, "invalid_request")
-	if !strings.Contains(refused.Body.String(), "claude-sonnet-5-5") {
+	if !strings.Contains(refused.Body.String(), "claude-sonnet-5-5") || !strings.Contains(refused.Body.String(), "no AI provider of its own") {
 		t.Fatalf("refusal = %s", refused.Body.String())
+	}
+	// Its use then says the price is unknown instead of a spend of $0.00 the server never counted.
+	type usageView struct {
+		SpentMicroUSD *int64  `json:"spent_micro_usd"`
+		UnpricedModel *string `json:"unpriced_model"`
+	}
+	var usage usageView
+	if response := request(t, unpriced.api, http.MethodPut, "/api/v1/ai/slots/chat", map[string]any{"source": "provider", "provider_id": unpriced.providerA, "enabled": true},
+		unpriced.adminA, nil); response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	decode(t, request(t, unpriced.api, http.MethodGet, "/api/v1/ai/chat/usage", nil, unpriced.adminA, nil), &usage)
+	if usage.SpentMicroUSD != nil || usage.UnpricedModel == nil || *usage.UnpricedModel != "claude-sonnet-5-5" {
+		t.Fatalf("unpriced usage = %+v", usage)
 	}
 	desk := newAIDesk(t, func(config *httpapi.Config) {
 		config.AI.Server = &ai.ServerProvider{Kind: aiprovider.KindAnthropic, Label: "Server", APIKey: "k", Prices: map[string]ai.Price{"claude-sonnet-5-5": {Input: 2, Output: 10}}}
@@ -48,6 +62,10 @@ func TestTheChatFeatureTakesAMonthlyLimitOfItsOwn(t *testing.T) {
 	slot := put(map[string]any{"source": "provider", "provider_id": desk.providerA, "enabled": true, "monthly_cap_micro_usd": 5_000_000}, http.StatusOK)
 	if slot.Slot != "chat" || !slot.Enabled || slot.MonthlyCap == nil || *slot.MonthlyCap != 5_000_000 {
 		t.Fatalf("slot = %+v", slot)
+	}
+	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/ai/chat/usage", nil, desk.adminA, nil), &usage)
+	if usage.SpentMicroUSD == nil || usage.UnpricedModel != nil {
+		t.Fatalf("priced usage = %+v", usage)
 	}
 	if slot := put(map[string]any{"source": "provider", "provider_id": desk.providerA, "enabled": false}, http.StatusOK); slot.MonthlyCap == nil || *slot.MonthlyCap != 5_000_000 {
 		t.Fatalf("a change without the limit dropped it: %+v", slot)

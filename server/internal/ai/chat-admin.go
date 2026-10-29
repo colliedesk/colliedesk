@@ -280,10 +280,13 @@ type ChatUsage struct {
 	SpentMicroUSD *int64 `json:"spent_micro_usd"`
 	LimitMicroUSD *int64 `json:"limit_micro_usd"`
 	SpentPercent  *int   `json:"spent_percent"`
-	Chats         int    `json:"chats"`
-	HandedOff     int    `json:"handed_off"`
-	Helpful       int    `json:"rated_helpful"`
-	Rated         int    `json:"rated"`
+	// UnpricedModel is the chat's model when the server has no price for it (AI_SERVER_PRICES): its
+	// spend is not counted (SpentMicroUSD is null) and no limit in dollars can be set.
+	UnpricedModel *string `json:"unpriced_model"`
+	Chats         int     `json:"chats"`
+	HandedOff     int     `json:"handed_off"`
+	Helpful       int     `json:"rated_helpful"`
+	Rated         int     `json:"rated"`
 	// Articles is how many published articles the chat may answer from; zero answers nothing.
 	Articles int       `json:"articles"`
 	ResetsAt time.Time `json:"resets_at"`
@@ -352,7 +355,12 @@ func (s *Service) ChatUsage(ctx context.Context, workspaceID string, month time.
 			dayLimit := *limits.answers / 10
 			usage.AnswerLimit, usage.DayAnswerLimit = limits.answers, &dayLimit
 		}
-		if !limits.planned {
+		if found && row.model != nil {
+			if _, priced := s.config.Server.PriceOf(*row.model); !priced {
+				usage.UnpricedModel = row.model
+			}
+		}
+		if !limits.planned && usage.UnpricedModel == nil {
 			usage.SpentMicroUSD = &spent
 		}
 		if limits.microUSD != nil {

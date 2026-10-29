@@ -19,7 +19,7 @@ const summary = (change: Partial<AIChatSummary> = {}): AIChatSummary => ({
 });
 const usage = (change: Partial<AIChatUsage> = {}): AIChatUsage => ({
   month: '2026-10', answers: 413, answers_today: 18, answer_limit: 750, day_answer_limit: 75, spent_micro_usd: null, limit_micro_usd: null,
-  spent_percent: 61, chats: 128, handed_off: 9, rated_helpful: 34, rated: 41, articles: 38, resets_at: '2026-11-01T00:00:00Z', ...change,
+  spent_percent: 61, unpriced_model: null, chats: 128, handed_off: 9, rated_helpful: 34, rated: 41, articles: 38, resets_at: '2026-11-01T00:00:00Z', ...change,
 });
 
 function wrap(children: ReactNode) {
@@ -122,6 +122,28 @@ test('on a workspace key an admin sets the monthly spend limit in dollars, and e
   fireEvent.change(field, { target: { value: '' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save limit' }));
   await waitFor(() => expect(setCap).toHaveBeenLastCalledWith(null));
+});
+
+test('a model the server has no price for says so instead of $0.00, and offers no limit in dollars', async () => {
+  aiApi.chatUsage.mockResolvedValue(usage({ answers: 21, answer_limit: null, day_answer_limit: null, spent_micro_usd: null, spent_percent: null, unpriced_model: 'claude-haiku-5-5' }));
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  const slot = { slot: 'chat', source: 'server', provider_id: null, model: 'claude-haiku-5-5', effort: 'low', enabled: true, automatic: false, auto_parts: [],
+    active: true, off_reason: null, consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null } as const;
+  wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} slot={{ ...slot, auto_parts: [] }} onSetCap={vi.fn()} />);
+  expect(await screen.findByText('Price unknown')).toBeTruthy();
+  expect(screen.queryByText(/\$0\.00/)).toBeNull();
+  expect(screen.getByText(/no price for claude-haiku-5-5/)).toBeTruthy();
+  expect(screen.getByText(/no limit in dollars can be set/)).toBeTruthy();
+  expect(screen.queryByRole('textbox', { name: 'Monthly spend limit (US dollars)' })).toBeNull();
+});
+
+test('without an AI provider of the server, an unpriced model says no price can be added here, not to edit AI_SERVER_PRICES', async () => {
+  aiApi.chatUsage.mockResolvedValue(usage({ answer_limit: null, day_answer_limit: null, spent_micro_usd: null, spent_percent: null, unpriced_model: 'claude-haiku-5-5' }));
+  aiApi.chatSessions.mockResolvedValue({ items: [], next_cursor: null });
+  wrap(<AIChatPanel timezone="UTC" onOpen={vi.fn()} serverPrices={false} />);
+  expect(await screen.findByText('Price unknown')).toBeTruthy();
+  expect(screen.getByText(/no AI provider of its own/)).toBeTruthy();
+  expect(screen.queryByText(/AI_SERVER_PRICES/)).toBeNull();
 });
 
 test('an admin tries the chat and reads the whole answer with what it read', async () => {

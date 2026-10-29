@@ -59,7 +59,7 @@ const chatStatusSchema = z.enum(['open', 'ended', 'handed_off']) satisfies z.Zod
 export const aiChatUsageSchema = z.object({
   month: z.string(), answers: z.number().int(), answers_today: z.number().int(), answer_limit: z.number().int().nullable(),
   day_answer_limit: z.number().int().nullable(), spent_micro_usd: z.number().int().nullable(), limit_micro_usd: z.number().int().nullable(),
-  spent_percent: z.number().int().nullable(), chats: z.number().int(), handed_off: z.number().int(), rated_helpful: z.number().int(), rated: z.number().int(),
+  spent_percent: z.number().int().nullable(), unpriced_model: z.string().nullable(), chats: z.number().int(), handed_off: z.number().int(), rated_helpful: z.number().int(), rated: z.number().int(),
   articles: z.number().int(), resets_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'AIChatUsage'>>;
 const chatSummaryShape = {

@@ -73,7 +73,7 @@ function CapForm({ slot, onSave }: { slot: AISlot; onSave: (cap: number | null) 
   </form>;
 }
 
-function Month({ usage, slot, onSetCap }: { usage: AIChatUsage; slot?: AISlot; onSetCap?: (cap: number | null) => Promise<unknown> }) {
+function Month({ usage, slot, onSetCap, serverPrices }: { usage: AIChatUsage; slot?: AISlot; onSetCap?: (cap: number | null) => Promise<unknown>; serverPrices: boolean }) {
   const resets = formatDay(usage.resets_at, 'UTC');
   const answers = usage.answer_limit === null ? usage.answers.toLocaleString() : m.answersOf(usage.answers, usage.answer_limit);
   const spent = usage.spent_micro_usd === null ? undefined : m.spent(money(usage.spent_micro_usd), usage.limit_micro_usd === null ? undefined : money(usage.limit_micro_usd));
@@ -85,10 +85,12 @@ function Month({ usage, slot, onSetCap }: { usage: AIChatUsage; slot?: AISlot; o
     </div>
     <div className="ai-meter">
       <div className="ai-meter-top"><strong>{m.budget}</strong><span>{m.resets(resets)}</span></div>
-      <span className="aic-figure">{usage.spent_micro_usd === null ? (usage.spent_percent === null ? '—' : m.budgetShare(usage.spent_percent)) : spent}</span>
+      <span className="aic-figure">{usage.spent_micro_usd !== null ? spent : usage.spent_percent !== null ? m.budgetShare(usage.spent_percent)
+        : usage.unpriced_model !== null ? m.priceUnknown : '—'}</span>
       {usage.spent_percent !== null && <Bar used={usage.spent_percent} limit={100} label={m.budget} text={m.budgetShare(usage.spent_percent)} />}
-      {usage.spent_percent === null && <span className="ai-meter-left">{m.noLimit}</span>}
-      {usage.answer_limit === null && slot && onSetCap && <CapForm key={slot.monthly_cap_micro_usd ?? 'none'} slot={slot} onSave={onSetCap} />}
+      {usage.unpriced_model !== null ? <span className="ai-meter-left">{serverPrices ? m.unpriced(usage.unpriced_model) : m.unpricedNoServer(usage.unpriced_model)}</span>
+        : usage.spent_percent === null && <span className="ai-meter-left">{m.noLimit}</span>}
+      {usage.answer_limit === null && usage.unpriced_model === null && slot && onSetCap && <CapForm key={slot.monthly_cap_micro_usd ?? 'none'} slot={slot} onSave={onSetCap} />}
     </div>
     <div className="ai-meter">
       <div className="ai-meter-top"><strong>{m.chats}</strong></div>
@@ -178,8 +180,9 @@ function ChatRow({ chat, timezone, onOpen }: { chat: AIChatSummary; timezone: st
 
 // AIChatPanel is the AI chat tab of Settings → Built-in AI. slot is the AI chat feature, whose own monthly
 // limit onSetCap changes where the plan sets none.
-export function AIChatPanel({ timezone, onOpen, slot, onSetCap, isAdmin = true }: {
-  timezone: string; onOpen: (id: string) => void; slot?: AISlot; onSetCap?: (cap: number | null) => Promise<unknown>; isAdmin?: boolean;
+// serverPrices: the server has an AI provider of its own, whose AI_SERVER_PRICES can price the chat's model.
+export function AIChatPanel({ timezone, onOpen, slot, onSetCap, isAdmin = true, serverPrices = true }: {
+  timezone: string; onOpen: (id: string) => void; slot?: AISlot; onSetCap?: (cap: number | null) => Promise<unknown>; isAdmin?: boolean; serverPrices?: boolean;
 }) {
   const client = useQueryClient();
   // The month's use and Try it are an admin's (spend); every member reads the chats.
@@ -189,7 +192,7 @@ export function AIChatPanel({ timezone, onOpen, slot, onSetCap, isAdmin = true }
   return <>
     {usage.data && <Notices usage={usage.data} />}
     {usage.isError && <p role="alert" className="error-copy">{m.usageFailed}</p>}
-    {usage.data ? <Month usage={usage.data} slot={slot} onSetCap={setCap} /> : !usage.isError && <section className="panel aic-month" aria-busy="true" aria-label={m.month} />}
+    {usage.data ? <Month usage={usage.data} slot={slot} onSetCap={setCap} serverPrices={serverPrices} /> : !usage.isError && <section className="panel aic-month" aria-busy="true" aria-label={m.month} />}
     <TryIt on={slot?.active ?? false} />
     <ChatList timezone={timezone} onOpen={onOpen} />
   </>;

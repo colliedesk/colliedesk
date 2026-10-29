@@ -126,7 +126,7 @@ export function AIPage(props: AIPageProps) {
               {tab === 'features' && <Features {...props} settings={settings} onOpenAdd={openAdd} onOpenAutomatic={() => setDialog({ kind: 'automatic' })}
                 onConfirmAuto={(slot) => setDialog({ kind: slot.slot === 'draft' ? 'auto-draft' : 'auto-triage', slot })} onSetAuto={setSlot} />}
               {tab === 'chat' && <AIChatPanel timezone={props.timezone} onOpen={(id) => props.onOpenChat?.(id)} slot={settings.slots.find((slot) => slot.slot === 'chat')}
-                onSetCap={props.onSetChatCap} isAdmin={isAdmin} />}
+                onSetCap={props.onSetChatCap} isAdmin={isAdmin} serverPrices={settings.server !== null} />}
               {tab === 'usage' && <Usage usage={props.usage} failed={props.usageFailed} month={month} onMonth={(next) => { setMonth(next); props.onUsageMonth(next); }} />}
               {tab === 'providers' && <Providers {...props} settings={settings}
                 onKey={(provider) => setDialog({ kind: 'key', provider })} onDelete={(provider) => setDialog({ kind: 'delete', provider })} />}

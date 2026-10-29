@@ -1,7 +1,7 @@
 // Strings of Settings → Built-in AI. The page is a lazy part, so they live in its chunk.
 export const aiMessages = {
   heading: 'Built-in AI',
-  description: 'Triage suggestions and reply drafts inside Colliedesk, on a model you choose. A person accepts, edits and sends; nothing reaches a customer until someone presses Send. Triage suggestions are accepted by a person too, unless an admin turns on Apply suggestions automatically below.',
+  description: 'Triage suggestions, reply drafts and the AI chat, each on a model you choose. A person accepts, edits and sends every draft; a draft never reaches a customer until someone presses Send. Triage suggestions are accepted by a person too, unless an admin turns on Apply suggestions automatically below. The AI chat answers customers on your help center from its public articles, once an admin turns it on.',
   loadFailed: 'The AI settings could not be loaded. Reload the page to try again.',
   tabs: 'Built-in AI settings',
   tabFeatures: 'Features',

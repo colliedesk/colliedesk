@@ -4100,12 +4100,14 @@ export interface components {
             answer_limit: number | null;
             /** @description A tenth of the month's. */
             day_answer_limit: number | null;
-            /** @description What the chat spent, calls still running included at most; null on the cloud's own provider. */
+            /** @description What the chat spent, calls still running included at most; null on the cloud's own provider, and when the server has no price for the model (unpriced_model). */
             spent_micro_usd: number | null;
             /** @description The AI chat feature's own monthly limit; null without one, and on the cloud's own provider. */
             limit_micro_usd: number | null;
             /** @description Spend as a share of the month's limit; null without one. */
             spent_percent: number | null;
+            /** @description The AI chat's model when the server has no price for it (AI_SERVER_PRICES): its spend is not counted (spent_micro_usd is null) and no limit in dollars can be set. Null when it is priced. */
+            unpriced_model: string | null;
             /** @description Chats started this month. */
             chats: number;
             handed_off: number;
