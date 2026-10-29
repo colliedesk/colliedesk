@@ -9,6 +9,7 @@ page per type under it:
   your addresses with how each receives, how its replies leave and its state. See
   [Email in Settings](email-channel.md#email-in-settings).
 - **Web form** (`/settings/channels/type/web_form`): your web form, or the form to add one.
+- **Help chat** (`/settings/channels/type/help_chat`): your [help chat](help-chat.md), or the form to add one.
 - **Channels** itself (`/settings/channels`) lists every channel with what each is doing, and lets an
   admin add one, turn it off and on, or remove it, and its **History** tab lists what changed.
 

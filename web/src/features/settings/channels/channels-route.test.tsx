@@ -371,6 +371,17 @@ test('a help chat whose AI chat cannot answer says why the help center shows no 
   expect(await screen.findByText('Your help center shows no chat: the AI chat is off in Settings → Built-in AI, or this server no longer offers its model.')).toBeInTheDocument();
 });
 
+// Every channel type has its place under Channels in the nav: a help chat's page marks Help chat.
+test('a help chat channel marks Help chat under Channels in the nav', async () => {
+  const chat = channel('web_form', { type: 'help_chat', name: 'Help chat' });
+  channelsApi.list.mockResolvedValue({ items: [chat], types: types(0, 0) });
+  channelsApi.get.mockResolvedValue({ ...chat, config: { channel_id: FORM, enabled: true, greeting: 'Hi!', suggestions: [], instructions: '', widget_origins: [] } });
+  show(FORM);
+  const group = await screen.findByRole('list', { name: 'Channels' });
+  await waitFor(() => expect(within(group).getByRole('link', { name: 'Help chat' })).toHaveAttribute('aria-current', 'page'));
+  expect(within(group).getByRole('link', { name: 'Help chat' })).toHaveAttribute('href', '/settings/channels/type/help_chat');
+});
+
 test('the web form save shows Saved after it succeeds', async () => {
   channelsApi.get.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
   channelsApi.update.mockResolvedValue({ ...channel('web_form'), config: webFormConfig });
