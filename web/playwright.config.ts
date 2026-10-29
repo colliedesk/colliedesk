@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { scratchDir } from './e2e/support/checkout';
 import { defineConfig } from '@playwright/test';
-import { attachmentsDir, databaseURL, goEnv, servers } from './e2e/support/cli';
+import { attachmentsDir, databaseFor, databaseNameFor, goEnv, postgresURL, servers } from './e2e/support/cli';
 import { identity, jwksURL } from './e2e/support/identity-provider';
 import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
 import { dnsFile } from './e2e/support/dns';
@@ -10,20 +10,20 @@ import { mailpit } from './e2e/support/mailpit';
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
 
-// Each server is the real `collie serve` on the same database, configured only through the
+// Each server is the real `collie serve` on a database of its own, configured only through the
 // environment an operator sets. They differ in what is plugged in: nothing, an SMTP relay, cloud sign-in.
-// serve refuses to start until row-level security is migrated: the main server migrates first, like
-// compose does, and the others wait for it so two migrations never race on the shared database.
+// Every run starts each server on a new database and migrates it, as a fresh install does.
 function server(origin: string, env: Record<string, string> = {}, tags = '') {
   const run = tags ? `go run -tags ${tags} ./cmd/collie` : 'go run ./cmd/collie';
   const serve = `${run} serve --listen 127.0.0.1:${new URL(origin).port}`;
-  const first = origin === servers.main;
+  const name = databaseNameFor(origin);
+  const fresh = `psql '${postgresURL}' -q -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS ${name} WITH (FORCE)' -c 'CREATE DATABASE ${name}'`;
   return {
-    command: first ? `${run} migrate && ${serve}` : `node ../web/e2e/support/wait-for-url.mjs ${servers.main} && ${serve}`,
+    command: `${fresh} && ${run} migrate && ${serve}`,
     cwd: '../server',
     env: {
       ...process.env as Record<string, string>, ...goEnv,
-      APP_ORIGIN: origin, DATABASE_URL: databaseURL, ATTACHMENTS_DIR: attachmentsDir, EMAIL_TRUSTED_AUTHSERV_ID: 'mx.example.net', ...env,
+      APP_ORIGIN: origin, DATABASE_URL: databaseFor(origin), ATTACHMENTS_DIR: attachmentsDir, EMAIL_TRUSTED_AUTHSERV_ID: 'mx.example.net', ...env,
     },
     url: origin,
     reuseExistingServer: false,
@@ -43,15 +43,12 @@ export default defineConfig({
   webServer: [
     // The main server also imports in the app from the fake Freshdesk (-tags e2e lets it reach a loopback
     // address), with a key ring as a fresh install has one. Its operator lets workspaces use an AI
-    // provider on the local network, where the AI settings journey runs its fake model server. Every
-    // server shares the database and runs an AI worker, and a task queued by the database (triage on a
-    // new ticket) goes to whichever worker claims it first, so all of them allow that network.
+    // provider on the local network, where the AI journeys run their fake model server; the others
+    // allow it too, so an AI journey behaves the same on whichever server it runs.
     server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=', AI_ALLOW_PRIVATE_BASE_URLS: '1', COLLIEDESK_E2E_DNS_FILE: dnsFile }, 'e2e'),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any', AI_ALLOW_PRIVATE_BASE_URLS: '1' }),
-    // The cloud server also imports in the app and sends replies by SMTP, for the golden path. Every server
-    // with a relay runs an outbox worker that sends any workspace's queued reply, and the worker picks the
-    // From line, so it uses the mail server's policy: either worker sends a reply the same way. Its key
-    // ring has its own key id, so the main server never runs a cloud import (and the other way round).
+    // The cloud server also imports in the app and sends replies by SMTP, through its own outbox worker,
+    // for the golden path. It sends with the mail server's From policy, so a reply leaves both the same way.
     server(servers.cloud, {
       ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'c1:ZTJlLWNsb3VkLWltcG9ydC1rZXktMzItYnl0ZXMhISE=',
       SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any',

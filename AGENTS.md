@@ -90,8 +90,9 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 Also: `tests/install-smoke.sh` (real `install.sh` with Docker against the image built from the
 commit; the printed link must sign in) and `tests/install-test.sh` (installer with stubbed Docker).
 
-Ports and temp files derive from the checkout path (`web/e2e/support/checkout.ts`), so two
-checkouts can run them at once; `COLLIEDESK_E2E_PORT_BASE` overrides the ports.
+Ports, databases and temp files derive from the checkout path (`web/e2e/support/checkout.ts`), so two
+checkouts can run them at once; `COLLIEDESK_E2E_PORT_BASE` overrides the ports. Each test server
+(main, mail, cloud) runs on a new database of its own, named after `TEST_DATABASE_URL`'s.
 Run locally: `docker compose --profile test up -d postgres mailpit`, then
 `make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
 `docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.

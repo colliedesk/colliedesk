@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { ports, scratchDir } from './checkout';
+import { checkoutID, ports, scratchDir } from './checkout';
 import type { ChildProcess } from 'node:child_process';
 
 // Ports and URLs shared with playwright.config.ts.
@@ -11,8 +11,29 @@ export const servers = {
   mail: `http://localhost:${ports.mail}`,
 } as const;
 
-export const databaseURL = process.env.TEST_DATABASE_URL
+const testDatabaseURL = process.env.TEST_DATABASE_URL
   ?? 'postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable';
+
+// Each server has its own database, named after TEST_DATABASE_URL's and the checkout, as a server of
+// its own would: what one server's workers do (send a queued reply, run an AI task, import) never
+// happens on another, and two checkouts never share one. The user of TEST_DATABASE_URL creates them.
+const databaseBase = `${new URL(testDatabaseURL).pathname.slice(1)}_${checkoutID}`;
+
+// databaseNameFor is the database of the server at origin; any other origin is the main server's.
+export function databaseNameFor(origin: string): string {
+  if (origin === servers.mail) return `${databaseBase}_mail`;
+  if (origin === servers.cloud) return `${databaseBase}_cloud`;
+  return `${databaseBase}_main`;
+}
+
+export function databaseFor(origin: string): string {
+  return withDatabase(testDatabaseURL, databaseNameFor(origin));
+}
+
+// The main server's database: the default of every query below.
+export const databaseURL = databaseFor(servers.main);
+// The maintenance database, for creating and dropping the others.
+export const postgresURL = withDatabase(testDatabaseURL, 'postgres');
 
 // Scratch Go paths by default; CI exports the caches setup-go restored so the servers reuse them.
 export const goEnv = {
@@ -50,7 +71,7 @@ export function colliedesk(args: string[], options: CommandOptions = {}): Comman
     encoding: 'utf8', timeout: 300_000,
     env: {
       ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir,
-      APP_ORIGIN: options.origin ?? servers.main, DATABASE_URL: options.databaseURL ?? databaseURL, ...options.env,
+      APP_ORIGIN: options.origin ?? servers.main, DATABASE_URL: options.databaseURL ?? databaseFor(options.origin ?? servers.main), ...options.env,
     },
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
@@ -62,7 +83,7 @@ export function colliedeskAsync(args: string[], options: CommandOptions = {}): P
     const child = spawn(binary(options.tags), args, {
       env: {
         ...process.env, ...goEnv, ATTACHMENTS_DIR: attachmentsDir,
-        APP_ORIGIN: options.origin ?? servers.main, DATABASE_URL: options.databaseURL ?? databaseURL, ...options.env,
+        APP_ORIGIN: options.origin ?? servers.main, DATABASE_URL: options.databaseURL ?? databaseFor(options.origin ?? servers.main), ...options.env,
       },
     });
     let stdout = '';
