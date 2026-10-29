@@ -25,7 +25,7 @@ The workspace address (the slug in `support@<address>.colliedesk.com`, the desk 
 center address) is separate. It is changed under **Workspace address name** in
 [Email channel](email-channel.md#2-forward-its-mail-to-colliedesk).
 
-## Your workspace's address
+## The workspace address
 
 On Colliedesk Cloud your team works at the workspace's own address, `https://<address>.colliedesk.com`:
 the inbox and every page are there, and the help center is at `/help` on it. Bookmark it.

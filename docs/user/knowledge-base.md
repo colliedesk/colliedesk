@@ -416,7 +416,7 @@ in **Settings → Help center** (see [Help center settings](#help-center-setting
 (`GET /api/v1/help-center`) and `colliedesk_help_center_get` give it in `url`.
 
 - **Colliedesk Cloud:** `/help` on your workspace's own address, `https://<workspace address name>.colliedesk.com/help`.
-  The rest of that address is your team's desk ([your workspace's address](workspace.md#your-workspaces-address)).
+  The rest of that address is your team's desk ([your workspace's address](workspace.md#the-workspace-address)).
   The help center's older addresses without `/help` move there (301).
 - **Your own server:** `<server address>/help/<workspace address name>`, for example
   `https://desk.example.com/help/acme`. The server can give each workspace its own host name instead;
