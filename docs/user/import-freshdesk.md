@@ -241,19 +241,27 @@ never accepts it as a command-line argument and never prints it.
    help center address** (optional; see "Old help center links"). Then select **Read account**. Colliedesk reads the account and shows what it
    found: tickets, contacts, companies and agents, and whether the key can read archived tickets,
    canned responses and the knowledge base. Nothing is written yet. Freshdesk does not count archived
-   tickets ahead of time, so the ticket number is "at least".
+   tickets ahead of time, so the ticket number is "at least". A plan that does not allow the archive API
+   gets a calm note, not a warning: those archived tickets are listed in the report to check. The page
+   also gives a time range for the import, from the ticket count and the API limit of your plan.
 3. Select **Start import** within the hour. The tickets updated in the last 90 days come first, newest
    first: once they are in, the page says so and your team can work on them while older and archived
-   tickets, contacts, saved replies and the knowledge base follow. The page shows the step, the counts,
-   an estimate of the time left, and when it waits for the Freshdesk API limit. You can leave the page
-   or sign out: the import runs on the server and survives a restart.
+   tickets, contacts, saved replies and the knowledge base follow. The page lists the steps (done, in
+   progress, waiting) with the counts, an estimate of the time left, and a quiet line when it waits for
+   the Freshdesk API limit, which is normal and automatic. **Open the inbox** is there from the first
+   minute. You can close the page or sign out: the import runs on the server and survives a restart.
 4. At the end the page shows the result, **In Freshdesk** next to **In Colliedesk** for each kind of
-   data, with **Download report** for the Markdown report. **Undo import** removes what it brought in.
+   data, with **Download report** for the Markdown report. When the only open point is an archive that
+   your Freshdesk plan does not let Colliedesk read, the headline is **Import done** and a short note
+   names the ticket numbers to check in Freshdesk. Any other unverified total keeps **Import done, not
+   verified**. **Undo import** is a quiet link below the buttons; it asks before it removes what the
+   import brought in.
 
 Under **Freshdesk agents** the page lists the agents of the account. Each one linked to a Colliedesk
 agent becomes the author of their imported replies and the assignee of the imported tickets they held
 (unless someone reassigned a ticket since); the original times do not change. Agents with the same email
-are linked when the account is read. **Invite** creates a one-time invite link for the others, shown
+are linked when the account is read, and an agent links by itself when they join Colliedesk with the same
+email as in Freshdesk. **Invite by email** sends a real invitation from Colliedesk to that address and creates a one-time invite link for the others, shown
 once in their row with **Copy link** and when it expires: send it to them. When they join they are
 linked by their email, before or after the import. **Revoke invite** takes a waiting invite back. To link someone whose email differs, choose
 the agent and select **Link**; **Unlink** takes it back. A link is applied within seconds.
