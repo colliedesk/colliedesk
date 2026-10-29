@@ -13,7 +13,7 @@ export interface Section {
   title: string;
   lead: string;
   keys: string[];
-  test?: 'smtp' | 'polar' | 'jwks';
+  test?: 'smtp' | 'polar' | 'jwks' | 'ai';
 }
 
 export const fields: Record<string, FieldInfo> = {
@@ -47,7 +47,7 @@ export const fields: Record<string, FieldInfo> = {
   'github.private_key': { label: 'Private key (PEM)', kind: 'pem' },
   'github.client_secret': { label: 'Client secret', kind: 'secret' },
   'github.webhook_secret': { label: 'Webhook secret', kind: 'secret' },
-  'polar.access_token': { label: 'Polar access token', kind: 'secret', help: 'Set: billing is on.' },
+  'polar.access_token': { label: 'Polar access token', kind: 'secret', help: 'Setting it turns billing on: add the products below first.' },
   'polar.webhook_secret': { label: 'Polar webhook secret', kind: 'secret' },
   'polar.api_url': { label: 'Polar API address', kind: 'text' },
   'billing.alert_email': { label: 'Billing alert email', kind: 'text' },
@@ -72,7 +72,7 @@ export const fields: Record<string, FieldInfo> = {
 
 export const sections: Record<string, Section[]> = {
   ai: [
-    { title: 'Server provider', lead: "Workspaces that bring no key of their own use this one.", keys: ['ai.server.provider', 'ai.server.label', 'ai.server.base_url', 'ai.server.api_key', 'ai.server.models'] },
+    { title: 'Server provider', lead: "Workspaces that bring no key of their own use this one.", keys: ['ai.server.provider', 'ai.server.label', 'ai.server.base_url', 'ai.server.api_key', 'ai.server.models'], test: 'ai' },
     { title: 'Pricing and allowance', lead: 'Costs already counted keep the price of their day.', keys: ['ai.server.prices', 'ai.server.monthly_allowance'] },
   ],
   email: [

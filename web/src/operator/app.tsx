@@ -4,7 +4,7 @@ import { api, onSessionEnded } from './api';
 import type { Config, Me, Status } from './api';
 import { CommandLine } from './copy';
 import { groupOrder } from './fields';
-import { AlertIcon, HistoryIcon, HomeIcon, ListIcon, UsersIcon } from './icons';
+import { HistoryIcon, HomeIcon, ListIcon, UsersIcon } from './icons';
 import { ConsoleLogo } from './logo';
 import { RequestsIcon, SettingsIcon } from '../ui/icons';
 import { m } from './messages';
@@ -82,7 +82,7 @@ export function App() {
 }
 
 function Ended() {
-  return <div className="ops-page-inner">
+  return <div className="ops-page-inner ended" role="alert">
     <header className="page-head"><div><h1 id="page-title">{m.signedOutTitle}</h1><p>{m.signedOutLead}</p></div></header>
     <CommandLine command="docker compose exec server /app/collie operator pair --email <your email>" />
   </div>;
@@ -156,7 +156,7 @@ function Shell({ data, ended, path, reload, children }: { data: { me: Me; status
             {groupOrder.map((group) => <NavLink key={group} to={`/config/${group}`} path={path} icon={<SettingsIcon />}>{m.groups[group]}</NavLink>)}
           </ul></div>
           <div><p className="settings-group-label">{m.navControl}</p><ul>
-            <NavLink to="/requests" path={path} icon={<AlertIcon />} count={waiting}>{m.requests}</NavLink>
+            <NavLink to="/requests" path={path} icon={<RequestsIcon />} count={waiting}>{m.requests}</NavLink>
             <NavLink to="/history" path={path} icon={<HistoryIcon />}>{m.history}</NavLink>
             <NavLink to="/audit" path={path} icon={<ListIcon />}>{m.audit}</NavLink>
             <NavLink to="/operators" path={path} icon={<UsersIcon />}>{m.operators}</NavLink>

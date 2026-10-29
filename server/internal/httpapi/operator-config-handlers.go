@@ -64,6 +64,11 @@ func (a *API) operatorCurrent(ctx context.Context) (serverconfig.Loaded, error) 
 func friendlyConfigError(err error) (string, map[string]string) {
 	text := err.Error()
 	fields := map[string]string{}
+	// A product has no setting of its own: name it as the products table does.
+	for _, product := range serverconfig.ProductEnvs {
+		text = strings.ReplaceAll(text, product.Env, "the "+product.Plan+" "+product.Period+" product (Billing › Products)")
+	}
+	text = strings.ReplaceAll(text, "(or unset every POLAR_* variable to turn billing off)", "(or remove the Polar settings to turn billing off)")
 	for _, key := range serverconfig.Keys() {
 		if key.Env != "" && strings.Contains(text, key.Env) {
 			text = strings.ReplaceAll(text, key.Env, key.Name)
@@ -155,7 +160,10 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 		if slices.Contains(key.Guards, serverconfig.GuardReauth) {
 			needsReauth = true
 		}
-		if slices.Contains(key.Guards, serverconfig.GuardReenterSecret) && key.Reenter != "" {
+		// The secret an endpoint is bound to is typed again when the endpoint moves and the secret stays: a
+		// removal sends it nowhere.
+		before, _ := current.Get(key.Name)
+		if slices.Contains(key.Guards, serverconfig.GuardReenterSecret) && key.Reenter != "" && before != value && !slices.Contains(unset, key.Reenter) {
 			if _, isSet := current.Get(key.Reenter); isSet {
 				if _, given := input.Secrets[key.Reenter]; !given {
 					reenter[key.Reenter] = "Enter it again: it goes to the new " + key.Name + "."
@@ -192,7 +200,8 @@ func (a *API) changeOperatorConfig(response http.ResponseWriter, request *http.R
 				"message": "Type the phrase to confirm. Nothing was saved.", "fields": map[string]string{guard.Key: "Type " + guard.Phrase + " to confirm."}, "guards": guards}})
 			return
 		}
-		if guard.Preview != "" || guard.Trial {
+		// A phrase or a trial is a decision that needs the code; a preview alone only informs.
+		if guard.Phrase != "" || guard.Trial {
 			needsReauth = true
 		}
 	}
@@ -384,7 +393,12 @@ func (a *API) getOperatorStatus(response http.ResponseWriter, request *http.Requ
 		}
 	}
 	if a.config.OperatorOrigin == "" {
-		warnings = append(warnings, map[string]any{"code": "path_mode", "severity": "warning", "env_name": "OPERATOR_ORIGIN"})
+		// On the hosted cloud a console on the app's origin is an error: a bug in the app would reach it.
+		severity := "warning"
+		if a.limits {
+			severity = "error"
+		}
+		warnings = append(warnings, map[string]any{"code": "path_mode", "severity": severity, "env_name": "OPERATOR_ORIGIN"})
 	}
 	if waiting > 0 {
 		warnings = append(warnings, map[string]any{"code": "requests_waiting", "severity": "warning", "detail": strconv.Itoa(waiting)})
@@ -395,9 +409,13 @@ func (a *API) getOperatorStatus(response http.ResponseWriter, request *http.Requ
 		if a.config.Carry != nil {
 			addresses, signedIn, refused = a.config.Carry.trial.read(run.Version)
 		}
+		evidence := map[string]any{"your_ip": clientIP(request, a.config.TrustedProxies),
+			"client_ips": addresses, "cloud_sign_ins_ok": signedIn, "cloud_sign_ins_refused": refused}
+		if domain, _ := current.Get("help_center.domain"); slices.Contains(run.Keys, "help_center.domain") && strings.TrimSpace(domain) != "" {
+			evidence["help_center"] = a.helpCenterEvidence(ctx, strings.TrimSpace(domain))
+		}
 		trial = map[string]any{"version": run.Version, "parent_version": run.Parent, "started_at": run.StartedAt.UTC(), "expires_at": run.ExpiresAt.UTC(),
-			"started_by": run.StartedBy, "keys": run.Keys, "evidence": map[string]any{"your_ip": clientIP(request, a.config.TrustedProxies),
-				"client_ips": addresses, "cloud_sign_ins_ok": signedIn, "cloud_sign_ins_refused": refused}}
+			"started_by": run.StartedBy, "keys": run.Keys, "evidence": evidence}
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"binary_version": a.config.Version, "migration": migration, "desired_version": current.State.Desired,
 		"last_good_version": current.State.LastGood, "processes": process, "warnings": warnings, "requests_waiting": waiting, "trial": trial,
@@ -435,9 +453,9 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 	out := map[string]any{"ok": true, "errors": map[string]string{}}
 	if a.config.CheckConfig != nil {
 		if err := a.config.CheckConfig(next); err != nil {
-			_, fields := friendlyConfigError(err)
+			text, fields := friendlyConfigError(err)
 			if len(fields) == 0 {
-				fields = map[string]string{"": err.Error()}
+				fields = map[string]string{"": text}
 			}
 			out["ok"], out["errors"] = false, fields
 		}
@@ -465,6 +483,29 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 		}
 		out["guards"] = guards
 	}
+	if input.Test != "" && out["ok"] == true {
+		// A live test sends the stored secrets: never at a token's word (it only reads), and never to an
+		// address the change moves without the secret typed again, as a save would ask.
+		if operatorPrincipal(request).IsToken() {
+			writeError(response, http.StatusForbidden, "test_needs_a_person", "A live test sends the server's secrets; only a person runs it in the console. Without test, the change is checked.")
+			return
+		}
+		for name := range set {
+			key, _ := serverconfig.Lookup(name)
+			if !slices.Contains(key.Guards, serverconfig.GuardReenterSecret) || key.Reenter == "" {
+				continue
+			}
+			before, _ := current.Get(key.Name)
+			if _, stored := current.Get(key.Reenter); stored && before != set[key.Name] {
+				if value, typed := input.Secrets[key.Reenter]; !typed || value == nil || *value == "" {
+					out["ok"] = false
+					out["test"] = map[string]any{"name": input.Test, "ok": false, "message": "Enter " + key.Reenter + " again: the test goes to the new " + key.Name + "."}
+					writeJSON(response, http.StatusOK, out)
+					return
+				}
+			}
+		}
+	}
 	if out["ok"] == true {
 		switch input.Test {
 		case "smtp":
@@ -473,6 +514,8 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 			out["test"] = a.tryPolar(request.Context(), next)
 		case "jwks":
 			out["test"] = tryJWKS(request.Context(), next)
+		case "ai":
+			out["test"] = a.tryAI(request.Context(), next)
 		}
 	}
 	writeJSON(response, http.StatusOK, out)
@@ -558,9 +601,10 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 		return
 	}
 	var input struct {
-		BaseVersion int64  `json:"base_version"`
-		ReauthCode  string `json:"reauth_code"`
-		Note        string `json:"note"`
+		BaseVersion int64             `json:"base_version"`
+		ReauthCode  string            `json:"reauth_code"`
+		Note        string            `json:"note"`
+		Confirm     map[string]string `json:"confirm"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_json", "Send the version you read (base_version).")
@@ -580,6 +624,7 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 		writeError(response, http.StatusNotFound, "not_found", "No such version.")
 		return
 	}
+	var names []string
 	for name := range diffKeys(current.Snapshot, old.Snapshot) {
 		key, _ := serverconfig.Lookup(name)
 		value, _ := old.Get(name)
@@ -587,6 +632,26 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 			writeRefused(response, http.StatusBadRequest, "setting_not_changeable", "This version changes a setting the console does not change yet; restore it with collie config restore. Nothing was saved.", map[string]string{key.Name: why})
 			return
 		}
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	// A restore is a change like any other: it passes the guards of what it changes from the version that runs
+	// (turning billing off asks "billing off"; a restore of trusted proxies is a trial).
+	guards := a.configGuards(request.Context(), request, current.Snapshot, old.Snapshot, names)
+	for _, guard := range guards {
+		if guard.Refused != "" {
+			writeRefused(response, http.StatusUnprocessableEntity, "config_invalid", guard.Refused+" Nothing was saved.", map[string]string{guard.Key: guard.Refused})
+			return
+		}
+		if guard.Phrase != "" && !confirmMatches(input.Confirm[guard.Key], guard.Phrase) {
+			writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "confirm_mismatch",
+				"message": "Type the phrase to confirm. Nothing was saved.", "fields": map[string]string{guard.Key: "Type " + guard.Phrase + " to confirm."}, "guards": guards}})
+			return
+		}
+	}
+	var trial time.Duration
+	if guardsTrial(guards) {
+		trial = TrialDuration
 	}
 	if !a.reauthorized(response, request, input.ReauthCode) {
 		return
@@ -600,11 +665,14 @@ func (a *API) restoreOperatorConfigVersion(response http.ResponseWriter, request
 	}
 	who := operatorPrincipal(request)
 	a.operatorOnce(response, request, "config-restore", []string{strconv.FormatInt(from, 10), strconv.FormatInt(input.BaseVersion, 10)}, func(ctx context.Context) (any, any, error) {
-		version, err := a.config.ServerConfig.Restore(ctx, from, input.BaseVersion, serverconfig.Actor{Kind: "operator", Name: who.Operator.Email, IP: clientIP(request, a.config.TrustedProxies)}, input.Note)
+		version, err := a.config.ServerConfig.RestoreTrial(ctx, from, input.BaseVersion, serverconfig.Actor{Kind: "operator", Name: who.Operator.Email, IP: clientIP(request, a.config.TrustedProxies)}, input.Note, trial)
 		if err != nil {
 			return nil, nil, err
 		}
 		saved := map[string]any{"version": version, "applies": "in_seconds"}
+		if trial > 0 {
+			saved["applies"], saved["trial_expires_at"] = "trial", a.now().Add(trial).UTC()
+		}
 		return saved, saved, nil
 	})
 }
@@ -695,7 +763,7 @@ func (a *API) listOperatorRequests(response http.ResponseWriter, request *http.R
 	}
 	items := make([]map[string]any, 0, len(requests))
 	for _, item := range requests {
-		items = append(items, operatorRequestJSON(item))
+		items = append(items, a.operatorRequestShown(request, item))
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items})
 }
@@ -710,7 +778,28 @@ func (a *API) getOperatorRequest(response http.ResponseWriter, request *http.Req
 		writeError(response, http.StatusInternalServerError, "internal_error", "The request could not be read.")
 		return
 	}
-	writeJSON(response, http.StatusOK, operatorRequestJSON(found))
+	writeJSON(response, http.StatusOK, a.operatorRequestShown(request, found))
+}
+
+// operatorRequestShown is a request as a person reviews it: a configuration change waiting for them also
+// says what it does and what to type (its guards), as the review of a change in the console does.
+func (a *API) operatorRequestShown(request *http.Request, found auth.OperatorRequest) map[string]any {
+	shown := operatorRequestJSON(found)
+	if found.Status != "pending" || found.Route != "PATCH /api/v1/operator/config" || operatorPrincipal(request).IsToken() {
+		return shown
+	}
+	// The secrets it names are typed at approval; a placeholder stands for them so a guard that depends on
+	// one being set (billing on) shows.
+	placeholders := map[string]string{}
+	for _, name := range found.NeedsSecrets {
+		placeholders[name] = "(typed at approval)"
+	}
+	guards, _ := a.requestGuards(request, found.Body, placeholders, nil)
+	if guards == nil {
+		guards = []configGuard{}
+	}
+	shown["guards"] = guards
+	return shown
 }
 
 func (a *API) cancelOperatorRequest(response http.ResponseWriter, request *http.Request) {
@@ -869,6 +958,14 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 			writeError(response, http.StatusConflict, "request_decided", "The request was decided, cancelled or expired.")
 			return
 		}
+		// The phrases are checked before the code is spent: a wrong phrase costs no authenticator code.
+		if approve && pending.Route == "PATCH /api/v1/operator/config" {
+			if guards, mismatch := a.requestGuards(request, pending.Body, input.Secrets, input.Confirm); mismatch != "" {
+				writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "confirm_mismatch",
+					"message": "Type the phrase to confirm. The request keeps waiting.", "fields": map[string]string{mismatch: "Type the phrase to confirm."}, "guards": guards}})
+				return
+			}
+		}
 		if !a.reauthorized(response, request, input.ReauthCode) {
 			return
 		}
@@ -884,13 +981,6 @@ func (a *API) decideOperatorRequest(approve bool) http.HandlerFunc {
 		for name := range input.Secrets {
 			if !slices.Contains(pending.NeedsSecrets, name) {
 				writeError(response, http.StatusBadRequest, "secret_not_asked", "The request does not ask for that secret.")
-				return
-			}
-		}
-		if pending.Route == "PATCH /api/v1/operator/config" {
-			if guards, mismatch := a.requestGuards(request, pending.Body, input.Secrets, input.Confirm); mismatch != "" {
-				writeJSON(response, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "confirm_mismatch",
-					"message": "Type the phrase to confirm. The request keeps waiting.", "fields": map[string]string{mismatch: "Type the phrase to confirm."}, "guards": guards}})
 				return
 			}
 		}
@@ -933,6 +1023,13 @@ func (a *API) replayOperatorRequest(ctx context.Context, approver auth.OperatorP
 	}
 	delete(body, "reauth_code")
 	delete(body, "confirm")
+	// The approver reviewed the change against the version that runs now (the dialog shows that diff), so the
+	// change applies on it: a version saved since the token asked does not fail the request.
+	if _, based := body["base_version"]; based {
+		if current, err := a.operatorCurrent(ctx); err == nil {
+			body["base_version"] = current.Version
+		}
+	}
 	if len(confirm) > 0 {
 		body["confirm"] = confirm
 	}

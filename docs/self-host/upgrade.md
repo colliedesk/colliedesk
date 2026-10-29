@@ -104,7 +104,7 @@ docker compose exec -T server /app/collie config doctor
 
 Running the installer again does the same before the server starts: it keeps the compose file it
 replaces as `compose.yaml.bak`, writes one that passes only the variables that stay in the environment,
-and imports the settings of `.env` (a group the database already holds is kept).
+and imports the settings of `.env` (a group the database holds or once held is kept, so one you unset stays unset). If the import fails, it puts the older compose file back and changes nothing.
 
 A group whose variables do not make a valid setting together is not imported, and the start log says
 why (`settings in the environment were not imported`): fix it with `collie config set`.

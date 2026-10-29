@@ -58,14 +58,16 @@ export function needs(draft: Draft, settings: Setting[], guards: Guard[] = []): 
     if (guard.phrase) result.confirm[guard.key] = guard.phrase;
     if (guard.preview) result.preview.push(guard.preview);
     if (guard.trial) result.trial = true;
-    if (guard.phrase || guard.preview || guard.trial) result.reauth = true;
+    if (guard.phrase || guard.trial) result.reauth = true;
   }
   for (const key of changed) {
     const setting = byKey.get(key);
     if (!setting) continue;
     if (setting.secret && key in draft.secrets) result.reauth = true;
     if (setting.guards.includes('reauth')) result.reauth = true;
-    if (setting.guards.includes('reenter_secret') && setting.reenter) {
+    // The bound secret is asked again when the endpoint moves and the secret stays (a removal sends it nowhere).
+    const moves = key in draft.set ? draft.set[key] !== (setting.value ?? '') : draft.unset.includes(key);
+    if (setting.guards.includes('reenter_secret') && setting.reenter && moves && !draft.unset.includes(setting.reenter)) {
       const secret = byKey.get(setting.reenter);
       if (secret?.set && !(setting.reenter in draft.secrets) && !result.reenter.includes(setting.reenter)) result.reenter.push(setting.reenter);
     }

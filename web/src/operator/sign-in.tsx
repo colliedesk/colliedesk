@@ -26,7 +26,7 @@ type State =
   | { kind: 'code'; step: SignInStep; wrong?: string }
   | { kind: 'no-totp' }
   | { kind: 'locked'; until: string; email?: string }
-  | { kind: 'link'; title: string; used?: boolean }
+  | { kind: 'link'; title: string; used?: boolean; ring?: boolean }
   | { kind: 'no-link' };
 
 const pairCommand = (email = '<your email>', reset = false) => `docker compose exec server /app/collie operator pair --email ${email}${reset ? ' --reset-totp' : ''}`;
@@ -36,6 +36,7 @@ function linkError(error: unknown): State {
     if (error.code === 'operator_locked') return { kind: 'locked', until: String(error.body.locked_until ?? '') };
     if (error.code === 'operator_link_expired') return { kind: 'link', title: m.linkExpired };
     if (error.code === 'operator_link_used') return { kind: 'link', title: m.linkUsed, used: true };
+    if (error.code === 'secret_keys_missing') return { kind: 'link', title: m.ringMissingTitle, ring: true };
   }
   return { kind: 'link', title: m.linkInvalid };
 }
@@ -142,7 +143,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     case 'link':
       body = <>
         <h1 id="sign-title">{state.title}</h1>
-        <p>{m.linkHelp}</p>
+        <p>{state.ring ? m.ringMissingLead : m.linkHelp}</p>
         <CommandLine command={pairCommand()} />
         {state.used && <><p>{m.usedHelp}</p><CommandLine command="docker compose exec server /app/collie operator sessions" /></>}
       </>;

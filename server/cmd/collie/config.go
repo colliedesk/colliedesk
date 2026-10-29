@@ -359,6 +359,12 @@ func parseEnvFile(reader io.Reader) (map[string]string, error) {
 			return nil, fmt.Errorf("line %d is not KEY=VALUE", line)
 		}
 		value = strings.TrimSpace(value)
+		// As Compose reads .env: an unquoted value ends where " #" starts a comment.
+		if value != "" && value[0] != '"' && value[0] != '\'' {
+			if at := strings.Index(value, " #"); at >= 0 {
+				value = strings.TrimSpace(value[:at])
+			}
+		}
 		if len(value) >= 2 && (value[0] == '"' && value[len(value)-1] == '"' || value[0] == '\'' && value[len(value)-1] == '\'') {
 			if value[0] == '"' {
 				unquoted, err := strconv.Unquote(value)
@@ -731,6 +737,11 @@ func doctorFindings(ctx context.Context, store *serverconfig.Store, environ func
 	}
 	for _, name := range serverconfig.Dead(environ) {
 		warnings = append(warnings, name+" is set but no release reads it: remove it")
+	}
+	// On the hosted cloud the console must not share the workspace app's origin: one bug in the app would
+	// reach the operator API with the operator's cookie.
+	if strings.TrimSpace(environ("OPERATOR_ORIGIN")) == "" && hostedCloud(loaded.Getenv) {
+		errs = append(errs, "the operator console shares the workspace app's address on a hosted cloud: set OPERATOR_ORIGIN to a host of its own (docs/self-host/operator-console.md)")
 	}
 	if run, ok, err := store.Trial(ctx); err == nil && ok {
 		warnings = append(warnings, fmt.Sprintf("v%d is a trial change until %s: confirm or revert it (collie config trial confirm|revert)", run.Version, run.ExpiresAt.UTC().Format(time.RFC3339)))

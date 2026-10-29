@@ -45,10 +45,11 @@ type ImportOptions struct {
 
 // ImportEnv moves the settings still in getenv into the database, a group at a time, under the lock every
 // process takes, so overlapping deploys import once (docs/internals/operator-console.md › First import):
-//  1. a group the database already holds any key of is skipped: the database wins;
+//  1. a group the database holds, or held once (the operator may have unset it since), is skipped: the
+//     database wins;
 //  2. a group with at least one variable set (and not only the compose file's defaults) is validated whole by
 //     its parsers and written as one version, or not at all;
-//  3. a secret the database lacks is imported once a key ring exists, even into a group already held;
+//  3. a secret the database never held is imported once a key ring exists, even into a group already held;
 //  4. the sign-up hash key comes from SIGNUP_HASH_KEY when set, and is generated only when it is not.
 func (s *Store) ImportEnv(ctx context.Context, getenv func(string) string, check GroupCheck, by Actor, options ImportOptions) (ImportResult, error) {
 	result := ImportResult{Invalid: map[string]string{}}
@@ -56,6 +57,19 @@ func (s *Store) ImportEnv(ctx context.Context, getenv func(string) string, check
 	err := s.privileged(ctx, func(tx pgx.Tx) error {
 		if err := lock(ctx, tx); err != nil {
 			return err
+		}
+		// Every key any version ever held: a group the operator set once and unset later stays unset.
+		ever := map[string]bool{}
+		saved, queryErr := tx.Query(ctx, `SELECT DISTINCT key FROM server_config_values`)
+		if queryErr != nil {
+			return fmt.Errorf("read saved settings: %w", queryErr)
+		}
+		names, collectErr := pgx.CollectRows(saved, pgx.RowTo[string])
+		if collectErr != nil {
+			return fmt.Errorf("read saved settings: %w", collectErr)
+		}
+		for _, name := range names {
+			ever[name] = true
 		}
 		for _, group := range ImportGroups() {
 			state, err := readState(ctx, tx)
@@ -73,7 +87,7 @@ func (s *Store) ImportEnv(ctx context.Context, getenv func(string) string, check
 			values, _ := s.open(raw)
 			current := NewSnapshot(state.Desired, values, products, "", s.environ, s.keys.Configured())
 			keys := GroupKeys(group)
-			held := slices.ContainsFunc(keys, func(key Key) bool { _, ok := raw[key.Name]; return ok })
+			held := slices.ContainsFunc(keys, func(key Key) bool { return ever[key.Name] })
 			if group == "polar" && len(products) > 0 {
 				held = true
 			}
@@ -103,7 +117,7 @@ func (s *Store) ImportEnv(ctx context.Context, getenv func(string) string, check
 				// Secrets the database lacks, set while the server had no ring (D8), arrive now.
 				late := map[string]string{}
 				for _, key := range keys {
-					if _, ok := raw[key.Name]; !ok && key.Secret && s.keys.Configured() && value(key.Env) != "" {
+					if !ever[key.Name] && key.Secret && s.keys.Configured() && value(key.Env) != "" {
 						late[key.Name] = value(key.Env)
 					}
 				}
@@ -149,7 +163,8 @@ func (s *Store) ImportEnv(ctx context.Context, getenv func(string) string, check
 			unset := []string{}
 			if options.Replace {
 				for _, key := range keys {
-					if _, ok := set[key.Name]; !ok && !(key.Secret && !s.keys.Configured()) {
+					// A secret the file leaves out is kept (an export leaves every secret out), as apply does.
+					if _, ok := set[key.Name]; !ok && !key.Secret {
 						unset = append(unset, key.Name)
 					}
 				}

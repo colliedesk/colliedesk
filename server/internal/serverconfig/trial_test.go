@@ -3,6 +3,8 @@ package serverconfig_test
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -158,6 +160,128 @@ func TestTheShellEndsATrialInsteadOfWaiting(t *testing.T) {
 	for _, version := range history {
 		if version.ID == second && version.Status != "reverted" {
 			t.Fatalf("the trial v%d restored over is %q, want reverted", second, version.Status)
+		}
+	}
+}
+
+// Review ADR 1: a group the database ever held is the operator's. Unset later (back to its default), it is
+// not brought back by the environment at the next start; only an explicit --replace writes it again.
+func TestAGroupUnsetLaterIsNotImportedAgain(t *testing.T) {
+	ctx := context.Background()
+	environ := map[string]string{"INTERNAL_SIGNUP_EMAILS": "@colliedesk.com", "SMTP_HOST": "smtp.example.net", "SMTP_PASSWORD": "pw"}
+	store := newStore(t, databasetest.Pool(t), ring(t, testRing), environ)
+	if _, err := store.ImportEnv(ctx, env(environ), acceptAll, cli, serverconfig.ImportOptions{SkipSignupKey: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Save(ctx, serverconfig.Change{Unset: []string{"internal_signup.emails", "smtp.password"}, Source: "cli", Actor: cli}); err != nil {
+		t.Fatal(err)
+	}
+	again, err := store.ImportEnv(ctx, env(environ), acceptAll, cli, serverconfig.ImportOptions{SkipSignupKey: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, _ := store.Current(ctx)
+	if loaded.Getenv("INTERNAL_SIGNUP_EMAILS") != "" || loaded.Getenv("SMTP_PASSWORD") != "" || len(again.Imported) != 0 || len(again.Secrets) != 0 {
+		t.Fatalf("the environment brought back what the operator unset: %+v emails=%q", again, loaded.Getenv("INTERNAL_SIGNUP_EMAILS"))
+	}
+	if _, err := store.ImportEnv(ctx, env(environ), acceptAll, cli, serverconfig.ImportOptions{SkipSignupKey: true, Replace: true}); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, _ := store.Current(ctx); loaded.Getenv("INTERNAL_SIGNUP_EMAILS") != "@colliedesk.com" {
+		t.Fatal("--replace did not write the group")
+	}
+}
+
+// Review ADR 2: --replace with a file that leaves a secret out (an export without secrets) keeps the secret,
+// as apply does.
+func TestReplaceKeepsSecretsTheFileLeavesOut(t *testing.T) {
+	ctx := context.Background()
+	store := newStore(t, databasetest.Pool(t), ring(t, testRing), nil)
+	if _, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"smtp.host": "smtp.example.net", "smtp.port": "2525", "smtp.password": "pw"}, Source: "cli", Actor: cli}); err != nil {
+		t.Fatal(err)
+	}
+	exported := map[string]string{"SMTP_HOST": "smtp.example.net", "SMTP_PORT": "2526"}
+	if _, err := store.ImportEnv(ctx, env(exported), acceptAll, cli, serverconfig.ImportOptions{SkipSignupKey: true, Replace: true}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _ := store.Current(ctx)
+	if loaded.Getenv("SMTP_PASSWORD") != "pw" || loaded.Getenv("SMTP_PORT") != "2526" {
+		t.Fatalf("after --replace: password %q port %q, want the password kept", loaded.Getenv("SMTP_PASSWORD"), loaded.Getenv("SMTP_PORT"))
+	}
+}
+
+// Every process looks for an expired trial; the advisory lock lets exactly one of them write the revert.
+func TestOneProcessRevertsAnExpiredTrial(t *testing.T) {
+	ctx := context.Background()
+	pool := databasetest.Pool(t)
+	first, second := newStore(t, pool, ring(t, testRing), nil), newStore(t, pool, ring(t, testRing), nil)
+	if _, err := first.Save(ctx, serverconfig.Change{Set: map[string]string{"trusted_proxies": "10.0.0.0/8"}, Source: "cli", Actor: cli}); err != nil {
+		t.Fatal(err)
+	}
+	trial, err := first.Save(ctx, serverconfig.Change{Set: map[string]string{"trusted_proxies": "192.168.0.0/16"}, Source: "console", Actor: operator, Trial: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE server_config_versions SET trial_expires_at = now() - interval '1 second' WHERE id=$1`, trial); err != nil {
+		t.Fatal(err)
+	}
+	results := make(chan int64, 8)
+	var wait sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		store := first
+		if i%2 == 1 {
+			store = second
+		}
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			reverted, err := store.RevertExpiredTrial(ctx)
+			if err != nil {
+				t.Error(err)
+			}
+			results <- reverted
+		}()
+	}
+	wait.Wait()
+	close(results)
+	reverts := 0
+	for reverted := range results {
+		if reverted != 0 {
+			reverts++
+		}
+	}
+	var autoReverts int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM server_config_versions WHERE source='trial-auto-revert'`).Scan(&autoReverts); err != nil {
+		t.Fatal(err)
+	}
+	if reverts != 1 || autoReverts != 1 {
+		t.Fatalf("%d processes reverted, %d revert versions; want exactly one", reverts, autoReverts)
+	}
+}
+
+// Review smoke F2: a version that removes settings lists them, secrets too, with nothing after.
+func TestHistoryListsRemovedSettings(t *testing.T) {
+	ctx := context.Background()
+	store := newStore(t, databasetest.Pool(t), ring(t, testRing), nil)
+	if _, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"smtp.host": "smtp.example.net", "smtp.username": "svc", "smtp.password": "pw"}, Source: "cli", Actor: cli}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Save(ctx, serverconfig.Change{Unset: []string{"smtp.username", "smtp.password"}, Set: map[string]string{"smtp.starttls": "false"}, Source: "cli", Actor: cli}); err != nil {
+		t.Fatal(err)
+	}
+	history, err := store.History(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(history[0].Changed, ","); got != "smtp.password,smtp.starttls,smtp.username" {
+		t.Fatalf("changed = %q, want the removed settings too", got)
+	}
+	for _, change := range history[0].Changes {
+		if change.Key == "smtp.username" && (change.After != nil || change.Before == nil || *change.Before != "svc") {
+			t.Fatalf("removed username = %+v", change)
+		}
+		if change.Key == "smtp.password" && (!change.Secret || change.Before != nil) {
+			t.Fatalf("removed password = %+v", change)
 		}
 	}
 }

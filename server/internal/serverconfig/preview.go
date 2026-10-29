@@ -2,6 +2,7 @@ package serverconfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -45,4 +46,22 @@ func (p *Preview) WorkspaceExists(ctx context.Context, slug string) (bool, error
 		return false, fmt.Errorf("look up the workspace: %w", err)
 	}
 	return exists, nil
+}
+
+// AnyOpenHelpCenter returns the slug of one workspace whose help center is on, so a trial of the help
+// center domain can fetch a real page under the new address; "" when none is.
+func (p *Preview) AnyOpenHelpCenter(ctx context.Context) (string, error) {
+	var slug string
+	err := p.db.Privileged(ctx, database.PrivilegeOperatorPreview, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx, `SELECT w.slug FROM workspaces w JOIN help_centers h ON h.workspace_id = w.id
+			WHERE h.enabled ORDER BY w.created_at, w.id LIMIT 1`).Scan(&slug)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	})
+	if err != nil {
+		return "", fmt.Errorf("find an open help center: %w", err)
+	}
+	return slug, nil
 }

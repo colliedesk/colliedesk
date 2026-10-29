@@ -526,7 +526,11 @@ paths:
         Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask
         (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address
         through the relay of the change; `polar` asks Polar about the Team and Founding products with the
-        change's token; `jwks` fetches the cloud sign-in keys. Nothing is saved. A repeat with the same Idempotency-Key checks again (nothing is stored).
+        change's token; `jwks` fetches the cloud sign-in keys; `ai` sends one short request to the server AI
+        provider of the change (its first model, a few output tokens). A help center domain without a
+        wildcard DNS record is refused in `errors`. Nothing is saved. A live test sends the server's stored
+        secrets, so an operator token gets 403 `test_needs_a_person` for one, and a change that moves an
+        endpoint answers `test.ok: false` until the secret bound to it is typed again in `secrets`. A repeat with the same Idempotency-Key checks again (nothing is stored).
       parameters:
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
@@ -539,7 +543,7 @@ paths:
                 set: {type: object, additionalProperties: {type: string}}
                 unset: {type: array, items: {type: string}}
                 secrets: {type: object, additionalProperties: {type: [string, 'null']}}
-                test: {type: string, enum: [smtp, polar, jwks]}
+                test: {type: string, enum: [smtp, polar, jwks, ai]}
       responses:
         '200':
           description: The result of the checks
@@ -576,6 +580,9 @@ paths:
       description: >-
         Saves an older version again as the newest one (secrets copied sealed). Needs `reauth_code`.
         `base_version` as for a change (409 `config_changed`). A version that does not build answers 422.
+        It passes the guards of what it changes from the version that runs: a phrase in `confirm` (400
+        `confirm_mismatch` with `error.guards`), and a trial when it changes trusted proxies, cloud sign-in or
+        the help center domain (`applies: trial`).
         An operator token's call is a request a person approves (202).
       parameters:
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}
@@ -590,6 +597,7 @@ paths:
                 base_version: {type: integer}
                 reauth_code: {type: string, maxLength: 12}
                 note: {type: string, maxLength: 500}
+                confirm: {type: object, additionalProperties: {type: string}, description: 'Per key, the phrase typed to confirm'}
       responses:
         '201':
           description: Restored as a new version
@@ -9993,6 +10001,15 @@ components:
             client_ips: {type: integer, description: Distinct client addresses seen; only one is a sign the proxies are wrong}
             cloud_sign_ins_ok: {type: integer}
             cloud_sign_ins_refused: {type: integer}
+            help_center:
+              type: object
+              required: [ok]
+              description: A help center domain on trial; one open help center fetched under it, as a visitor would
+              properties:
+                url: {type: string}
+                status: {type: integer}
+                ok: {type: boolean}
+                message: {type: string}
     OperatorProduct:
       type: object
       required: [product_id, plan, period, on_sale]
@@ -10039,6 +10056,7 @@ components:
       type: object
       required: [id, session_id, token_label, email, method, route, path, summary, note, needs_secrets, status, created_at, expires_at]
       properties:
+        guards: {type: array, items: {$ref: '#/components/schemas/OperatorConfigGuard'}, description: 'A configuration change waiting for a person: what it does and the phrases to type at approval'}
         id: {type: string, format: uuid}
         session_id: {type: string, format: uuid}
         token_label: {type: string}

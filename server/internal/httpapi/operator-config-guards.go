@@ -11,7 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/retention"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
@@ -144,6 +146,10 @@ func (a *API) configGuards(ctx context.Context, request *http.Request, current, 
 		case name == "help_center.domain":
 			preview := "Help centers move back to " + strings.TrimRight(a.config.Origin, "/") + "/help/<slug>."
 			if after != "" {
+				if refused := a.wildcardMissing(ctx, after); refused != "" {
+					add(configGuard{Key: name, Refused: refused})
+					continue
+				}
 				preview = "Every public help center moves to <slug>." + after + "; old links stop working unless redirected, and your reverse proxy needs certificates for them."
 			}
 			add(configGuard{Key: name, Trial: true, Preview: preview + " It is tried for " + minutes(TrialDuration) + " and reverts by itself unless you confirm it."})
@@ -454,4 +460,70 @@ func tryJWKS(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
 		return map[string]any{"name": "jwks", "ok": false, "message": "The JWKS address answered with no RSA key: no cloud sign-in would verify."}
 	}
 	return map[string]any{"name": "jwks", "ok": true, "message": fmt.Sprintf("The JWKS address answered with %d keys. Nothing was saved.", count)}
+}
+
+// wildcardMissing says why the help center domain cannot be used yet: every workspace's help center is
+// <slug>.<domain>, so a name nobody created must resolve (a wildcard record). It looks up one made-up name;
+// "" when it resolves.
+func (a *API) wildcardMissing(ctx context.Context, domain string) string {
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	probe := "dns-check-" + strconv.FormatInt(a.now().UnixNano()%1_000_000, 36) + "." + domain
+	if a.config.LookupCNAME == nil {
+		return ""
+	}
+	if _, err := a.config.LookupCNAME(lookupCtx, probe); err != nil {
+		return "No DNS record answers for " + probe + ": add a wildcard record *." + domain + " that points at this server first."
+	}
+	return ""
+}
+
+// helpCenterEvidence fetches a real help center under the domain a trial sets, as a visitor would.
+func (a *API) helpCenterEvidence(ctx context.Context, domain string) map[string]any {
+	slug, err := a.preview.AnyOpenHelpCenter(ctx)
+	if err != nil || slug == "" {
+		return map[string]any{"ok": false, "message": "No workspace has its help center on, so no page could be fetched."}
+	}
+	address := "https://" + helpcenter.SlugHost(domain, slug) + "/"
+	probe := a.config.HelpCenterProbe
+	if probe == nil {
+		probe = fetchStatus
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	status, err := probe(fetchCtx, address)
+	if err != nil {
+		return map[string]any{"url": address, "ok": false, "message": "The page did not answer: " + err.Error()}
+	}
+	return map[string]any{"url": address, "status": status, "ok": status == http.StatusOK}
+}
+
+func fetchStatus(ctx context.Context, address string) (int, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	if err != nil {
+		return 0, err
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	response, err := client.Do(request)
+	if err != nil {
+		return 0, err
+	}
+	_ = response.Body.Close()
+	return response.StatusCode, nil
+}
+
+// tryAI sends one tiny request to the server AI provider of the change. Nothing is saved; an error never
+// repeats the key.
+func (a *API) tryAI(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
+	server, err := ai.ServerProviderFromEnv(snap.Getenv)
+	if err != nil || server == nil {
+		return map[string]any{"name": "ai", "ok": false, "message": "Set the provider, its key or address and the models first."}
+	}
+	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	model, err := a.ai.PingServer(callCtx, server)
+	if err != nil {
+		return map[string]any{"name": "ai", "ok": false, "message": "The provider refused " + model + ": " + redactSecretsIn(err.Error(), snap)}
+	}
+	return map[string]any{"name": "ai", "ok": true, "message": "The provider answered with " + model + ". Nothing was saved."}
 }

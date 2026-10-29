@@ -105,6 +105,9 @@ type Config struct {
 	// LookupCNAME returns the end of a host name's CNAME chain, for the help center's custom domain
 	// check; nil uses the system resolver.
 	LookupCNAME func(ctx context.Context, host string) (string, error)
+	// HelpCenterProbe fetches a help center page under a domain on trial (D12) and returns its HTTP status;
+	// nil uses an HTTP client with a short timeout.
+	HelpCenterProbe func(ctx context.Context, url string) (int, error)
 	// MaxConcurrentExports caps workspace exports running at once on this server (default 2);
 	// more get 429. ExportWriteTimeout is how long one write to a slow client may block
 	// (default 60 s) before the export is aborted and its database connection released.

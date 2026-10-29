@@ -271,7 +271,7 @@ approves it in the console with their authenticator code.
 | `colliedesk_operator_token_create` | Asks an operator for another operator token | `operator` |
 | `colliedesk_operator_status` | Shows the server's release, the configuration each process runs and what needs attention | `operator` |
 | `colliedesk_operator_config_get` | Reads every setting, without secrets | `operator` |
-| `colliedesk_operator_config_check` | Checks a settings change without saving it, and can send a test email | `operator` |
+| `colliedesk_operator_config_check` | Checks a settings change without saving it and says what saving it would ask | `operator` |
 | `colliedesk_operator_config_change` | Asks an operator to change settings | `operator` |
 | `colliedesk_operator_config_history` | Lists the configuration versions and what each changed | `operator` |
 | `colliedesk_operator_config_restore` | Asks an operator to restore an older configuration version | `operator` |

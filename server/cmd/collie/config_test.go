@@ -384,3 +384,55 @@ func TestConfigTrialFromTheShell(t *testing.T) {
 		t.Fatalf("after a set from the shell: %q", shown)
 	}
 }
+
+// Review ADR 3: .env lines are read the way Compose reads them: an unquoted value ends at " #".
+func TestConfigImportReadsDotEnvLikeCompose(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("MAILBOX_TOKEN_KEYS", cliTestRing)
+	mustConfig(t, databaseURL, "SMTP_HOST=smtp.example.com # main\nSMTP_PORT=2525 # alt\nSMTP_USERNAME=\"ops # desk\"\n", "import", "--stdin")
+	for key, want := range map[string]string{"smtp.host": "smtp.example.com", "smtp.port": "2525", "smtp.username": "ops # desk"} {
+		if got := strings.TrimSpace(mustConfig(t, databaseURL, "", "get", key)); got != key+"="+want {
+			t.Errorf("%s: %q", key, got)
+		}
+	}
+}
+
+// Review ADR round 2: on the hosted cloud (billing and cloud sign-in on), a console without its own host is
+// an error of the doctor.
+func TestDoctorRefusesAConsoleOnTheAppOriginOfTheHostedCloud(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("MAILBOX_TOKEN_KEYS", cliTestRing)
+	store, err := openConfigStore(database.New(cliPool(t, databaseURL)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	hosted := serverconfig.NewSnapshot(0, map[string]string{"polar.access_token": "tok", "polar.webhook_secret": "wh", "cloud_auth.issuer": "https://id.example.com",
+		"cloud_auth.jwks_url": "https://id.example.com/jwks", "cloud_auth.authorized_parties": "https://desk.example.com", "clerk.publishable_key": "pk"},
+		[]serverconfig.ProductRow{{ProductID: "a", Plan: "team", Period: "monthly", OnSale: true}, {ProductID: "b", Plan: "team", Period: "yearly", OnSale: true},
+			{ProductID: "c", Plan: "founding", Period: "single", OnSale: true}}, "", func(string) string { return "" }, true)
+	if !hostedCloud(hosted.Getenv) {
+		t.Fatal("the fixture is not a hosted cloud")
+	}
+	for _, row := range hosted.Products() {
+		if err := store.AddProduct(ctx, row, serverconfig.Actor{Name: "t"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.Save(ctx, serverconfig.Change{Set: hosted.Values(), Source: "cli", Actor: serverconfig.Actor{Name: "t"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, errs, err := doctorFindings(ctx, store, func(string) string { return "" })
+	if err != nil || !slices.ContainsFunc(errs, func(text string) bool { return strings.Contains(text, "OPERATOR_ORIGIN") }) {
+		t.Fatalf("doctor errors = %v %v", errs, err)
+	}
+	_, errs, _ = doctorFindings(ctx, store, func(name string) string {
+		if name == "OPERATOR_ORIGIN" {
+			return "https://ops.example.com"
+		}
+		return ""
+	})
+	if slices.ContainsFunc(errs, func(text string) bool { return strings.Contains(text, "OPERATOR_ORIGIN") }) {
+		t.Fatalf("with its own host: %v", errs)
+	}
+}

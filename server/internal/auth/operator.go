@@ -691,9 +691,12 @@ func (s *OperatorService) Once(ctx context.Context, operatorID, operation, key s
 		return stored, !claimed && err == nil, err
 	}
 	answer, err := create(ctx)
+	// The outcome is recorded even when the client left meanwhile, or its key would stay "in flight" and the
+	// answer (a token shown once) would never reach a retry.
+	detached := context.WithoutCancel(ctx)
 	if err != nil {
-		_ = s.privileged(context.WithoutCancel(ctx), func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, `DELETE FROM operator_idempotency WHERE operator_id=$1 AND operation=$2 AND key=$3`, operatorID, operation, key)
+		_ = s.privileged(detached, func(tx pgx.Tx) error {
+			_, err := tx.Exec(detached, `DELETE FROM operator_idempotency WHERE operator_id=$1 AND operation=$2 AND key=$3`, operatorID, operation, key)
 			return err
 		})
 		return nil, false, err
@@ -702,8 +705,8 @@ func (s *OperatorService) Once(ctx context.Context, operatorID, operation, key s
 	if err != nil {
 		return nil, false, err
 	}
-	err = s.privileged(context.WithoutCancel(ctx), func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE operator_idempotency SET answer=$4 WHERE operator_id=$1 AND operation=$2 AND key=$3`, operatorID, operation, key, encoded)
+	err = s.privileged(detached, func(tx pgx.Tx) error {
+		_, err := tx.Exec(detached, `UPDATE operator_idempotency SET answer=$4 WHERE operator_id=$1 AND operation=$2 AND key=$3`, operatorID, operation, key, encoded)
 		return err
 	})
 	return nil, false, err

@@ -35,12 +35,14 @@ export default function TrialStrip({ trial, totp, onDecided }: { trial: Trial; t
   const evidence = trial.evidence;
   const cloud = trial.keys.some((key) => key.startsWith('cloud_auth.') || key === 'clerk.publishable_key');
   const proxies = trial.keys.includes('trusted_proxies');
-  const doubtful = (cloud && evidence.cloud_sign_ins_ok === 0 && evidence.cloud_sign_ins_refused > 0) || (proxies && evidence.client_ips === 1);
+  const page = evidence.help_center;
+  const doubtful = (cloud && evidence.cloud_sign_ins_ok === 0 && evidence.cloud_sign_ins_refused > 0) || (proxies && evidence.client_ips === 1) || (page !== undefined && !page.ok);
   return <section className="ops-strip" aria-label={m.trialInProgress}>
     <AlertIcon />
     <span><strong>{m.tryingVersion(trial.version, trial.keys.join(', '))}</strong> {m.revertsTo(trial.parent_version)}{' '}
       <span className="timer" role="timer" aria-live="off">{clock(left)}</span> {m.unlessConfirmed}
-      <span className="strip-more"> {proxies && m.trialYourIP(evidence.your_ip, evidence.client_ips)}{cloud && m.trialSignIns(evidence.cloud_sign_ins_ok, evidence.cloud_sign_ins_refused)}</span></span>
+      <span className="strip-more"> {proxies && m.trialYourIP(evidence.your_ip, evidence.client_ips)}{cloud && m.trialSignIns(evidence.cloud_sign_ins_ok, evidence.cloud_sign_ins_refused)}
+        {page?.url && m.trialHelpCenter(page.url, page.ok, page.status)}</span></span>
     <span className="sr-only" aria-live="polite">{announcement(left)}</span>
     <div className="button-row">
       <button type="button" onClick={() => setDeciding('revert')}>{m.revertNow}</button>

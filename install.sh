@@ -205,16 +205,21 @@ volumes:
   attachments-data:
 COMPOSE
 # The compose file this run replaces stays next to it, so the older image can run again with it.
+REPLACED=
 if [ -f "$TARGET_DIR/compose.yaml" ] && ! cmp -s "$TARGET_DIR/compose.yaml" "$TARGET_DIR/compose.yaml.next"; then
   cp "$TARGET_DIR/compose.yaml" "$TARGET_DIR/compose.yaml.bak"
+  REPLACED=1
 fi
 mv "$TARGET_DIR/compose.yaml.next" "$TARGET_DIR/compose.yaml"
 
 cd "$TARGET_DIR"
 if [ -n "$SETTINGS" ]; then
   "$DOCKER" compose up -d --wait postgres || fail 'PostgreSQL did not start. Run docker compose ps for details.'
-  printf '%s' "$SETTINGS" | "$DOCKER" compose run --rm -T server '/app/collie migrate && /app/collie config import --stdin --only-missing' ||
-    fail 'Importing the settings from .env failed. Run docker compose logs server for details.'
+  if ! printf '%s' "$SETTINGS" | "$DOCKER" compose run --rm -T server '/app/collie migrate && /app/collie config import --stdin --only-missing'; then
+    # The settings are still only in .env: put back the compose file that passes them to the server.
+    [ -z "$REPLACED" ] || mv compose.yaml.bak compose.yaml
+    fail 'Importing the settings from .env failed; the compose file was left as it was. Fix the lines it names in .env, then run the installer again.'
+  fi
 fi
 "$DOCKER" compose up -d
 

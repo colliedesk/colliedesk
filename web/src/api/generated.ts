@@ -319,7 +319,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address through the relay of the change; `polar` asks Polar about the Team and Founding products with the change's token; `jwks` fetches the cloud sign-in keys. Nothing is saved. A repeat with the same Idempotency-Key checks again (nothing is stored). */
+        /** @description Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address through the relay of the change; `polar` asks Polar about the Team and Founding products with the change's token; `jwks` fetches the cloud sign-in keys; `ai` sends one short request to the server AI provider of the change (its first model, a few output tokens). A help center domain without a wildcard DNS record is refused in `errors`. Nothing is saved. A live test sends the server's stored secrets, so an operator token gets 403 `test_needs_a_person` for one, and a change that moves an endpoint answers `test.ok: false` until the secret bound to it is typed again in `secrets`. A repeat with the same Idempotency-Key checks again (nothing is stored). */
         post: operations["checkOperatorConfig"];
         delete?: never;
         options?: never;
@@ -355,7 +355,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Saves an older version again as the newest one (secrets copied sealed). Needs `reauth_code`. `base_version` as for a change (409 `config_changed`). A version that does not build answers 422. An operator token's call is a request a person approves (202). */
+        /** @description Saves an older version again as the newest one (secrets copied sealed). Needs `reauth_code`. `base_version` as for a change (409 `config_changed`). A version that does not build answers 422. It passes the guards of what it changes from the version that runs: a phrase in `confirm` (400 `confirm_mismatch` with `error.guards`), and a trial when it changes trusted proxies, cloud sign-in or the help center domain (`applies: trial`). An operator token's call is a request a person approves (202). */
         post: operations["restoreOperatorConfigVersion"];
         delete?: never;
         options?: never;
@@ -6656,6 +6656,13 @@ export interface components {
                 client_ips: number;
                 cloud_sign_ins_ok: number;
                 cloud_sign_ins_refused: number;
+                /** @description A help center domain on trial; one open help center fetched under it, as a visitor would */
+                help_center?: {
+                    url?: string;
+                    status?: number;
+                    ok: boolean;
+                    message?: string;
+                };
             };
         };
         OperatorProduct: {
@@ -6701,6 +6708,8 @@ export interface components {
             ip?: string;
         };
         OperatorRequest: {
+            /** @description A configuration change waiting for a person: what it does and the phrases to type at approval */
+            guards?: components["schemas"]["OperatorConfigGuard"][];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -8091,7 +8100,7 @@ export interface operations {
                         [key: string]: string | null;
                     };
                     /** @enum {string} */
-                    test?: "smtp" | "polar" | "jwks";
+                    test?: "smtp" | "polar" | "jwks" | "ai";
                 };
             };
         };
@@ -8154,6 +8163,10 @@ export interface operations {
                     base_version: number;
                     reauth_code?: string;
                     note?: string;
+                    /** @description Per key, the phrase typed to confirm */
+                    confirm?: {
+                        [key: string]: string;
+                    };
                 };
             };
         };

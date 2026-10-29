@@ -76,7 +76,7 @@ function SettingRow({ setting, draft, setDraft, error }: { setting: Setting; dra
       </div>;
     } else {
       control = <div className="secret">
-        <span>{m.secretSet(when(setting.set_at), setting.set_by ?? '')}</span>
+        <span>{m.secretIsSet}</span>
         <div className="button-row">
           <button type="button" disabled={!setting.editable} onClick={() => setReplacing(true)}>{m.replace}</button>
           <button type="button" className="danger-action" disabled={!setting.editable} onClick={() => setDraft((current) => ({ ...current, unset: [...current.unset.filter((key) => key !== setting.key), setting.key] }))}>{m.remove}</button>
@@ -116,6 +116,8 @@ function asks(draft: Draft, settings: Setting[]): string[] {
   const out: string[] = [];
   if (need.reenter.length) out.push(m.askReenter);
   if (mayAskToType(draft, settings)) out.push(m.askConfirm);
+  const changed = new Set(changedKeys(draft));
+  if (settings.some((setting) => changed.has(setting.key) && setting.guards.includes('trial'))) out.push(m.askTrial);
   if (need.reauth) out.push(m.askReauth);
   return out;
 }
@@ -133,7 +135,10 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const changed = changedKeys(draft);
-  const runTest = async (kind: 'smtp' | 'polar' | 'jwks') => {
+  // A draft spans pages: say how many of its changes are not on this one.
+  const here = new Set((sections[group] ?? []).flatMap((section) => section.keys));
+  const elsewhere = changed.filter((key) => !here.has(key)).length;
+  const runTest = async (kind: 'smtp' | 'polar' | 'jwks' | 'ai') => {
     setTesting(true);
     try {
       const result = await api.check({ set: draft.set, unset: draft.unset, secrets: draft.secrets, test: kind });
@@ -145,8 +150,12 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
       setTesting(false);
     }
   };
+  // A saved trial's line goes once the trial is confirmed or reverted.
+  const trialRuns = Boolean(data.status.trial);
+  useEffect(() => { if (!trialRuns) setSaved((current) => (current?.applies === 'trial' ? null : current)); }, [trialRuns]);
   return <div className="ops-page-inner">
     <header className="page-head"><div><h1 id="page-title">{m.groups[group]}</h1><p>{m.groupLead[group]}</p></div></header>
+    {errors[''] && <p className="error-copy page-error" role="alert">{errors['']}</p>}
     {saved && <p className="apply-line" role="status"><span className="dot" data-tone="ok" /><span>{saved.applies === 'trial' ? m.savedTrial(saved.version) : m.saved(saved.version, saved.applies === 'at_once')}</span>
       <a className="link-button" href={href('/history')} onClick={(event) => { event.preventDefault(); navigate('/history'); }}>{m.undoInHistory}</a></p>}
     {conflict && <section className="ops-strip" data-tone="danger" role="alert"><span><strong>{m.conflictTitle}.</strong> {m.conflictLead}</span>
@@ -159,14 +168,15 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
           <SettingRow key={setting.key} setting={setting} draft={draft} setDraft={setDraft} error={errors[setting.key]} />)}
         {section.test && <div className="ops-check">
           <button type="button" disabled={testing} onClick={() => void runTest(section.test!)}>{testing ? m.checking
-            : section.test === 'smtp' ? m.sendTestEmail(data.config.operator_email ?? data.me.operator.email) : section.test === 'polar' ? m.tryPolar : m.tryJWKS}</button>
+            : section.test === 'smtp' ? m.sendTestEmail(data.config.operator_email ?? data.me.operator.email) : section.test === 'polar' ? m.tryPolar : section.test === 'ai' ? m.tryAI : m.tryJWKS}</button>
           {test && <p className={test.ok ? 'help' : 'error-copy'} role={test.ok ? 'status' : 'alert'}>{test.message}</p>}
         </div>}
       </div>
     </section>)}
     {group === 'billing' && <Suspense fallback={null}><ProductsSection totp={data.me.operator.totp_enabled} /></Suspense>}
     {changed.length > 0 && <div className="save-bar" role="region" aria-label={m.unsavedChanges(changed.length)}>
-      <span><strong>{m.unsavedChanges(changed.length)}</strong>{asks(draft, settings).length > 0 && <> · {m.savingAsksFor} {asks(draft, settings).join(' · ')}</>}</span>
+      <span><strong>{m.unsavedChanges(changed.length)}</strong>{elsewhere > 0 && <> {m.onOtherPages(elsewhere)}</>}
+        {asks(draft, settings).length > 0 && <span className="save-asks"> · {m.savingAsksFor} {asks(draft, settings).join(' · ')}</span>}</span>
       <div className="button-row"><button type="button" onClick={() => { setDraft(emptyDraft()); setErrors({}); }}>{m.discard}</button>
         <button type="button" className="primary-action" onClick={() => setReview(true)}>{m.reviewAndSave}</button></div>
     </div>}
@@ -241,7 +251,7 @@ export function Review({ data, draft, onClose, onSaved, onInvalid, onConflict }:
       const secret = setting?.secret;
       const after = key in draft.set ? draft.set[key] : draft.unset.includes(key) ? '' : null;
       return <li className="diff-row" key={key}><div>{fields[key]?.label ?? key}<code className="key">{key}</code></div>
-        {secret ? <div className="diff-vals">{m.replaced}</div> : <div className="diff-vals"><del>{setting?.value || setting?.default || '—'}</del><ins>{after || '—'}</ins></div>}</li>;
+        {secret ? <div className="diff-vals">{draft.unset.includes(key) ? m.removed : m.replaced}</div> : <div className="diff-vals"><del>{setting?.value || setting?.default || '—'}</del><ins>{after || '—'}</ins></div>}</li>;
     })}</ul>
     {guards === null && <p className="help" aria-busy="true">{m.checkingChange}…</p>}
     {need.preview.length > 0 && <div className="warning-note"><h3>{m.whatItDoes}</h3><ul>{need.preview.map((text) => <li key={text}>{text}</li>)}</ul></div>}

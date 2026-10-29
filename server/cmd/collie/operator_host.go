@@ -72,9 +72,14 @@ func writeWrongHost(response http.ResponseWriter, host, operatorOrigin string) {
 	response.Header().Set("Referrer-Policy", "no-referrer")
 	response.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
 	response.WriteHeader(http.StatusNotFound)
+	// A page of its own (the app host serves none of the console's files): the console's palette and type,
+	// light or dark with the system.
 	_, _ = response.Write([]byte(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
-		`<title>Colliedesk</title><style>body{margin:0;font:16px/1.5 system-ui,sans-serif;color:#0a0a0a;background:#fafafa}header{background:#0a0a0a;color:#fafafa;padding:12px 16px}` +
-		`main{max-width:36rem;margin:48px auto;padding:0 16px}a{color:inherit}</style></head><body><header>Colliedesk · ` + escape.Replace(host) + `</header>` +
+		`<title>Operator console · Colliedesk</title><style>body{margin:0;font:15px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#0a0a0a;background:#fafafa}` +
+		`header{background:#0a0a0a;color:#fafafa;padding:12px 16px;font-weight:600}header span{font:13px 'IBM Plex Mono',ui-monospace,monospace;color:#a3a3a3;margin-left:12px}` +
+		`main{max-width:36rem;margin:48px auto;padding:0 16px}h1{font:500 26px/1.15 'IBM Plex Serif',Georgia,serif}a{color:inherit}code{font:13px 'IBM Plex Mono',ui-monospace,monospace}` +
+		`@media (prefers-color-scheme:dark){body{background:#0a0a0a;color:#fafafa}header{box-shadow:inset 0 -1px 0 #404040}}</style></head><body>` +
+		`<header>Operator console<span>` + escape.Replace(host) + `</span></header>` +
 		`<main><h1>The operator console has its own address</h1><p>Open <a href="` + escape.Replace(operatorOrigin) + `">` + escape.Replace(operatorOrigin) + `</a>. ` +
-		`A sign-in link printed with collie operator pair points there.</p></main></body></html>`))
+		`A sign-in link printed with <code>collie operator pair</code> points there.</p></main></body></html>`))
 }

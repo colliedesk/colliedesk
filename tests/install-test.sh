@@ -29,6 +29,10 @@ if [ "${1:-}" = run ]; then
   [ "${STUB_MODE:-ok}" = old-image ] || printf '%s\n' 'Usage: collie <serve|migrate|config|create-workspace|pair>'
   exit
 fi
+if [ "${1:-}" = compose ] && [ "${2:-}" = run ] && [ "${STUB_MODE:-ok}" = import-fails ]; then
+  cat >/dev/null
+  exit 1
+fi
 if [ "${1:-}" = compose ] && [ "${2:-}" = run ]; then
   # The import of settings left in .env: record what the installer sends on stdin.
   printf '%s\n' "$*" >>"$STUB_LOG"
@@ -185,6 +189,16 @@ printf '%s\n' 'POSTGRES_PASSWORD=pg' 'SMTP_HOST=smtp.example.net' >"$old/.env"
 expect_failure 'is older than this installer' env STUB_MODE=old-image sh "$ROOT/install.sh" --dir "$old" --name Desk --email admin@example.com
 grep -Fx '# kept' "$old/compose.yaml" >/dev/null
 [ ! -f "$old/compose.yaml.bak" ]
+
+# An import that fails puts the older compose file back: the server keeps reading .env as before.
+failing=$TMP/failing
+mkdir -p "$failing"
+printf '%s\n' 'name: colliedesk' '# still the older one' >"$failing/compose.yaml"
+printf '%s\n' 'POSTGRES_PASSWORD=pg' 'SMTP_HOST=smtp.example.net' >"$failing/.env"
+touch "$failing/.initialized"
+expect_failure 'Importing the settings from .env failed' env STUB_MODE=import-fails sh "$ROOT/install.sh" --dir "$failing" --name Desk --email admin@example.com
+grep -Fx '# still the older one' "$failing/compose.yaml" >/dev/null
+[ ! -f "$failing/compose.yaml.bak" ]
 
 # --operator-origin (or OPERATOR_ORIGIN) puts the console on its own host; no question is asked.
 ops=$TMP/ops

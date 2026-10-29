@@ -8,6 +8,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -147,6 +149,7 @@ func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Re
 		Note    string         `json:"note"`
 		Secrets map[string]any `json:"secrets"`
 		Set     map[string]any `json:"set"`
+		Unset   []string       `json:"unset"`
 	}
 	var stored json.RawMessage
 	if len(bytes.TrimSpace(body)) > 0 {
@@ -168,7 +171,7 @@ func (a *API) fileOperatorRequest(response http.ResponseWriter, request *http.Re
 		needs = append(needs, name)
 	}
 	filed, err := a.config.Operators.FileRequest(request.Context(), who, auth.OperatorRequest{Method: request.Method, Route: route.Method + " " + route.Pattern,
-		Path: request.URL.Path, Body: stored, Summary: operatorRequestSummary(route, request.URL.Path, shape.Note), Note: shape.Note, NeedsSecrets: needs})
+		Path: request.URL.Path, Body: stored, Summary: operatorRequestSummary(route, request.URL.Path, changedNames(shape.Set, shape.Unset, shape.Secrets)), Note: shape.Note, NeedsSecrets: needs})
 	if err != nil {
 		slog.Error("file operator request", "error", err)
 		writeError(response, http.StatusInternalServerError, "internal_error", "The request could not be stored.")
@@ -195,11 +198,18 @@ func withoutApproverFields(body []byte) json.RawMessage {
 }
 
 // operatorRequestSummary says what a filed call would do, for the operator deciding.
-func operatorRequestSummary(route Route, path, note string) string {
+func operatorRequestSummary(route Route, path string, keys []string) string {
 	switch route.Method + " " + route.Pattern {
 	case "POST /api/v1/operator/tokens":
 		return "Create an operator token"
 	case "PATCH /api/v1/operator/config":
+		// The keys tell two requests apart in the list.
+		if len(keys) > 3 {
+			return "Change " + strings.Join(keys[:3], ", ") + " and " + strconv.Itoa(len(keys)-3) + " more"
+		}
+		if len(keys) > 0 {
+			return "Change " + strings.Join(keys, ", ")
+		}
 		return "Change the server's settings"
 	case "POST /api/v1/operator/config/versions/{id}/restore":
 		return "Restore configuration version " + path[strings.LastIndex(strings.TrimSuffix(path, "/restore"), "/")+1:strings.LastIndex(path, "/")]
@@ -460,4 +470,18 @@ func (a *API) createOperatorToken(response http.ResponseWriter, request *http.Re
 		kept := map[string]any{"session": operatorSessionJSON(session)}
 		return map[string]any{"token": raw, "session": operatorSessionJSON(session)}, kept, nil
 	})
+}
+
+// changedNames lists, sorted, the settings a filed configuration change names.
+func changedNames(set map[string]any, unset []string, secrets map[string]any) []string {
+	var keys []string
+	for name := range set {
+		keys = append(keys, name)
+	}
+	for name := range secrets {
+		keys = append(keys, name)
+	}
+	keys = append(keys, unset...)
+	slices.Sort(keys)
+	return slices.Compact(keys)
 }

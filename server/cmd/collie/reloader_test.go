@@ -342,3 +342,34 @@ func TestReloadRevertsATrialPastItsTime(t *testing.T) {
 		t.Fatalf("after the trial's time: v%d %q runs %s (v%d before), want the value of v%d running", loaded.Version, loaded.Getenv("TRUSTED_PROXIES"), env.get(), trial, before)
 	}
 }
+
+// D12 across a restart: a process that starts after a trial's time ran out reverts it before it serves,
+// so it never serves the trial.
+func TestStartRevertsATrialThatRanOutWhileNothingRan(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("MAILBOX_TOKEN_KEYS", cliTestRing)
+	pool := cliPool(t, databaseURL)
+	store, err := openConfigStore(database.New(pool))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"trusted_proxies": "10.0.0.0/8"}, Source: "cli", Actor: serverconfig.Actor{Name: "t"}}); err != nil {
+		t.Fatal(err)
+	}
+	trial, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"trusted_proxies": "192.168.0.0/16"}, Source: "console",
+		Actor: serverconfig.Actor{Kind: "operator", Name: "ops@example.com"}, Trial: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE server_config_versions SET trial_expires_at = now() - interval '1 minute' WHERE id=$1`, trial); err != nil {
+		t.Fatal(err)
+	}
+	_, loaded, err := startConfig(ctx, store, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Version == trial || loaded.Getenv("TRUSTED_PROXIES") != "10.0.0.0/8" {
+		t.Fatalf("start loaded v%d with proxies %q, want the version before the trial", loaded.Version, loaded.Getenv("TRUSTED_PROXIES"))
+	}
+}

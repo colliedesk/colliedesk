@@ -71,9 +71,9 @@ function Act({ data, dialog, onClose, onShown, onDone }: { data: ConsoleData; di
       setError(problem instanceof ApiError ? problem.message : m.nothingSaved);
     }
   };
-  const title = dialog === 'invite' ? m.inviteOperator : dialog === 'token' ? m.createToken : 'revoke' in dialog ? m.revokeOperatorTitle(dialog.revoke.email) : m.revoke;
+  const title = dialog === 'invite' ? m.inviteOperator : dialog === 'token' ? m.createToken : 'revoke' in dialog ? m.revokeOperatorTitle(dialog.revoke.email) : m.revokeSessionTitle(dialog.session.label || m.thisBrowser, dialog.session.email);
   const ready = codeReady && (dialog !== 'invite' || email.includes('@')) && (dialog !== 'token' || label.trim() !== '');
-  return <ConsoleDialog title={title} help={typeof dialog === 'object' && 'revoke' in dialog ? m.revokeOperatorLead : undefined} onClose={onClose} closeLabel={m.cancel}
+  return <ConsoleDialog title={title} help={typeof dialog === 'object' ? ('revoke' in dialog ? m.revokeOperatorLead : m.revokeSessionLead) : undefined} onClose={onClose} closeLabel={m.cancel}
     alert={typeof dialog === 'object'} onSubmit={() => { if (ready) void run(); }}
     footer={<><button type="button" onClick={onClose}>{m.cancel}</button>
       <button type="submit" className={typeof dialog === 'object' ? 'danger-action' : 'primary-action'} disabled={!ready}>{dialog === 'invite' ? m.invite : dialog === 'token' ? m.createToken : m.revoke}</button></>}>
@@ -81,10 +81,10 @@ function Act({ data, dialog, onClose, onShown, onDone }: { data: ConsoleData; di
       <input id="invite-email" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} /></div>}
     {dialog === 'token' && <>
       <div className="field"><label className="field-label" htmlFor="token-label">{m.tokenName}</label><input id="token-label" value={label} onChange={(event) => setLabel(event.target.value)} /></div>
-      <fieldset className="field"><legend>{m.tokenAsks}</legend>
-        <label><input type="checkbox" checked disabled /> {m.permissionNames['operator:read']}</label>
+      <fieldset className="check-list"><legend>{m.tokenAsks}</legend>
+        <label><input type="checkbox" checked disabled />{m.permissionNames['operator:read']}</label>
         {allPermissions.map((name) => <label key={name}><input type="checkbox" checked={permissions.includes(name)}
-          onChange={(event) => setPermissions(event.target.checked ? [...permissions, name] : permissions.filter((item) => item !== name))} /> {m.permissionNames[name]}</label>)}
+          onChange={(event) => setPermissions(event.target.checked ? [...permissions, name] : permissions.filter((item) => item !== name))} />{m.permissionNames[name]}</label>)}
       </fieldset>
     </>}
     {totp && <div className="field"><label className="field-label" htmlFor="act-code">{m.confirmItsYou}: {m.authenticatorCode}</label>

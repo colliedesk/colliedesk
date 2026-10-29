@@ -24,7 +24,7 @@ export function Overview({ data }: { data: ConsoleData }) {
   return <div className="ops-page-inner">
     <header className="page-head"><div><h1 id="page-title">{m.overview}</h1><p>{m.overviewLead}</p></div></header>
     <div className="ops-tiles">
-      <section className="ops-tile"><h2>{m.server}</h2><p><span>{m.binary}</span><code>{status.binary_version}</code></p><p><span>{m.migration}</span><code>{status.migration}</code></p></section>
+      <section className="ops-tile"><h2>{m.server}</h2><p><span>{m.binary}</span><code>{status.binary_version}</code></p><p><span>{m.migration}</span><code>{status.migration.replace(/\.up\.sql$/, '')}</code></p></section>
       <section className="ops-tile"><h2>{m.configuration}</h2><p><span>{m.desired}</span><code>v{status.desired_version}</code></p><p><span>{m.running}</span><code>{on}/{status.processes.length}</code></p></section>
       <section className="ops-tile"><h2>{m.processes}</h2><p><span>{m.processes}</span><code>{status.processes.length}</code></p></section>
     </div>

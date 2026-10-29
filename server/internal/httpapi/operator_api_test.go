@@ -39,6 +39,12 @@ func newOperatorEnv(t *testing.T, requireTOTP bool) *operatorEnv {
 // newOperatorEnvChecking is newOperatorEnv with the check a change must pass before it is saved.
 func newOperatorEnvChecking(t *testing.T, requireTOTP bool, check func(serverconfig.Snapshot) error) *operatorEnv {
 	t.Helper()
+	return newOperatorEnvWith(t, requireTOTP, check, nil)
+}
+
+// newOperatorEnvWith also adjusts the API's config (a resolver, a probe, an AI adapter).
+func newOperatorEnvWith(t *testing.T, requireTOTP bool, check func(serverconfig.Snapshot) error, mutate func(*httpapi.Config)) *operatorEnv {
+	t.Helper()
 	keys, err := tokenseal.ParseKeys(operatorRing)
 	if err != nil {
 		t.Fatal(err)
@@ -50,6 +56,9 @@ func newOperatorEnvChecking(t *testing.T, requireTOTP bool, check func(servercon
 		carry.Hot = hot
 		config.Carry = carry
 		config.CheckConfig = check
+		if mutate != nil {
+			mutate(config)
+		}
 	})
 	bearer := createSession(t, api, workspaces, "Operator Realm", "admin@realm.example.com")
 	return &operatorEnv{t: t, api: api, pool: pool, hot: hot, workspace: bearer,

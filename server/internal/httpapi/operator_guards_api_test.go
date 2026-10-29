@@ -1,17 +1,26 @@
 package httpapi_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
+	"github.com/jackc/pgx/v5"
 )
 
 type guardAnswer struct {
@@ -208,11 +217,13 @@ func TestATokenCannotTypeTheApproversPhrase(t *testing.T) {
 		response := serve(e.api, req)
 		return response.Code, response.Body.String()
 	}
-	if code, body := approve(map[string]any{"reauth_code": nextCode(secret)}); code != http.StatusBadRequest || !strings.Contains(body, `"phrase":"any"`) {
-		t.Fatalf("approve without the phrase: %d %s", code, body)
+	code := nextCode(secret)
+	if status, body := approve(map[string]any{"reauth_code": code}); status != http.StatusBadRequest || !strings.Contains(body, `"phrase":"any"`) {
+		t.Fatalf("approve without the phrase: %d %s", status, body)
 	}
-	if code, body := approve(map[string]any{"confirm": map[string]any{"email.from_policy": "any"}}); code != http.StatusOK || !strings.Contains(body, `"status":"approved"`) {
-		t.Fatalf("approve with the phrase: %d %s", code, body)
+	// The wrong phrase did not spend the code: the same code approves with the phrase.
+	if status, body := approve(map[string]any{"reauth_code": code, "confirm": map[string]any{"email.from_policy": "any"}}); status != http.StatusOK || !strings.Contains(body, `"status":"approved"`) {
+		t.Fatalf("approve with the phrase: %d %s", status, body)
 	}
 }
 
@@ -322,5 +333,215 @@ func TestCheckFetchesTheSignInKeysOfAChange(t *testing.T) {
 	}
 	if e.version(cookie) != 0 {
 		t.Fatal("a check saved something")
+	}
+}
+
+// A help center domain needs its wildcard DNS record before it is saved; while it is tried, the band shows
+// what a visitor gets from a real help center under it.
+func TestHelpCenterDomainNeedsItsWildcardAndIsFetchedOnTrial(t *testing.T) {
+	wildcard := false
+	fetched := ""
+	e := newOperatorEnvWith(t, false, func(serverconfig.Snapshot) error { return nil }, func(config *httpapi.Config) {
+		config.LookupCNAME = func(_ context.Context, host string) (string, error) {
+			if wildcard && strings.HasSuffix(host, ".help.example.com") {
+				return host, nil
+			}
+			return "", errors.New("no such host")
+		}
+		config.HelpCenterProbe = func(_ context.Context, url string) (int, error) { fetched = url; return http.StatusOK, nil }
+	})
+	cookie := e.signIn("ops@example.com")
+	base := e.version(cookie)
+	refused := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"help_center.domain": "help.example.com"}})
+	if opsErrorCode(refused) != "config_invalid" || !strings.Contains(refused.Body.String(), "wildcard record *.help.example.com") {
+		t.Fatalf("without the wildcard: %d %s", refused.Code, refused.Body.String())
+	}
+	wildcard = true
+	tried := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"help_center.domain": "help.example.com"}})
+	var saved struct {
+		Version int64  `json:"version"`
+		Applies string `json:"applies"`
+	}
+	decode(t, tried, &saved)
+	if saved.Applies != "trial" {
+		t.Fatalf("with the wildcard: %d %s", tried.Code, tried.Body.String())
+	}
+	if err := database.New(e.pool).Privileged(context.Background(), database.PrivilegeMigrate, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), `INSERT INTO help_centers(workspace_id, enabled) SELECT id, true FROM workspaces ORDER BY created_at LIMIT 1
+			ON CONFLICT (workspace_id) DO UPDATE SET enabled = true`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	status := operatorRequest(t, e.api, http.MethodGet, "/api/v1/operator/status", nil, cookie)
+	if !strings.Contains(status.Body.String(), `"help_center":{"ok":true,"status":200,"url":"https://`) || !strings.HasSuffix(fetched, ".help.example.com/") {
+		t.Fatalf("trial evidence: %s (fetched %q)", status.Body.String(), fetched)
+	}
+}
+
+// The AI check asks the change's provider once (one provider check), and never repeats its key.
+func TestCheckAsksTheAIProviderOnce(t *testing.T) {
+	fake := &aiprovider.Fake{}
+	e := newOperatorEnvWith(t, false, func(serverconfig.Snapshot) error { return nil }, func(config *httpapi.Config) {
+		config.AI.Build = func(ai.Spec) (aiprovider.Provider, error) { return fake, nil }
+	})
+	cookie := e.signIn("ops@example.com")
+	const key = "sk-ant-canary-never-echoed"
+	body := map[string]any{"set": map[string]any{"ai.server.provider": "anthropic", "ai.server.models": "triage=claude-haiku-5-5"},
+		"secrets": map[string]any{"ai.server.api_key": key}, "test": "ai"}
+	fake.Script(aiprovider.FakeReply{Response: aiprovider.Response{Text: "OK"}})
+	ok := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check", body, cookie)
+	if !strings.Contains(ok.Body.String(), `"ok":true`) || !strings.Contains(ok.Body.String(), "claude-haiku-5-5") || len(fake.Requests()) != 1 || fake.Requests()[0].MaxOutput > 256 {
+		t.Fatalf("ai check: %s (%d requests)", ok.Body.String(), len(fake.Requests()))
+	}
+	fake.Script(aiprovider.FakeReply{Err: errors.New("401 invalid x-api-key " + key)})
+	refused := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check", body, cookie)
+	if strings.Contains(refused.Body.String(), key) || !strings.Contains(refused.Body.String(), `"name":"ai","ok":false`) {
+		t.Fatalf("a refusal: %s", refused.Body.String())
+	}
+}
+
+// Review ADR round 2: a live test never sends a stored secret somewhere new. A token runs no live test at
+// all (it only reads); a person who moves an endpoint types its secret again for the test, as for a save.
+func TestALiveTestNeverSendsAStoredSecretToANewAddress(t *testing.T) {
+	connected := make(chan struct{}, 4)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			connected <- struct{}{}
+			_ = conn.Close()
+		}
+	}()
+	_, port, _ := net.SplitHostPort(listener.Addr().String())
+	e := newOperatorEnv(t, false)
+	cookie := e.signIn("ops@example.com")
+	base := e.version(cookie)
+	if saved := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"smtp.host": "smtp.example.net", "smtp.username": "svc"},
+		"secrets": map[string]any{"smtp.password": "stored-relay-password"}}); saved.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", saved.Code, saved.Body.String())
+	}
+	moved := map[string]any{"set": map[string]any{"smtp.host": "127.0.0.1", "smtp.port": port, "smtp.starttls": "false"}, "test": "smtp"}
+	token := e.token(cookie)
+	byToken := request(t, e.api, http.MethodPost, "/api/v1/operator/config/check", moved, token, nil)
+	if byToken.Code != http.StatusForbidden || opsErrorCode(byToken) != "test_needs_a_person" {
+		t.Fatalf("a token's live test: %d %s", byToken.Code, byToken.Body.String())
+	}
+	// Without a test, a token still checks a change.
+	plain := request(t, e.api, http.MethodPost, "/api/v1/operator/config/check", map[string]any{"set": map[string]any{"internal_signup.emails": "@x.example"}}, token, nil)
+	if plain.Code != http.StatusOK {
+		t.Fatalf("a token's check: %d %s", plain.Code, plain.Body.String())
+	}
+	byPerson := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check", moved, cookie)
+	if !strings.Contains(byPerson.Body.String(), `"ok":false`) || !strings.Contains(byPerson.Body.String(), "smtp.password") {
+		t.Fatalf("a person's test to a new relay without the password: %s", byPerson.Body.String())
+	}
+	select {
+	case <-connected:
+		t.Fatal("the server connected to the new relay with the stored password")
+	default:
+	}
+}
+
+// Review UI/UX 2: a change that does not build says why in the console's words, never a variable name.
+func TestACheckThatFailsNamesNoVariable(t *testing.T) {
+	e := newOperatorEnvChecking(t, false, func(snap serverconfig.Snapshot) error { _, err := polar.ConfigFromEnv(snap.Getenv); return err })
+	cookie := e.signIn("ops@example.com")
+	check := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check",
+		map[string]any{"secrets": map[string]any{"polar.access_token": "tok", "polar.webhook_secret": "wh"}}, cookie)
+	if !strings.Contains(check.Body.String(), "team monthly product") || strings.Contains(check.Body.String(), "POLAR_") {
+		t.Fatalf("check: %s", check.Body.String())
+	}
+}
+
+// Review smoke F3: removing a relay's password (and username) asks for no password again; moving the relay
+// while the password stays does.
+func TestRemovingASecretAsksNotToTypeItAgain(t *testing.T) {
+	e := newOperatorEnv(t, false)
+	cookie := e.signIn("ops@example.com")
+	base := e.version(cookie)
+	if saved := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"smtp.host": "smtp.example.net", "smtp.username": "svc"},
+		"secrets": map[string]any{"smtp.password": "pw"}}); saved.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", saved.Code, saved.Body.String())
+	}
+	base = e.version(cookie)
+	if removed := e.patch(cookie, map[string]any{"base_version": base, "unset": []string{"smtp.username", "smtp.password"}}); removed.Code != http.StatusOK {
+		t.Fatalf("removing the password: %d %s", removed.Code, removed.Body.String())
+	}
+	base = e.version(cookie)
+	if same := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"smtp.host": "smtp.example.net", "smtp.port": "2525"}, "secrets": map[string]any{"smtp.password": "pw"}}); same.Code != http.StatusOK {
+		t.Fatalf("save again: %d %s", same.Code, same.Body.String())
+	}
+	base = e.version(cookie)
+	if moved := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"smtp.host": "other.example.net"}}); opsErrorCode(moved) != "reenter_secret" {
+		t.Fatalf("moving the relay: %s", moved.Body.String())
+	}
+}
+
+// Review smoke F1: a restore passes the guards of what it changes from the version that runs.
+func TestARestorePassesTheGuardsOfWhatItChanges(t *testing.T) {
+	e := newOperatorEnv(t, false)
+	cookie := e.signIn("ops@example.com")
+	if first := e.patch(cookie, map[string]any{"base_version": 0, "set": map[string]any{"internal_signup.emails": "@example.com"}}); first.Code != http.StatusOK {
+		t.Fatalf("first: %s", first.Body.String())
+	}
+	before := e.version(cookie)
+	if saved := e.patch(cookie, map[string]any{"base_version": before, "set": map[string]any{"trusted_proxies": "10.0.0.0/8"}}); saved.Code != http.StatusOK {
+		t.Fatalf("proxies: %s", saved.Body.String())
+	}
+	proxies := e.version(cookie)
+	if kept := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/trial/confirm", map[string]any{"version": proxies}, cookie); kept.Code != http.StatusCreated {
+		t.Fatalf("confirm: %s", kept.Body.String())
+	}
+	if on := e.patch(cookie, map[string]any{"base_version": proxies, "secrets": map[string]any{"polar.access_token": "tok"}, "confirm": map[string]any{"polar.access_token": "billing on"}}); on.Code != http.StatusOK {
+		t.Fatalf("billing on: %s", on.Body.String())
+	}
+	billing := e.version(cookie)
+	restore := func(version int64, body map[string]any) *httptest.ResponseRecorder {
+		body["base_version"] = billing
+		return operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/versions/"+strconv.FormatInt(version, 10)+"/restore", body, cookie)
+	}
+	// Back to before billing: billing turns off, so the phrase is asked.
+	untyped := restore(proxies, map[string]any{})
+	if opsErrorCode(untyped) != "confirm_mismatch" || !strings.Contains(untyped.Body.String(), `"phrase":"billing off"`) {
+		t.Fatalf("restore untyped: %d %s", untyped.Code, untyped.Body.String())
+	}
+	// Back to before the proxies too: also a trial.
+	typed := restore(before, map[string]any{"confirm": map[string]any{"polar.access_token": "billing off"}})
+	if typed.Code != http.StatusCreated || !strings.Contains(typed.Body.String(), `"applies":"trial"`) {
+		t.Fatalf("restore typed: %d %s", typed.Code, typed.Body.String())
+	}
+}
+
+// Review smoke F4: a request filed on an older version applies on the version that runs when it is approved.
+func TestARequestOnAnOlderVersionStillApplies(t *testing.T) {
+	e := newOperatorEnv(t, false)
+	cookie := e.signIn("ops@example.com")
+	token := e.token(cookie, auth.PermOperatorConfigWrite)
+	asked := request(t, e.api, http.MethodPatch, "/api/v1/operator/config", map[string]any{"base_version": 0, "set": map[string]any{"internal_signup.emails": "@agent.example"}}, token, nil)
+	var filed struct {
+		RequestID string `json:"request_id"`
+	}
+	decode(t, asked, &filed)
+	if saved := e.patch(cookie, map[string]any{"base_version": 0, "set": map[string]any{"internal_signup.networks": "10.0.0.0/8"}}); saved.Code != http.StatusOK {
+		t.Fatalf("a save meanwhile: %s", saved.Body.String())
+	}
+	req := newRequest(t, http.MethodPost, "/api/v1/agent-requests/"+filed.RequestID+"/approve", map[string]any{}, "", cookie)
+	req.Header.Set("Origin", testOrigin)
+	req.Header.Set("X-Colliedesk-Realm", "operator")
+	approved := serve(e.api, req)
+	if approved.Code != http.StatusOK || !strings.Contains(approved.Body.String(), `"status":"approved"`) {
+		t.Fatalf("approve on a newer version: %d %s", approved.Code, approved.Body.String())
+	}
+	config := operatorRequest(t, e.api, http.MethodGet, "/api/v1/operator/config", nil, cookie).Body.String()
+	if !strings.Contains(config, `"value":"@agent.example"`) || !strings.Contains(config, `"value":"10.0.0.0/8"`) {
+		t.Fatal("the approved change did not apply on the newer version, or replaced it")
 	}
 }

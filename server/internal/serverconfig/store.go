@@ -512,6 +512,12 @@ func (s *Store) Audit(ctx context.Context, actor Actor, action string, version i
 
 // Restore saves an older version again as the newest one; secrets are copied sealed.
 func (s *Store) Restore(ctx context.Context, from int64, base int64, actor Actor, note string) (int64, error) {
+	return s.RestoreTrial(ctx, from, base, actor, note, 0)
+}
+
+// RestoreTrial is Restore saved as a trial (D12) when trial is above 0: a restore that changes trusted
+// proxies, cloud sign-in or the help center domain is tried like any change of them.
+func (s *Store) RestoreTrial(ctx context.Context, from int64, base int64, actor Actor, note string, trial time.Duration) (int64, error) {
 	var version int64
 	err := s.privileged(ctx, func(tx pgx.Tx) error {
 		if err := lock(ctx, tx); err != nil {
@@ -557,7 +563,7 @@ func (s *Store) Restore(ctx context.Context, from int64, base int64, actor Actor
 		if note == "" {
 			note = fmt.Sprintf("restores v%d", from)
 		}
-		version, err = s.insertVersion(ctx, tx, state.Desired, old, Change{Source: "restore", Note: note, Actor: actor}, changed)
+		version, err = s.insertVersion(ctx, tx, state.Desired, old, Change{Source: "restore", Note: note, Actor: actor, Trial: trial}, changed)
 		return err
 	})
 	return version, err
@@ -574,15 +580,17 @@ func (s *Store) History(ctx context.Context, limit int) ([]Version, error) {
 			WITH page AS (
 				SELECT id, created_at, created_by, source, parent_id, note, status, coalesce(rejected_reason,'') AS rejected
 				FROM server_config_versions ORDER BY id DESC LIMIT $1
+			), cur AS (
+				SELECT p.id, v.key, v.value, v.sealed, v.seal_key_id FROM page p JOIN server_config_values v ON v.version_id = p.id
+			), par AS (
+				SELECT p.id, v.key, v.value, v.sealed, v.seal_key_id FROM page p JOIN server_config_values v ON v.version_id = p.parent_id
 			), pairs AS (
-				SELECT p.id, coalesce(c.key, b.key) AS key, (c.sealed IS NOT NULL OR b.sealed IS NOT NULL) AS secret,
+				-- Both sides keep their version id, so a key the version removed (only in its parent) is listed too.
+				SELECT coalesce(c.id, b.id) AS id, coalesce(c.key, b.key) AS key, (c.sealed IS NOT NULL OR b.sealed IS NOT NULL) AS secret,
 					CASE WHEN c.sealed IS NULL AND b.sealed IS NULL THEN b.value END AS before,
 					CASE WHEN c.sealed IS NULL AND b.sealed IS NULL THEN c.value END AS after
-				FROM page p
-				JOIN server_config_values c ON c.version_id = p.id
-				FULL JOIN (SELECT p2.id AS id, v.key, v.value, v.sealed, v.seal_key_id FROM page p2 JOIN server_config_values v ON v.version_id = p2.parent_id) b
-					ON b.id = c.version_id AND b.key = c.key
-				WHERE c.version_id IS NULL OR b.id IS NULL
+				FROM cur c FULL JOIN par b ON b.id = c.id AND b.key = c.key
+				WHERE c.id IS NULL OR b.id IS NULL
 					OR c.value IS DISTINCT FROM b.value OR c.sealed IS DISTINCT FROM b.sealed OR c.seal_key_id IS DISTINCT FROM b.seal_key_id
 			)
 			SELECT p.id, p.created_at, p.created_by, p.source, p.parent_id, p.note, p.status, p.rejected,

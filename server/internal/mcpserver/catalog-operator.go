@@ -129,11 +129,11 @@ const changeProperties = `"set":{"type":"object","additionalProperties":{"type":
 func operatorCheckSpec() Spec {
 	return Spec{
 		Name: "colliedesk_operator_config_check", Title: "Check a settings change",
-		Description: `Check a change of the server's settings without saving it: whether it builds, and with test "smtp" a test email to the operator. Nothing is saved.` + operatorToolNote,
+		Description: `Check a change of the server's settings without saving it: whether it builds, and what saving it would ask (guards). Nothing is saved. A token never runs a live test (it would send the server's secrets): an operator does that in the console.` + operatorToolNote,
 		Tier:        auth.ScopeOperator, ReadOnly: true,
 		REST:   []string{"POST /api/v1/operator/config/check"},
-		Input:  `{"type":"object","additionalProperties":false,"properties":{` + changeProperties + `,"test":{"type":"string","enum":["smtp"]}}}`,
-		Output: `{"type":"object","required":["ok","errors"],"properties":{"ok":{"type":"boolean"},"errors":{"type":"object"},"test":{"type":"object"}}}`,
+		Input:  `{"type":"object","additionalProperties":false,"properties":{` + changeProperties + `}}`,
+		Output: `{"type":"object","required":["ok","errors"],"properties":{"ok":{"type":"boolean"},"errors":{"type":"object"},"guards":{"type":"array"}}}`,
 		run: func(c *call, arguments map[string]any) (any, error) {
 			var out map[string]any
 			err := c.send(http.MethodPost, "/api/v1/operator/config/check", arguments, &out)

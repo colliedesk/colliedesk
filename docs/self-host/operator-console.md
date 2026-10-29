@@ -34,7 +34,9 @@ token stops at once; `pair` lets them in again) and `collie operator sessions [-
 
 ## Its own address
 
-By default the console is at `APP_ORIGIN/operator/`, the same address as the workspace app. Give it its
+By default the console is at `APP_ORIGIN/operator/`, the same address as the workspace app. That suits a
+self-hosted server run by the team that uses it; a server that hosts other teams (billing and cloud
+sign-in on) must give the console its own host: `collie config doctor` reports it as an error otherwise. Give it its
 own host to keep a bug in the workspace app from reaching it: set `OPERATOR_ORIGIN` in `.env` (for
 example `https://ops.example.com`), point that host at the server through your reverse proxy, and run
 `docker compose up -d`. The installer takes `--operator-origin https://ops.example.com` on a new install.
@@ -131,7 +133,7 @@ docker compose exec server /app/collie config <command>
 | `set KEY=VALUE…` | Saves settings as a new version. A setting that changes what the server does for every workspace (billing, retention, help center domain, trusted proxies, the problem report workspace, video size) needs `--yes`. |
 | `set-secret KEY` | Saves a secret read from standard input, so it never sits in your shell history. |
 | `unset KEY…`, `reset KEY…` | Removes settings: they go back to their default. |
-| `import FILE`, `import --stdin`, `import --from-env` | Imports lines written like `.env` (the variable names). `--only-missing` (the default) keeps a group the database already holds; `--replace` replaces every group the file sets. |
+| `import FILE`, `import --stdin`, `import --from-env` | Imports lines written like `.env` (the variable names). Lines are read as Compose reads `.env` (an unquoted value ends at ` #`). `--only-missing` (the default) keeps a group the database holds or once held, so a group you unset stays unset whatever `.env` still says; `--replace` replaces every group the file sets, and keeps a secret the file leaves out (as `apply` does). |
 | `export [--format env\|json] [--include-secrets]` | Writes the configuration out. Secrets only with `--include-secrets`, with a warning: keep that file like a password. |
 | `apply FILE [--dry-run]` | Makes the configuration match a JSON file (as `export --format json` writes it) and prints the difference. Settings the file leaves out are unset; secrets it leaves out are kept. Running it again changes nothing. |
 | `history` | Lists the versions: number, time, how (`env-import`, `cli`, `apply-file`, `restore`…), who, status, settings changed. |

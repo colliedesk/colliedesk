@@ -203,6 +203,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
 	telemetryConfig := telemetry.ConfigFromEnv(loaded.Getenv, origin, hostedCloud, version)
+	// The snapshot answers DISABLE_TELEMETRY for the setting too: say which turned it off.
+	if telemetryConfig.OffReason == "DISABLE_TELEMETRY is set" && os.Getenv("DISABLE_TELEMETRY") == "" {
+		telemetryConfig.OffReason = "telemetry.enabled is false"
+	}
 	usage := telemetry.New(db, telemetryConfig, nil)
 	g.Go(func(ctx context.Context) { usage.Run(ctx, logger) })
 	// The results page only reads numbers this worker computes (docs/internals/results.md). It also sends
