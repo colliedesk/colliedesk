@@ -207,6 +207,7 @@ var tokenTiers = map[string]TokenAccess{
 	// person for every change (operator requests, docs/internals/operator-console.md).
 	"POST /api/v1/operator/auth/redeem":                  notForPeople,
 	"POST /api/v1/operator/auth/totp":                    notForPeople,
+	"POST /api/v1/operator/auth/cloud":                   notForPeople,
 	"GET /api/v1/operator/auth/me":                       anyOperatorToken,
 	"POST /api/v1/operator/auth/logout":                  anyOperatorToken,
 	"POST /api/v1/operator/tokens":                       alwaysAsk(auth.PermOperatorManage),

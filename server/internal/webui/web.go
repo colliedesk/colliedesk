@@ -6,12 +6,19 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 )
 
 //go:embed static
 var assets embed.FS
 
-func Handler(api http.Handler) http.Handler {
+// ConsoleSignIn is what the console's sign-in page needs of cloud sign-in; the zero value when it is off.
+type ConsoleSignIn struct {
+	PublishableKey string
+}
+
+func Handler(api http.Handler, signIn ConsoleSignIn) http.Handler {
 	static, err := fs.Sub(assets, "static")
 	if err != nil {
 		panic(err)
@@ -21,7 +28,7 @@ func Handler(api http.Handler) http.Handler {
 		served, _ = fs.Sub(static, "build")
 	}
 	files := http.FileServer(http.FS(served))
-	console := OperatorHandler("/operator")
+	console := OperatorHandler("/operator", signIn)
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if strings.HasPrefix(request.URL.Path, "/api/") {
 			api.ServeHTTP(response, request)
@@ -50,10 +57,24 @@ func Handler(api http.Handler) http.Handler {
 const operatorCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; " +
 	"frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
 
+// signInCSP is the sign-in page's policy when the operator signs in with cloud sign-in: the console's, plus
+// what the identity provider's form needs (its Frontend API host, bot protection, inline styles; Clerk's
+// list, clerk.com/docs/security/clerk-csp). Only this page gets it: after a cloud sign-in the console loads
+// itself again, so every signed-in screen runs under operatorCSP.
+func signInCSP(frontendHost string) string {
+	host := "https://" + frontendHost
+	return "default-src 'self'; script-src 'self' " + host + " https://challenges.cloudflare.com https://*.protect.clerk.com; " +
+		"connect-src 'self' " + host + " https://*.protect.clerk.com:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://img.clerk.com; " +
+		"frame-src https://challenges.cloudflare.com https://*.protect.clerk.com; worker-src 'self' blob:; " +
+		"frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
+}
+
 // OperatorHandler serves the operator console (its own Vite build, build/operator). Its files live under
 // /operator/ on every host; every other path is the console's page, told where its routes start: base is
 // "/operator" on the app's host and "" on OPERATOR_ORIGIN.
-func OperatorHandler(base string) http.Handler {
+// With signIn's publishable key every screen names it (colliedesk-operator-clerk) and the sign-in page gets
+// signInCSP.
+func OperatorHandler(base string, signIn ConsoleSignIn) http.Handler {
 	static, err := fs.Sub(assets, "static/build/operator")
 	if err != nil {
 		panic(err)
@@ -62,6 +83,13 @@ func OperatorHandler(base string) http.Handler {
 	page, pageErr := fs.ReadFile(static, "operator.html")
 	if pageErr == nil {
 		page = bytes.Replace(page, []byte(`name="colliedesk-operator-base" content="/operator"`), []byte(`name="colliedesk-operator-base" content="`+base+`"`), 1)
+	}
+	frontendHost := cloudauth.FrontendHost(signIn.PublishableKey)
+	if frontendHost != "" && pageErr == nil {
+		// Every screen names the key (public, as /api/v1/config serves it to the app): signing out and an
+		// ended session lead to the cloud sign-in. The key matched pk_(live|test)_[A-Za-z0-9+/=]+, so it
+		// needs no escaping in an attribute.
+		page = bytes.Replace(page, []byte(`name="colliedesk-operator-clerk" content=""`), []byte(`name="colliedesk-operator-clerk" content="`+signIn.PublishableKey+`"`), 1)
 	}
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		path := request.URL.Path
@@ -74,7 +102,11 @@ func OperatorHandler(base string) http.Handler {
 			return
 		}
 		header := response.Header()
-		header.Set("Content-Security-Policy", operatorCSP)
+		policy := operatorCSP
+		if frontendHost != "" && strings.TrimPrefix(path, base) == "/sign-in" {
+			policy = signInCSP(frontendHost)
+		}
+		header.Set("Content-Security-Policy", policy)
 		header.Set("Referrer-Policy", "no-referrer")
 		header.Set("Cache-Control", "no-store")
 		header.Set("X-Content-Type-Options", "nosniff")

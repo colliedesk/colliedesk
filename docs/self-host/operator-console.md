@@ -29,8 +29,28 @@ docker compose exec server /app/collie operator pair --email you@example.com --r
 A dangerous change (a secret, the billing switch, a new token…) asks for the code again; an operator
 without an authenticator passes only within 15 minutes of signing in with a fresh link.
 
-**Operators and sessions.** `collie operator list`, `collie operator revoke <email>` (every session and
-token stops at once; `pair` lets them in again) and `collie operator sessions [--revoke <id>]`.
+**Sign in with your email (cloud sign-in).** On a server with cloud sign-in configured (the
+`cloud_auth.*` settings and `clerk.publishable_key`, as on the hosted cloud), the console's sign-in page
+also offers the same email-and-code sign-in as the workspace app. Only operators get in: an email that is
+not an operator, or a revoked one, is refused with the same message as any other refusal. After the email
+code the console always asks for the authenticator (it is set up on the first sign-in), whatever
+`operator.require_totp` says, so a mailbox alone never opens the console. Add an operator without a link:
+
+```sh
+docker compose exec server /app/collie operator add --email teammate@example.com
+```
+
+The identity provider must issue the console its own session tokens: their authorized party (`azp`) is
+the console's origin, `OPERATOR_ORIGIN`. The console accepts only those, and the workspace app keeps
+accepting only the origins in `cloud_auth.authorized_parties`: never add the console's origin there. With
+Clerk, the console's host must be a subdomain of the instance's domain (`ops.example.com` beside
+`app.example.com`), and if the instance restricts which subdomains may call its Frontend API, the
+console's host must be on that list. Without cloud sign-in nothing changes: the console opens with a
+link. Signing out of the console also signs you out of the identity provider in that browser.
+
+**Operators and sessions.** `collie operator list`, `collie operator add --email <email>` (an operator
+without a link), `collie operator revoke <email>` (every session and token stops at once; `add` or `pair`
+lets them in again) and `collie operator sessions [--revoke <id>]`.
 
 ## Its own address
 

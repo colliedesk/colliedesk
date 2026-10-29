@@ -304,6 +304,51 @@ func (a *API) redeemOperatorLink(response http.ResponseWriter, request *http.Req
 	a.signInStep(response, step)
 }
 
+// signInOperatorWithCloud starts an operator's sign-in with a session token of the cloud's identity
+// provider, issued to the console's origin (a.operatorCloud). It goes on to the authenticator as a link
+// does. A refusal is logged, never audited (anyone can make a verified identity). Every token that does
+// not sign an operator in gets the same answer: an unknown email, a revoked
+// operator, another party, issuer or key, an expired or unverified token, a workspace session.
+func (a *API) signInOperatorWithCloud(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Cache-Control", "no-store")
+	if a.operatorCloud == nil {
+		writeError(response, http.StatusNotFound, "not_found", "Cloud sign-in is not configured.")
+		return
+	}
+	if request.Header.Get("Origin") != a.operatorOrigin() {
+		writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match the operator console.")
+		return
+	}
+	token, _ := bearerToken(request.Header.Get("Authorization"))
+	if a.tooManySignInTries(response, request, "cloud:"+token) {
+		return
+	}
+	refuse := func() {
+		writeError(response, http.StatusUnauthorized, "operator_sign_in_refused", "This account cannot sign in to the operator console.")
+	}
+	if token == "" {
+		refuse()
+		return
+	}
+	email, err := a.operatorCloud.Verify(request.Context(), token)
+	if err != nil {
+		slog.Info("operator cloud sign-in refused", "reason", err.Error())
+		refuse()
+		return
+	}
+	step, err := a.config.Operators.CloudSignIn(request.Context(), email)
+	if errors.Is(err, auth.ErrOperatorNotAllowed) {
+		slog.Warn("operator cloud sign-in refused", "reason", "not an operator")
+		refuse()
+		return
+	}
+	if err != nil {
+		signInError(response, step, 0, err)
+		return
+	}
+	a.signInStep(response, step)
+}
+
 func (a *API) confirmOperatorCode(response http.ResponseWriter, request *http.Request) {
 	var input struct {
 		Ticket string `json:"ticket"`

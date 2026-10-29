@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ApiError, api } from './api';
+import { ApiError, api, cloudPublishableKey } from './api';
 import type { Operator, OperatorSession } from './api';
 import type { ConsoleData } from './app';
 import { CommandLine, when } from './copy';
@@ -55,7 +55,7 @@ function Act({ data, dialog, onClose, onShown, onDone }: { data: ConsoleData; di
     try {
       if (dialog === 'invite') {
         const made = await api.invite(email, code);
-        onShown({ title: m.inviteLink, value: made.link, note: m.inviteAgain });
+        onShown({ title: m.inviteLink, value: made.link, note: cloudPublishableKey() ? `${m.inviteAgain} ${m.inviteCloud}` : m.inviteAgain });
       } else if (dialog === 'token') {
         const made = await api.createToken(label, permissions, code);
         const endpoint = `${data.me.console.path_mode ? window.location.origin : data.me.console.origin}/mcp/operator`;

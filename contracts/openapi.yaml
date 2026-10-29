@@ -692,6 +692,35 @@ paths:
         '410': {$ref: '#/components/responses/Gone'}
         '423': {$ref: '#/components/responses/OperatorLocked'}
         '429': {$ref: '#/components/responses/OperatorTooManyTries'}
+  /api/v1/operator/auth/cloud:
+    post:
+      operationId: signInOperatorWithCloud
+      security:
+        - bearerAuth: []
+      x-permission: public
+      description: >-
+        Starts an operator's sign-in with a session token of the hosted cloud's identity provider (the
+        `cloud_auth.*` settings) as the bearer. The token must be issued to the console's own origin
+        (`azp` = OPERATOR_ORIGIN; `cloud_auth.authorized_parties` stays the app's, so a token of the app never
+        opens the console and one of the console never the app), and its verified email must be an operator
+        that is not revoked. It always goes on to the authenticator, whatever `operator.require_totp` says:
+        a ticket for the code (`code`), or the first time the key to add (`enroll`); then
+        `POST /api/v1/operator/auth/totp`. Every other token answers the same 401 `operator_sign_in_refused`,
+        so the answer never tells who is an operator. 403 `csrf_rejected` when Origin is not the console's,
+        404 when cloud sign-in is not configured, 423 `operator_locked`, 429 after 5 tries a minute.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: Where the sign-in stands (`code` or `enroll`, never `done`)
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorSignInStep'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+        '429': {$ref: '#/components/responses/OperatorTooManyTries'}
   /api/v1/operator/auth/me:
     get:
       operationId: getOperatorMe

@@ -16,6 +16,7 @@ import (
 
 const operatorUsage = `usage: collie operator <command>
   pair --email E [--reset-totp] [--by B]   print a one-time sign-in link for the operator console (15 minutes)
+  add --email E [--by B]                   make E an operator without a link: with cloud sign-in they sign in with that email
   list                                     list the operators
   revoke EMAIL [--by B]                    end an operator's access: every session and token stops
   sessions [--revoke ID] [--by B]          list the operator sessions and tokens, or end one
@@ -56,6 +57,28 @@ func operatorCommand(ctx context.Context, pool *pgxpool.Pool, origin string, arg
 			return err
 		}
 		_, err = fmt.Fprintln(output, link)
+		return err
+	case "add":
+		flags, by := configFlags("add")
+		email := flags.String("email", "", "operator email")
+		if rest, err := parseFlagsAnywhere(flags, args[1:]); err != nil || len(rest) != 0 || *email == "" {
+			return errors.New("usage: collie operator add --email EMAIL [--by NAME]")
+		}
+		actor, err := cliActor(*by)
+		if err != nil {
+			return err
+		}
+		added, err := service.Add(ctx, *email, "cli", actor.Name)
+		if err != nil {
+			return err
+		}
+		normalized := strings.ToLower(strings.TrimSpace(*email))
+		if !added {
+			_, err = fmt.Fprintf(output, "%s is already an operator\n", normalized)
+			return err
+		}
+		_, err = fmt.Fprintf(output, "added %s: with cloud sign-in they sign in with this email at %s/sign-in; otherwise collie operator pair --email %s prints their link. collie operator revoke %s takes them out\n",
+			normalized, service.ConsoleBase(), normalized, normalized)
 		return err
 	case "list":
 		operators, err := service.Operators(ctx)

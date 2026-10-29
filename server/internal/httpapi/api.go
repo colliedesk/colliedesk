@@ -196,7 +196,10 @@ type API struct {
 	alerted *alertedSubscriptions
 	auth    *auth.Service
 	cloud   *cloudauth.Verifier
-	store   *store.Store
+	// operatorCloud checks the operator console's cloud sign-ins: the same identity provider, but only
+	// tokens issued to the console's origin (cloud_auth.authorized_parties is the app's and stays so).
+	operatorCloud *cloudauth.Verifier
+	store         *store.Store
 	// pipeline runs what channels receive into the store (internal/channels).
 	pipeline *pipeline.Pipeline
 	// exports admits workspace exports; see exportLimiter.
@@ -393,6 +396,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	if config.CloudAuth.Enabled() {
 		api.cloud = cloudauth.New(config.CloudAuth)
+		api.operatorCloud = cloudauth.New(config.CloudAuth.ForParty(api.operatorOrigin()))
 	}
 	if config.Billing.Enabled() {
 		api.polar = polar.NewClient(config.Billing)
@@ -473,6 +477,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/operator/auth/redeem", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/operator/auth/totp", auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/operator/auth/cloud", auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/operator/auth/me", auth.PermissionOperator},
 		{http.MethodPost, "/api/v1/operator/auth/logout", auth.PermissionOperator},
 		{http.MethodPost, "/api/v1/operator/tokens", auth.PermissionOperator},

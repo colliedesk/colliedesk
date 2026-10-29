@@ -17,6 +17,12 @@ export type Guard = Schemas['OperatorConfigGuard'];
 export type Trial = Schemas['OperatorTrial'];
 export type Product = Schemas['OperatorProduct'];
 
+// cloudPublishableKey is the identity provider's key when the server offers cloud sign-in on this console
+// (<meta name="colliedesk-operator-clerk">, filled by the server only then); "" otherwise.
+export function cloudPublishableKey(): string {
+  return document.querySelector('meta[name="colliedesk-operator-clerk"]')?.getAttribute('content') ?? '';
+}
+
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string, readonly body: Record<string, unknown> = {}) {
     super(message);
@@ -82,4 +88,5 @@ export const api = {
   logout: () => call<void>('POST', '/api/v1/operator/auth/logout'),
   redeem: (token: string) => call<SignInStep>('POST', '/api/v1/operator/auth/redeem', { token }, {}, false),
   confirmCode: (ticket: string, code: string) => call<SignInStep>('POST', '/api/v1/operator/auth/totp', { ticket, code }, {}, false),
+  cloudSignIn: (sessionToken: string) => call<SignInStep>('POST', '/api/v1/operator/auth/cloud', undefined, { Authorization: `Bearer ${sessionToken}` }, false),
 };

@@ -495,6 +495,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operator/auth/cloud": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Starts an operator's sign-in with a session token of the hosted cloud's identity provider (the `cloud_auth.*` settings) as the bearer. The token must be issued to the console's own origin (`azp` = OPERATOR_ORIGIN; `cloud_auth.authorized_parties` stays the app's, so a token of the app never opens the console and one of the console never the app), and its verified email must be an operator that is not revoked. It always goes on to the authenticator, whatever `operator.require_totp` says: a ticket for the code (`code`), or the first time the key to add (`enroll`); then `POST /api/v1/operator/auth/totp`. Every other token answers the same 401 `operator_sign_in_refused`, so the answer never tells who is an operator. 403 `csrf_rejected` when Origin is not the console's, 404 when cloud sign-in is not configured, 423 `operator_locked`, 429 after 5 tries a minute. */
+        post: operations["signInOperatorWithCloud"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/operator/auth/me": {
         parameters: {
             query?: never;
@@ -9048,6 +9065,35 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             410: components["responses"]["Gone"];
+            423: components["responses"]["OperatorLocked"];
+            429: components["responses"]["OperatorTooManyTries"];
+        };
+    };
+    signInOperatorWithCloud: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where the sign-in stands (`code` or `enroll`, never `done`) */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorSignInStep"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             423: components["responses"]["OperatorLocked"];
             429: components["responses"]["OperatorTooManyTries"];
         };

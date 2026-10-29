@@ -268,8 +268,13 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	if billing.Enabled() {
 		g.Go(func(ctx context.Context) { refreshFoundingAtStart(ctx, api) })
 	}
+	// The console's sign-in page offers cloud sign-in when it is configured (POST /api/v1/operator/auth/cloud).
+	var consoleSignIn webui.ConsoleSignIn
+	if cloudAuth.Enabled() {
+		consoleSignIn.PublishableKey = cloudAuth.PublishableKey
+	}
 	// The help center is outermost: a request to a help center host never reaches the app, the API or MCP.
-	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators}, webui.Handler(api))
-	g.handler = operatorHost(origin, p.operatorOrigin, api.WrapHelpCenter(inner), inner, webui.OperatorHandler(""))
+	inner := mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators}, webui.Handler(api, consoleSignIn))
+	g.handler = operatorHost(origin, p.operatorOrigin, api.WrapHelpCenter(inner), inner, webui.OperatorHandler("", consoleSignIn))
 	return g
 }

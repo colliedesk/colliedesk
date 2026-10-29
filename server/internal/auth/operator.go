@@ -182,23 +182,9 @@ func (s *OperatorService) pair(ctx context.Context, email string, resetTOTP bool
 		purpose = "reset-totp"
 	}
 	err = s.privileged(ctx, func(tx pgx.Tx) error {
-		var id string
-		var revoked *time.Time
-		err := tx.QueryRow(ctx, `SELECT id, revoked_at FROM operators WHERE email=$1 FOR UPDATE`, email).Scan(&id, &revoked)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			if err := tx.QueryRow(ctx, `INSERT INTO operators(email, created_by) VALUES($1,$2) RETURNING id`, email, by).Scan(&id); err != nil {
-				return fmt.Errorf("add operator: %w", err)
-			}
-		case err != nil:
+		id, _, err := s.upsert(ctx, tx, email, kind, by)
+		if err != nil {
 			return err
-		case revoked != nil:
-			if _, err := tx.Exec(ctx, `UPDATE operators SET revoked_at=NULL, failed_codes=0, locked_until=NULL WHERE id=$1`, id); err != nil {
-				return err
-			}
-			if err := operatorAudit(ctx, tx, kind, by, "operator.restore", map[string]any{"operator": email}); err != nil {
-				return err
-			}
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO operator_links(operator_id, token_hash, purpose, expires_at, created_by) VALUES($1,$2,$3,$4,$5)`,
 			id, hash, purpose, s.now().Add(operatorLinkLifetime), by); err != nil {
@@ -260,39 +246,154 @@ func (s *OperatorService) Redeem(ctx context.Context, raw string) (SignInStep, e
 		reset := purpose == "reset-totp"
 		if !reset && enabled == nil && !s.requireTOTP() {
 			step.Step = "done"
-			step.Session, err = s.startSession(ctx, tx, operatorID, email, "")
+			step.Session, err = s.startSession(ctx, tx, operatorID, email, "link", false)
 			return err
 		}
-		ticket, ticketHash, err := newToken()
-		if err != nil {
-			return err
-		}
-		var sealed []byte
-		var keyID *string
-		step.Step, step.Ticket = "code", ticket
-		if reset || enabled == nil {
-			if !s.keys.Configured() {
-				return ErrOperatorNoRing
-			}
-			secret, err := newTOTPSecret()
-			if err != nil {
-				return err
-			}
-			id, box, err := s.keys.Seal(secret, "operator-totp:"+operatorID)
-			if err != nil {
-				return err
-			}
-			sealed, keyID = box, &id
-			step.Step, step.Secret, step.OTPAuthURL = "enroll", secret, otpauthURL(operatorTOTPIssuer, email, secret)
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO operator_links(operator_id, token_hash, purpose, expires_at, created_by, enroll_sealed, enroll_key_id)
-			VALUES($1,$2,'totp-ticket',$3,'sign-in',$4,$5)`, operatorID, ticketHash, s.now().Add(operatorTicketLifetime), sealed, keyID)
-		return err
+		return s.ticket(ctx, tx, &step, operatorID, email, reset || enabled == nil, ticketByLink)
 	})
 	if err == nil && step.LockedUntil != nil {
 		return step, ErrOperatorLocked
 	}
 	return step, err
+}
+
+// Who made a ticket for the code (operator_links.created_by): the session it opens is audited with it.
+const (
+	ticketByLink  = "sign-in"
+	ticketByCloud = "cloud-sign-in"
+)
+
+// ticket makes the ticket for the authenticator code; with enroll, also a new key the operator adds first.
+// It ends the operator's tickets not used yet: one kept by whoever held the mailbox a while must not set up
+// an authenticator later (review ADR, PR #316).
+func (s *OperatorService) ticket(ctx context.Context, tx pgx.Tx, step *SignInStep, operatorID, email string, enroll bool, by string) error {
+	if err := s.endTickets(ctx, tx, operatorID, ""); err != nil {
+		return err
+	}
+	ticket, ticketHash, err := newToken()
+	if err != nil {
+		return err
+	}
+	var sealed []byte
+	var keyID *string
+	step.Step, step.Ticket = "code", ticket
+	if enroll {
+		if !s.keys.Configured() {
+			return ErrOperatorNoRing
+		}
+		secret, err := newTOTPSecret()
+		if err != nil {
+			return err
+		}
+		id, box, err := s.keys.Seal(secret, "operator-totp:"+operatorID)
+		if err != nil {
+			return err
+		}
+		sealed, keyID = box, &id
+		step.Step, step.Secret, step.OTPAuthURL = "enroll", secret, otpauthURL(operatorTOTPIssuer, email, secret)
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO operator_links(operator_id, token_hash, purpose, expires_at, created_by, enroll_sealed, enroll_key_id)
+		VALUES($1,$2,'totp-ticket',$3,$4,$5,$6)`, operatorID, ticketHash, s.now().Add(operatorTicketLifetime), by, sealed, keyID)
+	return err
+}
+
+// endTickets marks the operator's unused code tickets used, but keep.
+func (s *OperatorService) endTickets(ctx context.Context, tx pgx.Tx, operatorID, keep string) error {
+	_, err := tx.Exec(ctx, `UPDATE operator_links SET used_at=$2 WHERE operator_id=$1 AND purpose='totp-ticket' AND used_at IS NULL AND id::text <> $3`,
+		operatorID, s.now(), keep)
+	return err
+}
+
+// ErrOperatorNotAllowed refuses a cloud sign-in of an email that is no operator, or a revoked one; it says
+// no more than that, to anyone.
+var ErrOperatorNotAllowed = errors.New("this identity is not an operator")
+
+// CloudSignIn starts the sign-in of an operator whose email the identity provider verified. It always
+// ends at the authenticator (its code, or adding it the first time), whatever operator.require_totp says:
+// a verified inbox alone is not an operator, and a session without a code would pass Reauth as if it came
+// from the shell. It never replaces an authenticator; only collie operator pair --reset-totp does.
+func (s *OperatorService) CloudSignIn(ctx context.Context, email string) (SignInStep, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	var step SignInStep
+	refused := false
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		var operatorID string
+		var revoked, locked, enabled *time.Time
+		err := tx.QueryRow(ctx, `SELECT id, revoked_at, locked_until, totp_enabled_at FROM operators WHERE email=$1 FOR UPDATE`, email).
+			Scan(&operatorID, &revoked, &locked, &enabled)
+		// No audit line: anyone can make a verified identity, and the audit log keeps every line for good
+		// (review ADR, PR #316). The handler logs the refusal.
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && revoked != nil {
+			refused = true
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		step.Email = email
+		if locked != nil && s.now().Before(*locked) {
+			step.LockedUntil = locked
+			return nil
+		}
+		return s.ticket(ctx, tx, &step, operatorID, email, enabled == nil, ticketByCloud)
+	})
+	switch {
+	case err != nil:
+		return SignInStep{}, err
+	case refused:
+		return SignInStep{}, ErrOperatorNotAllowed
+	case step.LockedUntil != nil:
+		return step, ErrOperatorLocked
+	}
+	return step, nil
+}
+
+// Add makes email an operator without a link, or lets a revoked one in again; it reports false when the
+// operator was already in. With cloud sign-in the operator signs in with that email; without it, a link
+// from collie operator pair is still the way in.
+func (s *OperatorService) Add(ctx context.Context, email, actorKind, by string) (bool, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if !strings.Contains(email, "@") || len(email) < 3 {
+		return false, errors.New("an operator needs an email address")
+	}
+	var state string
+	err := s.privileged(ctx, func(tx pgx.Tx) error {
+		var err error
+		_, state, err = s.upsert(ctx, tx, email, actorKind, by)
+		if err != nil || state != operatorCreated {
+			return err
+		}
+		return operatorAudit(ctx, tx, actorKind, by, "operator.add", map[string]any{"operator": email})
+	})
+	return state != "", err
+}
+
+// What upsert did to the operator: created it, let a revoked one in again (audited), or nothing ("").
+const (
+	operatorCreated  = "created"
+	operatorRestored = "restored"
+)
+
+// upsert finds the operator of email, creating it or opening a revoked one again.
+func (s *OperatorService) upsert(ctx context.Context, tx pgx.Tx, email, kind, by string) (string, string, error) {
+	var id string
+	var revoked *time.Time
+	err := tx.QueryRow(ctx, `SELECT id, revoked_at FROM operators WHERE email=$1 FOR UPDATE`, email).Scan(&id, &revoked)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		if err := tx.QueryRow(ctx, `INSERT INTO operators(email, created_by) VALUES($1,$2) RETURNING id`, email, by).Scan(&id); err != nil {
+			return "", "", fmt.Errorf("add operator: %w", err)
+		}
+		return id, operatorCreated, nil
+	case err != nil:
+		return "", "", err
+	case revoked != nil:
+		if _, err := tx.Exec(ctx, `UPDATE operators SET revoked_at=NULL, failed_codes=0, locked_until=NULL WHERE id=$1`, id); err != nil {
+			return "", "", err
+		}
+		return id, operatorRestored, operatorAudit(ctx, tx, kind, by, "operator.restore", map[string]any{"operator": email})
+	}
+	return id, "", nil
 }
 
 // ConfirmTOTP checks the code of a ticket and signs the operator in. A wrong code counts toward the lock
@@ -302,17 +403,17 @@ func (s *OperatorService) ConfirmTOTP(ctx context.Context, ticket, code string) 
 	left := 0
 	var wrong bool
 	err := s.privileged(ctx, func(tx pgx.Tx) error {
-		var linkID, operatorID, email string
+		var linkID, operatorID, email, by string
 		var expires time.Time
 		var used, locked *time.Time
 		var enrollSealed, totpSealed []byte
 		var enrollKeyID, totpKeyID *string
 		var lastStep int64
 		var failed int
-		err := tx.QueryRow(ctx, `SELECT l.id, o.id, o.email, l.expires_at, l.used_at, o.locked_until, l.enroll_sealed, l.enroll_key_id, o.totp_sealed, o.totp_key_id, o.totp_last_step, o.failed_codes
+		err := tx.QueryRow(ctx, `SELECT l.id, o.id, o.email, l.created_by, l.expires_at, l.used_at, o.locked_until, l.enroll_sealed, l.enroll_key_id, o.totp_sealed, o.totp_key_id, o.totp_last_step, o.failed_codes
 			FROM operator_links l JOIN operators o ON o.id = l.operator_id
 			WHERE l.token_hash=$1 AND l.purpose='totp-ticket' AND o.revoked_at IS NULL FOR UPDATE OF l, o`, tokenHash(ticket)).
-			Scan(&linkID, &operatorID, &email, &expires, &used, &locked, &enrollSealed, &enrollKeyID, &totpSealed, &totpKeyID, &lastStep, &failed)
+			Scan(&linkID, &operatorID, &email, &by, &expires, &used, &locked, &enrollSealed, &enrollKeyID, &totpSealed, &totpKeyID, &lastStep, &failed)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return ErrOperatorLink
@@ -370,8 +471,16 @@ func (s *OperatorService) ConfirmTOTP(ctx context.Context, ticket, code string) 
 		if _, err := tx.Exec(ctx, `UPDATE operator_links SET used_at=$2 WHERE id=$1`, linkID, s.now()); err != nil {
 			return err
 		}
+		// Once in, no other ticket of the operator works: one left open could replace the authenticator.
+		if err := s.endTickets(ctx, tx, operatorID, linkID); err != nil {
+			return err
+		}
 		step.Step = "done"
-		step.Session, err = s.startSession(ctx, tx, operatorID, email, "reauth")
+		via := "link"
+		if by == ticketByCloud {
+			via = "cloud"
+		}
+		step.Session, err = s.startSession(ctx, tx, operatorID, email, via, true)
 		return err
 	})
 	switch {
@@ -385,14 +494,15 @@ func (s *OperatorService) ConfirmTOTP(ctx context.Context, ticket, code string) 
 	return step, left, nil
 }
 
-// startSession opens a 12-hour browser session; reauth starts it as freshly re-authenticated.
-func (s *OperatorService) startSession(ctx context.Context, tx pgx.Tx, operatorID, email, reauth string) (string, error) {
+// startSession opens a 12-hour browser session; reauth starts it as freshly re-authenticated. via (link or
+// cloud) is how the operator came in, for the audit log.
+func (s *OperatorService) startSession(ctx context.Context, tx pgx.Tx, operatorID, email, via string, reauth bool) (string, error) {
 	raw, hash, err := newToken()
 	if err != nil {
 		return "", err
 	}
 	var reauthAt *time.Time
-	if reauth != "" {
+	if reauth {
 		now := s.now()
 		reauthAt = &now
 	}
@@ -400,7 +510,7 @@ func (s *OperatorService) startSession(ctx context.Context, tx pgx.Tx, operatorI
 		operatorID, hash, s.now().Add(operatorCookieLifetime), reauthAt); err != nil {
 		return "", fmt.Errorf("start operator session: %w", err)
 	}
-	return raw, operatorAudit(ctx, tx, "operator", email, "operator.sign_in", nil)
+	return raw, operatorAudit(ctx, tx, "operator", email, "operator.sign_in", map[string]any{"via": via})
 }
 
 // Authenticate finds the operator of a session or token; every refusal wraps ErrInvalidCredential.
