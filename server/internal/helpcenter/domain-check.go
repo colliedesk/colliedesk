@@ -13,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"golang.org/x/net/idna"
 )
 
@@ -71,12 +72,7 @@ func hostOf(origin string) string {
 // SlugHost is a workspace's own help center host name, <slug>.<HELP_CENTER_DOMAIN>, or "" when the
 // server has no help center domain or the slug cannot be a host name. It proves nothing about a custom
 // domain: a slug can be renamed and then taken by another workspace.
-func SlugHost(domain, slug string) string {
-	if domain == "" || email.ValidateHostedSlug(slug) != nil {
-		return ""
-	}
-	return slug + "." + domain
-}
+func SlugHost(domain, slug string) string { return workspacehost.Host(domain, slug) }
 
 // ClaimHost is the host name a custom domain's CNAME points at to prove the claim: hc-<claim>.<domain>,
 // or "" when the server has no help center domain. The claim is random and made with the claim, so

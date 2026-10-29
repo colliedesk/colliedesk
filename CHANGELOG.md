@@ -10,12 +10,27 @@ requests. This file keeps the first release.
 
 ## Unreleased
 
+**Workspace host names: each workspace's desk runs on its own host.** With `HELP_CENTER_DOMAIN`
+(for example `example.com`), the team works at `https://<slug>.example.com`: the app, its API and MCP
+run there, and the help center moves to `https://<slug>.example.com/help` (its old addresses on that
+host move there with a 301). A session belongs to the host that made it, and a workspace host acts for
+its own workspace only. `APP_ORIGIN` keeps sign-up, finding your workspace and the fixed provider
+callbacks; a browser signed in there continues on its workspace's host. Agent links (invites, emails,
+payment returns) name the workspace host. Custom domains keep the help center at their root. Without
+`HELP_CENTER_DOMAIN` nothing changes. See
+[workspace host names](docs/self-host/running-behind-proxy.md#workspace-host-names).
+
 **Operators: the reverse proxy must send the visitor's `Host` header.** The server now answers the app,
 the API, MCP and attachments only when the `Host` of the request is `APP_ORIGIN`'s host, `localhost` or
 an IP address (health checks, the proxy's certificate question). Every other host name gets the help
 center, or the help center's 404. Caddy keeps the `Host` header by default. With nginx, set
 `proxy_set_header Host $host;`; a proxy that rewrites it to an internal name such as `colliedesk:8080`
 now gets 404 for everything. See [running behind a proxy](docs/self-host/running-behind-proxy.md#the-host-header).
+
+**The workspace app can no longer be framed by another site.** Its pages send
+`Content-Security-Policy: frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`
+and `Referrer-Policy: strict-origin-when-cross-origin`, so no other origin can load a signed-in agent's inbox in a
+hidden frame. Help centers and the chat widget keep their own framing rules.
 
 API changes in the email view (the full notes will be on the releases page):
 

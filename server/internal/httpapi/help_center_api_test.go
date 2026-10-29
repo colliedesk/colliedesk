@@ -304,30 +304,34 @@ func TestHelpCenterOnItsOwnHostAndTheCertificateQuestion(t *testing.T) {
 	article := kbArticle(t, f.api, f.adminA, map[string]any{"collection_id": collection.ID, "title": "Start here", "status": "published", "body_md": "Hello"})
 	host := slugA + ".help.example.net"
 
-	wantPage(t, visit(site, "/", "192.0.2.50", "Host", host), http.StatusOK, []string{"Alpha help", `href="/c/guides"`}, nil)
-	wantPage(t, visit(site, fmt.Sprintf("/a/%d-%s", article.Number, article.Slug), "192.0.2.50", "Host", strings.ToUpper(host)+":443"), http.StatusOK, []string{"Start here"}, nil)
+	wantPage(t, visit(site, "/help", "192.0.2.50", "Host", host), http.StatusOK, []string{"Alpha help", `href="/help/c/guides"`}, nil)
+	wantPage(t, visit(site, fmt.Sprintf("/help/a/%d-%s", article.Number, article.Slug), "192.0.2.50", "Host", strings.ToUpper(host)+":443"), http.StatusOK, []string{"Start here"}, nil)
 	robots := visit(site, "/robots.txt", "192.0.2.50", "Host", host)
 	if robots.Code != http.StatusOK || robots.Body.String() != "User-agent: *\nDisallow: /\n" {
 		t.Fatalf("trial robots.txt status=%d body=%q", robots.Code, robots.Body.String())
 	}
-	// Nothing of the app is reachable on a help center host.
+	// The rest of the workspace's host is its desk, not the help center; below /help, an app path is the
+	// help center's 404.
 	for _, path := range []string{"/api/v1/config", "/mcp", "/inbox"} {
-		if response := visit(site, path, "192.0.2.50", "Host", host); response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "Alpha help") {
-			t.Errorf("%s on the help center host status=%d", path, response.Code)
+		if response := visit(site, path, "192.0.2.50", "Host", host); response.Header().Get("Location") != "" || strings.Contains(response.Body.String(), "Alpha help") {
+			t.Errorf("%s on the workspace host status=%d location=%q, want the desk", path, response.Code, response.Header().Get("Location"))
+		}
+		if response := visit(site, "/help"+path, "192.0.2.50", "Host", host); response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "Alpha help") {
+			t.Errorf("/help%s on the workspace host status=%d", path, response.Code)
 		}
 	}
 	moved := visit(site, fmt.Sprintf("/help/%s/a/%d-%s?q=1", slugA, article.Number, article.Slug), "192.0.2.50")
-	if want := fmt.Sprintf("https://%s/a/%d-%s?q=1", host, article.Number, article.Slug); moved.Code != http.StatusMovedPermanently || moved.Header().Get("Location") != want {
+	if want := fmt.Sprintf("https://%s/help/a/%d-%s?q=1", host, article.Number, article.Slug); moved.Code != http.StatusMovedPermanently || moved.Header().Get("Location") != want {
 		t.Fatalf("path address status=%d location=%q, want 301 to %s", moved.Code, moved.Header().Get("Location"), want)
 	}
-	if home := visit(site, "/help/"+slugA, "192.0.2.50"); home.Header().Get("Location") != "https://"+host+"/" {
+	if home := visit(site, "/help/"+slugA, "192.0.2.50"); home.Header().Get("Location") != "https://"+host+"/help" {
 		t.Fatalf("path home location=%q", home.Header().Get("Location"))
 	}
 	var center struct {
 		URL string `json:"url"`
 	}
 	kbCall(t, f.api, http.MethodGet, "/api/v1/help-center", nil, f.adminA, http.StatusOK, &center)
-	if center.URL != "https://"+host {
+	if center.URL != "https://"+host+"/help" {
 		t.Fatalf("help center url=%q", center.URL)
 	}
 
@@ -343,7 +347,7 @@ func TestHelpCenterOnItsOwnHostAndTheCertificateQuestion(t *testing.T) {
 	for domain, want := range map[string]int{
 		host:                             http.StatusOK,
 		strings.ToUpper(host):            http.StatusOK,
-		slugB + ".help.example.net":      http.StatusNotFound, // off
+		slugB + ".help.example.net":      http.StatusOK, // off: the host still leads to the desk
 		"nobody.help.example.net":        http.StatusNotFound,
 		"www.help.example.net":           http.StatusNotFound, // reserved
 		"a." + host:                      http.StatusNotFound,
@@ -372,10 +376,11 @@ func TestHelpCenterOnItsOwnHostAndTheCertificateQuestion(t *testing.T) {
 		t.Fatalf("tls-ask for a reserved slug = %d", got)
 	}
 	f.clock.set(trialEnd)
-	if got := ask(host); got != http.StatusNotFound {
-		t.Fatalf("tls-ask for a locked workspace = %d, want 404", got)
+	// A locked workspace still signs in (to pay or export), so its host keeps its certificate.
+	if got := ask(host); got != http.StatusOK {
+		t.Fatalf("tls-ask for a locked workspace = %d, want 200", got)
 	}
-	if response := visit(site, "/", "192.0.2.51", "Host", host); response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "Alpha") {
+	if response := visit(site, "/help", "192.0.2.51", "Host", host); response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "Alpha") {
 		t.Fatalf("locked help center host status=%d", response.Code)
 	}
 }
@@ -450,7 +455,7 @@ func TestEveryArticleAnswerCarriesTheAddressTheHelpCenterServesItAt(t *testing.T
 			slugA, slugB := workspaceSlug(t, f.api, f.adminA), workspaceSlug(t, f.api, f.adminB)
 			home := testOrigin + "/help/" + slugA
 			if mode.domain != "" {
-				home = "https://" + slugA + "." + mode.domain
+				home = "https://" + slugA + "." + mode.domain + "/help"
 			}
 			enableHelpCenter(t, f.api, f.adminA, "Alpha help", true)
 			collection := kbCollection(t, f.api, f.adminA, map[string]any{"name": "Guides"})

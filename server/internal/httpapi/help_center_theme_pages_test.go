@@ -106,8 +106,8 @@ func TestHelpCenterBrandStyleSheetIsImmutableAndOnlyTheCurrentOne(t *testing.T) 
 	enableHelpCenter(t, api, admin, "Sheet help", true)
 	kbCall(t, api, http.MethodPut, themePath, fullTheme(""), admin, http.StatusOK, nil)
 
-	sheet := brandSheet(t, visit(site, "/", "192.0.2.61", "Host", host))
-	if !strings.HasPrefix(sheet, "/_/brand-") {
+	sheet := brandSheet(t, visit(site, "/help", "192.0.2.61", "Host", host))
+	if !strings.HasPrefix(sheet, "/help/_/brand-") {
 		t.Fatalf("brand sheet on the help center's host = %q", sheet)
 	}
 	response := visit(site, sheet, "192.0.2.61", "Host", host)
@@ -123,12 +123,12 @@ func TestHelpCenterBrandStyleSheetIsImmutableAndOnlyTheCurrentOne(t *testing.T) 
 	theme := fullTheme("")
 	theme["colors"].(map[string]any)["link"] = "#0a4f94"
 	kbCall(t, api, http.MethodPut, themePath, theme, admin, http.StatusOK, nil)
-	for _, stale := range []string{sheet, "/_/brand-00000000000000000000000000000000.css", "/_/brand-.css"} {
+	for _, stale := range []string{sheet, "/help/_/brand-00000000000000000000000000000000.css", "/help/_/brand-.css"} {
 		if response := visit(site, stale, "192.0.2.61", "Host", host); response.Code != http.StatusNotFound || response.Header().Get("Cache-Control") != "no-store" {
 			t.Errorf("%s status=%d cache=%q, want 404 no-store", stale, response.Code, response.Header().Get("Cache-Control"))
 		}
 	}
-	if current := brandSheet(t, visit(site, "/", "192.0.2.61", "Host", host)); current == sheet || visit(site, current, "192.0.2.61", "Host", host).Code != http.StatusOK {
+	if current := brandSheet(t, visit(site, "/help", "192.0.2.61", "Host", host)); current == sheet || visit(site, current, "192.0.2.61", "Host", host).Code != http.StatusOK {
 		t.Fatalf("brand sheet after a new link color = %q (was %q)", current, sheet)
 	}
 }

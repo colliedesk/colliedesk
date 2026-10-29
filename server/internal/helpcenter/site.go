@@ -1,7 +1,7 @@
 // Package helpcenter serves the public help center of every workspace: plain HTML rendered on the
 // server from the published knowledge base articles, with no script. A self-hosted server answers on
-// <origin>/help/<slug>; a server with a help center domain answers on <slug>.<domain> and redirects
-// the path there. docs/internals/help-center.md records the decisions.
+// <origin>/help/<slug>; a server with a help center domain answers on <slug>.<domain>/help, whose root
+// leads to the workspace's desk, and redirects the path there. docs/internals/help-center.md records the decisions.
 package helpcenter
 
 import (
@@ -141,10 +141,12 @@ func New(config Config) *Site {
 }
 
 // Wrap answers help center requests and passes the others to next (the app, the API and MCP). next
-// is reached only on APP_ORIGIN's host, and on loopback and IP address hosts (health checks, the
-// reverse proxy's certificate question): there the paths under /help/ are the help center and every
-// other path goes on. Every other host name belongs to the help center: a host name below the help
-// center domain, a claim's CNAME target, or an active custom domain serve it, whatever the path, and
+// is reached on APP_ORIGIN's host, on loopback and IP address hosts (health checks, the reverse
+// proxy's certificate question), and on a workspace's own host name below the help center domain:
+// on the first ones the paths under /help/ are the help center and every other path goes on; a
+// workspace's host serves its help center under /help and runs its desk on every other path, marked
+// with the workspace (serveWorkspaceHost). Every other host name belongs to the help center: a claim's
+// CNAME target or an active custom domain serve it, whatever the path, and
 // any other name, such as a custom domain just removed, gets the help center's 404. So the app, its
 // sign-in and its session never answer on a name the server does not own. Requests to APP_ORIGIN's
 // host and below HELP_CENTER_DOMAIN never look a custom domain up.
@@ -152,7 +154,7 @@ func (s *Site) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		host := requestHost(request.Host)
 		if slug, ok := hostSlug(host, s.config.Domain, s.originHost); ok {
-			s.serve(response, request, address{slug: slug, sub: request.URL.Path})
+			s.serveWorkspaceHost(response, request, slug, next)
 			return
 		}
 		if _, ok := claimOfHost(host, s.config.Domain); ok {
@@ -212,15 +214,17 @@ func requestHost(host string) string {
 	return strings.TrimSuffix(host, ".")
 }
 
-// address is where a request reached a help center: a slug (on its host name or below /help/), or the
-// workspace and host name of an active custom domain or of a claim's CNAME target (claim). base is the
-// path prefix the help center's own links start with ("" on a host name of its own) and sub the path
-// below it.
+// address is where a request reached a help center: a slug (on the workspace's host name, workspaceHost,
+// or below /help/), or the workspace and host name of an active custom domain or of a claim's CNAME
+// target (claim). base is the path prefix the help center's own links start with ("" on a custom
+// domain, /help on a workspace's host name) and sub the path below it; atRoot marks a file of the
+// workspace's host name served outside base (robots.txt).
 type address struct {
-	slug              string
-	workspaceID, host string
-	claim             bool
-	base, sub         string
+	slug                  string
+	workspaceID, host     string
+	claim                 bool
+	workspaceHost, atRoot bool
+	base, sub             string
 }
 
 // movedTo is where an old address of a help center with an active custom domain moves: the same path
@@ -235,10 +239,15 @@ func (s *Site) movedTo(request *http.Request, at address, site domain.HelpCenter
 		}
 		sub = rest
 	}
-	if sub == "" {
+	target := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
+	switch {
+	// An address with a path (/help on a workspace's host name) is its home page without a slash.
+	case (sub == "/" || sub == "") && strings.Count(target, "/") > 2:
+		sub = ""
+	case sub == "":
 		sub = "/"
 	}
-	target := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost) + sub
+	target += sub
 	if request.URL.RawQuery != "" {
 		target += "?" + request.URL.RawQuery
 	}
@@ -300,7 +309,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		return
 	// A server with a help center domain serves each help center on its own host; the path address
 	// moves there, whether or not the workspace exists, so the redirect tells nothing about it.
-	case base != "" && s.config.Domain != "" && email.ValidateHostedSlug(slug) == nil:
+	case !at.workspaceHost && base != "" && s.config.Domain != "" && email.ValidateHostedSlug(slug) == nil:
 		s.redirect(response, request, s.movedTo(request, at, domain.HelpCenterSite{Slug: slug}), base == "")
 		return
 	// Unknown, off and locked are one answer, and none of them ever reaches the ETag.
@@ -344,7 +353,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		s.video(response, request, view, strings.TrimPrefix(sub, "/media/"))
 	case strings.HasPrefix(sub, stylePath):
 		s.brandAsset(response, request, view, strings.TrimPrefix(sub, stylePath))
-	case sub == "/robots.txt" && base == "":
+	case sub == "/robots.txt" && (base == "" || at.atRoot):
 		s.robots(response, request, view)
 	case sub == "/sitemap.xml":
 		s.sitemap(response, request, view)

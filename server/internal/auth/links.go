@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -15,6 +17,41 @@ type Redeemed struct {
 	Token     string           `json:"token,omitempty"`
 	Agent     domain.Agent     `json:"agent"`
 	Workspace domain.Workspace `json:"workspace"`
+	// ContinueURL is where a browser that signed in on APP_ORIGIN continues: its workspace's own host,
+	// signed in there by a one-time token in the address's fragment. Absent everywhere else.
+	ContinueURL *string `json:"continue_url,omitempty"`
+}
+
+// ErrLinkOfAnotherWorkspace refuses a one-time link on the host of a workspace it does not belong to.
+var ErrLinkOfAnotherWorkspace = errors.New("the link belongs to another workspace")
+
+// ErrHandoffOffItsHost refuses a hand-off redeemed anywhere but as a cookie session on its workspace's
+// own host: it carries a browser's sign-in across, never a token a client keeps.
+var ErrHandoffOffItsHost = errors.New("a hand-off signs in only as a cookie session on its workspace's host")
+
+// expiredHandoffsPerSweep bounds how many expired hand-offs one new hand-off deletes, so a page load
+// never waits on a large delete; every hand-off sweeps again.
+const expiredHandoffsPerSweep = 100
+
+// Handoff makes a one-time link that signs the principal's agent in on the workspace's own host with
+// the same role, valid for a minute. It returns the token only: the caller puts it in the address's
+// fragment, which no server receives or logs. It also deletes some of the workspace's expired
+// hand-offs: they are worth nothing after their minute, and every page load can make one.
+func (s *Service) Handoff(ctx context.Context, principal Principal) (string, error) {
+	var link createdLink
+	err := s.db.InWorkspace(ctx, principal.Workspace.ID, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM pairing_links WHERE id IN (SELECT id FROM pairing_links
+			WHERE workspace_id=$1 AND kind='handoff' AND expires_at<=$2 LIMIT $3)`, principal.Workspace.ID, s.now(), expiredHandoffsPerSweep); err != nil {
+			return fmt.Errorf("delete expired hand-offs: %w", err)
+		}
+		var err error
+		link, err = s.createLinkFor(ctx, tx, principal.Workspace.ID, principal.Agent.ID, principal.Agent.Email, "handoff", principal.Agent.Role, nil, handoffLifetime)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	return link.Token, nil
 }
 
 type createdLink struct {
@@ -24,6 +61,10 @@ type createdLink struct {
 }
 
 func (s *Service) createLinkTx(ctx context.Context, tx pgx.Tx, workspaceID, agentID, email, kind, ceiling string, creatorID *string) (createdLink, error) {
+	return s.createLinkFor(ctx, tx, workspaceID, agentID, email, kind, ceiling, creatorID, linkLifetime)
+}
+
+func (s *Service) createLinkFor(ctx context.Context, tx pgx.Tx, workspaceID, agentID, email, kind, ceiling string, creatorID *string, lifetime time.Duration) (createdLink, error) {
 	token, hash, err := newToken()
 	if err != nil {
 		return createdLink{}, err
@@ -32,16 +73,19 @@ func (s *Service) createLinkTx(ctx context.Context, tx pgx.Tx, workspaceID, agen
 	if agentID != "" {
 		nullableAgent = agentID
 	}
-	var linkID string
+	var linkID, slug string
 	err = tx.QueryRow(ctx, `INSERT INTO pairing_links(workspace_id,agent_id,email,kind,role_ceiling,token_hash,created_by_agent_id,expires_at)
-		VALUES($1,$2,lower($3),$4,$5,$6,$7,$8) RETURNING id::text`, workspaceID, nullableAgent, email, kind, ceiling, hash, creatorID, s.now().Add(linkLifetime)).Scan(&linkID)
+		VALUES($1,$2,lower($3),$4,$5,$6,$7,$8) RETURNING id::text, (SELECT slug FROM workspaces WHERE id=$1)`,
+		workspaceID, nullableAgent, email, kind, ceiling, hash, creatorID, s.now().Add(lifetime)).Scan(&linkID, &slug)
 	if err != nil {
 		return createdLink{}, fmt.Errorf("create %s link: %w", kind, err)
 	}
-	return createdLink{Token: token, URL: s.redeemURL(token), ID: linkID}, nil
+	return createdLink{Token: token, URL: s.redeemURL(token, slug), ID: linkID}, nil
 }
 
-func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string) (Redeemed, error) {
+// Redeem spends a one-time link for a new session; cookie tells whether the session will be a browser's
+// cookie (true) or a bearer token the client keeps.
+func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string, cookie bool) (Redeemed, error) {
 	// The link's workspace is unknown until the token hash is looked up; the redemption itself,
 	// with its checks and the row lock, runs scoped to that workspace.
 	var linkWorkspace string
@@ -57,13 +101,22 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	now := s.now()
-	var linkID, workspaceID, email, kind, ceiling string
+	var linkID, workspaceID, email, kind, ceiling, slug string
 	var agentID *string
-	err = tx.QueryRow(ctx, `SELECT id::text,workspace_id::text,agent_id::text,email,kind,role_ceiling FROM pairing_links
-		WHERE token_hash=$1 AND used_at IS NULL AND revoked_at IS NULL AND expires_at>$2 FOR UPDATE`, tokenHash(token), now).
-		Scan(&linkID, &workspaceID, &agentID, &email, &kind, &ceiling)
+	err = tx.QueryRow(ctx, `SELECT p.id::text,p.workspace_id::text,p.agent_id::text,p.email,p.kind,p.role_ceiling,w.slug FROM pairing_links p
+		JOIN workspaces w ON w.id=p.workspace_id
+		WHERE p.token_hash=$1 AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at>$2 FOR UPDATE OF p`, tokenHash(token), now).
+		Scan(&linkID, &workspaceID, &agentID, &email, &kind, &ceiling, &slug)
 	if err != nil {
 		return Redeemed{}, fmt.Errorf("redeem link: %w", err)
+	}
+	// On a workspace's own host only that workspace's links sign in; the link stays unused.
+	hostSlug, onWorkspaceHost := workspacehost.Slug(ctx)
+	if onWorkspaceHost && hostSlug != slug {
+		return Redeemed{}, fmt.Errorf("redeem link: %w", ErrLinkOfAnotherWorkspace)
+	}
+	if kind == "handoff" && (!onWorkspaceHost || !cookie) {
+		return Redeemed{}, fmt.Errorf("redeem link: %w", ErrHandoffOffItsHost)
 	}
 	role := ceiling
 	if requestedRole != "" {

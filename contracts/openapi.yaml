@@ -371,6 +371,10 @@ paths:
       security:
         - bearerAuth: []
       x-permission: public
+      description: >-
+        Exchanges a verified identity token for a Colliedesk session. On a workspace's own host
+        `<slug>.<HELP_CENTER_DOMAIN>` the workspace is always the host's (`workspace_slug` is ignored), the
+        request must come from that host's origin, and the token's authorized party may be that origin.
       requestBody:
         required: true
         content:
@@ -383,6 +387,7 @@ paths:
                   type: string
                   description: Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in".
                 timezone: {$ref: '#/components/schemas/SignInTimezone'}
+                next: {$ref: '#/components/schemas/SignInNext'}
       responses:
         '200': {$ref: '#/components/responses/Redeemed'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -424,6 +429,7 @@ paths:
                 role: {$ref: '#/components/schemas/OnboardingRole'}
                 source: {$ref: '#/components/schemas/OnboardingSource'}
                 timezone: {$ref: '#/components/schemas/SignInTimezone'}
+                next: {$ref: '#/components/schemas/SignInNext'}
       responses:
         '201': {$ref: '#/components/responses/Redeemed'}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -447,6 +453,10 @@ paths:
       operationId: redeemLink
       security: []
       x-permission: public
+      description: >-
+        Redeems a one-time link (pairing, invite or hand-off) for a session. On a workspace's own host
+        `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's links are accepted; another workspace's link is
+        refused like an invalid one and stays unused.
       requestBody:
         required: true
         content:
@@ -460,6 +470,7 @@ paths:
                 label: {type: string}
                 session_type: {type: string, enum: [cookie, bearer], default: bearer}
                 timezone: {$ref: '#/components/schemas/SignInTimezone'}
+                next: {$ref: '#/components/schemas/SignInNext'}
       responses:
         '200': {$ref: '#/components/responses/Redeemed'}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -2955,11 +2966,12 @@ paths:
               required: [slug]
               properties:
                 slug: {type: string, minLength: 1, maxLength: 63}
+                next: {$ref: '#/components/schemas/SignInNext'}
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Updated workspace
-          content: {application/json: {schema: {$ref: '#/components/schemas/Workspace'}}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/RenamedWorkspace'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -3583,10 +3595,13 @@ paths:
       x-permission: public
       description: >-
         For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a
-        certificate for a host name it has never seen. It answers 200 when the workspace's help center
-        is on and the workspace is not locked, and `domain` is exactly one label below
-        `HELP_CENTER_DOMAIN` whose label is that workspace's slug or the CNAME target `hc-<claim>` of its
-        custom domain's claim (which redirects to the help center), or the workspace's custom domain.
+        certificate for a host name it has never seen. It answers 200 when `domain` is exactly one label
+        below `HELP_CENTER_DOMAIN` whose label is an existing workspace's slug (that host leads to the
+        workspace's desk at its root and serves its help center under `/help`, so it answers whatever the
+        help center's state). It also answers 200 when the workspace's help center is on and the
+        workspace is not locked, and `domain` is the CNAME target `hc-<claim>` below
+        `HELP_CENTER_DOMAIN` of its custom domain's claim (which redirects to the help center), or the
+        workspace's custom domain.
         A custom domain answers 200 once it is active, or when it is pending and its DNS check passes
         now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a
         time on the server and at most one per host name every 30 seconds. Every other case is the
@@ -7537,7 +7552,7 @@ components:
         expires_at: {type: string, format: date-time}
     PublicConfig:
       type: object
-      required: [cloud_sign_in, billing, signup, limits, product_analytics, ai, autofix, features]
+      required: [app_origin, workspace_hosts, cloud_sign_in, billing, signup, limits, product_analytics, ai, autofix, features]
       properties:
         features:
           type: object
@@ -7556,6 +7571,18 @@ components:
             cloud_sign_in: {$ref: '#/components/schemas/PublicFeature'}
             billing: {$ref: '#/components/schemas/PublicFeature'}
             signup: {$ref: '#/components/schemas/PublicFeature'}
+        workspace_hosts:
+          type: boolean
+          description: >-
+            True when each workspace's desk runs on its own host `<slug>.<HELP_CENTER_DOMAIN>`: a browser
+            signed in on `app_origin` continues there (`continue_url` of a sign-in).
+        app_origin:
+          type: string
+          format: uri
+          description: >-
+            `APP_ORIGIN`: where a person finds their workspace and a new team signs up. With
+            `HELP_CENTER_DOMAIN`, each workspace's desk runs on its own host `<slug>.<HELP_CENTER_DOMAIN>`,
+            and this is the address a page there links to for everything else.
         autofix:
           type: object
           required: [available, missing_settings, off_reason]
@@ -8520,6 +8547,35 @@ components:
         token: {type: string}
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
+        continue_url:
+          type: string
+          format: uri
+          description: >-
+            Present only for a browser that signed in on `APP_ORIGIN` of a server with `HELP_CENTER_DOMAIN`:
+            the workspace host's `/sign-in` address, with `next` and a one-time token in the fragment
+            (`#handoff=<token>`, never sent to a server). The web app there redeems the token with
+            `POST /api/v1/auth/redeem` for a cookie session of the same agent and role. The token works once,
+            for one minute, only on that workspace's host and only with `session_type: cookie`. With
+            `continue_url` the answer sets no session cookie on `APP_ORIGIN`.
+    RenamedWorkspace:
+      allOf:
+        - $ref: '#/components/schemas/Workspace'
+        - type: object
+          properties:
+            continue_url:
+              type: string
+              format: uri
+              description: >-
+                Present when the rename was made with a browser session on the workspace's own host
+                `<slug>.<HELP_CENTER_DOMAIN>`: the desk moves to the new host, and the browser continues at
+                this address, signed in there by a one-time token in the fragment (as for a sign-in's
+                `continue_url`). The old host's cookie no longer signs in.
+    SignInNext:
+      type: string
+      maxLength: 2048
+      description: >-
+        The page a browser signing in on `APP_ORIGIN` opens on its workspace's host (`continue_url`), a path
+        of this site such as `/settings/billing?buy=team_monthly`; anything else opens the inbox.
     OnboardingGoal:
       type: string
       enum: [leave_helpdesk, shared_inbox, lower_cost, ai_agents, other]
@@ -9221,8 +9277,9 @@ components:
           description: >-
             The public address of the help center, also while it is off: `https://<custom domain>` once
             the workspace's custom domain is active (GET /api/v1/help-center/domain), else
-            `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>`
-            when the server sets that variable and the slug can be a host name. The older addresses
+            `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>/help`
+            when the server sets that variable and the slug can be a host name (the root of that host
+            leads to the workspace's desk). The older addresses
             redirect to the custom domain while it is active. Changing the workspace slug changes the
             slug addresses, and links to the old slug stop working.
     HelpCenterDomain:

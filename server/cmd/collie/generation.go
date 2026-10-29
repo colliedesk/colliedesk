@@ -221,7 +221,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// the weekly email to admins, from the platform address, when the server can send mail.
 	resultsWorker := results.NewWorker(db)
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
-		resultsWorker.WithMail(results.Mail{Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain, Origin: origin,
+		resultsWorker.WithMail(results.Mail{Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain, Origin: origin, HelpCenterDomain: helpCenterDomain,
 			Locked: func(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error) {
 				if !billingOn {
 					return false, nil

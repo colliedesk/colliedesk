@@ -139,7 +139,7 @@ func TestChannelTypeRoutesServeOnTheHelpCenterPath(t *testing.T) {
 	same("a help center that is off, by POST", helpCenterCall(site, http.MethodPost, testOriginHost, "/help/"+slugA+"/loophelp/x"))
 }
 
-// With a help center domain the routes answer on <slug>.<domain> and on an active custom domain; the
+// With a help center domain the routes answer under /help on <slug>.<domain> and on an active custom domain; the
 // path address moves a page there but never turns a write into a GET.
 func TestChannelTypeRoutesServeOnTheHelpCenterHostAndCustomDomain(t *testing.T) {
 	api, service, dns, connect := loopHelpAPI(t, func(config *httpapi.Config) { config.HelpCenterDomain = "help.example.net" })
@@ -150,12 +150,12 @@ func TestChannelTypeRoutesServeOnTheHelpCenterHostAndCustomDomain(t *testing.T) 
 	channel := connect(admin).id
 
 	host := slug + ".help.example.net"
-	answer := loopHelpAnswer(t, helpCenterCall(site, http.MethodGet, host, "/loophelp"))
-	if answer.ChannelID != channel || answer.Base != "" || answer.Address != "https://"+host {
+	answer := loopHelpAnswer(t, helpCenterCall(site, http.MethodGet, host, "/help/loophelp"))
+	if answer.ChannelID != channel || answer.Base != "/help" || answer.Address != "https://"+host+"/help" {
 		t.Fatalf("host answer = %+v", answer)
 	}
 	if response := helpCenterCall(site, http.MethodGet, testOriginHost, "/help/"+slug+"/loophelp"); response.Code != http.StatusMovedPermanently ||
-		response.Header().Get("Location") != "https://"+host+"/loophelp" {
+		response.Header().Get("Location") != "https://"+host+"/help/loophelp" {
 		t.Errorf("path GET status=%d location=%q", response.Code, response.Header().Get("Location"))
 	}
 	if response := helpCenterCall(site, http.MethodPost, testOriginHost, "/help/"+slug+"/loophelp/x"); response.Code != http.StatusNotFound {
@@ -171,10 +171,10 @@ func TestChannelTypeRoutesServeOnTheHelpCenterHostAndCustomDomain(t *testing.T) 
 		t.Fatalf("custom domain answer = %+v", answer)
 	}
 	// The help center's own host now moves pages to the custom domain; a write there is not moved.
-	if response := helpCenterCall(site, http.MethodGet, host, "/loophelp"); response.Code != http.StatusMovedPermanently {
+	if response := helpCenterCall(site, http.MethodGet, host, "/help/loophelp"); response.Code != http.StatusMovedPermanently {
 		t.Errorf("old host GET status=%d", response.Code)
 	}
-	if response := helpCenterCall(site, http.MethodPost, host, "/loophelp/x"); response.Code != http.StatusNotFound {
+	if response := helpCenterCall(site, http.MethodPost, host, "/help/loophelp/x"); response.Code != http.StatusNotFound {
 		t.Errorf("old host POST status=%d, want 404", response.Code)
 	}
 }

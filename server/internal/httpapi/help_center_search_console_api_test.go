@@ -54,7 +54,7 @@ func TestSearchConsoleTokensAreMetaTagsOnlyOnTheirOwnHelpCenter(t *testing.T) {
 		t.Fatalf("a new workspace has tokens: %+v", before)
 	}
 	for _, path := range pages {
-		wantPage(t, visit(site, path, "192.0.2.110", "Host", hostA), statusOf(path), nil, []string{"google-site-verification", "msvalidate.01"})
+		wantPage(t, visit(site, helpPath(path), "192.0.2.110", "Host", hostA), statusOf(path), nil, []string{"google-site-verification", "msvalidate.01"})
 	}
 
 	var saved searchConsoleView
@@ -63,9 +63,9 @@ func TestSearchConsoleTokensAreMetaTagsOnlyOnTheirOwnHelpCenter(t *testing.T) {
 		t.Fatalf("saved = %+v", saved)
 	}
 	for _, path := range pages {
-		wantPage(t, visit(site, path, "192.0.2.110", "Host", hostA), statusOf(path), []string{googleMeta(googleToken), bingMeta(bingToken)}, nil)
+		wantPage(t, visit(site, helpPath(path), "192.0.2.110", "Host", hostA), statusOf(path), []string{googleMeta(googleToken), bingMeta(bingToken)}, nil)
 		// Bravo has no such collection or article, so some of these are its 404 page, which is a page too.
-		other := visit(site, path, "192.0.2.111", "Host", hostB).Body.String()
+		other := visit(site, helpPath(path), "192.0.2.111", "Host", hostB).Body.String()
 		for _, unwanted := range []string{"google-site-verification", "msvalidate.01", googleToken, bingToken} {
 			if strings.Contains(other, unwanted) {
 				t.Errorf("%s%s carries %q of another workspace", hostB, path, unwanted)
@@ -93,7 +93,15 @@ func TestSearchConsoleTokensAreMetaTagsOnlyOnTheirOwnHelpCenter(t *testing.T) {
 	for _, path := range pages {
 		wantPage(t, visit(site, path, "192.0.2.113", "Host", custom), statusOf(path), []string{googleMeta(googleToken), bingMeta(bingToken)}, nil)
 	}
-	wantPage(t, visit(site, "/", "192.0.2.114", "Host", hostA), http.StatusMovedPermanently, nil, []string{googleToken})
+	wantPage(t, visit(site, "/help", "192.0.2.114", "Host", hostA), http.StatusMovedPermanently, nil, []string{googleToken})
+}
+
+// helpPath is a page of the walk on a workspace's own host name, where the help center lives under /help.
+func helpPath(path string) string {
+	if path == "/" {
+		return "/help"
+	}
+	return "/help" + path
 }
 
 // statusOf is what a page of the walk answers.

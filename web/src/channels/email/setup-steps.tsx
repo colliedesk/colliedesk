@@ -1,3 +1,4 @@
+import { leaveTo } from '../../lib/leave-to';
 import { useEffect, useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -43,7 +44,9 @@ export function ForwardingName() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const save = useMutation({ mutationFn: api.updateWorkspaceSlug,
-    onSuccess: () => Promise.all(['me', 'email-channel'].map((key) => client.invalidateQueries({ queryKey: [key] }))) });
+    // On the workspace's own host the desk moves with the name: continue on the new host.
+    onSuccess: (renamed) => renamed.continue_url ? leaveTo(renamed.continue_url)
+      : Promise.all(['me', 'email-channel'].map((key) => client.invalidateQueries({ queryKey: [key] }))) });
   if (!me.data) return null;
   return <NameForm label={settingsMessages.workspaceAddressName} saveLabel={settingsMessages.saveAddressName} hint={settingsMessages.addressNameWarning} value={me.data.workspace.slug} canManage
     maxLength={63} save={saveState(save)} onSave={(slug) => save.mutate(slug)} />;

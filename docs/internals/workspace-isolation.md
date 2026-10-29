@@ -120,6 +120,41 @@ All queries go through `internal/database.DB` (`scope.go`):
 request-login mode. `httpapi.Config.RequestPool` and `store.NewWithDB` / `auth.NewWithDB` carry it.
 The store, auth, importer and email code never touch a pool.
 
+## Workspace hosts
+
+With `HELP_CENTER_DOMAIN`, each workspace's desk runs on its own host `<slug>.<HELP_CENTER_DOMAIN>`
+(`internal/workspacehost`). `helpcenter.Site.Wrap` marks every request there with the host's slug, and
+the request then acts on that workspace only:
+
+- `auth.Service.Authenticate` refuses a session or agent token of another workspace on that host
+  (`ErrInvalidCredential`); the API answers 401 and clears the cookie. The session cookie has no
+  `Domain` attribute, so the browser sends it only to the host that set it. On `APP_ORIGIN` every session
+  works as before.
+- A one-time link (pairing, invite, hand-off) redeems on a workspace host only when it belongs to that
+  workspace; another workspace's link stays unused.
+- Cloud sign-in takes the workspace from the host, never from the request body, and accepts the
+  identity token's authorized party `https://<slug>.<domain>` only on that host.
+- Writes with the cookie must come from the workspace host's own origin (`httpapi.requestOrigin`).
+- A hand-off from `APP_ORIGIN` is a one-time link of kind `handoff` for the same agent and role that
+  lives one minute; its token travels in the address's fragment, which no server receives or logs. It
+  redeems only on its workspace's host and only as a cookie session, never as a bearer token. It is no
+  pairing link: it does not prove the agent's address. Making one deletes up to 100 of the workspace's
+  expired hand-offs.
+- A sign-in on `APP_ORIGIN` that continues on a workspace host keeps no session on `APP_ORIGIN`: the
+  session it made is revoked and only the hand-off crosses over, so signing out on the workspace host
+  ends it. `APP_ORIGIN` keeps the cookie `colliedesk_workspace` with the slug, which is no credential: a
+  page load there redirects to the same page on that host. A session on `APP_ORIGIN` from before the
+  move hands off once; the page load that hands it off revokes it and clears its cookie.
+- `Authenticate` checks the host before it refreshes `last_seen_at` and `expires_at`, so a session sent
+  to another workspace's host is not extended.
+- A path a sign-in opens (`next`) is refused when it holds a control character: a browser drops tabs
+  and line breaks, so `/\t/evil.com` would open `//evil.com`.
+- The help center under `/help` shares the host with the desk session, so its pages run no script:
+  `script-src 'none'`.
+
+Tests: `workspace_host_test.go`, `workspace_host_sign_in_test.go`, `workspace_host_sign_out_test.go`,
+`workspace_host_hardening_test.go` in `internal/httpapi`.
+
 ## Privileged allowlist
 
 Each reason is a `database.Privilege` constant in `internal/database/privileges.go`. Each privileged
@@ -141,7 +176,7 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 | `PrivilegeKBPurge` | `store/kb-images.go` (`PurgeKBTrash`, `BackfillKBMedia`) | Deletes, in every workspace, the knowledge base articles and then the collections whose `deleted_at` is more than 30 days old (versions, translations and media links go by cascade), then the library items in the trash for 30 days or never kept, linked by no version and last uploaded 30 days ago (never one a live article's current text names), and the library's trash batches older than 30 days; only their workspace ids and storage keys (original, thumbnail, poster) leave the transaction, and the bytes go through the scoped `DiscardObject`. `BackfillKBMedia` lists the workspace and item ids and storage keys of images not inspected yet; it reads, thumbnails and updates each in its own workspace. Runs at start and daily from `serve` (same ticker as the saved reply purge), which logs the counts |
 | `PrivilegeKBUploadDisk` | `store/kb-media-uploads.go` (`KBMediaUploadsInProgress`) | Counts, over every workspace, the video uploads in progress and sums the bytes they still need (`size - received`), so a new upload's disk check and the server-wide valve of 200 count the other workspaces' uploads; only the count and the total leave the transaction. Called when an upload starts, one start at a time |
 | `PrivilegeRetention` | `retention/service.go` | Lists locked workspaces, reads their admins to send the 30-day deletion notice, and hard-deletes a workspace locked for 12 months with its attachment files. Each pass locks one workspace row and acts on it only. `retention_deletions` is a platform-level table like `cloud_signups` (privileged policy only, no grant to the app role) |
-| `PrivilegeWorkspaceBySlug` | `database/scope.go` (`WorkspaceIDBySlug`) | CLI `pair`, `token create`, `import freshdesk`, `import undo`, `trial set`, `plan grant`, `plan revoke` name a workspace by slug; hosted mail routing (`store.WorkspaceForMailSlug`) finds the workspace of `support@<slug>.<HOSTED_MAIL_DOMAIN>` from the envelope recipient, then continues only if its email channel is connected; the public web form (`store.OpenWebForm`) finds the workspace of `POST /api/v1/public/forms/{slug}`, then reads and writes only inside that workspace's scope |
+| `PrivilegeWorkspaceBySlug` | `database/scope.go` (`WorkspaceIDBySlug`) | CLI `pair`, `token create`, `import freshdesk`, `import undo`, `trial set`, `plan grant`, `plan revoke` name a workspace by slug; hosted mail routing (`store.WorkspaceForMailSlug`) finds the workspace of `support@<slug>.<HOSTED_MAIL_DOMAIN>` from the envelope recipient, then continues only if its email channel is connected; a page of the app on a workspace host name `<slug>.<HELP_CENTER_DOMAIN>` (`helpcenter.serveWorkspaceHost`) and the tls-ask learn only whether the slug exists, to serve the app or the 404 and to allow a certificate; the public web form (`store.OpenWebForm`) finds the workspace of `POST /api/v1/public/forms/{slug}`, then reads and writes only inside that workspace's scope |
 | `PrivilegeSessionToken` | `auth/sessions.go` | Session token hash → workspace; session checks then run scoped |
 | `PrivilegeLinkToken` | `auth/links.go` | Pairing/invite link token hash → workspace; redemption then runs scoped |
 | `PrivilegeCloudIdentity` | `auth/cloud.go` | Lists the workspaces where a verified cloud email is an agent |
@@ -152,6 +187,7 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 | `PrivilegeInboundSecret` | `store/email-channels.go` | Inbound email secret key id → workspace |
 | `PrivilegeOutboxClaim` | `store/channel-outbound.go` | The outbox worker leases due rows of all workspaces (every channel type); each row is then loaded and finished scoped |
 | `PrivilegeChannelInboundClaim` | `store/channel-journal.go` | The channel journal worker lists due events of all workspaces (received, failed, collected past their flush time); each set is then processed scoped, and processing locks the events |
+| `PrivilegeCallbackRouting` | `store/callback-routing.go` | A provider's callback (Google, Microsoft, GitHub) arrives on the fixed address on `APP_ORIGIN`, where the workspace host's session cookie does not exist. The hash of a live mailbox consent or GitHub authorization state, or an email channel id (Microsoft admin consent), finds only the slug of its workspace; the browser goes to the same callback on that workspace's host, which checks the session, spends the state and finishes inside the workspace. An unknown, spent or expired state finds nothing and the callback refuses it on `APP_ORIGIN` as before |
 | `PrivilegeGitHubInstallation` | `store/autofix-github-routing.go` | The Colliedesk GitHub App's webhook is shared by every workspace: the installation id it names (unique on the server) finds the one workspace that owns it, and the same read says whether the delivery id was applied already (`autofix_webhook_deliveries`, a platform-level table like `retention_deletions`: no workspace, no grant to the app role); a delivery is recorded after its event was applied. The ten-minute reconcile pass lists every installation with its workspace, and forgets delivery ids older than 30 days. Only workspace ids, installation ids and yes or no leave the transaction; every event and every check is then applied scoped to its workspace, and acts on a repository only when it is connected there through that installation |
 | `PrivilegeChannelRoute` | `store/channels.go` | A channel webhook shared by every workspace finds the live channel that is the account outside it names (accounts are unique on the server); only the workspace and channel ids leave |
 | `PrivilegeImportJobClaim` | `importjobs/store.go`, `importjobs/people.go` | The import worker leases due in-app import jobs of all workspaces, discards previews left over an hour, and lists the imported Freshdesk agents whose link changed; each job and each link is then applied scoped to its workspace |

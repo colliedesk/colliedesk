@@ -370,14 +370,16 @@ func TestAChatOverItsLimitOffersArticlesInsteadOfAnAnswer(t *testing.T) {
 // partitioned (SameSite=None); a server on plain http sets neither prefix nor Secure.
 func TestTheChatCookieFollowsTheAddress(t *testing.T) {
 	d := newChatDesk(t, "Chat Hotel", func(config *httpapi.Config) { config.HelpCenterDomain = "help.example.net" })
-	d.host, d.base, d.origin = d.slug+".help.example.net", "", "https://"+d.slug+".help.example.net"
+	// On the workspace's own host the help center is below /help, next to the desk: the cookie keeps to
+	// that path, so the desk's pages never receive it.
+	d.host, d.base, d.origin = d.slug+".help.example.net", "/help", "https://"+d.slug+".help.example.net"
 	d.fake.Script(chatReply("Hi [#"+num(d.article.Number)+"]."), chatReply("Hi [#"+num(d.article.Number)+"]."))
 	set := d.call(t, http.MethodPost, "/chat/turns", map[string]any{"question": "Hi"}).Header().Get("Set-Cookie")
-	if !strings.HasPrefix(set, "__Host-cd_chat_"+d.channel[:8]+"=") || !strings.Contains(set, "Path=/;") || !strings.Contains(set, "SameSite=Lax") {
+	if !strings.HasPrefix(set, "__Secure-cd_chat_"+d.slug+"_"+d.channel[:8]+"=") || !strings.Contains(set, "Path=/help;") || !strings.Contains(set, "SameSite=Lax") {
 		t.Fatalf("host cookie = %q", set)
 	}
 	widget := d.call(t, http.MethodPost, "/chat/turns?surface=widget", map[string]any{"question": "Hi"}).Header().Get("Set-Cookie")
-	if !strings.HasPrefix(widget, "__Host-cd_chat_w_"+d.channel[:8]+"=") || !strings.Contains(widget, "SameSite=None") || !strings.Contains(widget, "Partitioned") {
+	if !strings.HasPrefix(widget, "__Secure-cd_chat_w_"+d.slug+"_"+d.channel[:8]+"=") || !strings.Contains(widget, "SameSite=None") || !strings.Contains(widget, "Partitioned") {
 		t.Fatalf("widget cookie = %q", widget)
 	}
 

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/results"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -37,7 +36,7 @@ func (a *API) createResultsShareLink(response http.ResponseWriter, request *http
 		return
 	}
 	// The token is in the fragment: a browser never sends it to a server, a log or a Referer.
-	writeJSON(response, http.StatusCreated, map[string]any{"link": link, "url": strings.TrimRight(a.config.Origin, "/") + "/r#" + token})
+	writeJSON(response, http.StatusCreated, map[string]any{"link": link, "url": a.workspaceOrigin(who.Workspace.Slug) + "/r#" + token})
 }
 
 func (a *API) revokeResultsShareLink(response http.ResponseWriter, request *http.Request) {

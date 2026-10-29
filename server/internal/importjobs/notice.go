@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -76,7 +77,7 @@ func (r *jobRun) composeNotice(workspace, to string, state, status, code string,
 	if err != nil {
 		return nil, err
 	}
-	page := strings.TrimRight(r.worker.options.Origin, "/") + "/settings/import-freshdesk"
+	page := workspacehost.Origin(r.worker.options.Origin, r.worker.options.HelpCenterDomain, r.job.slug) + "/settings/import-freshdesk"
 	var subject, body string
 	if state == StateFinished {
 		headline := map[string]string{"OK": "complete", "FAILED": "incomplete", "UNVERIFIED": "done, not verified"}[status]

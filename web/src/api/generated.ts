@@ -300,6 +300,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Exchanges a verified identity token for a Colliedesk session. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` the workspace is always the host's (`workspace_slug` is ignored), the request must come from that host's origin, and the token's authorized party may be that origin. */
         post: operations["exchangeCloudSession"];
         delete?: never;
         options?: never;
@@ -336,6 +337,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Redeems a one-time link (pairing, invite or hand-off) for a session. On a workspace's own host `<slug>.<HELP_CENTER_DOMAIN>` only that workspace's links are accepted; another workspace's link is refused like an invalid one and stays unused. */
         post: operations["redeemLink"];
         delete?: never;
         options?: never;
@@ -2071,7 +2073,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 when the workspace's help center is on and the workspace is not locked, and `domain` is exactly one label below `HELP_CENTER_DOMAIN` whose label is that workspace's slug or the CNAME target `hc-<claim>` of its custom domain's claim (which redirects to the help center), or the workspace's custom domain. A custom domain answers 200 once it is active, or when it is pending and its DNS check passes now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a time on the server and at most one per host name every 30 seconds. Every other case is the same 404; custom domains work without `HELP_CENTER_DOMAIN` too. */
+        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 when `domain` is exactly one label below `HELP_CENTER_DOMAIN` whose label is an existing workspace's slug (that host leads to the workspace's desk at its root and serves its help center under `/help`, so it answers whatever the help center's state). It also answers 200 when the workspace's help center is on and the workspace is not locked, and `domain` is the CNAME target `hc-<claim>` below `HELP_CENTER_DOMAIN` of its custom domain's claim (which redirects to the help center), or the workspace's custom domain. A custom domain answers 200 once it is active, or when it is pending and its DNS check passes now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a time on the server and at most one per host name every 30 seconds. Every other case is the same 404; custom domains work without `HELP_CENTER_DOMAIN` too. */
         get: operations["askHelpCenterCertificate"];
         put?: never;
         post?: never;
@@ -4308,6 +4310,13 @@ export interface components {
                 billing: components["schemas"]["PublicFeature"];
                 signup: components["schemas"]["PublicFeature"];
             };
+            /** @description True when each workspace's desk runs on its own host `<slug>.<HELP_CENTER_DOMAIN>`: a browser signed in on `app_origin` continues there (`continue_url` of a sign-in). */
+            workspace_hosts: boolean;
+            /**
+             * Format: uri
+             * @description `APP_ORIGIN`: where a person finds their workspace and a new team signs up. With `HELP_CENTER_DOMAIN`, each workspace's desk runs on its own host `<slug>.<HELP_CENTER_DOMAIN>`, and this is the address a page there links to for everything else.
+             */
+            app_origin: string;
             autofix: {
                 /** @description The operator set up the server's GitHub App (operator console → Mailboxes & GitHub, github.*) and has not switched Autofix off, so Autofix can be used; the web app hides it otherwise. */
                 available: boolean;
@@ -5359,7 +5368,21 @@ export interface components {
             token?: string;
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
+            /**
+             * Format: uri
+             * @description Present only for a browser that signed in on `APP_ORIGIN` of a server with `HELP_CENTER_DOMAIN`: the workspace host's `/sign-in` address, with `next` and a one-time token in the fragment (`#handoff=<token>`, never sent to a server). The web app there redeems the token with `POST /api/v1/auth/redeem` for a cookie session of the same agent and role. The token works once, for one minute, only on that workspace's host and only with `session_type: cookie`. With `continue_url` the answer sets no session cookie on `APP_ORIGIN`.
+             */
+            continue_url?: string;
         };
+        RenamedWorkspace: components["schemas"]["Workspace"] & {
+            /**
+             * Format: uri
+             * @description Present when the rename was made with a browser session on the workspace's own host `<slug>.<HELP_CENTER_DOMAIN>`: the desk moves to the new host, and the browser continues at this address, signed in there by a one-time token in the fragment (as for a sign-in's `continue_url`). The old host's cookie no longer signs in.
+             */
+            continue_url?: string;
+        };
+        /** @description The page a browser signing in on `APP_ORIGIN` opens on its workspace's host (`continue_url`), a path of this site such as `/settings/billing?buy=team_monthly`; anything else opens the inbox. */
+        SignInNext: string;
         /**
          * @description What the team wants Colliedesk to do first, asked at cloud sign-up.
          * @enum {string}
@@ -6025,7 +6048,7 @@ export interface components {
             updated_at: string | null;
             /**
              * Format: uri
-             * @description The public address of the help center, also while it is off: `https://<custom domain>` once the workspace's custom domain is active (GET /api/v1/help-center/domain), else `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that variable and the slug can be a host name. The older addresses redirect to the custom domain while it is active. Changing the workspace slug changes the slug addresses, and links to the old slug stop working.
+             * @description The public address of the help center, also while it is off: `https://<custom domain>` once the workspace's custom domain is active (GET /api/v1/help-center/domain), else `<APP_ORIGIN>/help/<slug>` on a self-hosted server, or `https://<slug>.<HELP_CENTER_DOMAIN>/help` when the server sets that variable and the slug can be a host name (the root of that host leads to the workspace's desk). The older addresses redirect to the custom domain while it is active. Changing the workspace slug changes the slug addresses, and links to the old slug stop working.
              */
             url: string;
         };
@@ -8691,6 +8714,7 @@ export interface operations {
                     /** @description Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in". */
                     label?: string;
                     timezone?: components["schemas"]["SignInTimezone"];
+                    next?: components["schemas"]["SignInNext"];
                 };
             };
         };
@@ -8726,6 +8750,7 @@ export interface operations {
                     role?: components["schemas"]["OnboardingRole"];
                     source?: components["schemas"]["OnboardingSource"];
                     timezone?: components["schemas"]["SignInTimezone"];
+                    next?: components["schemas"]["SignInNext"];
                 };
             };
         };
@@ -8784,6 +8809,7 @@ export interface operations {
                      */
                     session_type?: "cookie" | "bearer";
                     timezone?: components["schemas"]["SignInTimezone"];
+                    next?: components["schemas"]["SignInNext"];
                 };
             };
         };
@@ -11767,6 +11793,7 @@ export interface operations {
             content: {
                 "application/json": {
                     slug: string;
+                    next?: components["schemas"]["SignInNext"];
                 };
             };
         };
@@ -11777,7 +11804,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Workspace"];
+                    "application/json": components["schemas"]["RenamedWorkspace"];
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];

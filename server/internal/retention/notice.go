@@ -10,6 +10,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -101,7 +102,7 @@ To keep it, choose a plan in Settings > Billing: %s
 To keep a copy of your data, export all your data from Colliedesk (Settings, or GET /api/v1/export) before %s.
 
 You get this message because you are an admin of the workspace.
-`, st.Name, st.LockedSince.Format(dateLayout), date, s.config.Origin, date)
+`, st.Name, st.LockedSince.Format(dateLayout), date, workspacehost.Origin(s.config.Origin, s.config.HelpCenterDomain, st.Slug), date)
 	return email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: s.config.From, ToAddress: to,
 		Subject: fmt.Sprintf("Your Colliedesk workspace %s will be deleted on %s", st.Name, date), Body: body,
 		MessageID: id, Date: now, Standalone: true})

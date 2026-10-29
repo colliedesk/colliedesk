@@ -77,7 +77,7 @@ func TestTrialCustomDomainVerifiesButServesOnlyOncePaid(t *testing.T) {
 	if code := askCertificate(t, f.api, slug+"."+trialDomainZone); code != http.StatusOK {
 		t.Fatalf("tls-ask for the trial workspace's subdomain = %d, want 200", code)
 	}
-	wantPage(t, onHost(site, slug+"."+trialDomainZone, "/"), http.StatusOK, []string{"Alpha Answers", `content="noindex"`}, nil)
+	wantPage(t, onHost(site, slug+"."+trialDomainZone, "/help"), http.StatusOK, []string{"Alpha Answers", `content="noindex"`}, nil)
 	if moved := visit(site, "/help/"+slug+"/", "192.0.2.80"); strings.Contains(moved.Header().Get("Location"), host) {
 		t.Fatalf("trial /help/ address moved to the custom host: %q", moved.Header().Get("Location"))
 	}
@@ -90,7 +90,7 @@ func TestTrialCustomDomainVerifiesButServesOnlyOncePaid(t *testing.T) {
 	if state := customDomainState(t, f.api, f.adminA); state.AwaitingPayment {
 		t.Fatalf("paid domain awaiting_payment=true, want false")
 	}
-	if moved := onHost(site, slug+"."+trialDomainZone, "/"); moved.Code != http.StatusMovedPermanently || !strings.HasPrefix(moved.Header().Get("Location"), "https://"+host) {
+	if moved := onHost(site, slug+"."+trialDomainZone, "/help"); moved.Code != http.StatusMovedPermanently || !strings.HasPrefix(moved.Header().Get("Location"), "https://"+host) {
 		t.Fatalf("paid subdomain status=%d Location=%q, want a 301 to the custom host", moved.Code, moved.Header().Get("Location"))
 	}
 }
