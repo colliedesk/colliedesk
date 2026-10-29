@@ -8,7 +8,7 @@ On Colliedesk Cloud every workspace has a ready-made address; you only forward y
 On your own server, the person who runs it first connects a mail forwarder and an SMTP relay: see
 [configuring email](../self-host/email.md).
 
-## Settings → Email
+## Email in Settings
 
 Open **Settings** and select **Email** under **Channels**. The **Connect your support email** link of
 the empty inbox opens the same page.
