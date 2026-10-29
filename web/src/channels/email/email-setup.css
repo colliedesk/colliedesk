@@ -47,6 +47,7 @@
 .setup-preview-lines { display: grid; gap: 2px; margin: 0; font-family: var(--font-mono); font-size: var(--fs-label); overflow-wrap: anywhere; }
 
 .email-home { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.email-home > * { min-width: 0; }
 .email-home-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
 .email-home-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
 .email-home-table th { padding: var(--space-2); border-bottom: 1px solid var(--line); color: var(--text-3); font-weight: 500; text-align: left; white-space: nowrap; }
@@ -55,6 +56,7 @@
 .email-home-name { display: block; color: var(--text-3); font-size: var(--fs-label); }
 .email-home-action { text-align: right; white-space: nowrap; }
 .email-home-action .button { min-height: var(--touch); display: inline-flex; align-items: center; }
+.channels-settings .email-home-action a.button.primary-action { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .email-home-folds { display: grid; }
 .email-home-fold { border-bottom: 1px solid var(--line); padding: 0 0 var(--space-2); }
 .email-home-fold[open] { padding-bottom: var(--space-4); }
@@ -70,6 +72,14 @@
   .setup-preview { position: static; }
 }
 @media (max-width: 40rem) {
+  /* On a phone each address is a card: its values under their names, the action last. */
+  .email-home-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .email-home-table, .email-home-table tbody, .email-home-table tr, .email-home-table td { display: block; }
+  .email-home-table tr { border-bottom: 1px solid var(--line); padding: var(--space-2) 0; }
+  .email-home-table td { border: 0; padding: var(--space-1) 0; }
+  .email-home-table td[data-label]::before { content: attr(data-label); display: block; color: var(--text-3); font-size: var(--fs-label); }
+  .email-home-action { text-align: left; }
+  .email-home .scroll-x-fade { overflow: visible; -webkit-mask-image: none; mask-image: none; }
   .setup-step { padding: var(--space-3); }
   .setup-body { padding-left: 0; }
   .setup-choices { grid-template-columns: minmax(0, 1fr); }

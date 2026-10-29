@@ -56,11 +56,11 @@ function Row({ channel, settings, isDefault }: { channel: Channel; settings?: Em
   const address = settings?.channel?.support_address ?? channel.summary;
   const unfinished = channel.status.state === 'waiting' || (settings !== undefined && !addressSaved(settings));
   return <tr className={channel.enabled ? undefined : 'ch-row-off'}>
-    <td><strong>{address}</strong>{isDefault && <> <span className="ch-default">{m.defaultMark}</span></>}
+    <td data-label={m.colAddress}><strong>{address}</strong>{isDefault && <> <span className="ch-default">{m.defaultMark}</span></>}
       {channel.name !== address && <small className="email-home-name">{channel.name}</small>}</td>
-    <td><code>{settings ? settings.hosted_address ?? m.inboundURL : '…'}</code></td>
-    <td>{settings ? m.through[repliesThrough(settings)] : '…'}</td>
-    <td><span className={`status ${statusClass[channel.status.state]}`}>{statusLabel[channel.status.state]}</span>
+    <td data-label={m.colReceives}><code>{settings ? settings.hosted_address ?? m.inboundURL : '…'}</code></td>
+    <td data-label={m.colReplies}>{settings ? m.through[repliesThrough(settings)] : '…'}</td>
+    <td data-label={m.colStatus}><span className={`status ${statusClass[channel.status.state]}`}>{statusLabel[channel.status.state]}</span>
       {channel.held_count > 0 && <small className="email-home-name">{m.held(channel.held_count)}</small>}</td>
     <td className="email-home-action">{unfinished
       ? <a className="button primary-action" href={`/settings/channels/${encodeURIComponent(channel.id)}/setup`} aria-label={m.continueSetupOf(address)}>{m.continueSetup}</a>
