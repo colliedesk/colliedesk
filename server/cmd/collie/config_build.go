@@ -52,6 +52,7 @@ type builtConfig struct {
 	Retention              retentionSettings
 	ProblemReportWorkspace string
 	BillingAlertEmail      string
+	RequireTOTP            bool
 }
 
 // buildConfig parses every setting of getenv and the rules that span them. Errors name settings, never
@@ -105,6 +106,7 @@ func buildConfig(getenv func(string) string, retired map[string]string) (builtCo
 		}
 	}
 	built.ProblemReportWorkspace = strings.TrimSpace(getenv("PROBLEM_REPORT_WORKSPACE"))
+	built.RequireTOTP = strings.TrimSpace(getenv("operator.require_totp")) == "true"
 	built.BillingAlertEmail = strings.TrimSpace(getenv("BILLING_ALERT_EMAIL"))
 	if built.BillingAlertEmail != "" && !strings.Contains(built.BillingAlertEmail, "@") {
 		keep(errors.New("billing.alert_email must be an email address"))

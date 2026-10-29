@@ -190,6 +190,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/operator/auth/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Uses a one-time operator link (`collie operator pair`, 15 minutes). The console calls it when the operator presses Continue, never on page load, so a link scanner cannot spend it. Without an authenticator required or set up it signs the operator in (`step: done`, a `colliedesk_operator` cookie, `__Host-colliedesk_operator` on https); otherwise it returns a ticket for the code (`code`), and the first time the key to add (`enroll`, with a QR code drawn by the server). 404 `operator_link_invalid`, 410 `operator_link_expired`, 409 `operator_link_used`, 423 `operator_locked` with `locked_until`, 429 after 5 tries a minute. A repeat with the same Idempotency-Key is refused like any second use of the link (409). */
+        post: operations["redeemOperatorLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/auth/totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Checks the authenticator code of a sign-in ticket and signs the operator in (a cookie). A wrong code answers 400 `operator_code_wrong` with `tries_left` and keeps the ticket; ten wrong codes lock sign-in for 15 minutes (423 `operator_locked`). A repeat after success is refused like any second use of the ticket (409). */
+        post: operations["confirmOperatorCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The operator of this session or operator token. A workspace session or agent token is refused (401). */
+        get: operations["getOperatorMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Ends this operator session (and its cookie) or this operator token. A repeat finds it ended (401). */
+        post: operations["operatorLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/operator/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates an operator token (`cdop_…`) for an AI agent: it always reads, and holds the permissions given; it expires after 30 days. It works on `/mcp/operator` and the operator routes only, never in a workspace. Needs the operator's authenticator code (`reauth_code`; 400 `reauth_required` or `reauth_code_invalid`, nothing saved); an operator without an authenticator passes within 15 minutes of signing in, else 403 `reauth_needs_new_link`. An operator token's call is a request a person approves (202). */
+        post: operations["createOperatorToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations": {
         parameters: {
             query?: never;
@@ -6037,6 +6122,92 @@ export interface components {
             }[];
             product_events?: string[];
         };
+        /** @enum {string} */
+        OperatorPermission: "operator:read" | "operator_requests:cancel" | "operator_config:write" | "operator:manage";
+        OperatorSignInStep: {
+            /** @enum {string} */
+            step: "code" | "enroll" | "done";
+            email: string;
+            /** @description For POST /api/v1/operator/auth/totp, 10 minutes, once */
+            ticket?: string;
+            /** @description enroll: the authenticator key as text (base32) */
+            key?: string;
+            /** @description enroll: the key as an otpauth:// URL */
+            otpauth_url?: string;
+            /** @description enroll: the URL as a QR code, an SVG image */
+            qr_svg?: string | null;
+            /** @description done: whether this server requires an authenticator */
+            totp_required?: boolean;
+        };
+        OperatorLockedError: {
+            error: {
+                code: string;
+                message: string;
+                request_id?: string;
+                /** Format: date-time */
+                locked_until: string;
+            };
+        };
+        OperatorCodeError: {
+            error: {
+                code: string;
+                message: string;
+                request_id?: string;
+                tries_left?: number;
+                fields?: {
+                    [key: string]: string;
+                };
+            };
+        };
+        OperatorSession: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            operator_id: string;
+            email: string;
+            /** @enum {string} */
+            kind: "cookie" | "token";
+            label: string;
+            permissions: components["schemas"]["OperatorPermission"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            revoked_at?: string | null;
+        };
+        OperatorMe: {
+            operator: {
+                /** Format: uuid */
+                id: string;
+                email: string;
+                totp_enabled: boolean;
+            };
+            session: components["schemas"]["OperatorSession"];
+            console: {
+                /** @description Where the console is served: OPERATOR_ORIGIN, or APP_ORIGIN/operator */
+                origin: string;
+                /** @description True when the console shares the workspace app's address */
+                path_mode: boolean;
+            };
+        };
+        OperatorToken: {
+            /** @description Starts with cdop_; shown once */
+            token: string;
+            session: components["schemas"]["OperatorSession"];
+        };
+        OperatorRequestAccepted: {
+            /** Format: uuid */
+            request_id: string;
+            /** @enum {string} */
+            status: "pending";
+            summary: string;
+            /** Format: date-time */
+            expires_at: string;
+            message: string;
+        };
         Error: {
             error: {
                 code: string;
@@ -6567,6 +6738,52 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The link or ticket expired */
+        Gone: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Operator sign-in is locked after ten wrong codes; `error.locked_until` says until when */
+        OperatorLocked: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["OperatorLockedError"];
+            };
+        };
+        /** @description More than 5 tries a minute */
+        OperatorTooManyTries: {
+            headers: {
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The code did not match (`operator_code_wrong`, `error.tries_left`) or the body is invalid */
+        OperatorCodeWrong: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["OperatorCodeError"];
+            };
+        };
+        /** @description An operator token asked for a change: nothing happened yet. It waits as an operator request a person approves in the console (with their authenticator code); it expires after seven days. */
+        OperatorRequestAccepted: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["OperatorRequestAccepted"];
+            };
+        };
         Unauthorized: {
             headers: {
                 [name: string]: unknown;
@@ -7072,6 +7289,164 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    redeemOperatorLink: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Where the sign-in stands */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorSignInStep"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            410: components["responses"]["Gone"];
+            423: components["responses"]["OperatorLocked"];
+            429: components["responses"]["OperatorTooManyTries"];
+        };
+    };
+    confirmOperatorCode: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ticket: string;
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Signed in */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorSignInStep"];
+                };
+            };
+            400: components["responses"]["OperatorCodeWrong"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            410: components["responses"]["Gone"];
+            423: components["responses"]["OperatorLocked"];
+            429: components["responses"]["OperatorTooManyTries"];
+        };
+    };
+    getOperatorMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current operator */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorMe"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    operatorLogout: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createOperatorToken: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The client's name for this submit, 1 to 200 printable ASCII characters; the same on every retry of it. A repeat within a day returns what the first request created (200) and creates nothing; a repeat that arrives while the first still runs waits up to 10 seconds for its answer, then answers 409 `request_in_progress`. The same key with other input answers 422 `idempotency_key_reused`. Keys belong to the workspace. An agent token below the route's tier files an agent request (202) without the key. */
+                "Idempotency-Key"?: components["parameters"]["CreateIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    label: string;
+                    permissions?: components["schemas"]["OperatorPermission"][];
+                    reauth_code?: string;
+                    /** @description Why an operator token asks for this, shown to the approver */
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The token, shown once */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorToken"];
+                };
+            };
+            202: components["responses"]["OperatorRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["IdempotencyKeyReused"];
         };
     };
     listConversations: {

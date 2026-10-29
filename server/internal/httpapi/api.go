@@ -137,6 +137,10 @@ type Config struct {
 	ProblemReportWorkspace string
 	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
 	Carry *Carry
+	// OperatorOrigin is OPERATOR_ORIGIN: the operator console's own host. Empty serves it at Origin/operator.
+	OperatorOrigin string
+	// Operators signs the operators of the server in; nil makes one with the Gmail key ring.
+	Operators *auth.OperatorService
 }
 
 // ProductAnalytics names the PostHog project key and host the web app sends usage events to, and
@@ -193,6 +197,8 @@ type API struct {
 	liveChecks *helpcenter.LiveChecks
 	// certificateNotes lets the certificate question record a certificate once an hour per host name.
 	certificateNotes *webFormLimiter
+	// operatorSignIns limits the tries of operator links, tickets and client addresses.
+	operatorSignIns, operatorSignInIPs *webFormLimiter
 	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
 	helpCenterHostLookups *webFormLimiter
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
@@ -239,6 +245,9 @@ type Server struct {
 	http.Handler
 	api *API
 }
+
+// Operators signs in the operators of the server, for the operator MCP endpoint.
+func (s *Server) Operators() *auth.OperatorService { return s.api.config.Operators }
 
 // AI is the service of the workspaces' AI settings and task queue, which the worker of the process shares.
 func (s *Server) AI() *ai.Service { return s.api.ai }
@@ -301,7 +310,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api := &API{config: config, now: clock, limits: limits, exports: carry.exports, exportLinks: carry.exportLinks, webForms: carry.webForms, webFormClients: carry.webFormClients,
 		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
 		testMessages: carry.testMessages, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
-		helpCenterHostLookups: carry.helpCenterHostLookups, certificateNotes: carry.certificateNotes, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
+		helpCenterHostLookups: carry.helpCenterHostLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
 		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding,
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
@@ -357,6 +366,13 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 			slog.Error("autofix: the GitHub App settings do not work", "error", err)
 		}
 	}
+	if api.config.Operators == nil {
+		base := strings.TrimRight(config.Origin, "/") + "/operator"
+		if config.OperatorOrigin != "" {
+			base = config.OperatorOrigin
+		}
+		api.config.Operators = auth.NewOperatorService(db, config.Google.Keys, base, func() bool { return api.hot().RequireTOTP }).WithClock(clock)
+	}
 	api.helpCenter = api.newHelpCenter()
 	mux := http.NewServeMux()
 	api.mux = mux
@@ -365,6 +381,10 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 			continue
 		}
 		if route.Pattern == resendWebhookPath && config.Email.ResendWebhookSecret == "" {
+			continue
+		}
+		if route.Permission == auth.PermissionOperator {
+			mux.Handle(route.Method+" "+route.Pattern, api.authorizeOperator(route.Route, route.handler))
 			continue
 		}
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
@@ -381,6 +401,11 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
 		{http.MethodPost, cloudSignupPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/operator/auth/redeem", auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/operator/auth/totp", auth.PermissionPublic},
+		{http.MethodGet, "/api/v1/operator/auth/me", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/auth/logout", auth.PermissionOperator},
+		{http.MethodPost, "/api/v1/operator/tokens", auth.PermissionOperator},
 		{http.MethodPost, "/api/v1/auth/logout", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/me", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/sessions", auth.PermissionAccessRead},

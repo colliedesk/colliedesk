@@ -92,6 +92,11 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	p := &process{pool: pool, requestPool: requestPool, db: db, origin: origin, storage: storage, carry: carry,
 		importKeys: importjobs.NewKeys(configStore.Keys()),
 		cursor:     &autofixworker.Cursor{Store: store.NewWithDB(db).WithSealKeys(configStore.Keys()), Base: cursorBaseURL}}
+	p.operatorOrigin, err = operatorOrigin(origin)
+	if err != nil {
+		slog.Error("the operator console stays at APP_ORIGIN/operator/", "error", err)
+	}
+	p.operators = auth.NewOperatorService(db, configStore.Keys(), consoleBase(origin), func() bool { return hot.Load().RequireTOTP })
 	processCtx, stopProcess := context.WithCancel(ctx)
 	defer stopProcess()
 	p.Go(processCtx, func(ctx context.Context) { sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage)) })

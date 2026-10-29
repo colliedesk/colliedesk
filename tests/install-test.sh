@@ -38,7 +38,10 @@ fi
 if [ "${1:-}" = compose ] && [ "${2:-}" = exec ]; then
   # Real `docker compose exec` forwards stdin even with -T; consume it the same way.
   cat >/dev/null || :
-  printf '%s\n' 'http://localhost:8080/sign-in?token=pairing-token'
+  case "$*" in
+    *'collie operator pair'*) printf '%s\n' 'http://localhost:8080/operator/sign-in?token=operator-token' ;;
+    *) printf '%s\n' 'http://localhost:8080/sign-in?token=pairing-token' ;;
+  esac
   exit
 fi
 exit 0
@@ -85,6 +88,10 @@ fresh=$TMP/fresh
 rm -f "$STUB_LOG" "$STUB_LOG.stdin"
 output=$(sh "$ROOT/install.sh" --dir "$fresh" --name Desk --email admin@example.com </dev/null)
 [ "$(stat -c %a "$fresh/.env")" = 600 ]
+# The first install also prints the operator console's one-time link, for the same email.
+printf '%s' "$output" | grep -Fx 'Operator console (one-time link): http://localhost:8080/operator/sign-in?token=operator-token' >/dev/null
+grep -F 'OPERATOR_ORIGIN: ${OPERATOR_ORIGIN:-}' "$fresh/compose.yaml" >/dev/null
+grep -q '^OPERATOR_ORIGIN=' "$fresh/.env" && { printf '%s\n' 'OPERATOR_ORIGIN written without --operator-origin' >&2; exit 1; }
 grep -F "image: \${COLLIE_DESK_IMAGE}" "$fresh/compose.yaml" >/dev/null
 # Fresh installs: superuser only for initdb, a non-superuser owner, and a separate request login.
 grep -Fx 'POSTGRES_USER=postgres' "$fresh/.env" >/dev/null
@@ -178,5 +185,16 @@ printf '%s\n' 'POSTGRES_PASSWORD=pg' 'SMTP_HOST=smtp.example.net' >"$old/.env"
 expect_failure 'is older than this installer' env STUB_MODE=old-image sh "$ROOT/install.sh" --dir "$old" --name Desk --email admin@example.com
 grep -Fx '# kept' "$old/compose.yaml" >/dev/null
 [ ! -f "$old/compose.yaml.bak" ]
+
+# --operator-origin (or OPERATOR_ORIGIN) puts the console on its own host; no question is asked.
+ops=$TMP/ops
+sh "$ROOT/install.sh" --dir "$ops" --name Desk --email admin@example.com --operator-origin https://ops.example.com </dev/null >/dev/null
+grep -Fx 'OPERATOR_ORIGIN=https://ops.example.com' "$ops/.env" >/dev/null
+# Running the installer again prints no new operator link.
+again=$(sh "$ROOT/install.sh" --dir "$ops" --name Desk --email admin@example.com </dev/null)
+if printf '%s' "$again" | grep -F 'Operator console' >/dev/null; then
+  printf '%s\n' 'a second run printed another operator link' >&2
+  exit 1
+fi
 
 printf '%s\n' 'install tests passed'

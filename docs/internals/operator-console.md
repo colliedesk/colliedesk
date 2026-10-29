@@ -43,6 +43,43 @@ usage report off.
 - **The server never refuses to start over its configuration.** A version that does not build is marked
   `rejected` (once, with an audit line) and the last good one runs, else every default.
 
+## Operator realm
+
+Operators (`operators`, `operator_links`, `operator_sessions`, `operator_requests`, `operator_idempotency`;
+`PrivilegeOperator`, `auth/operator.go`) are a realm apart from every workspace:
+
+- Routes of the console carry `auth.PermissionOperator`; `authorize` hands them to `authorizeOperator`,
+  which reads only the operator cookie (`colliedesk_operator`, `__Host-` over https, SameSite=Strict,
+  12 hours) or an operator bearer. Sessions and tokens live in `operator_sessions`, workspace ones in
+  `sessions`, so a credential of one realm finds no row in the other: 401 both ways
+  (`TestOperatorRealmIsSeparate`). A browser session is never a bearer and a token never a cookie.
+- Operator tokens (`cdop_`, hashed with their own domain) hold `auth.ScopeOperator`, which is not in
+  `ScopeNames`: the workspace tiers are ordered, and `ScopeAllows`/`ValidScope` must never hand this one to
+  a workspace token. Its permissions (`operator:read`, `operator_requests:cancel`, `operator_config:write`,
+  `operator:manage`) preset to `operator`. The parity gate lists `operator` beside the workspace tiers: a
+  vocabulary, no ceiling moved.
+- `/mcp/operator` (`mcpserver.NewOperator`) registers only `Tier: operator` tools and takes operator
+  tokens; `/mcp` never registers them, and `toolOpen` refuses them to any workspace principal.
+- Writes with the cookie need `Origin` equal to the console's origin (`OPERATOR_ORIGIN`, else
+  `APP_ORIGIN`): `app.` and `ops.` are the same site, so SameSite alone does not stop a cross-subdomain post.
+- `OPERATOR_ORIGIN` is a bootstrap variable, not a setting: it decides the cookie, Origin and the way in,
+  and a wrong value saved from the console would lock the console out. `operatorHost` sits outside the help
+  center (which takes every unknown host, and would read `ops.` as a workspace slug); `ops`, `operator`
+  and `console` are reserved slugs.
+- Sign-in: a link is spent only by `POST /operator/auth/redeem` (the page's Continue), never on load. With
+  an authenticator it opens a ticket (`operator_links` purpose `totp-ticket`, 10 minutes) that carries
+  the key being enrolled, sealed, until a code proves it. Codes are RFC 6238 with the used step stored.
+  Limits: 5 tries a minute per link or ticket, 60 per client address (only a second layer: wrong trusted
+  proxies put every client behind one address), and 10 wrong codes lock the operator for 15 minutes.
+- The QR code is drawn on the server (`internal/qrsvg`, byte mode, level M, versions 1–10) so the console's
+  first bundle carries no QR library; the key is always shown as text too.
+- An operator token's call to an `alwaysAsk` route is filed in `operator_requests` (`fileOperatorRequest`,
+  never `agent_requests`); a body with a secret's value is refused (`secret_in_request`) before anything
+  is stored.
+- Every operator POST takes an Idempotency-Key (`operator_idempotency`, a day; `operatorOnce`): the
+  workspace `createOnce` keys by workspace, which an operator has none of. A repeat answers the first
+  result without what was shown once (a token).
+
 ## Re-serve
 
 `collie serve` is a process (`cmd/collie/generation.go` `process`: pools, attachment store, the in-app

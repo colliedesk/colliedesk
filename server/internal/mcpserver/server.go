@@ -18,6 +18,9 @@ import (
 // Path is where the server is mounted.
 const Path = "/mcp"
 
+// OperatorPath serves the operator tools to operator tokens (cdop_); Path never serves them.
+const OperatorPath = "/mcp/operator"
+
 // Config wires the server to the REST API it adapts.
 type Config struct {
 	// API is the handler of /api/v1; every tool call is served through it in process.
@@ -26,6 +29,8 @@ type Config struct {
 	Auth *auth.Service
 	// Version is the build version reported as the server version.
 	Version string
+	// Operators authenticates the operator tokens of OperatorPath; nil leaves OperatorPath unserved (404).
+	Operators *auth.OperatorService
 }
 
 const instructions = `Colliedesk is a helpdesk: customers write in, a small support team answers. You work the inbox for that team.
@@ -40,12 +45,19 @@ A call above your tier is not refused: Colliedesk files it as an agent request t
 // /api/v1 keep their own handler and pay nothing for the extra route.
 func Mount(config Config, next http.Handler) http.Handler {
 	mcpHandler := New(config)
+	var operatorHandler http.Handler = http.NotFoundHandler()
+	if config.Operators != nil {
+		operatorHandler = NewOperator(config)
+	}
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == Path {
+		switch request.URL.Path {
+		case Path:
 			mcpHandler.ServeHTTP(response, request)
-			return
+		case OperatorPath:
+			operatorHandler.ServeHTTP(response, request)
+		default:
+			next.ServeHTTP(response, request)
 		}
-		next.ServeHTTP(response, request)
 	})
 }
 
@@ -56,7 +68,9 @@ func New(config Config) http.Handler {
 	rest := &restClient{api: config.API}
 	docSections() // build the guide index now, so a bad embed stops the server at start
 	for _, spec := range Catalog() {
-		register(server, spec, rest)
+		if spec.Tier != auth.ScopeOperator {
+			register(server, spec, rest)
+		}
 	}
 	// A bearer token is required, so DNS rebinding cannot ride on a browser's ambient credentials. The
 	// SDK's loopback Host check would refuse the public host name that a reverse proxy on the same
@@ -64,6 +78,45 @@ func New(config Config) http.Handler {
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true})
 	return requireBearer(config.Auth, streamable)
+}
+
+const operatorInstructions = `Colliedesk's operator tools run the whole server: its settings, operators and requests, not a workspace's inbox.
+Start with colliedesk_operator_whoami. You read freely; every change you ask for becomes an operator request that a person approves in the operator console with their authenticator code. Never ask for a secret's value and never send one: a request names the secrets it needs, and the approver types them.`
+
+// NewOperator returns the handler of OperatorPath: the operator tools, for operator tokens only.
+func NewOperator(config Config) http.Handler {
+	server := mcp.NewServer(&mcp.Implementation{Name: "colliedesk-operator", Title: "Colliedesk operator", Version: config.Version},
+		&mcp.ServerOptions{Instructions: operatorInstructions})
+	rest := &restClient{api: config.API}
+	for _, spec := range Catalog() {
+		if spec.Tier == auth.ScopeOperator {
+			register(server, spec, rest)
+		}
+	}
+	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
+		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true})
+	return requireOperatorBearer(config.Operators, streamable)
+}
+
+// requireOperatorBearer answers 401 unless the request carries a valid operator token as a bearer. An
+// operator's browser session and every workspace credential are refused.
+func requireOperatorBearer(service *auth.OperatorService, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		raw, ok := bearerToken(request)
+		if !ok {
+			unauthorized(response)
+			return
+		}
+		principal, err := service.Authenticate(request.Context(), raw, false)
+		if err != nil || !principal.IsToken() {
+			if err != nil && !errors.Is(err, auth.ErrInvalidCredential) {
+				slog.Error("authenticate operator MCP request", "error", err)
+			}
+			unauthorized(response)
+			return
+		}
+		next.ServeHTTP(response, request)
+	})
 }
 
 // requireBearer answers 401 unless the request carries a valid agent token as a bearer. Cookies and

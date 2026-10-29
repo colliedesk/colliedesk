@@ -1,5 +1,57 @@
 # Operator console and settings
 
+The operator console is where the people who run a server (operators) sign in, separately from every
+workspace. An operator is not a workspace admin: a workspace session never opens it, and an operator
+session never opens a workspace.
+
+## Sign in
+
+The installer prints a one-time link for the admin email when it installs:
+`Operator console (one-time link): …`. Print a new one at any time on the server (15 minutes, works once):
+
+```sh
+docker compose exec server /app/collie operator pair --email you@example.com
+```
+
+Opening the link shows a page with **Continue**; nothing is used until you press it, so a link scanner in
+your mail cannot spend it. A browser session lasts 12 hours.
+
+**Authenticator (TOTP).** With `operator.require_totp` on (always on the hosted cloud), the first sign-in
+shows a QR code and the key as text for an authenticator app, then asks for its 6-digit code; later
+sign-ins ask for the code. Ten wrong codes lock sign-in for 15 minutes. Turn it on with
+`collie config set operator.require_totp=true`. Lost the authenticator: print a link that replaces it
+(the shell is the root of trust):
+
+```sh
+docker compose exec server /app/collie operator pair --email you@example.com --reset-totp
+```
+
+A dangerous change (a secret, the billing switch, a new token…) asks for the code again; an operator
+without an authenticator passes only within 15 minutes of signing in with a fresh link.
+
+**Operators and sessions.** `collie operator list`, `collie operator revoke <email>` (every session and
+token stops at once; `pair` lets them in again) and `collie operator sessions [--revoke <id>]`.
+
+## Its own address
+
+By default the console is at `APP_ORIGIN/operator/`, the same address as the workspace app. Give it its
+own host to keep a bug in the workspace app from reaching it: set `OPERATOR_ORIGIN` in `.env` (for
+example `https://ops.example.com`), point that host at the server through your reverse proxy, and run
+`docker compose up -d`. The installer takes `--operator-origin https://ops.example.com` on a new install.
+That host then serves only the console, the operator API and `/mcp/operator`; the app host serves none of
+them. Over https the session cookie is `__Host-colliedesk_operator`, which no other host can set or read.
+
+## Operator tokens and MCP
+
+An AI client can help run the server with an operator token (`cdop_…`): `collie operator token create
+--email you@example.com --label "nightly check"` (printed once, 30 days) or the console. It connects to
+`APP_ORIGIN/mcp/operator` (or `OPERATOR_ORIGIN/mcp/operator`), never to `/mcp`, and a workspace token never
+reaches it ([operator tools](../user/mcp.md#operator-tools)). A token reads; every change it asks for waits
+as a request an operator approves with their code. A token never sends a secret: it names the secrets a
+change needs, and the operator types them when approving.
+
+## Settings
+
 The server's settings (email, AI, mailboxes, GitHub, billing, proxies, limits) live in its database,
 not in the environment. Every change is a version: nothing is lost, and any version can be brought
 back. This page covers `collie config`, the command line for them; it works on any install, from the

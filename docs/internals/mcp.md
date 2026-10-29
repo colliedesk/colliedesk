@@ -44,6 +44,9 @@
   - stderr has one line per event (start: host and version; failure: the method and the HTTP
     status), never a header or body. Claude Desktop keeps it in its MCP log.
 
+`/mcp/operator` serves the operator tools (`Tier: operator`) to operator tokens only, with its own
+instructions; `/mcp` never registers them. See [operator console internals](operator-console.md#operator-realm).
+
 ## Traps
 
 - **The bridge sets the HTTP headers a stdio host cannot.** `MCP-Protocol-Version` comes from the

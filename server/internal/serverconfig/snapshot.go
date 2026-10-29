@@ -90,7 +90,12 @@ func (s Snapshot) WithProducts(products []ProductRow) Snapshot {
 
 // Getenv answers with the old variable names: a moved variable from the database, a bootstrap variable
 // and the telemetry opt-out from the environment. A moved variable left in the environment is never read.
+// A setting that never was a variable (operator.require_totp) answers to its dotted name.
 func (s Snapshot) Getenv(name string) string {
+	if key, ok := Lookup(name); ok && key.Env == "" && key.Name == name {
+		value, _ := s.Get(name)
+		return value
+	}
 	if key, ok := Lookup(name); ok && key.Env == name {
 		value, _ := s.Get(name)
 		return value

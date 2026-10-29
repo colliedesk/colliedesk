@@ -135,4 +135,8 @@ const (
 	// key in server_secrets). None of these tables has a workspace_id or a grant to the app role; no
 	// workspace row is read.
 	PrivilegeServerConfig Privilege = "server-config"
+	// PrivilegeOperator signs in the people who run the server (operators, operator_links,
+	// operator_sessions, operator_requests) and writes their audit lines (operator_audit). None of these
+	// tables has a workspace_id or a grant to the app role; no workspace row is read.
+	PrivilegeOperator Privilege = "operator"
 )

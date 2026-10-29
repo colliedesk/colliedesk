@@ -52,7 +52,9 @@ You need to:
 
 The [quick start](#quick-start) command writes `compose.yaml` and `.env` to `./colliedesk` (`--dir` picks
 another directory), starts PostgreSQL and the server, and creates the workspace. It prints a one-time
-URL. Open it to sign in as the admin. Running the installer again keeps your `.env` and data.
+URL. Open it to sign in as the admin. It also prints a one-time link to the
+[operator console](operator-console.md), where you run the server itself (email, AI, proxies, operators).
+Running the installer again keeps your `.env` and data.
 
 ### From a clone
 

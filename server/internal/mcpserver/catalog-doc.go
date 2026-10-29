@@ -4,6 +4,9 @@ package mcpserver
 // written for the model. The tool table in docs/user/mcp.md is generated from it (make docs-mcp),
 // with the tier from Tier and "Cannot be undone" from Destructive, so neither belongs here.
 var toolDocs = map[string]string{
+	"colliedesk_operator_whoami":           "Shows the operator the token acts as, what it may ask for and where the console is",
+	"colliedesk_operator_sign_out":         "Ends this operator token",
+	"colliedesk_operator_token_create":     "Asks an operator for another operator token",
 	"colliedesk_help_center_domain_get":    "Reads the custom domain, its DNS records and the last check",
 	"colliedesk_help_center_domain_set":    "Sets or replaces the custom domain, pending DNS ownership proof",
 	"colliedesk_help_center_domain_check":  "Checks DNS ownership and activates the proven custom domain",

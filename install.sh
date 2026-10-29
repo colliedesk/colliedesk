@@ -11,9 +11,11 @@ SLEEP=${SLEEP:-sleep}
 TARGET_DIR=./colliedesk
 WORKSPACE_NAME=
 ADMIN_EMAIL=
+# The operator console on its own host, e.g. https://ops.example.com; empty serves it at APP_ORIGIN/operator/.
+INSTALL_OPERATOR_ORIGIN=${OPERATOR_ORIGIN:-}
 
 usage() {
-  printf '%s\n' 'Usage: install.sh [--dir PATH] [--name NAME] [--email EMAIL]'
+  printf '%s\n' 'Usage: install.sh [--dir PATH] [--name NAME] [--email EMAIL] [--operator-origin URL]'
 }
 
 fail() {
@@ -26,6 +28,7 @@ while [ "$#" -gt 0 ]; do
     --dir) [ "$#" -ge 2 ] || fail '--dir requires a value'; TARGET_DIR=$2; shift 2 ;;
     --name) [ "$#" -ge 2 ] || fail '--name requires a value'; WORKSPACE_NAME=$2; shift 2 ;;
     --email) [ "$#" -ge 2 ] || fail '--email requires a value'; ADMIN_EMAIL=$2; shift 2 ;;
+    --operator-origin) [ "$#" -ge 2 ] || fail '--operator-origin requires a value'; INSTALL_OPERATOR_ORIGIN=$2; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) fail "unknown argument: $1" ;;
   esac
@@ -94,6 +97,7 @@ if [ ! -f "$TARGET_DIR/.env" ]; then
       printf 'COLLIE_DESK_IMAGE=%s\n' "${COLLIE_DESK_IMAGE:-ghcr.io/colliedesk/colliedesk:latest}"
       printf 'COLLIE_DESK_PORT=%s\n' "${COLLIE_DESK_PORT:-8080}"
       printf 'APP_ORIGIN=%s\n' "${APP_ORIGIN:-http://localhost:${COLLIE_DESK_PORT:-8080}}"
+      [ -z "$INSTALL_OPERATOR_ORIGIN" ] || printf 'OPERATOR_ORIGIN=%s\n' "$INSTALL_OPERATOR_ORIGIN"
     } >"$TARGET_DIR/.env"
   )
 fi
@@ -162,6 +166,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://colliedesk:${POSTGRES_PASSWORD}@postgres:5432/colliedesk?sslmode=disable}
       DATABASE_REQUEST_URL: ${DATABASE_REQUEST_URL:-}
       APP_ORIGIN: ${APP_ORIGIN}
+      OPERATOR_ORIGIN: ${OPERATOR_ORIGIN:-}
       LISTEN_ADDR: :8080
       MAILBOX_TOKEN_KEYS: ${MAILBOX_TOKEN_KEYS:-}
       # Secrets stay readable from .env until a key ring seals them in the database (docs/self-host/environment-variables.md#no-key-ring).
@@ -236,8 +241,12 @@ fi
 PAIRING_URL=$("$DOCKER" compose exec -T server /app/collie create-workspace \
   --name "$WORKSPACE_NAME" --admin-email "$ADMIN_EMAIL" </dev/null)
 [ -n "$PAIRING_URL" ] || fail 'Workspace creation did not return a pairing URL.'
+# The same person runs the server: the operator console's link is printed once, beside the workspace's.
+OPERATOR_URL=$("$DOCKER" compose exec -T server /app/collie operator pair --email "$ADMIN_EMAIL" --by installer </dev/null) ||
+  fail 'Making the operator console link failed. Print one later with: docker compose exec server /app/collie operator pair --email <your email>'
 touch .initialized
 printf 'Colliedesk is ready. Open this one-time pairing URL:\n%s\n' "$PAIRING_URL"
+printf 'Operator console (one-time link): %s\n' "$OPERATOR_URL"
 }
 
 main "$@"

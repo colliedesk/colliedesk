@@ -315,6 +315,140 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/operator/auth/redeem:
+    post:
+      operationId: redeemOperatorLink
+      security: []
+      x-permission: public
+      description: >-
+        Uses a one-time operator link (`collie operator pair`, 15 minutes). The console calls it when the
+        operator presses Continue, never on page load, so a link scanner cannot spend it. Without an
+        authenticator required or set up it signs the operator in (`step: done`, a `colliedesk_operator`
+        cookie, `__Host-colliedesk_operator` on https); otherwise it returns a ticket for the code (`code`),
+        and the first time the key to add (`enroll`, with a QR code drawn by the server). 404
+        `operator_link_invalid`, 410 `operator_link_expired`, 409 `operator_link_used`, 423
+        `operator_locked` with `locked_until`, 429 after 5 tries a minute. A repeat with the same
+        Idempotency-Key is refused like any second use of the link (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Where the sign-in stands
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorSignInStep'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+        '429': {$ref: '#/components/responses/OperatorTooManyTries'}
+  /api/v1/operator/auth/totp:
+    post:
+      operationId: confirmOperatorCode
+      security: []
+      x-permission: public
+      description: >-
+        Checks the authenticator code of a sign-in ticket and signs the operator in (a cookie). A wrong code
+        answers 400 `operator_code_wrong` with `tries_left` and keeps the ticket; ten wrong codes lock sign-in
+        for 15 minutes (423 `operator_locked`). A repeat after success is refused like any second use of the
+        ticket (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket, code]
+              properties:
+                ticket: {type: string, minLength: 1, maxLength: 200}
+                code: {type: string, minLength: 1, maxLength: 12}
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorSignInStep'}}}
+        '400': {$ref: '#/components/responses/OperatorCodeWrong'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+        '429': {$ref: '#/components/responses/OperatorTooManyTries'}
+  /api/v1/operator/auth/me:
+    get:
+      operationId: getOperatorMe
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The operator of this session or operator token. A workspace session or agent token is refused (401).
+      responses:
+        '200':
+          description: Current operator
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorMe'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/auth/logout:
+    post:
+      operationId: operatorLogout
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: Ends this operator session (and its cookie) or this operator token. A repeat finds it ended (401).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '204': {description: Signed out}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/operator/tokens:
+    post:
+      operationId: createOperatorToken
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Creates an operator token (`cdop_…`) for an AI agent: it always reads, and holds the permissions
+        given; it expires after 30 days. It works on `/mcp/operator` and the operator routes only, never in a
+        workspace. Needs the operator's authenticator code (`reauth_code`; 400 `reauth_required` or
+        `reauth_code_invalid`, nothing saved); an operator without an authenticator passes within 15 minutes
+        of signing in, else 403 `reauth_needs_new_link`. An operator token's call is a request a person
+        approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: {type: string, minLength: 1, maxLength: 100}
+                permissions: {type: array, items: {$ref: '#/components/schemas/OperatorPermission'}}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500, description: 'Why an operator token asks for this, shown to the approver'}
+      responses:
+        '201':
+          description: The token, shown once
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorToken'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
   /api/v1/conversations:
     get:
       operationId: listConversations
@@ -5987,6 +6121,7 @@ components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
     sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
+    operatorCookie: {type: apiKey, in: cookie, name: colliedesk_operator, description: '__Host-colliedesk_operator when the console is served over https'}
     inboundSecret: {type: apiKey, in: header, name: X-Colliedesk-Inbound-Secret}
     polarWebhook: {type: apiKey, in: header, name: webhook-signature}
     resendWebhook: {type: apiKey, in: header, name: svix-signature}
@@ -6107,6 +6242,25 @@ components:
       headers:
         Retry-After: {schema: {type: integer}}
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Gone:
+      description: The link or ticket expired
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    OperatorLocked:
+      description: Operator sign-in is locked after ten wrong codes; `error.locked_until` says until when
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorLockedError'}}}
+    OperatorTooManyTries:
+      description: More than 5 tries a minute
+      headers:
+        Retry-After: {schema: {type: integer}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    OperatorCodeWrong:
+      description: The code did not match (`operator_code_wrong`, `error.tries_left`) or the body is invalid
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorCodeError'}}}
+    OperatorRequestAccepted:
+      description: >-
+        An operator token asked for a change: nothing happened yet. It waits as an operator request a
+        person approves in the console (with their authenticator code); it expires after seven days.
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorRequestAccepted'}}}
     Unauthorized: {$ref: '#/components/responses/Error401'}
     Forbidden: {$ref: '#/components/responses/Error403'}
     NotFound: {$ref: '#/components/responses/Error404'}
@@ -9094,6 +9248,92 @@ components:
           type: array
           maxItems: 30
           items: {type: string, maxLength: 60}
+    OperatorPermission:
+      type: string
+      enum: [operator:read, operator_requests:cancel, operator_config:write, operator:manage]
+    OperatorSignInStep:
+      type: object
+      required: [step, email]
+      properties:
+        step: {type: string, enum: [code, enroll, done]}
+        email: {type: string}
+        ticket: {type: string, description: 'For POST /api/v1/operator/auth/totp, 10 minutes, once'}
+        key: {type: string, description: 'enroll: the authenticator key as text (base32)'}
+        otpauth_url: {type: string, description: 'enroll: the key as an otpauth:// URL'}
+        qr_svg: {type: [string, 'null'], description: 'enroll: the URL as a QR code, an SVG image'}
+        totp_required: {type: boolean, description: 'done: whether this server requires an authenticator'}
+    OperatorLockedError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, locked_until]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            locked_until: {type: string, format: date-time}
+    OperatorCodeError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            tries_left: {type: integer}
+            fields: {type: object, additionalProperties: {type: string}}
+    OperatorSession:
+      type: object
+      required: [id, operator_id, email, kind, label, permissions, created_at, last_seen_at, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        operator_id: {type: string, format: uuid}
+        email: {type: string}
+        kind: {type: string, enum: [cookie, token]}
+        label: {type: string}
+        permissions: {type: array, items: {$ref: '#/components/schemas/OperatorPermission'}}
+        created_at: {type: string, format: date-time}
+        last_seen_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        revoked_at: {type: [string, 'null'], format: date-time}
+    OperatorMe:
+      type: object
+      required: [operator, session, console]
+      properties:
+        operator:
+          type: object
+          required: [id, email, totp_enabled]
+          properties:
+            id: {type: string, format: uuid}
+            email: {type: string}
+            totp_enabled: {type: boolean}
+        session: {$ref: '#/components/schemas/OperatorSession'}
+        console:
+          type: object
+          required: [origin, path_mode]
+          properties:
+            origin: {type: string, description: 'Where the console is served: OPERATOR_ORIGIN, or APP_ORIGIN/operator'}
+            path_mode: {type: boolean, description: 'True when the console shares the workspace app''s address'}
+    OperatorToken:
+      type: object
+      required: [token, session]
+      properties:
+        token: {type: string, description: 'Starts with cdop_; shown once'}
+        session: {$ref: '#/components/schemas/OperatorSession'}
+    OperatorRequestAccepted:
+      type: object
+      required: [request_id, status, summary, expires_at, message]
+      properties:
+        request_id: {type: string, format: uuid}
+        status: {type: string, enum: [pending]}
+        summary: {type: string}
+        expires_at: {type: string, format: date-time}
+        message: {type: string}
     Error:
       type: object
       required: [error]

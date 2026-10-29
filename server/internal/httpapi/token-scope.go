@@ -58,6 +58,8 @@ var (
 	// anyToken: the token's own session (who am I, sign out) and a problem report; every token may.
 	anyToken     = TokenAccess{Tier: auth.ScopeRead}
 	notForPeople = TokenAccess{Closed: NotForPeople}
+	// anyOperatorToken: an operator token's own session (who am I, sign out).
+	anyOperatorToken = TokenAccess{Tier: auth.ScopeOperator}
 )
 
 // tokenTiers classifies every route in Routes(), keyed "METHOD pattern". gateToken lets a token
@@ -200,6 +202,14 @@ var tokenTiers = map[string]TokenAccess{
 	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
 	"PUT /api/v1/conversations/{id}/presence":               grant(auth.PermConversationsRead),
 	"DELETE /api/v1/conversations/{id}/presence/{clientId}": grant(auth.PermConversationsRead),
+
+	// The operator console: no workspace token reaches these (401); an operator token reads, and asks a
+	// person for every change (operator requests, docs/internals/operator-console.md).
+	"POST /api/v1/operator/auth/redeem": notForPeople,
+	"POST /api/v1/operator/auth/totp":   notForPeople,
+	"GET /api/v1/operator/auth/me":      anyOperatorToken,
+	"POST /api/v1/operator/auth/logout": anyOperatorToken,
+	"POST /api/v1/operator/tokens":      alwaysAsk(auth.PermOperatorManage),
 
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
 	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),

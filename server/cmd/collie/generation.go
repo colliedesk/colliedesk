@@ -45,7 +45,10 @@ type process struct {
 	importKeys        *importjobs.Keys
 	cursor            *autofixworker.Cursor
 	carry             *httpapi.Carry
-	wait              sync.WaitGroup
+	// operatorOrigin is OPERATOR_ORIGIN when valid; operators signs operators in for every generation.
+	operatorOrigin string
+	operators      *auth.OperatorService
+	wait           sync.WaitGroup
 }
 
 // Go runs a loop that does not depend on the configuration for the life of the process.
@@ -117,7 +120,8 @@ func (g *generation) Busy() string {
 // hotSettings are the settings the API reads at each use.
 func hotSettings(config builtConfig) httpapi.HotSettings {
 	return httpapi.HotSettings{AlertEmail: config.BillingAlertEmail, InternalSignups: config.InternalSignups,
-		ProblemReportWorkspace: config.ProblemReportWorkspace, KBVideoMaxBytes: config.KBVideoMaxBytes, MailImageCacheBytes: config.MailImageCacheBytes}
+		ProblemReportWorkspace: config.ProblemReportWorkspace, KBVideoMaxBytes: config.KBVideoMaxBytes, MailImageCacheBytes: config.MailImageCacheBytes,
+		RequireTOTP: config.RequireTOTP}
 }
 
 // newGeneration builds the API and the workers of config, read from loaded. It starts nothing.
@@ -227,7 +231,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, GitHub: githubConfig, Attachments: storage, MailImageCacheBytes: config.MailImageCacheBytes,
 		KBVideoMaxBytes: config.KBVideoMaxBytes, RequestPool: p.requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey,
 		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
-		ProblemReportWorkspace: config.ProblemReportWorkspace, Carry: p.carry}
+		ProblemReportWorkspace: config.ProblemReportWorkspace, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {
@@ -257,6 +261,6 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		g.Go(func(ctx context.Context) { refreshFoundingAtStart(ctx, api) })
 	}
 	// The help center is outermost: a request to a help center host never reaches the app, the API or MCP.
-	g.handler = api.WrapHelpCenter(mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version}, webui.Handler(api)))
+	g.handler = operatorHost(origin, p.operatorOrigin, api.WrapHelpCenter(mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version, Operators: p.operators}, webui.Handler(api))))
 	return g
 }

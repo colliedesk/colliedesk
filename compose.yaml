@@ -43,6 +43,7 @@ services:
       # Requests run as a login that can only take the row-level security role; migrate creates it.
       DATABASE_REQUEST_URL: postgres://colliedesk_request:colliedesk@postgres:5432/colliedesk?sslmode=disable
       APP_ORIGIN: http://localhost:${COLLIE_DESK_PORT:-8080}
+      OPERATOR_ORIGIN: ${OPERATOR_ORIGIN:-}
       LISTEN_ADDR: :8080
       # Every other setting lives in the database: collie config, or the operator console.
       MAILBOX_TOKEN_KEYS: ${MAILBOX_TOKEN_KEYS:-}

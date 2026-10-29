@@ -23,6 +23,7 @@ type Carry struct {
 	helpCenterPages, helpCenterSearches *webFormLimiter
 	helpCenterHostLookups               *webFormLimiter
 	certificateNotes                    *webFormLimiter
+	operatorSignIns, operatorSignInIPs  *webFormLimiter
 	mailImageLimits                     *mailImageLimiter
 	liveChecks                          *helpcenter.LiveChecks
 	alerted                             *alertedSubscriptions
@@ -33,6 +34,14 @@ type Carry struct {
 	// Hot holds the settings read at each use; Store applies a change at once.
 	Hot *Hot
 }
+
+// operatorSignInsPerMinute bounds the tries of each operator link and ticket. Per client address the bound
+// is wider and only a second layer: wrong trusted proxies put every client behind one address, and the
+// lock after ten wrong codes is per operator.
+const (
+	operatorSignInsPerMinute           = 5
+	operatorSignInsPerAddressPerMinute = 60
+)
 
 // NewCarry makes the state a process's APIs share, sized by config as New would.
 func NewCarry(config Config) *Carry {
@@ -50,9 +59,11 @@ func NewCarry(config Config) *Carry {
 		testMessages:    newWindowLimiter(testMessagesPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
-		mailImageLimits: newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait),
-		liveChecks:      helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
-		alerted:         &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},
+		operatorSignIns:   newWindowLimiter(operatorSignInsPerMinute, webFormMaxKeys, time.Minute),
+		operatorSignInIPs: newWindowLimiter(operatorSignInsPerAddressPerMinute, webFormMaxKeys, time.Minute),
+		mailImageLimits:   newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait),
+		liveChecks:        helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
+		alerted:           &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},
 		founding: &foundingState{},
 	}
 }
@@ -67,6 +78,8 @@ type HotSettings struct {
 	ProblemReportWorkspace string
 	KBVideoMaxBytes        int64
 	MailImageCacheBytes    int64
+	// RequireTOTP is operator.require_totp: an operator must set up an authenticator to sign in.
+	RequireTOTP bool
 }
 
 // Hot holds the current HotSettings of a process.

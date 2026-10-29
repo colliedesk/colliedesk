@@ -124,6 +124,14 @@ func TestAgentGetsContractValidForbiddenOnEveryAdminRoute(t *testing.T) {
 		req := newRequest(t, route.Method, item.path, item.body, fixture.agentToken, nil)
 		validateContractRequest(t, req)
 		response := serve(fixture.api, req)
+		// An operator route does not know workspace credentials at all (TestOperatorRealmIsSeparate).
+		if route.Permission == auth.PermissionOperator {
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("%s %s status=%d, want 401 for a workspace credential", route.Method, route.Pattern, response.Code)
+			}
+			validateContractResponse(t, req, response)
+			continue
+		}
 		if response.Code != http.StatusForbidden {
 			t.Fatalf("%s %s status=%d, want 403", route.Method, route.Pattern, response.Code)
 		}
@@ -140,7 +148,11 @@ func TestCookieWriteRoutesReturnContractValidForbidden(t *testing.T) {
 			continue
 		}
 		item := cases[route.Method+" "+route.Pattern]
-		req := contractRequest(t, route.Method, item, "", "", cookie)
+		useCookie := cookie
+		if route.Permission == auth.PermissionOperator {
+			useCookie = &http.Cookie{Name: "__Host-colliedesk_operator", Value: fixture.operatorCookie}
+		}
+		req := contractRequest(t, route.Method, item, "", "", useCookie)
 		validateContractRequest(t, req)
 		response := serve(fixture.api, req)
 		if response.Code != http.StatusForbidden {
@@ -154,6 +166,11 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 	admin := f.adminToken
 	cases := map[string]contractCase{
 		"GET /api/v1/config":                                         {"/api/v1/config", nil, "", 200, ""},
+		"POST /api/v1/operator/auth/redeem":                          {"/api/v1/operator/auth/redeem", map[string]any{"token": f.operatorLink}, "", 200, ""},
+		"POST /api/v1/operator/auth/totp":                            {"/api/v1/operator/auth/totp", map[string]any{"ticket": "no-such-ticket", "code": "123456"}, "", 404, ""},
+		"GET /api/v1/operator/auth/me":                               {"/api/v1/operator/auth/me", nil, f.operatorToken, 200, ""},
+		"POST /api/v1/operator/auth/logout":                          {"/api/v1/operator/auth/logout", nil, f.operatorLogoutToken, 204, ""},
+		"POST /api/v1/operator/tokens":                               {"/api/v1/operator/tokens", map[string]any{"label": "contract"}, f.operatorToken, 202, ""},
 		"POST /api/v1/auth/cloud/exchange":                           {"/api/v1/auth/cloud/exchange", map[string]any{}, "disabled-cloud-token", 404, ""},
 		"POST /api/v1/auth/cloud/signup":                             {"/api/v1/auth/cloud/signup", map[string]any{"workspace_name": "Acme"}, "disabled-cloud-token", 404, ""},
 		"POST /api/v1/auth/redeem":                                   {"/api/v1/auth/redeem", map[string]any{"token": f.redeemToken}, "", 200, ""},
