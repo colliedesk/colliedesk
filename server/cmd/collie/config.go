@@ -35,6 +35,7 @@ const configUsage = `usage: collie config <command>
   history                           list the versions
   restore VERSION [--by B]          save an older version again as the newest
   trial [confirm|revert] [--by B]   show the trial change that runs, keep it, or end it now
+  features                          list the feature switches: on or off, and what each still needs
   doctor                            check the configuration; exit 0 clean, 1 warnings, 2 errors
   reseal [--by B]                   seal every secret again with the first key of MAILBOX_TOKEN_KEYS`
 
@@ -78,6 +79,8 @@ func configCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 		return configRestore(ctx, store, rest, output)
 	case "trial":
 		return configTrial(ctx, store, rest, output)
+	case "features":
+		return configFeatures(ctx, store, output)
 	case "doctor":
 		return configDoctor(ctx, store, output)
 	case "reseal":
@@ -239,6 +242,9 @@ func saveChecked(ctx context.Context, store *serverconfig.Store, change serverco
 	}
 	next := loaded.With(change.Set, change.Unset)
 	if _, err := checkSnapshot(next); err != nil {
+		return 0, fmt.Errorf("not saved: %w", err)
+	}
+	if err := serverconfig.CheckSwitches(loaded.Snapshot, next); err != nil {
 		return 0, fmt.Errorf("not saved: %w", err)
 	}
 	if change.Set["operator.require_totp"] == "false" && hostedCloud(next.Getenv) {
@@ -748,6 +754,11 @@ func doctorFindings(ctx context.Context, store *serverconfig.Store, environ func
 	if strings.TrimSpace(environ("OPERATOR_ORIGIN")) == "" && hostedCloud(loaded.Getenv) {
 		errs = append(errs, "the operator console shares the workspace app's address on a hosted cloud: set OPERATOR_ORIGIN to a host of its own (docs/self-host/operator-console.md)")
 	}
+	for _, state := range serverconfig.FeatureStates(loaded.Snapshot) {
+		if state.Requested == "on" && !state.Enabled {
+			warnings = append(warnings, fmt.Sprintf("%s is switched on but misses %s, so it is off: set it, or switch it off", state.SwitchKey, strings.Join(state.Missing, ", ")))
+		}
+	}
 	if run, ok, err := store.Trial(ctx); err == nil && ok {
 		warnings = append(warnings, fmt.Sprintf("v%d is a trial change until %s: confirm or revert it (collie config trial confirm|revert)", run.Version, run.ExpiresAt.UTC().Format(time.RFC3339)))
 	}
@@ -829,4 +840,26 @@ func configReseal(ctx context.Context, store *serverconfig.Store, args []string,
 	}
 	_, err = fmt.Fprintf(output, "sealed %s again with %s as version %d\n", strings.Join(keys, ", "), store.Keys().Current(), version)
 	return err
+}
+
+// configFeatures lists every feature switch: whether the feature runs, what was asked, and what it misses.
+func configFeatures(ctx context.Context, store *serverconfig.Store, output io.Writer) error {
+	loaded, err := store.Current(ctx)
+	if err != nil {
+		return err
+	}
+	for _, state := range serverconfig.FeatureStates(loaded.Snapshot) {
+		status := "off"
+		if state.Enabled {
+			status = "on"
+		}
+		line := fmt.Sprintf("%s\t%s\tswitch %s", state.SwitchKey, status, state.Requested)
+		if len(state.Missing) > 0 {
+			line += "\tneeds " + strings.Join(state.Missing, ", ")
+		}
+		if _, err := fmt.Fprintln(output, line); err != nil {
+			return err
+		}
+	}
+	return nil
 }

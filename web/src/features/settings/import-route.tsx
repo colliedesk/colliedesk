@@ -8,6 +8,7 @@ import { importMessages } from './import-messages';
 import { ImportPage } from './import-page';
 import { ImportPeople } from './import-people';
 import type { CreatedInvite } from './import-people';
+import { useBillingShown } from '../billing/billing-shown';
 
 // While a job moves, the page reads it again every few seconds: one row of the server's database.
 const pollMs = 3000;
@@ -28,6 +29,7 @@ export function ImportRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const isAdmin = me.data?.agent.role === 'admin';
+  const billingShown = useBillingShown(isAdmin);
   const imports = useQuery({
     queryKey: ['imports'], queryFn: importsApi.list, enabled: isAdmin,
     refetchInterval: (query) => (query.state.data?.items.some((job) => moving.has(job.state)) ? pollMs : false),
@@ -99,7 +101,7 @@ export function ImportRoute() {
       onInvite={onlyPeople(invite)} onRevokeInvite={onlyPeople(revokeInvite)} onLink={(externalId, agentId) => onlyPeople(link)({ externalId, agentId })} onUnlink={onlyPeople(unlink)} />
     : undefined;
   const peopleError = peopleFailed ? (peopleFailed instanceof InvalidRequestError ? peopleFailed.message : importMessages.actionFailed) : undefined;
-  return <ImportPage isAdmin={isAdmin} peopleSection={peopleSection} showBilling={isAdmin && config.data?.billing.enabled === true}
+  return <ImportPage isAdmin={isAdmin} peopleSection={peopleSection} showBilling={billingShown}
     job={job} report={reportReady && parsed.success && job?.kind !== 'undo' ? importReportSchema.parse(report.data) : undefined}
     undoReport={reportReady && parsed.success && job?.kind === 'undo' ? undoReportSchema.parse(report.data) : undefined} history={items} timezone={me.data?.timezone ?? 'UTC'}
     loadFailed={imports.isError} error={error ?? peopleError} busy={busy} connecting={connecting}

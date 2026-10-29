@@ -153,6 +153,55 @@ trusted_proxies=…` must not revert itself). While one runs the console and app
 store's advisory lock lets exactly one write the `trial-auto-revert` version. The evidence the band shows
 (distinct client addresses, cloud sign-ins) is counted in memory per process, only while a trial runs.
 
+## Feature switches
+
+`serverconfig/features.go` lists the features workspaces see that need the server's settings, each with a
+switch `features.<name>` (no environment variable, not hot: a switch rebuilds the generation like the
+settings it rides with).
+
+- **Unset is "on once its settings are complete".** Nothing is written at upgrade, so no version, no
+  migration and no import: what ran before still runs. Effective state = switch not `false` and nothing
+  `missing`.
+- **"Complete" is read from the snapshot's keys** (and `Ring()`), not from the parsers: `serverconfig` must
+  not import `httpapi`, and whether a value is valid is `buildConfig`'s job already. Keep each feature's
+  `missing` in step with its parser's `Enabled()`.
+- **Turning on while incomplete is refused at the save, never in `buildConfig`** (`CheckSwitches`, called by
+  the operator PATCH and check, the approve replay and `saveChecked`). A check in `buildConfig` would reject
+  the whole version when a setting of a switched-on feature is removed, and the last good version would keep
+  running: the change would silently not apply. Restores and imports are not checked; the effective state
+  covers them.
+- **Off closes entry points, never what keeps data whole.** `featureOfRoute` maps routes to features and
+  `featureGate` answers `409 feature_off` before `authorize`, so an agent token is refused at once instead of
+  filing an approval that could only fail. Reads, the ways out (disconnecting a mailbox, DELETE routes of
+  Autofix, the billing portal), consent callbacks and the webhooks (GitHub, Polar) stay open; inbound mail
+  is never refused. Billing closes only checkout and Founding.
+  Parsed configs are not emptied: `Missing()` stays right and the key ring stays shared.
+- **Gmail and Microsoft 365 off defer, not fail.** `emailoutbox` answers `channels.Defer` (no attempt spent,
+  10 minutes, the reason in `last_error`, `reason_code` `mailbox_switched_off`) when the provider is switched
+  off, and the same (`mailbox_not_configured`) when the server lost a setting a connected provider needs:
+  a connection exists only where the provider once worked, so a missing setting is a provider off, and no
+  reply fails for a setting. Queuing (`notReadyReason`) no longer fails such a reply either, except on a
+  server that runs no email outbox (`OutboundPolicy.Worker` false: no SMTP relay and no provider set up, the
+  same condition serve starts the worker on): nobody would keep it waiting, so it fails at once with the
+  reason and `mailbox_not_configured`, and Retry sends it later. The worker is not started always: it would
+  fail SMTP replies queued before the relay was removed, which wait today. The Microsoft
+  keep-alive keeps running so grants outlive the switch.
+- **Workspaces never read setting names.** `missing_settings` of the Gmail, Microsoft 365 and Autofix
+  answers is always empty (kept for the contract); `off_reason` (`not_set_up`, `switched_off`) says why. The
+  names are for the console, `collie config features` and the log.
+- **Autofix off closes only what starts something** (`autofixStarts`: sending or retrying a fix, adding an
+  installation or a repository, a connector or Cursor's key). Fixes already sent are still followed by the
+  workers and can be cancelled, marked deployed or given their pull request.
+- **Hosted addresses off withdraw the offer, not the address.** `hosted_address` stays for a channel whose
+  support address is a hosted address (under `hosted_mail.domain`, also after a new slug renamed it; its
+  setup reads it); new workspaces get none.
+- **Billing off is limits off, not the cloud off.** `generation` and `httpapi.New` read
+  `billing.Enabled() && !off`, for plan limits, retention, Founding and the AI allowance; the Polar client
+  stays (its webhook keeps subscriptions in step). `hostedCloud()`, telemetry's realm and the console's
+  `path_mode` severity read the configured settings, so a switch never changes what the server is.
+- **Cloud sign-in off keeps the console's own verifier** (`operatorCloud`): only the app's exchange and
+  sign-up close. The guard makes it a trial with a phrase, and the one-time link always opens the console.
+
 ## Traps
 
 - A moved variable left in the environment is never read. It is logged at every start (error when it

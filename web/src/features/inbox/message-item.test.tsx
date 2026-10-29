@@ -186,6 +186,18 @@ test('a reply waiting because the server\'s Microsoft credentials were refused s
   expect(screen.getByText(waiting)).toBeVisible();
 });
 
+test('a reply waiting because Gmail is switched off on the server says why on the timeline', () => {
+  const waiting = 'Gmail sending is turned off on this server: this reply waits and is sent once it is on again.';
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'queued', attempts: 0, last_error: waiting, sent_at: null, reason_code: 'mailbox_switched_off' } }} timezone="UTC" />);
+  expect(screen.getByText(waiting)).toBeVisible();
+});
+
+test('a reply waiting because the server lost a Gmail setting says why on the timeline', () => {
+  const waiting = 'Gmail sending is not set up on this server: this reply waits and is sent once whoever runs it sets it up again.';
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'queued', attempts: 0, last_error: waiting, sent_at: null, reason_code: 'mailbox_not_configured' } }} timezone="UTC" />);
+  expect(screen.getByText(waiting)).toBeVisible();
+});
+
 test('the time names its timezone in its title, and on screen when it is not the browser\'s clock', () => {
   render(<MessageItem item={{ ...base, created_at: '2026-10-28T05:42:00Z' }} timezone="Pacific/Kiritimati" />);
   const time = document.querySelector('time') as HTMLElement;

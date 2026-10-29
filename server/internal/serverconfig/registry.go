@@ -35,6 +35,7 @@ const (
 	GroupSecurity  = "security"
 	GroupLimits    = "limits"
 	GroupOperator  = "operator"
+	GroupFeatures  = "features"
 )
 
 // Key is one setting. Name is its stable dotted name (the database, the API, the console); Env is the
@@ -114,6 +115,17 @@ var keys = []Key{
 
 	// Turning it off is for the CLI only, and refused on the hosted cloud.
 	{Name: "operator.require_totp", Default: "false", Hot: true, Group: GroupOperator},
+
+	// Feature switches (features.go): unset is on once the feature's settings are complete. What a change
+	// asks depends on what it does (httpapi configGuards): switching off a feature in use shows who it stops.
+	{Name: "features.gmail", Group: GroupFeatures, Guards: []Guard{GuardReauth}},
+	{Name: "features.microsoft", Group: GroupFeatures, Guards: []Guard{GuardReauth}},
+	{Name: "features.autofix", Group: GroupFeatures, Guards: []Guard{GuardReauth}},
+	{Name: "features.ai_server", Group: GroupFeatures, Guards: []Guard{GuardReauth}},
+	{Name: "features.hosted_mail", Group: GroupFeatures, Guards: []Guard{GuardReauth}},
+	{Name: "features.cloud_sign_in", Group: GroupFeatures, Guards: []Guard{GuardReauth, GuardTypeToConfirm, GuardTrial}},
+	{Name: "features.billing", Group: GroupFeatures, Guards: []Guard{GuardReauth, GuardPreview, GuardTypeToConfirm}},
+	{Name: "features.signup", Group: GroupFeatures, Guards: []Guard{GuardReauth}},
 }
 
 // InstallerTrustedProxies is what the installer saves for trusted_proxies, as its compose file passed it

@@ -63,4 +63,5 @@ export const billingMessages = {
   manageBillingHelp: 'Change your card, download invoices or cancel in the billing portal.',
   billingAdminsOnly: 'Only workspace admins can see plan and billing.',
   billingNotEnabled: 'Billing is not enabled on this instance.',
+  billingSwitchedOff: 'Billing is turned off on this server: nothing is charged or locked meanwhile. Your subscription is unchanged; manage or cancel it in the billing portal.',
 } as const;

@@ -33,6 +33,10 @@ interface ProviderText {
   // The self-hosting guide section that sets this provider up, linked under notAvailable.
   setupGuide: { text: string; href: string };
   notSetUpSummary: string;
+  // The operator switched the provider off (its settings are complete): said for a connection, and with no
+  // connection only to a self-hosted admin, never with a setting's name.
+  switchedOff: string;
+  notTurnedOn: string;
   redirectUri: string;
   disconnect: string;
   disconnectQuestion: string;
@@ -50,7 +54,7 @@ const providers: Record<MailboxProvider, ProviderText> = {
     failedTitle: messages.gmailFailedTitle, failedBody: messages.gmailFailedBody, failureReasons: messages.gmailFailureReasons, failureUnknown: messages.gmailFailureUnknown,
     addressMismatch: messages.gmailAddressMismatch, notAvailable: messages.gmailNotAvailable,
     setupGuide: { text: messages.gmailSetupGuide, href: selfHostGuide('email.md', 'send-replies-through-gmail') }, notSetUpSummary: messages.gmailNotSetUpSummary,
-    redirectUri: messages.gmailRedirectUri, disconnect: messages.disconnectGmail, disconnectQuestion: messages.disconnectGmailQuestion,
+    switchedOff: messages.gmailSwitchedOff, notTurnedOn: messages.gmailNotTurnedOn, redirectUri: messages.gmailRedirectUri, disconnect: messages.disconnectGmail, disconnectQuestion: messages.disconnectGmailQuestion,
     confirmDisconnect: messages.confirmDisconnectGmail, signInAs: messages.gmailSignInAs, justConnected: messages.gmailJustConnected,
     connectFailed: messages.gmailConnectFailed, returnErrors: messages.gmailReturnErrors,
   },
@@ -61,6 +65,7 @@ const providers: Record<MailboxProvider, ProviderText> = {
     failureReasons: messages.microsoftFailureReasons, failureUnknown: messages.microsoftFailureUnknown, addressMismatch: messages.microsoftAddressMismatch,
     notAvailable: messages.microsoftNotAvailable,
     setupGuide: { text: messages.microsoftSetupGuide, href: selfHostGuide('email.md', 'send-replies-through-microsoft-365') }, notSetUpSummary: messages.microsoftNotSetUpSummary, redirectUri: messages.microsoftRedirectUri,
+    switchedOff: messages.microsoftSwitchedOff, notTurnedOn: messages.microsoftNotTurnedOn,
     disconnect: messages.disconnectMicrosoft, disconnectQuestion: messages.disconnectMicrosoftQuestion, confirmDisconnect: messages.confirmDisconnectMicrosoft,
     signInAs: messages.microsoftSignInAs, justConnected: messages.microsoftJustConnected, connectFailed: messages.microsoftConnectFailed,
     returnErrors: messages.microsoftReturnErrors,
@@ -147,6 +152,8 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
   const settings = active === 'microsoft' ? microsoft! : gmail;
   const text = providers[active ?? 'google'];
   const available = (provider: MailboxProvider) => (provider === 'google' ? gmail.available : microsoft?.available === true);
+  // The operator switched it off (its settings are complete).
+  const switchedOff = (provider: MailboxProvider) => (provider === 'google' ? gmail : microsoft)?.off_reason === 'switched_off';
   const other: MailboxProvider | undefined = active && available(active === 'google' ? 'microsoft' : 'google') ? (active === 'google' ? 'microsoft' : 'google') : undefined;
   const pending: MailboxProvider | undefined = connectPending === true ? 'google' : connectPending || undefined;
   const [confirming, setConfirming] = useState<'disconnect' | 'switch' | null>(null);
@@ -174,6 +181,7 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
   );
   const unconnected = (['google', 'microsoft'] as const).filter((provider) => provider === 'google' || microsoft);
   const offered = unconnected.filter(available);
+  const notSetUp = unconnected.filter((provider) => !switchedOff(provider));
   // The button that starts a provider's sign-in as the block shows it now, which the outcome names.
   const buttonFor = (provider: MailboxProvider) => !connection ? providers[provider].connect
     : provider !== active ? messages.useInstead(providers[provider].label)
@@ -202,6 +210,9 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
     </>;
     return folded ? <details key={provider} className="email-channel-dns-folded"><summary>{providers[provider].notSetUpSummary}</summary>{body}</details> : <div key={provider}>{body}</div>;
   };
+  // Every provider switched off and nothing connected: on Colliedesk Cloud, and for someone who cannot manage
+  // it, there is nothing to show.
+  if (!connection && unconnected.every(switchedOff) && !(realm === 'self-hosted' && canManage)) return null;
   return (
     <section ref={block} className="gmail-connection" aria-labelledby="gmail-connection-heading">
       <h3 id="gmail-connection-heading">{messages.mailboxHeading}</h3>
@@ -213,9 +224,11 @@ export function MailboxConnection({ gmail, microsoft: offeredMicrosoft, supportA
       {error && <p role="alert" className="error-copy">{error}</p>}
       {/* The connected provider lost its settings: said plainly. Without a connection, the providers this
           server lacks are folded for the admin, or shown as before when there is none at all. */}
-      {active && !available(active) && setup(active, false)}
-      {!connection && offered.length === 0 && unconnected.map((provider) => setup(provider, provider !== 'google'))}
-      {!connection && offered.length > 0 && canManage && unconnected.filter((provider) => !available(provider)).map((provider) => setup(provider, true))}
+      {active && !available(active) && (switchedOff(active) ? <p role="note" className="warning-note">{text.switchedOff}</p> : setup(active, false))}
+      {!connection && offered.length === 0 && notSetUp.map((provider) => setup(provider, provider !== 'google'))}
+      {!connection && offered.length > 0 && canManage && notSetUp.filter((provider) => !available(provider)).map((provider) => setup(provider, true))}
+      {!connection && canManage && realm === 'self-hosted' && unconnected.filter(switchedOff).map((provider) =>
+        <p key={provider} role="note" className="muted-copy">{providers[provider].notTurnedOn}</p>)}
       {/* Before an admin leaves for a provider's sign-in, how Cloud handles that provider's data. */}
       {canManage && gmail.available && (active !== 'microsoft' || other === 'google') && <GmailDataDisclosure />}
       {canManage && microsoft?.available && (active !== 'google' || other === 'microsoft') && <MicrosoftDataDisclosure />}

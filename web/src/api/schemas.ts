@@ -18,16 +18,27 @@ export const workspaceSchema = z.object({
 export const renamedWorkspaceSchema = workspaceSchema.extend({ continue_url: z.string().url().optional() }) satisfies z.ZodType<Generated<'RenamedWorkspace'>>;
 export const workspaceChoiceSchema = z.object({ slug: z.string(), name: z.string() }) satisfies z.ZodType<Generated<'WorkspaceChoice'>>;
 export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema).min(2) }) satisfies z.ZodType<Generated<'CloudWorkspaceChoices'>>;
+export const serverFeatures = ['gmail', 'microsoft', 'autofix', 'ai_server', 'hosted_mail', 'cloud_sign_in', 'billing', 'signup'] as const;
+export type ServerFeature = (typeof serverFeatures)[number];
+const featureSchema = z.object({ enabled: z.boolean() });
+// Why a feature is not offered, never which setting; a server from before the switches reads as not set up.
+const featureOffReason = z.enum(['not_set_up', 'switched_off']).nullable().default(null);
 export const publicConfigSchema = z.object({
   version: z.string().optional(),
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
-  billing: z.object({ enabled: z.boolean() }),
+  // switched_off: set up but switched off by the operator; a server from before the switches never is.
+  billing: z.object({ enabled: z.boolean(), switched_off: z.boolean().default(false) }),
   signup: z.object({ enabled: z.boolean() }),
   limits: z.object({ outgoing_attachments_bytes: z.number().int(), outgoing_attachments_files: z.number().int() }),
   product_analytics: z.object({ enabled: z.boolean(), key: z.string().nullable(), host: z.string().nullable(), realm: z.enum(['cloud', 'self-hosted']).nullable() }),
   ai: z.object({ server_provider: z.boolean() }),
   // Autofix needs the server's GitHub App; a server from before Autofix reads as without it.
-  autofix: z.object({ available: z.boolean(), missing_settings: z.array(z.string()) }).default({ available: false, missing_settings: [] }),
+  autofix: z.object({ available: z.boolean(), missing_settings: z.array(z.string()), off_reason: featureOffReason })
+    .default({ available: false, missing_settings: [], off_reason: 'not_set_up' }),
+  // Which of the server's features run here (operator console → Features); a server from before the
+  // switches reads as running none of them, and the fields above still say what it has.
+  features: z.object(Object.fromEntries(serverFeatures.map((name) => [name, featureSchema])) as Record<ServerFeature, typeof featureSchema>)
+    .default(Object.fromEntries(serverFeatures.map((name) => [name, { enabled: false }])) as Record<ServerFeature, { enabled: boolean }>),
   // A server from before workspace hosts runs everything on one origin.
   app_origin: z.string().default(''),
   workspace_hosts: z.boolean().default(false),
@@ -154,11 +165,13 @@ export const mailboxConnectionSchema = z.object({
 export const gmailSettingsSchema = z.object({
   available: z.boolean(),
   missing_settings: z.array(z.enum(['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
+  off_reason: featureOffReason,
   redirect_uri: z.string().url(), connection: mailboxConnectionSchema.nullable(), address_matches: z.boolean().optional(),
 }) satisfies z.ZodType<Generated<'GmailSettings'>>;
 export const microsoftSettingsSchema = z.object({
   available: z.boolean(),
   missing_settings: z.array(z.enum(['MICROSOFT_OAUTH_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
+  off_reason: featureOffReason,
   redirect_uri: z.string().url(), admin_consent_redirect_uri: z.string().url(), admin_consent_url: z.string().url().nullable(),
   large_attachment_bytes: z.number().int().nonnegative(), server_credentials_refused: z.boolean(),
   connection: mailboxConnectionSchema.nullable(), address_matches: z.boolean().optional(),

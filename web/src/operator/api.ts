@@ -16,6 +16,7 @@ export type SignInStep = Schemas['OperatorSignInStep'];
 export type Guard = Schemas['OperatorConfigGuard'];
 export type Trial = Schemas['OperatorTrial'];
 export type Product = Schemas['OperatorProduct'];
+export type Feature = Schemas['OperatorFeature'];
 
 // cloudPublishableKey is the identity provider's key when the server offers cloud sign-in on this console
 // (<meta name="colliedesk-operator-clerk">, filled by the server only then); "" otherwise.

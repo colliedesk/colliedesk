@@ -238,7 +238,7 @@ const billingRoute = createRoute({
     // Billing is asked for while the page's chunk loads, not after it (billing-route.tsx asks the same).
     const me = useQuery({ queryKey: ['me'], queryFn: api.me });
     const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
-    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: me.data?.agent.role === 'admin' && config.data?.billing.enabled === true });
+    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: me.data?.agent.role === 'admin' && (config.data?.billing.enabled === true || config.data?.billing.switched_off === true) });
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });

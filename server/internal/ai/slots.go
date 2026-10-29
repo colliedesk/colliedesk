@@ -78,6 +78,8 @@ func (s *Service) view(slot string, row slotRow, found bool) Slot {
 	if row.enabled && row.usesServer {
 		reason := ""
 		switch {
+		case s.config.ServerOff:
+			reason = OffServerProviderOff
 		case s.config.Server == nil || len(s.config.Server.ModelsFor(slot)) == 0:
 			reason = OffServerProviderMissing
 		case row.model != nil && !slices.Contains(s.config.Server.ModelsFor(slot), *row.model):
@@ -215,6 +217,9 @@ func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, 
 		label := ""
 		switch input.Source {
 		case SourceServer:
+			if s.config.ServerOff {
+				return ErrServerProviderOff
+			}
 			models := s.config.Server.ModelsFor(slot)
 			if len(models) == 0 {
 				return ErrNoServerProvider

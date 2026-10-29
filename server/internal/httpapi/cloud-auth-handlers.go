@@ -7,11 +7,12 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/workspacehost"
 )
 
 func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
-	enabled := a.cloud != nil
+	enabled := a.featureOn(serverconfig.FeatureCloudSignIn)
 	var publishableKey *string
 	if enabled {
 		publishableKey = &a.config.CloudAuth.PublishableKey
@@ -26,13 +27,17 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 		// when the page runs on a workspace's own host.
 		"app_origin":    a.config.Origin,
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
-		"billing":       map[string]any{"enabled": a.polar != nil},
-		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing.
-		"signup":            map[string]any{"enabled": enabled && a.polar != nil && !a.config.SignupDisabled},
+		// switched_off: billing is set up but the operator switched it off; a workspace with a subscription
+		// still sees its plan and the portal.
+		"billing": map[string]any{"enabled": a.featureOn(serverconfig.FeatureBilling), "switched_off": a.polar != nil && a.switchedOff(serverconfig.FeatureBilling)},
+		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing,
+		// 409 feature_off while an operator switched it (or cloud sign-in, or billing) off.
+		"signup":            map[string]any{"enabled": a.featureOn(serverconfig.FeatureSignup)},
 		"limits":            map[string]any{"outgoing_attachments_bytes": attachments.MaxOutgoingBytes, "outgoing_attachments_files": attachments.MaxOutgoingFiles},
 		"product_analytics": a.productAnalyticsConfig(),
 		"ai":                map[string]any{"server_provider": a.ai.ServerConfigured()},
 		"autofix":           a.autofixConfig(),
+		"features":          a.featuresConfig(),
 		// workspace_hosts: each workspace's desk runs on its own host (HELP_CENTER_DOMAIN); a browser
 		// signed in on app_origin continues there (POST /api/v1/auth/handoff).
 		"workspace_hosts": a.config.HelpCenterDomain != "",
@@ -124,9 +129,7 @@ func bearerToken(header string) (string, bool) {
 // autofixConfig tells the web app whether Autofix can be used on this server (its GitHub App is set up)
 // and, when not, which settings the operator still needs; the web app hides Autofix while it is off.
 func (a *API) autofixConfig() map[string]any {
-	missing := a.config.GitHub.Missing()
-	if missing == nil {
-		missing = []string{}
-	}
-	return map[string]any{"available": len(missing) == 0, "missing_settings": missing}
+	// Public: never the names of the server's settings, only why Autofix is off (the console names them).
+	off := a.offReason(serverconfig.FeatureAutofix, a.config.GitHub.Missing())
+	return map[string]any{"available": off == nil, "missing_settings": []string{}, "off_reason": off}
 }

@@ -235,6 +235,12 @@ or Google refuses to send, **Send from your mailbox** turns into an alert with t
 marked **Delivery failed** with the same reason. They are never sent another way without you knowing.
 Select **Reconnect Gmail**, then **Retry delivery** on the failed replies.
 
+**When the server turns Gmail off.** The operator of the server can switch Gmail (or Microsoft 365) off
+for every workspace. The connection stays; **Send from your mailbox** says sending through it is turned
+off, and replies wait in the outbox with that reason instead of failing. They are sent once it is on
+again. You can still disconnect. Without a connection, the provider is not offered (on your own server an
+admin reads that it is not turned on).
+
 **Disconnect Gmail** asks first, then removes Colliedesk's access at Google. Replies go out the way
 they did before Gmail was connected (the server's SMTP relay). A reply that was still waiting for Gmail
 fails with a note and can be retried. **Use another Gmail account** replaces the connected account.

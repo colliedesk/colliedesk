@@ -8,7 +8,7 @@ import { GmailConnection } from './gmail-connection';
 import { gmailReturn } from './gmail-return';
 
 const available: GmailSettings = {
-  available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null,
+  available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null,
 };
 const connected: GmailSettings = {
   ...available,
@@ -24,14 +24,16 @@ const failed: GmailSettings = {
 
 type PublicConfig = Awaited<ReturnType<typeof api.config>>;
 const selfHosted: PublicConfig = {
-  app_origin: 'https://desk.example.com', workspace_hosts: false, cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
+  app_origin: 'https://desk.example.com', workspace_hosts: false, cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false, switched_off: false }, signup: { enabled: false },
   limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
   product_analytics: { enabled: false, key: null, host: null, realm: null },
   ai: { server_provider: false },
-  autofix: { available: false, missing_settings: [] },
+  autofix: { available: false, missing_settings: [], off_reason: null },
+  features: { gmail: { enabled: true }, microsoft: { enabled: true }, autofix: { enabled: false }, ai_server: { enabled: false }, hosted_mail: { enabled: false },
+    cloud_sign_in: { enabled: false }, billing: { enabled: false }, signup: { enabled: false } },
 };
 const cloud: PublicConfig = {
-  ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true }, signup: { enabled: true },
+  ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true, switched_off: false }, signup: { enabled: true },
 };
 
 // The block reads the server's public config to know whether it runs on Colliedesk Cloud.
@@ -118,7 +120,7 @@ test('agents see the state but no buttons', () => {
 });
 
 test('a server without Google settings says whom to ask, not the variable names, and the redirect URI to register', () => {
-  const missing: GmailSettings = { ...available, available: false, missing_settings: ['GOOGLE_OAUTH_CLIENT_ID', 'MAILBOX_TOKEN_KEYS'] };
+  const missing: GmailSettings = { ...available, available: false, missing_settings: [], off_reason: 'not_set_up' };
   render(<GmailConnection gmail={missing} supportAddress="support@example.com" timezone="UTC" canManage />);
   expect(screen.getByText(/Gmail sending is not set up on this server.*ask whoever runs it/)).toBeInTheDocument();
   expect(screen.queryByText(/GOOGLE_OAUTH_CLIENT_ID|MAILBOX_TOKEN_KEYS/)).not.toBeInTheDocument();
@@ -129,7 +131,7 @@ test('a server without Google settings says whom to ask, not the variable names,
 });
 
 test('a connection the server can no longer use says why instead of claiming replies go through Gmail', () => {
-  render(<GmailConnection gmail={{ ...connected, available: false, missing_settings: ['MAILBOX_TOKEN_KEYS'] }} supportAddress="support@example.com" timezone="UTC" canManage />);
+  render(<GmailConnection gmail={{ ...connected, available: false, missing_settings: [], off_reason: 'not_set_up' }} supportAddress="support@example.com" timezone="UTC" canManage />);
   expect(screen.getByText(/not set up on this server.*ask whoever runs it/)).toBeInTheDocument();
   expect(screen.queryByText(/Replies are sent through Gmail/)).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Disconnect Gmail' })).toBeInTheDocument();

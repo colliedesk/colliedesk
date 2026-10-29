@@ -20,6 +20,7 @@ import { channelsMessages as m } from './channels-messages';
 import './channels.css';
 import { useCreateAction } from '../../../api/use-create';
 import { takeSetupReturn } from '../../../channels/setup-return';
+import { useBillingShown } from '../../billing/billing-shown';
 
 // The pages under /settings/channels. Everything a type adds comes from the web registry
 // (src/channels/registry.ts); nothing here names a type.
@@ -53,9 +54,10 @@ export function ChannelsRoute({ path, search, navigate }: ChannelsRouteProps) {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const isAdmin = me.data?.agent.role === 'admin';
+  const billingShown = useBillingShown(isAdmin);
   const timezone = me.data?.timezone ?? 'UTC';
   const shown: Shown = { general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
-    billing: isAdmin && config.data?.billing.enabled === true, importData: isAdmin, ai: true };
+    billing: billingShown, importData: isAdmin, ai: true };
   const [first, second] = path.split('/');
   const page = { navigate, isAdmin, timezone };
   // The type a page belongs to names it and marks its place in the nav; a channel's type is read from the

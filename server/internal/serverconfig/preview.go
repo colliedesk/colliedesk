@@ -65,3 +65,27 @@ func (p *Preview) AnyOpenHelpCenter(ctx context.Context) (string, error) {
 	}
 	return slug, nil
 }
+
+// MailboxConnections counts the email channels sending through a provider (google, microsoft) and the
+// workspaces they belong to, for switching it off.
+func (p *Preview) MailboxConnections(ctx context.Context, provider string) (channels, workspaces int, err error) {
+	err = p.db.Privileged(ctx, database.PrivilegeOperatorPreview, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT count(*), count(DISTINCT workspace_id) FROM mailbox_connections WHERE provider = $1`, provider).Scan(&channels, &workspaces)
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("count the mailbox connections: %w", err)
+	}
+	return channels, workspaces, nil
+}
+
+// ServerAIWorkspaces counts the workspaces with an AI feature on that runs on the server's provider.
+func (p *Preview) ServerAIWorkspaces(ctx context.Context) (int, error) {
+	var count int
+	err := p.db.Privileged(ctx, database.PrivilegeOperatorPreview, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT count(DISTINCT workspace_id) FROM ai_slots WHERE uses_server AND enabled`).Scan(&count)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count the workspaces using the server's AI provider: %w", err)
+	}
+	return count, nil
+}

@@ -69,6 +69,10 @@ func (a *API) configGuards(ctx context.Context, request *http.Request, current, 
 			continue
 		}
 		switch {
+		case strings.HasPrefix(name, "features."):
+			if guard, ok := a.switchGuard(ctx, strings.TrimPrefix(name, "features."), current, next); ok {
+				add(guard)
+			}
 		case name == "polar.access_token" || name == "polar.webhook_secret" || name == "polar.api_url":
 			on, wasOn := valueOf(next, "polar.access_token") != "", valueOf(current, "polar.access_token") != ""
 			if on == wasOn {
@@ -526,4 +530,82 @@ func (a *API) tryAI(ctx context.Context, snap serverconfig.Snapshot) map[string]
 		return map[string]any{"name": "ai", "ok": false, "message": "The provider refused " + model + ": " + redactSecretsIn(err.Error(), snap)}
 	}
 	return map[string]any{"name": "ai", "ok": true, "message": "The provider answered with " + model + ". Nothing was saved."}
+}
+
+// switchGuard is what switching a feature on or off asks: who it stops, counted, and for billing and cloud
+// sign-in a phrase (and a trial for cloud sign-in). Switching a feature off removes nothing.
+func (a *API) switchGuard(ctx context.Context, feature string, current, next serverconfig.Snapshot) (configGuard, bool) {
+	key := serverconfig.SwitchKey(feature)
+	was, now := featureEnabled(current, feature), featureEnabled(next, feature)
+	if was == now {
+		return configGuard{}, false
+	}
+	if now {
+		if feature != serverconfig.FeatureBilling {
+			return configGuard{}, false
+		}
+		locked, err := a.preview.LockedWithBilling(ctx, a.now())
+		if err != nil {
+			return configGuard{Key: key, Refused: "The workspaces billing would lock could not be counted; try again."}, true
+		}
+		return configGuard{Key: key, Phrase: "billing on", Preview: fmt.Sprintf("Billing turns on again: %s whose trial ended without a plan lock at once, "+
+			"and every new workspace starts a trial.", workspacesText(locked))}, true
+	}
+	switch feature {
+	case serverconfig.FeatureGmail, serverconfig.FeatureMicrosoft:
+		provider, label := "google", "Gmail"
+		if feature == serverconfig.FeatureMicrosoft {
+			provider, label = "microsoft", "Microsoft 365"
+		}
+		channels, workspaces, err := a.preview.MailboxConnections(ctx, provider)
+		if err != nil {
+			return configGuard{Key: key, Refused: "The channels sending through " + label + " could not be counted; try again."}, true
+		}
+		preview := fmt.Sprintf("No workspace can connect %s. %d email %s in %s %s through it: their replies wait in the outbox, "+
+			"with the reason on the conversation, and are sent once %s is on again. Nothing is disconnected.", label, channels, plural(channels, "channel", "channels"),
+			workspacesText(workspaces), plural(channels, "sends", "send"), label)
+		if channels == 0 {
+			return configGuard{Key: key, Preview: preview}, true
+		}
+		return configGuard{Key: key, Phrase: feature + " off", Preview: preview}, true
+	case serverconfig.FeatureAIServer:
+		workspaces, err := a.preview.ServerAIWorkspaces(ctx)
+		if err != nil {
+			return configGuard{Key: key, Refused: "The workspaces using the server's AI provider could not be counted; try again."}, true
+		}
+		return configGuard{Key: key, Preview: fmt.Sprintf("%s %s an AI feature on the server's provider: those features stop, and say why, until it is on again. "+
+			"Workspaces with their own provider are not affected.", workspacesText(workspaces), plural(workspaces, "runs", "run"))}, true
+	case serverconfig.FeatureAutofix:
+		return configGuard{Key: key, Preview: "Autofix disappears from every workspace and no fix is sent; connected repositories and fixes stay, and GitHub's webhook is still received."}, true
+	case serverconfig.FeatureHostedMail:
+		return configGuard{Key: key, Preview: "New workspaces get no hosted support address and the address is no longer shown; mail to existing hosted addresses still arrives."}, true
+	case serverconfig.FeatureSignup:
+		return configGuard{Key: key, Preview: "Nobody can start a new trial; existing workspaces are not affected."}, true
+	case serverconfig.FeatureCloudSignIn:
+		return configGuard{Key: key, Phrase: "cloud sign-in off", Trial: true, Preview: "Every person who signs in to the app with cloud sign-in is refused, " +
+			"and nobody can sign up, until it is on again; sessions already open keep working. The operator console still opens with a " +
+			"one-time link (collie operator pair) and with its own cloud sign-in. It is tried for " + minutes(TrialDuration) +
+			" and reverts by itself unless you confirm it."}, true
+	case serverconfig.FeatureBilling:
+		return configGuard{Key: key, Phrase: "billing off", Preview: "Billing turns off: no workspace is billed or locked, trials are not enforced, " +
+			"and retention deletes nothing. Subscriptions stay as they are at Polar and their webhooks are still received; " +
+			"switching billing on again locks the workspaces whose trial ended without a plan."}, true
+	}
+	return configGuard{}, false
+}
+
+func featureEnabled(snap serverconfig.Snapshot, feature string) bool {
+	for _, state := range serverconfig.FeatureStates(snap) {
+		if state.Name == feature {
+			return state.Enabled
+		}
+	}
+	return false
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }

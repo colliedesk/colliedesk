@@ -124,6 +124,9 @@ code, .mono { font-family: var(--font-mono); font-size: var(--fs-label); }
 .setting-meta svg { width: 12px; height: 12px; }
 /* An on/off setting: the switch and its word, at the start of the row like every other control. */
 .switch { justify-self: start; display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--touch); font-size: var(--fs-small); cursor: pointer; }
+.feature-switch { display: grid; gap: var(--space-2); }
+.feature-needs { margin: var(--space-1) 0 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
+.feature-needs .setting-key { margin-left: var(--space-1); }
 .switch input { appearance: none; position: relative; flex: none; width: 34px; height: 20px; min-height: 0; margin: 0; border: 0; border-radius: var(--radius-full);
   background: var(--line-control); cursor: pointer; transition: background-color var(--dur) var(--ease); }
 .switch input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: var(--radius-full);

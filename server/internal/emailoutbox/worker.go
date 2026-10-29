@@ -62,6 +62,9 @@ type Options struct {
 	Google *google.Config
 	// Microsoft sends the replies of channels that connected Microsoft 365; nil fails them with the reason.
 	Microsoft *microsoft.Config
+	// SwitchedOff names the mailbox providers (google, microsoft) the operator switched off: their replies
+	// wait, with the reason, and are sent once the provider is on again. The keep-alive still runs.
+	SwitchedOff map[string]bool
 }
 
 // Worker drains the email outbox.

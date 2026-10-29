@@ -9,7 +9,9 @@ Colliedesk creates as you; Cursor works through its API with a key an admin sets
 always a person's: sending a conversation, merging the pull request, and replying to the customer.
 
 On a self-hosted server Autofix appears once the operator has set up its GitHub App (see
-[Autofix: the GitHub App](../self-host/github-app.md)).
+[Autofix: the GitHub App](../self-host/github-app.md)). The operator can also switch Autofix off for the
+whole server: it disappears from conversations and Settings → Autofix says it is not turned on, nothing is
+sent, and your repositories and fixes are kept until it is on again.
 
 Autofix is in preview. Its screens (Fixes, Settings → Autofix and the block on a conversation) show
 only in a browser that turned it on: open the browser console on Colliedesk and run

@@ -223,6 +223,8 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ai_provider_limit", "A workspace can have 5 AI providers. Delete one to add another.")
 	case errors.Is(err, ai.ErrLabelTaken):
 		writeError(response, http.StatusConflict, "ai_provider_name_taken", "Another provider of this workspace has that name.")
+	case errors.Is(err, ai.ErrServerProviderOff):
+		writeFeatureOff(response)
 	case errors.Is(err, ai.ErrNoServerProvider):
 		writeError(response, http.StatusConflict, "no_server_provider", "This server has no AI provider for that feature. Add your own provider, or ask the server operator.")
 	case errors.Is(err, ai.ErrFeatureOff):

@@ -17,6 +17,8 @@ interface BillingPageProps {
   busy?: boolean;
   onCheckout: (plan: CheckoutPlan) => void;
   onManage: () => void;
+  // switchedOff: the operator switched billing off; the plan and the portal stay, nothing is offered.
+  switchedOff?: boolean;
 }
 
 // periodNote says when the paid plan renews, or when it ends if it was cancelled.
@@ -60,8 +62,9 @@ function Usage({ label, text, used, limit }: { label: string; text: string; used
   );
 }
 
-export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, busy = false, onCheckout, onManage }: BillingPageProps) {
-  const note = periodNote(billing, timezone);
+export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, busy = false, onCheckout, onManage, switchedOff = false }: BillingPageProps) {
+  // While billing is switched off no trial ends and nothing locks: only a paid period is worth a line.
+  const note = switchedOff && (billing.plan === 'trial' || billing.plan === 'none') ? null : periodNote(billing, timezone);
   const storageLimit = billing.limits.storage_bytes;
   const warnAt = billing.limits.storage_warn_bytes;
   const storageNearlyFull = warnAt !== null && billing.usage.storage_bytes >= warnAt && !(storageLimit !== null && billing.usage.storage_bytes >= storageLimit);
@@ -73,6 +76,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
         {/* Only admins reach this page, and an admin sees every settings section. */}
         <SettingsNav page="/settings/billing" shown={{ general: true, team: true, channels: true, savedReplies: true, exportData: true, billing: true, importData: true, ai: true }} />
         <div className="settings-sections">
+          {switchedOff && <p role="note" className="warning-note">{billingMessages.billingSwitchedOff}</p>}
           {failed && <p role="alert" className="error-copy">{typeof failed === 'string' ? failed : messages.billingActionFailed}</p>}
           {checkoutReturned && <p role="status">{billingMessages.checkoutReturned}</p>}
           {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{billingMessages.duplicateSubscriptions}</p>}
@@ -107,7 +111,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
                 used={billing.usage.replies_last_24h} limit={billing.limits.replies_per_24h} />}
             </div>
           </section>
-          {(billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
+          {!switchedOff && (billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
             <div className="section-heading"><h2 id="upgrade-heading">{billingMessages.upgradeHeading}</h2><p>{billingMessages.upgradeHelp}</p></div>
             <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} busy={busy} onChoose={onCheckout} /></div>
           </section>}

@@ -9,6 +9,7 @@ import { autofixMessages } from './autofix-messages';
 import { RedirectRefused } from './fix-view';
 import { AutofixSettingsPage } from './autofix-settings-page';
 import type { SettingsActions } from './autofix-settings-page';
+import { useBillingShown } from '../billing/billing-shown';
 
 // The vendor-side checklist (Claude workflow, Copilot turned on) is the admin's own ticks: Colliedesk can't see those
 // from its app, so they stay in this browser, per workspace (decided for the first release).
@@ -93,14 +94,15 @@ export function AutofixSettingsRoute() {
     setKey: (key) => change(() => autofixApi.setCursorKey(key))(),
     removeKey: () => change(() => autofixApi.removeCursorKey())(),
   };
+  const billingShown = useBillingShown(me.data?.agent.role === 'admin');
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   const isAdmin = me.data.agent.role === 'admin';
   return <main className="settings-page panel">
     <div className="settings-layout">
       <SettingsNav page="/settings/autofix" shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
-        billing: isAdmin && config.data?.billing.enabled === true, importData: isAdmin, ai: true, autofix: true }} />
+        billing: billingShown, importData: isAdmin, ai: true, autofix: true }} />
       <AutofixSettingsPage load={settings.isPending ? 'loading' : settings.isError ? 'error' : 'ready'} available={available}
-        missingSettings={config.data?.autofix.missing_settings ?? []} isAdmin={isAdmin} settings={settings.data}
+        offReason={config.data?.autofix.off_reason ?? null} isAdmin={isAdmin} settings={settings.data}
         githubRepos={{ load: installation?.status !== 'active' ? 'ready' : github.isPending ? 'loading' : github.isError ? 'error' : 'ready', items: github.data?.items ?? [], onRetry: () => void github.refetch() }}
         timezone={me.data.timezone ?? 'UTC'} now={Date.now()} actions={actions} notice={back?.notice} problem={problem} onRetry={() => void settings.refetch()}
         checklist={(kind) => ticks[kind] ?? readChecklist(workspace, kind)}

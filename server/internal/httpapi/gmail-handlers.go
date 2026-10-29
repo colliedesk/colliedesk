@@ -7,6 +7,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/google"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/tokenseal"
 )
 
@@ -19,8 +20,10 @@ const (
 
 // gmailSettings is what the email channel settings say about Gmail.
 type gmailSettings struct {
-	Available       bool                      `json:"available"`
+	Available bool `json:"available"`
+	// MissingSettings is always empty: a workspace never reads the server's setting names (OffReason says why).
 	MissingSettings []string                  `json:"missing_settings"`
+	OffReason       *string                   `json:"off_reason"`
 	RedirectURI     string                    `json:"redirect_uri"`
 	Connection      *domain.MailboxConnection `json:"connection"`
 	// AddressMatches is false for a connection whose account is not the channel's support address;
@@ -31,11 +34,8 @@ type gmailSettings struct {
 func (a *API) gmailRedirectURI() string { return a.redirectURI(a.gmail()) }
 
 func (a *API) gmailSettings(connection *domain.MailboxConnection) gmailSettings {
-	missing := a.config.Google.Missing()
-	if missing == nil {
-		missing = []string{}
-	}
-	return gmailSettings{Available: len(missing) == 0, MissingSettings: missing, RedirectURI: a.gmailRedirectURI(), Connection: connection}
+	off := a.offReason(serverconfig.FeatureGmail, a.config.Google.Missing())
+	return gmailSettings{Available: off == nil, MissingSettings: []string{}, OffReason: off, RedirectURI: a.gmailRedirectURI(), Connection: connection}
 }
 
 // connectGmail starts the consent: it records who started it and answers Google's consent address.

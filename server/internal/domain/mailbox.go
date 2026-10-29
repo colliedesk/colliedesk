@@ -96,13 +96,39 @@ func MailboxFailureText(provider, code string) string {
 	}
 }
 
+// MailboxNotConfiguredCode is the code of a reply waiting because the server lost a setting its connected
+// provider needs: it waits, as if the provider were switched off, and is sent once the setting is back.
+const MailboxNotConfiguredCode = "mailbox_not_configured"
+
+// MailboxNotConfiguredFailedNote is the reason of a reply refused at once for a connected mailbox on a
+// server that lost the provider's settings and runs no email outbox to keep it waiting.
+func MailboxNotConfiguredFailedNote(provider string) string {
+	if provider == MailboxMicrosoft {
+		return "Microsoft 365 sending is not set up on this server: ask whoever runs it, then retry the reply."
+	}
+	return "Gmail sending is not set up on this server: ask whoever runs it, then retry the reply."
+}
+
 // MailboxNotConfiguredNote is the reason of a reply for a connected mailbox on a server that lost the
 // provider's settings.
 func MailboxNotConfiguredNote(provider string) string {
 	if provider == MailboxMicrosoft {
-		return "Microsoft 365 sending is not set up on this server: ask whoever runs it."
+		return "Microsoft 365 sending is not set up on this server: this reply waits and is sent once whoever runs it sets it up again."
 	}
-	return "Gmail sending is not set up on this server: ask whoever runs it."
+	return "Gmail sending is not set up on this server: this reply waits and is sent once whoever runs it sets it up again."
+}
+
+// MailboxSwitchedOffCode is the code of a reply waiting because the operator switched its provider off; the
+// timeline shows its reason, as it may wait long.
+const MailboxSwitchedOffCode = "mailbox_switched_off"
+
+// MailboxSwitchedOffNote is the reason of a reply waiting because the operator switched its provider off.
+func MailboxSwitchedOffNote(provider string) string {
+	label := "Gmail"
+	if provider == MailboxMicrosoft {
+		label = "Microsoft 365"
+	}
+	return label + " sending is turned off on this server: this reply waits and is sent once it is on again."
 }
 
 // MailboxDisconnectedNote is the reason of a reply accepted for a mailbox whose connection was removed,

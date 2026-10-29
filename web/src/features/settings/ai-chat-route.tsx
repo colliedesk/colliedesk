@@ -5,6 +5,7 @@ import { aiChatMessages as m } from './ai-chat-messages';
 import { ChatTranscript } from './ai-chat-panel';
 import { aiMessages } from './ai-messages';
 import { SettingsNav } from './settings-nav';
+import { useBillingShown } from '../billing/billing-shown';
 
 // A chat's transcript page under Settings → Built-in AI: every member of the team reads it, an admin
 // deletes it.
@@ -13,8 +14,9 @@ function useMe() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const isAdmin = me.data?.agent.role === 'admin';
+  const billingShown = useBillingShown(isAdmin);
   const shown = { general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin,
-    billing: isAdmin && config.data?.billing.enabled === true, importData: isAdmin, ai: true };
+    billing: billingShown, importData: isAdmin, ai: true };
   return { me: me.data, isAdmin, shown };
 }
 

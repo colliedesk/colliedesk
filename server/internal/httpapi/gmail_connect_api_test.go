@@ -10,6 +10,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/google/googletest"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -124,6 +125,7 @@ type gmailView struct {
 	Gmail       struct {
 		Available       bool     `json:"available"`
 		MissingSettings []string `json:"missing_settings"`
+		OffReason       *string  `json:"off_reason"`
 		RedirectURI     string   `json:"redirect_uri"`
 		Connection      *struct {
 			Address   string  `json:"address"`
@@ -190,7 +192,8 @@ func TestAServerWithoutGoogleSettingsSaysWhatIsMissing(t *testing.T) {
 	connectEmail(t, api, admin, "support@no-google.example.com")
 	desk := gmailDesk{api: api, admin: admin}
 	view := desk.settings(t, admin)
-	if view.Gmail.Available || strings.Join(view.Gmail.MissingSettings, ",") != "GOOGLE_OAUTH_CLIENT_ID,GOOGLE_OAUTH_CLIENT_SECRET,MAILBOX_TOKEN_KEYS" {
+	// The workspace hears why without a setting's name; whoever runs the server reads the names in the log.
+	if view.Gmail.Available || len(view.Gmail.MissingSettings) != 0 || view.Gmail.OffReason == nil || *view.Gmail.OffReason != "not_set_up" {
 		t.Fatalf("gmail = %+v", view.Gmail)
 	}
 	logs := captureLogs(t)
@@ -201,9 +204,10 @@ func TestAServerWithoutGoogleSettingsSaysWhatIsMissing(t *testing.T) {
 	}
 }
 
-// The operator removed the Google settings after an admin connected Gmail: replies must not wait in the
-// queue for a transport the server no longer has, nor claim to go through Gmail.
-func TestAConnectionTheServerCanNoLongerUseFailsRepliesAtOnce(t *testing.T) {
+// The operator removed the Google settings after an admin connected Gmail: as with Gmail switched off, the
+// reply is kept for Gmail (never handed to SMTP) and the outbox holds it with the reason until the settings
+// are back (emailoutbox TestAReplyWaitsWhileTheServerMissesAGmailSettingAndIsSentOnceItIsBack).
+func TestAConnectionTheServerCanNoLongerUseKeepsRepliesForIt(t *testing.T) {
 	api, service, pool, _ := testAPIWithConfig(t, nil)
 	admin := createSession(t, api, service, "Lost Google", "admin@lost-google.example.com")
 	connectEmail(t, api, admin, "support@lost-google.example.com")
@@ -223,8 +227,40 @@ func TestAConnectionTheServerCanNoLongerUseFailsRepliesAtOnce(t *testing.T) {
 	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Olive", "email": "olive@customer.example"})
 	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hi"})
 	create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hello"})
-	if row := queryString(t, pool, `SELECT status||' '||last_error FROM channel_outbox`); !strings.HasPrefix(row, "failed ") || !strings.Contains(row, "ask whoever runs it") || strings.Contains(row, "GOOGLE_OAUTH") {
-		t.Fatalf("outbox row = %q, want failed with the missing settings", row)
+	if row := queryString(t, pool, `SELECT status||' '||transport FROM channel_outbox`); row != "queued gmail" {
+		t.Fatalf("outbox row = %q, want queued for Gmail", row)
+	}
+}
+
+// A Gmail-only server (no SMTP relay) that lost its Google settings runs no email outbox at all, so a reply
+// for the connected Gmail cannot wait for anyone: it fails at once, saying why, and Retry sends it once the
+// settings are back.
+func TestAGmailOnlyServerThatLostItsSettingsFailsTheReplyWithTheReason(t *testing.T) {
+	keys, err := tokenseal.ParseKeys("k1:AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.Email.SMTP = email.SMTPConfig{}
+		config.Google = google.Config{ClientID: "client-1", Keys: keys}
+	})
+	admin := createSession(t, api, service, "Gmail Only", "admin@gmail-only.example.com")
+	connectEmail(t, api, admin, "support@gmail-only.example.com")
+	st := store.New(pool)
+	channel, err := st.GetEmailChannel(context.Background(), workspaceID(t, api, admin))
+	if err != nil || channel == nil {
+		t.Fatalf("email channel: %v %v", channel, err)
+	}
+	if _, _, err := st.SaveMailboxConnection(context.Background(), workspaceID(t, api, admin), channel.ChannelID, "", "support@gmail-only.example.com", google.ScopeGmailSend,
+		store.SealedGrant{KeyID: "k1", Sealed: []byte("sealed"), Provider: domain.MailboxGoogle}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Olive", "email": "olive@customer.example"})
+	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hi"})
+	create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": "Hello"})
+	if row := queryString(t, pool, `SELECT status||' '||COALESCE(last_error_code,'')||' '||COALESCE(last_error,'') FROM channel_outbox`); !strings.HasPrefix(row, "failed mailbox_not_configured ") ||
+		!strings.Contains(row, "Gmail sending is not set up on this server") || strings.Contains(row, "GOOGLE_OAUTH") {
+		t.Fatalf("outbox row = %q, want failed at once with the reason", row)
 	}
 }
 

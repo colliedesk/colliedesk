@@ -146,6 +146,10 @@ type Config struct {
 	// ExtraChannelTypes are channel types run after the registered ones; tests prove the frame with a
 	// type no server ships (channeltest.Loopback). Each needs its channel_types row.
 	ExtraChannelTypes []channels.Adapter
+	// SwitchedOff are the features an operator switched off (serverconfig features.<name> = false). Their
+	// settings and what they hold stay: the app hides them, the routes that use them answer 409 feature_off,
+	// and what keeps their data whole (webhooks, inbound mail, keep-alive) runs on (feature-switches.go).
+	SwitchedOff map[string]bool
 	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
 	Carry *Carry
 	// OperatorOrigin is OPERATOR_ORIGIN: the operator console's own host. Empty serves it at Origin/operator.
@@ -289,9 +293,12 @@ func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refre
 // from which identity.
 func Outbound(config Config) store.OutboundPolicy {
 	return store.OutboundPolicy{
-		GmailEnabled:          config.Google.Enabled(),
-		MicrosoftEnabled:      config.Microsoft.Enabled(),
-		Enabled:               config.Email.SMTP.Configured(),
+		// Switched off reads as not set up: the channel says it cannot send, and its replies wait in the outbox.
+		GmailEnabled:     config.Google.Enabled() && !config.SwitchedOff[serverconfig.FeatureGmail],
+		MicrosoftEnabled: config.Microsoft.Enabled() && !config.SwitchedOff[serverconfig.FeatureMicrosoft],
+		Enabled:          config.Email.SMTP.Configured(),
+		// The same condition as the email outbox worker serve runs (cmd/collie generation.go).
+		Worker:                config.Email.SMTP.Configured() || config.Google.Enabled() || config.Microsoft.Enabled(),
 		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
 		FallbackDomain:        config.Email.MailFromDomain,
 	}
@@ -340,7 +347,8 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
-	limits := config.Billing.Enabled()
+	// Billing switched off bills and locks no workspace; its subscriptions stay as they are (feature-switches.go).
+	limits := config.Billing.Enabled() && !config.SwitchedOff[serverconfig.FeatureBilling]
 	carry := config.Carry
 	if carry == nil {
 		carry = NewCarry(config)
@@ -380,6 +388,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		aiConfig.Keys = config.Google.Keys
 	}
 	aiConfig.PlanLimits = limits
+	if config.SwitchedOff[serverconfig.FeatureAIServer] {
+		aiConfig.Server, aiConfig.ServerOff = nil, true
+	}
 	if aiConfig.ChatGate == nil {
 		aiConfig.ChatGate = carry.chatGate
 	}
@@ -449,7 +460,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 			})
 			continue
 		}
-		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
+		// The switch is checked before authorize: an agent token hears feature_off at once, never a request
+		// filed for a person to approve into the same refusal.
+		mux.Handle(route.Method+" "+route.Pattern, api.featureGate(route.Route, api.authorize(route.Route, route.handler)))
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)

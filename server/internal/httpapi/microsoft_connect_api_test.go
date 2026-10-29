@@ -97,6 +97,7 @@ type microsoftView struct {
 	Microsoft struct {
 		Available               bool     `json:"available"`
 		MissingSettings         []string `json:"missing_settings"`
+		OffReason               *string  `json:"off_reason"`
 		RedirectURI             string   `json:"redirect_uri"`
 		AdminConsentRedirectURI string   `json:"admin_consent_redirect_uri"`
 		AdminConsentURL         *string  `json:"admin_consent_url"`
@@ -352,7 +353,7 @@ func TestAServerWithoutMicrosoftSettingsSaysWhatIsMissing(t *testing.T) {
 	}
 	var view microsoftView
 	decode(t, request(t, api, http.MethodGet, "/api/v1/channels/email", nil, admin, nil), &view)
-	if view.Microsoft.Available || view.Microsoft.AdminConsentURL != nil || len(view.Microsoft.MissingSettings) != 3 {
+	if view.Microsoft.Available || view.Microsoft.AdminConsentURL != nil || len(view.Microsoft.MissingSettings) != 0 || view.Microsoft.OffReason == nil || *view.Microsoft.OffReason != "not_set_up" {
 		t.Fatalf("settings = %+v", view.Microsoft)
 	}
 }

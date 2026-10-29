@@ -14,9 +14,9 @@ const disconnected: EmailChannelSettings = {
   hosted_address: null,
   domain_verification: 'txt',
   sending_pause: null,
-  gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null },
+  gmail: { available: true, missing_settings: [], off_reason: null, redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null },
   microsoft: {
-    available: false, missing_settings: ['MICROSOFT_OAUTH_CLIENT_ID', 'MICROSOFT_OAUTH_CLIENT_SECRET'],
+    available: false, missing_settings: [], off_reason: 'not_set_up',
     redirect_uri: 'https://desk.example.com/api/v1/channels/email/microsoft/callback',
     admin_consent_redirect_uri: 'https://desk.example.com/api/v1/channels/email/microsoft/admin-consent',
     admin_consent_url: null, large_attachment_bytes: 3145728, server_credentials_refused: false, connection: null,

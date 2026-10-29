@@ -11,6 +11,12 @@ info:
     plan, export the data (`GET /api/v1/export`), and show or disconnect the email channel. Paying unlocks the
     workspace on the next request. Self-hosted instances have no trial and no lock.
 
+    An operator can switch a feature of the server off (Gmail, Microsoft 365, Autofix, the server's AI
+    provider, hosted addresses, cloud sign-in, billing, cloud sign-up). `features` of `GET /api/v1/config`
+    says which run. A route that uses a feature switched off answers 409 `feature_off`; reading what the
+    feature holds, disconnecting it, and the webhooks that keep its data whole stay open. With billing
+    switched off no workspace is billed or locked.
+
     When a workspace moves to a plan with fewer agents than it has (a change in the billing portal),
     the agents beyond the cap are paused: agents before admins, the most recently added first, never
     the owner (the first admin added). Their requests answer 402 `seat_paused` except
@@ -2265,7 +2271,8 @@ paths:
         sends for one email channel of a workspace (the callback says otherwise). Connecting again replaces
         the earlier account and revokes its grant. 409
         `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its
-        Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an
+        Google settings (`gmail.off_reason` is `not_set_up`; the server log and the operator console name them); 409 `feature_off` when
+        the operator switched Gmail off (connections stay, and their replies wait until it is on again). An agent token gets an
         agent request; the person who approves receives the consent address.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
@@ -2333,7 +2340,7 @@ paths:
         Gmail or Microsoft 365; an earlier Gmail grant is revoked at Google. A work account may first need
         its organization's admin to approve Colliedesk (`microsoft.admin_consent_url` in the channel
         settings). 409 `email_channel_missing` without an email channel; 409 `microsoft_not_configured` when
-        the server lacks its Microsoft settings (`microsoft.missing_settings` names them). An agent token
+        the server lacks its Microsoft settings (`microsoft.off_reason` is `not_set_up`). An agent token
         gets an agent request; the person who approves receives the sign-in address.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
@@ -7545,8 +7552,25 @@ components:
         expires_at: {type: string, format: date-time}
     PublicConfig:
       type: object
-      required: [app_origin, workspace_hosts, cloud_sign_in, billing, signup, limits, product_analytics, ai, autofix]
+      required: [app_origin, workspace_hosts, cloud_sign_in, billing, signup, limits, product_analytics, ai, autofix, features]
       properties:
+        features:
+          type: object
+          description: >-
+            Which features of the server run here: their settings are complete and the operator has not
+            switched them off (operator console → Features, `features.<name>`). The web app shows only
+            those. A route of a feature switched off answers 409 `feature_off`; what the feature holds
+            (connections, fixes, subscriptions, queued replies) stays and is used again once it is on.
+          required: [gmail, microsoft, autofix, ai_server, hosted_mail, cloud_sign_in, billing, signup]
+          properties:
+            gmail: {$ref: '#/components/schemas/PublicFeature'}
+            microsoft: {$ref: '#/components/schemas/PublicFeature'}
+            autofix: {$ref: '#/components/schemas/PublicFeature'}
+            ai_server: {$ref: '#/components/schemas/PublicFeature'}
+            hosted_mail: {$ref: '#/components/schemas/PublicFeature'}
+            cloud_sign_in: {$ref: '#/components/schemas/PublicFeature'}
+            billing: {$ref: '#/components/schemas/PublicFeature'}
+            signup: {$ref: '#/components/schemas/PublicFeature'}
         workspace_hosts:
           type: boolean
           description: >-
@@ -7561,10 +7585,11 @@ components:
             and this is the address a page there links to for everything else.
         autofix:
           type: object
-          required: [available, missing_settings]
+          required: [available, missing_settings, off_reason]
           properties:
-            available: {type: boolean, description: 'The operator set up the server''s GitHub App (operator console → Mailboxes & GitHub, github.*), so Autofix can be used; the web app hides it otherwise.'}
-            missing_settings: {type: array, items: {type: string}, description: The settings the operator still needs; empty when available.}
+            available: {type: boolean, description: 'The operator set up the server''s GitHub App (operator console → Mailboxes & GitHub, github.*) and has not switched Autofix off, so Autofix can be used; the web app hides it otherwise.'}
+            missing_settings: {type: array, maxItems: 0, items: {type: string}, deprecated: true, description: 'Always empty: a public answer never names the server''s settings (the operator console and `collie config features` do). Read off_reason.'}
+            off_reason: {$ref: '#/components/schemas/FeatureOffReason'}
         ai:
           type: object
           required: [server_provider]
@@ -7597,14 +7622,29 @@ components:
             publishable_key: {type: [string, 'null']}
         billing:
           type: object
-          required: [enabled]
+          required: [enabled, switched_off]
           properties:
             enabled: {type: boolean, description: False on self-hosted instances; the billing routes answer 404.}
+            switched_off:
+              type: boolean
+              description: >-
+                Billing is set up but the operator switched it off: nobody is billed or locked and nothing is
+                sold (checkout answers 409 `feature_off`, `checkout_plans` is empty), but `GET /api/v1/billing`
+                and the billing portal stay open, so a workspace with a subscription can still see and cancel it.
         signup:
           type: object
           required: [enabled]
           properties:
             enabled: {type: boolean, description: True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured).}
+    FeatureOffReason:
+      type: [string, 'null']
+      enum: [not_set_up, switched_off, null]
+      description: 'Why the feature is not offered: `not_set_up` (the server misses its settings), `switched_off` (the operator switched it off; what it holds stays). Null while it is offered.'
+    PublicFeature:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: {type: boolean}
     AISlotName: {type: string, enum: [triage, draft, chat], description: '`chat`: the AI that answers end users in the help center''s chat (docs/user/ai-chat.md).'}
     AIProviderKind: {type: string, enum: [anthropic, openai_compatible]}
     AIProvider:
@@ -7639,7 +7679,7 @@ components:
         automatic: {type: boolean, description: 'The feature runs by itself: triage suggestions of new tickets apply their auto_parts, filling only what nobody set; drafts are written for every customer message (never sent). Off unless an admin turns it on; off with the feature and when it moves to another provider.'}
         auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only: what applies by itself.'}
         active: {type: boolean, description: 'On, and its provider and model are still there: the feature runs.'}
-        off_reason: {type: [string, 'null'], enum: [server_provider_missing, model_not_offered, null], description: Why a feature that is on cannot run.}
+        off_reason: {type: [string, 'null'], enum: [server_provider_missing, server_provider_off, model_not_offered, null], description: 'Why a feature that is on cannot run. `server_provider_off`: the operator switched the server''s provider off; it runs again once it is on.'}
         consented_by: {type: [string, 'null'], format: uuid, description: Who agreed that this feature's data goes to its current provider.}
         consented_at: {type: [string, 'null'], format: date-time}
         updated_by: {type: [string, 'null'], format: uuid}
@@ -8250,7 +8290,7 @@ components:
       properties:
         slots: {type: integer, description: Founding slots in total}
         taken: {type: [integer, 'null'], description: 'Slots held by active, trialing or past due subscriptions; null until counted'}
-        open: {type: boolean, description: Whether Founding can still be bought}
+        open: {type: boolean, description: Whether Founding can still be bought; false while the operator switched billing off}
     WebhookResult:
       type: object
       required: [status]
@@ -9830,7 +9870,11 @@ components:
             without email; retry once it is), channel_removed, no_recipient (the customer has no address on
             the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused
             this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and
-            reconnecting does not help).
+            reconnecting does not help), mailbox_switched_off (a queued reply waits because the operator switched
+            Gmail or Microsoft 365 off; it is sent once it is on again), mailbox_not_configured (a queued reply
+            waits because the server lost a setting its connected provider needs; it is sent once the setting is back;
+            on a server that runs no email outbox at all, no SMTP relay and no provider set up, the reply fails at once
+            with this code and Retry sends it once the setting is back).
             Null for most email failures, whose words are in last_error.
         attempts: {type: integer, minimum: 0}
         last_error:
@@ -10003,15 +10047,18 @@ components:
         smtp: {$ref: '#/components/schemas/SMTPStatus'}
     GmailSettings:
       type: object
-      required: [available, missing_settings, redirect_uri, connection]
+      required: [available, missing_settings, off_reason, redirect_uri, connection]
       properties:
         available:
           type: boolean
-          description: Whether this server can connect Gmail (its operator set the Google OAuth client and token keys).
+          description: Whether this server can connect Gmail (its operator set the Google OAuth client and token keys, and has not switched Gmail off).
         missing_settings:
           type: array
+          maxItems: 0
+          deprecated: true
           items: {type: string, enum: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, MAILBOX_TOKEN_KEYS]}
-          description: The server settings still needed before Gmail can be connected; empty when available.
+          description: Always empty; a workspace never reads the server's setting names. Read off_reason.
+        off_reason: {$ref: '#/components/schemas/FeatureOffReason'}
         redirect_uri:
           type: string
           format: uri
@@ -10028,15 +10075,18 @@ components:
             made before Gmail had to match keeps sending; connect it again with the support address to fix it.
     MicrosoftSettings:
       type: object
-      required: [available, missing_settings, redirect_uri, admin_consent_redirect_uri, admin_consent_url, large_attachment_bytes, server_credentials_refused, connection]
+      required: [available, missing_settings, off_reason, redirect_uri, admin_consent_redirect_uri, admin_consent_url, large_attachment_bytes, server_credentials_refused, connection]
       properties:
         available:
           type: boolean
-          description: Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys).
+          description: Whether this server can connect Microsoft 365 (its operator registered an app in Microsoft Entra and set the token keys, and has not switched it off).
         missing_settings:
           type: array
+          maxItems: 0
+          deprecated: true
           items: {type: string, enum: [MICROSOFT_OAUTH_CLIENT_ID, MICROSOFT_OAUTH_CLIENT_SECRET, MAILBOX_TOKEN_KEYS]}
-          description: The server settings still needed before Microsoft 365 can be connected; empty when available.
+          description: Always empty; a workspace never reads the server's setting names. Read off_reason.
+        off_reason: {$ref: '#/components/schemas/FeatureOffReason'}
         redirect_uri:
           type: string
           format: uri
@@ -10063,7 +10113,7 @@ components:
             True while a reply of this channel waits because Microsoft refused this server's own app credentials
             (microsoft.client_secret wrong or expired). The connection is fine; the operator must update the
             secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is
-            false): missing_settings names what to set.
+            false): off_reason says why.
         connection:
           description: The channel's Microsoft 365 connection; null when it has none (or sends through Gmail).
           oneOf:
@@ -10525,7 +10575,7 @@ components:
       type: object
       required: [code, severity]
       properties:
-        code: {type: string, enum: [env_differs, env_same, env_dead, no_key_ring, secret_stale_key, version_refused, waiting_for_import, path_mode, origin_invalid, requests_waiting]}
+        code: {type: string, enum: [env_differs, env_same, env_dead, no_key_ring, secret_stale_key, version_refused, waiting_for_import, path_mode, origin_invalid, requests_waiting, feature_incomplete]}
         severity: {type: string, enum: [error, warning]}
         env_name: {type: string, description: 'The environment variable it is about, as data (never written in the web app)'}
         key: {type: string}
@@ -10569,7 +10619,7 @@ components:
       properties:
         key: {type: string}
         env_name: {type: string, description: 'The variable it replaced, as data'}
-        group: {type: string, enum: [ai, email, mailboxes, billing, signups, security, limits, operator]}
+        group: {type: string, enum: [ai, email, mailboxes, billing, signups, security, limits, operator, features]}
         secret: {type: boolean}
         hot: {type: boolean, description: 'Applies at once; otherwise in a few seconds'}
         default: {type: string}
@@ -10608,6 +10658,24 @@ components:
             current: {type: string}
         telemetry_env_off: {type: boolean}
         operator_email: {type: string}
+        features:
+          type: array
+          description: >-
+            Every feature with a switch, as this version runs it. `requested` is the switch (`unset` is on
+            once the settings are complete); `enabled` is whether it runs; `missing` names what it still needs
+            (settings, `MAILBOX_TOKEN_KEYS`, or another feature's switch). A switch cannot be turned on while
+            `missing` is not empty (422 `config_invalid`).
+          items: {$ref: '#/components/schemas/OperatorFeature'}
+    OperatorFeature:
+      type: object
+      required: [name, label, switch_key, requested, enabled, missing]
+      properties:
+        name: {type: string, enum: [gmail, microsoft, autofix, ai_server, hosted_mail, cloud_sign_in, billing, signup]}
+        label: {type: string}
+        switch_key: {type: string}
+        requested: {type: string, enum: ['on', 'off', unset]}
+        enabled: {type: boolean}
+        missing: {type: array, items: {type: string}}
     OperatorConfigChange:
       type: object
       required: [base_version]

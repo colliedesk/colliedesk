@@ -1,6 +1,6 @@
 // How each setting shows on its page: a label people read, the control, and the section it sits in. The keys
 // and what saving them asks for come from the API (GET /api/v1/operator/config); this only words them.
-export type Kind = 'text' | 'number' | 'textarea' | 'switch' | 'select' | 'secret' | 'pem';
+export type Kind = 'text' | 'number' | 'textarea' | 'switch' | 'select' | 'secret' | 'pem' | 'feature';
 
 export interface FieldInfo {
   label: string;
@@ -68,9 +68,21 @@ export const fields: Record<string, FieldInfo> = {
   'problem_report.workspace': { label: 'Problem reports go to workspace', kind: 'text', help: "A workspace's address (slug); empty sends nothing." },
   'telemetry.enabled': { label: 'Usage report', kind: 'switch' },
   'operator.require_totp': { label: 'Require an authenticator', kind: 'switch', help: 'Can be turned off only on the server, never on the hosted cloud.' },
+  'features.gmail': { label: 'Gmail mailboxes', kind: 'feature' },
+  'features.microsoft': { label: 'Microsoft 365 mailboxes', kind: 'feature' },
+  'features.autofix': { label: 'Autofix', kind: 'feature' },
+  'features.ai_server': { label: "The server's AI provider", kind: 'feature' },
+  'features.hosted_mail': { label: 'Hosted support addresses', kind: 'feature' },
+  'features.cloud_sign_in': { label: 'Cloud sign-in', kind: 'feature', help: 'The console still opens with a one-time link.' },
+  'features.billing': { label: 'Billing', kind: 'feature', help: 'Off bills and locks nobody; subscriptions stay.' },
+  'features.signup': { label: 'Cloud sign-up', kind: 'feature', help: 'Needs cloud sign-in and billing on.' },
 };
 
 export const sections: Record<string, Section[]> = {
+  features: [
+    { title: 'Features', lead: 'Off hides a feature from every workspace; nothing it holds is removed.',
+      keys: ['features.gmail', 'features.microsoft', 'features.autofix', 'features.ai_server', 'features.hosted_mail', 'features.cloud_sign_in', 'features.billing', 'features.signup'] },
+  ],
   ai: [
     { title: 'Server provider', lead: "Workspaces that bring no key of their own use this one.", keys: ['ai.server.provider', 'ai.server.label', 'ai.server.base_url', 'ai.server.api_key', 'ai.server.models'], test: 'ai' },
     { title: 'Pricing and allowance', lead: 'Costs already counted keep the price of their day.', keys: ['ai.server.prices', 'ai.server.monthly_allowance'] },
@@ -103,4 +115,4 @@ export const sections: Record<string, Section[]> = {
   ],
 };
 
-export const groupOrder = ['ai', 'email', 'mailboxes', 'billing', 'signups', 'security', 'limits'];
+export const groupOrder = ['features', 'ai', 'email', 'mailboxes', 'billing', 'signups', 'security', 'limits'];

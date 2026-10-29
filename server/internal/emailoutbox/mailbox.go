@@ -52,6 +52,9 @@ const (
 	verdictDefer
 )
 
+// switchedOffWait is how long a reply waits before it looks again whether its provider is on.
+const switchedOffWait = 10 * time.Minute
+
 // mailboxes are the providers this worker can send through, by provider name.
 func (w *Worker) mailboxes() map[string]mailboxProvider {
 	providers := map[string]mailboxProvider{}
@@ -76,8 +79,17 @@ func (w *Worker) deliverMailbox(ctx context.Context, item store.Delivery, provid
 		return channels.Failed(domain.MailboxFailureText(provider, mailbox.ErrorCode))
 	}
 	sender, ok := w.mailboxes()[provider]
+	if ok && sender.configured() && w.options.SwitchedOff[provider] {
+		// Not an attempt: the reply waits for the operator, not for the provider.
+		waits := channels.Defer(w.options.Now().Add(switchedOffWait), domain.MailboxSwitchedOffNote(provider))
+		waits.Code = domain.MailboxSwitchedOffCode
+		return waits
+	}
 	if !ok || !sender.configured() {
-		return channels.Failed(domain.MailboxNotConfiguredNote(provider))
+		// A setting gone missing is a provider off, not a failed reply: it waits, without spending an attempt.
+		waits := channels.Defer(w.options.Now().Add(switchedOffWait), domain.MailboxNotConfiguredNote(provider))
+		waits.Code = domain.MailboxNotConfiguredCode
+		return waits
 	}
 	// The grant opens with the context of the provider that issued it, which the row names.
 	refresh, err := sender.keys().Open(mailbox.Grant.KeyID, mailbox.Grant.Sealed, sender.grantContext(item.WorkspaceID))

@@ -43,6 +43,8 @@ export const gmailMessages = {
   gmailSetupGuide: 'Self-hosting guide: send replies through Gmail',
   gmailRedirectUri: 'Redirect URI to register in Google Cloud',
   gmailNotSetUpSummary: 'Gmail is not set up on this server',
+  gmailSwitchedOff: 'Gmail sending is turned off on this server: replies wait in the outbox and are sent once it is on again.',
+  gmailNotTurnedOn: 'Gmail is not turned on on this server.',
   gmailJustConnected: 'Gmail is connected.',
   gmailConnectFailed: 'Gmail could not be connected. Try again.',
   gmailReturnErrors: {

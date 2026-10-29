@@ -15,6 +15,8 @@ export const microsoftMessages = {
   copyApprovalLink: 'Copy link',
   approvalLinkCopied: 'Link copied',
   microsoftNotSetUpSummary: 'Microsoft 365 is not set up on this server',
+  microsoftSwitchedOff: 'Microsoft 365 sending is turned off on this server: replies wait in the outbox and are sent once it is on again.',
+  microsoftNotTurnedOn: 'Microsoft 365 is not turned on on this server.',
   microsoftNotAvailable: 'Microsoft 365 sending is not set up on this server: ask whoever runs it. They find the steps here:',
   microsoftSetupGuide: 'Self-hosting guide: send replies through Microsoft 365',
   microsoftRedirectUri: 'Redirect URI to register in Microsoft Entra',
