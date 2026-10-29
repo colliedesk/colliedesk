@@ -80,10 +80,11 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, 
 	if channel != nil {
 		local = channel.HostedLocal
 	}
-	// Hosted addresses switched off are not offered to a channel; one already at its hosted address keeps it
-	// (its setup and forwarding name read it), and mail to it is still received.
+	// Hosted addresses switched off are not offered to a channel; one whose support address is a hosted address
+	// keeps it (its setup and forwarding name read it), also after a new slug renamed it, and mail to it is
+	// still received.
 	address := email.HostedLocalAddress(local, workspaceSlug, config.HostedMailDomain)
-	if a.switchedOff(serverconfig.FeatureHostedMail) && !(channel != nil && email.SameMailbox(channel.SupportAddress, address)) {
+	if a.switchedOff(serverconfig.FeatureHostedMail) && !(channel != nil && email.UnderDomain(channel.SupportAddress, config.HostedMailDomain)) {
 		address = ""
 	}
 	if address != "" {

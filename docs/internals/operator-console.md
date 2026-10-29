@@ -193,7 +193,8 @@ settings it rides with).
   installation or a repository, a connector or Cursor's key). Fixes already sent are still followed by the
   workers and can be cancelled, marked deployed or given their pull request.
 - **Hosted addresses off withdraw the offer, not the address.** `hosted_address` stays for a channel whose
-  support address is its hosted address (its setup reads it); new workspaces get none.
+  support address is a hosted address (under `hosted_mail.domain`, also after a new slug renamed it; its
+  setup reads it); new workspaces get none.
 - **Billing off is limits off, not the cloud off.** `generation` and `httpapi.New` read
   `billing.Enabled() && !off`, for plan limits, retention, Founding and the AI allowance; the Polar client
   stays (its webhook keeps subscriptions in step). `hostedCloud()`, telemetry's realm and the console's

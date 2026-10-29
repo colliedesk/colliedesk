@@ -243,4 +243,14 @@ func TestSwitchedOffHostedAddressesStayForTheChannelsUsingThem(t *testing.T) {
 	if result := inboundOK(t, f.api, platformSecret, hostedMail(address, "first@customer.example")); result.Status != "created" {
 		t.Fatalf("mail to the hosted address while they are switched off: %+v", result)
 	}
+	// A new slug renames the hosted address but not the channel's saved one: the channel still uses a hosted
+	// address, and keeps seeing it.
+	rename := newRequest(t, http.MethodPatch, "/api/v1/workspace/slug", map[string]any{"slug": "ada-help"}, "", cookie)
+	rename.Header.Set("Origin", testOrigin)
+	if renamed := serve(f.api, rename); renamed.Code != http.StatusOK {
+		t.Fatalf("rename the workspace: %d %s", renamed.Code, renamed.Body.String())
+	}
+	if shown := hostedAddress(); shown == nil || *shown != "support@ada-help."+hostedDomain {
+		t.Fatalf("after a new slug, with hosted addresses switched off, hosted_address = %v", shown)
+	}
 }
