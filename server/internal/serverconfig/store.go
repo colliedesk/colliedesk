@@ -376,9 +376,15 @@ func (s *Store) save(ctx context.Context, tx pgx.Tx, change Change) (int64, erro
 		}
 		return 0, ErrNoChange
 	}
-	// An import at start only fills groups the database lacks; it must never stop a server from starting.
-	if trial && change.Source != "env-import" {
-		return 0, ErrTrialPending
+	if trial {
+		// The console and approved requests wait for the trial. The shell (set, reset, apply) and an import
+		// at start never do: they are the way back when a trial locks people out (D12), so they end it.
+		if change.Source != "cli" && change.Source != "apply-file" && change.Source != "env-import" {
+			return 0, ErrTrialPending
+		}
+		if err := endTrial(ctx, tx, state.Desired, "confirmed", change.Actor, change.Source); err != nil {
+			return 0, err
+		}
 	}
 	return s.insertVersion(ctx, tx, state.Desired, next, change, changed)
 }
@@ -521,7 +527,13 @@ func (s *Store) Restore(ctx context.Context, from int64, base int64, actor Actor
 		if trial, err := readTrial(ctx, tx, state.Desired); err != nil {
 			return err
 		} else if trial {
-			return ErrTrialPending
+			// collie config restore is the shell's way back and ends the trial; the console waits for it.
+			if actor.Kind != "cli" {
+				return ErrTrialPending
+			}
+			if err := endTrial(ctx, tx, state.Desired, "reverted", actor, "restore"); err != nil {
+				return err
+			}
 		}
 		var exists bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM server_config_versions WHERE id=$1)`, from).Scan(&exists); err != nil {
@@ -1030,4 +1042,12 @@ func (s *Store) revertTrial(ctx context.Context, tx pgx.Tx, version int64, expir
 		}
 	}
 	return s.insertVersion(ctx, tx, version, old, change, changedKeys(current, old))
+}
+
+// endTrial ends a trial that a change from the shell or an import supersedes, and says so in the audit log.
+func endTrial(ctx context.Context, tx pgx.Tx, version int64, status string, actor Actor, source string) error {
+	if _, err := tx.Exec(ctx, `UPDATE server_config_versions SET status=$2 WHERE id=$1 AND status='trial'`, version, status); err != nil {
+		return fmt.Errorf("end the trial: %w", err)
+	}
+	return appendAudit(ctx, tx, actor, "trial.superseded", &version, nil, map[string]any{"by": source, "status": status})
 }

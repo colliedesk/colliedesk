@@ -133,10 +133,10 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const changed = changedKeys(draft);
-  const runTest = async () => {
+  const runTest = async (kind: 'smtp' | 'polar' | 'jwks') => {
     setTesting(true);
     try {
-      const result = await api.check({ set: draft.set, unset: draft.unset, secrets: draft.secrets, test: 'smtp' });
+      const result = await api.check({ set: draft.set, unset: draft.unset, secrets: draft.secrets, test: kind });
       if (!result.ok) setTest({ ok: false, message: Object.values(result.errors).join(' ') });
       else setTest({ ok: result.test?.ok ?? true, message: result.test?.message ?? m.checkOk });
     } catch (error) {
@@ -157,8 +157,9 @@ export function ConfigPage({ group, data, draft, setDraft }: { group: string; da
       <div className="settings-body">
         {section.keys.map((key) => byKey.get(key)).filter((setting): setting is Setting => Boolean(setting)).map((setting) =>
           <SettingRow key={setting.key} setting={setting} draft={draft} setDraft={setDraft} error={errors[setting.key]} />)}
-        {section.test === 'smtp' && <div className="ops-check">
-          <button type="button" disabled={testing} onClick={() => void runTest()}>{testing ? m.checking : m.sendTestEmail(data.config.operator_email ?? data.me.operator.email)}</button>
+        {section.test && <div className="ops-check">
+          <button type="button" disabled={testing} onClick={() => void runTest(section.test!)}>{testing ? m.checking
+            : section.test === 'smtp' ? m.sendTestEmail(data.config.operator_email ?? data.me.operator.email) : section.test === 'polar' ? m.tryPolar : m.tryJWKS}</button>
           {test && <p className={test.ok ? 'help' : 'error-copy'} role={test.ok ? 'status' : 'alert'}>{test.message}</p>}
         </div>}
       </div>

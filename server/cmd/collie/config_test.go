@@ -359,9 +359,6 @@ func TestConfigTrialFromTheShell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runConfig(t, databaseURL, "", "set", "internal_signup.emails=@example.com"); err == nil || !strings.Contains(err.Error(), "trial") {
-		t.Fatalf("a save during the trial: %v, want the trial named", err)
-	}
 	if shown := mustConfig(t, databaseURL, "", "trial"); !strings.Contains(shown, fmt.Sprintf("v%d is tried until", trial)) {
 		t.Fatalf("trial = %q", shown)
 	}
@@ -376,5 +373,14 @@ func TestConfigTrialFromTheShell(t *testing.T) {
 	}
 	if shown := mustConfig(t, databaseURL, "", "trial"); strings.TrimSpace(shown) != "no trial change runs" {
 		t.Fatalf("trial = %q", shown)
+	}
+	// The shell is always the way back: a set during a trial ends it instead of waiting.
+	if _, err := store.Save(context.Background(), serverconfig.Change{Set: map[string]string{"trusted_proxies": "192.168.0.0/16"}, Source: "console",
+		Actor: serverconfig.Actor{Kind: "operator", Name: "ops@example.com"}, Trial: time.Minute}); err != nil {
+		t.Fatal(err)
+	}
+	mustConfig(t, databaseURL, "", "set", "internal_signup.emails=@example.com")
+	if shown := mustConfig(t, databaseURL, "", "trial"); strings.TrimSpace(shown) != "no trial change runs" {
+		t.Fatalf("after a set from the shell: %q", shown)
 	}
 }

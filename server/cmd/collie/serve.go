@@ -12,7 +12,6 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -294,13 +293,7 @@ func attachmentStorage() (*attachments.LocalDisk, error) {
 }
 
 func cloudAuthConfig(getenv func(string) string) cloudauth.Config {
-	return cloudauth.Config{
-		Issuer:            getenv("CLOUD_AUTH_ISSUER"),
-		JWKSURL:           getenv("CLOUD_AUTH_JWKS_URL"),
-		AuthorizedParties: strings.Split(getenv("CLOUD_AUTH_AUTHORIZED_PARTIES"), ","),
-		PublishableKey:    getenv("CLERK_PUBLISHABLE_KEY"),
-		EmailClaim:        getenv("CLOUD_AUTH_EMAIL_CLAIM"),
-	}
+	return cloudauth.ConfigFromEnv(getenv)
 }
 
 // lockedScreenShipped says the web app shows a locked workspace (trial over, nothing paid) instead

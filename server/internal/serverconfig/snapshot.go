@@ -102,6 +102,11 @@ func (s Snapshot) Getenv(name string) string {
 	}
 	for _, product := range ProductEnvs {
 		if product.Env == name {
+			// Products are listed before billing turns on; until the token is set they are not billing, so
+			// the billing parser reads it off instead of "partly configured".
+			if token, _ := s.Get("polar.access_token"); strings.TrimSpace(token) == "" {
+				return ""
+			}
 			for _, row := range s.products {
 				if row.OnSale && row.Plan == product.Plan && row.Period == product.Period {
 					return row.ProductID

@@ -262,6 +262,9 @@ roll_back() {
     "$DOCKER" compose run --rm --no-deps -T server 'find /data/attachments -mindepth 1 -delete && tar -C /data/attachments -xf -' <attachments.tar 2>/dev/null) ||
     fail 'the documented restore failed'
   use_image "$PREVIOUS"
+  # The installer kept the compose file it replaced: the previous image reads its settings from the
+  # environment again (docs/self-host/upgrade.md).
+  if [ -f "$TMP/compose.yaml.bak" ]; then mv "$TMP/compose.yaml.bak" "$TMP/compose.yaml"; fi
   migrate || fail "$PREVIOUS did not take its restored database"
   check compare "$TMP/rolled-back" '' "$TMP/before" || fail 'the restored install differs from the backup'
   step 'the install is the backup again'
@@ -354,6 +357,29 @@ dc restart server >/dev/null 2>&1 && dc up -d --wait server >/dev/null 2>&1 || f
 [ "$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)" = "$imports" ] ||
   fail 'a restart imported the environment again'
 step 'settings imported from the environment once; the doctor names the leftovers'
+
+# The operator then runs the new installer on the same directory: it keeps the compose file it replaces as
+# compose.yaml.bak, passes only the bootstrap variables, imports the settings .env still holds through
+# --stdin (a group the database lacks; the others are kept) and keeps the workspaces it already made.
+step 'running the new installer again on the upgraded install'
+cp "$TMP/compose.yaml" "$TMP/compose.previous"
+touch "$TMP/.initialized"
+echo 'INTERNAL_SIGNUP_EMAILS=@upgrade.example' >>"$TMP/.env"
+echo 'SMTP_HOST=smtp.changed.invalid' >>"$TMP/.env"
+rerun=$(COLLIE_DESK_IMAGE=$CANDIDATE sh "$ROOT/install.sh" --dir "$TMP" --name 'Upgrade Desk' --email owner@acme.example </dev/null 2>&1) ||
+  { printf '%s\n' "$rerun" >&2; fail 'the new installer failed on the upgraded install'; }
+printf '%s\n' "$rerun" | grep -q 'Existing workspace initialization was kept' || { printf '%s\n' "$rerun" >&2; fail 'the installer did not keep the existing install'; }
+if printf '%s\n' "$rerun" | grep -q 'Operator console (one-time link)'; then fail 'the installer printed an operator link again'; fi
+cmp -s "$TMP/compose.previous" "$TMP/compose.yaml.bak" || fail 'the installer did not keep the compose file it replaced as compose.yaml.bak'
+if grep -q 'SMTP_HOST' "$TMP/compose.yaml"; then fail 'the new compose file still passes SMTP_HOST'; fi
+[ "$(dc exec -T server /app/collie config get internal_signup.emails 2>/dev/null)" = 'internal_signup.emails=@upgrade.example' ] ||
+  fail 'the installer did not import INTERNAL_SIGNUP_EMAILS from .env'
+[ "$(dc exec -T server /app/collie config get smtp.host 2>/dev/null)" = 'smtp.host=smtp.invalid' ] ||
+  fail 'the installer replaced a group the database already held'
+dc exec -T server /app/collie config doctor >"$TMP/doctor.out" 2>&1 || :
+if grep -q 'SMTP_HOST' "$TMP/doctor.out"; then cat "$TMP/doctor.out" >&2; fail 'with the new compose file the doctor still names SMTP_HOST'; fi
+check_inbox acme owner@acme.example
+step 'the installer moved the settings and kept the install and the old compose file'
 
 if [ "$RESTORE" = after ]; then
   restore_one_workspace "$CANDIDATE"

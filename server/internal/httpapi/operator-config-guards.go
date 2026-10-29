@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/retention"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 )
@@ -412,4 +414,44 @@ func (a *API) setOperatorProductOnSale(response http.ResponseWriter, request *ht
 	row := products[index]
 	row.OnSale = *input.OnSale
 	writeJSON(response, http.StatusOK, row)
+}
+
+// tryPolar asks Polar about each product the change sells with its token: the token works and no product
+// is archived (an archived one stops every checkout). Nothing is saved; an error never repeats a secret.
+func (a *API) tryPolar(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
+	config, err := polar.ConfigFromEnv(snap.Getenv)
+	if err != nil || !config.Enabled() {
+		return map[string]any{"name": "polar", "ok": false, "message": "Set the Polar token, its webhook secret and the Team and Founding products first."}
+	}
+	callCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	client := polar.NewClient(config)
+	for _, id := range []string{config.Products.TeamMonthly, config.Products.TeamYearly, config.Products.Founding} {
+		archived, err := client.ProductArchived(callCtx, id)
+		if err != nil {
+			return map[string]any{"name": "polar", "ok": false, "message": "Polar refused: " + redactSecretsIn(err.Error(), snap)}
+		}
+		if archived {
+			return map[string]any{"name": "polar", "ok": false, "message": "Product " + id + " is archived at Polar: nobody can buy it."}
+		}
+	}
+	return map[string]any{"name": "polar", "ok": true, "message": "Polar answered with this token; the Team and Founding products are on sale. Nothing was saved."}
+}
+
+// tryJWKS fetches the cloud sign-in keys of the change once. Nothing is saved.
+func tryJWKS(ctx context.Context, snap serverconfig.Snapshot) map[string]any {
+	config := cloudauth.ConfigFromEnv(snap.Getenv)
+	if !config.Enabled() {
+		return map[string]any{"name": "jwks", "ok": false, "message": "Set the issuer and the JWKS address first."}
+	}
+	callCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	count, err := cloudauth.New(config).CheckKeys(callCtx)
+	if err != nil {
+		return map[string]any{"name": "jwks", "ok": false, "message": "The JWKS address did not answer with keys: " + err.Error()}
+	}
+	if count == 0 {
+		return map[string]any{"name": "jwks", "ok": false, "message": "The JWKS address answered with no RSA key: no cloud sign-in would verify."}
+	}
+	return map[string]any{"name": "jwks", "ok": true, "message": fmt.Sprintf("The JWKS address answered with %d keys. Nothing was saved.", count)}
 }

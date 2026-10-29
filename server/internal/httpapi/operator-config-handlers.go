@@ -465,8 +465,15 @@ func (a *API) checkOperatorConfig(response http.ResponseWriter, request *http.Re
 		}
 		out["guards"] = guards
 	}
-	if input.Test == "smtp" && out["ok"] == true {
-		out["test"] = a.sendTestEmail(request.Context(), next, operatorPrincipal(request).Operator.Email)
+	if out["ok"] == true {
+		switch input.Test {
+		case "smtp":
+			out["test"] = a.sendTestEmail(request.Context(), next, operatorPrincipal(request).Operator.Email)
+		case "polar":
+			out["test"] = a.tryPolar(request.Context(), next)
+		case "jwks":
+			out["test"] = tryJWKS(request.Context(), next)
+		}
 	}
 	writeJSON(response, http.StatusOK, out)
 }

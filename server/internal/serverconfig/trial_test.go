@@ -30,14 +30,14 @@ func TestATrialRevertsByItselfUnlessConfirmed(t *testing.T) {
 	if err != nil || !ok || pending.Version != trial || pending.Parent != before || pending.ExpiresAt.IsZero() {
 		t.Fatalf("trial = %+v %v %v, want v%d on v%d with an end", pending, ok, err, trial, before)
 	}
-	// Nothing else is saved while it runs, whoever saves.
-	for _, source := range []string{"console", "cli", "request"} {
-		if _, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"smtp.host": "smtp.example.net"}, Source: source, Actor: cli}); !errors.Is(err, serverconfig.ErrTrialPending) {
+	// The console and approved requests wait for the trial.
+	for _, source := range []string{"console", "request"} {
+		if _, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"smtp.host": "smtp.example.net"}, Source: source, Actor: operator}); !errors.Is(err, serverconfig.ErrTrialPending) {
 			t.Fatalf("%s save during a trial: %v, want ErrTrialPending", source, err)
 		}
 	}
 	if _, err := store.Restore(ctx, before, 0, operator, ""); !errors.Is(err, serverconfig.ErrTrialPending) {
-		t.Fatalf("restore during a trial: %v, want ErrTrialPending", err)
+		t.Fatalf("restore from the console during a trial: %v, want ErrTrialPending", err)
 	}
 	// Not yet expired: nothing happens.
 	if reverted, err := store.RevertExpiredTrial(ctx); err != nil || reverted != 0 {
@@ -104,5 +104,60 @@ func TestATrialConfirmedStaysAndARevertedOneComesBack(t *testing.T) {
 	loaded, _ = store.Current(ctx)
 	if loaded.Version != back || loaded.Getenv("HELP_CENTER_DOMAIN") != "help.example.com" {
 		t.Fatalf("after revert v%d %q, want v%d with the confirmed domain", loaded.Version, loaded.Getenv("HELP_CENTER_DOMAIN"), back)
+	}
+}
+
+// D12: the shell is always the way back. A save, reset or restore from the CLI during a trial ends it (the
+// audit says so) instead of waiting, and nothing reverts afterwards.
+func TestTheShellEndsATrialInsteadOfWaiting(t *testing.T) {
+	ctx := context.Background()
+	pool := databasetest.Pool(t)
+	store := newStore(t, pool, ring(t, testRing), nil)
+	before, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"trusted_proxies": "10.0.0.0/8"}, Source: "cli", Actor: cli})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trial, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"trusted_proxies": "192.168.0.0/16"}, Source: "console", Actor: operator, Trial: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reset, err := store.Save(ctx, serverconfig.Change{Unset: []string{"trusted_proxies"}, Source: "cli", Actor: cli})
+	if err != nil {
+		t.Fatalf("collie config reset during a trial: %v", err)
+	}
+	if _, ok, _ := store.Trial(ctx); ok {
+		t.Fatal("the trial still runs after the shell's reset")
+	}
+	if _, err := pool.Exec(ctx, `UPDATE server_config_versions SET trial_expires_at = now() - interval '1 second' WHERE id=$1`, trial); err != nil {
+		t.Fatal(err)
+	}
+	if reverted, err := store.RevertExpiredTrial(ctx); err != nil || reverted != 0 {
+		t.Fatalf("a superseded trial reverted later: %d %v", reverted, err)
+	}
+	loaded, _ := store.Current(ctx)
+	if loaded.Version != reset || loaded.Getenv("TRUSTED_PROXIES") != "" {
+		t.Fatalf("after reset v%d proxies %q, want v%d with none", loaded.Version, loaded.Getenv("TRUSTED_PROXIES"), reset)
+	}
+	entries, _ := store.AuditLog(ctx, "", "", time.Time{}, 5)
+	found := false
+	for _, entry := range entries {
+		found = found || (entry.Action == "trial.superseded" && entry.VersionID != nil && *entry.VersionID == trial)
+	}
+	if !found {
+		t.Fatalf("no trial.superseded line for v%d: %+v", trial, entries)
+	}
+	// A restore from the shell ends a trial too.
+	second, err := store.Save(ctx, serverconfig.Change{Set: map[string]string{"trusted_proxies": "172.16.0.0/12"}, Source: "console", Actor: operator, Trial: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Restore(ctx, before, 0, cli, ""); err != nil {
+		t.Fatalf("collie config restore during a trial: %v", err)
+	}
+	history, _ := store.History(ctx, 5)
+	for _, version := range history {
+		if version.ID == second && version.Status != "reverted" {
+			t.Fatalf("the trial v%d restored over is %q, want reverted", second, version.Status)
+		}
 	}
 }

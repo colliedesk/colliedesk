@@ -317,9 +317,12 @@ func TestProductsAreAddOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The new product is sold; a subscription to the old one keeps its plan.
-	if loaded.Getenv("POLAR_PRODUCT_TEAM_MONTHLY") != "new" || loaded.Retired()["old"] != "team" {
-		t.Fatalf("on sale %q, retired %v", loaded.Getenv("POLAR_PRODUCT_TEAM_MONTHLY"), loaded.Retired())
+	// The new product is sold (once billing is on); a subscription to the old one keeps its plan.
+	billing := func(loaded serverconfig.Loaded) serverconfig.Snapshot {
+		return loaded.Snapshot.With(map[string]string{"polar.access_token": "tok"}, nil)
+	}
+	if billing(loaded).Getenv("POLAR_PRODUCT_TEAM_MONTHLY") != "new" || loaded.Retired()["old"] != "team" {
+		t.Fatalf("on sale %q, retired %v", billing(loaded).Getenv("POLAR_PRODUCT_TEAM_MONTHLY"), loaded.Retired())
 	}
 	for _, sql := range []string{`DELETE FROM polar_products WHERE product_id='old'`, `UPDATE polar_products SET plan='solo' WHERE product_id='old'`} {
 		if _, err := pool.Exec(ctx, sql); err == nil {
@@ -333,7 +336,7 @@ func TestProductsAreAddOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	loaded, _ = store.Current(ctx)
-	if loaded.Getenv("POLAR_PRODUCT_TEAM_MONTHLY") != "old" {
+	if billing(loaded).Getenv("POLAR_PRODUCT_TEAM_MONTHLY") != "old" {
 		t.Fatal("putting the old product back on sale did not take the new one off")
 	}
 }

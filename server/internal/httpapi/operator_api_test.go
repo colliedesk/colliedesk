@@ -32,6 +32,13 @@ type operatorEnv struct {
 
 func newOperatorEnv(t *testing.T, requireTOTP bool) *operatorEnv {
 	t.Helper()
+	// serve builds with every parser (cmd/collie buildConfig); the email parser is enough here.
+	return newOperatorEnvChecking(t, requireTOTP, func(snap serverconfig.Snapshot) error { _, err := email.ConfigFromEnv(snap.Getenv); return err })
+}
+
+// newOperatorEnvChecking is newOperatorEnv with the check a change must pass before it is saved.
+func newOperatorEnvChecking(t *testing.T, requireTOTP bool, check func(serverconfig.Snapshot) error) *operatorEnv {
+	t.Helper()
 	keys, err := tokenseal.ParseKeys(operatorRing)
 	if err != nil {
 		t.Fatal(err)
@@ -42,8 +49,7 @@ func newOperatorEnv(t *testing.T, requireTOTP bool) *operatorEnv {
 		carry := httpapi.NewCarry(*config)
 		carry.Hot = hot
 		config.Carry = carry
-		// serve builds with every parser (cmd/collie buildConfig); the email parser is enough here.
-		config.CheckConfig = func(snap serverconfig.Snapshot) error { _, err := email.ConfigFromEnv(snap.Getenv); return err }
+		config.CheckConfig = check
 	})
 	bearer := createSession(t, api, workspaces, "Operator Realm", "admin@realm.example.com")
 	return &operatorEnv{t: t, api: api, pool: pool, hot: hot, workspace: bearer,

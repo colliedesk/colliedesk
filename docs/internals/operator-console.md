@@ -124,8 +124,9 @@ wrong phrase leaves it waiting).
 
 A trial (D12) is a version with `status = 'trial'` and `trial_expires_at`. Only a console or approved
 change of a trial key starts one; the CLI and imports never do (the installer's `collie config set
-trusted_proxies=…` must not revert itself). While one runs every save but an import at start is refused
-(`ErrTrialPending`). Every process calls `RevertExpiredTrial` on each reload and before it serves; the
+trusted_proxies=…` must not revert itself). While one runs the console and approved requests are refused
+(`ErrTrialPending`); the shell (`set`, `reset`, `apply`, `restore`) and an import at start end it instead
+(`trial.superseded`), because the shell is the way back when a trial locks operators out. Every process calls `RevertExpiredTrial` on each reload and before it serves; the
 store's advisory lock lets exactly one write the `trial-auto-revert` version. The evidence the band shows
 (distinct client addresses, cloud sign-ins) is counted in memory per process, only while a trial runs.
 

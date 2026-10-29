@@ -319,7 +319,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Checks a change without saving it: whether it builds (`errors` per key), and with `test` a live check: `smtp` sends a test email to the operator's own address through the relay of the change. Nothing is saved. A repeat with the same Idempotency-Key checks again (nothing is stored). */
+        /** @description Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address through the relay of the change; `polar` asks Polar about the Team and Founding products with the change's token; `jwks` fetches the cloud sign-in keys. Nothing is saved. A repeat with the same Idempotency-Key checks again (nothing is stored). */
         post: operations["checkOperatorConfig"];
         delete?: never;
         options?: never;
@@ -8091,7 +8091,7 @@ export interface operations {
                         [key: string]: string | null;
                     };
                     /** @enum {string} */
-                    test?: "smtp";
+                    test?: "smtp" | "polar" | "jwks";
                 };
             };
         };

@@ -103,12 +103,17 @@ Run locally: `docker compose --profile test up -d postgres mailpit`, then
 Colliedesk Cloud (`app.colliedesk.com`) is production. Every sign-up there counts as a customer
 trial in the funnel and emails the team. Test locally or with the e2e suite first.
 
-- **Sign up on Cloud only with a team address.** The server reads `INTERNAL_SIGNUP_EMAILS`
+- **Sign up on Cloud only with a team address.** The server reads the setting `internal_signup.emails`
   (`@colliedesk.com`, `@hclabs.co`, `@hclabs.colliedesk.com` on Cloud) and sends `trial_started` with `internal: true` for a
-  match, and for any sign-up from a network in `INTERNAL_SIGNUP_NETWORKS` (the team's agent hosts).
+  match, and for any sign-up from a network in `internal_signup.networks` (the team's agent hosts).
   Never use a personal mailbox: it is counted as a customer. If you must, add that exact
-  address to `INTERNAL_SIGNUP_EMAILS` first (HC Labs `infra` repo,
-  `hosts/collie-01/colliedesk/compose.yaml`) and wait for the deploy.
+  address to `internal_signup.emails` first: an operator does it in the operator console (Sign-ups) or
+  with `collie config set internal_signup.emails=…` on the server; it applies at once, no deploy. The
+  settings live in the server's database (docs/self-host/operator-console.md); the variables
+  `INTERNAL_SIGNUP_EMAILS` / `_NETWORKS` in the HC Labs `infra` compose file were imported once and are
+  ignored once they differ from the database. Until Cloud runs a release with the operator console
+  (`version` in `GET /api/v1/config`), edit `INTERNAL_SIGNUP_EMAILS` in the `infra` repo
+  (`hosts/collie-01/colliedesk/compose.yaml`) and wait for the deploy, as before.
 - **Name a test workspace for what it is** (`e2e-…`, `test-…`), so a person reading the database
   sees it at once.
 - **Every count of trials, activation or payments leaves out internal sign-ups.** Only
@@ -117,7 +122,7 @@ trial in the funnel and emails the team. Test locally or with the e2e suite firs
   workspace id from an internal `trial_started`. A new query, alert or report that skips this
   inflates the funnel.
 - `TestInternalSignupIsMarkedOnTrialStarted` guards the flag. Never weaken it; a new place that
-  starts a trial sets the flag through `Config.InternalSignups` too.
+  starts a trial sets the flag through the API's hot settings (`InternalSignups`) too.
 
 ## Releases
 

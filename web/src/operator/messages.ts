@@ -162,6 +162,8 @@ export const m = {
   sourceOther: (source: string, at: string) => `${source} · ${at}`,
   sendTestEmail: (to: string) => `Send a test email to ${to}`,
   checkSettings: 'Check these settings',
+  tryPolar: 'Ask Polar about the products',
+  tryJWKS: 'Fetch the sign-in keys',
   checking: 'Checking…',
   checkOk: 'These settings build. Nothing was saved.',
   on: 'On',

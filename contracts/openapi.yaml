@@ -523,9 +523,10 @@ paths:
       security: [{operatorCookie: []}, {bearerAuth: []}]
       x-permission: operator
       description: >-
-        Checks a change without saving it: whether it builds (`errors` per key), and with `test` a live check:
-        `smtp` sends a test email to the operator's own address through the relay of the change. Nothing is
-        saved. A repeat with the same Idempotency-Key checks again (nothing is stored).
+        Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask
+        (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address
+        through the relay of the change; `polar` asks Polar about the Team and Founding products with the
+        change's token; `jwks` fetches the cloud sign-in keys. Nothing is saved. A repeat with the same Idempotency-Key checks again (nothing is stored).
       parameters:
         - {$ref: '#/components/parameters/CreateIdempotencyKey'}
       requestBody:
@@ -538,7 +539,7 @@ paths:
                 set: {type: object, additionalProperties: {type: string}}
                 unset: {type: array, items: {type: string}}
                 secrets: {type: object, additionalProperties: {type: [string, 'null']}}
-                test: {type: string, enum: [smtp]}
+                test: {type: string, enum: [smtp, polar, jwks]}
       responses:
         '200':
           description: The result of the checks

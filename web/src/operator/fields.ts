@@ -13,7 +13,7 @@ export interface Section {
   title: string;
   lead: string;
   keys: string[];
-  test?: 'smtp';
+  test?: 'smtp' | 'polar' | 'jwks';
 }
 
 export const fields: Record<string, FieldInfo> = {
@@ -86,7 +86,7 @@ export const sections: Record<string, Section[]> = {
     { title: 'GitHub App', lead: 'On when all six are set. Autofix works through it.', keys: ['github.app_id', 'github.slug', 'github.client_id', 'github.private_key', 'github.client_secret', 'github.webhook_secret'] },
   ],
   billing: [
-    { title: 'Polar', lead: 'Billing turns the server into the hosted cloud: trials, locks and plans.', keys: ['polar.access_token', 'polar.webhook_secret', 'polar.api_url', 'billing.alert_email'] },
+    { title: 'Polar', lead: 'Billing turns the server into the hosted cloud: trials, locks and plans.', keys: ['polar.access_token', 'polar.webhook_secret', 'polar.api_url', 'billing.alert_email'], test: 'polar' },
     { title: 'Retention', lead: 'What happens to workspaces that stopped paying a year ago.', keys: ['retention.delete', 'retention.max_deletions_per_day'] },
   ],
   signups: [
@@ -94,7 +94,7 @@ export const sections: Record<string, Section[]> = {
   ],
   security: [
     { title: 'Network', lead: 'Changing these is tried for 10 minutes before it stays.', keys: ['trusted_proxies', 'help_center.domain', 'ai.allow_private_base_urls'] },
-    { title: 'Cloud sign-in', lead: 'Who may sign in to the hosted cloud.', keys: ['cloud_auth.issuer', 'cloud_auth.jwks_url', 'cloud_auth.authorized_parties', 'cloud_auth.email_claim', 'clerk.publishable_key'] },
+    { title: 'Cloud sign-in', lead: 'Who may sign in to the hosted cloud.', keys: ['cloud_auth.issuer', 'cloud_auth.jwks_url', 'cloud_auth.authorized_parties', 'cloud_auth.email_claim', 'clerk.publishable_key'], test: 'jwks' },
     { title: 'Operator sign-in', lead: 'Turning it off is done on the server only.', keys: ['operator.require_totp'] },
   ],
   limits: [

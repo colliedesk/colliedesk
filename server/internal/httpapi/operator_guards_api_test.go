@@ -1,12 +1,17 @@
 package httpapi_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/polar"
+	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 )
 
 type guardAnswer struct {
@@ -208,5 +213,114 @@ func TestATokenCannotTypeTheApproversPhrase(t *testing.T) {
 	}
 	if code, body := approve(map[string]any{"confirm": map[string]any{"email.from_policy": "any"}}); code != http.StatusOK || !strings.Contains(body, `"status":"approved"`) {
 		t.Fatalf("approve with the phrase: %d %s", code, body)
+	}
+}
+
+// Billing turns on in the console the way an operator does it: the products first, then the token and the
+// webhook secret with the phrase, checked by the real billing parser; off again asks its own phrase.
+func TestBillingTurnsOnAfterItsProductsAndOffAgain(t *testing.T) {
+	e := newOperatorEnvChecking(t, true, func(snap serverconfig.Snapshot) error { _, err := polar.ConfigFromEnv(snap.Getenv); return err })
+	cookie, secret := e.enrolled("ops@example.com")
+	e.staleCode()
+	for i, product := range []map[string]any{{"product_id": "prod_tm", "plan": "team", "period": "monthly"},
+		{"product_id": "prod_ty", "plan": "team", "period": "yearly"}, {"product_id": "prod_f", "plan": "founding", "period": "single"}} {
+		if i == 0 {
+			product["reauth_code"] = nextCode(secret)
+		}
+		if added := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/billing/products", product, cookie); added.Code != http.StatusCreated {
+			t.Fatalf("add %v: %d %s", product["product_id"], added.Code, added.Body.String())
+		}
+	}
+	// Listed products alone are not billing: every other change still saves.
+	base := e.version(cookie)
+	if other := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"internal_signup.emails": "@example.com"}}); other.Code != http.StatusOK {
+		t.Fatalf("a change with products listed and billing off: %d %s", other.Code, other.Body.String())
+	}
+	base = e.version(cookie)
+	on := map[string]any{"base_version": base, "secrets": map[string]any{"polar.access_token": "polar_oat_test", "polar.webhook_secret": "whsec_test"}}
+	if half := e.patch(cookie, map[string]any{"base_version": base, "secrets": map[string]any{"polar.access_token": "polar_oat_test"}, "confirm": map[string]any{"polar.access_token": "billing on"}}); opsErrorCode(half) != "config_invalid" {
+		t.Fatalf("a token without its webhook secret: %d %s", half.Code, half.Body.String())
+	}
+	if untyped := e.patch(cookie, on); opsErrorCode(untyped) != "confirm_mismatch" {
+		t.Fatalf("billing on untyped: %s", untyped.Body.String())
+	}
+	on["confirm"] = map[string]any{"polar.access_token": "billing on"}
+	if saved := e.patch(cookie, on); saved.Code != http.StatusOK {
+		t.Fatalf("billing on: %d %s", saved.Code, saved.Body.String())
+	}
+	base = e.version(cookie)
+	// Rotating the token while billing stays on asks no phrase.
+	if rotated := e.patch(cookie, map[string]any{"base_version": base, "secrets": map[string]any{"polar.access_token": "polar_oat_next"}}); rotated.Code != http.StatusOK {
+		t.Fatalf("rotating the token: %d %s", rotated.Code, rotated.Body.String())
+	}
+	base = e.version(cookie)
+	off := map[string]any{"base_version": base, "unset": []string{"polar.access_token", "polar.webhook_secret"}}
+	if untyped := e.patch(cookie, off); opsErrorCode(untyped) != "confirm_mismatch" || !strings.Contains(untyped.Body.String(), `"phrase":"billing off"`) {
+		t.Fatalf("billing off untyped: %s", untyped.Body.String())
+	}
+	off["confirm"] = map[string]any{"polar.access_token": "billing off"}
+	if saved := e.patch(cookie, off); saved.Code != http.StatusOK {
+		t.Fatalf("billing off: %d %s", saved.Code, saved.Body.String())
+	}
+}
+
+// Turning deletion on with billing on shows how many workspaces are due and asks to type that number.
+func TestRetentionOnAsksForTheNumberDue(t *testing.T) {
+	e := newOperatorEnv(t, true)
+	cookie, secret := e.enrolled("ops@example.com")
+	e.staleCode()
+	base := e.version(cookie)
+	if saved := e.patch(cookie, map[string]any{"base_version": base, "secrets": map[string]any{"polar.access_token": "polar_oat_test"},
+		"confirm": map[string]any{"polar.access_token": "billing on"}, "reauth_code": nextCode(secret)}); saved.Code != http.StatusOK {
+		t.Fatalf("billing on: %d %s", saved.Code, saved.Body.String())
+	}
+	base = e.version(cookie)
+	asked := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"retention.delete": "on"}})
+	var answer guardAnswer
+	_ = json.Unmarshal(asked.Body.Bytes(), &answer)
+	if answer.Error.Code != "confirm_mismatch" || answer.Error.Guards[0].Phrase != "0" || !strings.Contains(answer.Error.Guards[0].Preview, "0 workspaces locked for 12 months are due now") {
+		t.Fatalf("retention on: %s", asked.Body.String())
+	}
+	if saved := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"retention.delete": "on"}, "confirm": map[string]any{"retention.delete": "0"}}); saved.Code != http.StatusOK {
+		t.Fatalf("retention on typed: %d %s", saved.Code, saved.Body.String())
+	}
+	// Off again is at once and asks nothing.
+	base = e.version(cookie)
+	if off := e.patch(cookie, map[string]any{"base_version": base, "set": map[string]any{"retention.delete": "off"}}); off.Code != http.StatusOK {
+		t.Fatalf("retention off: %d %s", off.Code, off.Body.String())
+	}
+}
+
+// Before cloud sign-in changes, the console fetches the JWKS of the change once; nothing is saved.
+func TestCheckFetchesTheSignInKeysOfAChange(t *testing.T) {
+	e := newOperatorEnv(t, false)
+	cookie := e.signIn("ops@example.com")
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwks := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(response).Encode(map[string]any{"keys": []map[string]string{jwk("key-1", &key.PublicKey)}})
+	}))
+	defer jwks.Close()
+	set := map[string]any{"cloud_auth.issuer": "https://identity.example.com", "cloud_auth.jwks_url": jwks.URL,
+		"cloud_auth.authorized_parties": testOrigin, "clerk.publishable_key": "pk_test_x"}
+	check := operatorRequest(t, e.api, http.MethodPost, "/api/v1/operator/config/check", map[string]any{"set": set, "test": "jwks"}, cookie)
+	var answer struct {
+		Test struct {
+			OK      bool
+			Message string
+		}
+		Guards []struct {
+			Key, Phrase string
+			Trial       bool
+		}
+	}
+	decode(t, check, &answer)
+	if !answer.Test.OK || !strings.Contains(answer.Test.Message, "1 keys") || len(answer.Guards) != 1 || answer.Guards[0].Phrase != "https://identity.example.com" || !answer.Guards[0].Trial {
+		t.Fatalf("check: %s", check.Body.String())
+	}
+	if e.version(cookie) != 0 {
+		t.Fatal("a check saved something")
 	}
 }
