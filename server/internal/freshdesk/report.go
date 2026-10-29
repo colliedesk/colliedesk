@@ -69,6 +69,16 @@ type Verification struct {
 // with every ticket found outside the archive.
 const CauseArchiveRefused = "archive_refused"
 
+// UnverifiedCause is CauseArchiveRefused when the report is UNVERIFIED only because the plan refuses the
+// archive API: every other total Freshdesk reports was confirmed. Empty otherwise.
+func (r *Report) UnverifiedCause() string {
+	v := r.Verification
+	if r.Status == StatusUnverified && v.Tickets.Cause == CauseArchiveRefused && v.Contacts.Verified && v.SavedReplies.Verified && v.KnowledgeBase.Verified {
+		return CauseArchiveRefused
+	}
+	return ""
+}
+
 type Verifications struct {
 	Tickets       Verification `json:"tickets"`
 	Contacts      Verification `json:"contacts"`

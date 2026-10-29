@@ -69,13 +69,13 @@ func (r *run) anchored(ctx context.Context) (bool, error) {
 }
 
 // markResults records the finished full run for the results baseline.
-func (r *run) markResults(ctx context.Context, status string) error {
+func (r *run) markResults(ctx context.Context, status, cause string) error {
 	tx, err := r.begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	if err := results.MarkImportFinished(ctx, tx, r.workspaceID, r.ledger.source, status, r.now()); err != nil {
+	if err := results.MarkImportFinished(ctx, tx, r.workspaceID, r.ledger.source, status, cause, r.now()); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
