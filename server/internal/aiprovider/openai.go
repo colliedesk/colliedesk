@@ -1,9 +1,11 @@
 package aiprovider
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -80,14 +82,16 @@ type openAIReply struct {
 	} `json:"usage"`
 }
 
-func (p *openAIProvider) Complete(ctx context.Context, request Request) (Response, error) {
-	if err := request.Validate(); err != nil {
-		return Response{}, err
+// body builds the chat completion request.
+func (p *openAIProvider) body(request Request, stream bool) map[string]any {
+	body := map[string]any{"model": request.Model, "stream": stream}
+	if stream {
+		// The last chunk then carries the usage; without it a streamed call is not metered.
+		body["stream_options"] = map[string]any{"include_usage": true}
 	}
-	body := map[string]any{"model": request.Model, "stream": false}
 	messages := make([]openAIMessage, 0, len(request.Messages)+1)
-	if request.System != "" {
-		messages = append(messages, openAIMessage{Role: "system", Content: request.System})
+	if system := request.SystemText(); system != "" {
+		messages = append(messages, openAIMessage{Role: "system", Content: system})
 	}
 	for _, message := range request.Messages {
 		messages = append(messages, openAIMessage{Role: string(message.Role), Content: message.Text})
@@ -112,22 +116,50 @@ func (p *openAIProvider) Complete(ctx context.Context, request Request) (Respons
 			body["provider"] = map[string]any{"require_parameters": true}
 		}
 	}
+	return body
+}
+
+// send posts a body and returns the reply when its status is a success; the caller closes it.
+func (p *openAIProvider) send(ctx context.Context, body map[string]any, accept string) (*http.Response, error) {
 	encoded, err := json.Marshal(body)
 	if err != nil {
-		return Response{}, err
+		return nil, err
 	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, bytes.NewReader(encoded))
 	if err != nil {
-		return Response{}, &Error{Code: ErrorBadRequest}
+		return nil, &Error{Code: ErrorBadRequest}
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
-	httpRequest.Header.Set("Accept", "application/json")
+	httpRequest.Header.Set("Accept", accept)
 	if p.apiKey != "" {
 		httpRequest.Header.Set("Authorization", "Bearer "+p.apiKey)
 	}
 	reply, err := p.http.Do(httpRequest)
 	if err != nil {
-		return Response{}, transportError(ctx, err)
+		return nil, transportError(ctx, err)
+	}
+	if reply.StatusCode < 200 || reply.StatusCode > 299 {
+		defer reply.Body.Close()
+		data, _ := io.ReadAll(io.LimitReader(reply.Body, maxResponseBytes))
+		providerErr := statusError(reply.StatusCode, reply.Header, reply.Header.Get("X-Request-Id"))
+		if reply.StatusCode == http.StatusTooManyRequests && openAIQuotaExhausted(data) {
+			providerErr.Code, providerErr.RetryAfter = ErrorQuotaExhausted, 0
+		}
+		return nil, providerErr
+	}
+	return reply, nil
+}
+
+func (p *openAIProvider) Complete(ctx context.Context, request Request) (Response, error) {
+	if err := request.Validate(); err != nil {
+		return Response{}, err
+	}
+	if request.Warm {
+		return Response{}, errors.New("aiprovider: this provider keeps no prompt cache to warm")
+	}
+	reply, err := p.send(ctx, p.body(request, false), "application/json")
+	if err != nil {
+		return Response{}, err
 	}
 	defer reply.Body.Close()
 	requestID := reply.Header.Get("X-Request-Id")
@@ -135,19 +167,112 @@ func (p *openAIProvider) Complete(ctx context.Context, request Request) (Respons
 	if err != nil {
 		return Response{}, transportError(ctx, err)
 	}
-	if reply.StatusCode < 200 || reply.StatusCode > 299 {
-		providerErr := statusError(reply.StatusCode, reply.Header, requestID)
-		if reply.StatusCode == http.StatusTooManyRequests && openAIQuotaExhausted(data) {
-			providerErr.Code, providerErr.RetryAfter = ErrorQuotaExhausted, 0
-		}
-		return Response{}, providerErr
-	}
 	if len(data) > maxResponseBytes {
 		return Response{}, &Error{Code: ErrorInvalidResponse, Status: reply.StatusCode, RequestID: requestID}
 	}
 	var parsed openAIReply
 	if err := json.Unmarshal(data, &parsed); err != nil || len(parsed.Choices) == 0 {
 		return Response{}, &Error{Code: ErrorInvalidResponse, Status: reply.StatusCode, RequestID: requestID}
+	}
+	return openAIResponse(request, parsed, requestID), nil
+}
+
+// openAIChunk is one event of a streamed chat completion.
+type openAIChunk struct {
+	ID      string `json:"id"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Delta struct {
+			Content *string `json:"content"`
+			Refusal *string `json:"refusal"`
+		} `json:"delta"`
+		FinishReason *string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *struct {
+		PromptTokens        int64 `json:"prompt_tokens"`
+		CompletionTokens    int64 `json:"completion_tokens"`
+		PromptTokensDetails *struct {
+			CachedTokens int64 `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
+	} `json:"usage"`
+}
+
+// Stream reads server-sent events ("data: {chunk}" lines, then "data: [DONE]") into the same reply
+// Complete reads.
+func (p *openAIProvider) Stream(ctx context.Context, request Request, onText func(text string)) (Response, error) {
+	if err := request.Validate(); err != nil {
+		return Response{}, err
+	}
+	if request.Warm {
+		return Response{}, errors.New("aiprovider: a request that warms the cache is never streamed")
+	}
+	reply, err := p.send(ctx, p.body(request, true), "text/event-stream")
+	if err != nil {
+		return Response{}, err
+	}
+	defer reply.Body.Close()
+	requestID := reply.Header.Get("X-Request-Id")
+	var parsed openAIReply
+	var text, refusal strings.Builder
+	finish := ""
+	read := 0
+	lines := bufio.NewScanner(reply.Body)
+	lines.Buffer(make([]byte, 64<<10), 1<<20)
+	done := false
+	for !done && lines.Scan() {
+		line := lines.Text()
+		read += len(line)
+		if read > maxResponseBytes {
+			return openAIResponse(request, parsed, requestID), &Error{Code: ErrorInvalidResponse, Status: reply.StatusCode, RequestID: requestID}
+		}
+		data, ok := strings.CutPrefix(line, "data:")
+		if !ok {
+			continue
+		}
+		data = strings.TrimSpace(data)
+		if data == "[DONE]" {
+			done = true
+			break
+		}
+		var chunk openAIChunk
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			return Response{}, &Error{Code: ErrorInvalidResponse, Status: reply.StatusCode, RequestID: requestID}
+		}
+		if parsed.ID == "" {
+			parsed.ID = chunk.ID
+		}
+		if chunk.Model != "" {
+			parsed.Model = chunk.Model
+		}
+		if chunk.Usage != nil {
+			parsed.Usage = chunk.Usage
+		}
+		for _, choice := range chunk.Choices {
+			if choice.Delta.Content != nil && *choice.Delta.Content != "" {
+				text.WriteString(*choice.Delta.Content)
+				onText(*choice.Delta.Content)
+			}
+			if choice.Delta.Refusal != nil {
+				refusal.WriteString(*choice.Delta.Refusal)
+			}
+			if choice.FinishReason != nil {
+				finish = *choice.FinishReason
+			}
+		}
+	}
+	choice := openAIChoice{FinishReason: finish}
+	content, refused := text.String(), refusal.String()
+	choice.Message.Content = &content
+	if refused != "" {
+		choice.Message.Refusal = &refused
+	}
+	parsed.Choices = []openAIChoice{choice}
+	if err := lines.Err(); err != nil {
+		return openAIResponse(request, parsed, requestID), transportError(ctx, err)
+	}
+	if !done && finish == "" {
+		// The connection closed before the answer ended.
+		return openAIResponse(request, parsed, requestID), &Error{Code: ErrorUnavailable, Status: reply.StatusCode, RequestID: requestID}
 	}
 	return openAIResponse(request, parsed, requestID), nil
 }

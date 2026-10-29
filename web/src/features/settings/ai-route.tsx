@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ConflictError, InvalidRequestError } from '../../api/client';
 import { aiApi } from '../../api/ai';
@@ -7,6 +8,7 @@ import { aiMessages as m } from './ai-messages';
 import { AIPage } from './ai-page';
 import type { FieldError } from './ai-page';
 import { useCreateAction } from '../../api/use-create';
+import { AIChatSettingsRoute } from './ai-chat-route';
 
 const consentKey = 'colliedesk.ai-consent-dismissed';
 
@@ -45,7 +47,21 @@ export function refusal(error: unknown): FieldError {
 // The banner shows on a server with a provider until a feature was set once or someone chose "Not now".
 const neverSet = (settings?: AISettings) => Boolean(settings?.server) && Boolean(settings?.slots.every((slot) => !slot.enabled && !slot.updated_at));
 
-export function AIRoute() {
+// AIRoute is Settings → Built-in AI and a chat's transcript below it: path is what follows /settings/ai
+// ("chats/<id>", or "conversations/<id>/chat": the chat that handed off to a conversation).
+export function AIRoute({ path = '' }: { path?: string } = {}) {
+  const navigate = useNavigate();
+  const go = useCallback((href: string) => void navigate({ href }), [navigate]);
+  // tab=chat opens the AI chat tab, where a transcript goes back to.
+  const tab = new URLSearchParams(window.location.search).get('tab') === 'chat' ? 'chat' : undefined;
+  const chat = /^chats\/([^/]+)$/.exec(path)?.[1];
+  if (chat) return <AIChatSettingsRoute id={decodeURIComponent(chat)} navigate={go} />;
+  const conversation = /^conversations\/([^/]+)\/chat$/.exec(path)?.[1];
+  if (conversation) return <AIChatSettingsRoute conversation={decodeURIComponent(conversation)} navigate={go} />;
+  return <AISettingsRoute tab={tab} onOpenChat={(id) => go(`/settings/ai/chats/${encodeURIComponent(id)}`)} />;
+}
+
+function AISettingsRoute({ tab, onOpenChat }: { tab?: 'chat'; onOpenChat: (id: string) => void }) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const settings = useQuery({ queryKey: ['ai-settings'], queryFn: aiApi.settings, enabled: Boolean(me.data) });
@@ -109,5 +125,13 @@ export function AIRoute() {
     onSetKey={(id, key) => run(() => aiApi.setKey(id, key))}
     onRemove={(id) => run(() => aiApi.remove(id))}
     onSetAutomatic={(perDay, perMinute, draftPerDay) => run(() => aiApi.setAutomatic(perDay, perMinute, draftPerDay))}
-    usage={usage.data} usageFailed={usage.isError} onUsageMonth={setUsageMonth} />;
+    usage={usage.data} usageFailed={usage.isError} onUsageMonth={setUsageMonth} initialTab={tab} onOpenChat={onOpenChat}
+    onSetChatCap={async (cap) => {
+      const chat = settings.data?.slots.find((item) => item.slot === 'chat');
+      if (!chat) throw new Error('no chat feature');
+      // The limit is set with the feature as it is: where it runs, the model, effort and on or off.
+      await aiApi.setSlot('chat', { source: chat.source, ...(chat.provider_id ? { provider_id: chat.provider_id } : {}), ...(chat.model ? { model: chat.model } : {}),
+        effort: chat.effort, enabled: chat.enabled, monthly_cap_micro_usd: cap });
+      await refresh();
+    }} />;
 }

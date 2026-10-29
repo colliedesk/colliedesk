@@ -1,11 +1,14 @@
 # AI providers and features
 
-Colliedesk can use a language model to suggest how to sort a new ticket (tags, priority, assignee)
-and to draft a reply an agent edits and sends. A model only suggests and drafts: a person accepts each
+Colliedesk can use a language model to suggest how to sort a new ticket (tags, priority, assignee),
+to draft a reply an agent edits and sends, and to answer customers on your help center with the
+[AI chat](ai-chat.md). In a conversation a model only suggests and drafts: a person accepts each
 suggestion, unless an admin turns on [Apply suggestions automatically](#apply-suggestions-automatically),
-which lets the picked parts (tags, priority, assignee) apply by themselves and can be undone. Nothing
-reaches a customer until someone presses **Send**. **Settings → Built-in AI** decides
-which model each feature uses and records who agreed to send data to it.
+which lets the picked parts (tags, priority, assignee) apply by themselves and can be undone, and a
+draft never reaches a customer until someone presses **Send**. The AI chat is the one feature that
+answers customers by itself: only once an admin turns it on, and only from the help center's public
+articles. **Settings → Built-in AI** decides which model each feature uses and records who agreed to
+send data to it.
 
 ## Every feature starts off
 
@@ -205,6 +208,16 @@ undone in the last 30 days. Restoring a workspace from a backup turns the automa
    day of the next month (UTC), and Settings says so; your own providers keep working. **Settings → Built-in AI →
    Usage** shows what is used. A call that starts sets aside the most it can cost, so calls running at
    the same time never spend more than is left; the last few cents of a month can stay unused.
+
+3. **AI chat.** The help center's [AI chat](ai-chat.md) has limits of its own and never uses the
+   included AI above, so customers asking questions cannot stop your team's drafts and suggestions.
+
+## AI chat
+
+**AI chat** answers your customers on the help center from your published articles. It is a feature
+of this page like the others (provider, model, on or off), and it needs a [Help chat](help-chat.md)
+channel too. Its use, its chats and their transcripts are on the **AI chat** tab; see
+[AI chat](ai-chat.md).
 
 ## History and usage
 

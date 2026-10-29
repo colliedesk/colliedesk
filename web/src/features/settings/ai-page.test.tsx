@@ -10,7 +10,7 @@ const providerID = '11111111-1111-4111-8111-111111111111';
 
 function slot(change: Partial<AISlot> = {}): AISlot {
   return { slot: 'triage', source: 'none', provider_id: null, model: null, effort: 'low', enabled: false, automatic: false, auto_parts: [], active: false, off_reason: null,
-    consented_by: null, consented_at: null, updated_by: null, updated_at: null, ...change };
+    consented_by: null, consented_at: null, updated_by: null, updated_at: null, monthly_cap_micro_usd: null, ...change };
 }
 
 function provider(change: Partial<AIProvider> = {}): AIProvider {
@@ -438,6 +438,13 @@ test('where the page says a person accepts each suggestion, it names the admin e
   for (const claim of [/A person accepts, edits and sends/, /An agent accepts or dismisses each one/]) {
     expect(screen.getAllByText(claim)[0]).toHaveTextContent(/unless an admin turns on Apply suggestions automatically/);
   }
+});
+
+test('the page never says nothing reaches a customer: the AI chat answers customers once an admin turns it on', () => {
+  page();
+  const intro = screen.getByRole('heading', { name: 'Built-in AI', level: 1 }).parentElement!;
+  expect(intro).not.toHaveTextContent(/nothing reaches a customer/i);
+  expect(intro).toHaveTextContent(/AI chat answers customers on your help center from its public articles, once an admin turns it on/);
 });
 
 test('the data notice says what a draft keeps, for how long, and that it is exported', () => {

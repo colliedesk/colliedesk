@@ -57,9 +57,14 @@ type Config struct {
 	Build func(Spec) (aiprovider.Provider, error)
 	// CheckTimeout bounds one check; zero is 20 seconds.
 	CheckTimeout time.Duration
+	// ChatAnswerTimeout bounds one chat answer; zero is 60 seconds.
+	ChatAnswerTimeout time.Duration
 	// PlanLimits is true on the hosted cloud, where a trial and a lock apply: the allowance reads
 	// the plan, and the worker cancels the tasks of a locked workspace.
 	PlanLimits bool
+	// ChatGate counts the chat answers streaming in this process; the services built for each new
+	// configuration share it (NewChatGate). Nil makes one for this service alone.
+	ChatGate *ChatGate
 }
 
 // Service reads and changes a workspace's AI settings. Every call names the workspace; a provider of
@@ -71,6 +76,8 @@ type Service struct {
 	checks checkLimiter
 	// wakeup tells the worker a task was queued, so it does not wait for its next tick.
 	wakeup chan struct{}
+	// chats bounds the chat answers streaming at once (chat.go).
+	chats *ChatGate
 }
 
 // NewService uses db (request pool).
@@ -78,7 +85,11 @@ func NewService(db *database.DB, config Config) *Service {
 	if config.CheckTimeout <= 0 {
 		config.CheckTimeout = defaultCheckTimeout
 	}
-	return &Service{db: db, config: config, now: time.Now, checks: checkLimiter{seen: map[string][]time.Time{}}, wakeup: make(chan struct{}, 1)}
+	chats := config.ChatGate
+	if chats == nil {
+		chats = NewChatGate()
+	}
+	return &Service{db: db, config: config, now: time.Now, checks: checkLimiter{seen: map[string][]time.Time{}}, wakeup: make(chan struct{}, 1), chats: chats}
 }
 
 // SetClock replaces the clock; tests use it.
@@ -243,6 +254,10 @@ type SlotInput struct {
 	// Automatic and AutoParts are kept as they are when nil.
 	Automatic *bool
 	AutoParts []string
+	// MonthlyCap is the chat slot's most a calendar month (UTC) may spend, in micro-dollars, kept as it
+	// is unless MonthlyCapSet; nil with MonthlyCapSet removes it.
+	MonthlyCap    *int64
+	MonthlyCapSet bool
 }
 
 func newID() string {

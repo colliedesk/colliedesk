@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"html/template"
 	"regexp"
 	"strings"
@@ -82,7 +83,7 @@ func (s *Site) Preview(ctx context.Context, workspaceID string, theme domain.Hel
 	if err != nil {
 		return nil, err
 	}
-	v := s.newView(read.Site, previewBase)
+	v := s.newView(read.Site, previewBase, channels.HelpCenterAdditions{})
 	t := buildTree(read.Collections)
 	var data page
 	switch {

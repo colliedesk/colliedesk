@@ -15,7 +15,7 @@ const (
 	channelOutput   = `{"type":"object","required":["channel"],"properties":{"channel":{"type":"object"}}}`
 	channelSettings = `"settings":{"type":"object","description":"The channel's rules over its type's defaults: join_policy {kind: always_reopen, within_days with days, never}, ` +
 		`default_tags, default_priority, default_assignee_id, rate_limits {window_seconds, per_sender, new_conversations, scope}, commands (name to {action, phrases, tags, priority}), review, scopes, notices {received}. Never a secret."}`
-	channelConfig  = `"config":{"type":"object","description":"The type's configuration: email {support_address, sender_name}; web_form {allowed_origins}."}`
+	channelConfig  = `"config":{"type":"object","description":"The type's configuration: email {support_address, sender_name}; web_form {allowed_origins}; help_chat {greeting, suggestions (at most 4), instructions, widget_origins}."}`
 	channelDefault = `"is_default":{"type":"boolean","enum":[true],"description":"true makes the channel its type's default; the one that was loses it."}`
 	heldEventIDs   = `"event_ids":{"type":"array","maxItems":500,"items":{"type":"string",` + uuid + `},"description":"Leave out for every held message."}`
 )

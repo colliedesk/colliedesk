@@ -163,6 +163,21 @@ one transaction sent as one batch (`TestHelpCenterThemePreviewReadsInOneTransact
 transactions: as many as reading the saved theme). `site.css` is linked by its immutable address
 instead of being inlined in every answer.
 
+## AI chat turn budget
+
+`TestAIChatTurnSetupLatencyBudget` reads the knowledge base search budget's fixture (1,000 published
+articles of workspace A, 20 of them 100,000 characters: too large to send whole) with a help chat
+channel and the AI chat feature on the server's provider (the recording fake). It times 40 questions,
+each from a new browser, from the request to the call of the provider: the channel and feature checks,
+the chat and its turn, the set of articles and its fingerprint (read once per question, without
+bodies), the excerpt search and the prompt, at or below 100 ms p95 (41 ms locally). Reading a chat back
+by its cookie (`GET …/chat/session`) stays at or below 50 ms p95 (4 ms locally). The first question
+measures the set of articles (and, with Claude, asks `count_tokens`) and is left out: it happens once
+per set of articles and model. The time the AI takes is the provider's, not the server's. The chat page
+and an article with its chat box are help center pages and keep the inbox's 200 ms p95 (4 ms and 6 ms
+locally). Their scripts have budgets of their own, gzip: chat.js 25 KB (11 KB), widget.js 6 KB (2 KB),
+chat.css 8 KB (6 KB), `TestTheChatFilesStayInTheirBudget`; none of them is in the web app's bundle.
+
 ## Results budget
 
 `TestResultsComputeAndReadStayInBudget` (in `internal/httpapi`, so the latency shard builds no new test
@@ -243,6 +258,8 @@ On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, t
 On 2026-10-25 Settings → Channels (its pages, the channel registry and every channel's panels) went into lazy parts; the first bundle reached 204,742 bytes with the routes, the composer's channel notices and the nav. The agent request card imported the "Send from Gmail" part from the email channel section, which pulled the whole section (and its forms) into the first bundle; the part is now its own module (`settings/gmail-part.ts`), bringing it to 202,301.
 
 On 2026-10-27 Autofix (the bridge to the customer's own coding agent) kept in the first bundle only the rail's Fixes link with its wrench icon and count (`useAutofixStatus`, one `GET /api/v1/autofix/status` a minute), the two routes, the slots in the conversation details and under the thread header, the Settings menu item, the request card's branch for Autofix calls, the composer's listener for a reply put in from elsewhere (`colliedesk:insert-reply`, used by Draft reply): 203,612 → 204,698 bytes (+1,086), CSS 16,828 → 16,833. Every Autofix screen (the conversation block, the send dialog, Fixes, Settings → Autofix, the request detail) is one lazy part, `autofix-chunk`: 25,451 bytes gzip plus 4,339 of CSS; the rail link preloads it on hover and focus. That leaves 102 bytes under the gate: the next feature has to move something out first. Measured with Playwright on a local `collie serve` (Chromium, 1,280 px, the Autofix routes answered by the test page, median of 5): rail → Fixes with its groups 68 ms, a click on a conversation → its Autofix block with the track 37 ms. Going to GitHub to confirm a fix leaves the app and is not counted; the page it comes back to shows the fix as Sending at once and reads it again every 3 seconds while it sends. On 2026-10-28 the Autofix end-to-end test (P6) measured it again against a real `collie serve`, PostgreSQL and the GitHub stand-in (`cmd/github-stand-in`), not routes answered by the test page: Chromium, 1,280 px, an Apple M4, assets cached, median of 5, each time read in the page (`performance.now()` checked every animation frame, since Playwright's own retries add up to 250 ms that are not the app's). Rail → Fixes with its groups 28 ms; a click on a conversation → its Autofix block with the track 38 ms; back from GitHub (the callback's redirect and a full load of the conversation's address) → the block's Sending or Sent badge 116 ms from the start of that navigation. The first bundle is 204,705 bytes (raw size unchanged; +7 gzip only from the new chunk names it references), `autofix-chunk` 25,782 bytes gzip (P6 fixes: the GitHub address is checked before leaving and a refusal is said; the issue's creator on the timeline) plus 4,312 of CSS.
+
+On 2026-10-29 the AI chat (Settings → Built-in AI → AI chat, a chat's transcript at `/settings/ai/chats/<id>`, the Help chat channel's panels) went into the existing lazy parts: the first bundle keeps only the `help_chat` value of the conversation channel and the AI settings route as a splat (`/settings/ai/$`, one route for the page and its transcripts instead of one more). The help chat panels read the help center's address with their own small request rather than the knowledge base's API module, which would have become a shared chunk the first bundle lists. On top of the lazy-only words moved out of `messages.ts` the same day, the first bundle is 199,668 bytes, CSS 17,312.
 
 On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,776 bytes (−209 against 201,985), CSS 14,267 → 14,317.
 

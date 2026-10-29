@@ -136,7 +136,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, domain.ErrMailboxClosed
 		}
 	}
-	senderKey := in.Sender.Identity.Key()
+	senderKey := in.SenderKey()
 	// Serialize one sender's messages on the channel so the rate count and duplicate check see each other.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "channel-inbound:"+channel.ID+":"+senderKey); err != nil {
 		return result, fmt.Errorf("lock inbound sender: %w", err)
@@ -399,7 +399,7 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 func (s *Store) holdInbound(ctx context.Context, tx pgx.Tx, journal *journalWriter, in channels.Inbound, reason string,
 	finish func(channels.IngestResult) (channels.IngestResult, error)) (channels.IngestResult, error) {
 	var result channels.IngestResult
-	detail := journalDetail{senderKey: in.Sender.Identity.Key(), holdReason: reason}
+	detail := journalDetail{senderKey: in.SenderKey(), holdReason: reason}
 	for _, file := range in.Files {
 		if !file.Original {
 			continue

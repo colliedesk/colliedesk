@@ -1,0 +1,42 @@
+{
+  "about": "A made-up parcel tracking app, ParcelPilot, for the AI chat eval (make eval-chat). Original text written for Colliedesk; no customer's articles.",
+  "articles": [
+    {"number": 101, "folder": "Getting started", "title": "Create your ParcelPilot account", "body": "Sign up at app.parcelpilot.example with your work email. You get a 14-day trial with every feature. After the trial, pick a plan under Settings > Billing. Your data stays for 30 days if you do not pick one."},
+    {"number": 102, "folder": "Getting started", "title": "Connect your store", "body": "ParcelPilot connects to Shopify, WooCommerce and BigCommerce. Go to Settings > Stores, select Add store and sign in to your store. Orders from the last 60 days are imported; new orders arrive within a minute."},
+    {"number": 103, "folder": "Tracking", "title": "How tracking pages work", "body": "Every order gets a tracking page at track.parcelpilot.example/<order number>. Customers see the carrier, the last scan and the estimated delivery date. You can add your logo and colours under Settings > Branding."},
+    {"number": 104, "folder": "Tracking", "title": "Supported carriers", "body": "ParcelPilot reads tracking from more than 900 carriers, including UPS, FedEx, DHL, USPS, Royal Mail, Australia Post and Viettel Post. A carrier we do not support shows as Unknown carrier; send us its name and we add it within a week."},
+    {"number": 105, "folder": "Tracking", "title": "Why tracking says Pending", "body": "Pending means the carrier has not scanned the parcel yet. It usually changes within 24 to 48 hours after the label is printed. If a parcel stays Pending for more than 5 days, contact the carrier with the tracking number."},
+    {"number": 106, "folder": "Notifications", "title": "Shipping notification emails", "body": "ParcelPilot emails your customers when an order ships, is out for delivery and is delivered. Turn each email on or off under Settings > Notifications. Emails come from your store's name and your reply-to address."},
+    {"number": 107, "folder": "Notifications", "title": "Send SMS updates", "body": "SMS updates are on the Growth and Scale plans. Each SMS costs one credit; a plan includes 500 credits a month and extra credits cost 4 cents each. Customers can reply STOP to opt out."},
+    {"number": 108, "folder": "Billing", "title": "Plans and prices", "body": "Starter costs 19 US dollars a month for up to 300 orders. Growth costs 49 US dollars a month for up to 2,000 orders. Scale costs 149 US dollars a month for up to 10,000 orders. Yearly plans get two months free."},
+    {"number": 109, "folder": "Billing", "title": "Change or cancel your plan", "body": "Go to Settings > Billing and select Change plan. An upgrade starts at once and you pay the difference for the rest of the month. A downgrade or cancellation starts at the next billing date; nothing is refunded for the current month."},
+    {"number": 110, "folder": "Billing", "title": "Download invoices", "body": "Invoices are under Settings > Billing > Invoices. Each one is a PDF with your company name and tax number. To change the company name on future invoices, edit Billing details."},
+    {"number": 111, "folder": "Returns", "title": "Set up a returns portal", "body": "The returns portal lets customers start a return at returns.parcelpilot.example/<store>. Set the return window (7 to 90 days) and the reasons customers can pick under Settings > Returns. You approve each return before a label is sent."},
+    {"number": 112, "folder": "Returns", "title": "Refund a return", "body": "When a returned parcel is scanned as delivered to you, ParcelPilot marks the return Received. Refund it from the return's page; the refund goes back to the original payment method through your store and takes 5 to 10 business days to appear."},
+    {"number": 113, "folder": "Account", "title": "Reset your password", "body": "On the sign-in page select Forgot password and enter your email. The reset link works for one hour. If no email arrives, check spam, then ask an admin of your team to resend your invite."},
+    {"number": 114, "folder": "Account", "title": "Invite your team", "body": "Admins invite teammates under Settings > Team. Starter has 2 seats, Growth 5 and Scale 15. A teammate can be an admin or a member; members cannot change billing."},
+    {"number": 115, "folder": "Account", "title": "Delete your account", "body": "An admin deletes the account under Settings > Account > Delete account. Every order, tracking page and return is removed within 30 days. Export your data first under Settings > Export; the export is a CSV of orders and returns."}
+  ],
+  "questions": [
+    {"lang": "en", "q": "How much is the Growth plan?", "expect": [108]},
+    {"lang": "en", "q": "My parcel has said pending for two days, is something wrong?", "expect": [105]},
+    {"lang": "en", "q": "Can I connect my WooCommerce shop?", "expect": [102]},
+    {"lang": "en", "q": "Where do I find my invoices?", "expect": [110]},
+    {"lang": "en", "q": "How long does a refund take to show up?", "expect": [112]},
+    {"lang": "en", "q": "Do you support Royal Mail?", "expect": [104]},
+    {"lang": "en", "q": "How many people can I add on Starter?", "expect": [114]},
+    {"lang": "en", "q": "If I cancel today do I get money back for this month?", "expect": [109]},
+    {"lang": "en", "q": "How do I stop the delivered email going to customers?", "expect": [106]},
+    {"lang": "en", "q": "Can I pay with Bitcoin?", "expect": []},
+    {"lang": "vi", "q": "Gói Scale giá bao nhiêu một tháng?", "expect": [108]},
+    {"lang": "vi", "q": "Tôi quên mật khẩu thì làm sao?", "expect": [113]},
+    {"lang": "vi", "q": "Có hỗ trợ Viettel Post không?", "expect": [104]},
+    {"lang": "vi", "q": "Khách hàng muốn trả hàng thì làm thế nào?", "expect": [111]},
+    {"lang": "vi", "q": "Có ứng dụng điện thoại không?", "expect": []},
+    {"lang": "paraphrase", "q": "texting my buyers about their orders, how much does that cost me", "expect": [107]},
+    {"lang": "paraphrase", "q": "I want to get rid of everything we have stored with you", "expect": [115]},
+    {"lang": "paraphrase", "q": "can my shoppers see where their box is without emailing me", "expect": [103]},
+    {"lang": "paraphrase", "q": "what happens to my stuff if the free period ends and I don't buy", "expect": [101]},
+    {"lang": "paraphrase", "q": "the courier I use isn't recognised", "expect": [104]}
+  ]
+}

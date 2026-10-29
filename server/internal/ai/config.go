@@ -17,10 +17,12 @@ import (
 const (
 	SlotTriage = "triage"
 	SlotDraft  = "draft"
+	// SlotChat answers end users in the help center's chat (ai-chat.go); it has its own money bucket.
+	SlotChat = "chat"
 )
 
 // Slots lists every slot in display order.
-var Slots = []string{SlotTriage, SlotDraft}
+var Slots = []string{SlotTriage, SlotDraft, SlotChat}
 
 // DefaultServerLabel names the server's provider when AI_SERVER_LABEL is not set.
 const DefaultServerLabel = "Server provider"
@@ -40,6 +42,15 @@ type ServerProvider struct {
 	// no limit, as on a self-hosted server that pays its own provider.
 	Prices    map[string]Price
 	Allowance *Allowance
+}
+
+// PriceOf returns the server's price for a model; false when it declares none (or there is no server provider).
+func (s *ServerProvider) PriceOf(model string) (Price, bool) {
+	if s == nil {
+		return Price{}, false
+	}
+	price, ok := s.Prices[model]
+	return price, ok
 }
 
 // ModelsFor returns the models the server offers for a slot.

@@ -19,6 +19,8 @@ const (
 	FeatureCheck  = "check"
 	FeatureTriage = "triage"
 	FeatureDraft  = "draft"
+	// FeatureChat is the help center's AI chat: answers, pre-warms and the admin's previews.
+	FeatureChat = "chat"
 )
 
 // Who pays for a call.
@@ -78,7 +80,7 @@ func (s *Service) allowanceLeft(ctx context.Context, tx pgx.Tx, workspaceID stri
 	var used int64
 	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
 			(SELECT COALESCE(sum(CASE WHEN status='started' THEN COALESCE(reserved_micro_usd,0) ELSE COALESCE(cost_micro_usd,0) END),0)
-				FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND started_at>=$2)`,
+				FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND started_at>=$2)`,
 		workspaceID, monthStart(s.now())).Scan(&agents, &used); err != nil {
 		return 0, 0, false, err
 	}
@@ -103,10 +105,20 @@ func (s *Service) Metered(ctx context.Context, call Call, provider aiprovider.Pr
 	})
 }
 
+// MeteredStream is Metered for an answer handed to onText as it is written (aiprovider.Provider.Stream).
+// A call that fails or is cut short after the provider read the prompt is recorded with the usage it
+// reported, so what it cost counts.
+func (s *Service) MeteredStream(ctx context.Context, call Call, provider aiprovider.Provider, request aiprovider.Request, onText func(text string)) (aiprovider.Response, error) {
+	input, output := estimateTokens(request)
+	return s.metered(ctx, call, request.Model, [2]int64{input, output}, func(ctx context.Context) (aiprovider.Response, error) {
+		return provider.Stream(ctx, request, onText)
+	})
+}
+
 // estimateTokens is the most a request can use: its text at one token per 3 bytes (about one per CJK
 // character, more than English uses), and all of its output.
 func estimateTokens(request aiprovider.Request) (input, output int64) {
-	size := len(request.System)
+	size := len(request.SystemText())
 	for _, message := range request.Messages {
 		size += len(message.Text)
 	}
@@ -138,7 +150,14 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 	var usageID string
 	err := s.db.InWorkspace(ctx, call.WorkspaceID, func(tx pgx.Tx) error {
 		var reserved *int64
-		if call.BilledTo == BilledToServer && s.config.Server != nil {
+		if call.Feature == FeatureChat {
+			// The chat has its own money: it never spends or waits on the team's allowance.
+			hold, err := s.chatRoom(ctx, tx, call, model, tokens)
+			if err != nil {
+				return err
+			}
+			reserved = hold
+		} else if call.BilledTo == BilledToServer && s.config.Server != nil {
 			// Checked and held in one step per workspace: calls that start together each see what the
 			// others hold, so together they never pass the allowance by more than their estimates miss.
 			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ai-allowance:"+call.WorkspaceID); err != nil {
@@ -151,7 +170,7 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 			}
 			if limited && (left <= 0 || hold > left) {
 				var held int64
-				if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND status='started'`,
+				if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND status='started'`,
 					call.WorkspaceID).Scan(&held); err != nil {
 					return err
 				}
@@ -182,24 +201,14 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 	defer cancel()
 	latency := finished.Sub(started).Milliseconds()
 	err = s.db.InWorkspace(finishCtx, call.WorkspaceID, func(tx pgx.Tx) error {
-		if callErr != nil {
-			code := aiprovider.CodeOf(callErr)
-			var providerErr *aiprovider.Error
-			requestID := ""
-			if errors.As(callErr, &providerErr) {
-				requestID = providerErr.RequestID
-			}
-			_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='error',error_code=$3,provider_request_id=$4,finished_at=$5,latency_ms=$6
-				WHERE workspace_id=$1 AND id=$2`, call.WorkspaceID, usageID, string(code), nullable(requestID), finished, latency)
-			return err
-		}
+		// A failed call keeps the usage the provider reported before it failed (a stream cut short).
 		var input, output, cacheRead, cacheWrite *int64
 		if response.Usage.Reported {
 			input, output, cacheRead, cacheWrite = &response.Usage.InputTokens, &response.Usage.OutputTokens, &response.Usage.CacheReadTokens, &response.Usage.CacheWriteTokens
 		}
 		var hops []byte
 		var cost *int64
-		if response.Usage.Reported && call.BilledTo == BilledToServer && s.config.Server != nil {
+		if response.Usage.Reported && s.priced(call, model) {
 			value, known := costMicroUSD(s.config.Server.Prices, response.Hops)
 			if !known {
 				slog.Warn("an AI model without a price in ai.server.prices answered; charged at the highest declared price", "model", response.Model)
@@ -213,6 +222,22 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 			}
 			hops, _ = json.Marshal(list)
 		}
+		if callErr != nil {
+			code := aiprovider.CodeOf(callErr)
+			var providerErr *aiprovider.Error
+			requestID := ""
+			if errors.As(callErr, &providerErr) {
+				requestID = providerErr.RequestID
+			}
+			if requestID == "" {
+				requestID = response.RequestID
+			}
+			_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='error',error_code=$3,provider_request_id=$4,finished_at=$5,latency_ms=$6,
+					served_model=$7,input_tokens=$8,output_tokens=$9,cache_read_tokens=$10,cache_write_tokens=$11,hops=$12,cost_micro_usd=$13
+				WHERE workspace_id=$1 AND id=$2`, call.WorkspaceID, usageID, string(code), nullable(requestID), finished, latency,
+				nullable(response.Model), input, output, cacheRead, cacheWrite, hops, cost)
+			return err
+		}
 		_, err := tx.Exec(finishCtx, `UPDATE ai_usage SET status='ok',stop_reason=$3,served_model=$4,input_tokens=$5,output_tokens=$6,cache_read_tokens=$7,
 				cache_write_tokens=$8,hops=$9,provider_request_id=$10,finished_at=$11,latency_ms=$12,cost_micro_usd=$13
 			WHERE workspace_id=$1 AND id=$2`, call.WorkspaceID, usageID, string(response.Stop), nullable(response.Model),
@@ -223,6 +248,19 @@ func (s *Service) metered(ctx context.Context, call Call, model string, tokens [
 		return response, fmt.Errorf("record the AI call after it: %w", err)
 	}
 	return response, callErr
+}
+
+// priced says whether a call's cost is computed: every call on the server's provider, and a chat call
+// on a workspace's key when the server declares its model's price (its own monthly limit counts it).
+func (s *Service) priced(call Call, model string) bool {
+	if s.config.Server == nil {
+		return false
+	}
+	if call.BilledTo == BilledToServer {
+		return true
+	}
+	_, known := s.config.Server.Prices[model]
+	return call.Feature == FeatureChat && known
 }
 
 func nullable(value string) any {
@@ -292,7 +330,7 @@ func (s *Service) typicalCallFits(ctx context.Context, tx pgx.Tx, workspaceID, m
 		return err
 	}
 	var held int64
-	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND status='started'`,
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND feature<>'chat' AND status='started'`,
 		workspaceID).Scan(&held); err != nil {
 		return err
 	}

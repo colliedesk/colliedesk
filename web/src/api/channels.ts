@@ -7,7 +7,7 @@ import type { Generated } from './schemas';
 // Channels load with their settings pages, a lazy part, so their schemas and calls are not in the first bundle.
 
 const nullableDate = z.string().datetime().nullable();
-export const channelTypeSchema = z.enum(['email', 'web_form']) satisfies z.ZodType<Generated<'ChannelType'>>;
+export const channelTypeSchema = z.enum(['email', 'web_form', 'help_chat']) satisfies z.ZodType<Generated<'ChannelType'>>;
 const channelStateSchema = z.object({
   state: z.enum(['working', 'waiting', 'off', 'needs_attention', 'not_connected', 'removed']), reason_code: z.string().nullable(), message: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'ChannelState'>>;
@@ -18,7 +18,12 @@ export const channelSchema = z.object({
   deleted_at: z.string().datetime().optional(),
 }) satisfies z.ZodType<Generated<'Channel'>>;
 // The configuration is the type's own schema; the type's panels read it, the shared pages never do.
-const channelConfigSchema = z.union([emailChannelSchema, webFormSettingsSchema]) satisfies z.ZodType<Generated<'ChannelConfig'>>;
+export const helpChatConfigSchema = z.object({
+  channel_id: z.string().uuid(), enabled: z.boolean(), greeting: z.string(), suggestions: z.array(z.string()), instructions: z.string(),
+  widget_origins: z.array(z.string()),
+}) satisfies z.ZodType<Generated<'HelpChatChannelConfig'>>;
+export type HelpChatConfig = z.infer<typeof helpChatConfigSchema>;
+const channelConfigSchema = z.union([emailChannelSchema, webFormSettingsSchema, helpChatConfigSchema]) satisfies z.ZodType<Generated<'ChannelConfig'>>;
 export const channelDetailSchema = channelSchema.extend({ config: channelConfigSchema }) satisfies z.ZodType<Generated<'ChannelDetail'>>;
 const channelTypeInfoSchema = z.object({
   type: channelTypeSchema, available: z.boolean(), count: z.number().int().nonnegative(), default_channel_id: z.string().uuid().nullable(),

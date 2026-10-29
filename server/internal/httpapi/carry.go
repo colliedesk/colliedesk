@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/ai"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 )
@@ -32,6 +33,8 @@ type Carry struct {
 	dispatches                          *sync.WaitGroup
 	founding                            *foundingState
 	trial                               *trialEvidence
+	helpChat                            *helpChatLimiters
+	chatGate                            *ai.ChatGate
 	// Hot holds the settings read at each use; Store applies a change at once.
 	Hot *Hot
 }
@@ -65,7 +68,7 @@ func NewCarry(config Config) *Carry {
 		mailImageLimits:   newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait),
 		liveChecks:        helpcenter.NewLiveChecks(helpCenterLiveChecks, helpCenterLiveCheckBackoff, helpCenterLiveCheckHosts, clock),
 		alerted:           &alertedSubscriptions{}, kbUploads: &kbUploadGate{}, kbUploadStart: &sync.Mutex{}, dispatches: &sync.WaitGroup{},
-		founding: &foundingState{}, trial: &trialEvidence{},
+		founding: &foundingState{}, trial: &trialEvidence{}, helpChat: &helpChatLimiters{}, chatGate: ai.NewChatGate(),
 	}
 }
 

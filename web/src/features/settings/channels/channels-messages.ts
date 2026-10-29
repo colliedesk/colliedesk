@@ -101,6 +101,7 @@ const reasons: Record<string, string> = {
   domain_unverified: 'The domain is not verified yet.',
   no_inbound_secret: 'Customer email sent to your support address cannot arrive yet: whoever manages your email needs an inbound secret to send it here (a password for this only). A test message works without it.',
   no_origins: 'No website can send messages through this form yet. Add your website address below.',
+  ai_chat_off: 'Your help center shows no chat: the AI chat is off in Settings → Built-in AI, or this server no longer offers its model.',
 };
 
 const messagesOf = (count: number | undefined) => (count === undefined ? 'messages' : `${count} ${count === 1 ? 'message' : 'messages'}`);

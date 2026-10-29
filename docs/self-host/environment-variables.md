@@ -149,7 +149,7 @@ docker compose exec -T server /app/collie config set-secret ai.server.api_key < 
 # openai_compatible: also ai.server.base_url, with the version path, e.g. http://ollama:11434/v1
 ```
 
-`ai.server.models` lists, per feature (`triage`, `draft`), the models a workspace may pick, separated
+`ai.server.models` lists, per feature (`triage`, `draft`, `chat`), the models a workspace may pick, separated
 by `|`; the first is the default. A feature left out cannot use the server's provider. A change that
 sets some of these settings but not all that are needed is refused and says which are missing. The server's provider can reach any address, your own network included: you chose it. No
 workspace uses it until one of its admins turns a feature on.
@@ -164,7 +164,8 @@ docker compose exec server /app/collie config set \
 ```
 
 A price is `input:output[:cache_read[:cache_write]]` dollars per million tokens, as your provider bills
-them. Each call's cost is computed with the prices of the day it ran and stored, so changing a price
+them. A cache price left out is a share of the input price, as Anthropic bills it: a read a tenth, a
+write (five minutes) 1.25 times; write `0` to make one free. Each call's cost is computed with the prices of the day it ran and stored, so changing a price
 never rewrites a past month. An allowance needs a price for every model in `ai.server.models` (the server
 says which are missing); a model that answers without a price (a provider's fallback) is charged at
 the highest price you declared. Allowances reset on the first day of each UTC month. Without

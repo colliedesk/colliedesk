@@ -16,6 +16,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
+	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 	"github.com/colliedesk/colliedesk/server/internal/channels/outbox"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/database"
@@ -156,7 +157,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
 	// replies that need them fail with the reason. The journal worker processes what Async channels received.
 	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing}
-	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig))).
+	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig), helpchat.Config{})).
 		WithSealKeys(googleConfig.Keys).WithPlanLimits(billing.Enabled())
 	var sender emailoutbox.Sender
 	if emailConfig.SMTP.Configured() {

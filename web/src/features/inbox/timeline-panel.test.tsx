@@ -184,3 +184,14 @@ test('no conversation, no status button', () => {
   expect(screen.queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument();
 });
+
+test('a help chat conversation says its sender is unverified and links the chat it came from', async () => {
+  render(<TimelinePanel conversation={{ ...thread, channel: 'help_chat' }} items={[]} timezone="UTC" />);
+  expect(await screen.findByText('Unverified sender (Help chat)')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Open chat transcript' })).toHaveAttribute('href', `/settings/ai/conversations/${thread.id}/chat`);
+});
+
+test('another conversation shows neither', () => {
+  render(<TimelinePanel conversation={thread} items={[]} timezone="UTC" />);
+  expect(screen.queryByText('Unverified sender (Help chat)')).not.toBeInTheDocument();
+});

@@ -42,7 +42,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listImports, a.getImport, a.setImportKey, a.cancelImport, a.startImport, a.previewImport, a.getImportReport, a.undoImport,
 		a.listImportPeople, a.linkImportPerson, a.unlinkImportPerson,
 		a.getAISettings, a.addAIProvider, a.listAIModels, a.updateAIProvider, a.setAIProviderKey, a.checkAIProvider, a.setAISlot, a.removeAIProvider,
-		a.getAIUsage, a.setAIAutomaticLimits,
+		a.getAIUsage, a.getAIChatUsage, a.listAIChatSessions, a.getAIChatSession, a.deleteAIChatSession, a.previewAIChat, a.setAIAutomaticLimits,
 		a.createAIDraft, a.listAIDrafts, a.getAIDraft, a.discardAIDraft,
 		a.getAITriage, a.createAITriage, a.acceptAITriage, a.dismissAITriage, a.undoAITriage,
 		a.getResults, a.getResultsShareLink, a.createResultsShareLink, a.revokeResultsShareLink, a.getSharedResults, a.setResultsEmail,

@@ -294,3 +294,84 @@ func aiTriageDismiss(c *call, arguments map[string]any) (any, error) {
 	}
 	return map[string]any{"suggestion": suggestion}, nil
 }
+
+const aiChatNotFound = "No chat with that id in this workspace. List them with colliedesk_ai_chat_sessions_list."
+
+func aiChatUsageGet(c *call, arguments map[string]any) (any, error) {
+	query := url.Values{}
+	if month, _ := arguments["month"].(string); month != "" {
+		query.Set("month", month)
+	}
+	var usage json.RawMessage
+	if err := c.get("/api/v1/ai/chat/usage", query, &usage); err != nil {
+		return nil, err
+	}
+	return map[string]any{"usage": usage}, nil
+}
+
+func aiChatSessionsList(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		ChannelID      string `json:"channel_id"`
+		Status         string `json:"status"`
+		OnlyNotHelpful bool   `json:"only_not_helpful"`
+		ConversationID string `json:"conversation_id"`
+		Cursor         string `json:"cursor"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{}
+	for key, value := range map[string]string{"channel_id": args.ChannelID, "status": args.Status, "conversation_id": args.ConversationID, "cursor": args.Cursor} {
+		if value != "" {
+			query.Set(key, value)
+		}
+	}
+	if args.OnlyNotHelpful {
+		query.Set("feedback", "not_helpful")
+	}
+	var page json.RawMessage
+	if err := c.get("/api/v1/ai/chat/sessions", query, &page); err != nil {
+		return nil, err
+	}
+	return page, nil
+}
+
+func aiChatPath(arguments map[string]any) (string, error) {
+	args, err := decodeArguments[struct {
+		ID string `json:"chat_id"`
+	}](arguments)
+	if err != nil {
+		return "", err
+	}
+	return "/api/v1/ai/chat/sessions/" + url.PathEscape(args.ID), nil
+}
+
+func aiChatSessionGet(c *call, arguments map[string]any) (any, error) {
+	path, err := aiChatPath(arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = aiChatNotFound
+	var chat json.RawMessage
+	if err := c.get(path, nil, &chat); err != nil {
+		return nil, err
+	}
+	return map[string]any{"chat": chat}, nil
+}
+
+func aiChatSessionDeleteRequest(c *call, arguments map[string]any) (any, error) {
+	path, err := aiChatPath(arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = aiChatNotFound
+	return ask(c, http.MethodDelete, path, nil)
+}
+
+func aiChatPreview(c *call, arguments map[string]any) (any, error) {
+	var answer json.RawMessage
+	if err := c.send(http.MethodPost, "/api/v1/ai/chat/preview", arguments, &answer); err != nil {
+		return nil, err
+	}
+	return answer, nil
+}

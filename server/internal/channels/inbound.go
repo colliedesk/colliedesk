@@ -114,6 +114,17 @@ type Inbound struct {
 	StorageBound int64
 	// Summary replaces the raw event in the journal of a Sync type (who sent what, without the bytes).
 	Summary json.RawMessage
+	// RateKey is what the rate limits count the message by, when not its sender's identity: a public
+	// form whose sender types any address counts the place it came from instead.
+	RateKey string
+}
+
+// SenderKey is the key the journal and the rate limits record the message by.
+func (in Inbound) SenderKey() string {
+	if in.RateKey != "" {
+		return in.RateKey
+	}
+	return in.Sender.Identity.Key()
 }
 
 // Thread says which conversation a message continues.

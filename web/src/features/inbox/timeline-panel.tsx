@@ -72,6 +72,8 @@ export function TimelinePanel({ conversation, channelLabel, items, afterFirstCus
           <h2>{conversation?.subject ?? messages.selectConversation}</h2>
           {conversation && <div className="timeline-meta"><StatusLabel status={conversation.status} /><PriorityLabel priority={conversation.priority} />
             {channelLabel && <span className="channel-pill">{channelLabel}</span>}
+            {/* Anyone can type any address into the help chat: say so, and link the chat it came from. */}
+            {conversation.channel === 'help_chat' && <Part part={presenceViewPart} render={(view) => <view.HelpChatLine conversationId={conversation.id} />} />}
             <a className="timeline-contact" href={`/contacts/${conversation.contact_id}`} aria-label={messages.openContact(conversation.contact_name)}>
               {conversation.contact_name}</a></div>}
           {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}

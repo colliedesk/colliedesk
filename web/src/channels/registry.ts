@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { Channel, ChannelCreate, ChannelDetail, ChannelList, ChannelType } from '../api/channels';
 import type { LazyPart } from '../ui/lazy-part';
 import { emailChannel } from './email';
+import { helpChatChannel } from './help_chat';
 import { webFormChannel } from './web_form';
 
 // What a type's tab shows: the channel it belongs to, read fresh from GET /api/v1/channels/{id}.
@@ -65,12 +66,16 @@ export interface ChannelUI {
   fieldLabel?: (field: string) => string | undefined;
   // waitingHelp says how to send the first test message while nothing has arrived; a type without it gets the shared words.
   waitingHelp?: string;
+  // defaultHelp says what this type's channels are and what its default does; a type without it gets the shared words.
+  defaultHelp?: string;
+  // defaultBadge names the default channel of this type; a type without it gets "Default <label> channel".
+  defaultBadge?: string;
   // caches: the query keys of the type's own settings, reloaded when the channel is turned on or off.
   caches?: string[];
 }
 
 // The order here is the order of the Add channel list and of the empty page.
-export const channelTypes: ChannelUI[] = [emailChannel, webFormChannel];
+export const channelTypes: ChannelUI[] = [emailChannel, webFormChannel, helpChatChannel];
 
 // Types the roadmap promises with their tracking issue; shown as not available yet, never added.
 export const upcomingChannels: { label: string; issue: number }[] = [{ label: 'Live chat', issue: 124 }];

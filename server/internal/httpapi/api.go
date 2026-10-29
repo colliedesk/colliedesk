@@ -5,6 +5,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
+	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 	"github.com/colliedesk/colliedesk/server/internal/channels/pipeline"
 	"github.com/colliedesk/colliedesk/server/internal/channels/registry"
 	"io"
@@ -33,6 +34,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -139,6 +141,9 @@ type Config struct {
 	// reports as conversations (PROBLEM_REPORT_WORKSPACE). Empty answers 404 not_configured, so the web app
 	// offers a GitHub issue instead.
 	ProblemReportWorkspace string
+	// ExtraChannelTypes are channel types run after the registered ones; tests prove the frame with a
+	// type no server ships (channeltest.Loopback). Each needs its channel_types row.
+	ExtraChannelTypes []channels.Adapter
 	// Carry is the state the APIs of one process share across configurations (re-serve); nil makes a new one.
 	Carry *Carry
 	// OperatorOrigin is OPERATOR_ORIGIN: the operator console's own host. Empty serves it at Origin/operator.
@@ -181,7 +186,9 @@ type API struct {
 	dispatches *sync.WaitGroup
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
-	config Config
+	// helpChat bounds the help center's AI chat per client address.
+	helpChat *helpChatLimiters
+	config   Config
 	// db and preview count, across workspaces, what an operator's change would do (numbers only).
 	db      *database.DB
 	preview *serverconfig.Preview
@@ -287,14 +294,27 @@ func Outbound(config Config) store.OutboundPolicy {
 
 // Channels is the registry of channel types a configuration runs. revoke, when given, revokes the
 // mailbox grant of a removed email channel at its provider.
-func Channels(config Config, outbound store.OutboundPolicy, revoke ...func(*store.SealedGrant, string, string)) *channels.Registry {
+func Channels(config Config, outbound store.OutboundPolicy, helpChat helpchat.Config, revoke ...func(*store.SealedGrant, string, string)) *channels.Registry {
 	email := channelemail.Config{TrustedAuthServID: config.Email.TrustedAuthServID,
 		HostedMailDomain: config.Email.HostedMailDomain, PlatformForwarding: config.Email.PlatformInboundSecret != "",
 		Cloud: config.Billing.Enabled(), Outbound: outbound}
 	if len(revoke) > 0 {
 		email.RevokeGrant = revoke[0]
 	}
-	return registry.New(registry.Config{Email: email})
+	registered := registry.New(registry.Config{Email: email, HelpChat: helpChat})
+	if len(config.ExtraChannelTypes) == 0 {
+		return registered
+	}
+	adapters := make([]channels.Adapter, 0, len(registered.Types())+len(config.ExtraChannelTypes))
+	for _, kind := range registered.Types() {
+		adapter, _ := registered.Adapter(kind)
+		adapters = append(adapters, adapter)
+	}
+	extended, err := channels.NewRegistry(append(adapters, config.ExtraChannelTypes...)...)
+	if err != nil {
+		panic(err) // a programming error of the test that added the type
+	}
+	return extended
 }
 
 func New(pool *pgxpool.Pool, config Config) *Server {
@@ -324,11 +344,14 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		domainChecks: carry.domainChecks, providerChecks: carry.providerChecks, cursorCalls: carry.cursorCalls, problemReports: carry.problemReports,
 		testMessages: carry.testMessages, helpCenterPages: carry.helpCenterPages, helpCenterSearches: carry.helpCenterSearches,
 		helpCenterHostLookups: carry.helpCenterHostLookups, certificateNotes: carry.certificateNotes, operatorSignIns: carry.operatorSignIns, operatorSignInIPs: carry.operatorSignInIPs, mailImageLimits: carry.mailImageLimits, liveChecks: carry.liveChecks,
-		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding,
+		alerted: carry.alerted, kbUploads: carry.kbUploads, kbUploadStart: carry.kbUploadStart, dispatches: carry.dispatches, founding: carry.founding, helpChat: carry.helpChat,
 		auth: auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).
 			WithSealKeys(config.Google.Keys)}
-	api.store = api.store.WithChannels(Channels(config, outbound, api.revokeSealed))
+	api.store = api.store.WithChannels(Channels(config, outbound, helpchat.Config{HelpCenterRoutes: api.helpChatRoutes(), HelpCenterAdditions: api.helpChatAdditions,
+		ChatActive: func(ctx context.Context, tx pgx.Tx, workspaceID string) (bool, error) {
+			return api.ai.ChatActiveIn(ctx, tx, workspaceID)
+		}}, api.revokeSealed))
 	api.pipeline = pipeline.New(api.store, clock)
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	importKeys := config.ImportKeys
@@ -352,6 +375,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		aiConfig.Keys = config.Google.Keys
 	}
 	aiConfig.PlanLimits = limits
+	if aiConfig.ChatGate == nil {
+		aiConfig.ChatGate = carry.chatGate
+	}
 	api.ai = ai.NewService(db, aiConfig)
 	api.ai.SetClock(clock)
 	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
@@ -629,6 +655,11 @@ func Routes() []Route {
 		{http.MethodPut, "/api/v1/ai/slots/{slot}", auth.PermissionAccessWrite},
 		{http.MethodDelete, "/api/v1/ai/providers/{id}", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/ai/usage", auth.PermissionBillingManage},
+		{http.MethodGet, "/api/v1/ai/chat/usage", auth.PermissionBillingManage},
+		{http.MethodGet, "/api/v1/ai/chat/sessions", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/ai/chat/sessions/{id}", auth.PermissionConversationsRead},
+		{http.MethodDelete, "/api/v1/ai/chat/sessions/{id}", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/ai/chat/preview", auth.PermissionConversationsWrite},
 		{http.MethodPut, "/api/v1/ai/automatic-limits", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/conversations/{id}/ai-drafts", auth.PermissionConversationsRead},

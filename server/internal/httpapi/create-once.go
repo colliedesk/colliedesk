@@ -28,6 +28,7 @@ const (
 	addAIProviderOperation      = "ai_provider"
 	problemReportOperation      = "problem_report"
 	previewImportOperation      = "import_preview"
+	previewAIChatOperation      = "ai_chat_preview"
 )
 
 // shownOnce is a create's answer that holds a secret shown once (an invite link, a token): the first

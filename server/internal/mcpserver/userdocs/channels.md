@@ -1,12 +1,15 @@
 # Channels
 
-A channel is one way customers reach your workspace: your [support email](email-channel.md) or your
-website's [web form](web-form.md). In **Settings**, **Channels** has a page per type under it:
+A channel is one way customers reach your workspace: your [support email](email-channel.md), your
+website's [web form](web-form.md), or the [help chat](help-chat.md) where an AI answers from your
+help articles and a customer can hand the chat to your team. In **Settings**, **Channels** has a
+page per type under it:
 
 - **Email** (`/settings/channels/type/email`): the setup of your support address, then the table of
   your addresses with how each receives, how its replies leave and its state. See
   [Email in Settings](email-channel.md#email-in-settings).
 - **Web form** (`/settings/channels/type/web_form`): your web form, or the form to add one.
+- **Help chat** (`/settings/channels/type/help_chat`): your [help chat](help-chat.md), or the form to add one.
 - **Channels** itself (`/settings/channels`) lists every channel with what each is doing, and lets an
   admin add one, turn it off and on, or remove it, and its **History** tab lists what changed.
 
@@ -29,7 +32,8 @@ and its state:
   connection broke, the support address domain is not verified yet, or (on your own server) no
   inbound secret is set, so customer email forwarded from your mailbox cannot arrive yet. A test
   message works without it. Web form: it is on but lists no website origin, so no
-  page can post to it.
+  page can post to it. Help chat: the AI chat feature is off in **Settings → Built-in AI**, so the
+  help center shows no chat.
 
 ## Add a channel
 

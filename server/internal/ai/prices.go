@@ -38,6 +38,12 @@ func (a *Allowance) For(access domain.Access, activeAgents int) int64 {
 	return int64(math.Round(dollars * 1e6))
 }
 
+// The cache prices of a model whose AI_SERVER_PRICES entry leaves them out, as shares of its input price.
+const (
+	cacheReadShare  = 0.1
+	cacheWriteShare = 1.25
+)
+
 func parsePrices(value string) (map[string]Price, error) {
 	prices := map[string]Price{}
 	if strings.TrimSpace(value) == "" {
@@ -60,6 +66,14 @@ func parsePrices(value string) (map[string]Price, error) {
 		}
 		if _, seen := prices[model]; seen {
 			return nil, fmt.Errorf("AI_SERVER_PRICES lists %s twice", model)
+		}
+		// A cache price left out is the providers' usual share of the input price (a read a tenth, a
+		// write of five minutes a quarter more), never free: a limit in dollars must count it.
+		if len(parts) < 3 {
+			numbers[2] = numbers[0] * cacheReadShare
+		}
+		if len(parts) < 4 {
+			numbers[3] = numbers[0] * cacheWriteShare
 		}
 		prices[model] = Price{Input: numbers[0], Output: numbers[1], CacheRead: numbers[2], CacheWrite: numbers[3]}
 	}

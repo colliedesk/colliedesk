@@ -370,7 +370,7 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
       </div>
       {channel.status.state === 'needs_attention' && <p className="notice" role="status"><span>{m.reason(channel.status.reason_code, channel.status.message)}</span></p>}
       {channel.status.state === 'waiting' && <p className="notice notice-plain" role="status"><span>{ui?.waitingHelp ?? m.waitingHelp}</span></p>}
-      <ChannelIdentity channel={channel} label={ui.label} isAdmin={isAdmin} />
+      <ChannelIdentity channel={channel} label={ui.label} defaultHelp={ui.defaultHelp} defaultBadge={ui.defaultBadge} isAdmin={isAdmin} />
       {capabilities.length > 0 && <p className="muted-copy ch-carries">{m.capabilities}: {capabilities.join(' · ')}</p>}
       {channel.held_count > 0 && <Held channel={channel} isAdmin={isAdmin} onDone={setHeldDone} />}
       {heldDone && <p className="notice notice-plain" role="status" tabIndex={-1} ref={heldNote}><span>{heldDone.kind === 'opened' ? m.heldOpened(heldDone.count, heldDone.skipped ?? 0) : m.heldDiscarded(heldDone.count)}</span>
@@ -456,7 +456,9 @@ function History({ timezone, channelID }: { timezone: string; channelID?: string
 
 // ChannelIdentity is the channel's name, which an admin changes here, and whether it is its type's
 // default, which an admin moves here.
-function ChannelIdentity({ channel, label, isAdmin }: { channel: ChannelDetail; label: string; isAdmin: boolean }) {
+function ChannelIdentity({ channel, label, defaultHelp, defaultBadge, isAdmin }: {
+  channel: ChannelDetail; label: string; defaultHelp?: string; defaultBadge?: string; isAdmin: boolean;
+}) {
   const client = useQueryClient();
   const reload = () => client.invalidateQueries({ predicate: (query) => ['channels', 'channel', 'channel-events', 'conversations'].includes(String(query.queryKey[0])) });
   const rename = useMutation({ mutationFn: (name: string) => channelsApi.update(channel.id, { name }), onSuccess: reload });
@@ -468,13 +470,13 @@ function ChannelIdentity({ channel, label, isAdmin }: { channel: ChannelDetail; 
   const said = succeeded && channel.is_default === true;
   useEffect(() => { if (said) done.current?.focus(); }, [said]);
   return <div className="ch-identity">
-    {isAdmin && <NameForm label={m.nameLabel} saveLabel={m.saveName} hint={m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
+    {isAdmin && <NameForm label={m.nameLabel} saveLabel={m.saveName} hint={defaultHelp ?? m.defaultHelp} value={channel.name} canManage maxLength={80} save={saveState(rename)}
       onSave={(name) => rename.mutate(name)} conflictLink={(conflict) => <a href={`${base}/${conflict.channel_id}`}>{m.openTaken(conflict.channel_name)}</a>} />}
     <div className="ch-default-row">
       {channel.is_default
         ? succeeded
           ? <p className="notice notice-plain" role="status" tabIndex={-1} ref={done}><span>{m.madeDefault(channel.name)}</span></p>
-          : <p><span className="ch-default">{m.defaultOf(label)}</span></p>
+          : <p><span className="ch-default">{defaultBadge ?? m.defaultOf(label)}</span></p>
         : isAdmin && <span className="button-row"><button type="button" disabled={makeDefault.isPending} onClick={() => makeDefault.mutate()}>
             {makeDefault.isPending ? m.saving : m.makeDefault}</button></span>}
       {makeDefault.isError && <span role="alert" className="error-copy">{makeDefault.error instanceof InvalidRequestError ? makeDefault.error.message : m.actionFailed}</span>}

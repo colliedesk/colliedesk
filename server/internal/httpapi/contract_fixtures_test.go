@@ -74,6 +74,8 @@ type contractFixture struct {
 	fixID string
 	// secondEmailChannelID is a second email channel of the admin's workspace.
 	secondEmailChannelID string
+	// aiChatID is a handed-off chat with an answer, its sources and feedback: read, then deleted.
+	aiChatID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -255,6 +257,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatalf("ask for an AI draft: %d %s", queued.Code, queued.Body.String())
 	}
 	aiDraftID := draft.ID
+	aiChatID := seedChatSession(t, pool, workspaceID(t, api, adminToken), conversationID)
 	if response := request(t, api, http.MethodPut, "/api/v1/ai/slots/triage", map[string]any{"source": "provider", "provider_id": draftsProvider, "enabled": true}, adminToken, nil); response.Code != http.StatusOK {
 		t.Fatalf("turn triage on: %d %s", response.Code, response.Body.String())
 	}
@@ -280,7 +283,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	newTriageConversation := create(t, api, adminToken, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Triage asked for"})
-	return contractFixture{operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	return contractFixture{operatorRequestID: operatorRequestID, operatorCancelID: operatorCancelID, operatorLink: operatorLink, operatorToken: operatorToken, operatorLogoutToken: operatorLogoutToken, operatorCookie: operatorCookie, github: github, fixID: fixID, webFormChannelID: channelIDs["web_form"], emailChannelID: channelIDs["email"], secondEmailChannelID: billing.ID, aiTriageAutoID: aiTriageAutoID, aiTriageAutoConversation: autoTriageConversation, aiDraftID: aiDraftID, aiChatID: aiChatID, aiTriageID: aiTriageID, aiTriageOtherID: aiTriageOtherID, aiTriageOtherConversation: otherTriageConversation, aiTriageNewConversation: newTriageConversation, aiDraftsProviderID: draftsProvider, aiProviderID: aiProviderID, imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
 }
@@ -364,6 +367,25 @@ func memberIDByEmail(t *testing.T, api http.Handler, token, email string) string
 	}
 	t.Fatalf("no agent %s", email)
 	return ""
+}
+
+// seedChatSession adds a help chat channel and one handed-off chat of the workspace with every field
+// the contract allows filled.
+func seedChatSession(t *testing.T, pool *pgxpool.Pool, workspaceID, conversationID string) string {
+	t.Helper()
+	var chatID string
+	err := pool.QueryRow(context.Background(), `WITH c AS (INSERT INTO channels(workspace_id,type,name) VALUES($1,'help_chat','Contract chat') RETURNING id),
+			s AS (INSERT INTO ai_chat_sessions(workspace_id,channel_id,token_hash,surface,status,conversation_id,history_cut_at)
+				SELECT $1,c.id,sha256('contract-chat'::bytea),'widget','handed_off',$2,now() FROM c RETURNING id),
+			t AS (INSERT INTO ai_chat_turns(workspace_id,session_id,seq,question,answer,status,model,ttft_ms,finished_at)
+				SELECT $1,s.id,1,'Where is my order?','It ships in 2 days [#1].','answered','claude-haiku-5-5',900,now() FROM s RETURNING id),
+			o AS (INSERT INTO ai_chat_sources(workspace_id,turn_id,ordinal,article_number,article_version,title,folder) SELECT $1,t.id,1,1,1,'Shipping','Orders' FROM t),
+			f AS (INSERT INTO ai_chat_feedback(workspace_id,turn_id,rating) SELECT $1,t.id,'helpful' FROM t)
+		SELECT id::text FROM s`, workspaceID, conversationID).Scan(&chatID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return chatID
 }
 
 // contractOperators makes an operator, a link for the redeem case, a browser session and two tokens.

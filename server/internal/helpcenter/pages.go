@@ -125,6 +125,15 @@ type page struct {
 	Logo                *pageImage
 	Website, Contact    *link
 	Phone               *phoneLink
+
+	// What a channel type adds (channels.HelpCenterAdditions): the header's link on every page, and on an
+	// article its style sheet, its script and its box, with the article it is about.
+	AskLink, AskLabel  string
+	ExtraStyle, Script string
+	ChatBox            bool
+	BoxConfig          string
+	ArticleNumber      int64
+	ArticleTitle       string
 }
 
 func (s *Site) page(v view, title string, crumbs []link) page {
@@ -137,6 +146,9 @@ func (s *Site) page(v view, title string, crumbs []link) page {
 		Style: v.base + stylePath + s.pages.styleName, NoIndex: v.site.Trial, Crumbs: crumbs,
 		GoogleVerification: v.site.SearchConsole.Google, BingVerification: v.site.SearchConsole.Bing}
 	v.brand.fill(&data, v)
+	if v.additions.Link != "" {
+		data.AskLink, data.AskLabel = v.base+v.additions.Link, v.additions.LinkLabel
+	}
 	return data
 }
 
@@ -506,6 +518,10 @@ func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbo
 		data.CollectionName, data.Collection = collection.Name, v.collectionURL(collection)
 	}
 	data.Neighbours = v.articleLinks(neighbours, article.Number)
+	if a := v.additions; a.ArticleBox && a.ArticleScript != "" {
+		data.ExtraStyle, data.Script, data.ChatBox, data.BoxConfig = v.base+a.ArticleStyle, v.base+a.ArticleScript, true, a.BoxConfig
+		data.ArticleNumber, data.ArticleTitle = article.Number, article.Title
+	}
 	return data, rendered.plain
 }
 
