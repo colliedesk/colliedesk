@@ -81,7 +81,9 @@ func (w *Worker) deliverMailbox(ctx context.Context, item store.Delivery, provid
 	sender, ok := w.mailboxes()[provider]
 	if ok && sender.configured() && w.options.SwitchedOff[provider] {
 		// Not an attempt: the reply waits for the operator, not for the provider.
-		return channels.Defer(w.options.Now().Add(switchedOffWait), domain.MailboxSwitchedOffNote(provider))
+		waits := channels.Defer(w.options.Now().Add(switchedOffWait), domain.MailboxSwitchedOffNote(provider))
+		waits.Code = domain.MailboxSwitchedOffCode
+		return waits
 	}
 	if !ok || !sender.configured() {
 		return channels.Failed(domain.MailboxNotConfiguredNote(provider))

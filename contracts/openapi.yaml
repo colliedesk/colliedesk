@@ -9802,7 +9802,8 @@ components:
             without email; retry once it is), channel_removed, no_recipient (the customer has no address on
             the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused
             this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and
-            reconnecting does not help).
+            reconnecting does not help), mailbox_switched_off (a queued reply waits because the operator switched
+            Gmail or Microsoft 365 off; it is sent once it is on again).
             Null for most email failures, whose words are in last_error.
         attempts: {type: integer, minimum: 0}
         last_error:

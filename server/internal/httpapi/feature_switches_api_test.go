@@ -65,7 +65,7 @@ func TestASwitchedOffMailboxProviderIsHiddenAndRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Google = google.Config{ClientID: "client-1", ClientSecret: "not-a-secret", Keys: keys}
 		config.SwitchedOff = map[string]bool{serverconfig.FeatureGmail: true}
 	})
@@ -85,6 +85,13 @@ func TestASwitchedOffMailboxProviderIsHiddenAndRefused(t *testing.T) {
 	}
 	if disconnect := request(t, api, http.MethodDelete, "/api/v1/channels/email/gmail", nil, admin, nil); disconnect.Code == http.StatusConflict {
 		t.Fatalf("disconnecting Gmail while it is off: %d %s", disconnect.Code, disconnect.Body.String())
+	}
+	// An AI agent hears the same at once: no request is filed for a person to approve into a refusal.
+	token := issueToken(t, api, admin, "agent", "admin")
+	asked := request(t, api, http.MethodPost, "/api/v1/channels/email/gmail", nil, token.Token, nil)
+	featureOff(t, asked, asked.Body.String())
+	if filed := queryString(t, pool, `SELECT count(*)::text FROM agent_requests`); filed != "0" {
+		t.Fatalf("a request was filed for a feature that is off: %s", filed)
 	}
 }
 
@@ -108,6 +115,10 @@ func TestASwitchedOffAutofixIsHiddenAndRefused(t *testing.T) {
 	if settings := request(t, api, http.MethodGet, "/api/v1/autofix/settings", nil, admin, nil); settings.Code != http.StatusOK {
 		t.Fatalf("what autofix holds stays readable: %d %s", settings.Code, settings.Body.String())
 	}
+	// The ways out stay open: a stored key or a repository can still be removed.
+	if removed := request(t, api, http.MethodDelete, "/api/v1/autofix/connectors/cursor_api/key", nil, admin, nil); removed.Code == http.StatusConflict {
+		t.Fatalf("removing the Cursor key while autofix is off: %d %s", removed.Code, removed.Body.String())
+	}
 	if unsigned := request(t, api, http.MethodPost, "/api/v1/webhooks/github", map[string]any{}, "", nil); unsigned.Code == http.StatusConflict || unsigned.Code == http.StatusNotFound {
 		t.Fatalf("the GitHub webhook stops while autofix is off: %d", unsigned.Code)
 	}
@@ -126,8 +137,12 @@ func TestASwitchedOffBillingKeepsItsWebhook(t *testing.T) {
 		t.Fatalf("billing switched off = %+v", config)
 	}
 	admin := createSession(t, api, service, "Billing Off", "admin@billing-off.example.com")
-	billing := request(t, api, http.MethodGet, "/api/v1/billing", nil, admin, nil)
-	featureOff(t, billing, billing.Body.String())
+	// What is paid stays visible and cancellable; only buying is refused.
+	if billing := request(t, api, http.MethodGet, "/api/v1/billing", nil, admin, nil); billing.Code != http.StatusOK {
+		t.Fatalf("the plan while billing is off: %d %s", billing.Code, billing.Body.String())
+	}
+	checkout := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team_monthly"}, admin, nil)
+	featureOff(t, checkout, checkout.Body.String())
 	if webhook := request(t, api, http.MethodPost, "/api/v1/webhooks/polar", map[string]any{}, "", nil); webhook.Code == http.StatusNotFound || webhook.Code == http.StatusConflict {
 		t.Fatalf("Polar's webhook stops while billing is off: %d", webhook.Code)
 	}

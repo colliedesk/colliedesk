@@ -416,7 +416,8 @@ func TestAReplyWaitsWhileGmailIsSwitchedOffAndIsSentOnceItIsOn(t *testing.T) {
 	reply := f.write(t, "outgoing", "Hello")
 	process(t, off)
 	delivery := f.delivery(t, reply.ID)
-	if delivery.Status != "queued" || delivery.LastError == nil || !strings.Contains(*delivery.LastError, "turned off on this server") || len(fake.Messages()) != 0 {
+	if delivery.Status != "queued" || delivery.LastError == nil || !strings.Contains(*delivery.LastError, "turned off on this server") ||
+		delivery.ReasonCode == nil || *delivery.ReasonCode != domain.MailboxSwitchedOffCode || len(fake.Messages()) != 0 {
 		t.Fatalf("delivery while Gmail is off = %+v", delivery)
 	}
 	clock = clock.Add(time.Minute)

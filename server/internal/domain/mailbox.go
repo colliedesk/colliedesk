@@ -105,6 +105,10 @@ func MailboxNotConfiguredNote(provider string) string {
 	return "Gmail sending is not set up on this server: ask whoever runs it."
 }
 
+// MailboxSwitchedOffCode is the code of a reply waiting because the operator switched its provider off; the
+// timeline shows its reason, as it may wait long.
+const MailboxSwitchedOffCode = "mailbox_switched_off"
+
 // MailboxSwitchedOffNote is the reason of a reply waiting because the operator switched its provider off.
 func MailboxSwitchedOffNote(provider string) string {
 	label := "Gmail"

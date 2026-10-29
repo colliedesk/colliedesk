@@ -151,7 +151,8 @@ versioned and restored like any other.
   - Hosted addresses: new workspaces get none and the address is not shown; mail to existing hosted
     addresses still arrives.
   - Billing: no workspace is billed or locked and trials are not enforced, retention deletes nothing, and
-    the billing pages say billing is off. Subscriptions stay as they are at Polar and Polar's webhook is
+    nothing new can be bought (checkout answers `feature_off`). The web app hides the billing page; the plan
+    (`GET /api/v1/billing`) and the billing portal, where a subscription is cancelled, stay open in the API. Subscriptions stay as they are at Polar and Polar's webhook is
     still received, so they stay in step. Switched on again, a workspace whose trial ended without a plan
     locks at once (the review counts them first). The server still counts as the hosted cloud
     (an authenticator stays required, the console must keep its own address).

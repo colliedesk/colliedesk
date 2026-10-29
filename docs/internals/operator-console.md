@@ -171,8 +171,10 @@ settings it rides with).
   running: the change would silently not apply. Restores and imports are not checked; the effective state
   covers them.
 - **Off closes entry points, never what keeps data whole.** `featureOfRoute` maps routes to features and
-  `featureGate` answers `409 feature_off` (before the handler, after authorization). Reads, disconnecting a
-  mailbox, consent callbacks and the webhooks (GitHub, Polar) stay open; inbound mail is never refused.
+  `featureGate` answers `409 feature_off` before `authorize`, so an agent token is refused at once instead of
+  filing an approval that could only fail. Reads, the ways out (disconnecting a mailbox, DELETE routes of
+  Autofix, the billing portal), consent callbacks and the webhooks (GitHub, Polar) stay open; inbound mail
+  is never refused. Billing closes only checkout and Founding.
   Parsed configs are not emptied: `Missing()` stays right and the key ring stays shared.
 - **Gmail and Microsoft 365 off defer, not fail.** `emailoutbox` answers `channels.Defer` (no attempt spent,
   10 minutes, the reason in `last_error`) when the provider is configured but switched off; never configured

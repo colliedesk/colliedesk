@@ -435,7 +435,6 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		if billingRoute(route.Route) && api.polar == nil {
 			continue
 		}
-		route.handler = api.featureGate(route.Route, route.handler)
 		if route.Pattern == resendWebhookPath && config.Email.ResendWebhookSecret == "" {
 			continue
 		}
@@ -456,7 +455,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 			})
 			continue
 		}
-		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
+		// The switch is checked before authorize: an agent token hears feature_off at once, never a request
+		// filed for a person to approve into the same refusal.
+		mux.Handle(route.Method+" "+route.Pattern, api.featureGate(route.Route, api.authorize(route.Route, route.handler)))
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)

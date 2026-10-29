@@ -25,8 +25,9 @@ func writeFeatureOff(response http.ResponseWriter) {
 }
 
 // featureOfRoute is the feature a route uses, for the routes a switch closes. Reading what a feature holds
-// stays open (a way to see its state), and so do the routes that keep its data whole: webhooks, consent
-// callbacks, disconnecting a mailbox.
+// stays open (a way to see its state), and so do the ways out (disconnecting a mailbox, removing a
+// repository or a key, the billing portal that cancels) and the routes that keep its data whole: webhooks,
+// consent callbacks.
 func featureOfRoute(route Route) string {
 	if route.Permission == auth.PermissionPublic && route.Pattern != "/api/v1/auth/cloud/exchange" && route.Pattern != cloudSignupPath {
 		return ""
@@ -36,9 +37,10 @@ func featureOfRoute(route Route) string {
 		return serverconfig.FeatureGmail
 	case route.Method == http.MethodPost && (route.Pattern == microsoftPath || route.Pattern == channelMicrosoftPath):
 		return serverconfig.FeatureMicrosoft
-	case route.Method != http.MethodGet && (strings.HasPrefix(route.Pattern, "/api/v1/autofix/") || strings.HasPrefix(route.Pattern, "/api/v1/conversations/{id}/fixes")):
+	case route.Method != http.MethodGet && route.Method != http.MethodDelete &&
+		(strings.HasPrefix(route.Pattern, "/api/v1/autofix/") || strings.HasPrefix(route.Pattern, "/api/v1/conversations/{id}/fixes")):
 		return serverconfig.FeatureAutofix
-	case billingRoute(route) && route.Pattern != polarWebhookPath:
+	case route.Pattern == "/api/v1/billing/checkout" || route.Pattern == foundingPath:
 		return serverconfig.FeatureBilling
 	case route.Pattern == "/api/v1/auth/cloud/exchange":
 		return serverconfig.FeatureCloudSignIn
@@ -49,12 +51,12 @@ func featureOfRoute(route Route) string {
 }
 
 // featureGate answers feature_off in place of a route whose feature is switched off.
-func (a *API) featureGate(route Route, handler http.HandlerFunc) http.HandlerFunc {
+func (a *API) featureGate(route Route, handler http.Handler) http.Handler {
 	feature := featureOfRoute(route)
 	if feature == "" || !a.switchedOff(feature) {
 		return handler
 	}
-	return func(response http.ResponseWriter, _ *http.Request) { writeFeatureOff(response) }
+	return http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) { writeFeatureOff(response) })
 }
 
 // featuresConfig tells the web app which features run here: on, and with their settings complete.
