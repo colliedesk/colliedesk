@@ -97,10 +97,11 @@ func conversationStart(c *call, arguments map[string]any) (any, error) {
 			Name  string `json:"name"`
 			Email string `json:"email"`
 		} `json:"new_contact"`
-		Subject   string   `json:"subject"`
-		Body      string   `json:"body"`
-		CC        []string `json:"cc"`
-		ChannelID string   `json:"channel_id"`
+		Subject   string          `json:"subject"`
+		Body      string          `json:"body"`
+		CC        []string        `json:"cc"`
+		ChannelID string          `json:"channel_id"`
+		Files     []inlineFileArg `json:"files"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -111,7 +112,37 @@ func conversationStart(c *call, arguments map[string]any) (any, error) {
 	if (args.ContactID == "") == (args.NewContact == nil) {
 		return nil, &toolError{"Give contact_id or new_contact, not both and not neither."}
 	}
+	files, err := decodeFiles(args.Files)
+	if err != nil {
+		return nil, err
+	}
 	c.notFound = notFoundContact(args.ContactID)
+	switch {
+	case args.ChannelID != "" && args.ContactID == "":
+		c.notFound = "No email channel " + args.ChannelID + " in this workspace. Use an id from colliedesk_channels_list."
+	case args.ChannelID != "":
+		c.notFound = "No contact " + args.ContactID + " or email channel " + args.ChannelID + " in this workspace. Use ids from colliedesk_contacts_find and colliedesk_channels_list."
+	}
+	var created restConversation
+	if len(files) > 0 {
+		fields := [][2]string{{"subject", args.Subject}, {"body", args.Body}}
+		if args.NewContact != nil {
+			fields = append(fields, [2]string{"contact_name", args.NewContact.Name}, [2]string{"contact_email", args.NewContact.Email})
+		} else {
+			fields = append(fields, [2]string{"contact_id", args.ContactID})
+		}
+		for _, address := range args.CC {
+			fields = append(fields, [2]string{"cc", address})
+		}
+		if args.ChannelID != "" {
+			fields = append(fields, [2]string{"channel_id", args.ChannelID})
+		}
+		contentType, form := messageForm(fields, files)
+		if err := c.sendBytes(http.MethodPost, "/api/v1/conversations", contentType, nil, form, &created); err != nil {
+			return nil, err
+		}
+		return conversationStarted(c, created)
+	}
 	request := map[string]any{"subject": args.Subject, "body": args.Body}
 	if args.NewContact != nil {
 		request["contact"] = map[string]any{"name": args.NewContact.Name, "email": args.NewContact.Email}
@@ -124,10 +155,14 @@ func conversationStart(c *call, arguments map[string]any) (any, error) {
 	if args.ChannelID != "" {
 		request["channel_id"] = args.ChannelID
 	}
-	var created restConversation
 	if err := c.send(http.MethodPost, "/api/v1/conversations", request, &created); err != nil {
 		return nil, err
 	}
+	return conversationStarted(c, created)
+}
+
+// conversationStarted answers a started conversation with its first reply.
+func conversationStarted(c *call, created restConversation) (any, error) {
 	// The conversation and its email are saved already, so a failed lookup only leaves details out.
 	agents, _ := c.agentsByID()
 	out := map[string]any{"conversation": state(created, agents)}
@@ -138,6 +173,9 @@ func conversationStart(c *call, arguments map[string]any) (any, error) {
 		message := map[string]any{"id": timeline.Items[0].ID}
 		if timeline.Items[0].Delivery != nil {
 			message["delivery"] = timeline.Items[0].Delivery.Status
+		}
+		if files := attachmentRows(timeline.Items[0]); files != nil {
+			message["attachments"] = files
 		}
 		out["message"] = message
 	}

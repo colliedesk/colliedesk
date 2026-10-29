@@ -445,6 +445,62 @@ type AISlot struct {
 	ConsentedAt *time.Time `json:"consented_at"`
 	UpdatedBy   *string    `json:"updated_by"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	// MonthlyCapMicroUSD is the AI chat feature's own monthly spending limit; null is none.
+	MonthlyCapMicroUSD *int64 `json:"monthly_cap_micro_usd"`
+}
+
+// AIChatSession is one end user's chat with the help center's AI and its transcript; never the
+// cookie's token or its hash. Texts are null once they expired (90 days after the last turn).
+type AIChatSession struct {
+	ID             string       `json:"id"`
+	ChannelID      string       `json:"channel_id"`
+	Surface        string       `json:"surface"`
+	Status         string       `json:"status"`
+	ConversationID *string      `json:"conversation_id"`
+	HandedOffAt    *time.Time   `json:"handed_off_at"`
+	HistoryCutAt   *time.Time   `json:"history_cut_at"`
+	CreatedAt      time.Time    `json:"created_at"`
+	LastTurnAt     time.Time    `json:"last_turn_at"`
+	EndedAt        *time.Time   `json:"ended_at"`
+	Turns          []AIChatTurn `json:"turns"`
+}
+
+// AIChatTurn is one question and its answer, with the articles it cited as they were and its feedback.
+type AIChatTurn struct {
+	ID                  string          `json:"id"`
+	Seq                 int             `json:"seq"`
+	Question            *string         `json:"question"`
+	Answer              *string         `json:"answer"`
+	ViewingKBArticleID  *string         `json:"viewing_kb_article_id"`
+	Status              string          `json:"status"`
+	ErrorCode           *string         `json:"error_code"`
+	Model               *string         `json:"model"`
+	TTFTMS              *int            `json:"ttft_ms"`
+	InputTokens         *int64          `json:"input_tokens"`
+	CacheReadTokens     *int64          `json:"cache_read_tokens"`
+	CacheCreationTokens *int64          `json:"cache_creation_tokens"`
+	OutputTokens        *int64          `json:"output_tokens"`
+	CreatedAt           time.Time       `json:"created_at"`
+	FinishedAt          *time.Time      `json:"finished_at"`
+	Sources             []AIChatSource  `json:"sources"`
+	Feedback            *AIChatFeedback `json:"feedback"`
+}
+
+// AIChatSource is an article an answer cited.
+type AIChatSource struct {
+	Ordinal        int     `json:"ordinal"`
+	KBArticleID    *string `json:"kb_article_id"`
+	ArticleNumber  int64   `json:"article_number"`
+	ArticleVersion int     `json:"article_version"`
+	Title          *string `json:"title"`
+	Folder         *string `json:"folder"`
+}
+
+// AIChatFeedback is how the end user rated an answer.
+type AIChatFeedback struct {
+	Rating    string    `json:"rating"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // AISettingsEvent is one change to the AI settings.
@@ -740,7 +796,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelInboundEvent*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, AIDraft*, AITriage*, AIChatSession*, ResultsBaseline*, Channel*, ChannelEvent*, ChannelInboundEvent*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -768,6 +824,7 @@ type Sink interface {
 	AIUsage(AIUsage) error
 	AIDraft(AIDraft) error
 	AITriage(AITriage) error
+	AIChatSession(AIChatSession) error
 	ResultsBaseline(ResultsBaseline) error
 	AutofixInstallation(AutofixInstallation) error
 	AutofixRepo(AutofixRepo) error

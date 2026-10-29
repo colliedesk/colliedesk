@@ -14,7 +14,10 @@ func replySendSpec() Spec {
 			`To have a person check the words first, use colliedesk_reply_draft; with a token below send this tool files the same draft for a person to send. ` +
 			`The reply is recorded as written by you through your token (written_by_agent_token). delivery says whether the email is queued. ` +
 			`Pass seen_reply_number, the latest_reply_number of the colliedesk_conversation_get you read: when someone replied since, nothing is sent and the error shows their reply; read the conversation again before you send. ` +
-			`When a team member has a reply to this customer open and not sent yet, the result carries a warning; say so to the user.` +
+			`When a team member has a reply to this customer open and not sent yet, the result carries a warning; say so to the user. ` +
+			`files attaches up to 10 files, ` + inlineFilesLimitWords + ` in total per call (base64); they are emailed with the reply. ` +
+			`Pass ai_draft_id when the reply is written from an AI draft (colliedesk_ai_draft_get), so the draft records how close the reply stayed to it; a draft that is not this conversation's ready one is refused and nothing is sent. ` +
+			`With a token below send the reply is filed for a person to send, and then neither files nor ai_draft_id can go with it: the call is refused and nothing is filed. Send the text alone, and a person attaches the files after approval.` +
 			"\n\nTier: send.",
 		Tier: "send", Destructive: true,
 		REST: []string{"POST /api/v1/conversations/{id}/messages", "GET /api/v1/conversations/{id}/messages", "GET /api/v1/agents", "GET /api/v1/inbox/activity"},
@@ -22,10 +25,11 @@ func replySendSpec() Spec {
 			`"conversation_id":{"type":"string",` + uuid + `},` +
 			`"seen_reply_number":{"type":"integer","minimum":0,"description":"latest_reply_number from the colliedesk_conversation_get you based this reply on."},` +
 			`"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The reply text (Markdown)."},` +
-			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy, at most 10. The customer is always the recipient."}}}`,
+			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy, at most 10. The customer is always the recipient."},` +
+			`"ai_draft_id":{"type":"string",` + uuid + `,"description":"The AI draft this reply was written from. Send token only."},` + filesProperty + `}}`,
 		Output: `{"type":"object","required":["conversation_id","message"],"properties":{"conversation_id":{"type":"string"},"message":{"type":"object",` +
 			`"required":["id","kind","created_at"],"properties":{"id":{"type":"string"},"kind":{"type":"string"},"created_at":{"type":"string"},"author":{"type":"string"},` +
-			`"delivery":{"type":"string","description":"queued, sent or failed; absent when the reply is not emailed (no email channel)."},` +
+			`"attachments":` + attachmentsSchema + `,"delivery":{"type":"string","description":"queued, sent or failed; absent when the reply is not emailed (no email channel)."},` +
 			`"cc":{"type":"array","items":{"type":"string"}},` +
 			`"written_by_agent_token":{"type":"object","required":["label","scope"],"properties":{"label":{"type":"string"},"scope":{"type":"string"}}}}},` +
 			`"warning":{"type":"string","description":"A team member had a reply to this customer open and not sent yet."}}}`,

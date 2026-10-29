@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/mcpbridge"
-	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -88,7 +87,7 @@ func TestBridgeCarriesEveryProtocolVersionToTheServer(t *testing.T) {
 				}
 				names = append(names, tool.Name)
 			}
-			if want := len(mcpserver.Catalog()); len(names) != want {
+			if want := len(toolNames); len(names) != want {
 				t.Errorf("listed %d tools through the bridge, the catalog has %d", len(names), want)
 			}
 			me := e.ok(session, "colliedesk_whoami", map[string]any{})

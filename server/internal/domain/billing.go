@@ -127,6 +127,34 @@ func LimitsForStorage(plan string, storageCap int64) PlanLimits {
 	return limits
 }
 
+// ChatLimits are what the help center's AI chat may answer and spend a UTC calendar month on the
+// cloud's own provider (docs/user/ai-chat.md): end users of one workspace never use the team's
+// included AI. A UTC day may use a tenth of each.
+type ChatLimits struct {
+	Answers  int
+	MicroUSD int64
+}
+
+// ChatLimitsFor is a plan's monthly chat limits: about a fifth of the plan's monthly price in AI spend
+// (a yearly plan's price over twelve). A locked workspace answers nothing.
+func ChatLimitsFor(plan string) ChatLimits {
+	switch plan {
+	case PlanTrial:
+		return ChatLimits{Answers: 50, MicroUSD: 1_000_000}
+	case PlanSolo:
+		return ChatLimits{Answers: 300, MicroUSD: 3_800_000}
+	case PlanSmall:
+		return ChatLimits{Answers: 750, MicroUSD: 7_800_000}
+	case PlanTeam:
+		return ChatLimits{Answers: 1500, MicroUSD: 13_800_000}
+	case PlanTeam25:
+		return ChatLimits{Answers: 3000, MicroUSD: 29_800_000}
+	case PlanFounding:
+		return ChatLimits{Answers: 600, MicroUSD: 6_600_000}
+	}
+	return ChatLimits{}
+}
+
 // Subscription mirrors the latest Polar subscription event of a workspace.
 type Subscription struct {
 	Plan              string // solo, small, team, team25 or founding: what the product bought

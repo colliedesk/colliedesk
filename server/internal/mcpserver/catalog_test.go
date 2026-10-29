@@ -20,7 +20,7 @@ func TestCatalogToolsMapOntoRealRoutesAndStateTheirTier(t *testing.T) {
 			t.Errorf("tool name %q is duplicated or not underscore_case", spec.Name)
 		}
 		names[spec.Name] = true
-		if !slices.Contains([]string{"read", "draft", "send", "admin", "any"}, spec.Tier) {
+		if !slices.Contains([]string{"read", "draft", "send", "admin", "any", "operator"}, spec.Tier) {
 			t.Errorf("%s: tier %q", spec.Name, spec.Tier)
 		}
 		for _, route := range spec.REST {
@@ -33,7 +33,7 @@ func TestCatalogToolsMapOntoRealRoutesAndStateTheirTier(t *testing.T) {
 			t.Errorf("%s: incomplete spec", spec.Name)
 		}
 	}
-	if len(names) != len(toolNames) {
-		t.Errorf("catalog has %d tools, the list test expects %d", len(names), len(toolNames))
+	if len(names) != len(toolNames)+len(operatorToolNames) {
+		t.Errorf("catalog has %d tools, the list tests expect %d on %s and %d on %s", len(names), len(toolNames), mcpserver.Path, len(operatorToolNames), mcpserver.OperatorPath)
 	}
 }

@@ -80,14 +80,14 @@ func TestImportSendsProgressToStderrNotStdout(t *testing.T) {
 }
 
 // The import points old Freshdesk help center links at the help center's address, which it builds
-// from the server's APP_ORIGIN and HELP_CENTER_DOMAIN, as the server does.
+// from the server's APP_ORIGIN and help_center.domain, as the server does.
 func TestImportGivesTheImporterTheHelpCenterAddress(t *testing.T) {
 	databaseURL := cliDatabase(t)
 	t.Setenv("FRESHDESK_API_KEY", cliTestKey)
 	t.Setenv("ATTACHMENTS_DIR", t.TempDir())
 	t.Setenv("APP_ORIGIN", " https://support-desk.example.org ")
-	t.Setenv("HELP_CENTER_DOMAIN", "Help.Example.NET")
 	createImportDesk(t, databaseURL)
+	configure(t, databaseURL, map[string]string{"HELP_CENTER_DOMAIN": "Help.Example.NET"})
 	var origin, domain string
 	if _, err := runImportWithReport(t, databaseURL, &freshdesk.Report{Status: freshdesk.StatusOK}, func(options freshdesk.Options) {
 		origin, domain = options.Origin, options.HelpCenterDomain

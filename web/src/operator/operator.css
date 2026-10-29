@@ -1,0 +1,433 @@
+/* The operator console's styles. Only tokens: fonts, colours and sizes come from styles/tokens.css, the base rules
+   from styles/base-plain.css (the workspace app's, without Tailwind), the controls from ui/controls.css. The layout
+   below follows design ops-uiux (server band, section nav, settings cards); nothing names a hex value. */
+@import "../styles/fonts.css";
+@import "../styles/tokens.css";
+@import "../styles/base-plain.css";
+@import "../ui/controls.css";
+
+/* Copied verbatim from web/src/styles (layout.css, components.css): the app's settings card, dialog, button row and warning note. */
+.settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 600; }
+.settings-card h2 { scroll-margin-top: var(--space-6); }
+.settings-card { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: var(--space-4) var(--space-10); border-top: 1px solid var(--line); padding: var(--space-6) 0; }
+.section-heading h2 { font-size: 14px; font-weight: 600; }
+.section-heading p { margin-top: var(--space-1); color: var(--text-3); font-size: var(--fs-small); }
+.settings-body { display: grid; align-content: start; gap: var(--space-4); }
+.settings-body:empty { display: none; }
+.button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.confirm-panel { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--danger); border-radius: var(--radius); }
+.warning-note { margin: 0; border-left: 3px solid var(--warn); border-radius: var(--radius-sm); background: var(--warn-soft); padding: var(--space-2) var(--space-3); color: var(--text-1); }
+.copy-field { display: grid; gap: var(--space-2); }
+.dialog-backdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 0.45); padding: var(--space-3); }
+.dialog textarea { width: 100%; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; padding: var(--space-2) var(--space-3); line-height: 1.5; }
+.dialog {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); width: min(36rem, 100%); max-height: 100%; overflow-y: auto; border: 1px solid var(--line);
+  border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-5);
+}
+@media (max-width: 56rem) { .settings-card { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 44rem) { .settings-card { padding: var(--space-5) 0; } }
+
+/* Operator console: layout and parts that the workspace app does not have. Every colour, size and font is a token
+   from tokens.css; nothing here names a hex value. Loaded after tokens.css, base.css and controls.css. */
+
+html, body { height: 100%; }
+body { overflow: hidden; }
+code, .mono { font-family: var(--font-mono); font-size: var(--fs-label); }
+.ops-shell { height: 100dvh; display: grid; grid-template-rows: auto auto minmax(0, 1fr); background: var(--surface-0); }
+
+/* Server band: always on, on every screen and every width (the console's identity bar). Ink in both themes. */
+.ops-band {
+  display: flex; align-items: center; gap: var(--space-4); min-width: 0; min-height: 48px;
+  background: var(--brand-panel); color: var(--on-brand-panel); padding: var(--space-1) var(--space-4);
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.ops-band .logo-mark { flex: none; }
+.ops-id { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
+.ops-id strong { flex: none; font-weight: 600; font-size: var(--fs-ui); }
+.ops-host { min-width: 0; overflow: hidden; color: var(--on-brand-panel-2); font-family: var(--font-mono); font-size: var(--fs-label); text-overflow: ellipsis; white-space: nowrap; }
+.ops-ledger { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; min-width: 0; color: var(--on-brand-panel-2); font-size: var(--fs-small); white-space: nowrap; }
+.ops-ledger b { color: var(--on-brand-panel); font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 500; }
+.ops-ledger { text-decoration: none; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); }
+.ops-ledger:hover { color: var(--on-brand-panel); background: color-mix(in srgb, var(--on-brand-panel) 10%, transparent); }
+.ops-dot { width: 8px; height: 8px; flex: none; border-radius: var(--radius-full); background: var(--on-brand-panel-2); }
+.ops-dot[data-tone="ok"] { background: var(--ok); }
+.ops-dot[data-tone="warn"] { background: var(--warn); }
+.ops-dot[data-tone="danger"] { background: var(--danger); }
+.ops-dot[data-tone="busy"] { background: var(--on-brand-panel); animation: ops-pulse 1.2s var(--ease) infinite; }
+@keyframes ops-pulse { 50% { opacity: 0.35; } }
+.ops-where { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.ops-account { position: relative; flex: none; min-width: 0; }
+/* A long address never widens the band: it ends in an ellipsis, the menu shows it whole. */
+.ops-account .acct-label { max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-account > button svg { display: none; }
+.ops-account > button { border-color: transparent; background: transparent; box-shadow: none; color: var(--on-brand-panel); }
+.ops-account > button:hover:not(:disabled) { border-color: var(--on-brand-panel-2); background: transparent; }
+.ops-account-menu { position: absolute; z-index: 30; right: 0; top: calc(100% + var(--space-2)); width: 17rem; display: grid; gap: var(--space-3);
+  border-radius: var(--radius-lg); background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-2); padding: var(--space-3); }
+.ops-account-menu p { display: grid; gap: 2px; font-size: var(--fs-small); }
+.ops-account-menu p span { color: var(--text-3); overflow-wrap: anywhere; }
+.ops-account-menu button { width: 100%; }
+
+/* A banner under the band that every screen shares: a running trial, a refused version. */
+.ops-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding: var(--space-2) var(--space-4);
+  background: var(--warn-soft); color: var(--text-1); box-shadow: inset 0 -1px 0 var(--line); font-size: var(--fs-small); }
+.ops-strip[data-tone="danger"] { background: var(--danger-soft); }
+.ops-strip svg { flex: none; color: var(--warn); }
+.ops-strip[data-tone="danger"] svg { color: var(--danger); }
+.ops-strip > span { flex: 1 1 18rem; min-width: 0; }
+.ops-strip .timer { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.ops-strip .button-row { margin-left: auto; }
+
+/* Body: section nav beside the working panel. */
+.ops-body { min-height: 0; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
+.ops-nav { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: var(--space-5); padding: var(--space-5) var(--space-3); }
+.ops-nav ul { display: grid; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.ops-nav .settings-group-label { padding: 0 var(--space-2); }
+.ops-nav a { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; border-radius: var(--radius-sm); padding: 0 var(--space-2);
+  color: var(--text-2); font-size: var(--fs-small); text-decoration: none; }
+.ops-nav a svg { flex: none; color: var(--text-3); }
+.ops-nav a:hover { background: var(--surface-2); color: var(--text-1); }
+.ops-nav a[aria-current="page"] { background: var(--surface-1); color: var(--text-1); font-weight: 600; box-shadow: var(--shadow-1); }
+.ops-nav a[aria-current="page"] svg { color: var(--text-1); }
+.ops-nav .seg-count { margin-left: auto; }
+.ops-main:focus, .ops-sign:focus { outline: none; }
+.ops-main { min-width: 0; min-height: 0; overflow-y: auto; padding: var(--space-2) var(--space-2) var(--space-2) 0; }
+.ops-page { min-height: 100%; display: flex; flex-direction: column; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.ops-page-inner { flex: 1; width: 100%; max-width: 72rem; padding: var(--space-8) var(--space-10) var(--space-10); }
+.ops-page header.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
+.page-head > div { flex: 1 1 24rem; min-width: 0; }
+.page-head h1 { font: 500 28px/1.1 var(--font-display); letter-spacing: -0.02em; }
+.page-head p { margin-top: var(--space-1); color: var(--text-2); }
+
+/* Apply state line: one sentence with a dot, live for screen readers. */
+.apply-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-5); border-radius: var(--radius); background: var(--surface-0);
+  padding: var(--space-2) var(--space-3); box-shadow: var(--shadow-1); font-size: var(--fs-small); color: var(--text-2); }
+.apply-line strong { color: var(--text-1); font-weight: 600; }
+.apply-line .button-row { margin-left: auto; }
+.dot { width: 8px; height: 8px; flex: none; border-radius: var(--radius-full); background: var(--text-3); }
+.dot[data-tone="ok"] { background: var(--ok); }
+.dot[data-tone="warn"] { background: var(--warn); }
+.dot[data-tone="danger"] { background: var(--danger); }
+.dot[data-tone="open"] { background: var(--open); }
+.dot[data-tone="pending"] { background: var(--pending); }
+.dot[data-tone="busy"] { background: var(--text-1); animation: ops-pulse 1.2s var(--ease) infinite; }
+
+/* A setting: label, control, then one meta line (where the value comes from, when it applies). */
+.setting { display: grid; gap: var(--space-1); }
+.setting > label, .setting > .field-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }
+.key, .setting .key { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 400; }
+.setting input:not([type="checkbox"]):not([type="radio"]), .setting select, .setting textarea { width: 100%; max-width: 32rem; }
+.setting textarea { min-height: 84px; font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.6; resize: vertical; }
+.setting .help { color: var(--text-3); font-size: var(--fs-label); }
+.setting-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); color: var(--text-3); font-size: var(--fs-label); }
+.setting-meta .tag { display: inline-flex; align-items: center; gap: 4px; }
+.setting-meta svg { width: 12px; height: 12px; }
+/* An on/off setting: the switch and its word, at the start of the row like every other control. */
+.switch { justify-self: start; display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--touch); font-size: var(--fs-small); cursor: pointer; }
+.switch input { appearance: none; position: relative; flex: none; width: 34px; height: 20px; min-height: 0; margin: 0; border: 0; border-radius: var(--radius-full);
+  background: var(--line-control); cursor: pointer; transition: background-color var(--dur) var(--ease); }
+.switch input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: var(--radius-full);
+  background: var(--surface-1); box-shadow: var(--shadow-1); transition: translate var(--dur) var(--ease); }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { translate: 14px 0; }
+.switch input:disabled { opacity: 0.5; cursor: not-allowed; }
+.switch input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition: none; } }
+.setting .error-copy { font-size: var(--fs-label); }
+.setting-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.radio-list { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; }
+.radio-list label { display: flex; align-items: flex-start; gap: var(--space-2); font-size: var(--fs-small); cursor: pointer; }
+.radio-list label input { margin-top: 2px; }
+.radio-list small { display: block; color: var(--text-3); font-size: var(--fs-label); }
+
+/* Write-only secret: what is known about it, never the value. */
+.secret { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); max-width: 32rem; border-radius: var(--radius); background: var(--surface-0);
+  padding: var(--space-2) var(--space-3); box-shadow: var(--shadow-1); font-size: var(--fs-small); }
+.secret > svg { flex: none; color: var(--text-3); }
+.secret > span { flex: 1 1 12rem; min-width: 0; color: var(--text-2); }
+.secret[data-locked="true"] { background: var(--surface-2); }
+.secret-edit { display: grid; gap: var(--space-2); max-width: 32rem; }
+.secret-edit textarea { min-height: 120px; }
+
+/* Settings card variant: the console's sections reuse .settings-card from the app. */
+.ops-page .settings-card:first-of-type { border-top: 0; padding-top: 0; }
+.check-result { display: flex; align-items: flex-start; gap: var(--space-2); max-width: 32rem; border-radius: var(--radius); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.check-result[data-tone="ok"] { background: var(--ok-soft); }
+.check-result[data-tone="ok"] svg { color: var(--ok); }
+.check-result[data-tone="danger"] { background: var(--danger-soft); }
+.check-result[data-tone="danger"] svg { color: var(--danger); }
+.check-result svg { flex: none; margin-top: 2px; }
+
+/* Save bar: sticks to the foot of the page while there are unsaved changes, and names the checks the save will ask for. */
+.save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2);
+  padding: var(--space-3) var(--space-10); }
+.save-bar > div:first-child { flex: 1 1 20rem; min-width: 0; display: grid; gap: 2px; font-size: var(--fs-small); }
+.save-bar strong { font-weight: 600; }
+.save-bar .gates { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--text-3); font-size: var(--fs-label); }
+.save-bar .gates span { display: inline-flex; align-items: center; gap: 4px; }
+.save-bar .gates svg { width: 12px; height: 12px; }
+
+/* Lists and tables. */
+.ops-table-wrap { overflow-x: auto; border-radius: var(--radius); box-shadow: var(--shadow-1); }
+.ops-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+.ops-table th { position: sticky; top: 0; background: var(--surface-0); color: var(--text-3); font-size: var(--fs-label); font-weight: 600; text-align: left; white-space: nowrap; }
+.ops-table th, .ops-table td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); vertical-align: middle; }
+.ops-table tr:last-child td { border-bottom: 0; }
+.ops-table td.num { font-variant-numeric: tabular-nums; }
+.ops-table .status { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.ops-table tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+.ops-table tbody tr.row-link { cursor: pointer; }
+.ops-table tbody tr.row-link:hover { background: var(--surface-2); }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2) var(--space-6); margin: 0; font-size: var(--fs-small); }
+.facts dt { color: var(--text-3); }
+.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.badge { display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm); background: var(--surface-3); color: var(--text-2); font-size: var(--fs-label); font-weight: 600; padding: 0 var(--space-2); line-height: 20px; white-space: nowrap; }
+.badge[data-tone="ok"] { background: var(--ok-soft); color: var(--ok); }
+.badge[data-tone="danger"] { background: var(--danger-soft); color: var(--danger); }
+.badge[data-tone="warn"] { background: var(--warn-soft); color: var(--warn); }
+.badge[data-tone="ink"] { background: var(--accent); color: var(--on-accent); }
+
+/* Overview tiles: a few facts, not a dashboard. */
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--space-4); margin-bottom: var(--space-8); }
+.ov-tile { display: grid; align-content: start; gap: var(--space-2); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4); }
+.ov-tile h2 { font-size: var(--fs-small); font-weight: 600; color: var(--text-2); }
+.ov-tile .big { font-family: var(--font-mono); font-size: 20px; font-weight: 500; letter-spacing: -0.01em; }
+.ov-tile p { color: var(--text-3); font-size: var(--fs-label); }
+.ov-section { display: grid; gap: var(--space-3); margin-bottom: var(--space-8); }
+.ov-section > h2 { font-size: var(--fs-ui); font-weight: 600; }
+.warn-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.warn-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-2) var(--space-3); border-radius: var(--radius); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-3); font-size: var(--fs-small); }
+.warn-list li > svg { flex: none; margin-top: 2px; }
+.warn-list li[data-tone="danger"] > svg { color: var(--danger); }
+.warn-list li[data-tone="warn"] > svg { color: var(--warn); }
+.warn-list li > div { min-width: 0; display: grid; gap: 2px; }
+@media (max-width: 44rem) { .warn-list li { grid-template-columns: auto minmax(0, 1fr); } .warn-list li > a { grid-column: 2; } }
+.warn-list li > div span { color: var(--text-2); }
+.workers { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.workers li { display: flex; align-items: center; gap: var(--space-2); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.workers li span:last-child { margin-left: auto; color: var(--text-3); font-size: var(--fs-label); }
+
+/* Code to copy (CLI rescue lines, one-time links). */
+.cli { display: flex; align-items: flex-start; gap: var(--space-2); max-width: 40rem; border-radius: var(--radius); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3); }
+.cli code { flex: 1; min-width: 0; padding-top: 6px; overflow-wrap: anywhere; color: var(--text-1); }
+.once { display: grid; gap: var(--space-2); border-radius: var(--radius); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-3); }
+
+/* Diff of a version: key, before, after. Secrets show only that they changed. */
+.diff { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-radius: var(--radius); box-shadow: var(--shadow-1); overflow: hidden; font-size: var(--fs-small); }
+.diff-row { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); gap: var(--space-1) var(--space-4); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+.diff-row:last-child { border-bottom: 0; }
+.diff-row > div:first-child { display: grid; gap: 2px; }
+.diff-row .key { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-label); }
+.diff-vals { display: grid; gap: 2px; min-width: 0; font-family: var(--font-mono); font-size: var(--fs-label); }
+.diff-vals del, .diff-vals ins { display: flex; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; text-decoration: none; }
+.diff-vals del { color: var(--text-3); }
+.diff-vals del::before { content: "−"; color: var(--danger); }
+.diff-vals ins::before { content: "+"; color: var(--ok); }
+.diff-vals .secret-note { font-family: var(--font-sans); color: var(--text-2); }
+
+/* History: versions on the left, the chosen one on the right. */
+.split { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+.version-list { display: grid; gap: 2px; max-height: 60dvh; overflow-y: auto; margin: 0; padding: 2px; list-style: none; }
+.version-list button { width: 100%; min-height: 56px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; justify-content: stretch; gap: 2px var(--space-3); border: 0; box-shadow: none;
+  border-radius: var(--radius); background: transparent; padding: var(--space-2) var(--space-3); text-align: left; white-space: normal; }
+.version-list button:hover:not(:disabled) { background: var(--surface-2); }
+.version-list button[aria-current="true"] { background: var(--accent-soft); }
+.version-list .v { grid-row: span 2; align-self: center; font-family: var(--font-mono); font-size: var(--fs-small); font-weight: 500; }
+.version-list .who { min-width: 0; overflow: hidden; color: var(--text-3); font-size: var(--fs-label); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.version-list .badge { grid-row: span 2; align-self: center; }
+
+/* Sign-in: the band on top, one column. */
+.ops-sign { min-height: 0; overflow-y: auto; display: grid; place-items: start center; padding: var(--space-12) var(--space-4); }
+.sign-card { width: min(100%, 28rem); display: grid; gap: var(--space-4); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-8); }
+.sign-card h1 { font: 500 26px/1.15 var(--font-display); letter-spacing: -0.02em; }
+.sign-card > p { color: var(--text-2); }
+.sign-card .primary-action { --control: 44px; width: 100%; font-size: var(--fs-ui); }
+.qr { display: grid; grid-template-columns: 152px minmax(0, 1fr); gap: var(--space-4); align-items: center; }
+.qr > svg { width: 152px; height: 152px; border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-2); color: var(--text-1); }
+.qr .mono { display: block; overflow-wrap: anywhere; font-size: var(--fs-small); letter-spacing: 0.04em; }
+.code-input { width: 100%; max-width: 12rem; font-family: var(--font-mono); font-size: 20px !important; letter-spacing: 0.3em; text-align: center; min-height: 44px !important; }
+.sign-card details summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
+.sign-card details[open] summary { margin-bottom: var(--space-2); }
+.sign-foot { color: var(--text-3); font-size: var(--fs-label); }
+
+/* Dialog extras: barrier blocks inside the review dialog. */
+.dialog-backdrop { z-index: 40; }
+.gate { display: grid; gap: var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.gate h3 { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-small); font-weight: 600; }
+.gate h3 svg { color: var(--text-3); }
+.gate ul { margin: 0; padding-left: var(--space-5); color: var(--text-1); font-size: var(--fs-small); }
+.gate li + li { margin-top: var(--space-1); }
+.gate .warning-note { font-size: var(--fs-small); }
+.dialog .field input { width: 100%; }
+.dialog .phrase { font-family: var(--font-mono); font-weight: 500; background: var(--surface-2); border-radius: var(--radius-sm); padding: 0 4px; }
+
+/* Empty, loading, error. */
+.empty { display: grid; justify-items: start; gap: var(--space-2); max-width: 36rem; border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-6); }
+.empty h2 { font-size: var(--fs-ui); font-weight: 600; }
+.empty p { color: var(--text-2); font-size: var(--fs-small); }
+.skeleton { display: grid; gap: var(--space-4); }
+.skeleton i { display: block; height: 14px; border-radius: var(--radius-sm); background: var(--surface-2); animation: ops-pulse 1.4s var(--ease) infinite; }
+.skeleton i:nth-child(3n) { width: 60%; } .skeleton i:nth-child(3n + 1) { width: 85%; } .skeleton i:nth-child(3n + 2) { width: 40%; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-4); }
+.toolbar .field { min-width: 10rem; }
+.toolbar .field input, .toolbar .field select { width: 100%; }
+.req-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.req-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-4); align-items: center; border-radius: var(--radius); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-3) var(--space-4); }
+.req-list li > div { display: grid; gap: 2px; min-width: 0; }
+.req-list strong { font-weight: 600; }
+.req-list span { color: var(--text-3); font-size: var(--fs-label); }
+.inline-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
+
+@media (prefers-reduced-motion: reduce) { .ops-dot[data-tone="busy"], .dot[data-tone="busy"], .skeleton i { animation: none; } }
+
+/* Band extras: the short version mark (phones) and the requests count (narrow screens, where the nav scrolls). */
+.ops-host-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.ops-mini { display: none; align-items: center; gap: 4px; flex: none; color: var(--on-brand-panel); font-family: var(--font-mono); font-size: var(--fs-label); }
+.ops-req-chip { display: none; flex: none; align-items: center; justify-content: center; gap: 4px; min-width: var(--touch); min-height: var(--touch); border-radius: var(--radius);
+  color: var(--on-brand-panel); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
+.ops-req-chip:hover { color: var(--on-brand-panel); background: color-mix(in srgb, var(--on-brand-panel) 10%, transparent); }
+/* Links that stand alone (not inside a sentence) are at least 24 px tall with a mouse. */
+.ops-strip a, .apply-line a, .warn-list a, .empty a, .settings-body > p > a { display: inline-flex; align-items: center; min-height: 24px; }
+/* The dialog body scrolls; its padding leaves room for the 2 px focus ring and its 2 px gap. */
+.form-dialog-body { margin: 0 calc(-1 * var(--space-2)); padding: var(--space-1) var(--space-2); }
+
+/* Touch: every control and link a finger uses is at least 44 px. */
+@media (pointer: coarse), (max-width: 30rem) {
+  .ops-nav a, .version-list button { min-height: var(--touch); }
+  .sign-card details summary { display: flex; align-items: center; min-height: var(--touch); }
+  .ops-home, .ops-ledger, .ops-strip a, .apply-line a, .warn-list a, .empty a, .settings-body > p > a { display: inline-flex; align-items: center; min-height: var(--touch); }
+  .ops-home { min-width: var(--touch); justify-content: center; }
+  .switch { min-width: var(--touch); }
+  .radio-list label, .field-inline, fieldset.radio-list label { min-height: var(--touch); align-items: center; }
+}
+
+/* Tablet: the section nav becomes one row under the band that scrolls sideways with faded edges and no bar. */
+@media (max-width: 56rem) {
+  .ops-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .ops-nav { display: flex; gap: var(--space-1); overflow-x: auto; overflow-y: hidden; padding: var(--space-2) var(--space-3); scrollbar-width: none;
+    mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
+  .ops-nav::-webkit-scrollbar { display: none; }
+  .ops-nav > div { display: contents; }
+  .ops-nav .settings-group-label { display: none; }
+  .ops-nav ul { display: flex; gap: var(--space-1); margin: 0; }
+  .ops-nav a { min-height: var(--touch); white-space: nowrap; padding: 0 var(--space-3); }
+  .ops-main { padding: 0 var(--space-2) var(--space-2); }
+  .ops-page-inner { padding: var(--space-6); }
+  .save-bar { padding: var(--space-3) var(--space-6); }
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .version-list { max-height: none; }
+  .ops-ledger .ledger-long { display: none; }
+  .ops-req-chip { display: inline-flex; }
+}
+
+/* Phone: the band takes two lines (who and where, then the running version); the page fills the width. */
+@media (max-width: 44rem) {
+  /* One line: the mark, who and where (with the running version beside the host), requests, account. */
+  .ops-band { gap: var(--space-2); padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3); }
+  .ops-id { flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 0; }
+  .ops-ledger { display: none; }
+  .ops-mini { display: inline-flex; }
+  .ops-account > button { width: var(--touch); padding: 0; }
+  .ops-account > button .acct-label { display: none; }
+  .ops-account > button svg { display: block; }
+  .ops-strip { padding: var(--space-2) var(--space-3); }
+  .strip-more { display: none; }
+  .ops-main { padding: 0; }
+  .ops-page { border-radius: 0; box-shadow: none; }
+  .ops-page-inner { padding: var(--space-5) var(--space-4) var(--space-8); }
+  .page-head h1 { font-size: 24px; }
+  .save-bar { border-radius: 0; padding: var(--space-3) var(--space-4); }
+  .save-bar .button-row { width: 100%; }
+  .save-bar .button-row button { flex: 1 1 0; }
+  .diff-row { grid-template-columns: minmax(0, 1fr); }
+  .qr { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+  .sign-card { padding: var(--space-6) var(--space-4); box-shadow: none; }
+  .ops-sign { padding: var(--space-4) 0; }
+  .req-list li { grid-template-columns: minmax(0, 1fr); }
+  .inline-actions { justify-content: flex-start; }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 0 0; }
+  .facts dd { margin-bottom: var(--space-2); }
+  .ops-strip .button-row { margin-left: 0; width: 100%; }
+  /* Tables become one card per row: each cell says which column it is. */
+  .ops-table-wrap { overflow: visible; box-shadow: none; }
+  .ops-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .ops-table, .ops-table tbody, .ops-table tr, .ops-table td { display: block; }
+  .ops-table tr { margin-bottom: var(--space-2); border-radius: var(--radius); background: var(--surface-0); box-shadow: var(--shadow-1); padding: var(--space-2) var(--space-3); }
+  .ops-table td { display: flex; gap: var(--space-3); justify-content: space-between; align-items: center; border: 0; padding: var(--space-1) 0; text-align: right !important; overflow-wrap: anywhere; }
+  .ops-table td::before { content: attr(data-label); flex: none; color: var(--text-3); font-family: var(--font-sans); font-size: var(--fs-label); text-align: left; }
+  .ops-table td[data-label=""]::before { content: none; }
+  .ops-table td[data-label=""] { justify-content: flex-end; }
+  .ops-strip .button-row button { flex: 1 1 0; }
+  .apply-line .button-row { margin-left: 0; }
+}
+
+/* Skip link: hidden until it has the keyboard focus. */
+.skip-link { position: absolute; z-index: 60; left: var(--space-2); top: var(--space-2); transform: translateY(calc(-100% - 2 * var(--space-2) - var(--touch))); border-radius: var(--radius); background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-2); padding: var(--space-2) var(--space-3); }
+.skip-link:focus { transform: none; }
+@media (pointer: coarse), (max-width: 30rem) { .skip-link { display: inline-flex; align-items: center; min-height: var(--touch); } }
+
+/* Parts the React console adds to the prototype. */
+.logo-tile { fill: var(--logo-tile); }
+.ops-requests { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 32px; color: var(--on-brand-panel); font-size: var(--fs-small); text-decoration: none; }
+.ops-command { display: block; overflow-x: auto; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--surface-0); white-space: pre; }
+.ops-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6); }
+.ops-tile { display: grid; gap: var(--space-1); padding: var(--space-4); border-radius: var(--radius); background: var(--surface-0); }
+.ops-tile p { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--fs-small); }
+.ops-warnings, .ops-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.ops-warnings li { display: flex; align-items: baseline; gap: var(--space-2); }
+.ops-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--line); }
+.ops-list li > div { display: grid; gap: 2px; min-width: 0; }
+.ops-list li span { color: var(--text-3); font-size: var(--fs-small); }
+.ops-env { display: grid; gap: var(--space-2); margin: 0; }
+.ops-env > div { display: grid; grid-template-columns: minmax(10rem, 16rem) 1fr; gap: var(--space-3); }
+.ops-env dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ops-sign { display: grid; place-items: center; padding: var(--space-6) var(--space-4); overflow-y: auto; }
+.ops-shell-sign { grid-template-rows: auto minmax(0, 1fr); }
+.ops-enroll { display: grid; gap: var(--space-3); justify-items: start; }
+.ops-check { display: grid; gap: var(--space-2); justify-items: start; }
+.ops-filters { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-bottom: var(--space-4); }
+.version-layout { display: grid; grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr); gap: var(--space-6); }
+.version-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.version-list button { display: grid; justify-items: start; width: 100%; height: auto; padding: var(--space-2) var(--space-3); text-align: left; border-color: transparent; background: transparent; box-shadow: none; }
+.version-list button[aria-pressed="true"] { background: var(--accent-soft); }
+.version-list button span { color: var(--text-3); font-size: var(--fs-small); }
+.setting-key { color: var(--text-3); }
+.setting-meta { color: var(--text-3); font-size: var(--fs-label); }
+.badge { display: inline-flex; align-items: center; border-radius: var(--radius-full); background: var(--surface-2); padding: 0 var(--space-2); font-size: var(--fs-label); font-weight: 500; }
+.badge[data-tone="danger"] { background: var(--danger-soft); }
+.empty { color: var(--text-2); }
+@media (max-width: 56rem) { .version-layout { grid-template-columns: 1fr; } .ops-env > div { grid-template-columns: 1fr; } }
+/* The test button names the operator's address, which can be long: it wraps instead of widening the page. */
+.ops-check > button { max-width: 100%; height: auto; min-height: 36px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.ops-page-inner > .warning-note { margin-bottom: var(--space-4); }
+.dialog-frame { display: contents; }
+.section-heading > button { margin-top: var(--space-3); }
+/* The authenticator QR code: shown at its own size (5 px a module), never wider than the column. */
+.qr-code { display: block; max-width: 100%; height: auto; border-radius: var(--radius); box-shadow: var(--shadow-1); image-rendering: pixelated; }
+/* Touch targets on a phone: the band's requests link, live tests and link buttons are 44 px tall too. */
+@media (pointer: coarse), (max-width: 30rem) {
+  .ops-requests, .ops-check > button, .link-button { min-height: var(--touch); }
+}
+/* Dark theme: the band is ink like the page, so a line marks where it ends. */
+:root[data-theme="dark"] .ops-band { box-shadow: inset 0 -1px 0 var(--line-strong); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ops-band { box-shadow: inset 0 -1px 0 var(--line-strong); } }
+/* Every dialog title is the same: sans, semibold (the serif is for page titles only). */
+.form-dialog header h2 { font: 600 18px/1.3 var(--font-sans); letter-spacing: 0; }
+/* A long dialog keeps its buttons in view: the footer sticks to the bottom of the dialog. */
+.form-dialog-footer { position: sticky; bottom: calc(-1 * var(--space-5)); z-index: 1; background: var(--surface-1);
+  margin: 0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5)); padding: var(--space-3) var(--space-5); box-shadow: 0 -1px 0 var(--line); }
+/* A list of checkboxes: box and words on one row, no browser frame around the group. */
+.check-list { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; }
+.check-list legend { padding: 0; margin-bottom: var(--space-1); color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }
+.check-list label { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; font-size: var(--fs-small); cursor: pointer; }
+@media (pointer: coarse), (max-width: 30rem) { .check-list label { min-height: var(--touch); } }
+/* The band at tablet width keeps the host whole: the console's name gives way first. */
+.ops-id strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-host { flex: none; }
+.ops-requests { white-space: nowrap; }
+/* On a phone the save bar names the count; the review lists what saving asks. */
+@media (max-width: 30rem) { .save-asks { display: none; } }
+.page-error { margin-bottom: var(--space-4); }
+.copy-field { justify-items: start; }
+.sign-card > * + * { margin-top: var(--space-3); }

@@ -2,6 +2,9 @@
 <section class="hero">
 <h1 class="hero-title">How can we help?</h1>
 {{template "heroSearch" .}}
+{{- with .AskLink}}
+<p class="hero-ask">Prefer to ask in your own words? <a href="{{.}}">{{$.AskLabel}}<span aria-hidden="true"> →</span></a></p>
+{{- end}}
 </section>
 {{- if .Collections}}
 <section class="topics" aria-labelledby="topics">

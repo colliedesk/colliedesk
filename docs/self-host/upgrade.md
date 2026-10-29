@@ -89,7 +89,38 @@ docker compose exec -T server /app/collie pair --workspace <slug> --email <your 
 
 Every `exec` and `run` here has `-T` (no terminal), so the commands also work from a script.
 
+## Settings move into the database
+
+From the release that keeps settings in the database (see [settings](environment-variables.md#settings)),
+the first start imports the settings your `.env` still holds (SMTP, mailboxes, AI, proxies…), a group at
+a time, and logs `imported settings from the environment into the database`. From then on the database
+wins: a variable left in `.env` is ignored, the server logs it at every start, and `collie config doctor`
+exits 1 naming it. Check, then remove those lines from `.env` once you no longer plan to go back to an
+older release (it reads only `.env`):
+
+```sh
+docker compose exec -T server /app/collie config doctor
+```
+
+Running the installer again does the same before the server starts: it keeps the compose file it
+replaces as `compose.yaml.bak`, writes one that passes only the variables that stay in the environment,
+and imports the settings of `.env` (a group the database holds or once held is kept, so one you unset stays unset). If the import fails, it puts the older compose file back and changes nothing.
+
+A group whose variables do not make a valid setting together is not imported, and the start log says
+why (`settings in the environment were not imported`): fix it with `collie config set`.
+
 ## Roll back
+
+If you changed settings after the upgrade (with `collie config` or the operator console), the older
+release does not see them: it reads `.env` only. Before rolling back, write them out in its format and
+put the lines you need in `.env`; the file holds secrets, so delete it afterwards:
+
+```sh
+docker compose exec -T server /app/collie config export --format env --include-secrets > rollback.env
+```
+
+If the installer of the new release replaced your compose file, put the older one back too (it passes
+`.env` to the server): `mv compose.yaml.bak compose.yaml`.
 
 Roll back when the migration fails or the new release does not work for you. The install goes back
 to the moment of the backup: anything written since then (new conversations, replies, received

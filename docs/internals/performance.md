@@ -163,6 +163,21 @@ one transaction sent as one batch (`TestHelpCenterThemePreviewReadsInOneTransact
 transactions: as many as reading the saved theme). `site.css` is linked by its immutable address
 instead of being inlined in every answer.
 
+## AI chat turn budget
+
+`TestAIChatTurnSetupLatencyBudget` reads the knowledge base search budget's fixture (1,000 published
+articles of workspace A, 20 of them 100,000 characters: too large to send whole) with a help chat
+channel and the AI chat feature on the server's provider (the recording fake). It times 40 questions,
+each from a new browser, from the request to the call of the provider: the channel and feature checks,
+the chat and its turn, the set of articles and its fingerprint (read once per question, without
+bodies), the excerpt search and the prompt, at or below 100 ms p95 (41 ms locally). Reading a chat back
+by its cookie (`GET …/chat/session`) stays at or below 50 ms p95 (4 ms locally). The first question
+measures the set of articles (and, with Claude, asks `count_tokens`) and is left out: it happens once
+per set of articles and model. The time the AI takes is the provider's, not the server's. The chat page
+and an article with its chat box are help center pages and keep the inbox's 200 ms p95 (4 ms and 6 ms
+locally). Their scripts have budgets of their own, gzip: chat.js 25 KB (11 KB), widget.js 6 KB (2 KB),
+chat.css 8 KB (6 KB), `TestTheChatFilesStayInTheirBudget`; none of them is in the web app's bundle.
+
 ## Results budget
 
 `TestResultsComputeAndReadStayInBudget` (in `internal/httpapi`, so the latency shard builds no new test
@@ -226,6 +241,14 @@ Measured on a local stack with 304 conversations, cold page load of a ticket by 
 
 Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB HTML report, Chrome, local stack, medians of 16 to 20 runs): the first open of a ticket in a page costs 118 to 146 ms and an open of a ticket seen a moment before costs 47 to 54 ms, the same at `ed2400b` (plain-text view) and at the head (formatted view: 143/50 ms and 140/52 ms by click, 140/52 ms and 118/54 ms by `history.pushState`). A report of 70 ms "warm" against 192 ms came from comparing runs with a warm cache against all runs including each ticket's first open; they are different measurements. `inbox-route.test.tsx` pins what keeps the warm open fast: a ticket opened from the list renders its header and composer from the row and makes no detail request, and an address that is in the list does not wait for a pending detail.
 
+## Configuration reload cost
+
+Each `collie serve` reads which configuration version it should run every 5 seconds (one privileged
+transaction: the state row, the current version's values, the products) and writes its heartbeat
+(`server_processes`, one upsert and one delete): about 0.4 queries a second per process on the owner
+pool, and one idle connection held by `LISTEN colliedesk_config`. A request never waits on it: the handler
+swap is an atomic pointer, and settings read at each use are an atomic load.
+
 ## Web bundle budget
 
 `corepack pnpm bundle:check` reads the production Vite output. The largest JavaScript asset must be at most 200 KiB gzip. The largest CSS asset must be at most 30 KiB gzip. `make test` builds the bundle before running this gate; in CI it runs in the e2e job, after that job's Vite build of the same commit, and a failure fails CI like any other step.
@@ -235,6 +258,8 @@ On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, t
 On 2026-10-25 Settings → Channels (its pages, the channel registry and every channel's panels) went into lazy parts; the first bundle reached 204,742 bytes with the routes, the composer's channel notices and the nav. The agent request card imported the "Send from Gmail" part from the email channel section, which pulled the whole section (and its forms) into the first bundle; the part is now its own module (`settings/gmail-part.ts`), bringing it to 202,301.
 
 On 2026-10-27 Autofix (the bridge to the customer's own coding agent) kept in the first bundle only the rail's Fixes link with its wrench icon and count (`useAutofixStatus`, one `GET /api/v1/autofix/status` a minute), the two routes, the slots in the conversation details and under the thread header, the Settings menu item, the request card's branch for Autofix calls, the composer's listener for a reply put in from elsewhere (`colliedesk:insert-reply`, used by Draft reply): 203,612 → 204,698 bytes (+1,086), CSS 16,828 → 16,833. Every Autofix screen (the conversation block, the send dialog, Fixes, Settings → Autofix, the request detail) is one lazy part, `autofix-chunk`: 25,451 bytes gzip plus 4,339 of CSS; the rail link preloads it on hover and focus. That leaves 102 bytes under the gate: the next feature has to move something out first. Measured with Playwright on a local `collie serve` (Chromium, 1,280 px, the Autofix routes answered by the test page, median of 5): rail → Fixes with its groups 68 ms, a click on a conversation → its Autofix block with the track 37 ms. Going to GitHub to confirm a fix leaves the app and is not counted; the page it comes back to shows the fix as Sending at once and reads it again every 3 seconds while it sends. On 2026-10-28 the Autofix end-to-end test (P6) measured it again against a real `collie serve`, PostgreSQL and the GitHub stand-in (`cmd/github-stand-in`), not routes answered by the test page: Chromium, 1,280 px, an Apple M4, assets cached, median of 5, each time read in the page (`performance.now()` checked every animation frame, since Playwright's own retries add up to 250 ms that are not the app's). Rail → Fixes with its groups 28 ms; a click on a conversation → its Autofix block with the track 38 ms; back from GitHub (the callback's redirect and a full load of the conversation's address) → the block's Sending or Sent badge 116 ms from the start of that navigation. The first bundle is 204,705 bytes (raw size unchanged; +7 gzip only from the new chunk names it references), `autofix-chunk` 25,782 bytes gzip (P6 fixes: the GitHub address is checked before leaving and a refusal is said; the issue's creator on the timeline) plus 4,312 of CSS.
+
+On 2026-10-29 the AI chat (Settings → Built-in AI → AI chat, a chat's transcript at `/settings/ai/chats/<id>`, the Help chat channel's panels) went into the existing lazy parts: the first bundle keeps only the `help_chat` value of the conversation channel and the AI settings route as a splat (`/settings/ai/$`, one route for the page and its transcripts instead of one more). The help chat panels read the help center's address with their own small request rather than the knowledge base's API module, which would have become a shared chunk the first bundle lists. On top of the lazy-only words moved out of `messages.ts` the same day, the first bundle is 199,668 bytes, CSS 17,312.
 
 On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,776 bytes (−209 against 201,985), CSS 14,267 → 14,317.
 
@@ -258,6 +283,26 @@ The same day its Usage tab, the paused and allowance notices and the automatic-r
 On 2026-10-23 the results page (#100) became its own lazy part, `results-route` (its strings, schemas, page and CSS); the first bundle keeps the rail link with its chart icon, the route, the `result` inbox filter, the public share page's route and the strings of a refreshed list: 201,489 → 202,056 bytes (+567); the share page is a lazy part of its own. Its CSS went from 15,890 to 15,893: the mobile filter chips now wrap instead of scrolling sideways, so a filter is never out of view.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
+
+## Operator console bundle
+
+The operator console is a build of its own (`web/vite.operator.config.ts`, served under `/operator/`): none
+of it is in the workspace app's bundle, and the workspace app's code is not in it. `corepack pnpm
+bundle:check` also measures the console's first bundle (the JavaScript and CSS `operator.html` loads)
+against its own ceilings, set on 2026-10-29 to the first measurement plus 5%: 78,652 bytes of JavaScript
+and 9,076 of CSS gzip (`OPERATOR_JS_LIMIT`, `OPERATOR_CSS_LIMIT` in `web/scripts/check-bundle-budget.mjs`).
+Never raise them to pass; move a screen into a lazy part. Measured then: 75,443 and 8,734 bytes; History,
+Requests, the audit log and Operators are lazy parts of 0.8 to 2 KB each. The workspace app's first
+bundle is unchanged (199,617 bytes). With the dangerous groups (the review's server guards in the first
+bundle; the trial band and the Polar products table as lazy parts): 76,691 and 8,774. Measured with
+Playwright on a local `collie serve` (Chromium, 1,440 px, an Apple M4, median of 5): a full load of the
+overview to its numbers 41 ms; from a nav link to a settings page 16 ms.
+
+On 2026-10-29 cloud sign-in on the console (email and code, then the authenticator) kept in the first
+bundle only the sign-in page's branch, the meta read and a few strings: 77,416 → 77,843 bytes (+427), CSS
+unchanged at 9,006. Clerk's form with its strings is the lazy part `cloud-sign-in`, loaded only by the
+sign-in page of a server with cloud sign-in. The workspace app's first bundle: 200,409 → 200,411 (its cloud
+sign-in now uses the shared `ClerkSession`).
 
 ## Reply box lists (saved replies, articles)
 

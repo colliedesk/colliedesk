@@ -68,10 +68,27 @@ server_run() { dc run --rm --no-deps -T server "$@"; }
 # A migrate that prints exactly "migrations applied", as both releases do.
 migrate() { server_run '/app/collie migrate' 2>/dev/null | grep -qx 'migrations applied'; }
 
-# The install as install.sh lays it out: its compose file and database users, generated passwords.
-sed -n "/^cat >\"\$TARGET_DIR\/compose.yaml\" <<'COMPOSE'$/,/^COMPOSE$/p" "$ROOT/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
+# The install as the previous release's install.sh laid it out: its compose file, which still passes
+# the settings to the server in its environment, and its database users, generated passwords. The
+# upgrade keeps that compose file, as an operator who only changes the image does: the candidate
+# imports the settings into its database and warns that they are still in the environment.
+# PREVIOUS_INSTALL_SH names the file instead (a local image without a release tag).
+previous_tag=${PREVIOUS##*:}
+# Images are tagged 0.0.N, the release tags v0.0.N.
+case "$previous_tag" in
+  [0-9]*) previous_tag=v$previous_tag ;;
+esac
+if [ -n "${PREVIOUS_INSTALL_SH:-}" ]; then
+  cp "$PREVIOUS_INSTALL_SH" "$TMP/install.sh"
+else
+  git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh" 2>/dev/null ||
+    { git -C "$ROOT" fetch -q --depth 1 origin "refs/tags/$previous_tag:refs/tags/$previous_tag" 2>/dev/null &&
+      git -C "$ROOT" show "$previous_tag:install.sh" >"$TMP/install.sh"; } ||
+    fail "cannot read install.sh of $previous_tag; set PREVIOUS_INSTALL_SH"
+fi
+sed -n "/^cat >\"\$TARGET_DIR\/compose.yaml\" <<'COMPOSE'$/,/^COMPOSE$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/compose.yaml"
 mkdir -p "$TMP/initdb"
-sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$ROOT/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
+sed -n "/^cat >\"\$TARGET_DIR\/initdb\/10-colliedesk-owner.sh\" <<'INITDB'$/,/^INITDB$/p" "$TMP/install.sh" | sed '1d;$d' >"$TMP/initdb/10-colliedesk-owner.sh"
 chmod 755 "$TMP/initdb/10-colliedesk-owner.sh"
 grep -q '^services:' "$TMP/compose.yaml" && grep -q 'CREATE ROLE colliedesk' "$TMP/initdb/10-colliedesk-owner.sh" ||
   fail 'could not read the compose file and database setup from install.sh'
@@ -83,11 +100,14 @@ owner_password=$(secret)
   echo "COLLIEDESK_OWNER_PASSWORD=$owner_password"
   echo "DATABASE_URL=postgres://colliedesk:$owner_password@postgres:5432/colliedesk?sslmode=disable"
   echo "DATABASE_REQUEST_URL=postgres://colliedesk_request:$(secret)@postgres:5432/colliedesk?sslmode=disable"
-  echo "APP_SECRET=$(secret)"
   echo "COLLIE_DESK_IMAGE=$PREVIOUS"
   echo "COLLIE_DESK_PORT=$PORT"
   echo "APP_ORIGIN=http://localhost:$PORT"
   echo 'DISABLE_TELEMETRY=true'
+  # Settings an older release read from the environment: the candidate imports them.
+  echo 'SMTP_HOST=smtp.invalid'
+  echo 'SMTP_PORT=2525'
+  echo 'TRUSTED_PROXIES=127.0.0.0/8,10.9.0.0/16'
 } >"$TMP/.env"
 use_image() {
   sed "s#^COLLIE_DESK_IMAGE=.*#COLLIE_DESK_IMAGE=$1#" "$TMP/.env" >"$TMP/.env.next" && mv "$TMP/.env.next" "$TMP/.env"
@@ -246,6 +266,9 @@ roll_back() {
     "$DOCKER" compose run --rm --no-deps -T server 'find /data/attachments -mindepth 1 -delete && tar -C /data/attachments -xf -' <attachments.tar 2>/dev/null) ||
     fail 'the documented restore failed'
   use_image "$PREVIOUS"
+  # The installer kept the compose file it replaced: the previous image reads its settings from the
+  # environment again (docs/self-host/upgrade.md).
+  if [ -f "$TMP/compose.yaml.bak" ]; then mv "$TMP/compose.yaml.bak" "$TMP/compose.yaml"; fi
   migrate || fail "$PREVIOUS did not take its restored database"
   check compare "$TMP/rolled-back" '' "$TMP/before" || fail 'the restored install differs from the backup'
   step 'the install is the backup again'
@@ -319,6 +342,48 @@ step 'serving the upgraded install'
 dc up -d --wait server >/dev/null 2>&1 || fail "$CANDIDATE did not become healthy on the upgraded database"
 check_inbox acme owner@acme.example
 check_inbox beta admin@beta.example
+
+# The settings the previous release read from the environment are in the database now, imported once,
+# and the doctor says they can go from the environment (exit 1: warnings, no error).
+[ "$(dc exec -T server /app/collie config get smtp.host 2>/dev/null)" = 'smtp.host=smtp.invalid' ] ||
+  fail 'the candidate did not import SMTP_HOST into its database'
+[ "$(dc exec -T server /app/collie config get trusted_proxies 2>/dev/null)" = 'trusted_proxies=127.0.0.0/8,10.9.0.0/16' ] ||
+  fail 'the candidate did not import TRUSTED_PROXIES into its database'
+imports=$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)
+[ "$imports" -ge 1 ] || fail 'the import from the environment left no audit line'
+doctor_status=0
+dc exec -T server /app/collie config doctor >"$TMP/doctor.out" 2>&1 || doctor_status=$?
+[ "$doctor_status" = 1 ] && grep -q 'SMTP_HOST is still set in the environment and equals' "$TMP/doctor.out" ||
+  { cat "$TMP/doctor.out" >&2; fail "collie config doctor exited $doctor_status, want 1 naming SMTP_HOST still in the environment"; }
+dc logs --no-color server 2>/dev/null | grep -q 'a setting is still in the environment' ||
+  fail 'the candidate did not warn that settings are still in the environment'
+dc restart server >/dev/null 2>&1 && dc up -d --wait server >/dev/null 2>&1 || fail "$CANDIDATE did not restart"
+[ "$(echo "SELECT count(*) FROM operator_audit WHERE action = 'env.import';" | psql_as postgres colliedesk -At)" = "$imports" ] ||
+  fail 'a restart imported the environment again'
+step 'settings imported from the environment once; the doctor names the leftovers'
+
+# The operator then runs the new installer on the same directory: it keeps the compose file it replaces as
+# compose.yaml.bak, passes only the bootstrap variables, imports the settings .env still holds through
+# --stdin (a group the database lacks; the others are kept) and keeps the workspaces it already made.
+step 'running the new installer again on the upgraded install'
+cp "$TMP/compose.yaml" "$TMP/compose.previous"
+touch "$TMP/.initialized"
+echo 'INTERNAL_SIGNUP_EMAILS=@upgrade.example' >>"$TMP/.env"
+echo 'SMTP_HOST=smtp.changed.invalid' >>"$TMP/.env"
+rerun=$(COLLIE_DESK_IMAGE=$CANDIDATE sh "$ROOT/install.sh" --dir "$TMP" --name 'Upgrade Desk' --email owner@acme.example </dev/null 2>&1) ||
+  { printf '%s\n' "$rerun" >&2; fail 'the new installer failed on the upgraded install'; }
+printf '%s\n' "$rerun" | grep -q 'Existing workspace initialization was kept' || { printf '%s\n' "$rerun" >&2; fail 'the installer did not keep the existing install'; }
+if printf '%s\n' "$rerun" | grep -q 'Operator console (one-time link)'; then fail 'the installer printed an operator link again'; fi
+cmp -s "$TMP/compose.previous" "$TMP/compose.yaml.bak" || fail 'the installer did not keep the compose file it replaced as compose.yaml.bak'
+if grep -q 'SMTP_HOST' "$TMP/compose.yaml"; then fail 'the new compose file still passes SMTP_HOST'; fi
+[ "$(dc exec -T server /app/collie config get internal_signup.emails 2>/dev/null)" = 'internal_signup.emails=@upgrade.example' ] ||
+  fail 'the installer did not import INTERNAL_SIGNUP_EMAILS from .env'
+[ "$(dc exec -T server /app/collie config get smtp.host 2>/dev/null)" = 'smtp.host=smtp.invalid' ] ||
+  fail 'the installer replaced a group the database already held'
+dc exec -T server /app/collie config doctor >"$TMP/doctor.out" 2>&1 || :
+if grep -q 'SMTP_HOST' "$TMP/doctor.out"; then cat "$TMP/doctor.out" >&2; fail 'with the new compose file the doctor still names SMTP_HOST'; fi
+check_inbox acme owner@acme.example
+step 'the installer moved the settings and kept the install and the old compose file'
 
 if [ "$RESTORE" = after ]; then
   restore_one_workspace "$CANDIDATE"

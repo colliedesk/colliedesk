@@ -135,6 +135,13 @@ func (verifier *Verifier) key(ctx context.Context, keyID string) (*rsa.PublicKey
 	return nil, fmt.Errorf("JWT key ID is unknown")
 }
 
+// CheckKeys fetches the JWKS once and counts the RSA keys it holds, for the operator console's check
+// before a change of cloud sign-in is saved. It does not touch the cache.
+func (verifier *Verifier) CheckKeys(ctx context.Context) (int, error) {
+	keys, err := verifier.fetchKeys(ctx)
+	return len(keys), err
+}
+
 func (verifier *Verifier) cachedKey(keyID string) *rsa.PublicKey {
 	verifier.cacheMu.RLock()
 	defer verifier.cacheMu.RUnlock()

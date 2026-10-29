@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -160,16 +161,29 @@ func (a *API) setAISlot(response http.ResponseWriter, request *http.Request) {
 		Effort     string `json:"effort"`
 		Enabled    *bool  `json:"enabled"`
 		// Absent: kept as they are.
-		Automatic *bool     `json:"automatic"`
-		AutoParts *[]string `json:"auto_parts"`
+		Automatic  *bool           `json:"automatic"`
+		AutoParts  *[]string       `json:"auto_parts"`
+		MonthlyCap json.RawMessage `json:"monthly_cap_micro_usd"`
 	}
 	if err := decodeJSON(request, &input); err != nil || input.Enabled == nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send source (server, provider or none), enabled, and optional provider_id, model and effort.")
 		return
 	}
-	slot, err := a.ai.SetSlot(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("slot"),
-		ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, Effort: input.Effort, Enabled: *input.Enabled,
-			Automatic: input.Automatic, AutoParts: autoParts(input.AutoParts)})
+	slotInput := ai.SlotInput{Source: input.Source, ProviderID: input.ProviderID, Model: input.Model, Effort: input.Effort, Enabled: *input.Enabled,
+		Automatic: input.Automatic, AutoParts: autoParts(input.AutoParts)}
+	// Absent: kept; null: removed.
+	if len(input.MonthlyCap) > 0 {
+		slotInput.MonthlyCapSet = true
+		if string(input.MonthlyCap) != "null" {
+			var cap int64
+			if err := json.Unmarshal(input.MonthlyCap, &cap); err != nil {
+				writeError(response, http.StatusBadRequest, "invalid_request", "monthly_cap_micro_usd is a whole number of micro-dollars, or null.")
+				return
+			}
+			slotInput.MonthlyCap = &cap
+		}
+	}
+	slot, err := a.ai.SetSlot(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("slot"), slotInput)
 	if err != nil {
 		writeAIError(response, err)
 		return

@@ -32,6 +32,9 @@ func TestEveryRoutePermissionIsHeldByTheTierTheRouteHad(t *testing.T) {
 		if access.Permission == "" {
 			continue
 		}
+		if auth.PermissionPreset(access.Permission) == auth.ScopeOperator {
+			continue // an operator token's permission, never a workspace token's (TestOperatorRealmIsSeparate)
+		}
 		used[access.Permission] = true
 		if !auth.ValidPermission(access.Permission) {
 			t.Errorf("%s names unknown permission %q", key, access.Permission)

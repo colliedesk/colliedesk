@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="{{.Look.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="color-scheme" content="{{if .Look.LightOnly}}light{{else}}light dark{{end}}">
+<meta name="robots" content="noindex">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="{{.Look.Style}}">
+<link rel="stylesheet" href="{{.Style}}">
+{{- with .Look.BrandStyle}}
+<link rel="stylesheet" href="{{.}}">
+{{- end}}
+{{- with .Look.Favicon}}
+<link rel="icon" href="{{.}}">
+{{- end}}
+<script src="{{.Script}}" defer></script>
+</head>
+<body class="{{if .Embed}}embed{{else}}chat-page{{end}}">
+<a class="skip" href="#chat">Skip to the chat</a>
+<div id="chat" class="chat-mount" data-config="{{.Config}}" tabindex="-1"></div>
+<noscript><p class="wrap">AI chat needs JavaScript. <a href="{{.Look.SearchURL}}">Search the articles</a> or go back to <a href="{{.Look.Home}}">{{.Look.SiteTitle}}</a>.</p></noscript>
+</body>
+</html>

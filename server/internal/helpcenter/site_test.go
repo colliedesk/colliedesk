@@ -9,11 +9,12 @@ import (
 )
 
 // The help center is the customer's own site (#125): no template or style may name the product, and
-// no page may carry a script or inline style. The one exception is the JSON-LD data block, which no
-// browser runs (and script-src 'none' would refuse anyway).
+// no page may carry an inline script or style. The one script a page may load is a channel type's own
+// file (the chat), by address, only where the type asks for it; the JSON-LD data block is no script a
+// browser runs.
 func TestTemplatesCarryNoBrandingScriptOrInlineStyle(t *testing.T) {
 	check := func(path string, data []byte) {
-		text := strings.ReplaceAll(strings.ToLower(string(data)), `<script type="application/ld+json">`, "")
+		text := strings.ReplaceAll(strings.ToLower(strings.ReplaceAll(string(data), `<script src="{{.Script}}" defer></script>`, "")), `<script type="application/ld+json">`, "")
 		for _, banned := range []string{"colliedesk", "hc labs", "powered by", "<script", "style=", "<style", "@import", "url("} {
 			if strings.Contains(text, banned) {
 				t.Errorf("%s holds %q", path, banned)

@@ -5,6 +5,7 @@
 package helpcenter
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/channels"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/kbhtml"
@@ -51,6 +53,19 @@ const (
 var contentSecurityPolicy = "default-src 'none'; img-src 'self'; style-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
 	"; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 
+// ScriptPolicy is contentSecurityPolicy for a page that runs one script of the help center's own
+// (a channel type's, such as the chat): that script by its full address and nothing else, calls to the
+// help center's own origin, Trusted Types so the script cannot write HTML, and the pages allowed to frame
+// it (frameAncestors, 'none' when empty).
+func ScriptPolicy(script, frameAncestors string) string {
+	if frameAncestors == "" {
+		frameAncestors = "'none'"
+	}
+	return "default-src 'none'; img-src 'self'; style-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
+		"; media-src 'self'; script-src " + script + "; connect-src 'self'; require-trusted-types-for 'script'; form-action 'self'; frame-ancestors " +
+		frameAncestors + "; base-uri 'none'"
+}
+
 // slugShape is the shape the workspaces table enforces; anything else cannot be a workspace.
 var slugShape = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -74,6 +89,17 @@ type Config struct {
 	// Client names the address a request comes from (behind trusted proxies), for the bound on videos
 	// sent at once; nil uses the connection's address.
 	Client func(request *http.Request) string
+	// ChannelRoutes are the channel types' routes below every open help center (channels.HelpCenterRoute).
+	ChannelRoutes []ChannelRoute
+	// Additions says what the channel types add to the help center's pages now (an Ask AI link, an
+	// article's chat box); nil adds nothing.
+	Additions func(ctx context.Context, at channels.HelpCenter) (channels.HelpCenterAdditions, error)
+}
+
+// ChannelRoute is a channel type's help center route with the handler the API built for it.
+type ChannelRoute struct {
+	Method, Path string
+	Handler      channels.HelpCenterHandler
 }
 
 // Site serves every workspace's help center.
@@ -89,6 +115,8 @@ type Site struct {
 	videos *streams
 	// hosts finds the workspaces of custom domains (custom-host.go).
 	hosts *customHosts
+	// routes matches the channel types' routes on the path below a help center's root.
+	routes *http.ServeMux
 }
 
 // New builds the help center from its configuration. It panics when a template is broken, which the
@@ -96,7 +124,14 @@ type Site struct {
 func New(config Config) *Site {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	config.Domain = strings.ToLower(strings.TrimSpace(config.Domain))
-	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams(), hosts: newCustomHosts(time.Now)}
+	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams(), hosts: newCustomHosts(time.Now), routes: http.NewServeMux()}
+	for _, route := range config.ChannelRoutes {
+		handler := route.Handler
+		// Two types claiming one route is a programming error: the mux panics.
+		site.routes.HandleFunc(route.Method+" "+route.Path, func(response http.ResponseWriter, request *http.Request) {
+			handler(response, request, request.Context().Value(helpCenterKey{}).(channels.HelpCenter))
+		})
+	}
 	if parsed, err := url.Parse(config.Origin); err == nil {
 		site.originHost = strings.ToLower(parsed.Hostname())
 	}
@@ -222,7 +257,8 @@ func (s *Site) movedTo(request *http.Request, at address, site domain.HelpCenter
 // serve answers one request to the help center at address at.
 func (s *Site) serve(response http.ResponseWriter, request *http.Request, at address) {
 	slug, base, sub := at.slug, at.base, at.sub
-	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+	route := s.channelRoute(request, sub)
+	if route == nil && request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		securityHeaders(response.Header())
 		response.Header().Set("Cache-Control", "no-store")
@@ -260,8 +296,7 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	// A claim's CNAME target is only where the custom domain's DNS points: a visitor who opens it
 	// moves to the help center's address, the custom domain once it is active.
 	case at.claim && open:
-		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, s.movedTo(request, at, site), http.StatusMovedPermanently)
+		s.redirect(response, request, s.movedTo(request, at, site), base == "")
 		return
 	// A custom domain removed or replaced in another process may still be remembered here; the
 	// workspace's own row decides.
@@ -270,21 +305,34 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		return
 	// An open help center with an active custom domain serves only there; its other addresses move.
 	case at.host == "" && open && site.CustomHost != "":
-		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, s.movedTo(request, at, site), http.StatusMovedPermanently)
+		s.redirect(response, request, s.movedTo(request, at, site), base == "")
 		return
 	// A server with a help center domain serves each help center on its own host; the path address
 	// moves there, whether or not the workspace exists, so the redirect tells nothing about it.
 	case !at.workspaceHost && base != "" && s.config.Domain != "" && email.ValidateHostedSlug(slug) == nil:
-		response.Header().Set("Cache-Control", "no-store")
-		http.Redirect(response, request, s.movedTo(request, at, domain.HelpCenterSite{Slug: slug}), http.StatusMovedPermanently)
+		s.redirect(response, request, s.movedTo(request, at, domain.HelpCenterSite{Slug: slug}), base == "")
 		return
 	// Unknown, off and locked are one answer, and none of them ever reaches the ETag.
 	case !open:
 		s.writeNotFound(response, base == "")
 		return
 	}
-	view := s.newView(site, base)
+	view := s.newView(site, base, channels.HelpCenterAdditions{})
+	reached := s.helpCenterAt(view, base)
+	if route != nil {
+		route.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), helpCenterKey{}, reached)))
+		return
+	}
+	if s.config.Additions != nil && (sub == "/" || sub == "" || sub == "/search" || strings.HasPrefix(sub, "/c/") || strings.HasPrefix(sub, "/a/")) {
+		additions, err := s.config.Additions(ctx, reached)
+		if err != nil {
+			s.writeError(response, err)
+			return
+		}
+		if additions.Version != "" {
+			view = s.newView(site, base, additions)
+		}
+	}
 	switch {
 	case sub == "/" || sub == "":
 		// One address for the home page: no trailing slash below /help/, no query.
@@ -320,6 +368,46 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	}
 }
 
+// helpCenterKey holds the channels.HelpCenter of a request to a channel type's route.
+type helpCenterKey struct{}
+
+// channelRoute is the channel types' route that answers a request at sub, the path below the help
+// center's root, or nil. The built-in pages never move: a type cannot claim one of their paths.
+func (s *Site) channelRoute(request *http.Request, sub string) http.Handler {
+	if sub == "" || sub == "/" || sub == "/search" || sub == "/robots.txt" {
+		return nil
+	}
+	for _, prefix := range []string{"/c/", "/a/", "/images/", "/media/", stylePath} {
+		if strings.HasPrefix(sub, prefix) {
+			return nil
+		}
+	}
+	probe := request.Clone(request.Context())
+	probe.URL.Path, probe.URL.RawPath = sub, ""
+	if _, pattern := s.routes.Handler(probe); pattern == "" {
+		return nil
+	}
+	// The mux serves the probe's path, so the route reads its wildcards (PathValue).
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		routed := request.Clone(request.Context())
+		routed.URL.Path, routed.URL.RawPath = sub, ""
+		s.routes.ServeHTTP(response, routed)
+	})
+}
+
+// redirect moves a request to target with a 301, which a browser follows with a GET. A write to a
+// channel type's route (a chat's question) is never turned into a GET: on an address that moves it
+// gets the 404 of a help center that is not there, and the page it came from posts to the help
+// center's current address.
+func (s *Site) redirect(response http.ResponseWriter, request *http.Request, target string, onHost bool) {
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		s.writeNotFound(response, onHost)
+		return
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	http.Redirect(response, request, target, http.StatusMovedPermanently)
+}
+
 // view is one help center as its pages show it.
 type view struct {
 	site domain.HelpCenterSite
@@ -329,9 +417,28 @@ type view struct {
 	// address is the help center's public address, for canonical links.
 	address string
 	brand   brand
+	// additions are what the channel types add to its pages now.
+	additions channels.HelpCenterAdditions
 }
 
-func (s *Site) newView(site domain.HelpCenterSite, base string) view {
+// helpCenterAt is the help center as a channel type's route sees it.
+func (s *Site) helpCenterAt(v view, base string) channels.HelpCenter {
+	data := s.page(v, "", nil)
+	look := channels.HelpCenterLook{Lang: data.Lang, SiteTitle: data.SiteTitle, Home: data.Home, SearchURL: data.SearchURL, Style: data.Style,
+		BrandStyle: data.BrandStyle, Favicon: data.Favicon, LightOnly: data.LightOnly, NoIndex: data.NoIndex}
+	if data.Logo != nil {
+		look.LogoURL, look.LogoAlt, look.LogoWidth, look.LogoHeight = data.Logo.URL, data.Logo.Alt, data.Logo.Width, data.Logo.Height
+	}
+	if colorsSet(v.site.Theme.Colors) {
+		palette := domain.ThemeBrandPalette(v.site.Theme.Colors)
+		look.Accent, look.AccentInk = palette.Accent.Hex(), palette.AccentInk.Hex()
+	}
+	site := v.site
+	return channels.HelpCenter{WorkspaceID: site.WorkspaceID, Slug: site.Slug, Name: site.Name, Trial: site.Trial, Address: v.address, Base: base,
+		NotFound: func(response http.ResponseWriter) { s.writeNotFound(response, base == "") }, Look: look}
+}
+
+func (s *Site) newView(site domain.HelpCenterSite, base string, additions channels.HelpCenterAdditions) view {
 	home := base
 	if home == "" {
 		home = "/"
@@ -342,8 +449,8 @@ func (s *Site) newView(site domain.HelpCenterSite, base string) view {
 	brand := newBrand(site)
 	address := SiteURL(s.config.Origin, s.config.Domain, site.Slug, site.CustomHost)
 	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
-		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, brand.key}, "\x00")))
-	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: address, brand: brand}
+		site.Title, site.Locale, site.Name, base, address, s.config.Version, s.pages.fingerprint, brand.key, additions.Version}, "\x00")))
+	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: address, brand: brand, additions: additions}
 }
 
 func (v view) title() string {
@@ -379,6 +486,10 @@ func securityHeaders(header http.Header) {
 func (s *Site) writePage(response http.ResponseWriter, request *http.Request, v view, status int, body []byte) {
 	header := response.Header()
 	securityHeaders(header)
+	if v.additions.ArticleScript != "" && v.additions.ArticleBox && bytes.Contains(body, []byte(`<script src="`)) {
+		script, _, _ := strings.Cut(v.additions.ArticleScript, "?")
+		header.Set("Content-Security-Policy", ScriptPolicy(v.address+script, ""))
+	}
 	header.Set("Content-Type", "text/html; charset=utf-8")
 	header.Set("Content-Length", strconv.Itoa(len(body)))
 	if v.site.Trial {

@@ -32,7 +32,12 @@ func TestValidateHostedSlug(t *testing.T) {
 		"reserved clerk":        "clerk",
 		"reserved clkmail":      "clkmail",
 		"reserved help-staging": "help-staging",
-		"punycode":              "xn--acme",
+		// The operator console's own host (OPERATOR_ORIGIN) is one of these on the hosted cloud.
+		"reserved admin":    "admin",
+		"reserved ops":      "ops",
+		"reserved operator": "operator",
+		"reserved console":  "console",
+		"punycode":          "xn--acme",
 		// hc-<24 hex digits> is the CNAME target of a custom help center domain's claim.
 		"claim target": "hc-0123456789abcdef01234567",
 	} {

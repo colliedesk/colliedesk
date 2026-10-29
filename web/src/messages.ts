@@ -72,6 +72,7 @@ export const messages = {
   channels: 'Channels',
   emailNav: 'Email',
   webFormNav: 'Web form',
+  helpChatNav: 'Help chat',
   connectAIAgent: 'Connect an AI agent',
   mcpURL: 'https://colliedesk.com/docs/mcp',
   conversationList: 'Conversation list',

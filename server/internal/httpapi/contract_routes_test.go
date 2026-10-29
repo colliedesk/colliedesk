@@ -124,6 +124,14 @@ func TestAgentGetsContractValidForbiddenOnEveryAdminRoute(t *testing.T) {
 		req := newRequest(t, route.Method, item.path, item.body, fixture.agentToken, nil)
 		validateContractRequest(t, req)
 		response := serve(fixture.api, req)
+		// An operator route does not know workspace credentials at all (TestOperatorRealmIsSeparate).
+		if route.Permission == auth.PermissionOperator {
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("%s %s status=%d, want 401 for a workspace credential", route.Method, route.Pattern, response.Code)
+			}
+			validateContractResponse(t, req, response)
+			continue
+		}
 		if response.Code != http.StatusForbidden {
 			t.Fatalf("%s %s status=%d, want 403", route.Method, route.Pattern, response.Code)
 		}
@@ -140,7 +148,11 @@ func TestCookieWriteRoutesReturnContractValidForbidden(t *testing.T) {
 			continue
 		}
 		item := cases[route.Method+" "+route.Pattern]
-		req := contractRequest(t, route.Method, item, "", "", cookie)
+		useCookie := cookie
+		if route.Permission == auth.PermissionOperator {
+			useCookie = &http.Cookie{Name: "__Host-colliedesk_operator", Value: fixture.operatorCookie}
+		}
+		req := contractRequest(t, route.Method, item, "", "", useCookie)
 		validateContractRequest(t, req)
 		response := serve(fixture.api, req)
 		if response.Code != http.StatusForbidden {
@@ -154,6 +166,31 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 	admin := f.adminToken
 	cases := map[string]contractCase{
 		"GET /api/v1/config":                                         {"/api/v1/config", nil, "", 200, ""},
+		"POST /api/v1/operator/auth/redeem":                          {"/api/v1/operator/auth/redeem", map[string]any{"token": f.operatorLink}, "", 200, ""},
+		"POST /api/v1/operator/auth/totp":                            {"/api/v1/operator/auth/totp", map[string]any{"ticket": "no-such-ticket", "code": "123456"}, "", 404, ""},
+		"POST /api/v1/operator/auth/cloud":                           {"/api/v1/operator/auth/cloud", nil, "disabled-cloud-token", 404, ""},
+		"GET /api/v1/operator/auth/me":                               {"/api/v1/operator/auth/me", nil, f.operatorToken, 200, ""},
+		"POST /api/v1/operator/auth/logout":                          {"/api/v1/operator/auth/logout", nil, f.operatorLogoutToken, 204, ""},
+		"POST /api/v1/operator/tokens":                               {"/api/v1/operator/tokens", map[string]any{"label": "contract"}, f.operatorToken, 202, ""},
+		"GET /api/v1/operator/status":                                {"/api/v1/operator/status", nil, f.operatorToken, 200, ""},
+		"GET /api/v1/operator/config":                                {"/api/v1/operator/config", nil, f.operatorToken, 200, ""},
+		"PATCH /api/v1/operator/config":                              {"/api/v1/operator/config", map[string]any{"base_version": 0, "set": map[string]any{"internal_signup.emails": "@contract.example"}}, f.operatorToken, 202, ""},
+		"POST /api/v1/operator/config/check":                         {"/api/v1/operator/config/check", map[string]any{"set": map[string]any{"internal_signup.emails": "@contract.example"}}, f.operatorToken, 200, ""},
+		"GET /api/v1/operator/config/versions":                       {"/api/v1/operator/config/versions", nil, f.operatorToken, 200, ""},
+		"POST /api/v1/operator/config/versions/{id}/restore":         {"/api/v1/operator/config/versions/1/restore", map[string]any{"base_version": 1}, f.operatorToken, 202, ""},
+		"POST /api/v1/operator/config/trial/confirm":                 {"/api/v1/operator/config/trial/confirm", map[string]any{"version": 1}, f.operatorToken, 202, ""},
+		"POST /api/v1/operator/config/trial/revert":                  {"/api/v1/operator/config/trial/revert", map[string]any{"version": 1}, f.operatorToken, 202, ""},
+		"GET /api/v1/operator/billing/products":                      {"/api/v1/operator/billing/products", nil, f.operatorToken, 200, ""},
+		"POST /api/v1/operator/billing/products":                     {"/api/v1/operator/billing/products", map[string]any{"product_id": "prod_contract", "plan": "team", "period": "monthly"}, f.operatorToken, 202, ""},
+		"PATCH /api/v1/operator/billing/products/{id}":               {"/api/v1/operator/billing/products/prod_contract", map[string]any{"on_sale": false}, f.operatorToken, 202, ""},
+		"GET /api/v1/operator/audit":                                 {"/api/v1/operator/audit", nil, f.operatorToken, 200, ""},
+		"GET /api/v1/operator/requests":                              {"/api/v1/operator/requests", nil, f.operatorToken, 200, ""},
+		"GET /api/v1/operator/requests/{id}":                         {"/api/v1/operator/requests/" + f.operatorRequestID, nil, f.operatorToken, 200, ""},
+		"POST /api/v1/operator/requests/{id}/cancel":                 {"/api/v1/operator/requests/" + f.operatorCancelID + "/cancel", nil, f.operatorToken, 200, ""},
+		"GET /api/v1/operator/operators":                             {"/api/v1/operator/operators", nil, f.operatorToken, 200, ""},
+		"POST /api/v1/operator/operators":                            {"/api/v1/operator/operators", map[string]any{"email": "new@contract.example"}, f.operatorToken, 202, ""},
+		"DELETE /api/v1/operator/operators/{id}":                     {"/api/v1/operator/operators/00000000-0000-4000-8000-000000000000", nil, f.operatorToken, 202, ""},
+		"DELETE /api/v1/operator/sessions/{id}":                      {"/api/v1/operator/sessions/00000000-0000-4000-8000-000000000000", nil, f.operatorToken, 202, ""},
 		"POST /api/v1/auth/cloud/exchange":                           {"/api/v1/auth/cloud/exchange", map[string]any{}, "disabled-cloud-token", 404, ""},
 		"POST /api/v1/auth/cloud/signup":                             {"/api/v1/auth/cloud/signup", map[string]any{"workspace_name": "Acme"}, "disabled-cloud-token", 404, ""},
 		"POST /api/v1/auth/redeem":                                   {"/api/v1/auth/redeem", map[string]any{"token": f.redeemToken}, "", 200, ""},
@@ -329,6 +366,11 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"PUT /api/v1/ai/slots/{slot}":                                      {path: "/api/v1/ai/slots/triage", body: map[string]any{"source": "provider", "provider_id": f.aiDraftsProviderID, "enabled": true}, token: admin, status: 200},
 		"DELETE /api/v1/ai/providers/{id}":                                 {path: "/api/v1/ai/providers/" + f.aiProviderID, token: admin, status: 200},
 		"GET /api/v1/ai/usage":                                             {path: "/api/v1/ai/usage?month=2026-10", token: admin, status: 200},
+		"GET /api/v1/ai/chat/usage":                                        {path: "/api/v1/ai/chat/usage", token: admin, status: 200},
+		"GET /api/v1/ai/chat/sessions":                                     {path: "/api/v1/ai/chat/sessions?status=handed_off", token: admin, status: 200},
+		"GET /api/v1/ai/chat/sessions/{id}":                                {path: "/api/v1/ai/chat/sessions/" + f.aiChatID, token: admin, status: 200},
+		"DELETE /api/v1/ai/chat/sessions/{id}":                             {path: "/api/v1/ai/chat/sessions/" + f.aiChatID, token: admin, status: 204},
+		"POST /api/v1/ai/chat/preview":                                     {path: "/api/v1/ai/chat/preview", body: map[string]any{"question": "Where is my order?"}, token: admin, status: 409},
 		"PUT /api/v1/ai/automatic-limits":                                  {path: "/api/v1/ai/automatic-limits", body: map[string]any{"per_day": 200, "per_minute": 20}, token: admin, status: 200},
 		"POST /api/v1/conversations/{id}/ai-drafts":                        {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts", body: map[string]any{"prompt": "Another contract draft"}, token: admin, status: 202},
 		"GET /api/v1/conversations/{id}/ai-drafts":                         {path: "/api/v1/conversations/" + f.conversationID + "/ai-drafts", token: admin, status: 200},

@@ -45,6 +45,10 @@ export function pairs() {
   add('--accent-text', '--ok-soft', 4.5, 'reconcile footer link');
   add('--on-brand-panel', '--brand-panel', 4.5, 'sign-in brand side');
   add('--on-brand-panel-2', '--brand-panel', 4.5, 'sign-in brand side, secondary');
+  // The operator console's server band: status dots always sit beside their words, so 3:1 (non-text).
+  for (const dot of ['--ok', '--warn', '--danger']) add(dot, '--brand-panel', 3, 'operator console band dot');
+  add('--text-1', '--warn-soft', 4.5, 'operator console trial strip');
+  add('--text-1', '--danger-soft', 4.5, 'operator console refused strip');
   add('--pending', '--surface-1', 3, 'pending dot');
   add('--open', '--surface-1', 3, 'open dot');
   for (const bg of surfaces) add('--focus', bg, 3, 'focus ring');

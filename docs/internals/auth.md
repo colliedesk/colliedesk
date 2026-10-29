@@ -223,6 +223,12 @@ workspace table). User page: `docs/user/agent-requests.md`.
 - **Rollback.** The down migration refuses while any request exists, like saved replies: requests
   are the record of what agents asked and who approved it.
 
+## Operators
+
+The people who run the server sign in to the operator console in a realm of their own: their own tables,
+cookie, token prefix (`cdop_`) and tier. No workspace credential opens an operator route and no operator
+credential opens a workspace route. See [operator console internals](operator-console.md#operator-realm).
+
 ## Optional cloud sign-in
 
 Cloud sign-in is an OIDC-style bridge, not a second Colliedesk session system. The browser obtains

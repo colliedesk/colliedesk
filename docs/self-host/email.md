@@ -9,35 +9,40 @@ an SMTP relay.
 
 ## 1. Configure the server
 
-Set these variables on the server, then restart it. With the installer, add them to `.env` and
-run `docker compose up -d`.
+Save these settings with `collie config` (or in the operator console); a running server applies them
+within seconds. Each is named by its key or by the variable it replaced, shown in brackets:
 
-| Variable | Default | Meaning |
+```sh
+docker compose exec server /app/collie config set smtp.host=smtp.example.net smtp.username=apikey email.from_policy=any
+docker compose exec -T server /app/collie config set-secret smtp.password < relay-password.txt
+```
+
+| Setting | Default | Meaning |
 |---|---|---|
-| `SMTP_HOST` | empty | SMTP relay host. Empty disables outgoing email. |
-| `SMTP_PORT` | `587` | Relay port. Port 465 (implicit TLS) is not supported; use 587. |
-| `SMTP_USERNAME` | empty | Login. Leave empty for a relay that does not need one. |
-| `SMTP_PASSWORD` | empty | Password or API key for the login. |
-| `SMTP_STARTTLS` | `true` | Require STARTTLS before login. |
-| `EMAIL_FROM_POLICY` | `verified` | `verified`: send as the support address only after its domain is verified ([verify the domain](../user/email-channel.md#send-from-your-own-domain)). `any`: always send as the support address. |
-| `MAIL_FROM_DOMAIN` | empty | Domain used to send for workspaces whose domain is not verified, for example `mail.example.com`. |
-| `MAIL_FROM_INBOUND_SECRET` | empty | Secret (32+ characters) for the forwarder of `MAIL_FROM_DOMAIN` (step 4). |
-| `HOSTED_MAIL_DOMAIN` | empty | Hosted cloud only. Turns on `support@<workspace slug>.<this domain>` for every workspace. Needs `MAIL_FROM_INBOUND_SECRET`. Leave empty when you self-host. |
-| `RESEND_API_KEY` | empty | Resend API key. When set, domain verification uses the DNS records Resend lists (DKIM and SPF) instead of one TXT record. Needs a key that can add and verify domains. |
-| `EMAIL_TRUSTED_AUTHSERV_ID` | empty | Name of the receiving mail server whose SPF/DKIM/DMARC result you trust (step 3). Empty: no result is trusted. |
+| `smtp.host` (`SMTP_HOST`) | empty | SMTP relay host. Empty disables outgoing email. |
+| `smtp.port` (`SMTP_PORT`) | `587` | Relay port. Port 465 (implicit TLS) is not supported; use 587. |
+| `smtp.username` (`SMTP_USERNAME`) | empty | Login. Leave empty for a relay that does not need one. |
+| `smtp.password` (`SMTP_PASSWORD`) | empty | Password or API key for the login (a secret: `set-secret`). |
+| `smtp.starttls` (`SMTP_STARTTLS`) | `true` | Require STARTTLS before login. |
+| `email.from_policy` (`EMAIL_FROM_POLICY`) | `verified` | `verified`: send as the support address only after its domain is verified ([verify the domain](../user/email-channel.md#send-from-your-own-domain)). `any`: always send as the support address. |
+| `mail_from.domain` (`MAIL_FROM_DOMAIN`) | empty | Domain used to send for workspaces whose domain is not verified, for example `mail.example.com`. |
+| `mail_from.inbound_secret` (`MAIL_FROM_INBOUND_SECRET`) | empty | Secret (32+ characters) for the forwarder of `MAIL_FROM_DOMAIN` (step 4). |
+| `hosted_mail.domain` (`HOSTED_MAIL_DOMAIN`) | empty | Hosted cloud only. Turns on `support@<workspace slug>.<this domain>` for every workspace. Needs `MAIL_FROM_INBOUND_SECRET`. Leave empty when you self-host. |
+| `resend.api_key` (`RESEND_API_KEY`) | empty | Resend API key. When set, domain verification uses the DNS records Resend lists (DKIM and SPF) instead of one TXT record. Needs a key that can add and verify domains. |
+| `email.trusted_authserv_id` (`EMAIL_TRUSTED_AUTHSERV_ID`) | empty | Name of the receiving mail server whose SPF/DKIM/DMARC result you trust (step 3). Empty: no result is trusted. |
 
-**Self-hosted with your own relay:** set `EMAIL_FROM_POLICY=any`. You own the relay, so every
+**Self-hosted with your own relay:** set `email.from_policy=any`. You own the relay, so every
 workspace may send as its support address.
 
-**Shared relay (several teams on one server):** keep `verified` and set `MAIL_FROM_DOMAIN` to a
+**Shared relay (several teams on one server):** keep `verified` and set `mail_from.domain` to a
 domain the relay is allowed to send for.
 
 The relay must be allowed to send for the From domain. Set up SPF and DKIM for that domain with
 your relay provider, or receiving servers will mark replies as spam.
 
 Mail the server writes by itself (import notices, the weekly [results](../user/results.md) email to
-admins) leaves from `noreply@<MAIL_FROM_DOMAIN>` through the same relay, so it needs `SMTP_HOST` and
-`MAIL_FROM_DOMAIN`. Without them the results page says the weekly email cannot be sent.
+admins) leaves from `noreply@<mail_from.domain>` through the same relay, so it needs `smtp.host` and
+`mail_from.domain`. Without them the results page says the weekly email cannot be sent.
 
 If outgoing email cannot work, replies still appear on the timeline with **Delivery failed** and
 the reason, and the composer shows a notice. Fix the cause, then select **Retry delivery**.
@@ -83,7 +88,7 @@ Responses:
 Sending the same message twice is safe: Colliedesk stores a message once per `Message-ID`.
 
 **Sender verification.** Colliedesk shows a sender verification result only from the
-`Authentication-Results` header written by your receiving server. Set `EMAIL_TRUSTED_AUTHSERV_ID`
+`Authentication-Results` header written by your receiving server. Set `email.trusted_authserv_id`
 to the name at the start of that header (the text before the first `;`). Headers with any other
 name are ignored, because a sender can write them. Find the name in the original source of a
 message your receiving server delivered.
@@ -96,7 +101,7 @@ message your receiving server delivered.
 3. In **Email Routing → Routing rules**, send your support address to the Worker.
 4. To use reply tokens (`support+r-…@example.com`), enable subaddressing in Email Routing or
    add a catch-all rule to the same Worker. Threading by `In-Reply-To` works without it.
-5. Set `EMAIL_TRUSTED_AUTHSERV_ID` to the name Cloudflare writes in its `Authentication-Results`
+5. Set `email.trusted_authserv_id` to the name Cloudflare writes in its `Authentication-Results`
    header. At the time of writing that is `mx.cloudflare.net`; confirm it in the source of a
    message delivered through your route.
 
@@ -152,23 +157,23 @@ message to the sender. The wrapper maps the responses:
    Route the support address to the `colliedesk` transport. To keep a copy of rejected mail for a
    person, also deliver the support address to a human mailbox (for example with an alias that
    lists both).
-4. Set `EMAIL_TRUSTED_AUTHSERV_ID` to the name your MTA's DMARC or DKIM milter writes in
+4. Set `email.trusted_authserv_id` to the name your MTA's DMARC or DKIM milter writes in
    `Authentication-Results` (often the server host name).
 
 The secret is passed in a private header file, never on the command line.
 
 ## 4. Receive replies and bounces for MAIL_FROM_DOMAIN (shared relay)
 
-Workspaces without a verified domain send from `reply+<token>@<MAIL_FROM_DOMAIN>`. Most customers
+Workspaces without a verified domain send from `reply+<token>@<mail_from.domain>`. Most customers
 reply to the support address (it is in `Reply-To`), but some mail clients reply to the From
 address. A bounce goes to it only when your relay keeps that address as the envelope sender; relays
 that own the envelope sender (Resend, Amazon SES) send bounces to themselves instead. The server
 operator routes the domain once for all workspaces:
 
-1. Point the MX records of `MAIL_FROM_DOMAIN` at a forwarder, for example Cloudflare Email Routing
+1. Point the MX records of `mail_from.domain` at a forwarder, for example Cloudflare Email Routing
    with a catch-all rule to a Worker.
-2. Set `MAIL_FROM_INBOUND_SECRET` on the server to a random value of at least 32 characters.
-3. Use the same Worker code as in step 3, with `INBOUND_SECRET` set to `MAIL_FROM_INBOUND_SECRET`.
+2. Set `mail_from.inbound_secret` on the server to a random value of at least 32 characters.
+3. Use the same Worker code as in step 3, with `INBOUND_SECRET` set to `mail_from.inbound_secret`.
    Keep the `X-Original-To` line: it carries the `reply+<token>` address.
 
 Colliedesk finds the conversation from the token and files the message in its workspace, like any
@@ -176,10 +181,10 @@ reply. A bounce that reaches this address marks the reply **Delivery failed**. M
 token is answered `200` with status `dropped` and reason `unknown_recipient`; the Worker forwards
 nothing for it.
 
-On the hosted cloud, `MAIL_FROM_DOMAIN` may sit below `HOSTED_MAIL_DOMAIN`, for example
-`mail.colliedesk.com`. A recipient at `MAIL_FROM_DOMAIN` is always a reply address, never a workspace
+On the hosted cloud, `mail_from.domain` may sit below `hosted_mail.domain`, for example
+`mail.colliedesk.com`. A recipient at `mail_from.domain` is always a reply address, never a workspace
 slug. The server refuses to start when that name is below the hosted domain and is not a reserved
-label such as `mail`, because a workspace could then own it. Give `MAIL_FROM_DOMAIN` its own MX
+label such as `mail`, because a workspace could then own it. Give `mail_from.domain` its own MX
 record: a wildcard MX does not cover a name that has other records below it.
 
 ### Bounces through Resend
@@ -189,11 +194,11 @@ Resend keeps bounces and complaints and reports them by webhook instead. To show
 
 1. In Resend, add a webhook to `https://<your server>/api/v1/webhooks/resend` for the events
    `email.bounced` and `email.complained`.
-2. Set `RESEND_WEBHOOK_SECRET` on the server to the webhook's signing secret (`whsec_...`).
-   It needs `MAIL_FROM_DOMAIN`. Without the secret the endpoint does not exist.
+2. Set `resend.webhook_secret` on the server to the webhook's signing secret (`whsec_...`).
+   It needs `mail_from.domain`. Without the secret the endpoint does not exist.
 
 A bounce or a spam complaint marks the reply it is about **Delivery failed**, with the reason.
-Each reply is sent from its own address, `reply+<token>-<reply id>@MAIL_FROM_DOMAIN`, so the event
+Each reply is sent from its own address, `reply+<token>-<reply id>@mail_from.domain`, so the event
 names exactly one reply; a customer who answers that address still reaches the conversation. Limits:
 
 - Only replies sent from the platform domain are matched. A reply sent as a verified support address
@@ -207,7 +212,7 @@ names exactly one reply; a customer who answers that address still reaches the c
 
 ### Release a domain held by another workspace
 
-With `RESEND_API_KEY`, only one workspace can verify a given domain name. When the owner of a domain
+With `resend.api_key`, only one workspace can verify a given domain name. When the owner of a domain
 asks for it and another workspace holds it, release it:
 
 ```sh
@@ -235,7 +240,7 @@ first. If an admin later saves another name in **Settings**, the brand check app
 When the Resend webhook above is on, Colliedesk [pauses sending](../user/email-channel.md#sending-pauses-after-spam-complaints)
 for a workspace with too many spam complaints. The operator:
 
-- gets one email at `BILLING_ALERT_EMAIL` (needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`); without it the
+- gets one email at `billing.alert_email` (needs `smtp.host` and `mail_from.domain`); without it the
   server only logs a warning;
 - lifts the pause after checking the complaints:
   ```sh
@@ -258,12 +263,12 @@ what is missing and Colliedesk keeps sending through SMTP.
 2. Create a client of type **Web application**. Add the **Redirect URI** that **Send from your mailbox**
    shows, which is your `APP_ORIGIN` followed by `/api/v1/channels/email/gmail/callback`, for example
    `https://desk.example.com/api/v1/channels/email/gmail/callback`.
-3. Set these variables on the server and restart it:
+3. Save these settings (`collie config set`, the secret with `collie config set-secret`):
 
 | Variable | Meaning |
 |---|---|
-| `GOOGLE_OAUTH_CLIENT_ID` | Client ID of the Web application client. |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Its client secret. |
+| `google.client_id` | Client ID of the Web application client. |
+| `google.client_secret` | Its client secret. |
 | `MAILBOX_TOKEN_KEYS` | Key that encrypts the stored Google access: `k1:` followed by 32 random bytes in base64, for example `k1:$(openssl rand -base64 32)`. Keep it secret and keep a copy: without it the server cannot read the connections and every admin must connect Gmail again. |
 
 To change the key, put the new one first and keep the old one after a comma
@@ -286,10 +291,10 @@ these settings Colliedesk names what is missing and keeps sending through SMTP.
 1. In the [Microsoft Entra admin center](https://entra.microsoft.com), open **Entra ID** → **App
    registrations** → **New registration**.
    - **Supported account types:** for a server that only your organization uses, choose **Single tenant**
-     and set `MICROSOFT_OAUTH_TENANT` to your tenant id. A multi-tenant app whose publisher Microsoft has
+     and set `microsoft.tenant` to your tenant id. A multi-tenant app whose publisher Microsoft has
      not verified is often blocked in other organizations until their admin approves it, so single tenant
      is the simple choice for self-hosting. Choose **Any Entra ID Tenant + Personal Microsoft accounts**
-     only to accept Outlook.com and other organizations too (keep `MICROSOFT_OAUTH_TENANT` at `common`).
+     only to accept Outlook.com and other organizations too (keep `microsoft.tenant` at `common`).
    - **Redirect URI:** platform **Web**, your `APP_ORIGIN` followed by
      `/api/v1/channels/email/microsoft/callback`, for example
      `https://desk.example.com/api/v1/channels/email/microsoft/callback`. Then, under **Authentication**,
@@ -301,14 +306,14 @@ these settings Colliedesk names what is missing and keeps sending through SMTP.
 3. **Certificates & secrets** → **New client secret**. Microsoft allows at most 24 months and recommends
    less than 12. Copy the **Value** at once (it is shown only once). Write down the date it expires: when it
    expires, every Microsoft 365 channel stops sending at the same time. Replies then wait with a note naming
-   `MICROSOFT_OAUTH_CLIENT_SECRET` and the connections are kept, so setting a new secret is enough.
-4. Set these variables on the server and restart it:
+   `microsoft.client_secret` and the connections are kept, so setting a new secret is enough.
+4. Save these settings (`collie config set`, the secret with `collie config set-secret`):
 
 | Variable | Meaning |
 |---|---|
-| `MICROSOFT_OAUTH_CLIENT_ID` | **Application (client) ID** of the app registration. |
-| `MICROSOFT_OAUTH_CLIENT_SECRET` | The client secret's **Value**. |
-| `MICROSOFT_OAUTH_TENANT` | `common` (default: work, school and personal accounts), `organizations` (work and school only), `consumers` (personal only), or your tenant id or domain for a single-tenant app. |
+| `microsoft.client_id` | **Application (client) ID** of the app registration. |
+| `microsoft.client_secret` | The client secret's **Value**. |
+| `microsoft.tenant` | `common` (default: work, school and personal accounts), `organizations` (work and school only), `consumers` (personal only), or your tenant id or domain for a single-tenant app. |
 | `MAILBOX_TOKEN_KEYS` | The same key ring as Gmail: it encrypts the stored Microsoft access too. |
 
 Microsoft replaces the stored access every time it is used and drops it after 90 days unused, so the

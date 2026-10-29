@@ -45,7 +45,9 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 			covered[rest] = spec.Name
 		}
 	}
-	tiers := append(slices.Clone(auth.ScopeNames), "handler")
+	// The operator tier is its own vocabulary, not a fifth workspace tier (operator tokens reach only the
+	// operator routes and /mcp/operator): adding it here closes nothing and raises no ceiling.
+	tiers := append(slices.Clone(auth.ScopeNames), "handler", auth.ScopeOperator)
 	closedReasons := []string{httpapi.PersonOnly, httpapi.NotForPeople}
 	// A token calls a route directly at its tier or above, and gets an agent request below it or on an
 	// Approval route: either way an MCP tool must reach it.

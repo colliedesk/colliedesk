@@ -701,3 +701,15 @@ func (s *Store) CountChannelsOfType(ctx context.Context, workspaceID string) (ma
 		return counts, rows.Err()
 	})
 }
+
+// ChannelConfigOf reads a channel's own configuration as its type shows it (ConfigPart.Public), and
+// nothing else: what a type's own route needs on every request.
+func (s *Store) ChannelConfigOf(ctx context.Context, channel channels.Channel) (any, error) {
+	adapter, err := s.adapterOf(channel.Type)
+	if err != nil {
+		return nil, err
+	}
+	return scoped(ctx, s, channel.WorkspaceID, func(tx pgx.Tx) (any, error) {
+		return adapter.Config().Public(ctx, tx, channel)
+	})
+}

@@ -77,11 +77,13 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		}
 	}
 	// On a workspace's own host the workspace is the host's, whatever the browser asks for, and the
-	// identity token was issued to that host's page.
+	// identity token was issued to that host's page: its authorized party must be this host's origin
+	// (requestOrigin, from the Host the middleware resolved, never from the body).
 	if slug, ok := workspacehost.Slug(request.Context()); ok {
 		input.WorkspaceSlug = slug
 	}
 	email, err := a.cloud.Verify(request.Context(), token, origin)
+	a.countTrialSignIn(err == nil)
 	if err != nil {
 		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
 		return

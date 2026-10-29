@@ -36,7 +36,8 @@ fails when shared code names a type; `TestEveryRegisteredTypeIsWhole` when a reg
    and `web/src/channels/registry.test.ts` fail until all three agree. The server's conversation filter,
    saved views and MCP tool schemas read the registry (`mcpserver/channel-values.go`).
 3. `server/internal/channels/<type>/`: the adapter, its own routes in `Definition.Routes` (mounted by the
-   API under `/api/v1`) and tools in `Definition.Tools`. Its directory's name is unique among the
+   API under `/api/v1`), its routes on the help center in `Definition.HelpCenterRoutes` (mounted by the
+   help center below every address of an open help center) and tools in `Definition.Tools`. Its directory's name is unique among the
    server's packages, since `go test -c` in CI names each test binary by it: email's is `channelemail`,
    apart from the parser `internal/email`.
 4. One line in `server/internal/channels/registry/registry.go`.
@@ -96,6 +97,16 @@ its own change.
 - **The web form's older address** (`/public/forms/<slug>`) belongs to the form with `legacy_slug`,
   set on the workspace's first form; every form also answers `/public/web-forms/<id>`.
 - **Removing** is a soft delete: the row keeps its name for old conversations; settings and secrets go.
+- **Routes on the help center.** A help center host never reaches `/api/v1`, so what a type serves to
+  the visitors of a help center (a chat) is a `HelpCenterRoute`, below the help center's root on its own
+  host, below `/help/<slug>` and on its custom domain alike. The help center resolves the workspace and
+  refuses a help center that is off or locked first; the route gets the workspace (`channels.HelpCenter`)
+  and finds its channel through the kit (the default, or the one a `channel` query names), never by an
+  id alone. A channel that is off, missing or of another workspace answers `HelpCenter.NotFound`: the
+  help center's own 404, byte for byte. Routes never shadow the built-in pages (`/`, `/search`, `/a/`,
+  `/c/`, `/images/`, `/media/`, `/_/`), and the API builds their handlers, so the help center imports no
+  type and no pipeline. Tests prove the frame with `channeltest.Loopback`, run by an API through
+  `Config.ExtraChannelTypes`.
 - **A server without SMTP, Gmail and Microsoft 365** leaves email replies to a server that can send them and sends
   every other type's (`outbox.Options.Skip`).
 
@@ -110,6 +121,14 @@ had to fold several channels of a type into one row. The down migration exists f
 a database with two channels of a type, naming them.
 
 ## Traps
+
+- An address of the help center that moves (the path address when `HELP_CENTER_DOMAIN` is set, every
+  other address once a custom domain is active, a claim's CNAME target) moves a GET with a 301; a write
+  to a type's help center route gets the help center's 404 there instead, because a browser follows a
+  301 with a GET and would drop the body. A page posts to the address it was served from.
+- Every help center answer carries the help center's headers (`script-src 'none'`,
+  `frame-ancestors 'none'`, `X-Frame-Options: DENY`); a route that serves a page with a script or one
+  meant for a frame sets its own policy on that answer only.
 
 - `channel_types` is not granted to the app role (row-level security gate); foreign keys check it as the
   owner, and nothing at runtime reads it.

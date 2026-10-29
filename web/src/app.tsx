@@ -121,8 +121,8 @@ function AppLayout() {
 // exact + includeHash: otherwise every section link would count as current on any settings page.
 function settingsRouterLink(item: NavItem) {
   const preload = item.to.startsWith('/settings/channels') ? channelsRoutePart.preload : undefined;
-  // /settings/channels and the type homes under it are the channels route's splat, paths the route types do not list.
-  return <Link to={item.to as Exclude<NavItem['to'], `/settings/channels${string}`>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
+  // /settings/channels, the type homes under it and /settings/ai are routes with a splat, paths the route types do not list.
+  return <Link to={item.to as Exclude<NavItem['to'], `/settings/channels${string}` | '/settings/ai'>} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
     aria-current={item.current ? 'page' : undefined} onPointerEnter={preload} onFocus={preload}>{item.label}</Link>;
 }
 
@@ -249,11 +249,13 @@ const importRoute = createRoute({
     return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
   },
 });
+// Settings → Built-in AI, with a chat's transcript below it (/settings/ai/chats/<id>): the chunk reads its path.
 const aiRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/settings/ai',
+  getParentRoute: () => rootRoute, path: '/settings/ai/$',
   component: function AISettings() {
-    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute />} />;
+    // The path is read here, not in render: the part calls render only once its chunk has loaded.
+    const path = aiRoute.useParams()._splat ?? '';
+    return <Part part={aiRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ AIRoute }) => <AIRoute path={path} />} />;
   },
 });
 // Settings → Channels is its own chunk; one component reads the rest of the address (channels-route.tsx).

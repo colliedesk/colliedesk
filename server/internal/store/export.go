@@ -740,14 +740,16 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 			return err
 		}
 	}
-	rows, err = tx.Query(ctx, `SELECT slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at
+	rows, err = tx.Query(ctx, `SELECT slot,uses_server,provider_id::text,model,effort,enabled,automatic,auto_parts,consented_by::text,consented_at,updated_by::text,updated_at,
+			monthly_cap_micro_usd
 		FROM ai_slots WHERE workspace_id=$1 ORDER BY slot`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export AI slots: %w", err)
 	}
 	slots, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (export.AISlot, error) {
 		var r export.AISlot
-		err := row.Scan(&r.Slot, &r.UsesServer, &r.ProviderID, &r.Model, &r.Effort, &r.Enabled, &r.Automatic, &r.AutoParts, &r.ConsentedBy, &r.ConsentedAt, &r.UpdatedBy, &r.UpdatedAt)
+		err := row.Scan(&r.Slot, &r.UsesServer, &r.ProviderID, &r.Model, &r.Effort, &r.Enabled, &r.Automatic, &r.AutoParts, &r.ConsentedBy, &r.ConsentedAt, &r.UpdatedBy, &r.UpdatedAt,
+			&r.MonthlyCapMicroUSD)
 		r.ConsentedAt, r.UpdatedAt = domain.UTCOptional(r.ConsentedAt), domain.UTC(r.UpdatedAt)
 		return r, err
 	})
@@ -853,7 +855,107 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 			return err
 		}
 	}
-	return rowsError("export AI triage", triage)
+	if err := rowsError("export AI triage", triage); err != nil {
+		return err
+	}
+	triage.Close()
+	return exportAIChats(ctx, tx, workspaceID, sink)
+}
+
+// exportAIChats streams the help center's AI chats, each with its turns, their sources and feedback.
+func exportAIChats(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	// A page of chats at a time, oldest first, with all their turns and sources in two queries.
+	var after *time.Time
+	afterID := ""
+	for {
+		rows, err := tx.Query(ctx, `SELECT id::text,channel_id::text,surface,status,conversation_id::text,handed_off_at,history_cut_at,created_at,last_turn_at,ended_at
+			FROM ai_chat_sessions WHERE workspace_id=$1 AND ($2::timestamptz IS NULL OR (created_at,id::text)>($2,$3))
+			ORDER BY created_at,id::text LIMIT $4`, workspaceID, after, afterID, exportPageConversations)
+		if err != nil {
+			return fmt.Errorf("export AI chats: %w", err)
+		}
+		chats, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (export.AIChatSession, error) {
+			var r export.AIChatSession
+			err := row.Scan(&r.ID, &r.ChannelID, &r.Surface, &r.Status, &r.ConversationID, &r.HandedOffAt, &r.HistoryCutAt, &r.CreatedAt, &r.LastTurnAt, &r.EndedAt)
+			return r, err
+		})
+		if err != nil {
+			return fmt.Errorf("export AI chats: %w", err)
+		}
+		if len(chats) == 0 {
+			return nil
+		}
+		last := chats[len(chats)-1]
+		after, afterID = &last.CreatedAt, last.ID
+		ids := make([]string, len(chats))
+		turnsOf := map[string][]export.AIChatTurn{}
+		for i, chat := range chats {
+			ids[i] = chat.ID
+		}
+		turns, err := tx.Query(ctx, `SELECT t.session_id::text,t.id::text,t.seq,t.question,t.answer,t.viewing_kb_article_id::text,t.status,t.error_code,t.model,t.ttft_ms,
+				t.input_tokens,t.cache_read_tokens,t.cache_creation_tokens,t.output_tokens,t.created_at,t.finished_at,f.rating,f.created_at,f.updated_at
+			FROM ai_chat_turns t LEFT JOIN ai_chat_feedback f ON f.workspace_id=t.workspace_id AND f.turn_id=t.id
+			WHERE t.workspace_id=$1 AND t.session_id=ANY($2::text[]::uuid[]) ORDER BY t.session_id,t.seq`, workspaceID, ids)
+		if err != nil {
+			return fmt.Errorf("export AI chat turns: %w", err)
+		}
+		for turns.Next() {
+			var sessionID string
+			var r export.AIChatTurn
+			var rating *string
+			var ratedAt, changedAt *time.Time
+			if err := turns.Scan(&sessionID, &r.ID, &r.Seq, &r.Question, &r.Answer, &r.ViewingKBArticleID, &r.Status, &r.ErrorCode, &r.Model, &r.TTFTMS,
+				&r.InputTokens, &r.CacheReadTokens, &r.CacheCreationTokens, &r.OutputTokens, &r.CreatedAt, &r.FinishedAt, &rating, &ratedAt, &changedAt); err != nil {
+				turns.Close()
+				return fmt.Errorf("export AI chat turns: %w", err)
+			}
+			r.CreatedAt, r.FinishedAt, r.Sources = domain.UTC(r.CreatedAt), domain.UTCOptional(r.FinishedAt), []export.AIChatSource{}
+			if rating != nil && ratedAt != nil && changedAt != nil {
+				r.Feedback = &export.AIChatFeedback{Rating: *rating, CreatedAt: domain.UTC(*ratedAt), UpdatedAt: domain.UTC(*changedAt)}
+			}
+			turnsOf[sessionID] = append(turnsOf[sessionID], r)
+		}
+		if err := rowsError("export AI chat turns", turns); err != nil {
+			return err
+		}
+		sources, err := tx.Query(ctx, `SELECT t.session_id::text,o.turn_id::text,o.ordinal,o.kb_article_id::text,o.article_number,o.article_version,o.title,o.folder
+			FROM ai_chat_sources o JOIN ai_chat_turns t ON t.workspace_id=o.workspace_id AND t.id=o.turn_id
+			WHERE o.workspace_id=$1 AND t.session_id=ANY($2::text[]::uuid[]) ORDER BY t.session_id,t.seq,o.ordinal`, workspaceID, ids)
+		if err != nil {
+			return fmt.Errorf("export AI chat sources: %w", err)
+		}
+		for sources.Next() {
+			var sessionID, turnID string
+			var r export.AIChatSource
+			if err := sources.Scan(&sessionID, &turnID, &r.Ordinal, &r.KBArticleID, &r.ArticleNumber, &r.ArticleVersion, &r.Title, &r.Folder); err != nil {
+				sources.Close()
+				return fmt.Errorf("export AI chat sources: %w", err)
+			}
+			list := turnsOf[sessionID]
+			for i := range list {
+				if list[i].ID == turnID {
+					list[i].Sources = append(list[i].Sources, r)
+					break
+				}
+			}
+		}
+		if err := rowsError("export AI chat sources", sources); err != nil {
+			return err
+		}
+		for _, chat := range chats {
+			chat.HistoryCutAt, chat.EndedAt, chat.HandedOffAt = domain.UTCOptional(chat.HistoryCutAt), domain.UTCOptional(chat.EndedAt), domain.UTCOptional(chat.HandedOffAt)
+			chat.CreatedAt, chat.LastTurnAt, chat.Turns = domain.UTC(chat.CreatedAt), domain.UTC(chat.LastTurnAt), turnsOf[chat.ID]
+			if chat.Turns == nil {
+				chat.Turns = []export.AIChatTurn{}
+			}
+			if err := sink.AIChatSession(chat); err != nil {
+				return err
+			}
+		}
+		if len(chats) < exportPageConversations {
+			return nil
+		}
+	}
 }
 
 func exportPageStatusChanges(ctx context.Context, tx pgx.Tx, workspaceID string, ids []string, into map[string][]export.StatusChange) error {

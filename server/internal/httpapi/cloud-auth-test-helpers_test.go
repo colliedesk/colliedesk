@@ -96,11 +96,17 @@ func (fixture *cloudAuthFixture) token(t *testing.T, overrides map[string]any) s
 	for key, value := range overrides {
 		claims[key] = value
 	}
-	header, _ := json.Marshal(map[string]string{"alg": "RS256", "kid": fixture.kid, "typ": "JWT"})
+	return signJWT(t, fixture.key, fixture.kid, claims)
+}
+
+// signJWT signs claims as an RS256 JWT with key under kid.
+func signJWT(t *testing.T, key *rsa.PrivateKey, kid string, claims map[string]any) string {
+	t.Helper()
+	header, _ := json.Marshal(map[string]string{"alg": "RS256", "kid": kid, "typ": "JWT"})
 	payload, _ := json.Marshal(claims)
 	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(payload)
 	digest := sha256.Sum256([]byte(unsigned))
-	signature, err := rsa.SignPKCS1v15(rand.Reader, fixture.key, crypto.SHA256, digest[:])
+	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 	if err != nil {
 		t.Fatal(err)
 	}

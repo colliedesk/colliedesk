@@ -93,6 +93,11 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   help center. The help center wraps everything else in `serve.go`: a request to a help center host
   never reaches the app, the API or `/mcp`. `helpcenter.URL` and `ArticleURL` build every address;
   `GET /api/v1/help-center` returns `url` from them.
+- **Channel types serve below the help center.** A type's `HelpCenterRoutes` (a chat) answer on every
+  address of an open help center, after the workspace was resolved and found open, and only on paths
+  the help center's own pages do not use; the help center code names no type
+  ([channels](channels.md#decisions)). They are the only writes a help center takes: a write reaching
+  an address that moves gets the 404, never a 301 a browser would follow with a GET.
 - **Unknown, off, locked and malformed are one 404.** Same status, headers and bytes (one copy for
   host names and one for paths, which differ in the style sheet's address), as for the web form
   (`web-form.md`). A locked workspace is a trial that ended unpaid (`locked.go`): it keeps sign-in,

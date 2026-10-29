@@ -32,6 +32,9 @@ func importHelpScout(ctx context.Context, pool *pgxpool.Pool, args []string, out
 	if err := database.Migrate(ctx, pool); err != nil {
 		return err
 	}
+	if _, err := useServerConfig(ctx, pool); err != nil {
+		return err
+	}
 	options.Progress, options.Cloud, options.PlansOnSale = progressOutput, billingEnabled(), plansOnSale()
 	if !options.DryRun {
 		storage, err := attachmentStorage()

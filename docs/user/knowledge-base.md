@@ -528,7 +528,9 @@ written as a list of questions also carries a `FAQPage`: it has at least two hea
 level, every one of them ends with `?`, and each is followed by its answer before the next one. Text
 before the first question is an introduction and is left out.
 
-Pages have no scripts, no cookies and no tracking, follow the visitor's light or dark setting, and
+Pages have no scripts, no cookies and no tracking (with the [help chat](help-chat.md) on, article pages
+and the chat page load the chat's one script from the help center itself, and the chat keeps one cookie
+once a customer asks), follow the visitor's light or dark setting, and
 fit a phone. The page labels (Search, Home and so on) are in English; the help center's language
 marks your articles' language for browsers and search engines.
 

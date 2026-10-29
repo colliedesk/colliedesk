@@ -1,0 +1,22 @@
+[
+ "The Growth plan costs 49 US dollars a month for up to 2,000 orders [#108]. Yearly plans get two months free",
+ "Nothing is necessarily wrong. \"Pending\" means the carrier has not scanned the parcel yet, and it usually changes within 24 to 48 hours after the label is printed [#105]. If it stays Pending for more than 5 days, contact the carrier with the tracking number",
+ "Yes, ParcelPilot connects to WooCommerce. Go to Settings > Stores, select Add store and sign in to your store [#102]. Orders from the last 60 days are imported, and new orders arrive within a minute",
+ "Your invoices are under Settings > Billing > Invoices. Each one is a PDF showing your company name and tax number",
+ "A refund goes back to the original payment method through your store and takes 5 to 10 business days to appear [#112]. This applies once the returned parcel is scanned as delivered to you, which marks the return as Received",
+ "Yes. ParcelPilot reads tracking from more than 900 carriers, and Royal Mail is one of them",
+ "Starter includes 2 seats for your team",
+ "No. A downgrade or cancellation starts at the next billing date, and nothing is refunded for the current month",
+ "You can turn off the delivered email for each notification type under Settings > Notifications [#106]. ParcelPilot sends emails when an order ships, is out for delivery and is delivered, and each one can be switched on or off there",
+ "The help articles don't mention Bitcoin or cryptocurrency as a payment method. For questions about accepted payment methods, please select \"Talk to a",
+ "Gói Scale có giá 149 đô la Mỹ một tháng, dành cho tối đa 10.000 đơn hàng [#108]. Gói hàng năm được tặng hai tháng miễn phí",
+ "Trên trang đăng nhập, chọn \"Forgot password\" và nhập email của bạn. Liên kết đặt lại mật khẩu chỉ có hiệu lực trong một giờ [#113]. Nếu không thấy email, hãy kiểm tra thư mục spam, sau đó nhờ quản trị viên của nhóm bạn gửi lại lời mời",
+ "Có, ParcelPilot hỗ trợ Viettel Post [#104]. Hệ thống đọc thông tin vận chuyển từ hơn 900 đơn vị vận chuyển, và Viettel Post nằm trong danh sách đó",
+ "Khách hàng có thể bắt đầu trả hàng qua cổng trả hàng tại returns.parcelpilot.example/<tên cửa hàng>. Bạn cần cài đặt cổng này trước: đặt thời hạn trả hàng (từ 7 đến 90 ngày) và các lý do trả hàng dưới Settings > Returns. Bạn phải duyệt từng yêu cầu trả hàng trước khi nhãn gửi hàng được gửi đi",
+ "Các bài viết hỗ trợ hiện có không đề cập đến ứng dụng điện thoại, nên tôi không thể xác nhận ParcelPilot có ứng dụng di động hay không. Bạn có thể chọn \"Talk to a person\" để được hỗ trợ",
+ "SMS updates are available on the Growth and Scale plans. Each SMS costs one credit, and a plan includes 500 credits a month. Extra credits cost 4 cents each [#107]. The plan prices themselves are Growth at 49 US dollars a month and Scale at 149 US dollars a month",
+ "To delete everything, an admin can go to Settings > Account > Delete account. Every order, tracking page and return is removed within 30 days [#115]. Before deleting, you can export your orders and returns as a CSV under Settings > Export",
+ "Yes. Every order gets a tracking page at track.parcelpilot.example/<order number>, where customers see the carrier, the last scan and the estimated delivery date [#103]. ParcelPilot also emails customers when an order ships, is out for delivery and is delivered, and you can turn each email on or",
+ "If you don't pick a plan when the 14-day trial ends, your data stays for 30 days [#101]. To keep using ParcelPilot, choose a plan under Settings > Billing [#101]. Deleting an account removes all orders, tracking pages and returns, so export your data first if you want a copy",
+ "ParcelPilot reads tracking from more than 900 carriers, including UPS, FedEx, DHL, USPS, Royal Mail, Australia Post and Viettel Post [#104]. A carrier that is not supported shows as Unknown carrier, and you can send ParcelPilot its name so it can be added within a week [#104].  If you don't see your"
+]

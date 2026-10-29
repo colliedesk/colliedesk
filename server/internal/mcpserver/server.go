@@ -5,11 +5,14 @@
 package mcpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -17,6 +20,9 @@ import (
 
 // Path is where the server is mounted.
 const Path = "/mcp"
+
+// OperatorPath serves the operator tools to operator tokens (cdop_); Path never serves them.
+const OperatorPath = "/mcp/operator"
 
 // Config wires the server to the REST API it adapts.
 type Config struct {
@@ -26,6 +32,8 @@ type Config struct {
 	Auth *auth.Service
 	// Version is the build version reported as the server version.
 	Version string
+	// Operators authenticates the operator tokens of OperatorPath; nil leaves OperatorPath unserved (404).
+	Operators *auth.OperatorService
 }
 
 const instructions = `Colliedesk is a helpdesk: customers write in, a small support team answers. You work the inbox for that team.
@@ -40,14 +48,25 @@ A call above your tier is not refused: Colliedesk files it as an agent request t
 // /api/v1 keep their own handler and pay nothing for the extra route.
 func Mount(config Config, next http.Handler) http.Handler {
 	mcpHandler := New(config)
+	var operatorHandler http.Handler = http.NotFoundHandler()
+	if config.Operators != nil {
+		operatorHandler = NewOperator(config)
+	}
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == Path {
+		switch request.URL.Path {
+		case Path:
 			mcpHandler.ServeHTTP(response, request)
-			return
+		case OperatorPath:
+			operatorHandler.ServeHTTP(response, request)
+		default:
+			next.ServeHTTP(response, request)
 		}
-		next.ServeHTTP(response, request)
 	})
 }
+
+// maxRequestBody bounds one MCP request: room for the 7,000,000 characters of base64 (5 MiB of bytes)
+// that a file argument takes, and the rest of the call. The SDK's default of 4 MiB refuses such a call.
+const maxRequestBody = 8 << 20
 
 // New returns the handler of Path. It panics when the catalog is inconsistent, which the tests catch.
 func New(config Config) http.Handler {
@@ -56,15 +75,121 @@ func New(config Config) http.Handler {
 	rest := &restClient{api: config.API}
 	docSections() // build the guide index now, so a bad embed stops the server at start
 	for _, spec := range Catalog() {
-		register(server, spec, rest)
+		if spec.Tier != auth.ScopeOperator {
+			register(server, spec, rest)
+		}
 	}
 	// A bearer token is required, so DNS rebinding cannot ride on a browser's ambient credentials. The
 	// SDK's loopback Host check would refuse the public host name that a reverse proxy on the same
 	// machine forwards, and self-hosters run exactly that.
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
-		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true})
-	return requireBearer(config.Auth, streamable)
+		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true, MaxRequestBodyBytes: maxRequestBody})
+	return requireBearer(config.Auth, limitLarge(streamable, largeRequestSlots, largeRequestSlotsPerWorkspace, callTimeout, largeRequestReadTime))
 }
+
+const operatorInstructions = `Colliedesk's operator tools run the whole server: its settings, operators and requests, not a workspace's inbox.
+Start with colliedesk_operator_whoami. You read freely; every change you ask for becomes an operator request that a person approves in the operator console with their authenticator code. Never ask for a secret's value and never send one: a request names the secrets it needs, and the approver types them.`
+
+// NewOperator returns the handler of OperatorPath: the operator tools, for operator tokens only.
+func NewOperator(config Config) http.Handler {
+	server := mcp.NewServer(&mcp.Implementation{Name: "colliedesk-operator", Title: "Colliedesk operator", Version: config.Version},
+		&mcp.ServerOptions{Instructions: operatorInstructions})
+	rest := &restClient{api: config.API}
+	for _, spec := range Catalog() {
+		if spec.Tier == auth.ScopeOperator {
+			register(server, spec, rest)
+		}
+	}
+	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
+		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true})
+	return requireOperatorBearer(config.Operators, streamable)
+}
+
+// requireOperatorBearer answers 401 unless the request carries a valid operator token as a bearer. An
+// operator's browser session and every workspace credential are refused.
+func requireOperatorBearer(service *auth.OperatorService, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		raw, ok := bearerToken(request)
+		if !ok {
+			unauthorized(response)
+			return
+		}
+		principal, err := service.Authenticate(request.Context(), raw, false)
+		if err != nil || !principal.IsToken() {
+			if err != nil && !errors.Is(err, auth.ErrInvalidCredential) {
+				slog.Error("authenticate operator MCP request", "error", err)
+			}
+			unauthorized(response)
+			return
+		}
+		next.ServeHTTP(response, request)
+	})
+}
+
+const (
+	// largeRequest is the body size above which a request is one that carries a file. The SDK decodes a
+	// request several times, so one such call holds tens of MiB while it runs.
+	largeRequest = 1 << 20
+	// largeRequestSlots is how many such requests the server reads at once; the others wait.
+	largeRequestSlots = 4
+	// largeRequestSlotsPerWorkspace keeps one workspace from taking every slot.
+	largeRequestSlotsPerWorkspace = 2
+	// largeRequestReadTime is how long a request that holds a slot may take to send its body, so a
+	// client that stalls cannot keep the slot: 8 MiB in two minutes is about 70 KiB a second.
+	largeRequestReadTime = 2 * time.Minute
+)
+
+// limitLarge lets at most slots requests with a large or unknown-length body in at once, and at most
+// perWorkspace of one workspace, so many file calls together cannot exhaust the server's memory and
+// one workspace cannot hold every slot. A request waits for a slot before its body is read, gets
+// 503 after wait, and must send its body within readFor once it holds one. Small calls never wait.
+func limitLarge(next http.Handler, slots, perWorkspace int, wait, readFor time.Duration) http.Handler {
+	free := make(chan struct{}, slots)
+	var mu sync.Mutex
+	held := map[string]int{}
+	busy := func(response http.ResponseWriter) {
+		response.Header().Set("Retry-After", "10")
+		writeJSONError(response, http.StatusServiceUnavailable, "busy",
+			"Colliedesk is reading other calls with files right now. Nothing was sent or stored. Try again in a few seconds.")
+	}
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.ContentLength >= 0 && request.ContentLength <= largeRequest {
+			next.ServeHTTP(response, request)
+			return
+		}
+		workspace, _ := request.Context().Value(workspaceKey{}).(string)
+		mu.Lock()
+		if held[workspace] >= perWorkspace {
+			mu.Unlock()
+			busy(response)
+			return
+		}
+		held[workspace]++
+		mu.Unlock()
+		defer func() {
+			mu.Lock()
+			if held[workspace]--; held[workspace] == 0 {
+				delete(held, workspace)
+			}
+			mu.Unlock()
+		}()
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case free <- struct{}{}:
+			defer func() { <-free }()
+			// A writer without deadlines (a test recorder) has none to set; the server's connections do.
+			_ = http.NewResponseController(response).SetReadDeadline(time.Now().Add(readFor)) //nolint:errcheck // see above
+			next.ServeHTTP(response, request)
+		case <-timer.C:
+			busy(response)
+		case <-request.Context().Done():
+		}
+	})
+}
+
+// workspaceKey carries the workspace id of an authenticated MCP request.
+type workspaceKey struct{}
 
 // requireBearer answers 401 unless the request carries a valid agent token as a bearer. Cookies and
 // a person's own session are never accepted.
@@ -91,7 +216,7 @@ func requireBearer(service *auth.Service, next http.Handler) http.Handler {
 			unauthorized(response)
 			return
 		}
-		next.ServeHTTP(response, request)
+		next.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), workspaceKey{}, principal.Workspace.ID)))
 	})
 }
 

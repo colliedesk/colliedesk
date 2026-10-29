@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, request as playwrightRequest, test } from '@playwright/test';
 import { appNavigationWith } from './support/browser';
-import { psql, servers, uniqueSuffix } from './support/cli';
+import { databaseFor, psql, servers, uniqueSuffix } from './support/cli';
 import { IdentityProvider } from './support/identity-provider';
 import { newClientAddress, signUp } from './support/signup';
 
@@ -9,6 +9,7 @@ import { newClientAddress, signUp } from './support/signup';
 // docs/user/billing.md). The identity provider is the only local stand-in; Clerk's own widget is not
 // part of this journey, so the verified token it would hand over is signed by the stand-in.
 const baseURL = servers.cloud;
+const database = databaseFor(baseURL);
 const provider = new IdentityProvider();
 
 test.beforeAll(async () => { await provider.start(); });
@@ -38,7 +39,7 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   expect(created.status()).toBe(201);
   const body = await created.json() as { workspace: { slug: string; name: string }; agent: { email: string; role: string } };
   expect(body.agent).toMatchObject({ email, role: 'admin' });
-  expect(psql(`SELECT source FROM workspace_onboarding JOIN workspaces ON workspaces.id=workspace_onboarding.workspace_id WHERE slug='${body.workspace.slug}'`).trim()).toBe('ai_claude');
+  expect(psql(`SELECT source FROM workspace_onboarding JOIN workspaces ON workspaces.id=workspace_onboarding.workspace_id WHERE slug='${body.workspace.slug}'`, database).trim()).toBe('ai_claude');
 
   // The session cookie from the sign-up opens the new workspace with its trial banner.
   await page.goto(baseURL);
@@ -63,7 +64,7 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
 
   // The trial ends: the whole workspace becomes the locked screen. Only the clock moves; the
   // server derives the state on every request.
-  psql(`UPDATE workspaces SET trial_ends_at = now() - interval '1 hour' WHERE slug = '${body.workspace.slug}'`);
+  psql(`UPDATE workspaces SET trial_ends_at = now() - interval '1 hour' WHERE slug = '${body.workspace.slug}'`, database);
   await page.goto(baseURL);
   await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
   await expect(appNavigationWith(page, name)).toHaveCount(1);

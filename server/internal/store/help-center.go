@@ -275,3 +275,62 @@ func (s *Store) HelpCenterImage(ctx context.Context, workspaceID, id string) (St
 	}
 	return image, nil
 }
+
+// ChatKBArticle is an article of the help center as its AI chat reads it: in its own language, with
+// the number and version it is cited by and its collection's name.
+type ChatKBArticle struct {
+	ID      string
+	Number  int64
+	Version int
+	Title   string
+	Folder  string
+	// Size is the body's length in bytes; Body is read only when asked for.
+	Size int
+	Body string
+}
+
+// ChatKBArticles lists the articles the help center shows (publishedKBArticle) that are not kept away
+// from AI, by number. Translations are never read. withBodies reads the texts too.
+func ChatKBArticles(ctx context.Context, tx pgx.Tx, workspaceID string, withBodies bool) ([]ChatKBArticle, error) {
+	body := `''`
+	if withBodies {
+		body = `a.body_md`
+	}
+	rows, err := tx.Query(ctx, `SELECT a.id::text,a.number,COALESCE(v.version,1),a.title,c.name,octet_length(a.body_md),`+body+`
+		FROM kb_articles a JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
+		LEFT JOIN LATERAL (SELECT max(version) AS version FROM kb_article_versions WHERE workspace_id=a.workspace_id AND article_id=a.id) v ON true
+		WHERE `+publishedKBArticle+` AND NOT a.ai_excluded ORDER BY a.number`, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("read the help center for AI chat: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ChatKBArticle, error) {
+		var a ChatKBArticle
+		err := row.Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body)
+		return a, err
+	})
+}
+
+// ChatKBArticleIDOf is the id of the article the help center shows under a number, when ChatKBArticles
+// holds it; "" otherwise.
+func ChatKBArticleIDOf(ctx context.Context, tx pgx.Tx, workspaceID string, number int64) (string, error) {
+	var id string
+	err := tx.QueryRow(ctx, `SELECT a.id::text FROM kb_articles a WHERE `+publishedKBArticle+` AND NOT a.ai_excluded AND a.number=$2`, workspaceID, number).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
+// ChatKBArticleByID reads one article of ChatKBArticles, with its body; found is false for one the
+// help center does not show or that is kept away from AI.
+func ChatKBArticleByID(ctx context.Context, tx pgx.Tx, workspaceID, id string) (ChatKBArticle, bool, error) {
+	var a ChatKBArticle
+	err := tx.QueryRow(ctx, `SELECT a.id::text,a.number,COALESCE(v.version,1),a.title,c.name,octet_length(a.body_md),a.body_md
+		FROM kb_articles a JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
+		LEFT JOIN LATERAL (SELECT max(version) AS version FROM kb_article_versions WHERE workspace_id=a.workspace_id AND article_id=a.id) v ON true
+		WHERE `+publishedKBArticle+` AND NOT a.ai_excluded AND a.id::text=$2`, workspaceID, id).Scan(&a.ID, &a.Number, &a.Version, &a.Title, &a.Folder, &a.Size, &a.Body)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ChatKBArticle{}, false, nil
+	}
+	return a, err == nil, err
+}

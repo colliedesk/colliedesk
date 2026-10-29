@@ -1,0 +1,195 @@
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
+import { ApiError, api, cloudPublishableKey } from './api';
+import type { SignInStep } from './api';
+import { CommandLine, when } from './copy';
+import { ConsoleLogo } from './logo';
+import { m } from './messages';
+import { href, navigate } from './router';
+
+// The identity provider's form, loaded only when the server offers cloud sign-in on this console.
+const CloudSignIn = lazy(() => import('./cloud-sign-in'));
+
+// takeToken reads the link's token once and takes it out of the address at once, so it never stays in the
+// history, a bookmark or a Referer (design ops-uiux, decision 6).
+export function takeToken(): string {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token') ?? '';
+  if (token) {
+    params.delete('token');
+    const rest = params.toString();
+    window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : ''));
+  }
+  return token;
+}
+
+type State =
+  | { kind: 'continue' }
+  | { kind: 'busy' }
+  | { kind: 'code'; step: SignInStep; wrong?: string }
+  | { kind: 'no-totp' }
+  | { kind: 'locked'; until: string; email?: string }
+  | { kind: 'link'; title: string; used?: boolean; ring?: boolean }
+  | { kind: 'no-link' }
+  | { kind: 'cloud' };
+
+const pairCommand = (email = '<your email>', reset = false) => `docker compose exec server /app/collie operator pair --email ${email}${reset ? ' --reset-totp' : ''}`;
+
+function linkError(error: unknown): State {
+  if (error instanceof ApiError) {
+    if (error.code === 'operator_locked') return { kind: 'locked', until: String(error.body.locked_until ?? '') };
+    if (error.code === 'operator_link_expired') return { kind: 'link', title: m.linkExpired };
+    if (error.code === 'operator_link_used') return { kind: 'link', title: m.linkUsed, used: true };
+    if (error.code === 'secret_keys_missing') return { kind: 'link', title: m.ringMissingTitle, ring: true };
+  }
+  return { kind: 'link', title: m.linkInvalid };
+}
+
+// qrSize shows the code at 5 CSS pixels a module (at least 4 keeps it readable by a phone camera and a decoder).
+function qrSize(svg: string): number {
+  const modules = Number(/viewBox="0 0 (\d+)/.exec(svg)?.[1] ?? 49);
+  return modules * 5;
+}
+
+export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+  const token = useRef<string>('');
+  const [state, setState] = useState<State>({ kind: 'continue' });
+  const [code, setCode] = useState('');
+  const main = useRef<HTMLElement>(null);
+  const publishableKey = cloudPublishableKey();
+  // Right after signing out, the identity provider's session in this browser ends too (ClerkSession).
+  const [endSession] = useState(() => new URLSearchParams(window.location.search).has('signed_out'));
+  // A sign-in begun with the identity provider ends with a full load, so the signed-in console runs under its
+  // own content policy, without the provider's scripts.
+  const viaCloud = useRef(false);
+  useEffect(() => {
+    token.current = takeToken();
+    if (!token.current) setState({ kind: publishableKey ? 'cloud' : 'no-link' });
+  }, [publishableKey]);
+  useEffect(() => { main.current?.focus(); }, [state.kind]);
+
+  const finish = (step: SignInStep) => {
+    if (step.step === 'done') {
+      if (viaCloud.current) window.location.assign(href('/'));
+      else if (step.totp_required === false) setState({ kind: 'no-totp' });
+      else { onSignedIn(); navigate('/', true); }
+      return;
+    }
+    setCode('');
+    setState({ kind: 'code', step });
+  };
+  const cloudStep = useCallback((step: SignInStep) => {
+    viaCloud.current = true;
+    setCode('');
+    setState({ kind: 'code', step });
+  }, []);
+  const cloudError = useCallback((error: ApiError) => { setState(linkError(error)); }, []);
+  const redeem = async () => {
+    setState({ kind: 'busy' });
+    try {
+      finish(await api.redeem(token.current));
+    } catch (error) {
+      setState(linkError(error));
+    }
+  };
+  const confirm = async (event: FormEvent) => {
+    event.preventDefault();
+    if (state.kind !== 'code') return;
+    const step = state.step;
+    try {
+      finish(await api.confirmCode(step.ticket ?? '', code));
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'operator_code_wrong') {
+        setState({ kind: 'code', step, wrong: m.codeWrong(Number(error.body.tries_left ?? 0)) });
+        setCode('');
+      } else if (error instanceof ApiError && error.code === 'operator_locked') {
+        setState({ kind: 'locked', until: String(error.body.locked_until ?? ''), email: step.email });
+      } else {
+        setState(linkError(error));
+      }
+    }
+  };
+
+  let body;
+  switch (state.kind) {
+    case 'continue':
+    case 'busy':
+      body = <>
+        <h1 id="sign-title">{m.signInTitle}</h1>
+        <p>{m.signInLead}</p>
+        <button type="button" className="primary-action" disabled={state.kind === 'busy'} onClick={() => void redeem()}>{state.kind === 'busy' ? m.continuing : m.continue}</button>
+      </>;
+      break;
+    case 'code': {
+      const enroll = state.step.step === 'enroll';
+      body = <form onSubmit={(event) => void confirm(event)} noValidate>
+        <h1 id="sign-title">{enroll ? m.enrollTitle : m.codeTitle}</h1>
+        <p>{enroll ? m.enrollLead : m.codeLead}</p>
+        {enroll && <div className="ops-enroll">
+          {state.step.qr_svg && <img className="qr-code" alt={m.qrLabel} src={`data:image/svg+xml;utf8,${encodeURIComponent(state.step.qr_svg)}`} width={qrSize(state.step.qr_svg)} height={qrSize(state.step.qr_svg)} />}
+          <CommandLine command={(state.step.key ?? '').replace(/(.{4})/g, '$1 ').trim()} label={m.copyKey} />
+        </div>}
+        <div className="field">
+          <label className="field-label" htmlFor="totp-code">{m.authenticatorCode}</label>
+          <input id="totp-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} spellCheck={false} value={code}
+            aria-invalid={state.wrong ? true : undefined} aria-describedby={state.wrong ? 'totp-wrong' : undefined}
+            onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} />
+          {state.wrong && <span className="error-copy field-note" id="totp-wrong" role="alert">{state.wrong}</span>}
+        </div>
+        <button type="submit" className="primary-action" disabled={code.length !== 6}>{enroll ? m.turnOnAndSignIn : m.signIn}</button>
+        {!enroll && <details><summary>{m.lostAuthenticator}</summary><p>{m.lostHelp}</p><CommandLine command={pairCommand(state.step.email, true)} /></details>}
+      </form>;
+      break;
+    }
+    case 'no-totp':
+      body = <>
+        <h1 id="sign-title">{m.signInTitle}</h1>
+        <p className="warning-note">{m.noTotpNote}</p>
+        <CommandLine command="docker compose exec server /app/collie config set operator.require_totp=true" />
+        <button type="button" className="primary-action" onClick={() => { onSignedIn(); navigate('/', true); }}>{m.goOverview}</button>
+      </>;
+      break;
+    case 'locked':
+      body = <>
+        <h1 id="sign-title">{m.lockedTitle}</h1>
+        <p>{m.lockedUntil(when(state.until))}</p>
+        <p>{m.lostHelp}</p>
+        <CommandLine command={pairCommand(state.email, true)} />
+      </>;
+      break;
+    case 'link':
+      body = <>
+        <h1 id="sign-title">{state.title}</h1>
+        <p>{state.ring ? m.ringMissingLead : m.linkHelp}</p>
+        <CommandLine command={pairCommand()} />
+        {state.used && <><p>{m.usedHelp}</p><CommandLine command="docker compose exec server /app/collie operator sessions" /></>}
+        {publishableKey && <button type="button" onClick={() => setState({ kind: 'cloud' })}>{m.signInWithEmail}</button>}
+      </>;
+      break;
+    case 'cloud':
+      body = <>
+        <h1 id="sign-title">{m.signInTitle}</h1>
+        <p>{m.cloudSignInLead}</p>
+        <Suspense fallback={<p>{m.continuing}</p>}>
+          <CloudSignIn publishableKey={publishableKey} endSession={endSession} onStep={cloudStep} onError={cloudError} />
+        </Suspense>
+        <details><summary>{m.orWithLink}</summary><CommandLine command={pairCommand()} /></details>
+      </>;
+      break;
+    case 'no-link':
+      body = <>
+        <h1 id="sign-title">{m.noLinkTitle}</h1>
+        <p>{m.noLinkLead}</p>
+        <CommandLine command={pairCommand()} />
+      </>;
+      break;
+  }
+  return (
+    <div className="ops-shell ops-shell-sign">
+      <header className="ops-band"><ConsoleLogo /><div className="ops-id"><strong>{m.consoleName}</strong><span className="ops-host">{window.location.host}</span></div></header>
+      <main id="main" className="ops-sign" tabIndex={-1} ref={main} aria-labelledby="sign-title">
+        <section className="sign-card" aria-live="polite">{body}</section>
+      </main>
+    </div>
+  );
+}

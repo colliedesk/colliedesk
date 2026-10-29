@@ -119,7 +119,7 @@ func (a *API) sendProblemReport(ctx context.Context, response http.ResponseWrite
 // problemReportDesk resolves the configured support desk. A slug that names no workspace is a
 // misconfiguration: it is logged and reported to the caller as not configured.
 func (a *API) problemReportDesk(ctx context.Context) (string, bool, error) {
-	slug := a.config.ProblemReportWorkspace
+	slug := a.hot().ProblemReportWorkspace
 	if slug == "" {
 		return "", false, nil
 	}

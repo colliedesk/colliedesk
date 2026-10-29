@@ -215,6 +215,11 @@ type Definition struct {
 	Defaults Settings
 	// Routes are the type's own HTTP entry points (a webhook) and admin actions, mounted by the API.
 	Routes []Route
+	// HelpCenterRoutes are the type's pages and calls on every address of a workspace's help center
+	// (a chat), mounted by the help center below its root once the help center was found open.
+	HelpCenterRoutes []HelpCenterRoute
+	// HelpCenterAdditions, when set, says what the type adds to the help center's own pages now.
+	HelpCenterAdditions func(kit HelpCenterKit) func(ctx context.Context, at HelpCenter) (HelpCenterAdditions, error)
 	// Tools are the MCP tools of the type's own admin actions.
 	Tools []ToolSpec
 }
@@ -239,6 +244,65 @@ type RouteKit interface {
 	FindChannel(ctx context.Context, externalAccount string) (Channel, bool, error)
 	// WriteError writes the API's error body.
 	WriteError(w http.ResponseWriter, status int, code, message string)
+}
+
+// HelpCenterRoute is one route of a type on the help center: Path is below the help center's root
+// ("/chat", "/chat/turns/{turn_id}"), on its own host name, below /help/<slug> and on its custom
+// domain alike. A help center host never reaches /api/v1, so what a type serves to the visitors of a
+// help center is mounted here.
+type HelpCenterRoute struct {
+	Method, Path string
+	Handler      func(kit HelpCenterKit) HelpCenterHandler
+}
+
+// HelpCenterHandler answers a request to a help center route, at the open help center it reached.
+type HelpCenterHandler func(response http.ResponseWriter, request *http.Request, at HelpCenter)
+
+// HelpCenter is the open help center a request reached: on, and its workspace not locked.
+type HelpCenter struct {
+	WorkspaceID, Slug, Name string
+	Trial                   bool
+	// Address is the help center's public address, without a trailing slash; Base is the path its own
+	// links start with: "" on a host name of its own, /help/<slug> on the app's origin.
+	Address, Base string
+	// NotFound writes the answer of a help center that does not exist or is off: the same status,
+	// headers and bytes, so a route of a channel that is off tells nothing more.
+	NotFound func(response http.ResponseWriter)
+	// Look is how the help center's own pages look, for a page of the type to look the same.
+	Look HelpCenterLook
+}
+
+// HelpCenterLook is a help center's frame as its pages show it: language, title, address of its home
+// and search, its style sheets (site.css, then the brand sheet), favicon and logo, and the brand's
+// accent colors as #rrggbb ("" when the brand sets no color).
+type HelpCenterLook struct {
+	Lang, SiteTitle, Home, SearchURL string
+	Style, BrandStyle, Favicon       string
+	LightOnly, NoIndex               bool
+	LogoURL, LogoAlt                 string
+	LogoWidth, LogoHeight            int
+	Accent, AccentInk                string
+}
+
+// HelpCenterAdditions are what a type adds to the help center's own pages while it is on: a link in the
+// header and on the home page (Ask AI), and on article pages a style sheet, a script and a button of
+// its own (a chat box). Paths are below the help center's root. Version changes with them and is part
+// of the pages' ETag, so a page cached before the type turned on or off is not served again.
+type HelpCenterAdditions struct {
+	Link, LinkLabel             string
+	ArticleStyle, ArticleScript string
+	ArticleBox                  bool
+	// BoxConfig is what the article's box needs (JSON), put in its data-config attribute.
+	BoxConfig string
+	Version   string
+}
+
+// HelpCenterKit is what the API gives a type's help center route.
+type HelpCenterKit interface {
+	RouteKit
+	// Channel finds a live channel of the route's type in the workspace: the one with id, or the
+	// type's default when id is empty. A channel of another workspace or type is not found.
+	Channel(ctx context.Context, workspaceID, id string) (Channel, bool, error)
 }
 
 // ToolSpec is an MCP tool of a type's own action, in neutral terms the MCP server translates.

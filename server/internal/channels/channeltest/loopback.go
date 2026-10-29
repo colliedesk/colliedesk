@@ -137,6 +137,8 @@ func (l *Loopback) Definition() channels.Definition {
 		ReplyTo: LoopbackIdentity, WhenOff: channels.OffHold, Defaults: l.Defaults, Scopes: []string{"user", "group"},
 		FileLimits: channels.FileLimits{PerFile: 1000, PerEvent: 5000},
 		Routes:     []channels.Route{{Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", Public: true, Handler: l.webhook}},
+		HelpCenterRoutes: []channels.HelpCenterRoute{{Method: http.MethodGet, Path: "/" + string(l.Type), Handler: l.helpCenter},
+			{Method: http.MethodPost, Path: "/" + string(l.Type) + "/{name}", Handler: l.helpCenter}},
 		Tools: []channels.ToolSpec{{Name: "colliedesk_" + string(l.Type) + "_ping", Description: "Checks the loopback route.",
 			Method: http.MethodPost, Path: "/channels/" + string(l.Type) + "/webhook", InputSchema: json.RawMessage(`{"type":"object"}`)}}}
 }
@@ -181,6 +183,35 @@ func (l *Loopback) webhook(kit channels.RouteKit) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"results": results})
+	}
+}
+
+// LoopbackHelpCenterAnswer is what loopback's help center route answers: where it was reached.
+type LoopbackHelpCenterAnswer struct {
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
+	Address     string `json:"address"`
+	Base        string `json:"base"`
+	Name        string `json:"name"`
+}
+
+// helpCenter is loopback's help center route: GET /<type> and POST /<type>/{name}, for the channel
+// the query names (?channel=<id>) or the type's default; one that is off or not there is the help
+// center's 404.
+func (l *Loopback) helpCenter(kit channels.HelpCenterKit) channels.HelpCenterHandler {
+	return func(w http.ResponseWriter, r *http.Request, at channels.HelpCenter) {
+		channel, ok, err := kit.Channel(r.Context(), at.WorkspaceID, r.URL.Query().Get("channel"))
+		if err != nil {
+			kit.WriteError(w, http.StatusInternalServerError, "internal_error", "Try again.")
+			return
+		}
+		if !ok || !channel.Enabled {
+			at.NotFound(w)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(LoopbackHelpCenterAnswer{WorkspaceID: at.WorkspaceID, ChannelID: channel.ID, Address: at.Address, Base: at.Base,
+			Name: r.PathValue("name")})
 	}
 }
 

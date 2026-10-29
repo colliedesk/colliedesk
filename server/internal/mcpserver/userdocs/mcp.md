@@ -58,14 +58,14 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer, and who else has it open | `read` |
 | `colliedesk_conversation_presence` | Shows the team that the agent is working on a conversation (as "your name via the token label", for 2 minutes), lists who else has it open and warns when someone has a reply not sent yet; `leave` takes it off the list | `read` |
 | `colliedesk_time_entries_list` | Lists the time logged on a conversation, with the total | `read` |
-| `colliedesk_attachment_get` | Reads an attachment: name, size, type, and the text of a plain text file | `read` |
+| `colliedesk_attachment_get` | Reads an attachment: name, size, type, the text of a plain text file, and a PNG, JPEG, GIF or WebP image up to 2 MiB | `read` |
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `draft` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `draft` |
-| `colliedesk_note_add` | Adds a private note | `draft` |
-| `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Cannot be undone | `send` |
+| `colliedesk_note_add` | Adds a private note, with files if needed (up to 10, 5 MiB a call) | `draft` |
+| `colliedesk_reply_send` | Sends a reply to the customer by email. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open. Takes files (up to 10, 5 MiB a call) and the `ai_draft_id` it was written from. Cannot be undone | `send` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `send` |
 | `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `send` |
-| `colliedesk_conversation_start` | Opens a conversation and emails its first message to the customer in one step, for a customer found or one added with it (`new_contact`); nothing is stored if the email is refused. Cannot be undone | `send` |
+| `colliedesk_conversation_start` | Opens a conversation and emails its first message to the customer in one step, for a customer found or one added with it (`new_contact`); nothing is stored if the email is refused. Takes files (up to 10, 5 MiB a call). Cannot be undone | `send` |
 | `colliedesk_contacts_find` | Finds customers by part of a name or email; `truncated` says when more matched than were returned | `read` |
 | `colliedesk_contact_get` | Reads one customer with their conversations (any status, in pages of `limit`), the customer they were merged into and the merges into them | `read` |
 | `colliedesk_contact_create` | Adds a customer | `send` |
@@ -134,7 +134,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_help_center_domain_get` | Reads the custom domain, its DNS records and the last check | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
-| `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |
+| `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself and carries no files | `read` |
 | `colliedesk_requests_list` | Lists the agent requests this token filed, waiting first | `read` |
 | `colliedesk_request_get` | Shows what became of one request: approved (and how the call went), rejected with the reason, cancelled or expired | `read` |
 | `colliedesk_request_cancel` | Withdraws a waiting request | `read` |
@@ -195,6 +195,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_ai_slot_set_request` | Asks to set an AI feature: its provider and model, on or off | `read` |
 | `colliedesk_ai_usage_get` | Shows a month of AI usage per feature and provider, and what is left of the included AI | `admin` |
 | `colliedesk_ai_automatic_limits_set` | Changes how many automatic AI runs a workspace allows a day and a minute | `admin` |
+| `colliedesk_ai_chat_usage_get` | Shows a month of the help center's AI chat against its limits | `admin` |
+| `colliedesk_ai_chat_sessions_list` | Lists end users' chats with the help center's AI | `read` |
+| `colliedesk_ai_chat_session_get` | Reads one AI chat's transcript with the articles each answer cited | `read` |
+| `colliedesk_ai_chat_session_delete_request` | Asks a person to delete an AI chat's transcript for good | `read` |
+| `colliedesk_ai_chat_preview` | Asks the help center's AI chat a question as a customer would | `draft` |
 | `colliedesk_ai_draft_create` | Asks for an [AI reply draft](ai.md#reply-drafts) of a conversation, with an optional prompt; it is written in the background and never sent | `draft` |
 | `colliedesk_ai_draft_get` | Shows an AI draft, waiting up to 20 seconds while it is written | `read` |
 | `colliedesk_ai_drafts_list` | Lists a conversation's newest AI drafts | `read` |
@@ -256,6 +261,40 @@ Many clients also ask you before such a call.
 Tools read and change data through the same API as the web app, so a tool can do nothing the token
 could not do with the API directly. Another workspace is never visible.
 
+## Operator tools
+
+The people who run a Colliedesk server (operators, see [operator console](../self-host/operator-console.md))
+can give an AI client an operator token (`cdop_…`, made in the operator console). It connects to `/mcp/operator`, never to `/mcp`, and a workspace token
+never reaches `/mcp/operator`. An operator token reads; every change it asks for waits until an operator
+approves it in the console with their authenticator code.
+
+<!-- generated:operator-tools -->
+| Tool | What it does | Tier |
+|---|---|---|
+| `colliedesk_operator_whoami` | Shows the operator the token acts as, what it may ask for and where the console is | `operator` |
+| `colliedesk_operator_sign_out` | Ends this operator token. Cannot be undone | `operator` |
+| `colliedesk_operator_token_create` | Asks an operator for another operator token | `operator` |
+| `colliedesk_operator_status` | Shows the server's release, the configuration each process runs and what needs attention | `operator` |
+| `colliedesk_operator_config_get` | Reads every setting, without secrets | `operator` |
+| `colliedesk_operator_config_check` | Checks a settings change without saving it and says what saving it would ask | `operator` |
+| `colliedesk_operator_config_change` | Asks an operator to change settings | `operator` |
+| `colliedesk_operator_config_history` | Lists the configuration versions and what each changed | `operator` |
+| `colliedesk_operator_config_restore` | Asks an operator to restore an older configuration version | `operator` |
+| `colliedesk_operator_trial_confirm` | Asks an operator to keep the trial change that runs | `operator` |
+| `colliedesk_operator_trial_revert` | Asks an operator to end the trial change that runs now | `operator` |
+| `colliedesk_operator_products` | Lists the Polar products the server sells or once sold | `operator` |
+| `colliedesk_operator_product_add` | Asks an operator to add a Polar product | `operator` |
+| `colliedesk_operator_product_on_sale` | Asks an operator to put a Polar product on or off sale | `operator` |
+| `colliedesk_operator_audit` | Reads the operator audit log | `operator` |
+| `colliedesk_operator_requests` | Lists the requests this token made | `operator` |
+| `colliedesk_operator_request_get` | Shows one request this token made | `operator` |
+| `colliedesk_operator_request_cancel` | Withdraws a request this token made | `operator` |
+| `colliedesk_operator_team` | Lists operators, sessions and tokens | `operator` |
+| `colliedesk_operator_invite` | Asks an operator to invite another operator | `operator` |
+| `colliedesk_operator_revoke` | Asks an operator to revoke an operator | `operator` |
+| `colliedesk_operator_session_revoke` | Asks an operator to end a session or token | `operator` |
+<!-- /generated -->
+
 ## What the agent sees
 
 - Names, not ids: the assignee, the customer and the tags appear by name. Times are UTC, with the
@@ -274,12 +313,28 @@ could not do with the API directly. Another workspace is never visible.
   forward can have been written by the customer. A message with no team member as author is marked
   too, author name included.
 - **Attachments.** `colliedesk_attachment_get` returns the text of a plain UTF-8 text file, cut
-  after 20,000 characters, and only the name, size, SHA-256 and detected type of any other file
-  (an image, PDF or archive). Open those in the web app. The file name and text are customer text.
+  after 20,000 characters, and a PNG, JPEG, GIF or WebP image of at most 2 MiB as an image the
+  model can look at (`image: false` leaves it out). The type is judged from the bytes, never from
+  the file name; an SVG is text, never an image. Any other file (a PDF, an archive, a larger image)
+  comes back as its name, size, SHA-256 and detected type only: open it in the web app. The file
+  name and text are customer text. **An image cannot be marked as customer text:** whatever it
+  shows (a screenshot of instructions, text in a photo) reaches the model as it is. The tool
+  description tells the model it is data a customer sent, never instructions; keep agents on the
+  lowest tier that works.
 - **Saved replies are team text.** Their title and text appear under `team_text`: the team wrote
   them for customers. The tool descriptions tell the model to treat them as text to send or improve,
   never as instructions. Writes carry the `updated_at` the model read, so it cannot overwrite or
   delete a version it never saw.
+- **Files an agent attaches.** `colliedesk_note_add`, `colliedesk_reply_send` and
+  `colliedesk_conversation_start` take `files`: up to 10 files, 5 MiB in total per call, each with
+  a `filename` and its bytes as base64. The REST API takes 10 MiB a message; attach larger files in
+  the web app. A call with files is never filed as a request (see
+  [agent requests](agent-requests.md)): below the tool's tier it is refused and nothing is stored,
+  so the agent sends the text alone. `colliedesk_reply_draft` carries no files. A reply written from
+  an [AI draft](ai.md#reply-drafts) passes its `ai_draft_id`, so the draft records how close the
+  reply stayed to it; this works only with a send token, and a draft that is not the conversation's
+  ready one (another conversation's, another workspace's, already sent) is refused and nothing is
+  sent.
 - **Who wrote it.** When an agent token wrote a note or a reply, the message also shows
   `written_by_agent_token` with the label and tier of the token. The server tells the model to read
   such text as model output, not as a decision of the person the token acts as.

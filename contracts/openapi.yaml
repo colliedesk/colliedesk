@@ -42,6 +42,312 @@ security:
   - bearerAuth: []
   - sessionCookie: []
 paths:
+  /chat/session:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    get:
+      operationId: getHelpChatSession
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: The end user's current chat by its cookie, with its turns; 204 without one.
+      responses:
+        '200':
+          description: The chat
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpChatSession'}}}
+        '204': {description: No chat on this browser.}
+        '404': {description: 'The chat is off: the help center''s own 404 page, as when it is off.'}
+  /chat:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: embed, in: query, required: false, schema: {type: string, enum: ['1']}, description: 'The chat in a site''s frame (the widget): only the channel''s sites may frame it (frame-ancestors).'}
+      - {name: t, in: query, required: false, schema: {type: string}, description: 'A one-time code from Open full chat: moves the frame''s chat to this page, then 303 to the page without it.'}
+    get:
+      operationId: getHelpChatPage
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        The chat page, in the help center's look (its style sheets, logo, colors), loading chat.js and chat.css of the
+        help center itself. Its Content-Security-Policy allows that one script, calls to the help center's own origin
+        and Trusted Types; it is never framed except by the channel's sites with embed=1.
+      responses:
+        '200':
+          description: The page
+          content: {text/html: {schema: {type: string}}}
+        '303': {description: 'A code moved the chat; the page without it.'}
+        '404': {description: The chat is off (the help center's own 404 page).}
+  /chat/chat.js:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    get:
+      operationId: getHelpChatScript
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: 'The chat''s script. With `?v=<version>` (the address the pages use) it is kept a year.'
+      responses:
+        '200':
+          description: The script
+          content: {text/javascript: {schema: {type: string}}}
+        '304': {description: Not modified}
+        '404': {description: The chat is off.}
+  /chat/chat.css:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    get:
+      operationId: getHelpChatStyle
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: 'The chat''s style sheet: only the help center''s own custom properties, so its theme and custom CSS apply.'
+      responses:
+        '200':
+          description: The style sheet
+          content: {text/css: {schema: {type: string}}}
+        '304': {description: Not modified}
+        '404': {description: The chat is off.}
+  /chat/widget.js:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    get:
+      operationId: getHelpChatWidget
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        The script a company's site loads to show the chat button: it asks widget-config first and draws nothing unless
+        the site is one of the channel's; it reads nothing of the page and sets no cookie on the site. Checked again after an hour.
+      responses:
+        '200':
+          description: The script
+          content: {text/javascript: {schema: {type: string}}}
+        '304': {description: Not modified}
+        '404': {description: The chat is off.}
+  /chat/widget-config:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    get:
+      operationId: getHelpChatWidgetConfig
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        What widget.js draws, for a site the channel lists (its Origin), with CORS for that origin alone. Any other site
+        gets the help center's 404 and no CORS header.
+      responses:
+        '200':
+          description: The chat's name, greeting, suggestions and the help center's brand colors
+          headers:
+            Access-Control-Allow-Origin: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpChatWidgetConfig'}}}
+        '404': {description: 'Not a site of the channel, or the chat is off.'}
+  /chat/transfer:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    post:
+      operationId: transferHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        Open full chat, from a site's frame: a one-time code (2 minutes) that moves the browser's chat to the help
+        center's own page, whose cookie the frame's partitioned cookie never reaches. Without a chat, the page's address.
+      responses:
+        '200':
+          description: Where to open the chat
+          content:
+            application/json:
+              schema: {type: object, required: [url], properties: {url: {type: string}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: The chat is off.}
+  /chat/handoff:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    post:
+      operationId: handOffHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        Talk to a person: the browser's chat (its questions, answers and the articles cited) goes to the team as an
+        inbound message of the help chat channel, from the typed address, which nothing checks (the inbox marks it
+        Unverified sender (Help chat)). A second hand-off of the same chat joins the same conversation. One address
+        may hand off 5 chats in 10 minutes, and the channel opens at most 50 conversations in 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, maxLength: 254}
+                name: {type: string, maxLength: 120}
+                note: {type: string, maxLength: 2000}
+      responses:
+        '201':
+          description: 'Sent: a reference the end user may quote (the start of the conversation''s id) and whether the workspace is on a trial (it cannot reply by email then).'
+          content:
+            application/json:
+              schema: {type: object, required: [reference, trial], properties: {reference: {type: string}, trial: {type: boolean}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: 'The chat is off.'}
+        '415': {description: Not JSON., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: '`validation_failed`, with `fields.email`, `fields.name` or `fields.note`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '429':
+          description: '`rate_limited`: too many hand-offs from this address, or conversations on the channel.'
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /chat/session/end:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    post:
+      operationId: endHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: New chat. Ends the browser's chat and removes its cookie; the team keeps its transcript. Needs the help center's Origin.
+      responses:
+        '204': {description: 'Ended, or there was none.'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: The chat is off (the help center's own 404 page).}
+  /chat/turns:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: surface, in: query, required: false, schema: {type: string, enum: [help_center, article, widget]}, description: '`widget`: the chat is framed by a site, its cookie is partitioned.'}
+    post:
+      operationId: askHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        Asks a question. The answer streams as NDJSON (`application/x-ndjson`), one `HelpChatEvent` a line: `turn`,
+        then `delta` (one checked sentence each; a sentence with contact details the articles do not hold is replaced),
+        `sources`, `done`; or `error` after the stream started. A chat starts at its first question and its cookie is
+        set (renewed for 30 days on each). Needs the help center's Origin and JSON. Limits: 1,000 characters, 50
+        questions a chat, 10 a minute and 60 an hour per address; past the month's or day's limit `done` says
+        `over_limit` with related articles and nothing is sent to the AI.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: {type: string, maxLength: 1000}
+                viewing_article_number: {type: integer, minimum: 1, description: 'The number of the article the end user reads, when they ask about it.'}
+                surface: {type: string, enum: [help_center, article, widget], description: Where a new chat starts.}
+      responses:
+        '200':
+          description: The answer, as NDJSON events
+          content: {application/x-ndjson: {schema: {$ref: '#/components/schemas/HelpChatEvent'}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: The chat is off (the help center's own 404 page).}
+        '409': {description: '`chat_full`: 50 questions; start a new chat.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '415': {description: Not JSON., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '422': {description: '`question_too_long` or `invalid_request`.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '429':
+          description: '`rate_limited`: too many questions from this address, or answers at once.'
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /chat/turns/{turn_id}:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: turn_id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: getHelpChatTurn
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: One answer of the browser's chat as stored, to recover a stream that broke.
+      responses:
+        '200':
+          description: The turn
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpChatTurn'}}}
+        '404': {description: 'Not an answer of this browser''s chat (`not_found`), or the chat is off (the help center''s own 404 page).'}
+  /chat/turns/{turn_id}/feedback:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+      - {name: turn_id, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: rateHelpChatAnswer
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: Rates an answer of the browser's chat; a second rating replaces the first.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating: {type: string, enum: [helpful, not_helpful]}
+      responses:
+        '204': {description: Rated}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Not an answer of this browser's chat.}
+        '422': {description: Not a rating., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    delete:
+      operationId: unrateHelpChatAnswer
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: Takes a rating back.
+      responses:
+        '204': {description: Taken back}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: Not an answer of this browser's chat.}
+  /chat/prewarm:
+    servers: [{url: '{helpCenter}', description: 'A help center''s own address (helpcenter.SiteURL): https://<slug>.<HELP_CENTER_DOMAIN>, its custom domain, or <APP_ORIGIN>/help/<slug>. Never /api/v1.', variables: {helpCenter: {default: 'https://acme.colliedesk.com'}}}]
+    parameters:
+      - {name: channel, in: query, required: false, schema: {type: string, format: uuid}, description: 'The help chat channel; its type''s default when left out.'}
+    post:
+      operationId: prewarmHelpChat
+      tags: [HelpCenterChat]
+      x-colliedesk-surface: help-center
+      x-permission: public
+      security: []
+      description: >
+        Warms the AI's cache of the articles when the end user starts typing, so the first answer comes sooner. At most
+        once in 5 minutes per address and workspace, never when the cache is warm, never a new chat; it counts toward the
+        chat's limits. Always 204.
+      responses:
+        '204': {description: Done or skipped.}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {description: The chat is off (the help center's own 404 page).}
   /api/v1/config:
     get:
       operationId: getPublicConfig
@@ -134,7 +440,7 @@ paths:
           description: Error code `rate_limited`. This client address already started 3 trials in the last 24 hours.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '503':
-          description: Error code `signup_unavailable`. Sign-up is off because SIGNUP_HASH_KEY or TRUSTED_PROXIES is missing on the server (logged at start).
+          description: Error code `signup_unavailable`. Sign-up is off because the server lacks its sign-up hash key or its trusted proxies (operator console → Security; logged at start).
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/auth/redeem:
     post:
@@ -326,6 +632,658 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/operator/auth/redeem:
+    post:
+      operationId: redeemOperatorLink
+      security: []
+      x-permission: public
+      description: >-
+        Uses a one-time operator link (`collie operator pair`, 15 minutes). The console calls it when the
+        operator presses Continue, never on page load, so a link scanner cannot spend it. Without an
+        authenticator required or set up it signs the operator in (`step: done`, a `colliedesk_operator`
+        cookie, `__Host-colliedesk_operator` on https); otherwise it returns a ticket for the code (`code`),
+        and the first time the key to add (`enroll`, with a QR code drawn by the server). 404
+        `operator_link_invalid`, 410 `operator_link_expired`, 409 `operator_link_used`, 423
+        `operator_locked` with `locked_until`, 429 after 5 tries a minute. A repeat with the same
+        Idempotency-Key is refused like any second use of the link (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Where the sign-in stands
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorSignInStep'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+        '429': {$ref: '#/components/responses/OperatorTooManyTries'}
+  /api/v1/operator/auth/totp:
+    post:
+      operationId: confirmOperatorCode
+      security: []
+      x-permission: public
+      description: >-
+        Checks the authenticator code of a sign-in ticket and signs the operator in (a cookie). A wrong code
+        answers 400 `operator_code_wrong` with `tries_left` and keeps the ticket; ten wrong codes lock sign-in
+        for 15 minutes (423 `operator_locked`). A repeat after success is refused like any second use of the
+        ticket (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket, code]
+              properties:
+                ticket: {type: string, minLength: 1, maxLength: 200}
+                code: {type: string, minLength: 1, maxLength: 12}
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorSignInStep'}}}
+        '400': {$ref: '#/components/responses/OperatorCodeWrong'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+        '429': {$ref: '#/components/responses/OperatorTooManyTries'}
+  /api/v1/operator/auth/cloud:
+    post:
+      operationId: signInOperatorWithCloud
+      security:
+        - bearerAuth: []
+      x-permission: public
+      description: >-
+        Starts an operator's sign-in with a session token of the hosted cloud's identity provider (the
+        `cloud_auth.*` settings) as the bearer. The token must be issued to the console's own origin
+        (`azp` = OPERATOR_ORIGIN; `cloud_auth.authorized_parties` stays the app's, so a token of the app never
+        opens the console and one of the console never the app), and its verified email must be an operator
+        that is not revoked. It always goes on to the authenticator, whatever `operator.require_totp` says:
+        a ticket for the code (`code`), or the first time the key to add (`enroll`); then
+        `POST /api/v1/operator/auth/totp`. Every other token answers the same 401 `operator_sign_in_refused`,
+        so the answer never tells who is an operator. 403 `csrf_rejected` when Origin is not the console's,
+        404 when cloud sign-in is not configured, 423 `operator_locked`, 429 after 5 tries a minute.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: Where the sign-in stands (`code` or `enroll`, never `done`)
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorSignInStep'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+        '429': {$ref: '#/components/responses/OperatorTooManyTries'}
+  /api/v1/operator/auth/me:
+    get:
+      operationId: getOperatorMe
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The operator of this session or operator token. A workspace session or agent token is refused (401).
+      responses:
+        '200':
+          description: Current operator
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorMe'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/auth/logout:
+    post:
+      operationId: operatorLogout
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: Ends this operator session (and its cookie) or this operator token. A repeat finds it ended (401).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '204': {description: Signed out}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/operator/tokens:
+    post:
+      operationId: createOperatorToken
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Creates an operator token (`cdop_…`) for an AI agent: it always reads, and holds the permissions
+        given; it expires after 30 days. It works on `/mcp/operator` and the operator routes only, never in a
+        workspace. Needs the operator's authenticator code (`reauth_code`; 400 `reauth_required` or
+        `reauth_code_invalid`, nothing saved); an operator without an authenticator passes within 15 minutes
+        of signing in, else 403 `reauth_needs_new_link`. An operator token's call is a request a person
+        approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: {type: string, minLength: 1, maxLength: 100}
+                permissions: {type: array, items: {$ref: '#/components/schemas/OperatorPermission'}}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500, description: 'Why an operator token asks for this, shown to the approver'}
+      responses:
+        '201':
+          description: The token, shown once
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorToken'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+  /api/v1/operator/status:
+    get:
+      operationId: getOperatorStatus
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        The server at a glance: its release and newest migration, the configuration version each running
+        process runs and the one they should, what needs attention (settings left in the environment, a
+        refused version, an import a change waits for, the console sharing the app's address), and how many
+        operator requests wait.
+      responses:
+        '200':
+          description: Status
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorStatus'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/config:
+    get:
+      operationId: getOperatorConfig
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Every setting: its value (a secret only says whether it is set, when and by whom), its default, where
+        its value came from, how a change applies and what saving it asks for; and the bootstrap variables
+        of the environment, passwords masked. Names of environment variables appear only as data (`env_name`).
+      responses:
+        '200':
+          description: The configuration
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfig'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    patch:
+      operationId: changeOperatorConfig
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Saves a change as a new version, checked the way the server reads it at start; a running server
+        applies it within seconds. `base_version` is the version the change was made on (409 `config_changed`
+        when another was saved since). Secrets go in `secrets`, never in `set` (400 `secret_in_set`). The
+        server enforces what the console asks for: `reauth_code` for a secret or a key that needs it
+        (400 `reauth_required` / `reauth_code_invalid`), the secret an endpoint is bound to entered again
+        (400 `reenter_secret`, `error.fields` names it), and the phrase typed to confirm (400
+        `confirm_mismatch`, `error.guards` lists what the change does and asks). What a change asks depends on
+        what it does (turning billing on, not rotating its token); `POST /config/check` returns the same
+        `guards` first. A change of trusted proxies, cloud sign-in or the help center domain is saved as a
+        trial (`applies: trial`): unless confirmed before `trial_expires_at`, it reverts by itself; while it
+        runs every other save answers 409 `trial_pending`. Turning the authenticator off answers 400
+        `setting_not_changeable` (the CLI only); a change that does not build answers 422 `config_invalid`
+        with `error.fields` per key. Nothing is saved on a refusal. An operator token's call is a request a person approves (202); it may only name the
+        secrets it needs (`"secrets": {"smtp.password": null}`), never send one (400 `secret_in_request`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OperatorConfigChange'}
+      responses:
+        '200':
+          description: Saved
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/config/check:
+    post:
+      operationId: checkOperatorConfig
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Checks a change without saving it: whether it builds (`errors` per key), what saving it would ask
+        (`guards`), and with `test` a live check: `smtp` sends a test email to the operator's own address
+        through the relay of the change; `polar` asks Polar about the Team and Founding products with the
+        change's token; `jwks` fetches the cloud sign-in keys; `ai` sends one short request to the server AI
+        provider of the change (its first model, a few output tokens). A help center domain without a
+        wildcard DNS record is refused in `errors`. Nothing is saved. A live test sends the server's stored
+        secrets, so an operator token gets 403 `test_needs_a_person` for one, and a change that moves an
+        endpoint answers `test.ok: false` until the secret bound to it is typed again in `secrets`. A repeat with the same Idempotency-Key checks again (nothing is stored).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                set: {type: object, additionalProperties: {type: string}}
+                unset: {type: array, items: {type: string}}
+                secrets: {type: object, additionalProperties: {type: [string, 'null']}}
+                test: {type: string, enum: [smtp, polar, jwks, ai]}
+      responses:
+        '200':
+          description: The result of the checks
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigCheck'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/operator/config/versions:
+    get:
+      operationId: listOperatorConfigVersions
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The versions, newest first, each with what it changed from the one before (a secret only says it was replaced).
+      parameters:
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, running_version]
+                properties:
+                  running_version: {type: integer}
+                  items: {type: array, items: {$ref: '#/components/schemas/OperatorConfigVersion'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/config/versions/{id}/restore:
+    parameters: [{name: id, in: path, required: true, schema: {type: integer, minimum: 1}}]
+    post:
+      operationId: restoreOperatorConfigVersion
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Saves an older version again as the newest one (secrets copied sealed). Needs `reauth_code`.
+        `base_version` as for a change (409 `config_changed`). A version that does not build answers 422.
+        It passes the guards of what it changes from the version that runs: a phrase in `confirm` (400
+        `confirm_mismatch` with `error.guards`), and a trial when it changes trusted proxies, cloud sign-in or
+        the help center domain (`applies: trial`).
+        An operator token's call is a request a person approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base_version]
+              properties:
+                base_version: {type: integer}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+                confirm: {type: object, additionalProperties: {type: string}, description: 'Per key, the phrase typed to confirm'}
+      responses:
+        '201':
+          description: Restored as a new version
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '200':
+          description: The version an earlier request with the same Idempotency-Key saved
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/config/trial/confirm:
+    post:
+      operationId: confirmOperatorConfigTrial
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Keeps the trial change `version` (D12): it becomes an ordinary version. Needs `reauth_code`. A version
+        that is not the trial that runs answers 400 `no_trial`. An operator token's call is a request a person
+        approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: integer, minimum: 1}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '201':
+          description: Confirmed
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '200':
+          description: The answer of an earlier request with the same Idempotency-Key
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/config/trial/revert:
+    post:
+      operationId: revertOperatorConfigTrial
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Ends the trial change `version` now: the version before it is saved again as the newest one. Needs
+        `reauth_code`. A version that is not the trial that runs answers 400 `no_trial`. An operator token's
+        call is a request a person approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: integer, minimum: 1}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '201':
+          description: Reverted as a new version
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '200':
+          description: The answer of an earlier request with the same Idempotency-Key
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorConfigSaved'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/billing/products:
+    get:
+      operationId: listOperatorProducts
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The Polar products this server sells or once sold, oldest first. A product is never removed nor changed, only taken off sale, so an old subscription always maps to its plan.
+      responses:
+        '200':
+          description: The products
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/OperatorProduct'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: addOperatorProduct
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Adds a Polar product. On sale, it takes the product of the same plan and period off sale. A product id
+        already listed answers 409. Needs `reauth_code`. An operator token's call is a request a person approves (202).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, plan, period]
+              properties:
+                product_id: {type: string, minLength: 1, maxLength: 200}
+                plan: {type: string, enum: [team, founding, solo, small, team25]}
+                period: {type: string, enum: [monthly, yearly, single]}
+                on_sale: {type: boolean, default: true}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '201':
+          description: Added
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorProduct'}}}
+        '200':
+          description: The product an earlier request with the same Idempotency-Key added
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorProduct'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/billing/products/{id}:
+    parameters: [{name: id, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 200}}]
+    patch:
+      operationId: setOperatorProductOnSale
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Puts a product on sale (taking the other of its plan and period off) or off sale; nothing else of a
+        product changes. Needs `reauth_code`. An operator token's call is a request a person approves (202).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [on_sale]
+              properties:
+                on_sale: {type: boolean}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '200':
+          description: The product
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorProduct'}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/OperatorConfigRefused'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/audit:
+    get:
+      operationId: listOperatorAudit
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: What changed the server's configuration and its operators, newest first; never a secret's value. `format=csv` answers the same as CSV.
+      parameters:
+        - {name: key, in: query, required: false, schema: {type: string, maxLength: 100}}
+        - {name: actor, in: query, required: false, schema: {type: string, maxLength: 200}}
+        - {name: since, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
+        - {name: format, in: query, required: false, schema: {type: string, enum: [json, csv], default: json}}
+      responses:
+        '200':
+          description: Audit log
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/OperatorAuditEntry'}}
+            text/csv: {schema: {type: string}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/requests:
+    get:
+      operationId: listOperatorRequests
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: Operator requests, newest first. An operator token sees only its own; an operator's session sees all.
+      responses:
+        '200':
+          description: Requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/OperatorRequest'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/operator/requests/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getOperatorRequest
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: One operator request (another token's answers 404).
+      responses:
+        '200':
+          description: The request
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorRequest'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/operator/requests/{id}/cancel:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: cancelOperatorRequest
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: Withdraws a pending request. The token that made it, or an operator's session, may (another token gets 404); a decided request answers 409. A repeat finds it cancelled (409).
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      responses:
+        '200':
+          description: The cancelled request
+          content: {application/json: {schema: {$ref: '#/components/schemas/OperatorRequest'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/operator/operators:
+    get:
+      operationId: listOperators
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: The operators and their sessions and tokens; never a token or a link.
+      responses:
+        '200':
+          description: Operators
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operators, sessions]
+                properties:
+                  operators: {type: array, items: {$ref: '#/components/schemas/Operator'}}
+                  sessions: {type: array, items: {$ref: '#/components/schemas/OperatorSession'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: inviteOperator
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Invites an operator (or lets a revoked one in again): a one-time sign-in link, shown once, 15 minutes.
+        Needs `reauth_code`. An operator token's call is a request a person approves (202); the link is shown
+        only to the approver.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, minLength: 3, maxLength: 320}
+                reauth_code: {type: string, maxLength: 12}
+                note: {type: string, maxLength: 500}
+      responses:
+        '201':
+          description: The link, shown once
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [email, link, expires_at]
+                properties:
+                  email: {type: string}
+                  link: {type: string}
+                  expires_at: {type: string, format: date-time}
+        '200':
+          description: The invite an earlier request with the same Idempotency-Key made, without its link
+          content: {application/json: {schema: {type: object, required: [email], properties: {email: {type: string}, expires_at: {type: string, format: date-time}}}}}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/operators/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    delete:
+      operationId: revokeOperator
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Ends an operator's access: every session and token stops at once. Inviting them again lets them back
+        in. Needs `reauth_code` (query or `X-Colliedesk-Reauth` header). An operator token's call is a request (202).
+      parameters:
+        - {name: X-Colliedesk-Reauth, in: header, required: false, schema: {type: string, maxLength: 12}}
+      responses:
+        '204': {description: Revoked}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
+  /api/v1/operator/sessions/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    delete:
+      operationId: revokeOperatorSession
+      security: [{operatorCookie: []}, {bearerAuth: []}]
+      x-permission: operator
+      description: >-
+        Ends one operator session or token. Ending your own browser session needs no code; any other needs
+        `X-Colliedesk-Reauth`. An operator token's call is a request (202).
+      parameters:
+        - {name: X-Colliedesk-Reauth, in: header, required: false, schema: {type: string, maxLength: 12}}
+      responses:
+        '204': {description: Ended}
+        '202': {$ref: '#/components/responses/OperatorRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '423': {$ref: '#/components/responses/OperatorLocked'}
   /api/v1/conversations:
     get:
       operationId: listConversations
@@ -3277,6 +4235,108 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/ai/chat/usage:
+    get:
+      operationId: getAIChatUsage
+      x-permission: billing:manage
+      description: >
+        One UTC calendar month of the help center's AI chat (docs/user/ai-chat.md): answers given (today and this month)
+        against the limits, what it spent, chats, hand-offs to the team and feedback. On the cloud's own provider the
+        limits are the plan's and spend shows only as a share (`spent_percent`); on the workspace's own provider, or a
+        server without plan limits, spend is in micro-dollars against the AI chat feature's own monthly limit, if any.
+        Admins only.
+      parameters:
+        - {name: month, in: query, required: false, schema: {type: string, pattern: '^[0-9]{4}-[0-9]{2}$'}, description: 'YYYY-MM; the current UTC month when left out.'}
+      responses:
+        '200':
+          description: The month's use
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIChatUsage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/ai/chat/sessions:
+    get:
+      operationId: listAIChatSessions
+      x-permission: conversations:read
+      description: >
+        The workspace's chats with the help center's AI, newest activity first, 50 a page. Texts are kept 90 days after a
+        chat's last turn (`kept_until`); after that `first_question` is null. Every member of the team reads them.
+      parameters:
+        - {name: channel_id, in: query, required: false, schema: {type: string, format: uuid}, description: Only chats of this help chat channel.}
+        - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/AIChatStatus'}}
+        - {name: feedback, in: query, required: false, schema: {type: string, enum: [not_helpful]}, description: Only chats with an answer rated not helpful.}
+        - {name: conversation_id, in: query, required: false, schema: {type: string, format: uuid}, description: 'Only the chat that handed off to this conversation (the inbox''s Open chat transcript).'}
+        - {name: cursor, in: query, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: A page of chats
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIChatSessionPage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/ai/chat/sessions/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: getAIChatSession
+      x-permission: conversations:read
+      description: One chat with its transcript, each answer with the articles it cited (as they were) and its feedback.
+      responses:
+        '200':
+          description: The chat
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIChatSession'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteAIChatSession
+      x-permission: access:write
+      description: >
+        Deletes a chat and its transcript for good; a conversation it handed off keeps its own copy. The history of the AI
+        settings records it, without its texts. Every agent token's call becomes an agent request a person approves.
+      responses:
+        '204': {description: Deleted}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/ai/chat/preview:
+    post:
+      operationId: previewAIChat
+      x-permission: conversations:write
+      description: >
+        Answers a question as the help center's AI chat would, with the default help chat channel's instructions (or
+        `channel_id`'s), for an admin trying it. Nothing reaches a customer and nothing is stored but the call's usage,
+        which counts toward the chat's limits. Not streamed: the whole answer comes back. A repeat with the same
+        Idempotency-Key answers the first answer again and asks the AI nothing; the key with another question is
+        refused with 422, code `idempotency_key_reused`.
+      parameters:
+        - {$ref: '#/components/parameters/CreateIdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [question]
+              properties:
+                question: {type: string, maxLength: 1000}
+                channel_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: The answer as an end user would see it (or, for a repeated Idempotency-Key, the first one's)
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIChatPreview'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '422': {$ref: '#/components/responses/IdempotencyKeyReused'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {description: Too many chat answers at once., content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '502': {description: '`ai_failed`: the AI did not answer.', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
   /api/v1/ai/automatic-limits:
     put:
       operationId: setAIAutomaticLimits
@@ -3853,6 +4913,8 @@ paths:
     post:
       operationId: approveAgentRequest
       x-permission: authenticated
+      parameters:
+        - {$ref: '#/components/parameters/OperatorRealm'}
       description: >-
         People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving
         person: their role, the workspace lock and every check of the route apply. The answer is 200 with
@@ -3869,6 +4931,13 @@ paths:
         `seen_reply_number` is the newest reply the approving person had on screen: when someone replied
         since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so
         it can be read again and approved with the new number.
+
+        With `X-Colliedesk-Realm: operator` the route decides an operator request instead, for an operator's
+        browser session only (no workspace credential, no operator token: 401 / 403 `person_only`): it needs
+        `reauth_code`, and `secrets` carries the secrets the request names; they are used for this one call
+        and never stored, and `confirm` carries the phrases a configuration change asks to type (400
+        `confirm_mismatch` names them in `error.guards`, and the request keeps waiting). An agent request's id
+        answers 404 there, and an operator request's id answers 404 without the header.
       requestBody:
         required: false
         content:
@@ -3884,6 +4953,9 @@ paths:
                   items: {type: string}
                   description: The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise).
                 seen_reply_number: {type: integer, minimum: 0, description: 'Reply drafts only: the newest reply number on the approver''s screen.'}
+                reauth_code: {type: string, maxLength: 12, description: 'Operator realm: the approver''s authenticator code'}
+                secrets: {type: object, additionalProperties: {type: string}, description: 'Operator realm: the secrets the request names, used once'}
+                confirm: {type: object, additionalProperties: {type: string}, description: 'Operator realm: the phrases a configuration change asks the approver to type; a token never fills them'}
       responses:
         '200':
           description: The decided request and the answer of its call
@@ -3893,7 +4965,7 @@ paths:
                 type: object
                 required: [request, result]
                 properties:
-                  request: {$ref: '#/components/schemas/AgentRequest'}
+                  request: {oneOf: [{$ref: '#/components/schemas/AgentRequest'}, {$ref: '#/components/schemas/OperatorRequest'}]}
                   result: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: The JSON answer of the approved call; null when it had none or was too large.}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -3906,7 +4978,11 @@ paths:
     post:
       operationId: rejectAgentRequest
       x-permission: authenticated
-      description: People only. Refuses the request (a discarded reply draft); nothing runs, and it can never run later.
+      description: >-
+        People only. Refuses the request (a discarded reply draft); nothing runs, and it can never run later.
+        With `X-Colliedesk-Realm: operator` it refuses an operator request (an operator's session, with `reauth_code`).
+      parameters:
+        - {$ref: '#/components/parameters/OperatorRealm'}
       requestBody:
         required: false
         content:
@@ -3916,10 +4992,11 @@ paths:
               additionalProperties: false
               properties:
                 reason: {type: string, maxLength: 1000, description: Shown to the agent that asked}
+                reauth_code: {type: string, maxLength: 12, description: 'Operator realm: the approver''s authenticator code'}
       responses:
         '200':
           description: The rejected request
-          content: {application/json: {schema: {$ref: '#/components/schemas/AgentRequest'}}}
+          content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/AgentRequest'}, {$ref: '#/components/schemas/OperatorRequest'}]}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
@@ -6002,6 +7079,7 @@ components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
     sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
+    operatorCookie: {type: apiKey, in: cookie, name: colliedesk_operator, description: '__Host-colliedesk_operator when the console is served over https'}
     inboundSecret: {type: apiKey, in: header, name: X-Colliedesk-Inbound-Secret}
     polarWebhook: {type: apiKey, in: header, name: webhook-signature}
     resendWebhook: {type: apiKey, in: header, name: svix-signature}
@@ -6022,6 +7100,12 @@ components:
         is accepted (202) and stores nothing new; the same key with other words is a new submission. Without
         a key every request is a submission. A malformed key is 400. Repeats still count against the limits.
       schema: {type: string, minLength: 1, maxLength: 200}
+    OperatorRealm:
+      name: X-Colliedesk-Realm
+      in: header
+      required: false
+      description: '`operator`: the request is an operator request, decided with an operator''s session (the operator console sends it).'
+      schema: {type: string, enum: [operator]}
     CreateIdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -6121,6 +7205,31 @@ components:
       description: The workspace ran 10 provider checks in the last minute; try again shortly.
       headers:
         Retry-After: {schema: {type: integer}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Gone:
+      description: The link or ticket expired
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    OperatorLocked:
+      description: Operator sign-in is locked after ten wrong codes; `error.locked_until` says until when
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorLockedError'}}}
+    OperatorTooManyTries:
+      description: More than 5 tries a minute
+      headers:
+        Retry-After: {schema: {type: integer}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    OperatorCodeWrong:
+      description: The code did not match (`operator_code_wrong`, `error.tries_left`) or the body is invalid
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorCodeError'}}}
+    OperatorRequestAccepted:
+      description: >-
+        An operator token asked for a change: nothing happened yet. It waits as an operator request a
+        person approves in the console (with their authenticator code); it expires after seven days.
+      content: {application/json: {schema: {$ref: '#/components/schemas/OperatorRequestAccepted'}}}
+    OperatorConfigRefused:
+      description: >-
+        Nothing was saved. `error.code` says why (`secret_in_set`, `reauth_required`, `reauth_code_invalid`,
+        `reenter_secret`, `confirm_mismatch`, `setting_not_changeable`, `unknown_setting`, `config_invalid`,
+        `secret_in_request`, `no_trial`); `error.fields` names the settings, never a value.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Unauthorized: {$ref: '#/components/responses/Error401'}
     Forbidden: {$ref: '#/components/responses/Error403'}
@@ -6454,13 +7563,13 @@ components:
           type: object
           required: [available, missing_settings]
           properties:
-            available: {type: boolean, description: 'The operator set up the server''s GitHub App (GITHUB_APP_*), so Autofix can be used; the web app hides it otherwise.'}
+            available: {type: boolean, description: 'The operator set up the server''s GitHub App (operator console → Mailboxes & GitHub, github.*), so Autofix can be used; the web app hides it otherwise.'}
             missing_settings: {type: array, items: {type: string}, description: The settings the operator still needs; empty when available.}
         ai:
           type: object
           required: [server_provider]
           properties:
-            server_provider: {type: boolean, description: True when the operator configured an AI provider for every workspace (AI_SERVER_*).}
+            server_provider: {type: boolean, description: 'True when the operator configured an AI provider for every workspace (operator console → AI: ai.server.*).'}
         product_analytics:
           type: object
           description: >
@@ -6496,7 +7605,7 @@ components:
           required: [enabled]
           properties:
             enabled: {type: boolean, description: True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured).}
-    AISlotName: {type: string, enum: [triage, draft]}
+    AISlotName: {type: string, enum: [triage, draft, chat], description: '`chat`: the AI that answers end users in the help center''s chat (docs/user/ai-chat.md).'}
     AIProviderKind: {type: string, enum: [anthropic, openai_compatible]}
     AIProvider:
       type: object
@@ -6518,9 +7627,10 @@ components:
         used_by: {type: array, items: {$ref: '#/components/schemas/AISlotName'}, description: 'The features set to this provider, on or off.'}
     AISlot:
       type: object
-      required: [slot, source, provider_id, model, effort, enabled, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at]
+      required: [slot, source, provider_id, model, effort, enabled, automatic, auto_parts, active, off_reason, consented_by, consented_at, updated_by, updated_at, monthly_cap_micro_usd]
       properties:
         slot: {$ref: '#/components/schemas/AISlotName'}
+        monthly_cap_micro_usd: {type: [integer, 'null'], description: 'AI chat only: the most it may spend a UTC calendar month, in millionths of a US dollar, on the workspace''s own provider or a server without plan limits; null is no limit. The cloud''s own provider has its plan''s limits.'}
         source: {type: string, enum: [server, provider, none]}
         provider_id: {type: [string, 'null'], format: uuid}
         model: {type: [string, 'null']}
@@ -6539,7 +7649,7 @@ components:
       required: [id, kind, actor_agent_id, actor_name, via_token, provider_id, provider_label, slot, detail, created_at]
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [provider_added, provider_changed, provider_key_changed, provider_removed, slot_changed, automatic_limits_changed]}
+        kind: {type: string, enum: [provider_added, provider_changed, provider_key_changed, provider_removed, slot_changed, automatic_limits_changed, chat_deleted]}
         actor_agent_id: {type: [string, 'null'], format: uuid}
         actor_name: {type: [string, 'null']}
         via_token: {type: boolean, description: True when an agent token made the change.}
@@ -6560,6 +7670,151 @@ components:
         drafts_today: {type: integer}
         drafts_paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s automatic drafts (or all automatic runs) are used up: the next UTC midnight.'}
         drafts_reserved_until: {type: [string, 'null'], format: date-time, description: 'When automatic drafts spent half of this month''s allowance of the server''s provider: the next month. The other half stays for drafts people ask for and for triage.'}
+    HelpChatWidgetConfig:
+      type: object
+      required: [name, greeting, suggestions, brand]
+      properties:
+        name: {type: string}
+        greeting: {type: string}
+        suggestions: {type: array, items: {type: string}}
+        brand:
+          description: 'The help center''s brand accent (#rrggbb) and the color on it; null when its theme sets no color (the button is ink #171717).'
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [accent, accent_ink]
+              properties:
+                accent: {type: string, pattern: '^#[0-9a-f]{6}$'}
+                accent_ink: {type: string, pattern: '^#[0-9a-f]{6}$'}
+    HelpChatEvent:
+      type: object
+      required: [type]
+      description: 'One line of an answer''s stream. `turn` first; `delta` a checked sentence; `sources` the cited articles (or, `over_limit`, related ones); `done` last; `error` instead of `done`.'
+      properties:
+        type: {type: string, enum: [turn, delta, sources, done, error]}
+        turn_id: {type: string, format: uuid}
+        session_created: {type: boolean, description: This question started a new chat.}
+        text: {type: string}
+        sources: {type: array, items: {$ref: '#/components/schemas/HelpChatSource'}}
+        status: {type: string, enum: [answered, no_source, over_limit]}
+        links_allowed: {type: array, items: {type: string}, description: Links of the answer that are the articles' own; only these are shown as links.}
+        redacted: {type: boolean}
+        code: {type: string, enum: [model_failed, timeout]}
+    HelpChatSession:
+      type: object
+      required: [status, idle_hours, turns]
+      properties:
+        status: {$ref: '#/components/schemas/AIChatStatus'}
+        idle_hours: {type: integer, description: Hours since the last turn; a chat idle more than 24 asks the end user to continue it.}
+        turns: {type: array, items: {$ref: '#/components/schemas/HelpChatTurn'}}
+    HelpChatTurn:
+      type: object
+      required: [id, question, answer, status, sources, feedback, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        question: {type: [string, 'null']}
+        answer: {type: [string, 'null']}
+        status: {type: string, enum: [streaming, answered, no_source, over_limit, failed]}
+        error_code: {type: [string, 'null']}
+        sources: {type: array, items: {$ref: '#/components/schemas/HelpChatSource'}}
+        feedback: {type: [string, 'null'], enum: [helpful, not_helpful, null]}
+        redacted: {type: boolean, description: A sentence of the answer was hidden because it held contact details not in the articles.}
+        created_at: {type: string, format: date-time}
+    HelpChatSource:
+      type: object
+      required: [number, title, url, folder]
+      properties:
+        number: {type: integer}
+        title: {type: string}
+        url: {type: string, description: The article's page on the help center.}
+        folder: {type: string}
+    AIChatPreview:
+      type: object
+      required: [answer, status, sources, redacted, whole, articles, took_ms]
+      properties:
+        answer: {type: string}
+        status: {type: string, enum: [answered, no_source, over_limit]}
+        sources: {type: array, items: {type: object, required: [number, title, folder], properties: {number: {type: integer}, title: {type: string}, folder: {type: string}}}}
+        redacted: {type: boolean}
+        whole: {type: boolean, description: 'The AI read every article (else the best excerpts of a large knowledge base).'}
+        articles: {type: integer, description: How many articles it read.}
+        took_ms: {type: integer}
+    AIChatStatus: {type: string, enum: [open, ended, handed_off], description: '`ended`: the end user started a new chat. `handed_off`: they asked to talk to a person.'}
+    AIChatUsage:
+      type: object
+      required: [month, answers, answers_today, answer_limit, day_answer_limit, spent_micro_usd, limit_micro_usd, spent_percent, unpriced_model, chats, handed_off, rated_helpful, rated, articles, resets_at]
+      properties:
+        month: {type: string, description: YYYY-MM}
+        answers: {type: integer, description: 'Questions the AI answered (with or without a source) this month; a question over the limits is not counted.'}
+        answers_today: {type: integer}
+        answer_limit: {type: [integer, 'null'], description: 'The plan''s monthly answers on the cloud''s own provider; null where answers are not limited.'}
+        day_answer_limit: {type: [integer, 'null'], description: A tenth of the month's.}
+        spent_micro_usd: {type: [integer, 'null'], description: 'What the chat spent, calls still running included at most; null on the cloud''s own provider, and when the server has no price for the model (unpriced_model).'}
+        limit_micro_usd: {type: [integer, 'null'], description: 'The AI chat feature''s own monthly limit; null without one, and on the cloud''s own provider.'}
+        spent_percent: {type: [integer, 'null'], minimum: 0, maximum: 100, description: Spend as a share of the month's limit; null without one.}
+        unpriced_model: {type: [string, 'null'], description: 'The AI chat''s model when the server has no price for it (the setting ai.server.prices): its spend is not counted (spent_micro_usd is null) and no limit in dollars can be set. Null when it is priced.'}
+        chats: {type: integer, description: Chats started this month.}
+        handed_off: {type: integer}
+        rated_helpful: {type: integer}
+        rated: {type: integer}
+        articles: {type: integer, description: 'Published articles the AI may answer from (the help center''s, without those kept away from AI); 0 answers nothing.'}
+        resets_at: {type: string, format: date-time}
+    AIChatSessionSummary:
+      type: object
+      required: [id, channel_id, channel_name, surface, status, turns, first_question, not_helpful, conversation_id, created_at, last_turn_at, ended_at, kept_until]
+      properties:
+        id: {type: string, format: uuid}
+        channel_id: {type: string, format: uuid}
+        channel_name: {type: string}
+        surface: {type: string, enum: [help_center, article, widget], description: 'Where it started: the chat page, an article''s chat box, or a site''s widget.'}
+        status: {$ref: '#/components/schemas/AIChatStatus'}
+        turns: {type: integer}
+        first_question: {type: [string, 'null'], description: Null once the texts expired.}
+        not_helpful: {type: boolean, description: An answer of it was rated not helpful.}
+        conversation_id: {type: [string, 'null'], format: uuid, description: The conversation its hand-off opened.}
+        created_at: {type: string, format: date-time}
+        last_turn_at: {type: string, format: date-time}
+        ended_at: {type: [string, 'null'], format: date-time}
+        kept_until: {type: string, format: date-time, description: When its texts are removed unless another turn comes first.}
+    AIChatSessionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AIChatSessionSummary'}}
+        next_cursor: {type: [string, 'null']}
+    AIChatSource:
+      type: object
+      required: [ordinal, article_id, number, version, title, folder]
+      properties:
+        ordinal: {type: integer}
+        article_id: {type: [string, 'null'], format: uuid, description: Null once the article was deleted for good.}
+        number: {type: integer}
+        version: {type: integer}
+        title: {type: [string, 'null']}
+        folder: {type: [string, 'null']}
+    AIChatTurn:
+      type: object
+      required: [id, seq, question, answer, status, error_code, viewing_article_id, sources, feedback, created_at, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        seq: {type: integer}
+        question: {type: [string, 'null']}
+        answer: {type: [string, 'null'], description: 'As the end user saw it: contact details not in the articles are hidden.'}
+        status: {type: string, enum: [streaming, answered, no_source, over_limit, failed]}
+        error_code: {type: [string, 'null']}
+        viewing_article_id: {type: [string, 'null'], format: uuid, description: The article they were reading when they asked.}
+        sources: {type: array, items: {$ref: '#/components/schemas/AIChatSource'}}
+        feedback: {type: [string, 'null'], enum: [helpful, not_helpful, null]}
+        created_at: {type: string, format: date-time}
+        finished_at: {type: [string, 'null'], format: date-time}
+    AIChatSession:
+      allOf:
+        - {$ref: '#/components/schemas/AIChatSessionSummary'}
+        - type: object
+          required: [history_cut_at, transcript]
+          properties:
+            history_cut_at: {type: [string, 'null'], format: date-time, description: 'Turns before it no longer fit what the AI reads of the chat.'}
+            transcript: {type: array, items: {$ref: '#/components/schemas/AIChatTurn'}}
     AIAllowance:
       type: object
       required: [limit_micro_usd, used_micro_usd, resets_at, drafts_left]
@@ -6788,7 +8043,7 @@ components:
             type: object
             required: [feature, billed_to, provider_label, calls, failed, automatic, input_tokens, output_tokens, cost_micro_usd]
             properties:
-              feature: {type: string, enum: [check, triage, draft]}
+              feature: {type: string, enum: [check, triage, draft, chat]}
               billed_to: {type: string, enum: [server, workspace_key]}
               provider_label: {type: string}
               calls: {type: integer}
@@ -6906,7 +8161,7 @@ components:
       required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance, auto_triage, auto_draft_estimate]
       properties:
         server:
-          description: The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none.
+          description: The server's provider, set by the operator in the operator console → AI (ai.server.*); null when the server has none.
           anyOf:
             - type: 'null'
             - type: object
@@ -6981,6 +8236,7 @@ components:
         enabled: {type: boolean}
         automatic: {type: boolean, description: 'Left out: kept as it is (off when the feature turns off or moves to another provider).'}
         auto_parts: {type: array, items: {type: string, enum: [tags, priority, assignee]}, description: 'Triage only. Left out: kept; tags and priority when automatic turns on with none.'}
+        monthly_cap_micro_usd: {type: [integer, 'null'], minimum: 1, description: 'AI chat only. Left out: kept; null removes the limit.'}
     ExportLink:
       type: object
       required: [url, expires_in_seconds]
@@ -7100,9 +8356,10 @@ components:
     Priority: {type: string, enum: [low, normal, high, urgent]}
     ConversationChannel:
       type: string
-      enum: [email, web_form, imported, agent, problem_report]
+      enum: [email, web_form, help_chat, imported, agent, problem_report]
       description: >-
         How the conversation started. email: a customer's mail. web_form: the public web form.
+        help_chat: an end user handed a chat with the help center's AI to the team (the address was typed, never verified).
         imported: brought over from another helpdesk (its original channel is in origin.source).
         agent: a team member started it in Colliedesk; an older image that does not know this field
         also writes agent. problem_report: an agent's Report a problem.
@@ -7303,6 +8560,7 @@ components:
           properties:
             triage: {type: boolean}
             draft: {type: boolean}
+            chat: {type: boolean, description: 'The help center''s AI chat answers end users (a server before it sends none).'}
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
         timezone: {type: string}
@@ -8571,7 +9829,7 @@ components:
             channel_not_connected (no channel of the type that carries the reply was connected, a web form
             without email; retry once it is), channel_removed, no_recipient (the customer has no address on
             the channel), bounced, gave_up, mailbox_server_config (a queued reply waits because Microsoft refused
-            this server's own app credentials; the operator must update MICROSOFT_OAUTH_CLIENT_SECRET, and
+            this server's own app credentials; the operator must update microsoft.client_secret in the operator console, and
             reconnecting does not help).
             Null for most email failures, whose words are in last_error.
         attempts: {type: integer, minimum: 0}
@@ -8803,7 +10061,7 @@ components:
           type: boolean
           description: >-
             True while a reply of this channel waits because Microsoft refused this server's own app credentials
-            (MICROSOFT_OAUTH_CLIENT_SECRET wrong or expired). The connection is fine; the operator must update the
+            (microsoft.client_secret wrong or expired). The connection is fine; the operator must update the
             secret, and reconnecting does not help. False while the server lacks its Microsoft settings (available is
             false): missing_settings names what to set.
         connection:
@@ -8836,7 +10094,7 @@ components:
         connected_at: {type: string, format: date-time}
     ChannelType:
       type: string
-      enum: [email, web_form]
+      enum: [email, web_form, help_chat]
       description: A channel type this server runs. A new type adds its value here and its configuration to ChannelConfig.
     ChannelState:
       type: object
@@ -8852,7 +10110,7 @@ components:
           type: [string, 'null']
           description: >-
             Why a channel needs attention, a fixed code the web app explains: email `sending_paused`,
-            `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`.
+            `cannot_send`, `gmail_broken`, `microsoft_broken`, `domain_unverified`, `no_inbound_secret`; web form `no_origins`; help chat `ai_chat_off`.
             A waiting channel has `no_message_yet`.
         message: {type: [string, 'null']}
     Channel:
@@ -8882,11 +10140,26 @@ components:
     WebFormChannelConfig:
       allOf: [{$ref: '#/components/schemas/WebFormSettings'}]
       description: The web form's configuration, as `GET /api/v1/channels/web-form` shows it.
+    HelpChatChannelConfig:
+      type: object
+      required: [channel_id, enabled, greeting, suggestions, instructions, widget_origins]
+      description: >-
+        The help chat's surface (docs/user/help-chat.md): what the chat says first, the questions it offers, what is added to
+        the AI's instructions, and the sites whose pages may embed the chat. The chat answers on the help center's own
+        address (`<help center>/chat`); a site embeds it with `<script src="<help center>/chat/widget.js" data-channel="<channel_id>" async></script>`.
+      properties:
+        channel_id: {type: string, format: uuid}
+        enabled: {type: boolean}
+        greeting: {type: string, maxLength: 300}
+        suggestions: {type: array, maxItems: 4, items: {type: string, maxLength: 120}}
+        instructions: {type: string, maxLength: 2000, description: 'Added to the AI''s instructions. The AI still answers only from published articles; instructions cannot add facts.'}
+        widget_origins: {type: array, maxItems: 20, items: {type: string}, description: 'Exact origins (scheme://host[:port]) whose pages may embed the chat.'}
     ChannelConfig:
       description: A channel's configuration, by its type.
       oneOf:
         - {$ref: '#/components/schemas/EmailChannelConfig'}
         - {$ref: '#/components/schemas/WebFormChannelConfig'}
+        - {$ref: '#/components/schemas/HelpChatChannelConfig'}
     ChannelDetail:
       allOf:
         - {$ref: '#/components/schemas/Channel'}
@@ -8920,11 +10193,22 @@ components:
       additionalProperties: false
       properties:
         allowed_origins: {type: array, maxItems: 20, items: {type: string, maxLength: 200}}
+    HelpChatChannelConfigInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: A field left out is kept.
+      properties:
+        greeting: {type: string, maxLength: 300}
+        suggestions: {type: array, maxItems: 4, items: {type: string, maxLength: 120}}
+        instructions: {type: string, maxLength: 2000}
+        widget_origins: {type: array, maxItems: 20, items: {type: string, maxLength: 200}}
     ChannelConfigInput:
       description: A channel's configuration as its type takes it.
       oneOf:
         - {$ref: '#/components/schemas/EmailChannelConfigInput'}
         - {$ref: '#/components/schemas/WebFormChannelConfigInput'}
+        - {$ref: '#/components/schemas/HelpChatChannelConfigInput'}
     ChannelSettings:
       type: object
       description: >-
@@ -9151,6 +10435,326 @@ components:
           type: array
           maxItems: 30
           items: {type: string, maxLength: 60}
+    OperatorPermission:
+      type: string
+      enum: [operator:read, operator_requests:cancel, operator_config:write, operator:manage]
+    OperatorSignInStep:
+      type: object
+      required: [step, email]
+      properties:
+        step: {type: string, enum: [code, enroll, done]}
+        email: {type: string}
+        ticket: {type: string, description: 'For POST /api/v1/operator/auth/totp, 10 minutes, once'}
+        key: {type: string, description: 'enroll: the authenticator key as text (base32)'}
+        otpauth_url: {type: string, description: 'enroll: the key as an otpauth:// URL'}
+        qr_svg: {type: [string, 'null'], description: 'enroll: the URL as a QR code, an SVG image'}
+        totp_required: {type: boolean, description: 'done: whether this server requires an authenticator'}
+    OperatorLockedError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, locked_until]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            locked_until: {type: string, format: date-time}
+    OperatorCodeError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            tries_left: {type: integer}
+            fields: {type: object, additionalProperties: {type: string}}
+    OperatorSession:
+      type: object
+      required: [id, operator_id, email, kind, label, permissions, created_at, last_seen_at, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        operator_id: {type: string, format: uuid}
+        email: {type: string}
+        kind: {type: string, enum: [cookie, token]}
+        label: {type: string}
+        permissions: {type: array, items: {$ref: '#/components/schemas/OperatorPermission'}}
+        created_at: {type: string, format: date-time}
+        last_seen_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        revoked_at: {type: [string, 'null'], format: date-time}
+    OperatorMe:
+      type: object
+      required: [operator, session, console]
+      properties:
+        operator:
+          type: object
+          required: [id, email, totp_enabled]
+          properties:
+            id: {type: string, format: uuid}
+            email: {type: string}
+            totp_enabled: {type: boolean}
+        session: {$ref: '#/components/schemas/OperatorSession'}
+        console:
+          type: object
+          required: [origin, path_mode]
+          properties:
+            origin: {type: string, description: 'Where the console is served: OPERATOR_ORIGIN, or APP_ORIGIN/operator'}
+            path_mode: {type: boolean, description: 'True when the console shares the workspace app''s address'}
+    OperatorToken:
+      type: object
+      required: [token, session]
+      properties:
+        token: {type: string, description: 'Starts with cdop_; shown once'}
+        session: {$ref: '#/components/schemas/OperatorSession'}
+    OperatorRequestAccepted:
+      type: object
+      required: [request_id, status, summary, expires_at, message]
+      properties:
+        request_id: {type: string, format: uuid}
+        status: {type: string, enum: [pending]}
+        summary: {type: string}
+        expires_at: {type: string, format: date-time}
+        message: {type: string}
+    OperatorWarning:
+      type: object
+      required: [code, severity]
+      properties:
+        code: {type: string, enum: [env_differs, env_same, env_dead, no_key_ring, secret_stale_key, version_refused, waiting_for_import, path_mode, origin_invalid, requests_waiting]}
+        severity: {type: string, enum: [error, warning]}
+        env_name: {type: string, description: 'The environment variable it is about, as data (never written in the web app)'}
+        key: {type: string}
+        version: {type: integer}
+        detail: {type: string}
+    OperatorProcess:
+      type: object
+      required: [instance_id, hostname, binary_version, running_version, started_at, heartbeat_at]
+      properties:
+        instance_id: {type: string}
+        hostname: {type: string}
+        binary_version: {type: string}
+        running_version: {type: integer}
+        started_at: {type: string, format: date-time}
+        heartbeat_at: {type: string, format: date-time}
+        last_error: {type: string}
+        waiting_for: {type: string}
+    OperatorStatus:
+      type: object
+      required: [binary_version, migration, desired_version, processes, warnings, requests_waiting, console]
+      properties:
+        binary_version: {type: string}
+        migration: {type: string, description: The newest migration applied}
+        desired_version: {type: integer, description: The configuration version every process should run; 0 before the first}
+        last_good_version: {type: integer}
+        processes: {type: array, items: {$ref: '#/components/schemas/OperatorProcess'}}
+        warnings: {type: array, items: {$ref: '#/components/schemas/OperatorWarning'}}
+        requests_waiting: {type: integer}
+        trial:
+          description: 'A trial change in progress (D12); null when none'
+          oneOf: [{$ref: '#/components/schemas/OperatorTrial'}, {type: 'null'}]
+        console:
+          type: object
+          required: [origin, path_mode]
+          properties:
+            origin: {type: string}
+            path_mode: {type: boolean}
+    OperatorSetting:
+      type: object
+      required: [key, group, secret, hot, guards, set, source, editable]
+      properties:
+        key: {type: string}
+        env_name: {type: string, description: 'The variable it replaced, as data'}
+        group: {type: string, enum: [ai, email, mailboxes, billing, signups, security, limits, operator]}
+        secret: {type: boolean}
+        hot: {type: boolean, description: 'Applies at once; otherwise in a few seconds'}
+        default: {type: string}
+        value: {type: [string, 'null'], description: 'The value; null for a secret and when not set'}
+        set: {type: boolean}
+        source: {type: string, enum: [default, env-import, console, cli, apply-file, restore, trial-auto-revert, request, environment]}
+        set_by: {type: string}
+        set_at: {type: string, format: date-time}
+        version: {type: integer}
+        key_id: {type: string, description: 'A secret: the key of MAILBOX_TOKEN_KEYS it is sealed with'}
+        locked: {type: string, enum: ['', no_key_ring, stale_key, env_off, cloud], description: 'Why the field cannot be changed here'}
+        guards: {type: array, items: {type: string, enum: [reauth, reenter_secret, preview, type_to_confirm, trial]}}
+        reenter: {type: string, description: 'The secret reenter_secret asks for'}
+        editable: {type: boolean, description: 'False for a setting this console does not change yet'}
+    OperatorConfig:
+      type: object
+      required: [version, settings, bootstrap, key_ring]
+      properties:
+        version: {type: integer}
+        settings: {type: array, items: {$ref: '#/components/schemas/OperatorSetting'}}
+        bootstrap:
+          type: array
+          items:
+            type: object
+            required: [env_name, set]
+            properties:
+              env_name: {type: string}
+              set: {type: boolean}
+              value: {type: [string, 'null'], description: 'Masked: a database URL shows its host and database, never its password; MAILBOX_TOKEN_KEYS shows its key ids'}
+        key_ring:
+          type: object
+          required: [configured, key_ids]
+          properties:
+            configured: {type: boolean}
+            key_ids: {type: array, items: {type: string}}
+            current: {type: string}
+        telemetry_env_off: {type: boolean}
+        operator_email: {type: string}
+    OperatorConfigChange:
+      type: object
+      required: [base_version]
+      properties:
+        base_version: {type: integer, minimum: 0}
+        set: {type: object, additionalProperties: {type: string}}
+        unset: {type: array, items: {type: string}}
+        secrets: {type: object, additionalProperties: {type: [string, 'null']}, description: 'Secrets to save; a token names them with null'}
+        confirm: {type: object, additionalProperties: {type: string}, description: 'Per key, the phrase typed to confirm'}
+        reauth_code: {type: string, maxLength: 12}
+        note: {type: string, maxLength: 500}
+    OperatorConfigSaved:
+      type: object
+      required: [version, applies]
+      properties:
+        version: {type: integer}
+        applies: {type: string, enum: [at_once, in_seconds, trial]}
+        changed: {type: array, items: {type: string}}
+        trial_expires_at: {type: string, format: date-time, description: 'A trial: when it reverts by itself unless confirmed'}
+    OperatorConfigCheck:
+      type: object
+      required: [ok, errors]
+      properties:
+        ok: {type: boolean}
+        errors: {type: object, additionalProperties: {type: string}}
+        test:
+          type: object
+          required: [name, ok, message]
+          properties:
+            name: {type: string}
+            ok: {type: boolean}
+            message: {type: string}
+        guards: {type: array, items: {$ref: '#/components/schemas/OperatorConfigGuard'}}
+    OperatorConfigGuard:
+      type: object
+      required: [key]
+      description: What a change of a key does and asks before it is saved; never a secret's value.
+      properties:
+        key: {type: string}
+        preview: {type: string, description: 'What the change does, with numbers'}
+        phrase: {type: string, description: 'What to type in `confirm[key]`'}
+        trial: {type: boolean, description: 'The change is tried and reverts by itself unless confirmed (D12)'}
+        refused: {type: string, description: Why the change cannot be saved as it is}
+    OperatorTrial:
+      type: object
+      required: [version, parent_version, started_at, expires_at, started_by, keys, evidence]
+      properties:
+        version: {type: integer}
+        parent_version: {type: integer}
+        started_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        started_by: {type: string}
+        keys: {type: array, items: {type: string}}
+        evidence:
+          type: object
+          required: [your_ip, client_ips, cloud_sign_ins_ok, cloud_sign_ins_refused]
+          description: What this process saw since the trial started, to judge it before confirming.
+          properties:
+            your_ip: {type: string, description: This request's client address under the trial's proxies}
+            client_ips: {type: integer, description: Distinct client addresses seen; only one is a sign the proxies are wrong}
+            cloud_sign_ins_ok: {type: integer}
+            cloud_sign_ins_refused: {type: integer}
+            help_center:
+              type: object
+              required: [ok]
+              description: A help center domain on trial; one open help center fetched under it, as a visitor would
+              properties:
+                url: {type: string}
+                status: {type: integer}
+                ok: {type: boolean}
+                message: {type: string}
+    OperatorProduct:
+      type: object
+      required: [product_id, plan, period, on_sale]
+      properties:
+        product_id: {type: string}
+        plan: {type: string, enum: [team, founding, solo, small, team25]}
+        period: {type: string, enum: [monthly, yearly, single]}
+        on_sale: {type: boolean}
+    OperatorConfigChangeItem:
+      type: object
+      required: [key, secret]
+      properties:
+        key: {type: string}
+        secret: {type: boolean}
+        before: {type: [string, 'null']}
+        after: {type: [string, 'null']}
+    OperatorConfigVersion:
+      type: object
+      required: [id, created_at, created_by, source, note, status, changes]
+      properties:
+        id: {type: integer}
+        created_at: {type: string, format: date-time}
+        created_by: {type: string}
+        source: {type: string}
+        parent_id: {type: [integer, 'null']}
+        note: {type: string}
+        status: {type: string, enum: [saved, trial, confirmed, reverted, rejected]}
+        rejected_reason: {type: string}
+        changes: {type: array, items: {$ref: '#/components/schemas/OperatorConfigChangeItem'}}
+    OperatorAuditEntry:
+      type: object
+      required: [id, at, actor_kind, actor, action, keys, detail]
+      properties:
+        id: {type: integer}
+        at: {type: string, format: date-time}
+        actor_kind: {type: string, enum: [operator, cli, server, token]}
+        actor: {type: string}
+        action: {type: string}
+        version_id: {type: [integer, 'null']}
+        keys: {type: array, items: {type: string}}
+        detail: {type: object, additionalProperties: true}
+        ip: {type: string}
+    OperatorRequest:
+      type: object
+      required: [id, session_id, token_label, email, method, route, path, summary, note, needs_secrets, status, created_at, expires_at]
+      properties:
+        guards: {type: array, items: {$ref: '#/components/schemas/OperatorConfigGuard'}, description: 'A configuration change waiting for a person: what it does and the phrases to type at approval'}
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        token_label: {type: string}
+        email: {type: string}
+        method: {type: string}
+        route: {type: string}
+        path: {type: string}
+        body: {type: [object, 'null'], additionalProperties: true}
+        summary: {type: string}
+        note: {type: string}
+        needs_secrets: {type: array, items: {type: string}}
+        status: {type: string, enum: [pending, approved, rejected, expired, failed, cancelled]}
+        decided_by: {type: string}
+        decided_at: {type: [string, 'null'], format: date-time}
+        result_status: {type: [integer, 'null']}
+        result: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+    Operator:
+      type: object
+      required: [id, email, created_at, created_by, link_unused]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        created_at: {type: string, format: date-time}
+        created_by: {type: string}
+        revoked_at: {type: [string, 'null'], format: date-time}
+        totp_enabled_at: {type: [string, 'null'], format: date-time}
+        link_unused: {type: boolean}
     Error:
       type: object
       required: [error]

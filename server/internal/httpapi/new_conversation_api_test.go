@@ -331,3 +331,54 @@ func TestNewConversationCarriesItsFirstReplyFiles(t *testing.T) {
 		t.Fatalf("refused multipart conversation stored %s rows", got)
 	}
 }
+
+// channel_id goes with the other fields of a multipart conversation, as it does in JSON; another
+// workspace's channel is refused before a byte is stored.
+func TestNewConversationWithFilesStartsFromTheChannelNamed(t *testing.T) {
+	f := newAttachFixture(t)
+	connectEmail(t, f.api, f.tokenB, "support@attach-bravo.example.com")
+	channelA := queryString(t, f.pool, `SELECT id::text FROM channels WHERE type='email' AND workspace_id=(SELECT workspace_id FROM conversations WHERE id=$1)`, f.conversationA)
+	channelB := queryString(t, f.pool, `SELECT id::text FROM channels WHERE type='email' AND workspace_id=(SELECT workspace_id FROM conversations WHERE id=$1)`, f.conversationB)
+	contact := create(t, f.api, f.tokenA, "/api/v1/contacts", map[string]any{"name": "Quinn", "email": "quinn@prospect.example"})
+	start := func(channelID string) *httptest.ResponseRecorder {
+		t.Helper()
+		var buffer bytes.Buffer
+		writer := multipart.NewWriter(&buffer)
+		for _, field := range [][2]string{{"contact_id", contact}, {"subject", "Your quote"}, {"body", "Attached."}, {"channel_id", channelID}} {
+			if err := writer.WriteField(field[0], field[1]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		part, err := writer.CreateFormFile("files", "quote.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write([]byte("quote")); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/conversations", &buffer)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req.Header.Set("Authorization", "Bearer "+f.tokenA)
+		return serve(f.api, req)
+	}
+
+	if refused := start(channelB); refused.Code != http.StatusNotFound {
+		t.Fatalf("another workspace's channel status=%d body=%s, want 404", refused.Code, refused.Body.String())
+	}
+	f.wantNothingStored(t)
+	response := start(channelA)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var started struct {
+		ID string `json:"id"`
+	}
+	decode(t, response, &started)
+	if got := queryString(t, f.pool, `SELECT c.reply_channel_id::text||':'||a.filename FROM conversations c JOIN messages m ON m.conversation_id=c.id
+		JOIN attachments a ON a.message_id=m.id WHERE c.id=$1`, started.ID); got != channelA+":quote.txt" {
+		t.Fatalf("stored=%q, want the channel named and the file", got)
+	}
+}

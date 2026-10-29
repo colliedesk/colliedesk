@@ -5,13 +5,17 @@ suggestions, reply drafts, later backtests and auto-answers) calls a language mo
 
 ## One request in, one answer out
 
-`Provider` has two calls: `Complete` (one request, the whole answer) and `Check` (the smallest real
-request that proves an endpoint, key and model work). A `Request` carries a model, an effort level
-(`low`, `medium`, `high`), Colliedesk's own system text, the conversation, an output limit and an
-optional JSON Schema. There are no sampling knobs, no streaming and no tool use:
+`Provider` has three calls: `Complete` (one request, the whole answer), `Check` (the smallest real
+request that proves an endpoint, key and model work) and `Stream` (the answer handed out as it is
+written, for the help center's chat only; see [AI chat](ai-chat.md)). A `Request` carries a model, an
+effort level (`low`, `medium`, `high`), Colliedesk's own system text (optionally in blocks, one of
+which may end a cached prefix), the conversation, an output limit and an optional JSON Schema. There
+are no sampling knobs and no tool use:
 
-1. Claude models refuse `temperature`, `top_p` and `top_k` (HTTP 400 since 2026-10-21) and refuse
-   turning thinking off; current Opus and Sonnet refuse a forced tool call. JSON comes from structured
+1. Claude models refuse `temperature`, `top_p` and `top_k` (HTTP 400 since 2026-10-21). Turning
+   thinking off (`NoThinking`) is sent only to models that take it at the effort asked (Claude Haiku
+   5.5, Opus 5, Sonnet 5, Opus 4.8/4.7; `thinkingOffModels`); Opus 5.5 and Sonnet 5.5 answer it with a
+   400. Current Opus and Sonnet refuse a forced tool call. JSON comes from structured
    output (`output_config.format` on Claude, `response_format` on OpenAI-compatible servers).
 2. Effort is always sent. Providers default to different levels (Claude Opus 5.5 and Haiku 5.5 to
    medium, Sonnet 5.5 to high), so leaving it out would change cost and quality with the model.
@@ -19,8 +23,9 @@ optional JSON Schema. There are no sampling knobs, no streaming and no tool use:
    it with a 400.
 4. The output limit is at most 16,000 tokens: requests are not streamed, and the Claude SDK refuses
    a non-streaming request that could run past ten minutes.
-5. No streaming: features run as background tasks, so an answer is a resource the web app, the API
-   and MCP read the same way. Streaming would need an SSE route that no MCP tool can mirror.
+5. Team features do not stream: they run as background tasks, so an answer is a resource the web
+   app, the API and MCP read the same way. Only the end-user chat streams; a stream never asks for a
+   refusal fallback, because text already shown cannot be replaced by another model's.
 6. No tool use: the model never acts. The worst a bad answer can do is a suggestion a person
    declines or a draft a person rewrites.
 
@@ -134,8 +139,12 @@ addresses too.
 context the caller cannot cancel (a person closing the tab must not leave it `started`). Provider fields
 are copied and there is no foreign key to `ai_providers`: the row exists before the provider does (the
 add check) and outlives it. Tokens the provider did not report stay `NULL`. `hops` keeps the per-model
-usage of a refusal fallback. `TestProvidersAreCalledOnlyThroughMetered` fails when code outside the
-adapters and `meter.go` calls `Complete` or `Check`. No prompt or answer is stored.
+usage of a refusal fallback. `Service.MeteredStream` is the same for `Stream`. A call that fails after
+the provider counted the prompt (a stream cut short, an error event midway) keeps the usage reported
+so far on its `error` row, with its cost: a half answer is not free. `TestProvidersAreCalledOnlyThroughMetered`
+fails when code outside the adapters and `meter.go` calls `Complete`, `Check` or `Stream`. Counting
+tokens (`aiprovider.CountTokens`: Claude's free `count_tokens`, else bytes ÷ 3) is not a call and
+leaves no row. No prompt or answer is stored.
 
 ## The task queue
 

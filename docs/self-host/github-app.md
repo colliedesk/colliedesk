@@ -12,14 +12,14 @@ How people use Autofix is in the [user guide](../user/autofix.md).
 On GitHub, open **Settings → Developer settings → GitHub Apps → New GitHub App** (for an organization:
 the organization's settings). Use `APP_ORIGIN` for `https://desk.example.com` below.
 
-1. **GitHub App name**: any name; its slug (the name in the App's address) is `GITHUB_APP_SLUG`.
+1. **GitHub App name**: any name; its slug (the name in the App's address) is `github.slug`.
 2. **Homepage URL**: `https://desk.example.com`.
 3. **Callback URL**: `https://desk.example.com/api/v1/autofix/github/callback`.
 4. Tick **Expire user authorization tokens** and **Request user authorization (OAuth) during
    installation**. Colliedesk checks with the installing admin's own authorization that the
    installation is theirs, then revokes it at once; expiring tokens are a safety net.
 5. **Webhook**: active, URL `https://desk.example.com/api/v1/webhooks/github`, and a random **Webhook
-   secret** (`openssl rand -hex 32`), which is `GITHUB_APP_WEBHOOK_SECRET`.
+   secret** (`openssl rand -hex 32`), which is `github.webhook_secret`.
 6. **Repository permissions**, nothing else:
    - Metadata: Read-only
    - Issues: Read and write
@@ -38,17 +38,27 @@ every repository your teams connected.
 
 ## Settings
 
-| Variable | Value |
-|---|---|
-| `GITHUB_APP_ID` | The App ID. |
-| `GITHUB_APP_SLUG` | The App's slug, from its address `https://github.com/apps/<slug>`. |
-| `GITHUB_APP_CLIENT_ID` | The Client ID. |
-| `GITHUB_APP_CLIENT_SECRET` | The client secret. |
-| `GITHUB_APP_PRIVATE_KEY` | The private key: the `.pem` file's text, the same on one line with its line breaks written `\n`, or the file in base64 (`base64 < key.pem`). |
-| `GITHUB_APP_WEBHOOK_SECRET` | The webhook secret. |
+Save them with `collie config` (the secrets with `set-secret`, from standard input) or in the operator
+console. All six are needed; a change that sets only some is refused and names what is missing.
 
-The server refuses to start when `GITHUB_APP_PRIVATE_KEY` is set and is not an RSA private key. The key
-stays in the environment; nothing of it goes into the database.
+```sh
+docker compose exec server /app/collie config set github.app_id=123456 github.slug=acme-colliedesk github.client_id=Iv1.abc
+docker compose exec -T server /app/collie config set-secret github.private_key < app.private-key.pem
+docker compose exec -T server /app/collie config set-secret github.client_secret < client-secret.txt
+docker compose exec -T server /app/collie config set-secret github.webhook_secret < webhook-secret.txt
+```
+
+| Setting | Value |
+|---|---|
+| `github.app_id` | The App ID. |
+| `github.slug` | The App's slug, from its address `https://github.com/apps/<slug>`. |
+| `github.client_id` | The Client ID. |
+| `github.client_secret` | The client secret. |
+| `github.private_key` | The private key: the `.pem` file as it is, or the file in base64 (`base64 < key.pem`). |
+| `github.webhook_secret` | The webhook secret. |
+
+A change is refused when `github.private_key` is not an RSA private key. The key is stored sealed with
+`MAILBOX_TOKEN_KEYS`; no command, export or log shows it again.
 
 ## Behind a firewall
 

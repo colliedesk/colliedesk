@@ -56,6 +56,7 @@ type Data struct {
 
 // NewData reads the catalog and the asset list (the path of client-assets.txt).
 func NewData(specs []mcpserver.Spec, assetList string) (Data, error) {
+	specs = WorkspaceTools(specs)
 	assets, err := readAssets(assetList)
 	if err != nil {
 		return Data{}, err
