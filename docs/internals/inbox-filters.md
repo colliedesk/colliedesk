@@ -63,13 +63,22 @@ renaming or deleting a tag is `send` because it rewrites every conversation that
 ## Web app
 
 The filters are in the address (`src/lib/inbox-query.ts`), with the API's names and comma lists. No
-`status` is the Open view and `status=all` is every status, so the default address stays `/`. Dates
-are picked as days in the agent's timezone and sent as UTC instants (`zonedDayStart` reads the offset
-twice to land on days next to a daylight saving switch, and steps to the first quarter hour of the day
-where a switch skips midnight, as in Santiago); the end day is included by sending the start of the next
-day as `*_before`. Values the inbox does not know are dropped when the address is read, so a stale link
-never turns into a 400. Text fields keep what is typed locally (`DraftInput`) and send 100 ms after the last
-key; a newer search cancels the request of the one it replaced.
+`status` is the Open view and `status=all` is every status, so the default address stays `/`. Values the
+inbox does not know are dropped when the address is read, so a stale link never turns into a 400. The
+search box keeps what is typed locally (`DraftInput`) and sends 100 ms after the last key; a newer search
+cancels the request of the one it replaced.
+
+The Filter menu offers fewer controls than the address takes. An agent narrows the inbox many times a day,
+so the menu keeps the choices that triage needs and the rest stay link-only: `awaiting=customer`,
+`has_pending_draft` (the Requests page owns drafts waiting for approval), `assignee=anyone`, `source`,
+`organization`, `channel=problem_report` (it reaches only the operator's workspace) and the date ranges
+(reporting, which Results and Export cover). A link that sets one still filters, counts on the Filter
+button and shows a chip that removes it; a channel value or a sort the menu does not offer stays listed
+while it is chosen, so the state is visible. `awaiting=team` is one checkbox, **Waiting on us**. The
+signed-in agent is the `me` value, labelled Me, and is not listed again under their name. A channel type
+(email, web form, help chat) is offered once the channel list has a channel of that type, removed ones
+included, since their conversations remain. A date chip shows the days of a `*_after` / `*_before` pair in
+the agent's timezone; the end day is the day before the exclusive `*_before`.
 
 Bundle: the first bundle carries only the search box, the status tabs, reading the address and building
 the API query. The Filter and Sort menus and the chips (`filter-panel.tsx`) and the Views menu with its

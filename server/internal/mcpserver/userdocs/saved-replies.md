@@ -19,8 +19,8 @@ stay. You read and edit the text before you send it. It also works in a private 
 inserted reply back out, press `Ctrl+Z` (`Cmd+Z`): the text goes in like typing, so undo works as usual.
 
 If the list is still loading it says so; it never claims there are no saved replies before it knows.
-When no saved reply exists, **Manage saved replies** opens Settings in a new tab, so your draft and
-files stay where they are.
+When no saved reply exists, the list has no search box; **Manage saved replies** opens Settings in a new
+tab, so your draft and files stay where they are.
 
 ### Variables
 

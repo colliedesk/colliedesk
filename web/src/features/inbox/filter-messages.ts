@@ -5,15 +5,14 @@ import { channelUI } from '../../channels/registry';
 export const filterMessages = {
   // How a conversation started without a channel; a channel type's label is its registry entry's (channelLabel).
   origins: { imported: 'Imported', agent: 'Started by the team', problem_report: 'Problem report' } as Record<string, string>,
-  sorts: { updated_desc: 'Latest activity', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first', priority: 'Priority, urgent first', waiting_longest: 'Waiting longest' },
+  // The Sort menu offers the first three; the others are named only while a link sets them.
+  sorts: { updated_desc: 'Latest activity', waiting_longest: 'Waiting longest', priority: 'Priority', updated_asc: 'Oldest activity', created_desc: 'Newest first', created_asc: 'Oldest first' },
   priority: 'Priority',
   assignee: 'Assignee',
   anyoneAssigned: 'Assigned to anyone',
   tags: 'Tags',
   matchAllTags: 'Has every chosen tag',
   noTags: 'No tags yet.',
-  awaiting: 'Who replies next',
-  awaitingAny: 'Anyone',
   awaitingOptions: { team: 'Waiting on us', customer: 'Waiting on the customer' },
   channel: 'Channel',
   // A type with two or more channels lists them, so one mailbox or form can be chosen.
@@ -21,7 +20,6 @@ export const filterMessages = {
   removedChannel: (name: string) => `${name} (removed)`,
   unknownChannel: 'A channel',
   source: 'Source',
-  sourceAny: 'Any',
   sources: { imported: 'Imported', native: 'Created in Colliedesk' },
   attention: 'Needs attention',
   hasPendingDraft: 'Reply draft waiting for approval',
@@ -29,12 +27,9 @@ export const filterMessages = {
   deliveryFailed: 'Reply delivery failed',
   noDeliveryFailed: 'No failed delivery',
   organization: 'Organization',
-  organizationHint: 'Exact name, any case',
   contact: 'Customer',
   created: 'Created',
   updated: 'Last activity',
-  from: 'From',
-  to: 'To',
   dateRange: (from?: string, to?: string) => (from && to ? `${from} to ${to}` : from ? `from ${from}` : `until ${to}`),
   active: 'Active filters',
   remove: (label: string) => `Remove filter ${label}`,

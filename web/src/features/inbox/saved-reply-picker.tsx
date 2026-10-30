@@ -39,13 +39,18 @@ export function SavedReplyPicker<T extends { id: string; title: string } = Saved
   const [active, setActive] = useState(0);
   const search = useRef<HTMLInputElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const manage = useRef<HTMLButtonElement>(null);
   const prefix = useId();
   const matches = useMemo(() => (onQueryChange ? replies : replies.filter((reply) => savedReplyMatches(reply.title, query))), [replies, query, onQueryChange]);
   const current = Math.min(active, matches.length - 1);
   // Without a search, an empty list means there is nothing at all, not nothing that matches.
   const nothing = onQueryChange ? query.trim() === '' : replies.length === 0;
-  // On a phone the list can open below the fold; it comes into view with the search box.
-  useEffect(() => { search.current?.focus(); panel.current?.scrollIntoView?.({ block: 'nearest' }); }, []);
+  // A search box with nothing to search is hidden; a source that searches by itself always has one.
+  const searchable = Boolean(onQueryChange) || replies.length > 0;
+  // Focus starts in the search box, or on the way to add some, or on the list itself.
+  useEffect(() => { (search.current ?? manage.current ?? panel.current)?.focus(); }, [searchable]);
+  // On a phone the list can open below the fold; it comes into view when it opens.
+  useEffect(() => { panel.current?.scrollIntoView?.({ block: 'nearest' }); }, []);
   const onKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (event.key === 'Escape') { event.preventDefault(); onClose(true); }
@@ -55,14 +60,16 @@ export function SavedReplyPicker<T extends { id: string; title: string } = Saved
   };
   const optionId = (index: number) => `${prefix}-option-${index}`;
   return (
-    <div ref={panel} className="saved-reply-picker" role="dialog" aria-label={texts.label}
+    <div ref={panel} className="saved-reply-picker" role="dialog" aria-label={texts.label} tabIndex={-1}
       // Focus leaving the panel (a click elsewhere) closes it; a click inside keeps focus in the search box.
-      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onClose(false); }}>
-      <div className="picker-search"><SearchIcon />
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onClose(false); }}
+      // Without a search box, Escape is the panel's.
+      onKeyDown={searchable ? undefined : (event) => { if (event.key === 'Escape') { event.preventDefault(); onClose(true); } }}>
+      {searchable && <div className="picker-search"><SearchIcon />
       <input ref={search} type="text" role="combobox" aria-expanded="true" aria-controls={`${prefix}-list`} aria-autocomplete="list"
         aria-activedescendant={matches.length > 0 ? optionId(current) : undefined} aria-label={texts.search}
         placeholder={texts.search} autoComplete="off" value={query} onKeyDown={onKey}
-        onChange={(event) => { setQuery(event.target.value); setActive(0); onQueryChange?.(event.target.value); }} /></div>
+        onChange={(event) => { setQuery(event.target.value); setActive(0); onQueryChange?.(event.target.value); }} /></div>}
       <ul id={`${prefix}-list`} role="listbox" aria-label={texts.label} onMouseDown={(event) => event.preventDefault()}>
         {matches.map((reply, index) => (
           <li key={reply.id} id={optionId(index)} role="option" aria-selected={index === current} onClick={() => onPick(reply)}
@@ -76,7 +83,7 @@ export function SavedReplyPicker<T extends { id: string; title: string } = Saved
       {state === 'loading' && replies.length === 0 && <p className="saved-reply-empty" role="status">{texts.loading}</p>}
       {state === 'failed' && replies.length === 0 && <p className="saved-reply-empty" role="alert">{texts.failed}</p>}
       {state === 'ready' && matches.length === 0 && <p className="saved-reply-empty" role="status">{nothing ? texts.none : texts.noMatch}</p>}
-      {state === 'ready' && replies.length === 0 && nothing && onManage && <button type="button" onClick={onManage}>{texts.manage}</button>}
+      {state === 'ready' && replies.length === 0 && nothing && onManage && <button ref={manage} type="button" onClick={onManage}>{texts.manage}</button>}
     </div>
   );
 }

@@ -84,7 +84,6 @@ export const messages = {
   tag: 'Tag',
   allAssignees: 'Any assignee',
   unassigned: 'Unassigned',
-  assignedToMe: 'Assigned to me',
   allTags: 'All tags',
   allConversations: 'All',
   filter: 'Filter',
@@ -268,7 +267,8 @@ export const messages = {
   billingActionFailed: 'The billing action failed. Try again.',
   roles: { admin: 'Admin', agent: 'Agent' },
   statuses: { open: 'Open', pending: 'Pending', resolved: 'Resolved', closed: 'Closed' },
-  priorities: { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' },
+  // Most urgent first, the order of every list of priorities.
+  priorities: { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' },
   replyNotSent: 'The reply could not be sent. Your text is still here; try again.',
   // Follows the server's explanation of a refusal that says it all, such as a reply to a merged address.
   textStillHere: 'Your text is still here.',

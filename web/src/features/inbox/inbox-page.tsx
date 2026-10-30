@@ -214,7 +214,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           <div className="list-title"><h1>{messages.inbox}</h1><ShownCount count={conversations.length} page={page} pageSize={pageSize} more={hasNextPage} />
             {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
           <div className="list-head">
-            <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} timezone={timezone} conversations={conversations} focusSignal={focusSignal}
+            <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} currentAgentId={currentAgentId} timezone={timezone} conversations={conversations} focusSignal={focusSignal}
               views={viewsMenu} />
           </div>
           {bulkFailed && <p role="alert" className="error-copy bulk-message">{messages.bulkUpdateFailed}</p>}
