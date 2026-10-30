@@ -10,6 +10,7 @@ import { messages } from '../../messages';
 import { CopyButton } from '../../features/settings/copy-button';
 import { EmailChannelSection, gmailPart } from '../../features/settings/email-channel-section';
 import { GmailDataDisclosure, MicrosoftDataDisclosure } from '../../features/settings/gmail-connection';
+import type { MailboxReturn } from '../../features/settings/gmail-return';
 import { NameForm } from '../../features/settings/name-form';
 import { saveState } from '../../features/settings/save-feedback';
 import { settingsMessages } from '../../features/settings/settings-messages';
@@ -114,16 +115,23 @@ interface RepliesProps {
   onSkip: () => void;
   // beforeLeave runs just before the browser leaves for a mailbox provider's sign-in.
   beforeLeave: () => void;
+  // returned: the outcome that sign-in came back with, shown in the mailbox block (why it failed, the approval
+  // link a Microsoft 365 admin needs).
+  returned?: MailboxReturn;
 }
 
 const choices: RepliesChoice[] = ['gmail', 'microsoft', 'colliedesk'];
 
-export function RepliesStep({ channelID, settings, canManage, timezone, provider, done, onContinue, onSkip, beforeLeave }: RepliesProps) {
+export function RepliesStep({ channelID, settings, canManage, timezone, provider, done, onContinue, onSkip, beforeLeave, returned }: RepliesProps) {
   const client = useQueryClient();
   const refresh = () => Promise.all(['email-channel', 'channel', 'channels'].map((key) => client.invalidateQueries({ queryKey: key === 'channel' ? [key, channelID] : [key] })));
   const best = recommended(provider);
-  const [choice, setChoice] = useState<RepliesChoice>(best);
-  useEffect(() => setChoice(best), [best]);
+  // The choice open first: the provider a sign-in just came back from, else the mailbox already connected,
+  // else the recommended one. Its block says what happened.
+  const connected: RepliesChoice | undefined = settings.microsoft.connection ? 'microsoft' : settings.gmail.connection ? 'gmail' : undefined;
+  const initial: RepliesChoice = returned ? (returned.provider === 'microsoft' ? 'microsoft' : 'gmail') : connected ?? best;
+  const [choice, setChoice] = useState<RepliesChoice>(initial);
+  useEffect(() => setChoice(initial), [initial]);
   useEffect(gmailPart.preload, []);
   const mailbox = useMailbox(channelID, refresh, beforeLeave);
   const verifyDomain = useMutation({ mutationFn: () => channelsApi.emailVerifyDomain(channelID), onSettled: refresh });
@@ -152,13 +160,13 @@ export function RepliesStep({ channelID, settings, canManage, timezone, provider
         ? <>{verifyDomain.isError && !(verifyDomain.error instanceof InvalidRequestError) && <p role="alert" className="error-copy">{messages.settingsActionFailed}</p>}
             <EmailChannelSection part="domain" settings={settings} timezone={timezone} canManage={canManage} onVerifyDomain={() => verifyDomain.mutate()} verifyPending={verifyDomain.isPending}
               verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined} /></>
-        : !connection && available && canManage
+        : !connection && available && canManage && !returned
           ? <>{mailboxFor === 'google' ? <GmailDataDisclosure /> : <MicrosoftDataDisclosure />}
               {mailbox.error && <p role="alert" className="error-copy">{mailbox.error}</p>}
               <span className="button-row"><button type="button" className="primary-action" disabled={Boolean(mailbox.pending)} onClick={() => mailbox.connect(mailboxFor)}>
                 {mailbox.pending ? m.opening : mailboxFor === 'google' ? m.connectGmail : m.connectMicrosoft}</button></span></>
           : <EmailChannelSection part="mailbox" settings={settings} timezone={timezone} canManage={canManage} onConnectMailbox={mailbox.connect} onDisconnectMailbox={mailbox.disconnect}
-              mailboxPending={mailbox.pending} mailboxError={mailbox.error} />}
+              mailboxPending={mailbox.pending} mailboxError={mailbox.error} mailboxReturned={returned} />}
     </div>
     <div className="setup-actions">
       {done && <button type="button" className="primary-action" onClick={onContinue}>{m.continue}</button>}

@@ -45,7 +45,11 @@ Each screen shows:
   **Recommended**.
 - The step itself, the same form as in Settings:
   - **Receive customer email**: your support address and how its mail reaches Colliedesk. After you
-    save the address, the setup continues on this screen.
+    save the address, the setup continues on this screen. Mail always arrives by forwarding. To send
+    replies from your own mailbox, **Connect Gmail** or **Connect Microsoft 365** signs in with
+    Google or Microsoft (permission to send only) and brings you back to this step, which says
+    whether it worked. When it did not, it says why; a Microsoft 365 account that needs its admin's
+    approval gets the approval link to send them.
   - **Import from Freshdesk**: the [import](import-freshdesk.md), without leaving the flow.
   - **Invite your team**: create an invite. Its one-time link stays on screen until you leave the step.
   - **Answer your first email**: **Send yourself a test message** opens a conversation from your own
