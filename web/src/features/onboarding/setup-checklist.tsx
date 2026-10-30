@@ -3,7 +3,7 @@ import type { CSSProperties, KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { OnboardingGoal } from '../../api/schemas';
 import type { SetupProgress, SetupStepKey } from '../../api/schemas';
-import { preloadChannelsPage } from '../settings/channels/channels-preload';
+import { preloadSetupStep } from './setup-flow-part';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { ChevronDownIcon } from '../../ui/icons';
@@ -11,8 +11,8 @@ import { setupMessages } from './setup-messages';
 import { stepIsDone, visibleSteps } from './setup-steps';
 import './setup-checklist.css';
 
-// Where each step is finished.
-const targets: Record<SetupStepKey, string> = { email: '/settings/channels/type/email', import: '/settings/import-freshdesk', invite: '/settings', first_reply: '/' };
+// Each step is done on its screen of the setup flow.
+const target = (step: SetupStepKey) => `/setup/${step}`;
 
 // Whether the agent left the guide open or folded, kept by this browser; without a stored choice, none.
 const storageKey = 'colliedesk-setup-dock-v1';
@@ -113,8 +113,8 @@ export function SetupChecklist({ progress, admin, goal, defaultOpen = false, onH
             return (
               <li key={step.key} className="setup-step" data-state={finished ? 'done' : 'todo'} data-step={step.key}>
                 <span className="setup-mark" aria-hidden="true" />
-                <a href={targets[step.key]} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
-                  onPointerEnter={() => preloadChannelsPage(client, targets[step.key])} onFocus={() => preloadChannelsPage(client, targets[step.key])}>
+                <a href={target(step.key)} className={primary ? 'primary-action' : undefined} onClick={() => track('onboarding_step_started', { step: step.key })}
+                  onPointerEnter={() => preloadSetupStep(client, step.key)} onFocus={() => preloadSetupStep(client, step.key)}>
                   <span className="setup-title">{setupMessages.title[step.key]}</span>
                   <span className="setup-state" data-attention={step.state === 'needs_attention' || undefined}>
                     {progress.recommended === step.key && !finished && <><b>{setupMessages.recommended}</b>{' · '}</>}

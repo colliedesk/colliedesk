@@ -29,7 +29,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     await page.goto(baseURL);
     await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText('Trial: 14 days left');
     await page.getByRole('region', { name: 'Finish setting up' }).getByRole('link', { name: /Import from Freshdesk/ }).click();
-    await expect(page).toHaveURL(`${baseURL}/settings/import-freshdesk`);
+    await expect(page).toHaveURL(`${baseURL}/setup/import`);
 
     // Import in the app, in the background, until the reconcile report is ready and OK.
     await page.getByLabel('Freshdesk address').fill('acme.freshdesk.com');
@@ -45,6 +45,8 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     // The results page shows the baseline measured from the import (#100). Every ticket of the fixture got
     // its first reply 20 minutes after the customer's first message (not after the follow-up at 10), and
     // the resolved and closed ones were resolved at 40 minutes (Freshdesk stats, read with the list).
+    // The import ran in the setup flow, which has no rail: leaving it brings the rail back.
+    await page.getByRole('link', { name: 'Exit setup' }).click();
     await page.getByRole('link', { name: 'Results' }).click();
     await expect(page).toHaveURL(`${baseURL}/results`);
     const firstResponse = page.getByRole('region', { name: 'First response time' });
