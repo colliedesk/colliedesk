@@ -1,10 +1,24 @@
 # Setup guide
 
-The setup guide sits at the top of the inbox and shows what is left before your team can receive
-and answer customer email. It stays in the inbox, also when conversations exist, until every step
-is done or you hide it.
+The setup guide sits in the bottom-left corner of the inbox and shows what is left before your team
+can receive and answer customer email. It stays in the inbox, also when conversations exist, until
+every step is done or you hide it.
 
 Heading: **Finish setting up**, with how many steps are done (for example "1 of 4") and a progress bar.
+
+## Open and folded
+
+The guide floats over the foot of the conversation list, clear of the reply box and its **Send reply**
+button on the right.
+
+- **Folded**, it is one button: **Finish setting up** with a progress ring and the count. Press it to
+  open the steps.
+- **Open**, it shows every step. **Minimize** (the arrow in its header) or **Esc** folds it again.
+- A new workspace with no conversation and no mailbox yet opens the guide on its own: there is
+  nothing for it to cover. Once a mailbox or a conversation exists it starts folded, so it never
+  covers **Send yourself a test message** or a conversation.
+- Your browser remembers whether you left it open or folded. This is separate from **Hide**.
+- On a phone the guide shows on the conversation list and steps aside while a conversation is open.
 
 | Step | Done when | Opens |
 |---|---|---|
@@ -27,8 +41,8 @@ The guide refreshes when the inbox changes; it does not poll on its own.
 
 ## Brand-new inbox
 
-In an empty inbox the guide replaces the old list of buttons. **Send yourself a test message** stays:
-it puts a first conversation in the inbox so you can answer it.
+In an empty inbox without a mailbox the guide opens on its own and replaces the old list of buttons. **Send yourself a
+test message** stays: it puts a first conversation in the inbox so you can answer it.
 
 ## API and AI agents
 

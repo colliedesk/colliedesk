@@ -9,9 +9,9 @@ subject at the top and the composer at the bottom. **Back to Inbox** above the s
 Back, returns to the list with the same filters and scrolled to where you left it. The workspace name
 and your address stay at the top while the page scrolls.
 
-The [setup guide](setup-guide.md) tops the list while setup is unfinished, also when conversations
-exist: **Receive customer email**, **Import from Freshdesk**, **Invite your team** and **Answer your
-first email**, each with its state. A new workspace has no conversations yet; the list then explains
+The [setup guide](setup-guide.md) waits in the bottom-left corner while setup is unfinished, also when
+conversations exist; folded to one button, it does not cover them. It lists **Receive customer email**,
+**Import from Freshdesk**, **Invite your team** and **Answer your first email**, each with its state. A new workspace has no conversations yet; the list then explains
 that and the guide shows what to do next. A workspace
 with an email channel also offers **Send yourself a test message**: it opens a conversation from your
 own address that you can answer, and the reply comes to your mailbox (see

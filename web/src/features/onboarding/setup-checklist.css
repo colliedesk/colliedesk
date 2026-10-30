@@ -1,6 +1,7 @@
 /* The setup guide floats in the bottom-left corner of the inbox, over the foot of the conversation list:
    the reply box and its Send button own the bottom right. Folded it is one button with the count. */
-.setup-dock { position: fixed; z-index: 20; left: calc(56px + var(--space-3)); bottom: var(--space-4); max-width: calc(100vw - 56px - 2 * var(--space-3)); }
+/* Above the list (sticky headers, row checks, tooltips) and below the account menu (20), which opens over the same corner. */
+.setup-dock { position: fixed; z-index: 15; left: calc(56px + var(--space-3)); bottom: var(--space-4); max-width: calc(100vw - 56px - 2 * var(--space-3)); }
 /* The last rows scroll clear of the folded button. */
 .inbox-shell:has(> .setup-dock) .conversation-scroll { padding-bottom: calc(var(--touch) + var(--space-6)); }
 
