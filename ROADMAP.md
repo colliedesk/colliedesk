@@ -75,6 +75,7 @@ Beta starts when HC Labs announces it. Before that:
 - Live chat widget into the same inbox ([#124](https://github.com/colliedesk/colliedesk/issues/124)).
 - A sandbox workspace for testing an AI agent safely ([#116](https://github.com/colliedesk/colliedesk/issues/116)).
 - No Colliedesk branding on anything your customers see ([#125](https://github.com/colliedesk/colliedesk/issues/125)).
+- Help center articles end with a helpful vote, a still-need-help step and related articles ([#338](https://github.com/colliedesk/colliedesk/issues/338)).
 
 How items get here: ideas start in [Discussions → Ideas](https://github.com/colliedesk/colliedesk/discussions/categories/ideas),
 where upvotes show how many teams need them. An idea we agree with becomes an issue labelled
