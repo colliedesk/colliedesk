@@ -76,18 +76,20 @@ button {
 }
 button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line-strong); }
 .primary-action { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
+/* A disabled primary keeps its shape at low strength, so it never reads as a selected row. */
+.primary-action:disabled { opacity: 0.3; }
 .primary-action:hover:not(:disabled) { border-color: var(--accent-hover); background: var(--accent-hover); }
 .danger-action { color: var(--danger); }
 .danger-action:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); }
 .icon-button { width: var(--control, 32px); padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
 .icon-button:hover:not(:disabled) { color: var(--text-1); }
 .link-button, .link-action {
-  min-height: auto; border: 0; background: none; box-shadow: none; padding: 0; color: var(--accent-text); text-decoration: underline;
-  text-underline-offset: 2px;
+  min-height: auto; border: 0; background: none; box-shadow: none; padding: 0; color: var(--text-2); font-weight: 500;
+  text-decoration: none; text-underline-offset: 3px;
 }
 /* Reload page is the only way back from a part that failed: a finger must hit it too. */
 @media (pointer: coarse), (max-width: 30rem) { .part-reload { min-height: var(--touch); } }
-.link-button:hover:not(:disabled), .link-action:hover:not(:disabled) { background: none; color: var(--accent-hover); }
+.link-button:hover:not(:disabled), .link-action:hover:not(:disabled) { background: none; color: var(--text-1); text-decoration: underline; }
 
 /* Touch screens and windows 480 px wide or less keep 44 px targets; a mouse on a wider window gets the
    denser 32 px controls. Every rule that sizes for a finger uses the same media query. */
@@ -111,7 +113,7 @@ html[data-tips-off] [data-tip]::after { opacity: 0; }
 .field-inline:has(input:disabled) { cursor: not-allowed; color: var(--text-3); }
 .input-with-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .input-with-actions input { flex: 1 1 14rem; min-width: 0; }
-.field > span:first-child, legend, .field-label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+.field > span:first-child, .field > label:not(.field-inline), legend, .field-label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
 kbd {
   display: inline-grid; place-items: center; min-width: 18px; height: 18px; border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface-1); padding: 0 4px; color: var(--text-3); font-family: var(--font-mono); font-size: 11px; font-weight: 500; line-height: 1;
@@ -122,3 +124,6 @@ kbd {
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; } }
 .save-status { align-self: center; font-size: var(--fs-small); color: var(--text-2); }
 .save-status.error-copy { color: var(--danger); }
+
+/* Line icons draw the stroke the tokens declare (ui/icons.tsx gives them the class). */
+.icon { stroke-width: var(--icon-stroke); }

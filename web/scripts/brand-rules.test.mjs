@@ -92,17 +92,52 @@ test('the brand orange appears only in the logo', () => {
   expect(offenders).toEqual([]);
 });
 
-// The high priority chip is a dark neutral chip with its arrow: the warning orange sat 8° of hue from the
-// brand orange, so a High ticket looked like the logo. Urgent keeps red.
-test('the high priority chip is neutral, not the warning orange', () => {
-  const high = rule(read('styles/components.css'), '.priority-high');
-  expect(high).not.toMatch(/var\(--warn(?:-soft)?\)/);
-  expect(high).toMatch(/background:\s*var\(--text-2\)/);
-  expect(high).toMatch(/color:\s*var\(--surface-1\)/);
+// Priority (design.md, Brand guideline): nothing is filled at rest. Urgent is a red arrow and red text and
+// outranks High, an arrow and grey text; neither is a chip. The warning orange never marks a priority.
+test('priority is an arrow and a word, Urgent red, nothing filled', () => {
+  const css = read('styles/components.css');
+  const high = rule(css, '.priority-high');
+  const urgent = rule(css, '.priority-urgent');
+  for (const r of [high, urgent]) {
+    expect(r).not.toMatch(/var\(--warn(?:-soft)?\)/);
+    expect(r).not.toMatch(/background:\s*var\(/);
+  }
+  expect(urgent).toMatch(/color:\s*var\(--danger\)/);
+  expect(high).toMatch(/color:\s*var\(--text-2\)/);
 });
 
-// The public help center is the customer's own site: white-label, so it carries neither the Colliedesk
-// orange nor a hue of its own. Its paper, ink, lines and accent are neutral greys in both themes.
+// A plain notice is a neutral card: amber belongs to notes, focus and pending only.
+test('a plain notice is neutral, not note amber', () => {
+  expect(rule(read('ui/controls.css'), '.notice')).not.toMatch(amber);
+  expect(rule(read('features/results/results.css'), '.results-notice')).not.toMatch(amber);
+});
+
+// Rule 4: a box sits on a ring or a surface step, never a border and a ring at once.
+test('a panel sits on its ring, without a border', () => {
+  expect(rule(read('styles/layout.css'), '.panel')).not.toMatch(/border:\s*1px/);
+});
+
+// Serif is for page titles: h1s, the sign-in promise and the KB title field. Empty states and sections are sans.
+test('IBM Plex Serif sets page titles only', () => {
+  const files = ['styles/components.css', 'styles/layout.css', 'features/results/results.css', 'features/kb/kb.css', 'features/settings/ai-settings.css', 'features/autofix/autofix.css'];
+  const offenders = files.flatMap((file) => [...read(file).matchAll(/([^{}]+)\{[^}]*var\(--font-display\)[^}]*\}/g)]
+    .map((m) => m[1].trim()).filter((selector) => /\b(?:h2|h3|h4)\b/.test(selector)).map((selector) => `${file}: ${selector}`));
+  expect(offenders).toEqual([]);
+});
+
+// Motion comes from the tokens, so prefers-reduced-motion (which zeroes them) stops it.
+test('transitions use the motion tokens', () => {
+  const files = ['styles/components.css', 'styles/layout.css', 'styles/base-plain.css', 'ui/controls.css'];
+  const raw = files.flatMap((file) => [...read(file).matchAll(/transition:[^;}]*\b\d+m?s\b[^;}]*/g)].map((m) => `${file}: ${m[0]}`));
+  expect(raw).toEqual([]);
+});
+
+// Icons draw the stroke the tokens declare.
+test('icons read --icon-stroke', () => {
+  expect(read('styles/base-plain.css')).toMatch(/\.icon\s*\{[^}]*stroke-width:\s*var\(--icon-stroke\)/);
+  expect(readFileSync(new URL('../src/ui/icons.tsx', import.meta.url), 'utf8')).toMatch(/className=\{?["`']?icon/);
+});
+
 test('the help center palette is ink and paper', () => {
   const css = readFileSync(new URL('../../server/internal/helpcenter/static/site.css', import.meta.url), 'utf8');
   const tinted = [...css.matchAll(/--(paper|surface|ink|muted|rule|accent|accent-ink|accent-soft|tab):\s*#([0-9a-f]{6})/gi)]

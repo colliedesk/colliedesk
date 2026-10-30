@@ -18,20 +18,27 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
    colliedesk.com the price (the promise). It is never a button, link, chip, badge or warning, so it stays
    rare enough to remember; the primary action stays ink, which reads calm and trustworthy.
    `web/scripts/brand-rules.test.mjs` fails when any app file other than the tokens and the mark names it.
-   Status (open blue, pending amber, resolved green, urgent red) and the high priority chip (dark neutral
-   with an up arrow; the warning orange sat 8° of hue from the brand and made a High ticket look like the
-   logo), focus (amber) and private notes (amber) keep their colours; nothing else is coloured. Amber means focus,
+   Status (open blue, pending amber, resolved green, urgent red), Urgent priority (red arrow and word), focus
+   (amber) and private notes (amber) keep their colours; nothing else is coloured. High is an arrow and grey
+   text, never the warning orange (it sat 8° of hue from the brand and made a High ticket look like the logo).
+   **Nothing is filled at rest** (owner 30/10/2026): priority, tags and status are marks and words; a fill means
+   hover, selection, a menu or a private note. Amber means focus,
    private notes and the pending status, and nothing else: a warning uses `--warn` / `--warn-soft` (or a
-   neutral card with a `--warn` icon), never the note colours. `web/scripts/brand-rules.test.mjs` checks it. In dark mode the
+   neutral card with a `--warn` icon), never the note colours; a plain notice is a neutral card. `web/scripts/brand-rules.test.mjs` checks it. In dark mode the
    logo tile keeps `#c2410c` (the mark never changes), while the price text on the site lightens to
    `#fb8a4a` so it reads on near-black (8.3:1).
 3. **Serif for titles only.** IBM Plex Serif 500 (`--font-display`) sets page titles (Inbox, Settings,
-   Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Every control, label and
-   body line stays IBM Plex Sans. One Plex skeleton for serif, sans and mono (owner 22/10/2026): it
+   Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Empty-state and section headings
+   in the app are sans (`brand-rules.test.mjs` fails on a serif h2 or h3). Every control, label and
+   body line stays IBM Plex Sans. Weight 600 is for the conversation title, sender names and the active tab;
+   row subjects, labels and buttons are 500, values and body 400. One Plex skeleton for serif, sans and mono (owner 22/10/2026): it
    replaced Instrument Serif, whose narrow high-contrast cut spoke in a different voice from the
    Plex Sans wordmark.
 4. **Rings, not borders.** Cards, the composer and our replies sit on a 1px shadow ring (`--shadow-1`,
-   `--shadow-2`), so the eye reads layers by surface and ring, not by outlines. Never a border on top of a ring.
+   `--shadow-2`), so the eye reads layers by surface and ring, not by outlines. Never a border on top of a ring
+   (`brand-rules.test.mjs` checks `.panel`). In dark the ring is the hairline token, so cards keep their edge.
+   The inbox is one work surface: list, thread and details share one white sheet split by hairlines, on the grey
+   chrome of the rail and the 40 px identity band.
 5. **Links are ink and underlined** inside running text (`a:not([class])`); colour alone never marks a link.
 6. **One product, one look.** Product pictures on colliedesk.com are screenshots of this app; when the app
    changes, the site's screenshots are retaken.
@@ -58,14 +65,17 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   second Escape clears the selection. Success clears the selection and writes `role="status"`; failure
   writes `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes
   to **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
-- Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`). The time is
+- Rows: subject (500) and time, then one meta line (status dot and word, priority arrow, `#tags`); the status
+  word is left out under a status tab that already names it, and Normal priority is not shown. With a mouse,
+  rows start on the column edge and the checkbox appears over the row's padding on hover or focus; its column
+  and **Select all on this page** appear once a row is ticked. Touch keeps the column. The time is
   the time alone for today and the date otherwise; without hover (no tooltip) an earlier row shows date and
   time, a row from today still only its time. The full stamp is the tooltip and the accessible name.
 - List keys, as in Gmail and Help Scout: **J** / **K** anywhere outside a text field, **Down** / **Up** while
   a row has the focus; each opens the next or previous conversation and moves the focus to its row (the
   inset amber ring). Modifier keys and dialogs keep their own meaning (`use-list-keys.ts`).
-- Thread: incoming messages on `--surface-2`, our replies on white with a 1px ring (`--surface-1`,
-  `--shadow-1`), private notes amber.
+- Thread: every message on white with a 1px ring (`--surface-1`, `--shadow-1`); a private note adds a light
+  amber fill and an amber ring, so the customer's words stay the loudest. "Sent" is grey text; a failure is red.
   Composer: a raised card with Reply / Private note tabs (keys **R** and **N**) and
   **Ctrl/Cmd + Enter** to send. A reply also offers **Send and resolve** (secondary button beside the
   primary **Send reply**; **Ctrl/Cmd + Shift + Enter**), as Freshdesk's "Send and set as" and Help Scout's
@@ -180,7 +190,13 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
   indeterminate states are ink in both themes; their labels keep readable text when disabled.
   Forced-colour mode keeps native checkbox and radio rendering and restores the native select arrow.
 - Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
-- Status is a dot plus its word. Only High and Urgent priorities get colour, with an arrow icon.
+- Status is a dot plus its word. Priority is an arrow and a word: Urgent red, High grey, Low a down arrow,
+  Normal unmarked. The same marks lead the options in menus and Properties.
+- Menus: one recipe for Filter, Views, bulk menus and every select picker: radius 10, 4 px inside, 30 px rows,
+  a leading mark, a trailing check, groups split by space, `--shadow-2`. Native selects keep their element and
+  take the recipe through `appearance: base-select`; other browsers keep the native picker.
+- Properties: label (84 px, `--text-3`) and value on one edge after a 16 px mark; no select chrome until hover.
+- A disabled primary keeps its shape at 30 % opacity.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip
   (`data-tip`, shown on hover and keyboard focus, dismissed with Escape). Other icon-only buttons follow the same pattern.
