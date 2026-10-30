@@ -44,6 +44,8 @@ export interface ImportPageProps {
   onUndo: (id: string) => void;
   // onNewImport opens the form again, with the address of a preview that failed.
   onNewImport: () => void;
+  // embedded shows the import inside another page (the setup flow), which has the title and the frame.
+  embedded?: boolean;
 }
 
 const recentDays = (job: ImportJob) => job.options.recent_days ?? defaultRecentDays;
@@ -52,22 +54,24 @@ const shownHistory = (history: ImportJob[], job?: ImportJob) => history.filter((
 
 export function ImportPage(props: ImportPageProps) {
   const { isAdmin, job, history, loadFailed } = props;
+  const sections = <div className="settings-sections">
+    {!isAdmin ? <p className="muted-copy">{m.adminsOnly}</p> : <>
+      {loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
+      {props.error && <p role="alert" className="error-copy">{props.error}</p>}
+      <section className="settings-card" aria-labelledby="import-current-heading">
+        <Current {...props} />
+      </section>
+      {props.peopleSection}
+      {shownHistory(history, job).length > 0 && <History {...props} />}
+    </>}
+  </div>;
+  if (props.embedded) return <div className="import-page import-embedded">{sections}</div>;
   return (
     <main className="settings-page panel import-page">
       <header><h1>{m.heading}</h1><p>{m.description}</p></header>
       <div className="settings-layout">
         <SettingsNav page="/settings/import-freshdesk" shown={{ general: isAdmin, team: isAdmin, channels: true, savedReplies: true, exportData: isAdmin, billing: Boolean(props.showBilling), importData: isAdmin, ai: true }} />
-        <div className="settings-sections">
-          {!isAdmin ? <p className="muted-copy">{m.adminsOnly}</p> : <>
-            {loadFailed && <p role="alert" className="error-copy">{m.loadFailed}</p>}
-            {props.error && <p role="alert" className="error-copy">{props.error}</p>}
-            <section className="settings-card" aria-labelledby="import-current-heading">
-              <Current {...props} />
-            </section>
-            {props.peopleSection}
-            {shownHistory(history, job).length > 0 && <History {...props} />}
-          </>}
-        </div>
+        {sections}
       </div>
     </main>
   );
