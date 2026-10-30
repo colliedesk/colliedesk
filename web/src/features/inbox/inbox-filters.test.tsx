@@ -1,23 +1,28 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { InboxFilters } from './inbox-filters';
 
 // The workspace's channels, read once the menu opens or a channel is filtered on: one of each type unless a test says more.
 const channelList = vi.hoisted(() => ({ listAll: vi.fn(async (): Promise<unknown> => ({ items: [], types: [] })) }));
 vi.mock('../../api/channels', () => ({ channelsApi: channelList }));
+beforeEach(() => { channelList.listAll.mockResolvedValue({ items: [], types: [] }); });
 
 const billing = { id: '33333333-3333-4333-8333-333333333333', name: 'Billing', color: '#64748b' };
 const vip = { id: '44444444-4444-4444-8444-444444444444', name: 'VIP', color: '#64748b' };
 const tags = [billing, vip];
+// Ann is the signed-in agent; Bo is her teammate.
 const ann = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: 'Ann', role: 'agent' as const, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
+const bo = { ...ann, id: '99999999-9999-4999-8999-999999999999', email: 'bo@example.com', display_name: 'Bo' };
 
 // Filters follows the query it is given, like the inbox does with the address.
 function Harness({ initial = {}, onChange }: { initial?: InboxQuery; onChange?: (query: InboxQuery) => void }) {
   const [query, setQuery] = useState<InboxQuery>(initial);
-  return <InboxFilters tags={tags} agents={[ann]} timezone="Asia/Ho_Chi_Minh" query={query} onChange={(next) => { setQuery(next); onChange?.(next); }} />;
+  return <InboxFilters tags={tags} agents={[ann, bo]} currentAgentId={ann.id} timezone="Asia/Ho_Chi_Minh" query={query} onChange={(next) => { setQuery(next); onChange?.(next); }} />;
 }
+
+const labelOf = (box: HTMLElement) => (box as HTMLInputElement).labels?.[0]?.textContent;
 
 // The menu's contents load on their own chunk; the first test that opens it waits for it.
 const openMenu = async () => {
@@ -47,50 +52,83 @@ test('the Filter menu picks several priorities, assignees and tags, and counts t
   fireEvent.click(within(menu).getByRole('checkbox', { name: 'Urgent' }));
   fireEvent.click(within(menu).getByRole('checkbox', { name: 'High' }));
   fireEvent.click(within(menu).getByRole('checkbox', { name: 'Unassigned' }));
-  fireEvent.click(within(menu).getByRole('checkbox', { name: 'Ann' }));
+  fireEvent.click(within(menu).getByRole('checkbox', { name: 'Bo' }));
   fireEvent.click(within(menu).getByRole('checkbox', { name: 'Billing' }));
   fireEvent.click(within(menu).getByRole('checkbox', { name: 'VIP' }));
   fireEvent.click(within(menu).getByRole('checkbox', { name: 'Has every chosen tag' }));
-  expect(onChange).toHaveBeenLastCalledWith({ priority: 'urgent,high', assignee: `unassigned,${ann.id}`, tag: `${billing.id},${vip.id}`, tag_match: 'all' });
+  expect(onChange).toHaveBeenLastCalledWith({ priority: 'urgent,high', assignee: `unassigned,${bo.id}`, tag: `${billing.id},${vip.id}`, tag_match: 'all' });
   expect(screen.getByLabelText('3 filters active')).toBeInTheDocument();
 });
 
-test('who replies next, attention flags, channel and source each narrow the list', async () => {
+test('Assignee lists Me first, then the other teammates, then Unassigned', async () => {
   const onChange = vi.fn();
   render(<Harness onChange={onChange} />);
-  const menu = await openMenu();
-  fireEvent.click(within(menu).getByRole('radio', { name: 'Waiting on us' }));
-  fireEvent.click(within(menu).getByRole('checkbox', { name: 'Reply draft waiting for approval' }));
-  fireEvent.click(within(menu).getByRole('checkbox', { name: 'Reply delivery failed' }));
-  fireEvent.click(within(menu).getByRole('checkbox', { name: 'Web form' }));
-  fireEvent.click(within(menu).getByRole('radio', { name: 'Imported' }));
-  expect(onChange).toHaveBeenLastCalledWith({ awaiting: 'team', has_pending_draft: true, delivery_failed: true, channel: 'web_form', source: 'imported' });
-  fireEvent.click(within(menu).getByRole('radio', { name: 'Anyone' }));
-  expect(onChange).toHaveBeenLastCalledWith({ has_pending_draft: true, delivery_failed: true, channel: 'web_form', source: 'imported' });
+  const assignee = within(await openMenu()).getByRole('group', { name: 'Assignee' });
+  expect(within(assignee).getAllByRole('checkbox').map(labelOf)).toEqual(['Me', 'Bo', 'Unassigned']);
+  fireEvent.click(within(assignee).getByRole('checkbox', { name: 'Me' }));
+  expect(onChange).toHaveBeenLastCalledWith({ assignee: 'me' });
 });
 
-test('a date range is picked in the agent timezone and sent as UTC instants, the end day included', async () => {
+test('the switch for every chosen tag shows once two tags are chosen, or when a link already sets it', async () => {
+  const { unmount } = render(<Harness />);
+  const menu = await openMenu();
+  fireEvent.click(within(menu).getByRole('checkbox', { name: 'Billing' }));
+  expect(within(menu).queryByRole('checkbox', { name: 'Has every chosen tag' })).not.toBeInTheDocument();
+  fireEvent.click(within(menu).getByRole('checkbox', { name: 'VIP' }));
+  expect(within(menu).getByRole('checkbox', { name: 'Has every chosen tag' })).not.toBeChecked();
+  unmount();
+  render(<Harness initial={{ tag: billing.id, tag_match: 'all' }} />);
+  expect(within(await openMenu()).getByRole('checkbox', { name: 'Has every chosen tag' })).toBeChecked();
+});
+
+test('Needs attention holds Waiting on us and a failed delivery; a channel narrows the list', async () => {
+  channelList.listAll.mockResolvedValue({ items: [form], types: [{ type: 'web_form' }] });
   const onChange = vi.fn();
   render(<Harness onChange={onChange} />);
   const menu = await openMenu();
-  const created = within(menu).getByRole('group', { name: 'Created' });
-  fireEvent.change(within(created).getByLabelText('From'), { target: { value: '2026-10-01' } });
-  fireEvent.change(within(created).getByLabelText('To'), { target: { value: '2026-10-07' } });
-  // Ho Chi Minh City is UTC+7: October 1 starts at 17:00 UTC the day before; the range ends where October 8 starts.
-  expect(onChange).toHaveBeenLastCalledWith({ created_after: '2026-09-30T17:00:00.000Z', created_before: '2026-10-07T17:00:00.000Z' });
-  expect(within(created).getByLabelText('To')).toHaveValue('2026-10-07');
+  const attention = within(menu).getByRole('group', { name: 'Needs attention' });
+  expect(within(attention).getAllByRole('checkbox').map(labelOf)).toEqual(['Waiting on us', 'Reply delivery failed']);
+  fireEvent.click(within(attention).getByRole('checkbox', { name: 'Waiting on us' }));
+  fireEvent.click(within(attention).getByRole('checkbox', { name: 'Reply delivery failed' }));
+  fireEvent.click(await within(menu).findByRole('checkbox', { name: 'Web form' }));
+  expect(onChange).toHaveBeenLastCalledWith({ awaiting: 'team', delivery_failed: true, channel: 'web_form' });
+  fireEvent.click(within(attention).getByRole('checkbox', { name: 'Waiting on us' }));
+  expect(onChange).toHaveBeenLastCalledWith({ delivery_failed: true, channel: 'web_form' });
+});
+
+test('Channel lists a channel type only once the workspace has one, never Problem report, and keeps a value already chosen', async () => {
+  channelList.listAll.mockResolvedValue({ items: [support], types: [{ type: 'email' }] });
+  render(<Harness initial={{ channel: 'help_chat,problem_report' }} />);
+  const channel = within(await openMenu()).getByRole('group', { name: 'Channel' });
+  await waitFor(() => expect(within(channel).getAllByRole('checkbox').map(labelOf)).toEqual(['Email', 'Help chat', 'Imported', 'Started by the team', 'Problem report']));
+});
+
+test('Source, Organization, who replies next and the date ranges are not in the menu; a link that sets them still shows chips', async () => {
+  const onChange = vi.fn();
+  render(<Harness initial={{ source: 'imported', organization: 'Acme', created_after: '2026-09-30T17:00:00.000Z', created_before: '2026-10-07T17:00:00.000Z' }} onChange={onChange} />);
+  const menu = await openMenu();
+  for (const name of ['Who replies next', 'Source', 'Created', 'Last activity']) expect(within(menu).queryByRole('group', { name })).not.toBeInTheDocument();
+  expect(within(menu).queryByRole('textbox')).not.toBeInTheDocument();
+  expect(within(menu).queryByRole('radio')).not.toBeInTheDocument();
+  for (const name of ['Assigned to anyone', 'Reply draft waiting for approval']) expect(within(menu).queryByRole('checkbox', { name })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('3 filters active')).toBeInTheDocument();
+  const chips = screen.getByRole('list', { name: 'Active filters' });
+  // Ho Chi Minh City is UTC+7: the range starts at 17:00 UTC on September 30 and ends where October 8 starts.
+  expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Source: Imported', 'Organization: Acme', 'Created: 2026-10-01 to 2026-10-07']);
+  fireEvent.click(within(chips).getByRole('button', { name: 'Remove filter Created: 2026-10-01 to 2026-10-07' }));
+  expect(onChange).toHaveBeenLastCalledWith({ source: 'imported', organization: 'Acme' });
 });
 
 test('every active filter shows as a chip that removes it, and Clear all goes back to the Open view', async () => {
   const onChange = vi.fn();
-  render(<Harness initial={{ status: 'pending', priority: 'high,urgent', tag: billing.id, awaiting: 'customer', organization: 'Acme', search: 'refund' }} onChange={onChange} />);
+  render(<Harness initial={{ status: 'pending', priority: 'high,urgent', assignee: 'me,anyone', tag: billing.id, awaiting: 'customer', has_pending_draft: true, organization: 'Acme', search: 'refund' }} onChange={onChange} />);
   const chips = await screen.findByRole('list', { name: 'Active filters' });
   expect(within(chips).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-    // In the order of the Filter menu.
-    'Priority: High', 'Priority: Urgent', 'Tags: Billing', 'Who replies next: Waiting on the customer', 'Organization: Acme',
+    // In the order of the Filter menu; a value the menu no longer offers keeps its chip.
+    'Priority: High', 'Priority: Urgent', 'Assignee: Me', 'Assignee: Assigned to anyone', 'Tags: Billing', 'Waiting on the customer', 'Reply draft waiting for approval', 'Organization: Acme',
   ]);
   fireEvent.click(within(chips).getByRole('button', { name: 'Remove filter Priority: High' }));
-  expect(onChange).toHaveBeenLastCalledWith({ status: 'pending', priority: 'urgent', tag: billing.id, awaiting: 'customer', organization: 'Acme', search: 'refund' });
+  expect(onChange).toHaveBeenLastCalledWith({ status: 'pending', priority: 'urgent', assignee: 'me,anyone', tag: billing.id, awaiting: 'customer', has_pending_draft: true, organization: 'Acme', search: 'refund' });
   fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
   expect(onChange).toHaveBeenLastCalledWith({});
   expect(screen.queryByRole('list', { name: 'Active filters' })).not.toBeInTheDocument();
@@ -125,17 +163,6 @@ test('text typed faster than the address updates is kept, and a change from else
   }
 });
 
-test('a date is applied once it is a whole day, never while the year is half typed', async () => {
-  const onChange = vi.fn();
-  render(<Harness onChange={onChange} />);
-  const created = within(await openMenu()).getByRole('group', { name: 'Created' });
-  fireEvent.change(within(created).getByLabelText('From'), { target: { value: '0002-03-15' } });
-  expect(onChange).not.toHaveBeenCalled();
-  expect(within(created).getByLabelText('From')).toHaveValue('0002-03-15');
-  fireEvent.change(within(created).getByLabelText('From'), { target: { value: '2025-03-15' } });
-  expect(onChange).toHaveBeenLastCalledWith({ created_after: '2025-03-14T17:00:00.000Z' });
-});
-
 // A form inside a form is invalid HTML: the browser submits the outer one natively (a full page load to
 // /?view-scope=on) and the saved view is never saved. The filters are a search region, not a form.
 test('the filters are not a form, so the forms of the views menu submit on their own', () => {
@@ -151,11 +178,22 @@ test('Clear all is outside the list of chips, so scrolling the chips never hides
   expect(chips.contains(screen.getByRole('button', { name: 'Clear all' }))).toBe(false);
 });
 
-test('the sort menu orders the list', () => {
+test('the sort menu offers latest activity, waiting longest and priority, and orders the list', async () => {
   const onChange = vi.fn();
   render(<Harness onChange={onChange} />);
-  fireEvent.change(screen.getByRole('combobox', { name: 'Sort' }), { target: { value: 'waiting_longest' } });
+  const sort = screen.getByRole('combobox', { name: 'Sort' });
+  await within(sort).findByRole('option', { name: 'Latest activity' });
+  expect(within(sort).getAllByRole('option').map((option) => option.textContent)).toEqual(['Latest activity', 'Waiting longest', 'Priority']);
+  fireEvent.change(sort, { target: { value: 'waiting_longest' } });
   expect(onChange).toHaveBeenLastCalledWith({ sort: 'waiting_longest' });
+});
+
+test('a sort set by a link that the menu does not offer still shows as chosen', async () => {
+  render(<Harness initial={{ sort: 'created_asc' }} />);
+  const sort = screen.getByRole('combobox', { name: 'Sort' });
+  await within(sort).findByRole('option', { name: 'Latest activity' });
+  expect(within(sort).getAllByRole('option').map((option) => option.textContent)).toEqual(['Latest activity', 'Waiting longest', 'Priority', 'Oldest first']);
+  expect(sort).toHaveValue('created_asc');
 });
 
 test('search and Filter come before the status tabs in tab order, as they do on screen', () => {

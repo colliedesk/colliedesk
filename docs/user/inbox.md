@@ -54,35 +54,38 @@ cannot be loaded, it says so with **Try again** instead.
 **Filter** (next to the search box) holds every filter. Ticking several values of one filter shows
 conversations with any of them; each filter you add narrows the list further.
 - **Priority**: Urgent, High, Normal, Low.
-- **Assignee**: Assigned to me, Unassigned, Assigned to anyone, or any teammate.
-- **Tags**: conversations with any of the ticked tags, or tick **Has every chosen tag** for all of them.
-- **Who replies next**: **Waiting on us** means the newest message that is not a private note came from
-  the customer; **Waiting on the customer** means the newest one is your team's reply. A conversation
-  with no such message is neither.
-- **Needs attention**: **Reply draft waiting for approval** (an [agent request](agent-requests.md) an AI
-  agent left) and **Reply delivery failed** (a reply that could not be emailed and was not retried since).
-- **Channel**: how the conversation started: **Email**, **Web form**, **Imported** (from another helpdesk),
-  **Started by the team** (created in Colliedesk by a teammate or an agent token) or **Problem report**.
+- **Assignee**: **Me**, each other teammate, or **Unassigned**.
+- **Tags**: conversations with any of the ticked tags. Once you tick two or more, **Has every chosen tag**
+  appears; tick it to show only conversations with all of them.
+- **Needs attention**: **Waiting on us** (the newest message that is not a private note came from the
+  customer) and **Reply delivery failed** (a reply that could not be emailed and was not retried since).
+  Reply drafts that wait for approval are on the [Requests](agent-requests.md) page.
+- **Channel**: how the conversation started. **Email**, **Web form** and **Help chat** are listed once the
+  workspace has a channel of that type. **Imported** (from another helpdesk) and **Started by the team**
+  (created in Colliedesk by a teammate or an agent token) are always listed.
   Conversations that existed before channels were recorded got theirs from their first message; one
   without a message from the customer first counts as started by the team.
 - **Email channels**, **Web form channels**: shown when the workspace has two or more channels of that
   type. Each one lists the conversations that came through it or whose replies leave from it. The chip
   names the channel, with "(removed)" for a channel that was removed. In an address it is
   `?channel_id=<id>`, which **Settings → Channels** links use.
-- **Source**: **Imported** or **Created in Colliedesk**.
-- **Organization**: the exact organization name of the customer, in any case.
-- **Created** and **Last activity**: a range of days, picked in your timezone (see
-  [Timezones](timezones.md)); both ends are included, and **To** cannot be earlier than **From**.
 - **All conversations of** *name* in the conversation details shows that customer's conversations in
   every status.
 
 Each active filter shows as a chip under the status tabs; select its **x** to remove it, or **Clear all**
 to go back to **Open**. The Filter button counts the filters that are on.
 
-**Sort** orders the list by **Latest activity** (the default), **Oldest activity**, **Newest first**,
-**Oldest first** (by creation), **Priority, urgent first**, or **Waiting longest** (conversations waiting on
-you, the customer who wrote longest ago first, then everything else). Only the latest-activity order is
-grouped under Today and Earlier.
+A link can set filters that the menu does not list. They work and show as chips:
+`awaiting=customer` (**Waiting on the customer**: the newest message is your team's reply),
+`has_pending_draft=true`, `assignee=anyone`, `channel=problem_report`, `source=imported` or
+`source=native`, `organization=<exact name, any case>`, and the date ranges `created_after`,
+`created_before`, `updated_after` and `updated_before` (UTC instants; the chip shows the days in your
+timezone, see [Timezones](timezones.md)).
+
+**Sort** orders the list by **Latest activity** (the default), **Waiting longest** (conversations waiting on
+you, the customer who wrote longest ago first, then everything else) or **Priority** (urgent first). Only the
+latest-activity order is grouped under Today and Earlier. A link can also set `sort=updated_asc`,
+`created_desc` or `created_asc`; the menu then shows that order as chosen.
 
 The filters, the sort and the search are part of the page address, so you can bookmark a list or send its
 link to a teammate. Back returns to the list you came from. A value the inbox does not know (an old or
@@ -250,8 +253,8 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 
 In the details pane (**Show details** on a narrower screen):
 - **Status**: every status can be changed back, for example Resolved → Open to reopen.
-- **Priority**: Low, Normal, High, Urgent.
-- **Assignee**: assign to a teammate or set back to unassigned.
+- **Priority**: Urgent, High, Normal, Low.
+- **Assignee**: **Me** first, then each teammate, then **Unassigned**.
 - **Tags**: see [Tags](tags.md).
 
 **Trial and locked workspaces** (hosted cloud only)

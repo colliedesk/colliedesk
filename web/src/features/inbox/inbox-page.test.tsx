@@ -37,8 +37,11 @@ test('shows the dense inbox filters and three-pane conversation workspace', asyn
   fireEvent.click(within(filters).getByText('Filter'));
   await screen.findByRole('checkbox', { name: 'Urgent' });
   const menu = within(filters).getByRole('group', { name: 'Filter' });
-  for (const name of ['Priority', 'Assignee', 'Tags', 'Who replies next', 'Needs attention', 'Channel', 'Source', 'Created', 'Last activity']) {
+  for (const name of ['Priority', 'Assignee', 'Tags', 'Needs attention', 'Channel']) {
     expect(within(menu).getByRole('group', { name })).toBeInTheDocument();
+  }
+  for (const name of ['Who replies next', 'Source', 'Created', 'Last activity']) {
+    expect(within(menu).queryByRole('group', { name })).not.toBeInTheDocument();
   }
   expect(within(filters).getByRole('combobox', { name: 'Sort' })).toBeInTheDocument();
   expect(screen.getByRole('region', { name: /conversation list/i })).toBeInTheDocument();

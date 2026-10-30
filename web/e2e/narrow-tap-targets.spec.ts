@@ -39,6 +39,9 @@ test('on a 375 px screen the empty inbox steps, the composer, every email setup 
   const created = await page.request.post(`${servers.main}/api/v1/conversations`, { headers, data: { contact_id: id, subject: 'Narrow question' } });
   expect(created.status()).toBe(201);
   const { id: conversation } = await created.json() as { id: string };
+  // The picker shows its search box only once a saved reply exists.
+  const savedReply = await page.request.post(`${servers.main}/api/v1/saved-replies`, { headers, data: { title: 'Narrow greeting', body: 'Hello' } });
+  expect(savedReply.status()).toBe(201);
   await page.goto(`${servers.main}/conversations/${conversation}`);
   await expect(page.getByLabel('Message body')).toBeVisible();
   await expectTapSized(page.locator('.composer-head'), 'composer tabs');

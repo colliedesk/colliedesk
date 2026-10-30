@@ -76,12 +76,24 @@ test('Escape closes it, and Enter does nothing while an input method is composin
   expect(onClose).toHaveBeenCalledOnce();
 });
 
-test('with no saved replies it says so and leads to the place that adds them', () => {
+test('with no saved replies it says so and leads to the place that adds them, without a search box', () => {
   const onManage = vi.fn();
-  render(<SavedReplyPicker replies={[]} onPick={vi.fn()} onClose={vi.fn()} onManage={onManage} />);
+  const onClose = vi.fn();
+  render(<SavedReplyPicker replies={[]} onPick={vi.fn()} onClose={onClose} onManage={onManage} />);
   expect(screen.getByText('No saved replies yet.')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Manage saved replies' }));
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  const manage = screen.getByRole('button', { name: 'Manage saved replies' });
+  expect(manage).toHaveFocus();
+  fireEvent.keyDown(manage, { key: 'Escape' });
+  expect(onClose).toHaveBeenCalledExactlyOnceWith(true);
+  fireEvent.click(manage);
   expect(onManage).toHaveBeenCalledOnce();
+});
+
+test('with no saved replies and no way to add them, the list itself has the focus', () => {
+  render(<SavedReplyPicker replies={[]} onPick={vi.fn()} onClose={vi.fn()} />);
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: 'Saved replies' })).toHaveFocus();
 });
 
 const texts = { label: 'Articles', search: 'Search articles', loading: 'Loading articles…', failed: 'Articles could not be loaded.', none: 'No published article yet.', noMatch: 'No published article matches.', manage: 'Open settings' };

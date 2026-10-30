@@ -145,3 +145,9 @@ test('the help center palette is ink and paper', () => {
     .map(([, name, hex]) => `--${name} #${hex}`);
   expect(tinted).toEqual([]);
 });
+
+test('an open menu sits above the setup guide in the corner', () => {
+  const layer = (file, selector) => Number(rule(read(file), selector).match(/z-index:\s*(\d+)/)?.[1]);
+  const dock = layer('features/onboarding/setup-checklist.css', '.setup-dock');
+  for (const menu of ['.filter-popover', '.action-popover']) expect(layer('styles/components.css', menu), menu).toBeGreaterThan(dock);
+});

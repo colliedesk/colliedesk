@@ -56,9 +56,11 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         </select></label>
         <label className="property-row"><span>{messages.assignee}</span><select value={conversation?.assignee_id ?? ''} disabled={!conversation}
           onChange={(event) => conversation && onUpdate?.(conversation.id, { assignee_id: event.target.value || null })}>
-          <option value="">{messages.unassigned}</option>
-          {agents.filter((agent) => !agent.deactivated_at || agent.id === conversation?.assignee_id).map((agent) =>
+          {/* The signed-in agent is Me, first; teammates follow and Unassigned comes last, as in the Filter menu. */}
+          {currentAgentId && <option value={currentAgentId}>{messages.assignToMe}</option>}
+          {agents.filter((agent) => agent.id !== currentAgentId && (!agent.deactivated_at || agent.id === conversation?.assignee_id)).map((agent) =>
             <option key={agent.id} value={agent.id}>{agent.display_name || agent.email}{agent.deactivated_at ? ` ${messages.deactivatedSuffix}` : ''}</option>)}
+          <option value="">{messages.unassigned}</option>
         </select></label>
       </section>
       <fieldset className="details-section" disabled={!conversation}><legend>{messages.tags}</legend>
