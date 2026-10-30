@@ -28,14 +28,15 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
   // straight back here.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   // On APP_ORIGIN of a server with workspace hosts the server answers where the browser continues
-  // (continue_url): the workspace's own host, signed in there.
-  const goAfterSignIn = useCallback(async (result?: { continue_url?: string }) => {
+  // (continue_url): the workspace's own host, signed in there. landing is where a sign-in without a plan
+  // opens: the inbox, or the setup flow for a team that just signed up.
+  const goAfterSignIn = useCallback(async (result?: { continue_url?: string }, landing: '/' | '/setup' = '/') => {
     if (result?.continue_url) {
       leaveTo(result.continue_url);
       return undefined;
     }
     await client.resetQueries({ queryKey: ['me'] });
-    return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: '/' });
+    return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: landing });
   }, [client, navigate]);
   // The page a sign-in here opens on the workspace host. A plan to buy rides in it: that host's storage
   // is not this page's.
@@ -48,7 +49,7 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
   const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
-  const redeem = useMutation({ mutationFn: () => api.redeem(token, navigator.userAgent, next), onSuccess: goAfterSignIn });
+  const redeem = useMutation({ mutationFn: () => api.redeem(token, navigator.userAgent, next), onSuccess: (result) => goAfterSignIn(result) });
   const exchange = useCallback(async (sessionToken: string) => {
     setCloudPending(true);
     setCloudFailed(false);
@@ -62,8 +63,9 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
       setCloudPending(false);
     }
   }, [goAfterSignIn, next, workspaceSlug]);
+  // A new team opens the setup flow, also when the sign-up continues on the workspace's own host.
   const signUp = useCallback(async (sessionToken: string, workspaceName: string, answers: SignupAnswers) => {
-    await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, next));
+    await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, next ?? '/setup'), '/setup');
   }, [goAfterSignIn, next]);
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;

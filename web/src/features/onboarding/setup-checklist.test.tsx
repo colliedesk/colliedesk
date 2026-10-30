@@ -49,12 +49,12 @@ test('finished steps read Done, and the bar counts them', () => {
   expect(rows()[0]).toHaveAttribute('data-state', 'done');
 });
 
-test('every step links to the screen that finishes it, with plain links', () => {
+test('every step links to its screen of the setup flow, with plain links', () => {
   render(<SetupChecklist progress={progress({})} admin defaultOpen onHide={vi.fn()} />);
-  expect(screen.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
-  expect(screen.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', '/settings/import-freshdesk');
-  expect(screen.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/settings');
-  expect(screen.getByRole('link', { name: /Answer your first email/ })).toHaveAttribute('href', '/');
+  expect(screen.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/setup/email');
+  expect(screen.getByRole('link', { name: /Import from Freshdesk/ })).toHaveAttribute('href', '/setup/import');
+  expect(screen.getByRole('link', { name: /Invite your team/ })).toHaveAttribute('href', '/setup/invite');
+  expect(screen.getByRole('link', { name: /Answer your first email/ })).toHaveAttribute('href', '/setup/first_reply');
 });
 
 test('only the first step still to do is the primary action', () => {

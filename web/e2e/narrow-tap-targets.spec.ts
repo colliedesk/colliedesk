@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import { servers } from './support/cli';
-import { redeemLink } from './support/browser';
+import { expectIdentityVisible, redeemLink } from './support/browser';
 import { createWorkspaceWithSlug } from './support/workspace';
 
 // A narrow window (a phone browser that does not report a touch pointer, or a small desktop window)
@@ -88,4 +88,17 @@ test('on a 375 px screen the test message conversation, its email links and the 
   await expectTapSized(page.locator('.message-envelope'), 'incoming email links');
   await page.getByRole('button', { name: 'Show details' }).click();
   await expectTapSized(page.locator('.conversation-source'), 'contact history link');
+});
+
+test('on a 375 px screen every control of the setup flow\'s email step is tap-sized, and the workspace stays on screen', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const name = `Narrow Flow ${suffix}`;
+  const email = `owner-${suffix}@example.com`;
+  await redeemLink(page, createWorkspaceWithSlug(name, email).url);
+  await page.goto(`${servers.main}/setup/email`);
+  await expect(page.getByRole('textbox', { name: 'Support address' })).toBeVisible();
+  await expectTapSized(page.locator('.setup-flow'), 'setup flow, email step');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY), 'the step scrolls').toBeGreaterThan(0);
+  await expectIdentityVisible(page, name, email);
 });

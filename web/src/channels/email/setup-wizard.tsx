@@ -10,6 +10,7 @@ import { TestMessage } from './email-shared';
 import { ForwardStep, RepliesStep, useRefetchOnActivity } from './setup-steps';
 import { setupMessages as m } from './setup-messages';
 import { markSetupReturn } from '../setup-return';
+import { mailboxReturn } from '../../features/settings/gmail-return';
 import { addressSaved, clockTime, nextStep, readMemory, repliesThrough, stepStates, steps, testReplied, writeMemory } from './setup-state';
 import type { SetupMemory, StepID, StepState } from './setup-state';
 import { settingsMessages } from '../../features/settings/settings-messages';
@@ -18,7 +19,7 @@ import './email-setup.css';
 // EmailSetup connects a support address in four steps on one page: the address, forwarding its mail here,
 // how replies leave, and a test message. Each step's state is read from the server; a step opens again
 // after it is done, and leaving the page loses nothing.
-export function EmailSetup({ channel, named = false, canManage, timezone, navigate, create }: SetupProps) {
+export function EmailSetup({ channel, named = false, canManage, timezone, navigate, create, returnTo }: SetupProps) {
   const client = useQueryClient();
   const id = channel?.id;
   const settings = useQuery({ queryKey: ['email-channel', id], queryFn: () => channelsApi.email(id!), enabled: Boolean(id) });
@@ -33,9 +34,14 @@ export function EmailSetup({ channel, named = false, canManage, timezone, naviga
   const data = settings.data;
   const states = stepStates({ channel, settings: data, memory, replied: testReplied(timeline.data?.items) });
   const ready = !id || Boolean(data);
+  // Back from a mailbox provider's sign-in (Google, Microsoft), the address carries the outcome: it is read
+  // once, and the replies step opens to say what happened (connected, or why not and what to do).
+  const [returned] = useState(mailboxReturn);
   // The step a person is on stays open until they move on, even when its state changes under them.
   const [chosen, setChosen] = useState<StepID | null>();
-  useEffect(() => { if (ready && chosen === undefined) setChosen(id ? nextStep(states) ?? null : 'address'); }, [ready, chosen, id, states]);
+  useEffect(() => {
+    if (ready && chosen === undefined) setChosen(id ? (returned ? 'replies' : nextStep(states) ?? null) : 'address');
+  }, [ready, chosen, id, states, returned]);
   const open = chosen === undefined ? (id ? undefined : 'address') : chosen;
   const advance = (from: StepID) => setChosen(nextStep(states, from) ?? steps.slice(steps.indexOf(from) + 1).find((step) => states[step] !== 'done') ?? null);
   const skip = (step: StepID) => {
@@ -54,7 +60,7 @@ export function EmailSetup({ channel, named = false, canManage, timezone, naviga
     forward: () => channel && data && <ForwardStep channel={channel} settings={data} canManage={canManage} timezone={timezone} provider={memory.provider}
       onProvider={(provider) => remember({ provider })} onContinue={() => advance('forward')} onSkip={() => skip('forward')} />,
     replies: () => id && data && <RepliesStep channelID={id} settings={data} canManage={canManage} timezone={timezone} provider={memory.provider ?? (data.hosted_address ? 'gmail' : 'other')} done={states.replies === 'done'}
-      onContinue={() => advance('replies')} onSkip={() => skip('replies')} beforeLeave={() => markSetupReturn(id)} />,
+      returned={returned} onContinue={() => advance('replies')} onSkip={() => skip('replies')} beforeLeave={() => markSetupReturn(id, returnTo)} />,
     test: () => id && data && <div className="setup-body">
       <TestMessage channelID={id} ready={addressSaved(data)} forwarding={states.forward === 'done'} navigate={navigate} onSent={(sent) => remember({ testConversation: sent })} />
       {conversation && (states.test === 'done'

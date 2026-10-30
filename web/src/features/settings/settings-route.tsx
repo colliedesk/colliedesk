@@ -16,6 +16,7 @@ import type { AgentToken } from '../../api/schemas';
 import type { TokenChoice } from './agent-tokens-section';
 import { saveState } from './save-feedback';
 import { useBillingShown } from '../billing/billing-shown';
+import { useInvites } from './use-invites';
 
 // The email channel and the web form were sections of this page; a link to their old anchors (a bookmark,
 // an old guide) opens their channel instead. Rare, so it is done here, in this page's own chunk.
@@ -36,10 +37,9 @@ export function SettingsRoute() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
-  const invites = useQuery({ queryKey: ['invites'], queryFn: api.invites });
+  const invites = useInvites();
   const team = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const refresh = (key: string) => client.invalidateQueries({ queryKey: [key] });
-  const createInvite = useCreateMutation({ create: ({ email, role }: { email: string; role: 'admin' | 'agent' }, key: string) => api.createInvite(email, role, key), onSuccess: () => refresh('invites') });
   // A team change also moves seats, sessions and assignments, so every view that shows them reloads.
   const updateAgent = useMutation({
     mutationFn: ({ id, ...change }: { id: string; display_name?: string; role?: 'admin' | 'agent'; active?: boolean; reassign_to?: string | null }) => api.updateAgent(id, change),
@@ -59,7 +59,6 @@ export function SettingsRoute() {
     },
     onSettled: () => refresh('sessions'),
   });
-  const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => refresh('invites') });
   // Revoking this device's own session signs it out; reloading me shows the signed-out screen.
   const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => { void refresh('sessions'); void refresh('me'); } });
   const workspaceTimezone = useMutation({ mutationFn: api.updateWorkspaceTimezone, onSuccess: () => refresh('me') });
@@ -82,10 +81,10 @@ export function SettingsRoute() {
   const billingShown = useBillingShown(isAdmin);
   // Plan and billing exists only on the hosted cloud and only admins manage it.
   const showBilling = billingShown;
-  const loading = me.isPending || sessions.isPending || invites.isPending;
+  const loading = me.isPending || sessions.isPending || invites.invites.isPending;
   // A link to a section (the nav from another settings page, a pasted address) arrives before the sections do.
   useScrollToHashWhenReady(!loading);
-  return <SettingsPage loading={loading} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
+  return <SettingsPage loading={loading} sessions={sessions.data?.items ?? []} invites={invites.section.invites} timezone={me.data?.timezone ?? 'UTC'}
     canCreateInvites={isAdmin} canManageWorkspace={isAdmin} showBilling={showBilling} exportSection={isAdmin ? <ExportAllData /> : undefined}
     workspaceTimezoneSave={saveState(workspaceTimezone)} personalTimezoneSave={saveState(agentTimezone)}
     workspaceName={me.data?.workspace.name} workspaceNameSave={saveState(workspaceName)} onSetWorkspaceName={(name) => workspaceName.mutate(name)}
@@ -93,7 +92,7 @@ export function SettingsRoute() {
     onSetDisplayName={(name) => agentDisplayName.mutate(name)}
     setupGuideHidden={me.data?.setup_guide_hidden} onSetSetupGuideHidden={(hidden) => setupGuide.mutate(hidden)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
-    error={revokeInvite.isError || revokeSession.isError ? messages.settingsActionFailed : undefined}
+    error={invites.revokeFailed || revokeSession.isError ? messages.settingsActionFailed : undefined}
     agentsSection={<AgentTokensSection canCreateAdmin={isAdmin}
       onCreate={(label, choice) => new Promise((keep, reject) => { createToken.mutateAsync({ label, choice, keep }).catch(reject); })} />}
     teamSection={<TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={isAdmin} timezone={me.data?.timezone ?? 'UTC'}
@@ -115,9 +114,7 @@ export function SettingsRoute() {
       <div className="settings-body"><Part part={helpCenterPart} failed={<PartUnavailable />}
         render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={isAdmin} workspaceName={me.data?.workspace.name} timezone={me.data?.timezone ?? 'UTC'} />} /></div>
     </section>}
-    inviteError={createInvite.error instanceof PlanLimitError || createInvite.error instanceof InvalidRequestError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
-    createdInvite={createInvite.data ? { url: createInvite.data.url } : undefined} creatingInvite={createInvite.isPending}
-    onCreateInvite={(email, role) => createInvite.mutate({ email, role })}
-    onRevokeInvite={(id) => revokeInvite.mutate(id)} onRevokeSession={(id) => revokeSession.mutate(id)}
+    inviteError={invites.section.inviteError} createdInvite={invites.section.createdInvite} creatingInvite={invites.section.creatingInvite}
+    onCreateInvite={invites.section.onCreateInvite} onRevokeInvite={invites.section.onRevokeInvite} onRevokeSession={(id) => revokeSession.mutate(id)}
     onSetWorkspaceTimezone={(value) => workspaceTimezone.mutate(value)} onSetAgentTimezone={(value) => agentTimezone.mutate(value)} />;
 }

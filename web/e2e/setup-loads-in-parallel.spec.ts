@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
 
-// The setup guide and the email setup page each need data and chunks. They must be asked for together:
+// The setup guide and the setup flow's email step each need data and chunks. They must be asked for together:
 // a request that leaves only after another one came back costs a round trip on every visit from far away.
 // A round trip of 150 ms is added to every request, so a chain shows as steps of at least that size.
 const baseURL = servers.mail;
@@ -31,7 +31,7 @@ async function slowNetwork(page: Page) {
   await session.send('Network.emulateNetworkConditions', { offline: false, latency: roundTrip, downloadThroughput: -1, uploadThroughput: -1 });
 }
 
-test('the setup guide asks for its data and its chunk together, and the email setup page asks for its list and its chunks together', async ({ page }) => {
+test('the setup guide asks for its data and its chunk together, and the email step asks for its list and its chunks together', async ({ page }) => {
   const suffix = uniqueSuffix();
   await redeemLink(page, createWorkspace(`Parallel Desk ${suffix}`, `admin-${suffix}@acme.example`, baseURL));
   await slowNetwork(page);
@@ -50,20 +50,20 @@ test('the setup guide asks for its data and its chunk together, and the email se
   expect(setup!.started, 'setup data left before the session came back').toBeLessThan(me!.finished!);
   expect(checklist!.started, 'the chunk left before the data came back').toBeLessThan(setup!.finished!);
 
-  // The email page: opened from the guide, everything it needs leaves at the click.
+  // The email step of the setup flow: opened from the guide, everything it needs leaves at the click.
   const email = record(page);
   const clicked = Date.now();
   await guide.getByRole('link', { name: /Receive customer email/ }).click();
-  await expect(page.getByRole('heading', { name: 'Email' })).toBeVisible();
-  const route = first(email, /channels-route-.*\.js$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Receive customer email' })).toBeVisible();
+  const route = first(email, /\/setup-flow-.*\.js$/);
   const channels = first(email, /\/api\/v1\/channels$/);
   const panels = first(email, /\/panels-.*\.js$/);
-  expect(route, 'the page chunk request').toBeDefined();
+  expect(route, 'the flow chunk request').toBeDefined();
   expect(channels, 'the channel list request').toBeDefined();
   expect(panels, 'the panels chunk request').toBeDefined();
-  expect(channels!.started, 'the list left before the page chunk came back').toBeLessThan(route!.finished!);
-  expect(panels!.started, 'the panels left before the page chunk came back').toBeLessThan(route!.finished!);
-  for (const [name, entry] of [['page chunk', route], ['channel list', channels], ['panels chunk', panels]] as const) {
+  expect(channels!.started, 'the list left before the flow chunk came back').toBeLessThan(route!.finished!);
+  expect(panels!.started, 'the panels left before the flow chunk came back').toBeLessThan(route!.finished!);
+  for (const [name, entry] of [['flow chunk', route], ['channel list', channels], ['panels chunk', panels]] as const) {
     expect(entry!.started - clicked, `${name} left within one round trip of the click`).toBeLessThan(roundTrip);
   }
 });

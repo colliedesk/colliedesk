@@ -1,12 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { createQueryClient } from './query-client';
 import { presenceViewPart } from './features/inbox/presence-part';
 import { autofixPart } from './features/autofix/autofix-part';
 import { leaveTo } from './lib/leave-to';
+import { answerSignupQuestions } from './features/auth/test-signup-answers';
 
 // Each workspace's desk runs on its own host; APP_ORIGIN finds workspaces and signs new teams up. Clerk
 // is the identity provider and leaving the page is the browser's: both are external boundaries here.
@@ -28,6 +29,8 @@ beforeAll(async () => {
   await import('./features/inbox/presence-view');
   autofixPart.preload();
   await import('./features/autofix/autofix-chunk');
+  // A sign-up lands on the setup flow, whose first step embeds the email setup.
+  await Promise.all([import('./features/onboarding/setup-flow'), import('./channels/email/panels')]);
 });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
@@ -47,6 +50,8 @@ function serve(options: { signedIn: boolean; config: ReturnType<typeof config>; 
   // On APP_ORIGIN of a server with workspace hosts the sign-in answers where the browser continues.
   const continueURL = options.config.workspace_hosts && options.config.app_origin === window.location.origin ? { continue_url: handoffURL } : {};
   let signedIn = options.signedIn;
+  // A sign-up makes its person the new workspace's admin.
+  let agent = me.agent;
   fetchMock.mockImplementation((url: string) => {
     const path = url.split('?')[0];
     if (path === '/api/v1/auth/cloud/exchange') {
@@ -55,7 +60,10 @@ function serve(options: { signedIn: boolean; config: ReturnType<typeof config>; 
       return Promise.resolve(answer);
     }
     if (path === '/api/v1/auth/redeem') { signedIn = true; return Promise.resolve(json(200, { agent: me.agent, workspace: me.workspace })); }
-    if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, me) : json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }));
+    if (path === '/api/v1/auth/cloud/signup') { signedIn = true; agent = { ...me.agent, role: 'admin' }; return Promise.resolve(json(201, { agent, workspace: me.workspace, ...continueURL })); }
+    if (path === '/api/v1/workspace/setup') return Promise.resolve(json(200, { steps: [{ key: 'email', state: 'none', detail: null }, { key: 'first_reply', state: 'none', detail: null }], complete: false, recommended: null }));
+    if (path === '/api/v1/channels') return Promise.resolve(json(200, { items: [], types: [] }));
+    if (path === '/api/v1/auth/me') return Promise.resolve(signedIn ? json(200, { ...me, agent }) : json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }));
     if (path === '/api/v1/config') return Promise.resolve(json(200, options.config));
     if (path === '/api/v1/inbox/activity') return Promise.resolve(json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }));
     return Promise.resolve(json(200, { items: [], page: 1, page_size: 50 }));
@@ -114,7 +122,32 @@ test('on a workspace host, an email that is not an agent there is told so and po
 test('a server without workspace hosts keeps the browser where it is', async () => {
   clerk.signedIn = true;
   serve({ signedIn: false, config: config(false) });
-  open('/sign-in');
+  const router = open('/sign-in');
   expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(router.state.location.pathname).toBe('/');
   expect(leaveTo).not.toHaveBeenCalled();
+});
+
+test('a new team that signs up without a plan lands on the setup flow, at its first step', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(false), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  const router = open('/sign-in?intent=trial');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  answerSignupQuestions();
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  expect(await screen.findByRole('heading', { level: 1, name: 'Receive customer email' })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/setup/email');
+  expect(leaveTo).not.toHaveBeenCalled();
+});
+
+test('on a server with workspace hosts, a new team that signs up without a plan continues to the setup flow on its own host', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  open('/sign-in?intent=trial');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  answerSignupQuestions();
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  const [, init] = calls('/api/v1/auth/cloud/signup')[0];
+  expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/setup' });
 });

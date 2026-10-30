@@ -1078,7 +1078,7 @@ test('a workspace with conversations keeps the setup guide folded in the corner 
   expect(screen.getByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
   fireEvent.click(launcher);
   const guide = screen.getByRole('region', { name: 'Finish setting up' });
-  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
+  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/setup/email');
 });
 
 test('a brand-new workspace without an email channel opens the setup guide by itself: there is nothing for it to cover', async () => {

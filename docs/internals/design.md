@@ -80,6 +80,12 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   is alpha) beside the form; on narrow screens the brand side becomes a header. The page has one h1:
   Clerk's own first-step header is hidden through its appearance config, and its card fills the panel.
 - The mascot is the white collie head on the orange tile (see Logo).
+- Setup flow (`/setup`, owner decision 30/10/2026: Linear's onboarding, adapted): one step per screen, full
+  screen on `--surface-1` without the rail, one centred column of 36 rem. It is the one exception to "no narrow
+  centred column", because a single focused task is all the screen holds. A sticky header keeps the mark, the
+  identity ("Signed in as") and **Exit setup**; then segments with "Step N of M", the step's serif title and
+  lead, the step's own Settings form, and **Back**, **I'll do this later** and **Continue** (the only ink
+  action of the flow itself) in a "Setup flow" navigation. The forms it embeds keep their own buttons.
 
 ## Themes
 
