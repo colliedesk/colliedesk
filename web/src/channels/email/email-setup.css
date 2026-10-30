@@ -2,10 +2,10 @@
 .setup-layout { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: var(--space-4); align-items: start; min-width: 0; }
 .setup-card { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
 .setup-steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.setup-step { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-3) var(--space-4); min-width: 0; }
+:where(.setup-steps) > .setup-step { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-3) var(--space-4); min-width: 0; }
 .setup-open { border-color: var(--line-strong); padding-bottom: var(--space-4); }
-.setup-step[aria-disabled="true"] { background: var(--surface-0); }
-.setup-step[aria-disabled="true"] .setup-step-head { color: var(--text-3); }
+:where(.setup-steps) > .setup-step[aria-disabled="true"] { background: var(--surface-0); }
+:where(.setup-steps) > .setup-step[aria-disabled="true"] .setup-step-head { color: var(--text-3); }
 .setup-step-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-height: 28px; }
 .setup-step-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .setup-num { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: var(--fs-label); font-weight: 600; }
@@ -88,7 +88,7 @@
   .email-home-table td[data-label]::before { content: attr(data-label); display: block; color: var(--text-3); font-size: var(--fs-label); }
   .email-home-action { text-align: left; }
   .email-home .scroll-x-fade { overflow: visible; -webkit-mask-image: none; mask-image: none; }
-  .setup-step { padding: var(--space-3); }
+  :where(.setup-steps) > .setup-step { padding: var(--space-3); }
   .setup-body { padding-left: 0; }
   .setup-choices { grid-template-columns: minmax(0, 1fr); }
   .setup-of, .setup-change { margin-left: 0; }

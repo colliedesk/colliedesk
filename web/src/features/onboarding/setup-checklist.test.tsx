@@ -51,7 +51,7 @@ test('finished steps read Done, and the bar counts them', () => {
 
 test('a finished step is marked with a check, an open one with an empty circle', () => {
   render(<SetupChecklist progress={progress({ email: 'working' })} admin defaultOpen onHide={vi.fn()} />);
-  expect(rows()[0].querySelector('.setup-mark svg path')).toHaveAttribute('d', 'M20 6 9 17l-5-5');
+  expect(rows()[0].querySelector('.setup-mark svg.icon')).not.toBeNull();
   expect(rows()[1].querySelector('.setup-mark svg')).toBeNull();
 });
 

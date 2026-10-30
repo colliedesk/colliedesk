@@ -31,7 +31,6 @@
 .setup-mark { display: grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid var(--line-control); border-radius: var(--radius-full); }
 /* Done is the menus' check in the success colour: a stroke, nothing filled. */
 .setup-step[data-state="done"] .setup-mark { border: 0; color: var(--ok); }
-.setup-mark .icon { width: 16px; height: 16px; }
 /* The whole row is the link (title above state), so a fingertip finds it at any width. */
 .setup-step > a { display: grid; align-content: center; gap: 2px; align-self: stretch; min-width: 0; min-height: 56px; color: var(--text-1); text-decoration: none; }
 .setup-step > a:hover .setup-title { text-decoration: underline; }
@@ -41,9 +40,8 @@
 .setup-state[data-attention] { color: var(--danger, var(--text-1)); font-weight: 600; }
 /* The step to do next: its row is tinted and its title in the accent colour. */
 .setup-step:has(> a.primary-action) { background: var(--accent-soft); margin: 0 calc(-1 * var(--space-2)); padding: 0 var(--space-2); border-radius: var(--radius); }
-.setup-step > a.primary-action, .setup-step > a.primary-action:hover { border-color: transparent; background: transparent; color: var(--text-1); }
+.setup-step > a.primary-action, .setup-step > a.primary-action:hover { border-color: transparent; background: transparent; color: var(--text-1); font-weight: 400; }
 .setup-step > a.primary-action .setup-title { color: var(--accent); }
-.setup-step > a.primary-action .setup-state { font-weight: 400; }
 .setup-step[data-state="done"] .setup-title { color: var(--text-2); font-weight: 500; }
 .setup-time { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 
