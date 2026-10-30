@@ -151,3 +151,21 @@ test('an open menu sits above the setup guide in the corner', () => {
   const dock = layer('features/onboarding/setup-checklist.css', '.setup-dock');
   for (const menu of ['.filter-popover', '.action-popover']) expect(layer('styles/components.css', menu), menu).toBeGreaterThan(dock);
 });
+
+test('the setup guide marks a finished step with a stroke check, not a filled disc', () => {
+  const css = read('features/onboarding/setup-checklist.css');
+  const done = rule(css, '.setup-step[data-state="done"] .setup-mark');
+  expect(done).not.toMatch(/background|box-shadow/);
+  expect(done).toMatch(/(?<![-\w])color:\s*var\(--ok\)/);
+  // The next step's row is a link styled as a primary action: the link drops the button weight, and its lines
+  // keep their own (the title bold, "Needs attention" bold, the rest regular), so no rule reweights a line under it.
+  expect(rule(css, '.setup-step > a.primary-action, .setup-step > a.primary-action:hover')).toMatch(/font-weight:\s*400/);
+  expect(css).not.toMatch(/\.primary-action \.setup-state/);
+  expect(rule(css, '.setup-state[data-attention]')).toMatch(/font-weight:\s*600/);
+});
+
+test('the email setup wizard styles only its own steps, never the setup guide rows that share the class name', () => {
+  // Once Settings → Email has loaded, its stylesheet stays on the page; a bare .setup-step rule boxed the guide's rows.
+  const bare = read('channels/email/email-setup.css').split('\n').filter((line) => /(^|[\s,])\.setup-step(?![-\w])/.test(line) && !/:where\(\.setup-steps\) > \.setup-step/.test(line));
+  expect(bare).toEqual([]);
+});
