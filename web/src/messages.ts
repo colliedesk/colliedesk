@@ -255,7 +255,10 @@ export const messages = {
   cloudNewHere: 'New to Colliedesk Cloud? Use the same form to start a 14-day free trial. No card needed.',
   workspaceName: 'Workspace name',
   buyingTitle: (plan: string) => (plan === 'founding' ? 'Join Founding' : 'Create your Colliedesk account'),
-  buyingExplanation: 'Create your account with your work email. Then name your workspace and pay on the next screen.',
+  // The identity step comes first (an emailed code), then the workspace name, then payment.
+  buyingExplanation: 'Enter your work email and we will send you a one-time code. Then you name your workspace and pay.',
+  // What a Founding buyer was promised on colliedesk.com, repeated where they sign up.
+  buyingFoundingOffer: '$99 every 3 months · up to 10 agents · 30-day money-back guarantee',
   billing: 'Billing',
   plans: { trial: 'Free trial', none: 'Trial ended', solo: 'Solo', small: 'Small', team: 'Team', team25: 'Team 25', founding: 'Founding' },
   agentsOverPlan: (over: number, plan: string) => `This workspace has ${over === 1 ? '1 agent' : `${over} agents`} more than the ${plan} plan allows. The ${over === 1 ? 'most recently added one' : `${over} most recently added`} cannot work until you deactivate agents in Settings > Team or upgrade under Manage billing.`,

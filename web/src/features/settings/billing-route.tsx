@@ -29,6 +29,10 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
     queryKey: ['billing'], queryFn: api.billing, enabled: isAdmin && (enabled || switchedOff),
     refetchInterval: (query) => (checkoutReturned && (query.state.data?.plan === 'trial' || query.state.data?.plan === 'none') ? confirmPollMs : false),
   });
+  // The migration card of a paid Founding or Team 25 workspace hides once a Freshdesk import has finished.
+  const migrationPlan = billing.data?.plan === 'founding' || billing.data?.plan === 'team25';
+  const setup = useQuery({ queryKey: ['setup'], queryFn: api.setupProgress, enabled: isAdmin && migrationPlan });
+  const importDone = setup.isSuccess ? setup.data.steps.some((step) => step.key === 'import' && step.state === 'done') : setup.isError ? false : undefined;
   const checkout = useMutation({ mutationFn: (plan: CheckoutPlan) => api.startCheckout(plan), onSuccess: (link) => openCheckout(link.url) });
   const portal = useMutation({ mutationFn: () => api.openBillingPortal(), onSuccess: (link) => window.location.assign(link.url) });
   // A remembered plan is acted on once, as soon as it is known whether this admin can buy it; every
@@ -51,7 +55,7 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
   if (me.data && !isAdmin) return <main className="settings-page"><p className="muted-copy">{billingMessages.billingAdminsOnly}</p></main>;
   if (!billing.data) return <main className="settings-page">{billing.isError && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}</main>;
   if (switchedOff && billing.data.status === 'none') return notEnabled;
-  return <BillingPage billing={billing.data} switchedOff={switchedOff} timezone={me.data?.timezone ?? 'UTC'} checkoutReturned={checkoutReturned} preferredPlan={readPlanIntent()}
+  return <BillingPage billing={billing.data} switchedOff={switchedOff} workspaceName={me.data?.workspace.name ?? ''} importDone={importDone} timezone={me.data?.timezone ?? 'UTC'} checkoutReturned={checkoutReturned} preferredPlan={readPlanIntent()}
     failed={checkout.error instanceof InvalidRequestError ? checkout.error.message : checkout.isError || portal.isError} busy={checkout.isPending}
     onCheckout={(plan) => checkout.mutate(plan)} onManage={() => portal.mutate()} />;
 }

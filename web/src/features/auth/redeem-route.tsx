@@ -64,7 +64,7 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
       setCloudPending(false);
     }
   }, [goAfterSignIn, next, workspaceSlug]);
-  const signUp = useCallback(async (sessionToken: string, workspaceName: string, answers: SignupAnswers) => {
+  const signUp = useCallback(async (sessionToken: string, workspaceName: string, answers: Partial<SignupAnswers>) => {
     await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, next));
   }, [goAfterSignIn, next]);
   const cloudConfig = config.data?.cloud_sign_in;
@@ -81,6 +81,6 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
     cloudSignIn={cloudEnabled && <Suspense fallback={<p>{messages.loadingCloudSignIn}</p>}>
       <CloudSignIn key={workspaceSlug ?? 'default'} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange}
-        onSignUp={config.data?.signup.enabled && !findWorkspaceAt ? signUp : undefined} findWorkspaceAt={findWorkspaceAt} buying={buying !== undefined} endSession={signedOut} />
+        onSignUp={config.data?.signup.enabled && !findWorkspaceAt ? signUp : undefined} findWorkspaceAt={findWorkspaceAt} buying={buying !== undefined} optionalQuestions={buying !== undefined || planIntent !== undefined} endSession={signedOut} />
     </Suspense>} />;
 }

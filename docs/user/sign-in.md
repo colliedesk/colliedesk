@@ -45,8 +45,16 @@ usual, and [Plan and billing](billing.md) then shows Team 25 first. No other `pl
 The same page asks three short questions, each with a fixed list of answers: what you want
 Colliedesk to do for you first, your role, and where you heard of Colliedesk. Your first goal decides
 which step the [setup guide](setup-guide.md) in the inbox lists and recommends first (for example **Import from Freshdesk** when you are moving
-off a helpdesk), and the answers help us send you emails that fit. The web form needs an answer to
-each; for API clients `goal`, `role` and `source` are optional.
+off a helpdesk), and the answers help us send you emails that fit. On the trial page the web form needs
+an answer to each. A visitor who came to buy (`/sign-in?buy=founding`) or for a plan
+(`plan=team25`) is asked for the workspace name only: the three questions sit under "Tell us about your
+team (optional)", closed, and any answer given is kept. For API clients `goal`, `role` and `source` are
+always optional, each on its own.
+
+The Founding link (`/sign-in?buy=founding`) is titled **Join Founding**. Under the title it repeats the offer,
+"$99 every 3 months · up to 10 agents · 30-day money-back guarantee", and says what happens: you enter
+your work email and the emailed code, name your workspace, and pay. Like the trial page, it tells someone who
+already has a workspace that the same form signs them in.
 
 - **This email already started a trial.** Each mailbox gets one trial. Sign in to that workspace
   instead (**Sign in to your workspace**), or ask us for help.

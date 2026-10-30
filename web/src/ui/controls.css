@@ -7,7 +7,7 @@
 .seg-tabs::-webkit-scrollbar { display: none; }
 .seg-tabs button { --control: 30px; display: inline-flex; align-items: center; gap: 6px; min-height: 30px; border: 0; border-radius: var(--radius-sm);
   background: transparent; box-shadow: none; padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); font-weight: 500; white-space: nowrap;
-  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease; }
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
 .seg-tabs button:hover:not(:disabled) { background: color-mix(in srgb, var(--text-1) 5%, transparent); box-shadow: none; color: var(--text-1); }
 .seg-tabs button[aria-selected="true"], .seg-tabs button[aria-selected="true"]:hover { background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
 .seg-tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -20,8 +20,9 @@
 button[aria-selected="true"] > .seg-count { background: var(--text-1); color: var(--surface-1); }
 
 /* Notices */
-.notice { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; border: 1px solid var(--note-line); border-radius: var(--radius-lg);
-  background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+/* A plain notice is a neutral card; amber stays on notes, focus and pending. */
+.notice { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface-0); color: var(--text-2); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
 .notice > svg { flex: none; }
 .notice > span { flex: 1 1 20rem; min-width: 0; }
 .notice strong { font-weight: 600; }

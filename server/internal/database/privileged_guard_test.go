@@ -61,6 +61,7 @@ var privilegedCallSites = []string{
 	"internal/store/saved-reply-history.go: PrivilegeSavedReplyPurge",
 	"internal/store/server-secrets.go: PrivilegeServerSecret",
 	"internal/telemetry/usage.go: PrivilegeTelemetry",
+	"internal/trialreminder/trialreminder.go: PrivilegeTrialReminder",
 }
 
 // poolFiles may import pgxpool. Outside the database package they only open a pool or hand it to a
