@@ -68,7 +68,8 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 - Rows: subject (500) and time, then one meta line (status dot and word, priority arrow, `#tags`); the status
   word is left out under a status tab that already names it, and Normal priority is not shown. With a mouse,
   rows start on the column edge and the checkbox appears over the row's padding on hover or focus; its column
-  and **Select all on this page** appear once a row is ticked. Touch keeps the column. The time is
+  opens once a row is ticked. **Select all on this page** stays, since focus returns to it after a bulk change.
+  Touch keeps the column. The time is
   the time alone for today and the date otherwise; without hover (no tooltip) an earlier row shows date and
   time, a row from today still only its time. The full stamp is the tooltip and the accessible name.
 - List keys, as in Gmail and Help Scout: **J** / **K** anywhere outside a text field, **Down** / **Up** while
