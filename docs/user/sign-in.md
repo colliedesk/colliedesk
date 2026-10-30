@@ -39,7 +39,8 @@ answers your customers. Under the form, a line links the [Terms](https://collied
 continuing means you agree to the terms.
 The website's **Start free trial** link opens this page as `/sign-in?intent=trial`, titled
 **Start your free trial**; it is the same form, so someone who already has a workspace is
-simply signed in.
+simply signed in. The Team 25 card links to `/sign-in?intent=trial&plan=team25`: the trial starts as
+usual, and [Plan and billing](billing.md) then shows Team 25 first. No other `plan` value does anything.
 
 The same page asks three short questions, each with a fixed list of answers: what you want
 Colliedesk to do for you first, your role, and where you heard of Colliedesk. Your first goal decides

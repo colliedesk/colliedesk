@@ -27,7 +27,8 @@ Roles:
 
 ## Agent limit on the hosted cloud
 
-On the hosted cloud, during the trial and on the Team and Founding plans, an active agent and a pending
-invite each take one of 10 seats; a [deactivated](team.md) agent takes none. Creating an eleventh fails with a message that names the limit.
+On the hosted cloud, an active agent and a pending invite each take one seat; a [deactivated](team.md)
+agent takes none. The trial and Team 25 have 25 seats; Team and Founding have 10. Creating an invite
+when every seat is taken fails with a message that names the limit.
 Revoke an invite you no longer need. See [Plan and billing](billing.md). A locked workspace (trial or
 subscription ended) cannot create or accept invites until it has a plan.

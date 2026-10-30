@@ -12,7 +12,7 @@ cancel the subscription under **Manage billing**.
 
 ## The free trial
 
-Every new cloud workspace starts a 14-day free trial of the full Team plan. No card is needed.
+Every new cloud workspace starts a 14-day free trial with every feature, for up to 25 agents. No card is needed.
 
 - A banner under the workspace name shows "Trial: N days left". Admins get a **Choose a plan**
   button in it. In a new workspace the [setup guide](setup-guide.md)'s next step stays the main button; Choose a plan is
@@ -27,10 +27,14 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
   and the payment window opens as soon as the workspace exists.
   The plan rides in the sign-in address, so it survives the identity provider's round trip; opening
   the plain sign-in page later in the same tab (the website's **Log in**) is a normal sign-in again.
+- Coming from the website's Team 25 link (`/sign-in?intent=trial&plan=team25`), a visitor signs up for the
+  trial as usual: no payment window opens. The browser remembers the plan they came for (for a day, in
+  that tab), so **Choose a plan** in the banner, **Plan and billing** and the locked page show the Team 25
+  card first, marked **Your pick**. Any other `plan` value is ignored.
 
 ### Limits during the trial
 
-- **Agents.** Up to 10. An agent and a pending invite each take one seat. Creating an invite when all
+- **Agents.** Up to 25, so a team of 11 to 25 agents can try Colliedesk with everyone. An agent and a pending invite each take one seat. Creating an invite when all
   seats are taken fails with a message that names the limit. Revoke an invite you no longer need and
   try again. Sending a second invite to the same address, or inviting someone who already is an
   agent, does not take another seat.
@@ -74,9 +78,10 @@ There is no free plan; every workspace starts with the free trial. Unlimited, fo
 than 25 agents at $349 per month billed yearly, is coming soon.
 
 Founding includes a free Freshdesk migration, done for you, and a 30-day money-back guarantee
-(see the [terms](https://colliedesk.com/terms#refunds)). Founding is limited to 10 subscriptions. While a Founding slot is free, the billing page and the locked page offer Founding only
-($99 every 3 months, $396 a year), with a link to self-host for free; a workspace that does not fit Founding (its 10-agent or
-20 GiB cap) still sees every plan. When all 10 are taken Founding is closed for good and the pages offer the other plans.
+(see the [terms](https://colliedesk.com/terms#refunds)). Founding is limited to 10 subscriptions. While a Founding slot is free, the billing page and the locked page offer two plans:
+Founding ($99 every 3 months, $396 a year) and Team 25 ($149 a month or $1,490 a year, for up to 25 agents), with a link to
+self-host for free. A workspace that does not fit Founding (its 10-agent or 20 GiB cap) sees the Founding card greyed, with
+the reason, and can still choose Team 25. When all 10 are taken Founding is closed for good and the pages offer every plan.
 
 When all seats of a plan are taken, the refusal names the next plan up (Solo, then Small, then
 Team, then Team 25). Switch plans under **Manage billing**.
@@ -139,7 +144,8 @@ trial (or the subscription) has ended, instead of the inbox.
 1. Open **Settings → Plan and billing** (or select **Choose a plan** in the banner or on the locked page).
 2. Under **Choose a plan**, pick **Monthly** or **Yearly, 2 months free**. Each plan is a card with its
    price per month (a yearly plan also shows what is billed once a year; Founding shows its price per
-   quarter), its agents and attachment storage. While Founding is open it is the only card. Select **Choose Solo**, **Choose Small**, **Choose Team**, **Choose Team 25** or **Choose Founding**.
+   quarter), its agents and attachment storage. While Founding is open the cards are Founding and Team 25, and
+   the Monthly or Yearly choice above them is for Team 25. Select **Choose Solo**, **Choose Small**, **Choose Team**, **Choose Team 25** or **Choose Founding**.
 3. Pay in the window that opens on top of Colliedesk. It is run by our payment provider, Polar;
    Colliedesk never sees your card. Pay by card. Apple Pay and Google Pay come later. If you
    close the window, you stay on the page and can start again.
