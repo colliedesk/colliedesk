@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { expectIdentityVisible, redeemLink } from './support/browser';
 
-// The setup flow (docs/user/setup-guide.md, "Setup flow"): one step per screen, each done in place, Continue
-// once the server reports the person's own part done, "I'll do this later" to move on, and a summary.
+// The setup flow (docs/user/setup-guide.md, "Setup flow"): one step per screen, each done in place, a main
+// button that names the next step once the server reports the person's own part done, "I'll do this later" to move on, and a summary.
 // The mail server relays replies by SMTP, so a saved address with its inbound secret waits for its first email.
 const baseURL = servers.mail;
 
@@ -12,9 +12,10 @@ test('setup flow: a new admin connects email in place, skips the import, invites
   const workspace = `Flow Desk ${suffix}`;
   const admin = `admin-${suffix}@acme.example`;
   await redeemLink(page, createWorkspace(workspace, admin, baseURL));
-  // The moves between steps; the email setup has a Continue of its own for its own steps.
+  // The moves between steps. The main button names the step it opens; the email setup has a Continue of its
+  // own for its own parts.
   const flow = page.getByRole('navigation', { name: 'Setup flow' });
-  const continueButton = flow.getByRole('button', { name: 'Continue' });
+  const continueButton = flow.getByRole('button', { name: /^(Next: |Finish setup$)/ });
   const later = flow.getByRole('link', { name: 'I\'ll do this later' });
 
   // /setup opens the first step still to do, full screen, with the workspace and address on screen.
@@ -32,13 +33,14 @@ test('setup flow: a new admin connects email in place, skips the import, invites
   await page.getByRole('button', { name: 'Save support address' }).click();
   await expect(page.getByRole('group', { name: 'Forward its mail to Colliedesk' })).toContainText('Step 2 of 4');
   await expect(page).toHaveURL(`${baseURL}/setup/email`);
-  // Without an inbound secret nothing can arrive yet: Continue still waits, and says so.
+  // Without an inbound secret nothing can arrive yet: the main button still waits, and says so.
   await expect(continueButton).toBeDisabled();
   await expect(page.getByText('Your email needs attention. Finish the steps above to continue.')).toBeVisible();
   await page.getByRole('button', { name: 'Create inbound secret' }).click();
   await expect(page.getByRole('textbox', { name: /Inbound secret/ })).toBeVisible();
   // The server now reports the address waiting for its first email: the person's own part is done.
   await expect(continueButton).toBeEnabled();
+  await expect(continueButton).toHaveText('Next: Import from Freshdesk');
   const setup = await (await page.request.get(`${baseURL}/api/v1/workspace/setup`)).json() as { steps: { key: string; state: string }[] };
   expect(setup.steps.find((step) => step.key === 'email')?.state).toBe('waiting');
   await continueButton.click();

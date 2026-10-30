@@ -63,8 +63,9 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
       setCloudPending(false);
     }
   }, [goAfterSignIn, next, workspaceSlug]);
+  // A new team opens the setup flow, also when the sign-up continues on the workspace's own host.
   const signUp = useCallback(async (sessionToken: string, workspaceName: string, answers: SignupAnswers) => {
-    await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, next), '/setup');
+    await goAfterSignIn(await api.signUpCloud(sessionToken, workspaceName, answers, next ?? '/setup'), '/setup');
   }, [goAfterSignIn, next]);
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;

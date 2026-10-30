@@ -59,6 +59,7 @@ export function SetupFlowRoute({ step, navigate }: SetupFlowRouteProps) {
   const missing = ready ? undefined : (m.missing[stepKey] as Record<string, string>)[current.state];
   const next = nextPath(steps, index);
   const back = previousPath(steps, index);
+  const following = steps[index + 1];
   return <SetupFlowFrame me={me.data}>
     <FlowProgress steps={steps} current={index} />
     <div className="setup-flow-title">
@@ -67,13 +68,14 @@ export function SetupFlowRoute({ step, navigate }: SetupFlowRouteProps) {
       <p className="setup-flow-lead">{m.lead[stepKey]}</p>
     </div>
     <div className="setup-flow-body"><StepBody step={stepKey} admin={admin} timezone={me.data.timezone} navigate={navigate} /></div>
-    {/* The moves between steps; the email setup inside has a Continue of its own, for its own steps. */}
+    {/* The moves between steps. The main button names the step it opens: the email setup inside has a Continue
+        of its own, for its own parts. */}
     <nav className="setup-flow-actions" aria-label={m.flowNav}>
       {missing && <p id={missingID} className="muted-copy setup-flow-missing">{missing}</p>}
       <div className="setup-flow-buttons">
         {back && <a className="button setup-flow-back" href={back}>{m.back}</a>}
         <a className="link-action setup-flow-later" href={next}>{m.later}</a>
-        <button type="button" className="primary-action" disabled={!ready} aria-describedby={missing ? missingID : undefined} onClick={() => navigate(next)}>{m.continue}</button>
+        <button type="button" className="primary-action" disabled={!ready} aria-describedby={missing ? missingID : undefined} onClick={() => navigate(next)}>{following ? m.next(setupMessages.title[following.key]) : m.finish}</button>
       </div>
     </nav>
   </SetupFlowFrame>;

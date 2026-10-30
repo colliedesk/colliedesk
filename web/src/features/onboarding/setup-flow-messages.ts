@@ -5,7 +5,9 @@ export const flowMessages = {
   exit: 'Exit setup',
   stepOf: (n: number, total: number) => `Step ${n} of ${total}`,
   progressLabel: 'Setup progress',
-  continue: 'Continue',
+  // The main button names the step it opens; the last one ends at the summary.
+  next: (title: string) => `Next: ${title}`,
+  finish: 'Finish setup',
   later: 'I\'ll do this later',
   back: 'Back',
   flowNav: 'Setup flow',

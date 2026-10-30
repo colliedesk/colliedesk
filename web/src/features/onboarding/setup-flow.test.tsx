@@ -63,9 +63,10 @@ function open(path: string) {
   return router;
 }
 const title = (name: string) => screen.findByRole('heading', { level: 1, name });
-// The moves between steps are one navigation; the email setup inside has a Continue of its own.
+// The moves between steps are one navigation. Its main button names the step it opens, so it never reads like
+// the Continue of the email setup inside, which moves between that setup's own parts.
 const flow = () => within(screen.getByRole('navigation', { name: 'Setup flow' }));
-const continueButton = () => flow().getByRole('button', { name: 'Continue' });
+const continueButton = () => flow().getByRole('button', { name: /^(Next: |Finish setup$)/ });
 
 test('a step opens from its address, full screen, with its title, its place in the flow and the workspace it acts in', async () => {
   serve({ setup: progress() });
@@ -100,6 +101,7 @@ test('Continue waits for the person\'s own part of the step, says what is missin
   await waitFor(() => expect(continueButton()).toBeEnabled());
   expect(screen.getByRole('textbox', { name: 'One-time invite link' })).toHaveValue('https://desk.example.com/sign-in?token=one-time-invite');
   expect(screen.queryByText('Create an invite above to continue.')).not.toBeInTheDocument();
+  expect(continueButton()).toHaveAccessibleName('Next: Answer your first email');
   fireEvent.click(continueButton());
   await waitFor(() => expect(router.state.location.pathname).toBe('/setup/first_reply'));
 });
@@ -117,10 +119,11 @@ test('"I\'ll do this later" opens the next step, Back the one before; the first 
   expect(router.state.location.pathname).toBe('/setup/email');
 });
 
-test('after the last step both Continue and "I\'ll do this later" open the summary', async () => {
+test('on the last step the main button reads Finish setup, and both it and "I\'ll do this later" open the summary', async () => {
   serve({ setup: progress({ first_reply: 'sent' }) });
   const router = open('/setup/first_reply');
   await title('Answer your first email');
+  expect(continueButton()).toHaveAccessibleName('Finish setup');
   expect(flow().getByRole('link', { name: 'I\'ll do this later' })).toHaveAttribute('href', '/setup/done');
   fireEvent.click(continueButton());
   await waitFor(() => expect(router.state.location.pathname).toBe('/setup/done'));

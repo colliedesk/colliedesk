@@ -51,9 +51,11 @@ Each screen shows:
   - **Answer your first email**: **Send yourself a test message** opens a conversation from your own
     address. Answer it, and the reply is emailed to you. Without a mailbox yet, replies start once email
     or an import brings conversations.
-- **Continue**, **I'll do this later** and **Back**.
+- A main button that names the step it opens (for example **Next: Import from Freshdesk**, and
+  **Finish setup** on the last step), **I'll do this later** and **Back**. The email setup has a
+  **Continue** of its own: it moves between the parts of that setup only.
 
-**Continue** works once your own part of the step is done, as the server reports it: the address saved
+The main button works once your own part of the step is done, as the server reports it: the address saved
 and able to receive ("Waiting for the first email"), an import read or running, an invite sent, a reply
 sent. Until then, a line under the step says what is missing. What others do next (the first customer
 email, a teammate joining) does not hold you back. The screen checks again every 5 seconds.

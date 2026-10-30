@@ -139,3 +139,15 @@ test('a new team that signs up without a plan lands on the setup flow, at its fi
   expect(router.state.location.pathname).toBe('/setup/email');
   expect(leaveTo).not.toHaveBeenCalled();
 });
+
+test('on a server with workspace hosts, a new team that signs up without a plan continues to the setup flow on its own host', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true), exchange: json(403, { error: { code: 'forbidden', message: 'no' } }) });
+  open('/sign-in?intent=trial');
+  fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Beta Desk' } });
+  answerSignupQuestions();
+  fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  const [, init] = calls('/api/v1/auth/cloud/signup')[0];
+  expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ next: '/setup' });
+});
