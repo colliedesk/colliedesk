@@ -118,10 +118,6 @@
   background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 500; text-decoration: none; }
 .get-started a.button.primary-action { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .get-started li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-/* Holds the place of the setup guide while its chunk loads: the same height as the finished list
-   (header 44, bar 4 + 2 x space-2, rows 56 + 1 border each but the first, padding 2 x space-3, bottom border 1). */
-.setup-guide-placeholder { box-sizing: border-box; border-bottom: 1px solid var(--line);
-  min-height: calc(45px + 2 * var(--space-3) + 4px + 2 * var(--space-2) + var(--rows, 4) * 56px + (var(--rows, 4) - 1) * 1px); }
 .empty-copy { padding: var(--space-4); }
 
 /* Status: a dot plus a word, never colour alone. */

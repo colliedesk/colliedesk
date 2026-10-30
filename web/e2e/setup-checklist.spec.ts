@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
 
-// The setup guide stays in the inbox after the first conversation exists, and its email step turns
+// The setup guide stays in the inbox, in its corner, after the first conversation exists, and its email step turns
 // to Done once a forwarded customer email arrives (docs/user/setup-guide.md).
 const baseURL = servers.mail;
 
@@ -21,6 +21,11 @@ test('setup guide: a workspace with one conversation and no email channel still 
 
   await page.goto(baseURL);
   await expect(page.getByRole('button', { name: new RegExp(`Made by hand ${suffix}`) })).toBeVisible();
+  // With a conversation in the inbox the guide waits folded in the bottom-left corner; one press opens it,
+  // and it stays open across reloads until it is folded again.
+  const launcher = page.getByRole('button', { name: /Finish setting up/ });
+  await expect(launcher).toContainText('0 of 4');
+  await launcher.click();
   const guide = page.getByRole('region', { name: 'Finish setting up' });
   const email = guide.getByRole('listitem').filter({ hasText: 'Receive customer email' });
   await expect(email).toBeVisible();
@@ -51,6 +56,7 @@ test('setup guide: a workspace with one conversation and no email channel still 
   // Hide is remembered; Preferences brings the guide back.
   await guide.getByRole('button', { name: 'Hide' }).click();
   await expect(guide).toHaveCount(0);
+  await expect(launcher).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('button', { name: new RegExp(`Forwarded ${suffix}`) })).toBeVisible();
   await expect(guide).toHaveCount(0);

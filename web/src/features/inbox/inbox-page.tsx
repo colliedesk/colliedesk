@@ -110,7 +110,7 @@ interface InboxPageProps {
   // Customers whose name or email matches the search, shown under the filters (contact-matches.tsx).
   contactMatches?: ReactNode;
   onNewConversation?: () => void;
-  // The setup guide, shown above the conversation rows while setup is unfinished.
+  // The setup guide while setup is unfinished; it floats in a corner, outside the conversation list.
   guide?: ReactNode;
   onTestMessage?: () => Promise<unknown>;
 }
@@ -229,7 +229,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
           checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll}
           toolbar={checkedIds.length > 0 && <BulkActionBar selected={conversations.filter((item) => checked.has(item.id))} agents={agents} tags={tags} currentAgentId={currentAgentId}
             busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds} viewers={viewers}
-          grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} guide={guide} onTestMessage={onTestMessage} />
+          grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onTestMessage={onTestMessage} />
       </section>
       <div className="conversation-center panel">
         <TimelinePanel conversation={selected} channelLabel={selected && channelLabel?.(selected)} items={timeline} onBack={threadOpen ? onBack : undefined}
@@ -256,6 +256,7 @@ export function InboxPage({ hosted = false, workspaceId, conversations = [], sel
       <DetailsPanel autofix={autofix} conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate} aiTriage={aiTriage} onTriageApplied={onTriageApplied} currentAgentId={currentAgentId} canManage={canManage} onTriageWaiting={setTriageWaiting}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}
         onShowContactConversations={onQuery ? (contact) => onQuery({ contact, status: 'all' }) : undefined} />
+      {guide}
     </main>
   );
 }

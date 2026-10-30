@@ -80,14 +80,6 @@ test('a brand-new workspace explains itself and no longer lists setup steps as b
   expect(within(start).queryByRole('link')).not.toBeInTheDocument();
 });
 
-test('the setup guide shows at the top of the list, also when conversations exist', () => {
-  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
-  render(<ConversationList items={[row('2026-10-15T09:05:00Z')]} timezone="UTC" page={1} hasNextPage={false} guide={<section aria-label="Finish setting up">guide</section>} />);
-  const scroll = document.querySelector('.conversation-scroll')!;
-  expect(scroll.firstElementChild).toBe(screen.getByRole('region', { name: 'Finish setting up' }));
-  expect(screen.getByRole('button', { name: /example request/i })).toBeInTheDocument();
-});
-
 test('a row marks who else has the conversation open, and says in words who is writing a reply', () => {
   vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
   const viewers = new Map([['11111111-1111-4111-8111-111111111111', [

@@ -1,10 +1,27 @@
-/* The setup guide at the top of the conversation list. Every row has the same height at every width
-   (title above state, never wrapped), so the placeholder in components.css and this list match. */
-.setup-guide { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); background: var(--surface-1); }
+/* The setup guide floats in the bottom-left corner of the inbox, over the foot of the conversation list:
+   the reply box and its Send button own the bottom right. Folded it is one button with the count. */
+.setup-dock { position: fixed; z-index: 20; left: calc(56px + var(--space-3)); bottom: var(--space-4); max-width: calc(100vw - 56px - 2 * var(--space-3)); }
+/* The last rows scroll clear of the folded button. */
+.inbox-shell:has(> .setup-dock) .conversation-scroll { padding-bottom: calc(var(--touch) + var(--space-6)); }
+
+.setup-launcher { display: flex; align-items: center; gap: var(--space-2); min-height: var(--touch); max-width: 100%; padding: 0 var(--space-4) 0 var(--space-3);
+  border: 0; border-radius: var(--radius-full); background: var(--surface-1); box-shadow: var(--shadow-2); color: var(--text-1); font-size: var(--fs-ui); font-weight: 600; }
+.setup-launcher:hover:not(:disabled) { background: var(--surface-2); }
+.setup-launcher-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A ring that fills with the share of steps done. */
+.setup-ring { flex: none; width: 18px; height: 18px; border-radius: var(--radius-full);
+  background: conic-gradient(var(--accent) calc(var(--share, 0) * 1turn), var(--line-control) 0);
+  mask: radial-gradient(circle, transparent 5px, #000 5.5px); }
+
+.setup-dock .setup-guide { width: min(22rem, calc(100vw - 2 * var(--space-3))); max-height: calc(100dvh - 2 * var(--space-4)); overflow-y: auto;
+  padding: var(--space-2) var(--space-4) var(--space-3); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-3); }
 .setup-guide header { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; }
 .setup-guide header button { min-height: 44px; padding: 0 var(--space-2); }
+.setup-guide header .setup-minimize { width: 44px; margin-right: calc(-1 * var(--space-2)); padding: 0; justify-content: center; }
+.setup-guide header .setup-minimize[data-tip]::after { top: auto; bottom: calc(100% + var(--space-2)); }
 .setup-guide h2 { margin: 0; font-size: 14px; font-weight: 600; }
 .setup-guide .setup-count { margin-right: auto; color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+.setup-launcher .setup-count { margin-left: var(--space-1); font-weight: 500; }
 .setup-bar { height: 4px; margin: var(--space-2) 0; border-radius: var(--radius-full); background: var(--surface-2); overflow: hidden; }
 .setup-bar span { display: block; height: 100%; border-radius: var(--radius-full); background: var(--accent); }
 .setup-guide ol { display: grid; margin: 0; padding: 0; list-style: none; }
@@ -25,3 +42,9 @@
 .setup-step > a.primary-action .setup-title { color: var(--accent); }
 .setup-step[data-state="done"] .setup-title { color: var(--text-2); font-weight: 500; }
 .setup-time { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+
+/* One pane at a time: the guide waits on the list and steps aside for an open conversation and its reply box. */
+@media (max-width: 44rem) {
+  .setup-dock { left: var(--space-3); bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); max-width: calc(100vw - 2 * var(--space-3)); }
+  .inbox-shell[data-view="thread"] > .setup-dock { display: none; }
+}
