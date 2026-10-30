@@ -1064,16 +1064,49 @@ const unfinished = { steps: [
 ], complete: false, recommended: null };
 const adminMe = (hidden: boolean) => ({ timezone: 'UTC', agent: { id: 'a-1', role: 'admin', email: 'ann@example.com', display_name: 'Ann' }, onboarding_goal: null, setup_guide_hidden: hidden });
 
-test('the setup guide shows above the conversations of a workspace that has not finished setting up', async () => {
+test('a workspace with conversations keeps the setup guide folded in the corner until the agent opens it', async () => {
+  localStorage.clear();
   quietApis();
   api.me.mockResolvedValue(adminMe(false));
   api.setupProgress.mockResolvedValue(unfinished);
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
   renderRoute();
-  const guide = await screen.findByRole('region', { name: 'Finish setting up' });
-  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
+  const launcher = await screen.findByRole('button', { name: /Finish setting up/ });
+  expect(launcher).toHaveTextContent('0 of 4');
+  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
+  fireEvent.click(launcher);
+  const guide = screen.getByRole('region', { name: 'Finish setting up' });
+  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
+});
+
+test('a brand-new workspace without an email channel opens the setup guide by itself: there is nothing for it to cover', async () => {
+  localStorage.clear();
+  quietApis();
+  api.me.mockResolvedValue(adminMe(false));
+  api.setupProgress.mockResolvedValue(unfinished);
+  api.channelCounts.mockResolvedValue({ types: [] });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  const guide = await screen.findByRole('region', { name: 'Finish setting up' });
+  expect(within(guide).getByRole('link', { name: /Receive customer email/ })).toBeInTheDocument();
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
+});
+
+test('a brand-new workspace that can send itself a test message keeps the guide folded, so it never covers that button', async () => {
+  localStorage.clear();
+  quietApis();
+  api.me.mockResolvedValue(adminMe(false));
+  api.setupProgress.mockResolvedValue(unfinished);
+  api.channelCounts.mockResolvedValue({ types: [{ type: 'email', count: 1 }] });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  expect(await screen.findByRole('button', { name: 'Send yourself a test message' })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /Finish setting up/ })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
 });
 
 test('Hide removes the guide and asks the server to remember it for this agent', async () => {
@@ -1083,8 +1116,10 @@ test('Hide removes the guide and asks the server to remember it for this agent',
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
   renderRoute();
-  fireEvent.click(await screen.findByRole('button', { name: 'Hide' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Finish setting up/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument());
+  expect(screen.queryByRole('button', { name: /Finish setting up/ })).not.toBeInTheDocument();
   expect(api.setSetupGuideHidden).toHaveBeenCalledWith(true);
 });
 
@@ -1099,4 +1134,5 @@ test('a hidden guide shows nothing, even though its data left with the session',
   await screen.findByRole('button', { name: /alpha conversation/i });
   await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
   expect(screen.queryByRole('region', { name: 'Finish setting up' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Finish setting up/ })).not.toBeInTheDocument();
 });

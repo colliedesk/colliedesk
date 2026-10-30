@@ -73,7 +73,7 @@ Running the installer again keeps your `.env` and data.
 The link works once and expires after 15 minutes. To print a new one, see
 [troubleshooting](troubleshooting.md#the-sign-in-link-expired).
 
-After you sign in, the [setup guide](../user/setup-guide.md) at the top of the inbox lists the next steps: receive
+After you sign in, the [setup guide](../user/setup-guide.md) in the bottom-left corner of the inbox lists the next steps: receive
 customer email, import from Freshdesk, invite your team and answer your first email.
 
 ## Upgrading

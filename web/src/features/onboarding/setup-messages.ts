@@ -5,6 +5,7 @@ export const setupMessages = {
   progress: (done: number, total: number) => `${done} of ${total}`,
   progressLabel: 'Setup progress',
   hide: 'Hide',
+  minimize: 'Minimize',
   hideHint: 'Hide the setup guide. You can show it again in Preferences.',
   recommended: 'Recommended',
   done: 'Done',

@@ -137,8 +137,6 @@ export function InboxRoute() {
   const hideGuide = useMutation({ mutationFn: () => api.setSetupGuideHidden(true),
     onSuccess: (answer) => client.setQueryData(['me'], (current: typeof me.data) => current && { ...current, setup_guide_hidden: answer.hidden }) });
   const isAdmin = me.data?.agent?.role === 'admin';
-  const guide = !guideHidden && setup.data && guideHasWork(setup.data, isAdmin)
-    ? <SetupGuide progress={setup.data} admin={isAdmin} goal={me.data?.onboarding_goal} onHide={() => hideGuide.mutate()} /> : undefined;
   const activeID = selectedId ?? params.conversationId;
   const listed = conversations.data?.items.find((item) => item.id === activeID);
   // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
@@ -186,6 +184,11 @@ export function InboxRoute() {
     queryFn: () => (senderID ? api.emailChannelOf(senderID) : api.emailChannel()) });
   const channelTypes = useQuery({ queryKey: ['channels', 'counts'], queryFn: api.channelCounts }).data?.types;
   const mailboxes = channelTypes?.find((info) => info.type === 'email')?.count ?? 0;
+  // The setup guide starts open only where it covers nothing: a workspace with no conversation at all, whose
+  // empty inbox has no button of its own yet (a mailbox brings "Send yourself a test message").
+  const guideStartsOpen = checkAny && anyConversation.data?.items.length === 0 && channelTypes !== undefined && mailboxes === 0;
+  const guide = !guideHidden && setup.data && guideHasWork(setup.data, isAdmin)
+    ? <SetupGuide progress={setup.data} admin={isAdmin} goal={me.data?.onboarding_goal} defaultOpen={guideStartsOpen} onHide={() => hideGuide.mutate()} /> : undefined;
   // A type with two channels or more names the channel on each row and thread; with one, nothing changes.
   const several = new Set(channelTypes?.filter((info) => info.count > 1).map((info) => info.type));
   const channelLabel = (conversation: Conversation) => {

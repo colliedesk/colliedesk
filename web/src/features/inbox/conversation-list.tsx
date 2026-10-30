@@ -42,8 +42,6 @@ interface ConversationListProps {
   viewers?: ReadonlyMap<string, ConversationViewer[]>;
   // grouped splits the rows under Today and Earlier; only the latest-activity order keeps the groups contiguous.
   grouped?: boolean;
-  // guide is the setup guide, shown above the rows while setup is unfinished (also when conversations exist).
-  guide?: ReactNode;
   // Sends the agent a test message on the default email channel; only where the workspace has one.
   onTestMessage?: () => Promise<unknown>;
 }
@@ -53,7 +51,7 @@ export type SettingsTarget = '/settings' | '/settings/import-freshdesk' | `/sett
 
 const visibleTags = 2;
 export function ConversationList({ items, channelLabel, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, guide, onTestMessage }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onTestMessage }: ConversationListProps) {
   const [testing, setTesting] = useState(false);
   const [testFailed, setTestFailed] = useState<string>();
   const testInFlight = useRef(false);
@@ -84,7 +82,6 @@ export function ConversationList({ items, channelLabel, selectedId, timezone, on
   const onListKey = useListKeys(scroll, items.map((item) => item.id), selectedId, onSelect);
   return (
     <div className="conversation-scroll" aria-busy={refreshing} ref={scroll} onKeyDown={onListKey}>
-      {guide}
       {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
