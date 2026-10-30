@@ -17,7 +17,7 @@ levels deep. Every article belongs to one collection, so a new knowledge base st
 one, for example "Getting started".
 
 - **Add**: select **New collection**, type a **Name** (and a description if you like), choose where it
-  goes under **Inside**, then **Create collection**. To add one inside the collection you are looking
+  goes under **Inside** (asked once there is a collection to put it in), then **Create collection**. To add one inside the collection you are looking
   at, select **Add a collection inside**. A collection on the third level cannot hold another one.
 - **Choose**: select a collection on the left to list only the articles directly in it; **All
   articles** lists every one. The number next to a collection counts the articles directly in it, drafts included, not those of the collections inside it.
@@ -72,10 +72,11 @@ the end of a published article's row opens its public page.
    lists, `- [ ]` checklists, `[links](https://example.com)`, tables, `> quotes` and code. The Markdown
    is colored as you type, and what you type is exactly what is stored. Raw HTML in the text is not
    shown, except a [YouTube or Vimeo video](#videos).
-   - The toolbar sets the block (**Text**, **Heading 1** to **3**) and adds bold, italic, a link,
-     numbered and bulleted lists, a quote and a table; **Insert image or video** adds an
-     [image](#images) or a [video](#videos); **⋯** (More formatting) holds strikethrough, code, a
-     checklist, a code block, a divider and redo. On a phone the toolbar keeps **Insert**, bold,
+   - The toolbar sets the block (**Text**, **Heading 2**, **Heading 3**; the title is the article's
+     Heading 1, so the text starts at Heading 2, and a `#` line written before still shows as **Heading 1**)
+     and adds bold, italic, a link, numbered and bulleted lists, a quote and a table; **Insert image or
+     video** adds an [image](#images) or a [video](#videos); **⋯** (More formatting) holds
+     strikethrough, code, a checklist, a code block, a divider and redo. On a phone the toolbar keeps **Insert**, bold,
      italic and link, and the rest is under **⋯**. With the keyboard, Tab reaches the toolbar and the
      arrow keys move along it.
    - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
@@ -139,8 +140,8 @@ The column on the right of the editor lists the images of the article that have 
 ### Media library
 
 **Knowledge → Media** shows every image and video of the workspace, newest first, with a search by
-name or alt text, a choice of images or videos, of what is in use, not used or missing alt text
-(on a phone, under **Filter**), and a sort (newest, oldest, name, largest). A card shows only what
+name or alt text, a choice of images or videos, and of what is in use, not used or missing alt text.
+A link with `sort=oldest`, `sort=name` or `sort=largest` still lists in that order. A card shows only what
 needs your attention: **No alt** on an image without alt text, **Not used**, and a pin on a kept item.
 An image the help center shows says **Used by the help center (logo)** (or favicon) and is in use.
 **Upload** takes several files at once, or drop them anywhere on the page; an upload made here is
@@ -333,8 +334,9 @@ see the saved brand and its preview, without the controls. A brand has:
 - **Colors**: primary, header, header text, background, text, links and footer, each `#rrggbb`. Any
   color set makes the help center light only.
 - **Fonts** for text and headings, from fonts already on the reader's device, so nothing is
-  downloaded: `system-sans` (the default text font), `humanist-sans`, `geometric-sans`,
-  `classic-serif` (the default heading font), `transitional-serif`, `rounded-sans`, `mono`.
+  downloaded: **Sans** (`system-sans`, the default text font) or **Serif** (`classic-serif`, the default
+  heading font). The API also takes `humanist-sans`, `geometric-sans`, `transitional-serif`,
+  `rounded-sans` and `mono`; a font saved that way stays and shows in the form until you choose another.
 - **Custom CSS** (`custom_css`), for details the fields above do not cover, such as
   `.masthead{border-bottom:2px solid #0b5cad}`. See [custom CSS](#custom-css).
 

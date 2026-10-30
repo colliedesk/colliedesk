@@ -149,12 +149,28 @@ test('the rarely used settings are folded under the table; the workspace address
   show('type/email');
   await screen.findByRole('table', { name: 'Support addresses' });
   const folded = Array.from(document.querySelectorAll('details.email-home-fold > summary')).map((summary) => summary.textContent);
-  expect(folded).toEqual(['Sender name', 'Your domain · acme.com not verified', 'Send a test message', 'Change forwarding address or disconnect']);
-  const change = screen.getByText('Change forwarding address or disconnect').closest('details') as HTMLElement;
+  expect(folded).toEqual(['Sender name', 'Your domain · acme.com not verified', 'Send a test message', 'Change forwarding address']);
+  const change = screen.getByText('Change forwarding address', { selector: 'summary' }).closest('details') as HTMLElement;
   expect(within(change).getByRole('textbox', { name: 'Workspace address name' })).toHaveValue('acme');
-  expect(within(change).getByRole('link', { name: 'Manage support@acme.com' })).toHaveAttribute('href', `/settings/channels/${MAIN}`);
+  expect(within(change).queryByRole('link')).not.toBeInTheDocument();
   const sender = screen.getByText('Sender name', { selector: 'summary' }).closest('details') as HTMLElement;
   expect(within(sender).getByRole('textbox', { name: 'Sender name' })).toHaveValue('Acme Support');
+});
+
+test('how to disconnect an address is one sentence and a link, shown as they are rather than folded', async () => {
+  const main = { ...channel(MAIN, 'support@acme.com'), config: emailConfig('support@acme.com') };
+  channelsApi.list.mockResolvedValue({ items: [main], types: types(1) });
+  channelsApi.get.mockResolvedValue(main);
+  // Self-hosted: no forwarding address of the workspace's own, so nothing else is under that fold.
+  channelsApi.email.mockResolvedValue(settings('support@acme.com', { hosted_address: null }));
+  show('type/email');
+  await screen.findByRole('table', { name: 'Support addresses' });
+  const help = screen.getByText('To disconnect an address, open it and select Disconnect email. Its conversations stay.');
+  expect(help.closest('details')).toBeNull();
+  const disconnect = screen.getByRole('list', { name: 'Disconnect an address' });
+  expect(disconnect.closest('details')).toBeNull();
+  expect(within(disconnect).getByRole('link', { name: 'Manage support@acme.com' })).toHaveAttribute('href', `/settings/channels/${MAIN}`);
+  expect(screen.queryByText(/^Change forwarding address/)).not.toBeInTheDocument();
 });
 
 test('the channel list no longer carries the workspace address name', async () => {

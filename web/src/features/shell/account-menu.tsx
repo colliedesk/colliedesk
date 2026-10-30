@@ -14,7 +14,8 @@ interface AccountMenuProps {
   signingOut?: boolean;
 }
 
-// AccountMenu is the avatar at the end of the rail: who is signed in, in which workspace, and the way out.
+// AccountMenu is the avatar at the end of the rail: who is signed in, as which role, and the way out. The
+// workspace and the address are in the identity bar above every page, so the menu does not repeat them.
 export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, signingOut = false }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -35,7 +36,7 @@ export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, 
         <Avatar name={name} />
       </button>
       {open && <div className="account-popover" role="group" aria-label={messages.account}>
-        <p><strong>{name}</strong>{me.agent.display_name && <span>{me.agent.email}</span>}<span>{me.workspace.name} · {messages.roles[me.agent.role]}</span></p>
+        <p><strong>{name}</strong><span>{messages.roles[me.agent.role]}</span></p>
         {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
         <button type="button" onClick={() => { setOpen(false); setReporting(true); }}>{messages.reportProblem}</button>
         <button type="button" disabled={signingOut} onClick={onSignOut}>{messages.signOut}</button>

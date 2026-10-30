@@ -180,6 +180,10 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
   indeterminate states are ink in both themes; their labels keep readable text when disabled.
   Forced-colour mode keeps native checkbox and radio rendering and restores the native select arrow.
 - Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
+- A control offers only real choices. A select appears only with two or more of them (a placeholder is not
+  one; with a single value there is nothing to ask, so the value is shown or used as it is), and no control
+  lists "Default (X)" beside X: the default is X, listed once. A filter set in the address stays on screen so
+  it can be cleared. `web/e2e/choice-hygiene.spec.ts` checks the main pages on a wide and a phone screen.
 - Status is a dot plus its word. Only High and Urgent priorities get colour, with an arrow icon.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip

@@ -218,7 +218,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const heading = (block: Block, label: string, icon: IconName): MenuItem => ({ label, icon, disabled: !editing || active?.block === block, onSelect: () => act((view) => setHeading(view, block)) });
   // Formatting a phone has no room for, and on a computer the less used tools: in the menu at the end.
   const more: MenuItem[] = [
-    ...(compact ? [heading('paragraph', t.paragraph, 'text'), heading('h1', t.h1, 'h1'), heading('h2', t.h2, 'h2'), heading('h3', t.h3, 'h3'),
+    ...(compact ? [heading('paragraph', t.paragraph, 'text'), heading('h2', t.h2, 'h2'), heading('h3', t.h3, 'h3'),
       { ...item(t.ordered, 'ordered', line('ordered')), separated: true }, item(t.bullet, 'bullet', line('bullet')), item(t.quote, 'quote', line('quote')),
       item(t.table, 'table', (view) => insertBlock(view, tableTemplate, [2, 8]))] : []),
     { ...item(t.strike, 'strike', (view) => toggleMark(view, '~~')), separated: compact }, item(t.code, 'code', inlineCode), item(t.task, 'task', line('task')),
@@ -243,7 +243,8 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           <select id={`${id}-block`} className="md-block" value={active?.block ?? 'paragraph'} disabled={!editing}
             onChange={(event) => act((view) => setHeading(view, event.target.value as Block))}>
             <option value="paragraph">{t.paragraph}</option>
-            <option value="h1">{t.h1}</option>
+            {/* The article page shows the title as its h1, so the text offers no Heading 1; a stored one still shows here. */}
+            {active?.block === 'h1' && <option value="h1">{t.h1}</option>}
             <option value="h2">{t.h2}</option>
             <option value="h3">{t.h3}</option>
           </select>

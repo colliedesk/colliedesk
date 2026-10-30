@@ -84,7 +84,8 @@ export const setupMessages = {
   foldSender: 'Sender name',
   foldDomain: (domain: string, verified: string | null) => `Your domain · ${domain} ${verified ? `verified ${verified}` : 'not verified'}`,
   foldTest: 'Send a test message',
-  foldChange: 'Change forwarding address or disconnect',
+  foldChange: 'Change forwarding address',
   forWhich: (address: string) => `For ${address}, the default address.`,
   disconnectHelp: 'To disconnect an address, open it and select Disconnect email. Its conversations stay.',
+  disconnectLinks: 'Disconnect an address',
 };

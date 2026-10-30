@@ -91,11 +91,14 @@ function Folds({ channel, settings, several, canManage, timezone, navigate, chan
       <TestMessage channelID={channel.id} ready={addressSaved(settings)} forwarding={channel.status.state === 'working'} navigate={navigate}
         onSent={(conversation) => writeMemory(channel.id, { ...readMemory(channel.id), testConversation: conversation })} />
     </details>
-    <details className="email-home-fold email-home-danger"><summary>{m.foldChange}</summary>
-      {canManage && settings.hosted_address && <ForwardingName />}
+    {canManage && settings.hosted_address && <details className="email-home-fold email-home-danger"><summary>{m.foldChange}</summary>
+      <ForwardingName />
+    </details>}
+    {/* One sentence and a link each: shown as they are, a fold would only hide them. */}
+    <div className="email-home-disconnect">
       <p className="muted-copy">{m.disconnectHelp}</p>
-      <ul className="email-home-manage">{channels.map((item) => <li key={item.id}>
+      <ul className="email-home-manage" aria-label={m.disconnectLinks}>{channels.map((item) => <li key={item.id}>
         <a href={`/settings/channels/${encodeURIComponent(item.id)}`}>{m.manageOf(item.summary || item.name)}</a></li>)}</ul>
-    </details>
+    </div>
   </div>;
 }
