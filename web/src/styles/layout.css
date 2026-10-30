@@ -2,7 +2,7 @@
 .app-shell { height: 100dvh; display: grid; grid-template-columns: 56px minmax(0, 1fr); background: var(--surface-0); }
 .app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .app-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
-.app-content > .inbox-shell { height: 100%; }
+.app-content > .inbox-shell { height: calc(100% - var(--space-2)); }  /* the sheet sits 8 px above the bottom edge */
 .app-content > .redeem-page { min-height: 100%; }
 /* The avatar opens the account menu; on a wide screen it sits at the foot of the rail. */
 .account-menu { position: relative; margin-top: auto; }
@@ -19,35 +19,39 @@
 .rail-label { display: none; }
 /* Always visible, never a tooltip: it is what tells a person which workspace this browser acts in. */
 .identity-bar {
-  flex: none; display: flex; align-items: baseline; gap: var(--space-2); min-width: 0;
-  background: var(--surface-0); padding: var(--space-2) var(--space-3) var(--space-1); font-size: var(--fs-label);
+  flex: none; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: 40px;
+  background: var(--surface-0); padding: 0 var(--space-3); font-size: var(--fs-label);
 }
 .identity-bar strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .identity-bar span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
 .identity-bar span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
 .app-rail { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-3) 0; background: var(--surface-0); }
-.rail-brand { width: 36px; height: 36px; display: grid; place-items: center; margin-bottom: var(--space-4); border-radius: var(--radius); }
+.rail-brand { width: 28px; height: 28px; display: grid; place-items: center; margin-bottom: var(--space-4); border-radius: var(--radius); }
 .rail-links { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
 .rail-link {
   width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--radius); color: var(--text-3);
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .rail-link:hover { background: var(--surface-2); color: var(--text-1); }
-.rail-link[aria-current="page"] { background: var(--surface-1); color: var(--accent-text); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
+.rail-link[aria-current="page"] { background: var(--surface-3); color: var(--text-1); }
 .rail-link svg { width: 20px; height: 20px; }
 .rail-link[data-tip]::after { left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
 
 /* A panel is the white working surface: list, thread, details, settings. */
-.panel { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
+.panel { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
 
 /* Inbox: list | thread | details. */
 .inbox-shell {
-  height: 100%; display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(240px, 300px);
-  gap: var(--space-2); padding: 0 var(--space-2) var(--space-2) 0;
+  height: calc(100% - var(--space-2)); display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(240px, 300px);
+  gap: 0; margin: 0 var(--space-2) var(--space-2) 0; border-radius: var(--radius-lg); background: var(--surface-1);
+  box-shadow: var(--shadow-1); overflow: hidden;
 }
+/* One work surface: list, thread and details share one sheet, split by hairlines. */
+.inbox-shell > .panel { border-radius: 0; box-shadow: none; }
+.inbox-shell > .panel + .panel { border-left: 1px solid var(--line); }
 .list-pane:focus { outline: none; }
 .list-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
-.list-pane > header { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.list-pane > header { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-5) 0; border-bottom: 1px solid var(--line); }
 .list-title { display: flex; align-items: baseline; gap: var(--space-2); }
 .list-title h1 { font: 500 24px/1.1 var(--font-display); letter-spacing: -0.02em; }
 .list-title span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
@@ -171,8 +175,9 @@
   .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); }
   .identity-bar { position: sticky; top: var(--top-bar); z-index: 2; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .app-content > .inbox-shell { height: auto; }
-  .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; padding: 0; }
-  .panel { border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
+  .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; margin: 0; border-radius: 0; box-shadow: none; overflow: visible; }
+  .panel { border-bottom: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+  .inbox-shell > .panel + .panel { border-left: 0; }
   /* The list and an opened conversation take turns: the list scrolls with the page, the conversation fills the
      screen under the bars like on a wide screen, its timeline scrolling between the title and the reply box. */
   .inbox-shell[data-view="list"] > .conversation-center, .inbox-shell[data-view="thread"] > .list-pane { display: none; }
@@ -186,3 +191,6 @@
   .settings-page { margin: 0; padding: var(--space-5) var(--space-4); }
   .settings-card { padding: var(--space-5) 0; }
 }
+
+/* Serif is for page titles; an h2 in a settings header (AI empty state) is sans. */
+.settings-page header > h2 { font-family: var(--font-sans); letter-spacing: 0; }

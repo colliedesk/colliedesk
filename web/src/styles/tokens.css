@@ -108,7 +108,7 @@
   --sla-track: #f5d5d2;
 
   --shadow-1: 0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.06);   /* a 1px ring, not a border */
-  --shadow-2: 0 0 0 1px rgb(0 0 0 / 0.06), 0 8px 24px -8px rgb(0 0 0 / 0.16);
+  --shadow-2: 0 0 0 1px var(--line), 0 8px 24px rgb(0 0 0 / 0.10);   /* menus, pickers, popovers, the composer */
   --shadow-3: 0 0 0 1px rgb(0 0 0 / 0.06), 0 24px 56px -12px rgb(0 0 0 / 0.24);
 }
 
@@ -168,8 +168,8 @@
   --sla-ok: var(--text-3);
   --sla-track: #3a2524;
 
-  --shadow-1: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-2: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px -6px rgb(0 0 0 / 0.55);
+  --shadow-1: 0 0 0 1px var(--line), 0 1px 2px rgb(0 0 0 / 0.4);   /* the ring uses the hairline: black at 6 % vanishes on #141414 */
+  --shadow-2: 0 0 0 1px var(--line), 0 8px 24px rgb(0 0 0 / 0.5);
   --shadow-3: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 24px 56px -12px rgb(0 0 0 / 0.7);
 
 }
