@@ -386,10 +386,11 @@ func TestReactivateRestoresSignInButNotAssignments(t *testing.T) {
 
 func TestDeactivationFreesASeatAndReactivationTakesItAgain(t *testing.T) {
 	f := newLimitsFixture(t, true)
+	f.upgrade(t, f.workspaceA, "sub_deactivation") // Team: ten seats
 	ann := fmt.Sprintf("ann@%s", "limits-alpha.example.com")
 	_, annURL := createContractInvite(t, f.api, f.adminA, ann, "agent")
 	redeemLabelled(t, f.api, annURL, "Ann laptop")
-	// Admin + Ann + eight pending invites fill the ten seats of the trial.
+	// Admin + Ann + eight pending invites fill the ten seats of the Team plan.
 	for number := 1; number <= 8; number++ {
 		if got := invite(t, f, f.adminA, number); got.Code != http.StatusCreated {
 			t.Fatalf("invite %d status=%d body=%s", number, got.Code, got.Body)

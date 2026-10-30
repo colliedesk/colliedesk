@@ -111,9 +111,10 @@ func LimitsForStorage(plan string, storageCap int64) PlanLimits {
 		limits.Agents = 1
 	case PlanSmall:
 		limits.Agents = 3
-	case PlanTrial, PlanTeam, PlanFounding:
+	case PlanTeam, PlanFounding:
 		limits.Agents = 10
-	case PlanTeam25:
+	case PlanTeam25, PlanTrial:
+		// A team of 11 to 25 agents tries Colliedesk with all of its people before it buys Team 25.
 		limits.Agents = 25
 	}
 	if plan == PlanTrial {
