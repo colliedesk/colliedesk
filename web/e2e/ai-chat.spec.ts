@@ -118,6 +118,10 @@ test('a customer asks the help chat, reads a cited answer, comes back to it, han
 
     // Past the month's limit, the chat offers the matching articles and a person instead of an answer.
     const workspace = psql(`SELECT id FROM workspaces WHERE slug='${desk.slug}'`);
+    // The matching articles come from the AI search index, which a background job builds every few seconds
+    // (an answer reads the help center itself); on a busy server it can still be behind the new article.
+    await expect.poll(() => psql(`SELECT count(*) FROM ai_retrieval_docs WHERE workspace_id='${workspace}' AND kb_article_id IS NOT NULL`),
+      { timeout: 30_000 }).toBe('1');
     psql(`UPDATE ai_slots SET monthly_cap_micro_usd=1 WHERE workspace_id='${workspace}' AND slot='chat'`);
     psql(`INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_kind,provider_label,model,status,cost_micro_usd,started_at,finished_at)
       VALUES('${workspace}','chat','workspace_key','openai_compatible','Chat model','chat-model','ok',5,now(),now())`);
