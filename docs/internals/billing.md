@@ -385,6 +385,25 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
 `httpapi.Config.Now` feeds the store and the auth service. Tests move it across a month boundary
 instead of sleeping. The webhook signature check keeps the real clock.
 
+## Trial-ending emails
+
+`internal/trialreminder` (started by `serve` when billing and outgoing mail are both configured) mails the
+active admins of a trial workspace twice: from three days before `trial_ends_at`, and from midnight of the
+day it ends in the workspace's timezone (`workspaces.timezone`). A pass runs every 5 minutes. It lists the
+workspaces whose trial ends within three days (`PrivilegeTrialReminder`, ids only) and does the rest in each
+workspace's scope: the plan is read with `store.WorkspaceAccess`, so a workspace that pays or is locked gets
+nothing; a workspace first seen on its last day gets only the second email.
+
+Idempotence is a row in `workspace_trial_reminders`, one per admin, kind and trial end. The row is inserted
+(`claimed`) and committed before the mail is sent, so two servers or a restart cannot send one twice; the
+send then settles it `sent`, or `rejected` when the relay refuses the address for good. A failure that may
+pass deletes the claim, so the next pass retries. A crash between the claim and the send loses that one
+email, never duplicates it. The trial end is part of the key on purpose: an operator or an import that moves
+it makes the old email untrue, and the new end gets its own two. The emails go from the platform address with
+`Reply-To` set to the support address; they carry no unsubscribe link, because they are about the admin's own
+workspace. There is no other mail opt-out in the server to respect: `agents.results_email` is the weekly results
+email's own switch and does not apply. Tests: `trialreminder/trialreminder_test.go` (real PostgreSQL, a fixed clock).
+
 ## Retention of locked workspaces
 
 A workspace that stays locked (no entitled subscription or comp grant, trial over) for 12 months is
