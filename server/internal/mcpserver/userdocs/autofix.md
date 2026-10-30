@@ -157,7 +157,8 @@ Why a fix ended:
 
 **Fixes** in the navigation (shown once a repository is connected) lists every fix in three groups:
 **Needs a person** (failed, merged but not released, or no word from the agent), **Running** and **Done**.
-Filter by repository and agent. The badge counts the fixes that need a person.
+Filter by repository once two are connected, and by agent once two are turned on; a filter set in the address
+stays shown so you can clear it. The badge counts the fixes that need a person.
 
 ## Requests from AI agents
 

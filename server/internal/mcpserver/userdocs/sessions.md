@@ -9,7 +9,8 @@ a client that sends no browser name shows **Browser session** or **Cloud sign-in
   a session that ran out shows **Expired**.
 - On **This device** the button reads **Sign out**: it signs this browser out at once.
 - To sign out of the browser you are using, you can also select your avatar at the foot of the left rail (top
-  right on a phone) and choose **Sign out**.
+  right on a phone) and choose **Sign out**. The menu shows your name and role; the workspace and your address
+  are in the bar above every page.
 - Agents see their own sessions. Admins see and can revoke every session in the workspace.
 
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
