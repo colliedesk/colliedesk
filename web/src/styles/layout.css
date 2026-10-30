@@ -99,6 +99,8 @@
 .redeem-panel h1 { margin: var(--space-5) 0 var(--space-2); font: 500 30px/1.1 var(--font-display); letter-spacing: -0.02em; }
 .signin-split .redeem-panel h1 { margin-top: 0; }
 .redeem-panel > p { color: var(--text-2); }
+/* The Founding offer, in one line under the title: it is what the visitor is about to pay. */
+.redeem-panel > .signin-offer { margin: 0 0 var(--space-3); color: var(--text-1); font-weight: 600; }
 .redeem-panel > .primary-action { width: 100%; margin-top: var(--space-6); --control: 44px; font-size: var(--fs-ui); }
 .redeem-panel > .error-copy { margin-top: var(--space-4); }
 .brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
