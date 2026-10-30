@@ -50,6 +50,9 @@ export const billingMessages = {
   monthly: 'Monthly',
   yearlyTwoMonthsFree: 'Yearly, 2 months free',
   billingInterval: 'Billing interval',
+  // Beside the Monthly/Yearly choice while Founding is open: Founding has one price, so the choice is Team 25's.
+  team25Billed: 'Team 25 billed',
+  planPicked: 'Your pick',
   choosePlanName: (plan: string) => `Choose ${plan}`,
   choosePlanPrice: (plan: string, price: string) => `Choose ${plan}, ${price}`,
   planAgents: (count: number) => (count === 1 ? '1 agent' : `Up to ${count} agents`),

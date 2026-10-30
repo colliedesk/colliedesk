@@ -7,6 +7,7 @@ import { billingMessages } from './billing-messages';
 import { openCheckout } from '../billing/open-checkout';
 import { BillingPage } from './billing-page';
 import { clearCheckoutIntent, readCheckoutIntent } from './checkout-intent';
+import { readPlanIntent } from './plan-intent';
 
 interface BillingRouteProps {
   // checkoutReturned is true on the page the checkout sends the browser back to.
@@ -50,7 +51,7 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
   if (me.data && !isAdmin) return <main className="settings-page"><p className="muted-copy">{billingMessages.billingAdminsOnly}</p></main>;
   if (!billing.data) return <main className="settings-page">{billing.isError && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}</main>;
   if (switchedOff && billing.data.status === 'none') return notEnabled;
-  return <BillingPage billing={billing.data} switchedOff={switchedOff} timezone={me.data?.timezone ?? 'UTC'} checkoutReturned={checkoutReturned}
+  return <BillingPage billing={billing.data} switchedOff={switchedOff} timezone={me.data?.timezone ?? 'UTC'} checkoutReturned={checkoutReturned} preferredPlan={readPlanIntent()}
     failed={checkout.error instanceof InvalidRequestError ? checkout.error.message : checkout.isError || portal.isError} busy={checkout.isPending}
     onCheckout={(plan) => checkout.mutate(plan)} onManage={() => portal.mutate()} />;
 }

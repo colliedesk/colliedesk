@@ -1,12 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { createQueryClient } from './query-client';
 import { presenceViewPart } from './features/inbox/presence-part';
 import { autofixPart } from './features/autofix/autofix-part';
 import { leaveTo } from './lib/leave-to';
+import { readPlanIntent } from './features/settings/plan-intent';
 
 // Each workspace's desk runs on its own host; APP_ORIGIN finds workspaces and signs new teams up. Clerk
 // is the identity provider and leaving the page is the browser's: both are external boundaries here.
@@ -21,7 +22,7 @@ vi.mock('./lib/leave-to', () => ({ leaveTo: vi.fn() }));
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
-afterEach(() => { fetchMock.mockReset(); vi.mocked(leaveTo).mockReset(); clerk.signedIn = false; });
+afterEach(() => { fetchMock.mockReset(); vi.mocked(leaveTo).mockReset(); clerk.signedIn = false; window.sessionStorage.clear(); });
 
 beforeAll(async () => {
   presenceViewPart.preload();
@@ -100,6 +101,59 @@ test('a buyer signing in on APP_ORIGIN takes the plan to the workspace host in t
   open('/sign-in?buy=team_monthly');
   await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
   expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body))).toMatchObject({ next: '/settings/billing?buy=team_monthly' });
+});
+
+test('a visitor from the Team 25 trial link takes the plan to the workspace host in the address', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true) });
+  open('/sign-in?intent=trial&plan=team25');
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body))).toMatchObject({ next: '/?plan=team25' });
+  expect(readPlanIntent()).toBe('team25');
+});
+
+test('a plan other than team25 in the trial link is ignored', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true) });
+  open('/sign-in?intent=trial&plan=solo');
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body)).next).toBeUndefined();
+  expect(readPlanIntent()).toBeUndefined();
+});
+
+test('a buyer of Founding keeps the checkout page in the address, not the Team 25 plan', async () => {
+  clerk.signedIn = true;
+  serve({ signedIn: false, config: config(true) });
+  open('/sign-in?buy=founding&plan=team25');
+  await waitFor(() => expect(leaveTo).toHaveBeenCalledWith(handoffURL));
+  expect(JSON.parse(String(calls('/api/v1/auth/cloud/exchange')[0][1].body))).toMatchObject({ next: '/settings/billing?buy=founding' });
+});
+
+test('on a workspace host, a hand-off that names Team 25 remembers it and opens the inbox without it in the address', async () => {
+  serve({ signedIn: false, config: config(true, 'https://app.example.com') });
+  const router = open('/sign-in?next=%2F%3Fplan%3Dteam25#handoff=one-time');
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(router.state.location.pathname).toBe('/');
+  expect(router.state.location.search).not.toHaveProperty('plan');
+  expect(readPlanIntent()).toBe('team25');
+  expect(calls('/api/v1/billing')).toHaveLength(0);
+});
+
+test('on a workspace host, a hand-off naming any other plan remembers nothing', async () => {
+  serve({ signedIn: false, config: config(true, 'https://app.example.com') });
+  open('/sign-in?next=%2F%3Fplan%3Dsolo#handoff=one-time');
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(readPlanIntent()).toBeUndefined();
+});
+
+test('a pairing link with the Team 25 plan signs in to the inbox and remembers the plan', async () => {
+  serve({ signedIn: false, config: config(false) });
+  const router = open('/sign-in?token=pairing-token&plan=team25');
+  fireEvent.click(await screen.findByRole('button', { name: /sign in|continue|open/i }));
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
+  expect(router.state.location.pathname).toBe('/');
+  expect(JSON.parse(String(calls('/api/v1/auth/redeem')[0][1].body))).toMatchObject({ token: 'pairing-token', next: '/?plan=team25' });
+  expect(readPlanIntent()).toBe('team25');
 });
 
 test('on a workspace host, an email that is not an agent there is told so and pointed to find its workspace', async () => {

@@ -4,6 +4,7 @@ import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { billingMessages } from '../settings/billing-messages';
+import type { PlanIntent } from '../settings/plan-intent';
 import { PlanPicker } from '../settings/plan-picker';
 
 interface LockedScreenProps {
@@ -16,6 +17,8 @@ interface LockedScreenProps {
   // checkoutBusy is true while a checkout is starting or open; the plan buttons wait for it.
   checkoutBusy?: boolean;
   signOutFailed?: boolean;
+  // preferredPlan is the plan the visitor came for on the website; its card comes first.
+  preferredPlan?: PlanIntent;
   exportAction?: ReactNode;
   onCheckout: (plan: CheckoutPlan) => void;
   // onManage opens the billing portal; offered when a subscription exists, so a failed card is fixed in place.
@@ -30,7 +33,7 @@ function heading(billing?: Billing) {
 
 // LockedScreen replaces the whole workspace once the trial or subscription ended. It names what
 // happened, what an admin can do (pay, take the data out) and what anyone can do (sign out).
-export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = false, checkoutBusy = false, signOutFailed = false, exportAction, onCheckout, onManage, onSignOut }: LockedScreenProps) {
+export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = false, checkoutBusy = false, signOutFailed = false, preferredPlan, exportAction, onCheckout, onManage, onSignOut }: LockedScreenProps) {
   // A 402 can swap the inbox for this page; focus would stay on a removed node, so the heading takes it.
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => title.current?.focus(), []);
@@ -48,7 +51,7 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <div className="section-heading"><h2 id="locked-plan-heading">{messages.choosePlan}</h2></div>
         <div className="settings-body">
           {isAdmin
-            ? <><PlanPicker sellable={billing?.checkout_plans ?? []} refusals={billing?.checkout_refusals} busy={checkoutBusy} onChoose={onCheckout} />
+            ? <><PlanPicker sellable={billing?.checkout_plans ?? []} refusals={billing?.checkout_refusals} busy={checkoutBusy} preferredPlan={preferredPlan} onChoose={onCheckout} />
               {hasSubscription && onManage && <div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div>}</>
             : <p>{billingMessages.askWorkspaceAdmin}</p>}
         </div>
