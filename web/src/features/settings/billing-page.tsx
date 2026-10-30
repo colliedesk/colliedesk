@@ -3,6 +3,7 @@ import { formatBytes } from '../../lib/format-bytes';
 import { formatDay } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { billingMessages } from './billing-messages';
+import { MigrationCard } from './migration-card';
 import type { PlanIntent } from './plan-intent';
 import { PlanPicker } from './plan-picker';
 import { SettingsNav } from './settings-nav';
@@ -10,7 +11,13 @@ import { SettingsNav } from './settings-nav';
 interface BillingPageProps {
   billing: Billing;
   timezone: string;
-  // checkoutReturned is set when the browser comes back from a successful checkout.
+  // workspaceName names the workspace in the migration email's subject.
+  workspaceName: string;
+  // importDone is true once the workspace has a finished Freshdesk import, false when it has none, and
+  // undefined while that is not known yet: the migration card waits for a false.
+  importDone?: boolean;
+  // checkoutReturned is set when the browser comes back from a successful checkout: until the payment
+  // provider confirms the plan the buttons are off, and once it does the page welcomes the buyer.
   checkoutReturned?: boolean;
   // failed is true for a generic failure, or the server's words when it said why (the provider refused the address).
   failed?: boolean | string;
@@ -65,13 +72,18 @@ function Usage({ label, text, used, limit }: { label: string; text: string; used
   );
 }
 
-export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, busy = false, preferredPlan, onCheckout, onManage, switchedOff = false }: BillingPageProps) {
+export function BillingPage({ billing, timezone, workspaceName, importDone, checkoutReturned = false, failed = false, busy = false, preferredPlan, onCheckout, onManage, switchedOff = false }: BillingPageProps) {
   // While billing is switched off no trial ends and nothing locks: only a paid period is worth a line.
   const note = switchedOff && (billing.plan === 'trial' || billing.plan === 'none') ? null : periodNote(billing, timezone);
   const storageLimit = billing.limits.storage_bytes;
   const warnAt = billing.limits.storage_warn_bytes;
   const storageNearlyFull = warnAt !== null && billing.usage.storage_bytes >= warnAt && !(storageLimit !== null && billing.usage.storage_bytes >= storageLimit);
   const manage = billing.status !== 'none' && !billing.complimentary;
+  const confirming = checkoutReturned && !isPaid(billing);
+  const welcome = checkoutReturned && isPaid(billing);
+  // Founding and Team 25 come with their Freshdesk data moved; a complimentary plan was not bought.
+  const migrationPlan = (billing.plan === 'founding' || billing.plan === 'team25') && !billing.complimentary ? billing.plan : undefined;
+  const migration = migrationPlan && importDone === false ? <MigrationCard plan={migrationPlan} workspaceName={workspaceName} /> : null;
   return (
     <main className="settings-page panel billing-page">
       <header><h1>{billingMessages.billingHeading}</h1><p>{billingMessages.billingDescription}</p></header>
@@ -81,7 +93,9 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
         <div className="settings-sections">
           {switchedOff && <p role="note" className="warning-note">{billingMessages.billingSwitchedOff}</p>}
           {failed && <p role="alert" className="error-copy">{typeof failed === 'string' ? failed : messages.billingActionFailed}</p>}
-          {checkoutReturned && <p role="status">{billingMessages.checkoutReturned}</p>}
+          {confirming && <p role="status">{billingMessages.checkoutConfirming}</p>}
+          {welcome && <p role="status">{billingMessages.checkoutConfirmed(messages.plans[billing.plan])}</p>}
+          {welcome && migration}
           {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{billingMessages.duplicateSubscriptions}</p>}
           {billing.status === 'past_due' && <p role="alert" className="error-copy">{billingMessages.pastDueNotice}</p>}
           {isPaid(billing) && billing.usage.agents > billing.limits.agents && <p role="alert" aria-label={billingMessages.usageAgents} className="error-copy">
@@ -114,9 +128,10 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
                 used={billing.usage.replies_last_24h} limit={billing.limits.replies_per_24h} />}
             </div>
           </section>
+          {!welcome && migration}
           {!switchedOff && (billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
             <div className="section-heading"><h2 id="upgrade-heading">{billingMessages.upgradeHeading}</h2><p>{billingMessages.upgradeHelp}</p></div>
-            <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} busy={busy} preferredPlan={preferredPlan} onChoose={onCheckout} /></div>
+            <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} busy={busy} disabled={confirming} preferredPlan={preferredPlan} onChoose={onCheckout} /></div>
           </section>}
         </div>
       </div>
