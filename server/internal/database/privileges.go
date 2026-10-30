@@ -117,6 +117,10 @@ const (
 	// workspaces whose results page numbers are due. Only workspace ids leave the transaction; each is
 	// computed and stored in its own scope.
 	PrivilegeResultsClaim Privilege = "results-claim"
+	// PrivilegeTrialReminder lists the workspaces whose trial ends within three days, for the trial-ending
+	// emails to their admins. Only workspace ids leave the transaction; each workspace's access is read, its
+	// admins found, their reminders claimed and settled in its own scope.
+	PrivilegeTrialReminder Privilege = "trial-reminder"
 	// PrivilegeAutofixClaim leases the Autofix fixes in progress of every workspace whose next check is
 	// due (a Cursor run to start or to read), for the Autofix worker. Only workspace ids, fix ids and
 	// connectors leave the transaction; each fix is then read, sent and moved in its own workspace.

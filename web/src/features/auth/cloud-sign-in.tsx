@@ -12,9 +12,11 @@ interface CloudSignInProps {
   // onSessionToken rejects with NotAnAgentError when the verified email belongs to no workspace.
   onSessionToken: (token: string) => Promise<void>;
   // onSignUp creates a trial workspace; present only where the server offers sign-up.
-  onSignUp?: (token: string, workspaceName: string, answers: SignupAnswers) => Promise<void>;
+  onSignUp?: (token: string, workspaceName: string, answers: Partial<SignupAnswers>) => Promise<void>;
   // buying is true when the visitor came to buy a plan; sign-up then leads to payment.
   buying?: boolean;
+  // optionalQuestions is true when the visitor came to buy a plan or for one: sign-up then asks for the workspace name only.
+  optionalQuestions?: boolean;
   // findWorkspaceAt is APP_ORIGIN's sign-in page, given on a workspace's own host: an email that is not an
   // agent of this workspace is sent there to find its own.
   findWorkspaceAt?: string;
@@ -29,13 +31,13 @@ const copy = {
 
 const isNotAnAgent = (error: unknown) => error instanceof NotAnAgentError;
 
-export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying, findWorkspaceAt, endSession }: CloudSignInProps) {
+export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying, optionalQuestions, findWorkspaceAt, endSession }: CloudSignInProps) {
   // A verified email of no workspace: sign up where the server offers it, else say so.
   const noWorkspace = ({ leave, getToken, signOutFailed }: RefusedIdentity) => {
     if (onSignUp) {
-      const create = async (name: string, answers: SignupAnswers) => { await onSignUp(await getToken(), name, answers); };
+      const create = async (name: string, answers: Partial<SignupAnswers>) => { await onSignUp(await getToken(), name, answers); };
       return <>
-        <CloudSignup buying={buying} onCreate={create} onSignIn={leave} onUseAnotherAccount={leave} />
+        <CloudSignup buying={buying} optionalQuestions={optionalQuestions} onCreate={create} onSignIn={leave} onUseAnotherAccount={leave} />
         {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
       </>;
     }

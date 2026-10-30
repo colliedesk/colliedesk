@@ -32,9 +32,17 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/serverconfig"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
+	"github.com/colliedesk/colliedesk/server/internal/trialreminder"
 	"github.com/colliedesk/colliedesk/server/internal/webui"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// The trial-ending emails look for due reminders this often; an answer to one goes to the support address
+// the hosted cloud already names in its messages.
+const (
+	trialReminderEvery   = 5 * time.Minute
+	trialReminderReplyTo = "support@colliedesk.com"
 )
 
 // process is what `collie serve` sets up once and keeps while its configuration changes: the pools, the
@@ -231,6 +239,13 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 			}})
 	}
 	g.Go(resultsWorker.Run)
+	// On the hosted cloud the admins hear when a trial is about to end (three days before, and on the day),
+	// from the platform address; answers go to the support address.
+	if billingOn && emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
+		reminders := trialreminder.New(trialreminder.Config{DB: db, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
+			ReplyTo: trialReminderReplyTo, Origin: origin, HelpCenterDomain: helpCenterDomain})
+		g.Go(func(ctx context.Context) { reminders.Run(ctx, trialReminderEvery) })
+	}
 	if billingOn {
 		retentionService, err := newRetentionService(db, origin, billing, config.Retention)
 		if err != nil {
