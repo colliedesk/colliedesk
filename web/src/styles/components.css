@@ -597,6 +597,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .plan-card li { display: flex; gap: var(--space-2); }
 .plan-card li::before { content: "✓"; flex: none; color: var(--accent-text); font-weight: 700; }
 .plan-card .primary-action { width: 100%; }
+.plan-interval { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); color: var(--text-2); font-size: var(--fs-small); }
+.plan-card-picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow-1); }
+.plan-pick { margin-left: var(--space-2); border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); padding: 0 var(--space-2); font-size: var(--fs-label); font-weight: 600; vertical-align: middle; }
 
 /* Agent requests: the Requests page and reply drafts above the composer. */
 .rail-link { position: relative; }

@@ -9,6 +9,7 @@ import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
 import { leaveTo } from '../../lib/leave-to';
 import { readCheckoutIntent } from '../settings/checkout-intent';
+import { readPlanIntent } from '../settings/plan-intent';
 import { preconnectClerk } from './clerk-appearance';
 import { RedeemPage } from './redeem-page';
 
@@ -38,9 +39,10 @@ export function RedeemRoute({ token, buy, trial = false, signedOut = false }: { 
     return readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: '/' });
   }, [client, navigate]);
   // The page a sign-in here opens on the workspace host. A plan to buy rides in it: that host's storage
-  // is not this page's.
+  // is not this page's. So does the plan a trial visitor came for, which opens the inbox, not a checkout.
   const plan = readCheckoutIntent();
-  const next = plan ? `/settings/billing?buy=${encodeURIComponent(plan)}` : undefined;
+  const planIntent = readPlanIntent();
+  const next = plan ? `/settings/billing?buy=${encodeURIComponent(plan)}` : planIntent ? `/?plan=${planIntent}` : undefined;
   // The website's trial and buy links only lead to cloud sign-in: its chunk downloads beside the config
   // instead of after it. A page without a sign-in form lets what waited for one go.
   useEffect(() => { if (!token && (trial || buy)) void loadCloudSignIn().catch(() => undefined); }, [token, trial, buy]);

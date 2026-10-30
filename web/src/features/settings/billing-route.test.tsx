@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { BillingRoute } from './billing-route';
 import { readCheckoutIntent, rememberCheckoutIntent } from './checkout-intent';
+import { readPlanIntent, rememberPlanIntent } from './plan-intent';
 
 const { api, InvalidRequestError } = vi.hoisted(() => ({
   api: { me: vi.fn(), config: vi.fn(), billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() },
@@ -127,6 +128,26 @@ test('a stored founding intent starts the founding checkout once and clears the 
   expect(api.startCheckout).toHaveBeenCalledTimes(1);
   expect(api.startCheckout).toHaveBeenCalledWith('founding');
   expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('a remembered Team 25 plan puts its card first and marked, starts no checkout and stays remembered', async () => {
+  rememberPlanIntent('team25');
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(free);
+  renderRoute();
+  const team25 = await screen.findByRole('article', { name: 'Team 25' });
+  expect(screen.getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual(['Team 25', 'Founding']);
+  expect(team25).toHaveTextContent('Your pick');
+  expect(api.startCheckout).not.toHaveBeenCalled();
+  expect(readPlanIntent()).toBe('team25');
+});
+
+test('without a remembered plan no card is marked', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(free);
+  renderRoute();
+  await screen.findByRole('article', { name: 'Team 25' });
+  expect(screen.queryByText('Your pick')).not.toBeInTheDocument();
 });
 
 test('an intent for a plan the server does not offer is dropped and the billing page is shown', async () => {

@@ -46,8 +46,8 @@ func TestNewAccessFollowsTrialAndSubscriptions(t *testing.T) {
 	}
 }
 
-func TestLockedPlanHasNoSeatsAndPaidPlansHaveTen(t *testing.T) {
-	for plan, want := range map[string]int{domain.PlanTrial: 10, domain.PlanTeam: 10, domain.PlanFounding: 10, domain.PlanNone: 0} {
+func TestLockedPlanHasNoSeatsAndTeamAndFoundingHaveTen(t *testing.T) {
+	for plan, want := range map[string]int{domain.PlanTeam: 10, domain.PlanFounding: 10, domain.PlanNone: 0} {
 		if got := domain.LimitsFor(plan).Agents; got != want {
 			t.Fatalf("%s agents=%d, want %d", plan, got, want)
 		}

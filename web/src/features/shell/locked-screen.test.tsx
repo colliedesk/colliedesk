@@ -10,10 +10,22 @@ const ended: Billing = {
 };
 const exportSlot = <button type="button">Export all data</button>;
 
-test('while Founding is open a locked workspace is offered Founding, as on the website', () => {
-  render(<LockedScreen isAdmin billing={{ ...ended, checkout_plans: [...ended.checkout_plans, 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onSignOut={vi.fn()} />);
+test('while Founding is open a locked workspace is offered Founding and Team 25, as on the website', () => {
+  const onCheckout = vi.fn();
+  render(<LockedScreen isAdmin billing={{ ...ended, checkout_plans: [...ended.checkout_plans, 'founding'] }} timezone="UTC" onCheckout={onCheckout} onSignOut={vi.fn()} />);
+  expect(screen.getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual(['Founding', 'Team 25']);
   expect(screen.getByRole('button', { name: 'Choose Founding, $99 per quarter for life' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /team/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /solo|small|team, /i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $149 per month' }));
+  fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $1,490 per year' }));
+  expect(onCheckout.mock.calls).toEqual([['team25_monthly'], ['team25_yearly']]);
+});
+
+test('a locked workspace whose visitor came for Team 25 finds it first and marked', () => {
+  render(<LockedScreen isAdmin billing={{ ...ended, checkout_plans: [...ended.checkout_plans, 'founding'] }} timezone="UTC" preferredPlan="team25" onCheckout={vi.fn()} onSignOut={vi.fn()} />);
+  expect(screen.getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual(['Team 25', 'Founding']);
+  expect(screen.getByText('Your pick')).toBeInTheDocument();
 });
 
 test('the locked screen offers only the plans the server can sell', () => {

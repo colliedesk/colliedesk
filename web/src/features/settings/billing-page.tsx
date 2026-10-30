@@ -3,6 +3,7 @@ import { formatBytes } from '../../lib/format-bytes';
 import { formatDay } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { billingMessages } from './billing-messages';
+import type { PlanIntent } from './plan-intent';
 import { PlanPicker } from './plan-picker';
 import { SettingsNav } from './settings-nav';
 
@@ -15,6 +16,8 @@ interface BillingPageProps {
   failed?: boolean | string;
   // busy is true while a checkout is starting or open; the plan buttons wait so a second click cannot open a second one.
   busy?: boolean;
+  // preferredPlan is the plan the visitor came for on the website; its card comes first.
+  preferredPlan?: PlanIntent;
   onCheckout: (plan: CheckoutPlan) => void;
   onManage: () => void;
   // switchedOff: the operator switched billing off; the plan and the portal stay, nothing is offered.
@@ -62,7 +65,7 @@ function Usage({ label, text, used, limit }: { label: string; text: string; used
   );
 }
 
-export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, busy = false, onCheckout, onManage, switchedOff = false }: BillingPageProps) {
+export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, busy = false, preferredPlan, onCheckout, onManage, switchedOff = false }: BillingPageProps) {
   // While billing is switched off no trial ends and nothing locks: only a paid period is worth a line.
   const note = switchedOff && (billing.plan === 'trial' || billing.plan === 'none') ? null : periodNote(billing, timezone);
   const storageLimit = billing.limits.storage_bytes;
@@ -113,7 +116,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
           </section>
           {!switchedOff && (billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
             <div className="section-heading"><h2 id="upgrade-heading">{billingMessages.upgradeHeading}</h2><p>{billingMessages.upgradeHelp}</p></div>
-            <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} busy={busy} onChoose={onCheckout} /></div>
+            <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} busy={busy} preferredPlan={preferredPlan} onChoose={onCheckout} /></div>
           </section>}
         </div>
       </div>

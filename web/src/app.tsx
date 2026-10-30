@@ -9,6 +9,8 @@ import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { HandoffSignIn } from './features/auth/handoff-sign-in';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent, signInCheckoutIntent } from './features/settings/checkout-intent';
+import { parsePlanIntent, signInPlanIntent } from './features/settings/plan-intent';
+import type { PlanIntent } from './features/settings/plan-intent';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
 import type { ReactNode } from 'react';
@@ -315,16 +317,19 @@ const signInRoute = createRoute({
   // `signed_out` marks the arrival right after the session ended (see AppLayout). `intent=trial` is the
   // website's "Start free trial" link: the page is titled for a new team. `next` is the page a hand-off
   // from APP_ORIGIN opens once its token (in the fragment, `#handoff=…`) signs in on this workspace host.
-  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; signed_out?: true; intent?: 'trial'; next?: string } => ({
+  // `plan=team25` is the plan the website's trial link came for: the trial starts as usual and the plan
+  // picker puts that plan first. Any other plan is dropped here.
+  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string; plan?: PlanIntent; signed_out?: true; intent?: 'trial'; next?: string } => ({
     ...(typeof search.token === 'string' ? { token: search.token } : {}),
     ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
+    ...(parsePlanIntent(search.plan) ? { plan: 'team25' as const } : {}),
     ...(search.signed_out === true ? { signed_out: true as const } : {}),
     ...(search.intent === 'trial' ? { intent: 'trial' as const } : {}),
     ...(typeof search.next === 'string' ? { next: search.next } : {}),
   }),
-  // `buy` stays in the address through the identity provider's round trip, so the address decides
-  // which plan, if any, this sign-in is for (see signInCheckoutIntent).
-  beforeLoad: ({ search }) => { signInCheckoutIntent(search); },
+  // `buy` and `plan` stay in the address through the identity provider's round trip, so the address decides
+  // which plan, if any, this sign-in is for (see signInCheckoutIntent, signInPlanIntent).
+  beforeLoad: ({ search }) => { signInCheckoutIntent(search); signInPlanIntent(search); },
   component: function SignIn() {
     const { token, buy, signed_out: signedOut, intent, next } = signInRoute.useSearch();
     const handoff = useRouterState({ select: (state) => /^handoff=(.+)$/.exec(state.location.hash)?.[1] });

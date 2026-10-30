@@ -25,23 +25,23 @@ type responseView struct {
 	Body string
 }
 
-func TestTrialCapsAgentsAtTenCountingPendingInvites(t *testing.T) {
+func TestTrialCapsAgentsAtTwentyFiveCountingPendingInvites(t *testing.T) {
 	f := newLimitsFixture(t, true)
-	// The admin is seat 1; nine pending invites fill seats 2 to 10.
-	for number := 1; number <= 9; number++ {
+	// The admin is seat 1; twenty-four pending invites fill seats 2 to 25.
+	for number := 1; number <= 24; number++ {
 		if got := invite(t, f, f.adminA, number); got.Code != http.StatusCreated {
 			t.Fatalf("invite %d status=%d body=%s, want 201", number, got.Code, got.Body)
 		}
 	}
-	eleventh := request(t, f.api, http.MethodPost, "/api/v1/auth/invites",
-		map[string]any{"email": "teammate10@limits-alpha.example.com", "role_ceiling": "agent"}, f.adminA, nil)
-	if eleventh.Code != http.StatusPaymentRequired {
-		t.Fatalf("eleventh seat status=%d body=%s, want 402", eleventh.Code, eleventh.Body.String())
+	twentySixth := request(t, f.api, http.MethodPost, "/api/v1/auth/invites",
+		map[string]any{"email": "teammate25@limits-alpha.example.com", "role_ceiling": "agent"}, f.adminA, nil)
+	if twentySixth.Code != http.StatusPaymentRequired {
+		t.Fatalf("twenty-sixth seat status=%d body=%s, want 402", twentySixth.Code, twentySixth.Body.String())
 	}
 	var failure apiError
-	decode(t, eleventh, &failure)
+	decode(t, twentySixth, &failure)
 	if failure.Error.Code != "plan_limit_reached" || !strings.Contains(failure.Error.Message, "trial") ||
-		!strings.Contains(failure.Error.Message, "10 agents") {
+		!strings.Contains(failure.Error.Message, "25 agents") {
 		t.Fatalf("error=%+v, want the trial and the cap named", failure.Error)
 	}
 	if got := f.usage(t, f.adminA).Usage.Agents; got != 1 {
@@ -55,13 +55,13 @@ func TestTrialCapsAgentsAtTenCountingPendingInvites(t *testing.T) {
 		} `json:"items"`
 	}
 	decode(t, request(t, f.api, http.MethodGet, "/api/v1/auth/invites", nil, f.adminA, nil), &list)
-	if len(list.Items) != 9 {
-		t.Fatalf("pending invites=%d, want 9 (the refused one is not stored)", len(list.Items))
+	if len(list.Items) != 24 {
+		t.Fatalf("pending invites=%d, want 24 (the refused one is not stored)", len(list.Items))
 	}
 	if got := request(t, f.api, http.MethodDelete, "/api/v1/auth/invites/"+list.Items[0].ID, nil, f.adminA, nil).Code; got != http.StatusNoContent {
 		t.Fatalf("revoke status=%d", got)
 	}
-	if got := invite(t, f, f.adminA, 10); got.Code != http.StatusCreated {
+	if got := invite(t, f, f.adminA, 25); got.Code != http.StatusCreated {
 		t.Fatalf("invite after a revoke status=%d body=%s, want 201", got.Code, got.Body)
 	}
 }
@@ -124,6 +124,7 @@ func TestSelfHostedHasNoAgentLimitAndNoTrial(t *testing.T) {
 
 func TestConcurrentInvitesNeverPassTheCap(t *testing.T) {
 	f := newLimitsFixture(t, true)
+	f.upgrade(t, f.workspaceA, "sub_concurrent_invites") // Team: ten seats
 	var wg sync.WaitGroup
 	statuses := make(chan int, 14)
 	for number := 1; number <= 14; number++ {
@@ -142,12 +143,13 @@ func TestConcurrentInvitesNeverPassTheCap(t *testing.T) {
 		}
 	}
 	if accepted != 9 {
-		t.Fatalf("%d invites accepted on a trial workspace with 1 agent, want exactly 9", accepted)
+		t.Fatalf("%d invites accepted on a Team workspace with 1 agent, want exactly 9", accepted)
 	}
 }
 
 func TestReinvitingAnExistingAgentOrResendingAPendingInviteTakesNoSeat(t *testing.T) {
 	f := newLimitsFixture(t, true)
+	f.upgrade(t, f.workspaceA, "sub_reinvite") // Team: ten seats
 	// Seat 2 is an agent; seats 3 to 10 are pending invites: the workspace is at the cap of 10.
 	_, agentURL := createContractInvite(t, f.api, f.adminA, "agent@limits-alpha.example.com", "agent")
 	if got := request(t, f.api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, agentURL)}, "", nil).Code; got != http.StatusOK {

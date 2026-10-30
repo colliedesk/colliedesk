@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
+import { readPlanIntent, rememberPlanIntent } from './features/settings/plan-intent';
 import { createQueryClient } from './query-client';
 import { resetProductAnalytics } from './lib/product-analytics';
 import { presenceViewPart } from './features/inbox/presence-part';
@@ -145,6 +146,34 @@ test('after a Founding visit, the plain sign-in page in the same tab is a sign-i
   await router.navigate({ to: '/sign-in' });
   expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
   expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('the Team 25 trial link keeps its plan through the sign-in page until a plain sign-in forgets it', async () => {
+  serve({ '/api/v1/config': () => json(200, config) });
+  const router = open('/sign-in?intent=trial&plan=team25');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Start your free trial' })).toBeInTheDocument();
+  expect(readPlanIntent()).toBe('team25');
+  await router.navigate({ to: '/sign-in' });
+  expect(await screen.findByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
+  expect(readPlanIntent()).toBeUndefined();
+});
+
+test('in a trial workspace that came for Team 25, Choose a plan opens the billing page with Team 25 first and marked, and buys nothing', async () => {
+  rememberPlanIntent('team25');
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing': () => json(200, trialBilling),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+  });
+  const router = open('/');
+  fireEvent.click(await screen.findByRole('button', { name: 'Choose a plan' }));
+  await screen.findByRole('heading', { name: 'Plan and billing' });
+  const cards = await screen.findAllByRole('article');
+  expect(cards.map((card) => card.getAttribute('aria-label'))).toEqual(['Team 25', 'Founding']);
+  expect(within(cards[0]).getByText('Your pick')).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/settings/billing');
+  expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/billing/checkout')).toBe(false);
 });
 
 test('the website trial link titles the sign-in page for a new team', async () => {

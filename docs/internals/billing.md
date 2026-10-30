@@ -165,6 +165,17 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
   off at start, the same condition as the route; the web app maps 503 `signup_unavailable` too). After Clerk authenticates, the exchange answers 403 `forbidden` for an email that
   belongs to no workspace; the sign-in page then shows the workspace-name form and posts to
   `/auth/cloud/signup` with a token fetched at that moment (Clerk tokens live about a minute).
+- Plan picker (`plan-options.ts`, `plan-picker.tsx`): while `checkout_plans` holds `founding` the cards are Founding
+  (greyed with the server's reason when the workspace does not fit) and Team 25 (only when the server sells it);
+  Solo, Small and Team wait, as on colliedesk.com. The Monthly or Yearly choice above them is Team 25's. If the
+  workspace can buy neither card (Founding refused, no Team 25 products) the whole ladder is shown, so the buyer
+  is never left with nothing. Once Founding closes the ladder is back on its own.
+- Plan intent: the website's Team 25 link is `/sign-in?intent=trial&plan=team25`. `plan` is not `buy`: it starts no
+  checkout. The sign-in route remembers it in `sessionStorage` (`plan-intent.ts`, one day), `RedeemRoute` sends
+  `next=/?plan=team25` so it crosses to the workspace host (`continue_url` carries `next`; that host's storage is
+  not APP_ORIGIN's), and `HandoffSignIn` remembers it there and removes it from the address. The billing page and
+  the locked screen put that plan's card first with "Your pick". Only `team25` is accepted; a Founding `buy` wins
+  over it. A plain sign-in forgets it, like `buy`.
 - Export: `POST /api/v1/export/link` (admin, on the locked allowlist) runs the 409 and 429 checks and returns
   `/api/v1/export/download/<token>`; the web app navigates the browser to it, so the ZIP streams to disk. The
   token is random, kept as a SHA-256 in process memory, valid 60 s, single use, bound to the workspace, and a
@@ -182,7 +193,8 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 
 ### Agent seats
 
-- Cap: 1 on Solo, 3 on Small, 10 on trial, Team and Founding, 25 on Team 25. A refusal names the next plan
+- Cap: 1 on Solo, 3 on Small, 10 on Team and Founding, 25 on the trial and Team 25 (a team of 11 to 25 agents tries
+  Colliedesk with everyone before it buys Team 25; Founding stays at 10). A refusal names the next plan
   up that the server sells (`domain.UpgradeFor`); Founding and Team 25 say "contact us". A seat is an active agent, or a person with an unused, unrevoked, unexpired invite.
   A deactivated agent holds no seat. Pending invites count by distinct address: re-sending an invite to the
   same address, or inviting someone who is already an active agent (a role change), takes no new seat.
