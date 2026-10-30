@@ -58,6 +58,7 @@
   .property-row select { display: flex; align-items: center; }
   .property-row select::picker-icon { opacity: 0; }
   .property-row select:is(:hover, :focus-visible)::picker-icon { opacity: 1; }
+  .property-row select:hover:not(:disabled) { background-image: none; }
   .sort-field::picker(select), .property-row select::picker(select) {
     appearance: base-select; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2);
     padding: var(--space-1); margin-top: var(--space-1); min-width: 12rem;
@@ -70,10 +71,10 @@
   .property-row select option:is([value="open"], [value="pending"], [value="resolved"], [value="closed"])::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--dot); }
   .property-row option[value="open"] { --dot: var(--open); } .property-row option[value="pending"] { --dot: var(--pending); }
   .property-row option[value="resolved"] { --dot: var(--ok); } .property-row option[value="closed"] { --dot: var(--text-3); }
-  .property-row option[value="urgent"]::before { content: "↑"; width: 8px; color: var(--danger); font-weight: 600; }
-  .property-row option[value="high"]::before { content: "↑"; width: 8px; color: var(--text-2); font-weight: 600; }
-  .property-row option[value="normal"]::before { content: "–"; width: 8px; color: var(--text-3); }
-  .property-row option[value="low"]::before { content: "↓"; width: 8px; color: var(--text-3); }
+  .property-row option[value="urgent"]::before { content: "↑" / ""; width: 8px; color: var(--danger); font-weight: 600; }
+  .property-row option[value="high"]::before { content: "↑" / ""; width: 8px; color: var(--text-2); font-weight: 600; }
+  .property-row option[value="normal"]::before { content: "" / ""; width: 8px; }
+  .property-row option[value="low"]::before { content: "↓" / ""; width: 8px; color: var(--text-3); }
 }
 .filter-match { margin-top: var(--space-1); color: var(--text-2); }
 .filter-hint { color: var(--text-3); font-size: var(--fs-small); }
@@ -408,10 +409,10 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .property-row:has(option[value="resolved"]:checked) { --dot: var(--ok); }
 .property-row:has(option[value="closed"]:checked) { --dot: var(--text-3); }
 .property-row:has(option[value="open"])::after { content: ""; width: 8px; height: 8px; margin-left: 4px; border-radius: var(--radius-full); background: var(--dot); }
-.property-row:has(option[value="urgent"]:checked)::after { content: "↑"; color: var(--danger); }
+.property-row:has(option[value="urgent"]:checked)::after { content: "↑" / ""; color: var(--danger); }
 .property-row:has(option[value="urgent"]:checked) select { color: var(--danger); }
-.property-row:has(option[value="high"]:checked)::after { content: "↑"; color: var(--text-2); }
-.property-row:has(option[value="low"]:checked)::after { content: "↓"; color: var(--text-3); }
+.property-row:has(option[value="high"]:checked)::after { content: "↑" / ""; color: var(--text-2); }
+.property-row:has(option[value="low"]:checked)::after { content: "↓" / ""; color: var(--text-3); }
 .tag-choices { clear: both; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .tag-check { position: relative; display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); cursor: pointer; }
 .tag-check input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
@@ -419,6 +420,7 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .tag-check::before { content: "#" / ""; margin-right: 1px; color: var(--text-3); }
 .tag-check:hover { background: var(--surface-2); color: var(--text-1); }
 .tag-check:has(input:checked) { color: var(--text-1); font-weight: 500; }
+.tag-check:has(input:checked)::before { content: "✓" / ""; margin-right: var(--space-1); color: var(--text-1); }
 .tag-check:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .tag-create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-top: var(--space-3); }
@@ -429,6 +431,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .drawer-close { display: flex; margin: var(--space-3) var(--space-4) 0 auto; }
   .inbox-shell[data-details-open="true"] .details-panel {
     display: block; position: fixed; inset: var(--space-2) var(--space-2) var(--space-2) auto; z-index: 3; width: min(100% - var(--space-4), 20rem); box-shadow: var(--shadow-3);
+    border-left: 0; border-radius: var(--radius-lg);
   }
 }
 @media (max-width: 44rem) {
@@ -952,4 +955,17 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   background: var(--surface-1);
   color: var(--text-1);
   box-shadow: var(--shadow-2);
+}
+
+/* Standalone tool links in the details pane (not inside a sentence) are quiet until hovered. */
+.details-panel .link-button { color: var(--text-2); font-weight: 500; text-decoration: none; }
+.details-panel .link-button:hover:not(:disabled) { color: var(--text-1); text-decoration: underline; }
+/* AI consent card: its strong edge came from the panel border; it is now a ring. */
+.panel.ai-consent { box-shadow: 0 0 0 1px var(--line-strong); }
+/* Forced colours: the menu rows show their native checkbox again, and selects use the native picker and arrow. */
+@media (forced-colors: active) {
+  .filter-popover .check-row > input:is([type="checkbox"], [type="radio"]) { position: static; width: auto; height: auto; opacity: 1; }
+  .filter-popover .check-row::after { display: none; }
+  .sort-field, .property-row select { appearance: auto; }
+  .property-row::after { forced-color-adjust: auto; }
 }

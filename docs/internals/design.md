@@ -66,7 +66,7 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
   writes `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes
   to **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
 - Rows: subject (500) and time, then one meta line (status dot and word, priority arrow, `#tags`); the status
-  word is left out under a status tab that already names it, and Normal priority is not shown. With a mouse,
+  (dot and word) is left out under a status tab that already names it, and Normal priority is not shown. With a mouse,
   rows start on the column edge and the checkbox appears over the row's padding on hover or focus; its column
   opens once a row is ticked. **Select all on this page** stays, since focus returns to it after a bulk change.
   Touch keeps the column. The time is
@@ -191,8 +191,8 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
   indeterminate states are ink in both themes; their labels keep readable text when disabled.
   Forced-colour mode keeps native checkbox and radio rendering and restores the native select arrow.
 - Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
-- Status is a dot plus its word. Priority is an arrow and a word: Urgent red, High grey, Low a down arrow,
-  Normal unmarked. The same marks lead the options in menus and Properties.
+- Status is a dot plus its word. Priority is an arrow and a word: Urgent red, High grey; Normal and Low are
+  not marked in a row. Menus and Properties lead each option with the same marks (Low a down arrow).
 - Menus: one recipe for Filter, Views, bulk menus and every select picker: radius 10, 4 px inside, 30 px rows,
   a leading mark, a trailing check, groups split by space, `--shadow-2`. Native selects keep their element and
   take the recipe through `appearance: base-select`; other browsers keep the native picker.

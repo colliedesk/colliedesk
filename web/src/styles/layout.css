@@ -2,7 +2,7 @@
 .app-shell { height: 100dvh; display: grid; grid-template-columns: 56px minmax(0, 1fr); background: var(--surface-0); }
 .app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .app-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
-.app-content > .inbox-shell { height: 100%; }
+.app-content > .inbox-shell { height: calc(100% - var(--space-2)); }  /* the sheet sits 8 px above the bottom edge */
 .app-content > .redeem-page { min-height: 100%; }
 /* The avatar opens the account menu; on a wide screen it sits at the foot of the rail. */
 .account-menu { position: relative; margin-top: auto; }
@@ -42,7 +42,7 @@
 
 /* Inbox: list | thread | details. */
 .inbox-shell {
-  height: 100%; display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(240px, 300px);
+  height: calc(100% - var(--space-2)); display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(240px, 300px);
   gap: 0; margin: 0 var(--space-2) var(--space-2) 0; border-radius: var(--radius-lg); background: var(--surface-1);
   box-shadow: var(--shadow-1); overflow: hidden;
 }

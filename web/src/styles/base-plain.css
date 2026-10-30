@@ -84,12 +84,12 @@ button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--
 .icon-button { width: var(--control, 32px); padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
 .icon-button:hover:not(:disabled) { color: var(--text-1); }
 .link-button, .link-action {
-  min-height: auto; border: 0; background: none; box-shadow: none; padding: 0; color: var(--text-2); font-weight: 500;
-  text-decoration: none; text-underline-offset: 3px;
+  min-height: auto; border: 0; background: none; box-shadow: none; padding: 0; color: var(--accent-text); text-decoration: underline;
+  text-underline-offset: 2px;
 }
 /* Reload page is the only way back from a part that failed: a finger must hit it too. */
 @media (pointer: coarse), (max-width: 30rem) { .part-reload { min-height: var(--touch); } }
-.link-button:hover:not(:disabled), .link-action:hover:not(:disabled) { background: none; color: var(--text-1); text-decoration: underline; }
+.link-button:hover:not(:disabled), .link-action:hover:not(:disabled) { background: none; color: var(--accent-hover); }
 
 /* Touch screens and windows 480 px wide or less keep 44 px targets; a mouse on a wider window gets the
    denser 32 px controls. Every rule that sizes for a finger uses the same media query. */
