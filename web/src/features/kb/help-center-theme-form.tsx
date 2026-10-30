@@ -34,6 +34,9 @@ const incomplete = (draft: Draft, field: LinkField) => draft[field].trim() !== '
 const previewable = (draft: Draft, field: LinkField) => (incomplete(draft, field) ? null : orNull(draft[field]));
 type Font = (typeof fontKeys)[number];
 const fontOrNull = (value: string) => (fontKeys as readonly string[]).includes(value) ? value as Font : null;
+// Each font field offers its default first, then the other of sans and serif. The server takes more keys
+// (theme-api.ts fontKeys); on many devices they fall back to the same font, so the form offers these two.
+const fontChoices: Record<'body_font' | 'heading_font', [Font, Font]> = { body_font: ['system-sans', 'classic-serif'], heading_font: ['classic-serif', 'system-sans'] };
 
 // inputOf is what Save sends. For the preview, a color, link or phone number still being typed counts as
 // the default, so a half-written value does not stop the page from showing. Custom CSS goes as written
@@ -135,15 +138,20 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
         <Hint id={`${id}-hint`} help={help} error={errors[field]} warning={field !== 'logo_alt' && incomplete(current, field) ? text.shapeHints[field] : undefined} /></div>
     );
   };
-  const fontField = (field: 'body_font' | 'heading_font', label: string, fallback: string) => (
-    <div className="field"><label htmlFor={controlId(field)}>{label}</label>
-      <select id={controlId(field)} value={current[field]} aria-invalid={errors[field] ? true : undefined} aria-describedby={errors[field] ? `${controlId(field)}-hint` : undefined}
-        onChange={(event) => change({ [field]: event.target.value })}>
-        <option value="">{text.defaultFont(text.fontNames[fallback]!)}</option>
-        {fontKeys.map((key) => <option key={key} value={key}>{text.fontNames[key]}</option>)}
-      </select>
-      <Hint id={`${controlId(field)}-hint`} error={errors[field]} /></div>
-  );
+  // The default is stored as no font (''), as before. A font saved from another key stays listed, so the
+  // form never changes it without the admin choosing.
+  const fontField = (field: 'body_font' | 'heading_font', label: string) => {
+    const [fallback] = fontChoices[field];
+    const keys = [...new Set([...fontChoices[field], ...[theme.data?.[field], current[field]].filter((key): key is string => Boolean(key))])];
+    return (
+      <div className="field"><label htmlFor={controlId(field)}>{label}</label>
+        <select id={controlId(field)} value={current[field] || fallback} aria-invalid={errors[field] ? true : undefined} aria-describedby={errors[field] ? `${controlId(field)}-hint` : undefined}
+          onChange={(event) => change({ [field]: event.target.value === fallback ? '' : event.target.value })}>
+          {keys.map((key) => <option key={key} value={key}>{text.fontNames[key] ?? key}</option>)}
+        </select>
+        <Hint id={`${controlId(field)}-hint`} error={errors[field]} /></div>
+    );
+  };
   const submit = (event: FormEvent) => { event.preventDefault(); if (!save.isPending) save.mutate(inputOf(current)); };
   const failure = save.isError ? (save.error instanceof ThemeInvalidError ? save.error.message : text.saveFailed) : undefined;
   return (
@@ -169,8 +177,8 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
         </fieldset>
         <fieldset><legend>{text.fonts}</legend>
           <p className="muted-copy theme-note">{text.fontsHelp}</p>
-          {fontField('body_font', text.bodyFont, 'system-sans')}
-          {fontField('heading_font', text.headingFont, 'classic-serif')}
+          {fontField('body_font', text.bodyFont)}
+          {fontField('heading_font', text.headingFont)}
         </fieldset>
         <CustomCSSField value={current.custom_css} savedHasCSS={theme.data.custom_css !== ''} error={errors.custom_css} pending={cssPending}
           onChange={(value) => change({ custom_css: value })} />

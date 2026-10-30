@@ -58,11 +58,12 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
       {slugChanged && <p className="warning-note" role="note">{kbMessages.slugChangeWarning}</p>}
       <label className="field"><span>{kbMessages.collectionDescription}</span>
         <textarea rows={2} value={values.description} onChange={(event) => set({ description: event.target.value })} /></label>
-      <label className="field"><span>{kbMessages.collectionParent}</span>
+      {/* With no collection to go inside, Top level is the only place: nothing to ask. */}
+      {choices.length > 0 && <label className="field"><span>{kbMessages.collectionParent}</span>
         <select value={values.parent_id ?? ''} onChange={(event) => set({ parent_id: event.target.value || null })}>
           <option value="">{kbMessages.topLevel}</option>
           {choices.map((choice) => <option key={choice.collection.id} value={choice.collection.id}>{indent(choice)}</option>)}
-        </select></label>
+        </select></label>}
       <div className="button-row">
         <button className="primary-action" type="submit" disabled={busy || !values.name.trim()}>{original ? kbMessages.saveCollection : kbMessages.createCollection}</button>
         <button type="button" disabled={busy} onClick={onCancel}>{kbMessages.cancel}</button>

@@ -57,10 +57,22 @@ test('the avatar opens an account menu with who is signed in and Sign out', () =
   fireEvent.click(button);
   expect(button).toHaveAttribute('aria-expanded', 'true');
   const menu = screen.getByRole('group', { name: 'Account' });
+  // Without a display name the person is their address.
   expect(menu).toHaveTextContent('sam@example.com');
-  expect(menu).toHaveTextContent('Beta Desk');
+  expect(menu).toHaveTextContent('Agent');
   fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
   expect(signOut).toHaveBeenCalledTimes(1);
+});
+
+test('the account menu names the person and their role, and leaves the workspace and address to the bar above', () => {
+  render(<AppShell me={{ ...me, agent: { ...me.agent, display_name: 'Sam Lee', role: 'admin' } }} onSignOut={() => {}}><p>inbox</p></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  const menu = screen.getByRole('group', { name: 'Account' });
+  expect(menu).toHaveTextContent('Sam Lee');
+  expect(menu).toHaveTextContent('Admin');
+  expect(menu).not.toHaveTextContent('sam@example.com');
+  expect(menu).not.toHaveTextContent('Beta Desk');
+  expect(screen.getAllByRole('button').filter((button) => menu.contains(button)).map((button) => button.textContent)).toEqual(['Report a problem', 'Sign out']);
 });
 
 test('Escape closes the account menu and returns focus to the avatar', () => {

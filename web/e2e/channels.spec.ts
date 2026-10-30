@@ -65,11 +65,9 @@ test('channels: an admin adds a web form, turns it off (submissions refused) and
   await expect(page.getByText('Email is off: this reply is saved but not sent until the channel is on.')).toBeVisible();
 
   // On again: the notice goes away.
-  // Settings → Email lists the address; the folded Change forwarding address or disconnect opens it.
+  // Settings → Email lists the address; Manage on its row opens it.
   await page.goto(`${baseURL}/settings/channels/type/email`);
-  const change = page.locator('details', { hasText: 'Change forwarding address or disconnect' });
-  await change.getByText('Change forwarding address or disconnect').click();
-  await change.getByRole('link', { name: `Manage support-${suffix}@example.com` }).click();
+  await page.getByRole('table', { name: 'Support addresses' }).getByRole('link', { name: `Manage support-${suffix}@example.com` }).click();
   await page.getByRole('switch', { name: 'Email' }).click();
   await expect(page.getByRole('switch', { name: 'Email' })).toBeChecked();
   await page.getByRole('link', { name: 'Inbox' }).click();

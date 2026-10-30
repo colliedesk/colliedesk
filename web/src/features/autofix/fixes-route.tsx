@@ -38,7 +38,8 @@ export function FixesRoute({ repoId, connector, onFilter }: FixesRouteProps) {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, staleTime: Infinity });
   const status = useQuery({ queryKey: keys.status, queryFn: () => autofixApi.status() });
   const groups = { needs_person: useGroup('needs_person', repoId, connector), running: useGroup('running', repoId, connector), done: useGroup('done', repoId, connector) };
-  return <FixesPage groups={groups} counts={status.data} repos={settings.data?.repos ?? []} repoId={repoId} connector={connector} onFilter={onFilter}
+  const agents = settings.data?.connectors.filter((item) => item.enabled).map((item) => item.kind) ?? [];
+  return <FixesPage groups={groups} counts={status.data} repos={settings.data?.repos ?? []} agents={agents} repoId={repoId} connector={connector} onFilter={onFilter}
     timezone={me.data?.timezone ?? 'UTC'} now={Date.now()} conversationLink={conversationLink} settingsLink={settingsLink} inboxLink={inboxLink}
     onRetry={() => { for (const rows of Object.values(groups)) rows.refetch(); }} />;
 }

@@ -240,11 +240,13 @@ function UseSelect({ search, go }: { search: MediaSearch; go: Go }) {
   );
 }
 
+// SortSelect lists newest first, by name, or largest first (what frees the most storage). Oldest first is not
+// offered; an older address with sort=oldest still lists that way and shows it chosen.
 function SortSelect({ search, go }: { search: MediaSearch; go: Go }) {
   return (
     <select aria-label={mediaMessages.sort} value={search.sort ?? 'newest'} onChange={(event) => go('library', { sort: event.target.value === 'newest' ? undefined : event.target.value as MediaSort })}>
       <option value="newest">{mediaMessages.newestFirst}</option>
-      <option value="oldest">{mediaMessages.oldestFirst}</option>
+      {search.sort === 'oldest' && <option value="oldest">{mediaMessages.oldestFirst}</option>}
       <option value="name">{mediaMessages.name}</option>
       <option value="largest">{mediaMessages.largest}</option>
     </select>

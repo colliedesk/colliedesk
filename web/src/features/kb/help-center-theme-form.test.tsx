@@ -55,13 +55,35 @@ test('an admin saves the brand and is told it is live on the next page load', as
   });
   open(true);
   fireEvent.change(await screen.findByRole('textbox', { name: 'Your website' }), { target: { value: ' https://acme.example/help ' } });
-  fireEvent.change(screen.getByRole('combobox', { name: 'Heading font' }), { target: { value: 'classic-serif' } });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Heading font' }), { target: { value: 'system-sans' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save brand' }));
   expect(await screen.findByText('Saved. Live on the next page load.')).toHaveAttribute('role', 'status');
   expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({
     logo_media_id: ids.image, favicon_media_id: null, logo_alt: 'Acme', linkback_url: 'https://acme.example/help', contact_url: null, contact_phone: '+1 555 0100',
-    colors: { ...noColors, primary: '#0b5cad' }, body_font: 'humanist-sans', heading_font: 'classic-serif', custom_css: '',
+    colors: { ...noColors, primary: '#0b5cad' }, body_font: 'humanist-sans', heading_font: 'system-sans', custom_css: '',
   });
+});
+
+test('each font offers sans and serif, the default first and never twice; a font saved before is kept and shown', async () => {
+  const calls = serve({
+    'GET /api/v1/help-center/theme': () => json(200, saved),
+    'POST /api/v1/help-center/theme/preview': () => json(200, preview),
+    'PUT /api/v1/help-center/theme': (call) => json(200, { ...saved, ...(call.body as object) }),
+  });
+  open(true);
+  const names = (select: HTMLElement) => within(select).getAllByRole('option').map((option) => option.textContent);
+  const body = await screen.findByRole('combobox', { name: 'Text font' });
+  // The workspace saved Humanist sans before the choice narrowed: it stays, and stays chosen.
+  expect(names(body)).toEqual(['Sans', 'Serif', 'Humanist sans']);
+  expect(body).toHaveValue('humanist-sans');
+  const heading = screen.getByRole('combobox', { name: 'Heading font' });
+  expect(names(heading)).toEqual(['Serif', 'Sans']);
+  expect(heading).toHaveValue('classic-serif');
+  // Choosing the default stores no font, as before: the server's default applies.
+  fireEvent.change(body, { target: { value: 'system-sans' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save brand' }));
+  await screen.findByText('Saved. Live on the next page load.');
+  expect(calls.find((call) => call.method === 'PUT')?.body).toMatchObject({ body_font: null, heading_font: null });
 });
 
 test('each color resets to its default, and the whole brand resets to the default look until saved', async () => {
@@ -81,7 +103,7 @@ test('each color resets to its default, and the whole brand resets to the defaul
 
   fireEvent.click(screen.getByRole('button', { name: 'Reset to default look' }));
   expect(screen.getByRole('textbox', { name: 'Your website' })).toHaveValue('');
-  expect(screen.getByRole('combobox', { name: 'Text font' })).toHaveValue('');
+  expect(screen.getByRole('combobox', { name: 'Text font' })).toHaveValue('system-sans');
   expect(screen.queryByRole('img', { name: 'Logo' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save brand' }));
   await screen.findByText('Saved. Live on the next page load.');
