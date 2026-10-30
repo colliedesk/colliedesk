@@ -21,6 +21,7 @@ import { autofixPart } from './features/autofix/autofix-part';
 import { autofixPreviewOn } from './features/autofix/autofix-preview';
 import { kbPart } from './features/kb/kb-part';
 import { channelsRoutePart, preloadChannelsPage } from './features/settings/channels/channels-preload';
+import { preloadSetupStep, setupFlowPart } from './features/onboarding/setup-flow-part';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
@@ -49,6 +50,8 @@ function AppLayout() {
   useInAppLinks();
   // The public page of a results share link has no session and no rail.
   const onSignIn = path === '/sign-in' || path === '/r';
+  // The setup flow fills the screen with one step at a time: no rail, its own header names the workspace.
+  const inSetup = path === '/setup' || path.startsWith('/setup/');
   // An address that matches no page is no rail destination either.
   const notFound = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === rootRouteId });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
@@ -87,6 +90,8 @@ function AppLayout() {
   // deliberate one (sign out, a revoked or an expired session alike).
   if (signedOut && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={{ signed_out: true }} replace />;
   if (signedOut && config.isPending) return <div className="app-main" />;
+  // Signed out or locked, the setup flow gets the same screens as any page, in the frame of every page.
+  if (inSetup && !signedOut && !locked) return <Outlet />;
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
@@ -276,6 +281,20 @@ const channelRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/settings/channels/$', validateSearch: channelsSearch,
   component: function Channel() { return <ChannelsSettings path={channelRoute.useParams()._splat ?? ''} search={channelRoute.useSearch()} />; },
 });
+// The setup flow is its own chunk (setup-flow-part.ts); one component reads the step in the address.
+function SetupFlow({ step }: { step?: string }) {
+  const navigate = useNavigate();
+  const go = useCallback((href: string, replace?: boolean) => void navigate({ href, replace }), [navigate]);
+  // A step opened without the guide's hover first (a typed address, the sign-up) still asks for everything at once.
+  const client = useQueryClient();
+  useEffect(() => { preloadSetupStep(client, step); }, [client, step]);
+  return <Part part={setupFlowPart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ SetupFlowRoute }) => <SetupFlowRoute step={step} navigate={go} />} />;
+}
+const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: () => <SetupFlow /> });
+const setupStepRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/setup/$step',
+  component: function SetupStep() { return <SetupFlow step={setupStepRoute.useParams().step} />; },
+});
 const resultsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/results',
@@ -333,7 +352,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, aiRoute, autofixSettingsRoute, channelRoute, resultsRoute, fixesRoute, resultsShareRoute, signInRoute, setupRoute, setupStepRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

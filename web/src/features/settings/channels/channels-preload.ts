@@ -22,10 +22,19 @@ export function preloadChannelsPage(client: QueryClient, href: string) {
   if (!href.startsWith(base)) return;
   channelsRoutePart.preload();
   const [first, second] = href.slice(base.length).split(/[?#]/, 1)[0].split('/').filter(Boolean);
-  // A type's page also needs that type's panels.
-  if (first === 'type' || first === 'new') void typePanels[second ?? '']?.().catch(() => undefined);
-  // The list is what a type's home and a channel's page both read.
-  if (first) void client.prefetchQuery({ queryKey: ['channels'], queryFn: listChannels });
+  // A type's page also needs that type's panels; the list is what a type's home and a channel's page both read.
+  if (first === 'type' || first === 'new') preloadChannelType(client, second ?? '');
+  else if (first) prefetchChannelList(client);
+}
+
+// preloadChannelType starts a type's panels and the channel list together: what its setup reads, wherever it shows.
+export function preloadChannelType(client: QueryClient, type: string) {
+  void typePanels[type]?.().catch(() => undefined);
+  prefetchChannelList(client);
+}
+
+function prefetchChannelList(client: QueryClient) {
+  void client.prefetchQuery({ queryKey: ['channels'], queryFn: listChannels });
 }
 
 // The request leaves now; the schema that checks the answer comes with the API chunk, which loads beside it.

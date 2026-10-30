@@ -25,7 +25,7 @@ interface AppShellProps {
 // and person a browser is signed in as, so a second link can never silently switch workspaces, and the view is replaced
 // by a way back in when there is no session.
 // Tooltips can be dismissed with Escape (WCAG 1.4.13) and return on the next pointer move or focus change.
-function useDismissibleTooltips() {
+export function useDismissibleTooltips() {
   useEffect(() => {
     const root = document.documentElement;
     const dismiss = (event: KeyboardEvent) => { if (event.key === 'Escape') root.setAttribute('data-tips-off', ''); };
