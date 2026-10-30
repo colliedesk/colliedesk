@@ -55,25 +55,35 @@ test('the library shows images and videos, a video with its length, and leads to
   expect(calls.some((call) => call.path === '/api/v1/kb/media' && call.search.get('usage') === 'unused' && call.search.get('sort') === 'largest')).toBe(true);
 });
 
-test('the library lists newest first with no sort to choose, and an old address with sort=oldest still lists oldest first', async () => {
+test('the library sorts newest first, by name or largest first; an old address with sort=oldest still lists oldest first and shows it', async () => {
   const calls = serve(base);
-  open('library', { sort: 'oldest' });
+  const show = open();
   await screen.findByRole('list', { name: 'Library items' });
-  expect(screen.queryByRole('combobox', { name: 'Sort' })).not.toBeInTheDocument();
-  expect(screen.getByRole('combobox', { name: 'Use' })).toBeInTheDocument();
-  expect(calls.some((call) => call.path === '/api/v1/kb/media' && call.search.get('sort') === 'oldest' && !call.search.has('usage'))).toBe(true);
+  const sort = screen.getByRole('combobox', { name: 'Sort' });
+  const names = () => within(screen.getByRole('combobox', { name: 'Sort' })).getAllByRole('option').map((option) => option.textContent);
+  // Oldest first is not offered: nobody browses a media library from its oldest file.
+  expect(names()).toEqual(['Newest first', 'Name', 'Largest']);
+  expect(sort).toHaveValue('newest');
+  fireEvent.change(sort, { target: { value: 'largest' } });
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { sort: 'largest' }, replace: false });
+  show({ sort: 'oldest' });
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Sort' })).toHaveValue('oldest'));
+  expect(names()).toEqual(['Newest first', 'Oldest first', 'Name', 'Largest']);
+  await waitFor(() => expect(calls.some((call) => call.path === '/api/v1/kb/media' && call.search.get('sort') === 'oldest' && !call.search.has('usage'))).toBe(true));
 });
 
-test('on a phone the Use filter sits in the toolbar, with no dialog around one select', async () => {
+test('on a phone, Use and Sort wait under Filter: the row has no room for both', async () => {
   const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
   vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
   serve(base);
   open();
   await screen.findByRole('list', { name: 'Library items' });
-  fireEvent.change(screen.getByRole('combobox', { name: 'Use' }), { target: { value: 'unused' } });
-  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { usage: 'unused' }, replace: false });
-  expect(screen.queryByRole('button', { name: /^(Filter|Use and sort)/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox', { name: 'Sort' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /^Use and sort/ }));
+  const dialog = screen.getByRole('dialog', { name: 'Use and sort' });
+  expect(within(within(dialog).getByRole('combobox', { name: 'Sort' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['Newest first', 'Name', 'Largest']);
+  fireEvent.change(within(dialog).getByRole('combobox', { name: 'Use' }), { target: { value: 'unused' } });
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { usage: 'unused' }, replace: false });
 });
 
 test('the panel saves a name and alt text with the version it read, and a used item stays out of the trash', async () => {

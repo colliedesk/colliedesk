@@ -157,19 +157,20 @@ test('the rarely used settings are folded under the table; the workspace address
   expect(within(sender).getByRole('textbox', { name: 'Sender name' })).toHaveValue('Acme Support');
 });
 
-test('how to disconnect an address is one sentence and a link, shown as they are rather than folded', async () => {
+test('how to disconnect an address is one sentence that points at the Manage button on its row, not folded and with no second Manage link', async () => {
   const main = { ...channel(MAIN, 'support@acme.com'), config: emailConfig('support@acme.com') };
   channelsApi.list.mockResolvedValue({ items: [main], types: types(1) });
   channelsApi.get.mockResolvedValue(main);
-  // Self-hosted: no forwarding address of the workspace's own, so nothing else is under that fold.
+  // Self-hosted: no forwarding address of the workspace's own, so there is no fold for it.
   channelsApi.email.mockResolvedValue(settings('support@acme.com', { hosted_address: null }));
   show('type/email');
-  await screen.findByRole('table', { name: 'Support addresses' });
-  const help = screen.getByText('To disconnect an address, open it and select Disconnect email. Its conversations stay.');
+  const table = await screen.findByRole('table', { name: 'Support addresses' });
+  const help = screen.getByText('To disconnect an address, select Manage on its row, then Disconnect email. Its conversations stay.');
   expect(help.closest('details')).toBeNull();
-  const disconnect = screen.getByRole('list', { name: 'Disconnect an address' });
-  expect(disconnect.closest('details')).toBeNull();
-  expect(within(disconnect).getByRole('link', { name: 'Manage support@acme.com' })).toHaveAttribute('href', `/settings/channels/${MAIN}`);
+  // One Manage link per address: the row's.
+  const manage = screen.getAllByRole('link', { name: 'Manage support@acme.com' });
+  expect(manage).toHaveLength(1);
+  expect(table).toContainElement(manage[0]);
   expect(screen.queryByText(/^Change forwarding address/)).not.toBeInTheDocument();
 });
 

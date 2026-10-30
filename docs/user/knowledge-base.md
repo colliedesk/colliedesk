@@ -140,8 +140,9 @@ The column on the right of the editor lists the images of the article that have 
 ### Media library
 
 **Knowledge → Media** shows every image and video of the workspace, newest first, with a search by
-name or alt text, a choice of images or videos, and of what is in use, not used or missing alt text.
-A link with `sort=oldest`, `sort=name` or `sort=largest` still lists in that order. A card shows only what
+name or alt text, a choice of images or videos, of what is in use, not used or missing alt text
+(on a phone, under **Filter**), and a sort: newest first, name, or largest first (what frees the most
+storage). A link with `sort=oldest` still lists oldest first. A card shows only what
 needs your attention: **No alt** on an image without alt text, **Not used**, and a pin on a kept item.
 An image the help center shows says **Used by the help center (logo)** (or favicon) and is in use.
 **Upload** takes several files at once, or drop them anywhere on the page; an upload made here is

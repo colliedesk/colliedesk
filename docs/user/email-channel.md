@@ -32,8 +32,8 @@ the empty inbox opens the same page.
 
 Below the table, folded, are the settings of the default address that people rarely change:
 **Sender name**, **Your domain** (verified or not), **Send a test message**, and on Colliedesk Cloud
-**Change forwarding address** (the **Workspace address name**). Under them, how to disconnect an address
-and a link to each address's page, where **Disconnect email** is.
+**Change forwarding address** (the **Workspace address name**). To disconnect an address, select
+**Manage** on its row, then **Disconnect email**.
 
 Old links keep working: `/settings/channels/<id>` opens the address's page, and a link with a tab
 (`/settings/channels/type/email?tab=replies`) opens that tab of the default address.

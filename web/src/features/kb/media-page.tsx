@@ -10,7 +10,7 @@ import { typingDelayMs } from '../inbox/inbox-filters';
 import { Icon } from './editor/icons';
 import { kbApi } from './kb-api';
 import { reason } from './kb-tree';
-import { KBDialog, KBHead, KBToast } from './kb-ui';
+import { KBDialog, KBHead, KBToast, usePhone } from './kb-ui';
 import { mediaApi } from './media-api';
 import type { KBMedia, KBMediaUpload, MediaKind, MediaSort, MediaUsage } from './media-api';
 import { MediaDetail } from './media-detail';
@@ -240,13 +240,27 @@ function UseSelect({ search, go }: { search: MediaSearch; go: Go }) {
   );
 }
 
-// Library lists newest first. There is no sort to choose; an older address with sort= still lists in that order.
+// SortSelect lists newest first, by name, or largest first (what frees the most storage). Oldest first is not
+// offered; an older address with sort=oldest still lists that way and shows it chosen.
+function SortSelect({ search, go }: { search: MediaSearch; go: Go }) {
+  return (
+    <select aria-label={mediaMessages.sort} value={search.sort ?? 'newest'} onChange={(event) => go('library', { sort: event.target.value === 'newest' ? undefined : event.target.value as MediaSort })}>
+      <option value="newest">{mediaMessages.newestFirst}</option>
+      {search.sort === 'oldest' && <option value="oldest">{mediaMessages.oldestFirst}</option>}
+      <option value="name">{mediaMessages.name}</option>
+      <option value="largest">{mediaMessages.largest}</option>
+    </select>
+  );
+}
+
 function Library({ search, go, onChanged, onUpload, tray }: { search: MediaSearch; go: Go; onChanged: () => void; onUpload: () => void; tray: ReactNode }) {
   const filter = { q: search.q, kind: search.kind, usage: search.usage, sort: search.sort };
   const list = useMediaList(filter);
   // The size of what no article uses, for the line that leads to the Not used page.
   const unused = useQuery({ queryKey: ['kb-media', 'unused-summary'], queryFn: ({ signal }) => mediaApi.list({ usage: 'unused', sort: 'largest' }, signal) });
   const summary = unused.data?.summary;
+  const phone = usePhone();
+  const [filters, setFilters] = useState(false);
   const [text, setText] = useState(search.q ?? '');
   useEffect(() => setText(search.q ?? ''), [search.q]);
   const typed = useRef<number | undefined>(undefined);
@@ -290,7 +304,9 @@ function Library({ search, go, onChanged, onUpload, tray }: { search: MediaSearc
               <label key={label}><input type="radio" name="media-kind" checked={search.kind === value} onChange={() => go('library', { kind: value })} />{label}</label>
             ))}
           </fieldset>
-          <UseSelect search={search} go={go} />
+          {!phone && <><UseSelect search={search} go={go} /><SortSelect search={search} go={go} /></>}
+          {phone && <button type="button" className="media-filter-button" aria-haspopup="dialog" aria-label={mediaMessages.filterLabel(search.usage, search.sort)} onClick={() => setFilters(true)}>
+            <Icon name="filter" />{mediaMessages.filter}</button>}
         </div>}
         <div className="media-grid-scroll">
           {list.isError && <p role="alert" className="error-copy">{mediaMessages.listFailed}{' '}
@@ -311,6 +327,11 @@ function Library({ search, go, onChanged, onUpload, tray }: { search: MediaSearc
         {tray}
       </section>
       {!empty && <MediaDetail id={search.item} onChanged={onChanged} onClose={closeItem} />}
+      {filters && <KBDialog title={mediaMessages.useAndSort} closeLabel={mediaMessages.close} onClose={() => setFilters(false)}
+        footer={<button type="button" className="primary-action" onClick={() => setFilters(false)}>{mediaMessages.done}</button>}>
+        <label className="field">{mediaMessages.usage}<UseSelect search={search} go={go} /></label>
+        <label className="field">{mediaMessages.sort}<SortSelect search={search} go={go} /></label>
+      </KBDialog>}
     </div>
   );
 }

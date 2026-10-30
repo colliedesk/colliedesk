@@ -86,6 +86,5 @@ export const setupMessages = {
   foldTest: 'Send a test message',
   foldChange: 'Change forwarding address',
   forWhich: (address: string) => `For ${address}, the default address.`,
-  disconnectHelp: 'To disconnect an address, open it and select Disconnect email. Its conversations stay.',
-  disconnectLinks: 'Disconnect an address',
+  disconnectHelp: 'To disconnect an address, select Manage on its row, then Disconnect email. Its conversations stay.',
 };
