@@ -76,6 +76,12 @@ Beta starts when HC Labs announces it. Before that:
 - A sandbox workspace for testing an AI agent safely ([#116](https://github.com/colliedesk/colliedesk/issues/116)).
 - No Colliedesk branding on anything your customers see ([#125](https://github.com/colliedesk/colliedesk/issues/125)).
 - Help center articles end with a helpful vote, a still-need-help step and related articles ([#338](https://github.com/colliedesk/colliedesk/issues/338)).
+- A request form and "My requests" on the help center, like a Freshdesk portal ([#290](https://github.com/colliedesk/colliedesk/issues/290)).
+- Articles for agents only or for signed-in customers ([#343](https://github.com/colliedesk/colliedesk/issues/343)).
+- Suggested articles while a customer writes a request, with the requests avoided counted ([#344](https://github.com/colliedesk/colliedesk/issues/344)).
+- A help center search report: top searches and searches with no results ([#345](https://github.com/colliedesk/colliedesk/issues/345)).
+- Knowledge gaps: what customers could not find, and a draft article from your solved conversations ([#346](https://github.com/colliedesk/colliedesk/issues/346)).
+- Help center numbers in Results: self-service rate, article views and the articles that lead to requests ([#347](https://github.com/colliedesk/colliedesk/issues/347)).
 
 How items get here: ideas start in [Discussions → Ideas](https://github.com/colliedesk/colliedesk/discussions/categories/ideas),
 where upvotes show how many teams need them. An idea we agree with becomes an issue labelled
