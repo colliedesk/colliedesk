@@ -27,8 +27,9 @@
 .filter-menu summary:hover { background: var(--surface-2); color: var(--text-1); }
 .filter-menu summary svg { color: var(--text-3); }
 .filter-count { min-width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: var(--radius-full); background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 600; }
+/* An open menu sits above the setup guide in the corner (15) and below the account menu (20). */
 .filter-popover {
-  position: absolute; z-index: 5; top: calc(100% + var(--space-1)); left: 0; width: min(100%, 15rem); display: grid; gap: 0;
+  position: absolute; z-index: 16; top: calc(100% + var(--space-1)); left: 0; width: min(100%, 15rem); display: grid; gap: 0;
   border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1);
 }
 .filter-popover select { width: 100%; }
@@ -610,7 +611,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .action-menu[open] summary::after { display: none; }
 .action-menu summary[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .action-popover {
-  position: absolute; z-index: 5; top: calc(100% + var(--space-1)); right: 0; display: grid; gap: 2px; width: max-content; min-width: 11rem; max-width: 18rem;
+  position: absolute; z-index: 16; top: calc(100% + var(--space-1)); right: 0; display: grid; gap: 2px; width: max-content; min-width: 11rem; max-width: 18rem;
   max-height: 20rem; overflow-y: auto; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1);
 }
 .action-popover button { justify-content: flex-start; gap: var(--space-2); min-height: 30px; border-color: transparent; border-radius: var(--radius); background: transparent; box-shadow: none; padding: 0 var(--space-2); font-weight: 400; }
