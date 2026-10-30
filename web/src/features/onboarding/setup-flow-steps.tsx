@@ -71,7 +71,7 @@ function EmailStep({ admin, timezone, navigate }: StepProps) {
   const channel = email.find((item) => item.id === defaultID) ?? email[0];
   // key: the mailbox just created starts its setup afresh, at the step after the address.
   return <div className="setup-flow-email"><Part part={emailChannel.panels} failed={<PartUnavailable />} render={({ Setup }) => Setup
-    && <Setup key={channel?.id ?? 'new'} channel={channel} list={list} canManage={admin} timezone={timezone} navigate={navigate} create={create} />} /></div>;
+    && <Setup key={channel?.id ?? 'new'} channel={channel} list={list} canManage={admin} timezone={timezone} navigate={navigate} create={create} returnTo="/setup/email" />} /></div>;
 }
 
 function InviteStep({ admin, timezone }: StepProps) {
@@ -92,7 +92,12 @@ function FirstReplyStep({ admin, navigate }: StepProps) {
   if (counts.isError) return <LoadFailed onRetry={() => void counts.refetch()} />;
   if (!counts.data) return loading;
   const mailboxes = counts.data.types.find((info) => info.type === 'email')?.count ?? 0;
-  if (mailboxes === 0) return <p className="muted-copy">{m.noMailbox}{admin && <>{' '}<a href="/setup/email">{m.setUpEmail}</a></>}</p>;
+  // Imported conversations can be answered without a mailbox: the inbox is always a way on.
+  const inbox = <a className="button" href="/">{m.openInbox}</a>;
+  if (mailboxes === 0) return <div className="setup-flow-test">
+    <p className="muted-copy">{m.noMailbox}{admin && <>{' '}<a href="/setup/email">{m.setUpEmail}</a></>}</p>
+    <p>{inbox}</p>
+  </div>;
   const send = () => {
     setFailed(undefined);
     test.run().then((sent) => {
@@ -101,7 +106,7 @@ function FirstReplyStep({ admin, navigate }: StepProps) {
     }, (error: unknown) => setFailed(error instanceof Error && !error.message.startsWith('API ') ? error.message : messages.testMessageFailed));
   };
   return <div className="setup-flow-test">
-    <p><button type="button" disabled={test.pending} onClick={send}>{messages.sendTestMessage}</button></p>
+    <p className="button-row"><button type="button" disabled={test.pending} onClick={send}>{messages.sendTestMessage}</button>{inbox}</p>
     <p className="muted-copy">{messages.sendTestMessageHint}</p>
     {failed && <p role="alert" className="error-copy">{failed}</p>}
   </div>;

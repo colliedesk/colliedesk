@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { routeTree } from '../../app';
 import { createQueryClient } from '../../query-client';
@@ -35,7 +35,7 @@ const invite = { id: '33333333-3333-4333-8333-333333333333', email: 'kim@example
   created_at: '2026-10-30T04:00:00Z', expires_at: '2026-11-06T04:00:00Z', used_at: null, revoked_at: null };
 
 // world is what the server holds; creating an invite moves the invite step on, as the server does.
-function serve(world: { role?: 'admin' | 'agent'; setup: Progress; signedOut?: boolean }) {
+function serve(world: { role?: 'admin' | 'agent'; setup: Progress; signedOut?: boolean; setupDown?: boolean }) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     const path = url.split('?')[0];
     const method = init?.method ?? 'GET';
@@ -45,7 +45,7 @@ function serve(world: { role?: 'admin' | 'agent'; setup: Progress; signedOut?: b
       workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' }, timezone: 'UTC', scope: null, plan: null,
     });
     if (path === '/api/v1/config') return json(200, config);
-    if (path === '/api/v1/workspace/setup') return json(200, world.setup);
+    if (path === '/api/v1/workspace/setup') return world.setupDown ? json(503, { error: { code: 'unavailable', message: 'down' } }) : json(200, world.setup);
     if (path === '/api/v1/channels') return json(200, { items: [], types: [{ type: 'email', available: true, count: 0, default_channel_id: null }] });
     if (path === '/api/v1/imports') return json(200, { items: [] });
     if (path === '/api/v1/auth/invites' && method === 'POST') {
@@ -188,4 +188,41 @@ test('signed out, the setup flow shows the way back in, as every page does, and 
   expect(await screen.findByText(/You are signed out/)).toBeInTheDocument();
   expect(screen.queryByRole('heading', { level: 1, name: 'Receive customer email' })).not.toBeInTheDocument();
   expect(screen.queryByRole('region', { name: 'Signed in as' })).not.toBeInTheDocument();
+});
+
+test('a check of the setup that fails while a step is on screen leaves the step, and its one-time invite link, in place', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const world: Parameters<typeof serve>[0] = { setup: progress() };
+    serve(world);
+    open('/setup/invite');
+    await title('Invite your team');
+    fireEvent.change(await screen.findByLabelText('Invite email'), { target: { value: 'kim@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create invite' }));
+    const link = await screen.findByRole('textbox', { name: 'One-time invite link' });
+    world.setupDown = true;
+    // The flow checks every 5 seconds and retries once.
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/workspace/setup').length).toBeGreaterThanOrEqual(3));
+    expect(screen.queryByText('The setup could not be loaded.')).not.toBeInTheDocument();
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveValue('https://desk.example.com/sign-in?token=one-time-invite');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('the last step leads to the inbox, where imported conversations wait to be answered, with or without a mailbox', async () => {
+  serve({ setup: progress({ import: 'done' }) });
+  open('/setup/first_reply');
+  await title('Answer your first email');
+  expect(await screen.findByRole('link', { name: 'Open the inbox' })).toHaveAttribute('href', '/');
+});
+
+test('an address under /setup that names no screen is the not-found page of every page, with the rail and the workspace', async () => {
+  serve({ setup: progress() });
+  open('/setup/email/extra');
+  expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  expect(await screen.findByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
 });

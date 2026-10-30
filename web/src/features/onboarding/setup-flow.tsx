@@ -46,7 +46,9 @@ export function SetupFlowRoute({ step, navigate }: SetupFlowRouteProps) {
   useEffect(() => { heading.current?.focus(); }, [step, loaded]);
   const missingID = useId();
 
-  if (me.isError || setup.isError) return <SetupFlowFrame me={me.data}>
+  // A check that fails after the steps loaded keeps them on screen, with what the person typed or was shown
+  // once (an invite link); only a flow that never loaded says so.
+  if ((me.isError && !me.data) || (setup.isError && !setup.data)) return <SetupFlowFrame me={me.data}>
     <p role="alert" className="error-copy">{m.loadFailed}{' '}
       <button type="button" className="link-action" onClick={() => { void me.refetch(); void setup.refetch(); }}>{messages.tryAgain}</button></p>
   </SetupFlowFrame>;

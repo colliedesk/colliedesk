@@ -49,8 +49,8 @@ Each screen shows:
   - **Import from Freshdesk**: the [import](import-freshdesk.md), without leaving the flow.
   - **Invite your team**: create an invite. Its one-time link stays on screen until you leave the step.
   - **Answer your first email**: **Send yourself a test message** opens a conversation from your own
-    address. Answer it, and the reply is emailed to you. Without a mailbox yet, replies start once email
-    or an import brings conversations.
+    address. Answer it, and the reply is emailed to you. **Open the inbox** is there too: conversations
+    come in with your email or your import, and you answer one from the inbox.
 - A main button that names the step it opens (for example **Next: Import from Freshdesk**, and
   **Finish setup** on the last step), **I'll do this later** and **Back**. The email setup has a
   **Continue** of its own: it moves between the parts of that setup only.

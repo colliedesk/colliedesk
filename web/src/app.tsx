@@ -50,8 +50,9 @@ function AppLayout() {
   useInAppLinks();
   // The public page of a results share link has no session and no rail.
   const onSignIn = path === '/sign-in' || path === '/r';
-  // The setup flow fills the screen with one step at a time: no rail, its own header names the workspace.
-  const inSetup = path === '/setup' || path.startsWith('/setup/');
+  // The setup flow fills the screen with one step at a time: no rail, its own header names the workspace. Only
+  // its own addresses do: a deeper one is not found, and the router matches it to a step page all the same.
+  const inSetup = /^\/setup(\/[^/]+)?\/?$/.test(path);
   // An address that matches no page is no rail destination either.
   const notFound = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === rootRouteId });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
@@ -91,7 +92,7 @@ function AppLayout() {
   if (signedOut && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={{ signed_out: true }} replace />;
   if (signedOut && config.isPending) return <div className="app-main" />;
   // Signed out or locked, the setup flow gets the same screens as any page, in the frame of every page.
-  if (inSetup && !signedOut && !locked) return <Outlet />;
+  if (inSetup && !signedOut && !locked && !notFound) return <Outlet />;
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');

@@ -25,7 +25,7 @@ export const flowMessages = {
     invite: { alone: 'Create an invite above to continue.' },
     first_reply: { none: 'Send your first reply to continue.' },
   } satisfies Record<SetupStepKey, Record<string, string>>,
-  noMailbox: 'Replies start from the inbox once email or an import brings conversations.',
+  noMailbox: 'Conversations come in with your email or your import. Answer one from the inbox.',
   setUpEmail: 'Set up email first',
   doneTitle: 'You\'re ready to answer customers',
   doneAll: 'Every step is done.',

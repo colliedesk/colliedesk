@@ -35,6 +35,9 @@ export interface SetupProps extends HomeProps {
   channel?: Channel;
   // named: the setup adds another channel of the type, told apart by its name.
   named?: boolean;
+  // returnTo: the page a sign-in the setup sends the browser to comes back to, when the setup is shown
+  // outside the channel's own pages (the setup flow).
+  returnTo?: string;
 }
 
 export interface ChannelPanels {

@@ -331,7 +331,8 @@ function ChannelPage({ id, tab, search, navigate, isAdmin, timezone }: PageProps
   // in the setup, with the outcome.
   const mailboxOutcome = search.gmail || search.gmail_error || search.microsoft || search.microsoft_error;
   useEffect(() => {
-    if (mailboxOutcome && takeSetupReturn(id)) navigate(withSearch(`${base}/${id}/setup`, { ...search, tab: undefined }), true);
+    const back = mailboxOutcome ? takeSetupReturn(id) : undefined;
+    if (back) navigate(withSearch(back.to ?? `${base}/${id}/setup`, { ...search, tab: undefined }), true);
   }, [mailboxOutcome, id, search, navigate]);
   const detail = useQuery({ queryKey: ['channel', id], queryFn: () => channelsApi.get(id), retry: (count, error) => !isMissing(error) && count < 2 });
   const [removing, setRemoving] = useState(false);

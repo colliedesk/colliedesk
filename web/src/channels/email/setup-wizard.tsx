@@ -18,7 +18,7 @@ import './email-setup.css';
 // EmailSetup connects a support address in four steps on one page: the address, forwarding its mail here,
 // how replies leave, and a test message. Each step's state is read from the server; a step opens again
 // after it is done, and leaving the page loses nothing.
-export function EmailSetup({ channel, named = false, canManage, timezone, navigate, create }: SetupProps) {
+export function EmailSetup({ channel, named = false, canManage, timezone, navigate, create, returnTo }: SetupProps) {
   const client = useQueryClient();
   const id = channel?.id;
   const settings = useQuery({ queryKey: ['email-channel', id], queryFn: () => channelsApi.email(id!), enabled: Boolean(id) });
@@ -54,7 +54,7 @@ export function EmailSetup({ channel, named = false, canManage, timezone, naviga
     forward: () => channel && data && <ForwardStep channel={channel} settings={data} canManage={canManage} timezone={timezone} provider={memory.provider}
       onProvider={(provider) => remember({ provider })} onContinue={() => advance('forward')} onSkip={() => skip('forward')} />,
     replies: () => id && data && <RepliesStep channelID={id} settings={data} canManage={canManage} timezone={timezone} provider={memory.provider ?? (data.hosted_address ? 'gmail' : 'other')} done={states.replies === 'done'}
-      onContinue={() => advance('replies')} onSkip={() => skip('replies')} beforeLeave={() => markSetupReturn(id)} />,
+      onContinue={() => advance('replies')} onSkip={() => skip('replies')} beforeLeave={() => markSetupReturn(id, returnTo)} />,
     test: () => id && data && <div className="setup-body">
       <TestMessage channelID={id} ready={addressSaved(data)} forwarding={states.forward === 'done'} navigate={navigate} onSent={(sent) => remember({ testConversation: sent })} />
       {conversation && (states.test === 'done'

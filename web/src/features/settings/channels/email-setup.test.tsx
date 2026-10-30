@@ -302,6 +302,13 @@ test('back from Google during the setup, the channel page sends the browser back
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/settings/channels/${MAIN}/setup?gmail=connected`, true));
 });
 
+test('back from Google during the setup flow, the channel page sends the browser back to the flow\'s email step with the outcome', async () => {
+  waitingChannel();
+  sessionStorage.setItem('colliedesk.email-setup.return', JSON.stringify({ channel: MAIN, to: '/setup/email' }));
+  const { navigate } = show(MAIN, { tab: 'replies', gmail: 'connected' });
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/setup/email?gmail=connected', true));
+});
+
 test('step 2 waits for Gmail\'s confirmation email, then shows its code, the confirm link in a new tab and its conversation', async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
