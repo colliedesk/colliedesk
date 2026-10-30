@@ -81,6 +81,7 @@ Beta starts when HC Labs announces it. Before that:
 - Suggested articles while a customer writes a request, with the requests avoided counted ([#344](https://github.com/colliedesk/colliedesk/issues/344)).
 - A help center search report: top searches and searches with no results ([#345](https://github.com/colliedesk/colliedesk/issues/345)).
 - After an import, draft articles for your most frequent questions from your solved conversations ([#349](https://github.com/colliedesk/colliedesk/issues/349)).
+- On trial, see on your own history what Colliedesk takes off your team ([#350](https://github.com/colliedesk/colliedesk/issues/350)).
 - Knowledge gaps: what customers could not find, and a draft article from your solved conversations ([#346](https://github.com/colliedesk/colliedesk/issues/346)).
 - Help center numbers in Results: self-service rate, article views and the articles that lead to requests ([#347](https://github.com/colliedesk/colliedesk/issues/347)).
 
