@@ -23,14 +23,23 @@ Every new cloud workspace starts a 14-day free trial with every feature, for up 
   not make a new one. If you sign up again with the same address you are told to sign in instead.
 - Sign-up is limited to 3 new workspaces per network address per day.
 - Coming from the website's Founding link, a visitor who is not signed in goes straight to sign-up,
-  which says the plan they came for. The button reads **Create workspace and continue to payment**,
-  and the payment window opens as soon as the workspace exists.
+  which says the plan they came for: under the title, "$99 every 3 months · up to 10 agents · 30-day
+  money-back guarantee". They enter their work email and the emailed code, name the workspace, and pay.
+  The button reads **Create workspace and continue to payment**, and the payment window opens as soon as
+  the workspace exists. The workspace name is the only answer the form needs; the three questions of
+  [sign-in](sign-in.md#create-a-workspace-hosted-cloud) wait under "Tell us about your team (optional)".
   The plan rides in the sign-in address, so it survives the identity provider's round trip; opening
   the plain sign-in page later in the same tab (the website's **Log in**) is a normal sign-in again.
 - Coming from the website's Team 25 link (`/sign-in?intent=trial&plan=team25`), a visitor signs up for the
   trial as usual: no payment window opens. The browser remembers the plan they came for (for a day, in
   that tab), so **Choose a plan** in the banner, **Plan and billing** and the locked page show the Team 25
-  card first, marked **Your pick**. Any other `plan` value is ignored.
+  card first, marked **Your pick**. Any other `plan` value is ignored. The sign-up form asks for the
+  workspace name only here too.
+- Admins get an email three days before the trial ends and another on the day it ends, in the workspace's
+  timezone (the day starts at its midnight). It gives the end date and time, says that the workspace locks,
+  that nothing is deleted and that export stays available, and links to **Plan and billing**. Each admin
+  gets each email once. A workspace that has a plan, or whose trial is over, gets none. If the trial end
+  moves (for example after a Freshdesk import extends it), the new end gets its own two emails.
 
 ### Limits during the trial
 
@@ -150,7 +159,24 @@ trial (or the subscription) has ended, instead of the inbox.
    Colliedesk never sees your card. Pay by card. Apple Pay and Google Pay come later. If you
    close the window, you stay on the page and can start again.
 4. You return to **Plan and billing**. The plan updates within a few moments, once the provider confirms
-   the payment.
+   the payment. Until then the page says it is confirming your plan and the **Choose** buttons stay off,
+   so a second click cannot start a second payment. Once the plan changes, the page says "Payment
+   confirmed. Welcome to" and the plan's name.
+
+## After you pay for Founding or Team 25
+
+A workspace on a paid Founding or Team 25 plan sees a card on **Plan and billing**: **Next: your Freshdesk
+migration**.
+
+- Founding: "Your plan includes a Freshdesk migration done for you." Team 25: "We run the Freshdesk import
+  with you."
+- **Email us your Freshdesk address** opens an email to support@colliedesk.com with the subject
+  "Migration: " and your workspace's name, and a short text that asks for your Freshdesk address and two
+  times that suit you.
+- **Or import it yourself** opens [Import from Freshdesk](import-freshdesk.md).
+- Right after you pay, the card sits at the top of the page with the confirmation. On later visits it
+  sits below the current plan. It goes away once the workspace has a finished Freshdesk import (one that was
+  not undone).
 
 If the window does not open within 3 seconds (for example a browser extension blocks it, or the
 payment provider refuses to show its page inside Colliedesk), Colliedesk says so and opens the same

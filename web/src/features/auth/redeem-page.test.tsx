@@ -63,9 +63,31 @@ test('a link refused by the plan says the link is fine and the workspace is full
 test('a visitor who came to buy Founding is greeted as a buyer, not sent to an admin', () => {
 	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" cloudSignIn={<div>form</div>} />);
 	expect(screen.getByRole('heading', { level: 1, name: 'Join Founding' })).toBeInTheDocument();
-	expect(screen.getByText('Create your account with your work email. Then name your workspace and pay on the next screen.')).toBeInTheDocument();
+	expect(screen.getByText('Enter your work email and we will send you a one-time code. Then you name your workspace and pay.')).toBeInTheDocument();
+	expect(screen.queryByText(/next screen/i)).not.toBeInTheDocument();
 	expect(screen.queryByText(/admin/i)).not.toBeInTheDocument();
 	expect(screen.queryByText(/free trial/i)).not.toBeInTheDocument();
+});
+
+test('the Founding page states its price and promises right under the title, and tells an existing customer the form signs them in', () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" cloudSignIn={<div>form</div>} />);
+	const title = screen.getByRole('heading', { level: 1, name: 'Join Founding' });
+	const offer = screen.getByText('$99 every 3 months · up to 10 agents · 30-day money-back guarantee');
+	expect(title.nextElementSibling).toBe(offer);
+	expect(screen.getByText('Already have a workspace? The same form signs you in.')).toBeInTheDocument();
+});
+
+test('a buy link for another plan names no Founding price but still tells an existing customer to sign in', () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled buying="team_monthly" cloudSignIn={<div>form</div>} />);
+	expect(screen.queryByText(/\$99/)).not.toBeInTheDocument();
+	expect(screen.queryByText(/money-back/i)).not.toBeInTheDocument();
+	expect(screen.getByText('Already have a workspace? The same form signs you in.')).toBeInTheDocument();
+});
+
+test('a buyer who already has a workspace and must pick one is not shown the sign-in hint', () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" workspaces={[{ slug: 'alpha', name: 'Alpha Support' }]} />);
+	expect(screen.queryByText('Already have a workspace? The same form signs you in.')).not.toBeInTheDocument();
+	expect(screen.getByRole('button', { name: 'Alpha Support' })).toBeInTheDocument();
 });
 
 test('the sign-in brand side shows the Colliedesk wordmark as one named image', () => {

@@ -38,6 +38,8 @@ export const signupMessages = {
       },
     },
   },
+  // The questions of a visitor who came with a plan in mind sit under this heading, closed.
+  signupOptional: 'Tell us about your team (optional)',
   signupAnswerEach: 'Answer each question to continue.',
   signupChooseOne: 'Choose one',
   signupErrors: {

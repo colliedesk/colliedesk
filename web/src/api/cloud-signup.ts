@@ -3,6 +3,7 @@ import { redeemedSchema } from './schemas';
 import type { Generated } from './schemas';
 
 // SignupAnswers are what the sign-up form asks about the team; the server stores them with the workspace.
+// A visitor who came with a plan in mind may give some, or none (the server takes each answer on its own).
 export interface SignupAnswers {
   goal: Generated<'OnboardingGoal'>;
   role: Generated<'OnboardingRole'>;
@@ -52,7 +53,7 @@ async function signupFailure(response: Response): Promise<SignupError> {
 
 // signUpCloud creates a trial workspace for the verified identity of the bearer token and returns
 // the signed-in agent and workspace (the session cookie is set by the response).
-export async function signUpCloud(token: string, workspaceName: string, answers?: SignupAnswers, next?: string) {
+export async function signUpCloud(token: string, workspaceName: string, answers?: Partial<SignupAnswers>, next?: string) {
   const response = await fetch('/api/v1/auth/cloud/signup', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

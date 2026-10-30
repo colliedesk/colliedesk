@@ -12,7 +12,7 @@ const founding = (used: number): Billing => ({
 });
 
 function show(billing: Billing) {
-  render(<BillingPage billing={billing} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  render(<BillingPage workspaceName="Birch Desk" billing={billing} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
 }
 
 test('a founding workspace sees its attachment usage against the 20 GiB cap', () => {
@@ -45,10 +45,10 @@ test('over the cap the page says uploads and imports are refused, mail is still 
 test('at or near the cap the notice names the upgrade the server says is on sale', () => {
   const small = (plan: 'solo' | 'small', limit: number, used: number, upgrade: Billing['storage_upgrade_plan']): Billing => ({ ...founding(used), plan,
     storage_upgrade_plan: upgrade, limits: { agents: plan === 'solo' ? 1 : 3, replies_per_24h: null, storage_bytes: limit, storage_warn_bytes: limit * 0.8 } });
-  const { unmount } = render(<BillingPage billing={small('solo', 10 * GiB, 10 * GiB, 'small')} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  const { unmount } = render(<BillingPage workspaceName="Birch Desk" billing={small('solo', 10 * GiB, 10 * GiB, 'small')} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByRole('alert', { name: /storage/i })).toHaveTextContent('Upgrade to the Small plan under Manage billing for a higher limit.');
   unmount();
-  const next = render(<BillingPage billing={small('small', 30 * GiB, 24 * GiB, 'team25')} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  const next = render(<BillingPage workspaceName="Birch Desk" billing={small('small', 30 * GiB, 24 * GiB, 'team25')} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByRole('status')).toHaveTextContent('To raise the limit, upgrade to Team 25 under Manage billing.');
   next.unmount();
   show(small('solo', 10 * GiB, 10 * GiB, null));

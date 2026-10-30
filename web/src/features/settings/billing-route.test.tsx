@@ -6,7 +6,7 @@ import { readCheckoutIntent, rememberCheckoutIntent } from './checkout-intent';
 import { readPlanIntent, rememberPlanIntent } from './plan-intent';
 
 const { api, InvalidRequestError } = vi.hoisted(() => ({
-  api: { me: vi.fn(), config: vi.fn(), billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() },
+  api: { me: vi.fn(), config: vi.fn(), billing: vi.fn(), setupProgress: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() },
   InvalidRequestError: class InvalidRequestError extends Error {},
 }));
 vi.mock('../../api/client', () => ({ api, InvalidRequestError }));
@@ -30,6 +30,7 @@ const assign = vi.fn();
 function renderRoute(props: { checkoutReturned?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><BillingRoute {...props} /></QueryClientProvider>);
+  return client;
 }
 
 beforeEach(() => {
@@ -238,4 +239,65 @@ test('with billing switched off a workspace that never paid sees no billing, and
   expect(await screen.findByText(/billing is not enabled/i)).toBeInTheDocument();
   expect(api.startCheckout).not.toHaveBeenCalled();
   expect(readCheckoutIntent()).toBeUndefined();
+});
+
+// The next step after paying: the migration card, and the plan buttons that wait for the payment provider.
+const foundingPaid = { ...free, plan: 'founding', status: 'active', active_subscriptions: 1, current_period_end: '2027-01-30T09:00:00Z', checkout_plans: [], limits: { ...free.limits, agents: 10, replies_per_24h: null } };
+const setup = (importState: 'none' | 'running' | 'done') => ({
+  steps: [{ key: 'email', state: 'none', detail: null }, { key: 'import', state: importState, detail: null }, { key: 'invite', state: 'alone', detail: null }, { key: 'first_reply', state: 'none', detail: null }],
+  complete: false, recommended: null,
+});
+const migrationCard = () => screen.queryByRole('region', { name: 'Next: your Freshdesk migration' });
+
+test('after checkout the plan buttons stay off until the provider confirms, then the paid page opens with the migration card', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValueOnce(free).mockResolvedValue(foundingPaid);
+  api.setupProgress.mockResolvedValue(setup('none'));
+  const client = renderRoute({ checkoutReturned: true });
+  expect(await screen.findByRole('status')).toHaveTextContent(/confirming your plan/i);
+  for (const button of screen.getAllByRole('button', { name: /^Choose / })) expect(button).toBeDisabled();
+  expect(api.setupProgress).not.toHaveBeenCalled();
+  await client.invalidateQueries({ queryKey: ['billing'] });
+  const card = await screen.findByRole('region', { name: 'Next: your Freshdesk migration' });
+  expect(card).toHaveTextContent('Your plan includes a Freshdesk migration done for you.');
+  expect(screen.getByRole('status')).toHaveTextContent('Payment confirmed. Welcome to Founding.');
+  expect(screen.queryByRole('button', { name: /^Choose / })).not.toBeInTheDocument();
+  const mail = new URL(screen.getByRole('link', { name: 'Email us your Freshdesk address' }).getAttribute('href') ?? '');
+  expect(mail.searchParams.get('subject')).toBe(`Migration: ${me('admin').workspace.name}`);
+});
+
+test('a paid Team 25 workspace without an import sees the card on an ordinary visit', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue({ ...foundingPaid, plan: 'team25', limits: { ...foundingPaid.limits, agents: 25 } });
+  api.setupProgress.mockResolvedValue(setup('running'));
+  renderRoute();
+  expect(await screen.findByRole('region', { name: 'Next: your Freshdesk migration' })).toHaveTextContent('We run the Freshdesk import with you.');
+});
+
+test('a paid Founding workspace with a finished Freshdesk import has no migration card', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(foundingPaid);
+  api.setupProgress.mockResolvedValue(setup('done'));
+  renderRoute();
+  await screen.findByRole('button', { name: /manage billing/i });
+  await waitFor(() => expect(api.setupProgress).toHaveBeenCalled());
+  await waitFor(() => expect(migrationCard()).not.toBeInTheDocument());
+  expect(screen.queryByRole('link', { name: 'Email us your Freshdesk address' })).not.toBeInTheDocument();
+});
+
+test('when setup progress cannot be read the card still shows, since an email is never wrong', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(foundingPaid);
+  api.setupProgress.mockRejectedValue(new Error('API 500'));
+  renderRoute();
+  expect(await screen.findByRole('region', { name: 'Next: your Freshdesk migration' })).toBeInTheDocument();
+});
+
+test('a workspace on a plan with no migration never asks for setup progress', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue({ ...foundingPaid, plan: 'team' });
+  renderRoute();
+  await screen.findByRole('button', { name: /manage billing/i });
+  expect(api.setupProgress).not.toHaveBeenCalled();
+  expect(migrationCard()).not.toBeInTheDocument();
 });

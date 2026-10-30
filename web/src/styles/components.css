@@ -4,43 +4,86 @@
 .status-tabs label { position: relative; display: inline-flex; align-items: center; min-height: 36px; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-small); font-weight: 500; cursor: pointer; white-space: nowrap; }
 .status-tabs input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
 .status-tabs label:hover { color: var(--text-1); }
-.status-tabs label:has(input:checked) { color: var(--text-1); box-shadow: inset 0 -2px var(--accent); }
+.status-tabs label:has(input:checked) { color: var(--text-1); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
 .status-tabs label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
 /* Search takes the first row; Filter, Sort and Views share the second. The menus open under the whole bar. */
 .filter-bar { position: relative; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .search-field { position: relative; display: block; flex: 1 1 100%; min-width: 0; }
 .search-field svg { position: absolute; top: 50%; left: 10px; translate: 0 -50%; color: var(--text-3); pointer-events: none; }
-.search-field input { width: 100%; padding-left: 32px; }
+.search-field input { width: 100%; padding-left: 32px; border-color: transparent; background: var(--surface-2); }
+.search-field input:hover:not(:disabled) { border-color: transparent; background: var(--surface-3); }
 .filter-menu { position: static; }
 .filter-menu summary {
   min-height: var(--control, 32px); display: inline-flex; align-items: center; gap: var(--space-2); list-style: none; cursor: pointer;
-  border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-1);
-  padding: 0 var(--space-3); color: var(--text-1); font-size: var(--fs-small); font-weight: 500;
+  border: 1px solid transparent; border-radius: var(--radius); background: transparent; box-shadow: none;
+  padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); font-weight: 500;
 }
+/* Ghost toolbar: the first and last icons sit on the column edge. */
+.filter-bar > .filter-menu:first-of-type summary { margin-left: calc(-1 * var(--space-3)); }
+.filter-bar > .views-menu { margin-left: auto; }
+.filter-bar > .views-menu summary { margin-right: calc(-1 * var(--space-3)); }
+.filter-menu[open] summary { background: var(--surface-3); color: var(--text-1); }
 .filter-menu summary::-webkit-details-marker { display: none; }
-.filter-menu summary:hover { background: var(--surface-2); border-color: var(--line-strong); }
+.filter-menu summary:hover { background: var(--surface-2); color: var(--text-1); }
 .filter-menu summary svg { color: var(--text-3); }
 .filter-count { min-width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: var(--radius-full); background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 600; }
 .filter-popover {
-  position: absolute; z-index: 5; top: calc(100% + var(--space-1)); left: 0; width: min(100%, 22rem); display: grid; gap: var(--space-3);
-  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-3);
+  position: absolute; z-index: 5; top: calc(100% + var(--space-1)); left: 0; width: min(100%, 15rem); display: grid; gap: 0;
+  border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1);
 }
 .filter-popover select { width: 100%; }
 /* The Filter menu holds every filter; it scrolls inside itself so the page never moves. */
 .filter-menu > .filter-popover { max-height: min(70vh, 34rem); overflow-y: auto; overscroll-behavior: contain; }
-.filter-popover fieldset { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; min-width: 0; }
-.filter-popover fieldset + fieldset, .filter-popover fieldset + .field, .filter-popover .field + fieldset { border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.filter-popover fieldset { display: grid; gap: 0; margin: 0; border: 0; padding: 0; min-width: 0; }
 /* A floated legend is laid out like any other child, so it never sits in the fieldset's top border. */
-.filter-popover legend { float: left; width: 100%; padding: 0; margin-bottom: var(--space-1); }
-.check-row { display: flex; align-items: center; gap: var(--space-2); min-height: 28px; font-size: var(--fs-small); color: var(--text-1); cursor: pointer; }
+.filter-popover legend { float: left; width: 100%; margin: 0; padding: var(--space-2) var(--space-2) var(--space-1); color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
+.check-row { position: relative; display: flex; align-items: center; gap: var(--space-2); min-height: 30px; font-size: var(--fs-small); color: var(--text-1); cursor: pointer; }
 .check-row span { min-width: 0; overflow-wrap: anywhere; }
 .check-row:has(input:disabled) { color: var(--text-3); cursor: not-allowed; }
+/* One menu recipe (Filter, Views, bulk menus, select pickers): 30 px rows, a trailing check, groups split by space.
+   The checkbox or radio stays in the row for keyboards and screen readers; the row draws the state. */
+.filter-popover .check-row { padding: 0 var(--space-2); border-radius: var(--radius); }
+.filter-popover .check-row:hover { background: var(--surface-2); }
+.filter-popover .check-row > input:is([type="checkbox"], [type="radio"]) { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.filter-popover .check-row:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.filter-popover .check-row:has(> input:is([type="checkbox"], [type="radio"]):checked)::after {
+  content: "" / ""; margin-left: auto; width: 14px; height: 14px; flex: none; background: var(--text-1); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.filter-popover fieldset + fieldset, .filter-popover fieldset + .field, .filter-popover .field + fieldset { border-top: 0; margin-top: var(--space-1); padding-top: 0; }
+/* Native selects keep their element; where the browser supports it the picker takes the menu recipe. */
+@supports (appearance: base-select) {
+  .sort-field, .property-row select { appearance: base-select; }
+  .sort-field { display: inline-flex; align-items: center; gap: var(--space-2); field-sizing: content; background-image: none; }
+  .sort-field::picker-icon, .property-row select::picker-icon { content: ""; width: 10px; height: 10px; background: var(--text-3); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
+  .property-row select { display: flex; align-items: center; }
+  .property-row select::picker-icon { opacity: 0; }
+  .property-row select:is(:hover, :focus-visible)::picker-icon { opacity: 1; }
+  .property-row select:hover:not(:disabled) { background-image: none; }
+  .sort-field::picker(select), .property-row select::picker(select) {
+    appearance: base-select; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2);
+    padding: var(--space-1); margin-top: var(--space-1); min-width: 12rem;
+  }
+  .sort-field option, .property-row select option { display: flex; align-items: center; gap: var(--space-2); min-height: 30px; padding: 0 var(--space-2);
+    border-radius: var(--radius); background: transparent; color: var(--text-1); font-size: var(--fs-small); }
+  .sort-field option:is(:hover, :focus-visible), .property-row select option:is(:hover, :focus-visible) { background: var(--surface-2); outline: 0; }
+  .sort-field option::checkmark, .property-row select option::checkmark { order: 2; margin-left: auto; content: ""; width: 14px; height: 14px;
+    background: var(--text-2); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E") center / contain no-repeat; }
+  .property-row select option:is([value="open"], [value="pending"], [value="resolved"], [value="closed"])::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--dot); }
+  .property-row option[value="open"] { --dot: var(--open); } .property-row option[value="pending"] { --dot: var(--pending); }
+  .property-row option[value="resolved"] { --dot: var(--ok); } .property-row option[value="closed"] { --dot: var(--text-3); }
+  .property-row option[value="urgent"]::before { content: "↑" / ""; width: 8px; color: var(--danger); font-weight: 600; }
+  .property-row option[value="high"]::before { content: "↑" / ""; width: 8px; color: var(--text-2); font-weight: 600; }
+  .property-row option[value="normal"]::before { content: "" / ""; width: 8px; }
+  .property-row option[value="low"]::before { content: "↓" / ""; width: 8px; color: var(--text-3); }
+}
 .filter-match { margin-top: var(--space-1); color: var(--text-2); }
 .filter-hint { color: var(--text-3); font-size: var(--fs-small); }
 .date-range { grid-template-columns: 1fr 1fr; column-gap: var(--space-2); }
 .date-range legend { grid-column: 1 / -1; }
 .date-range input { width: 100%; min-width: 0; padding-inline: var(--space-2); }
-.sort-field { flex: 1 1 8rem; width: auto; min-width: 0; max-width: 13rem; font-size: var(--fs-small); }
+.sort-field { flex: none; width: auto; min-width: 0; max-width: 13rem; border-color: transparent; background-color: transparent;
+  color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+.sort-field:hover:not(:disabled) { border-color: transparent; background-color: var(--surface-2); color: var(--text-1); }
 /* Active filters: one chip each, wrapping onto a second line rather than scrolling sideways. */
 .filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .filter-chips-pending { min-height: 26px; }
@@ -94,18 +137,18 @@
 /* Conversation rows. */
 .conversation-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .group-label {
-  position: sticky; top: 0; z-index: 1; background: var(--surface-1); padding: var(--space-3) var(--space-4) var(--space-1);
+  position: sticky; top: 0; z-index: 1; background: var(--surface-1); padding: var(--space-3) var(--space-5) var(--space-1);
   color: var(--text-3); font-size: var(--fs-label); font-weight: 600;
 }
 .conversation-row {
   width: 100%; min-height: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-1) var(--space-3);
-  border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-3) var(--space-4);
+  border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; padding: var(--space-3) var(--space-5);
   text-align: left; font-size: var(--fs-ui); font-weight: 400; white-space: normal;
 }
-.conversation-row:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line); }
-.conversation-row[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
+.conversation-row:hover:not(:disabled) { background: var(--surface-0); border-color: var(--line); }
+.conversation-row[aria-current="true"] { background: var(--surface-2); box-shadow: inset 2px 0 var(--accent); }
 .conversation-row:focus-visible { outline-offset: -2px; }
-.conversation-subject { overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-subject { overflow: hidden; color: var(--text-1); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-row time { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
 .conversation-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); min-height: 20px; }
 .pagination { display: flex; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
@@ -129,9 +172,13 @@
 .status-closed { --dot: var(--text-3); }
 .priority { display: inline-flex; align-items: center; gap: 2px; color: var(--text-3); font-size: var(--fs-label); }
 .priority svg { width: 12px; height: 12px; }
-.priority-high, .priority-urgent { border-radius: var(--radius-sm); padding: 0 6px; font-weight: 600; }
-.priority-high { background: var(--text-2); color: var(--surface-1); }
-.priority-urgent { background: var(--danger-soft); color: var(--danger); }
+/* Nothing filled at rest: Urgent is red and outranks High; Normal is the default and is not shown in a row. */
+.priority-high, .priority-urgent { font-weight: 500; }
+.priority-high { color: var(--text-2); }
+.priority-urgent { color: var(--danger); }
+.conversation-meta .priority-normal { display: none; }
+/* A status tab already names the status, so rows under it do not repeat it. */
+body:has(.status-tabs input:not([value="all"]):checked) .conversation-meta .status { display: none; }
 .tag-pill { color: var(--text-3); font-size: var(--fs-label); }
 .channel-pill { max-width: 12rem; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 6px; color: var(--text-2); font-size: var(--fs-label); line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .tag-pill::before { content: "#"; opacity: 0.7; }
@@ -150,10 +197,11 @@
 .status-button-error { flex-basis: 100%; margin: 0; text-align: right; font-size: var(--fs-label); }
 .timeline-scroll { overflow-y: auto; padding: var(--space-5) var(--space-6); }
 .timeline-stack { max-width: 46rem; margin: 0 auto; display: grid; gap: var(--space-4); }
-.message { border-radius: var(--radius-lg); background: var(--surface-2); padding: var(--space-4) var(--space-5); }
+/* One container for every message (a ring, not a border); only a private note is filled. */
+.message { border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-4) var(--space-5); }
 /* Our replies are paper on the grey thread: white with a 1px ring, so no colour is needed to tell them apart. */
 .message-outgoing { background: var(--surface-1); box-shadow: var(--shadow-1); }
-.message-note { background: var(--note-bg); box-shadow: inset 0 0 0 1px var(--note-line); }
+.message-note { background: color-mix(in srgb, var(--note-bg) 55%, var(--surface-1)); box-shadow: 0 0 0 1px var(--note-line); }
 .message-meta { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
 .message-meta .avatar { width: 24px; height: 24px; font-size: 10px; }
 .message-byline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); min-width: 0; }
@@ -180,11 +228,14 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .plain-text-body { line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-envelope, .message-origin { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: calc(-1 * var(--space-1)) 0 var(--space-3); color: var(--text-3); font-size: var(--fs-label); }
 .message-envelope:last-child { margin: var(--space-3) 0 0; }
+/* Links in the meta line are tools, not running text: quiet until hovered. */
+.message-envelope a { color: var(--text-3); text-decoration: none; }
+.message-envelope a:hover { color: var(--text-1); text-decoration: underline; }
 @media (pointer: coarse), (max-width: 30rem) { .message-envelope a, .conversation-source .link-button { display: inline-flex; align-items: center; min-height: var(--touch); } }
 .badge { border-radius: var(--radius-sm); background: var(--surface-3); color: var(--text-2); font-weight: 600; padding: 2px var(--space-2); }
 .badge-fail, .badge-delivery-failed { background: var(--danger-soft); color: var(--danger); }
 .badge-none { background: var(--warn-soft); color: var(--warn); }
-.badge-delivery-sent { background: var(--ok-soft); color: var(--ok); }
+.badge-delivery-sent { background: transparent; padding-inline: 0; color: var(--text-3); font-weight: 400; }
 .message-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; list-style: none; font-size: var(--fs-label); }
 .message-attachments li { display: inline-flex; align-items: center; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-1) var(--space-3); }
 .message-attachments svg { width: 14px; height: 14px; color: var(--text-3); }
@@ -339,22 +390,37 @@ a.saved-reply-button { display: inline-flex; align-items: center; justify-conten
 .list-notice button { justify-self: start; }
 
 /* Details panel: label/value property rows, then tags. */
-.details-section { margin: 0; border: 0; border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-4); min-width: 0; }
+.details-section { margin: 0; border: 0; padding: var(--space-3) var(--space-5); min-width: 0; }
+.details-section:first-child { padding-top: var(--space-5); }
 .details-section:last-child { border-bottom: 0; }
 .details-section legend { float: left; width: 100%; }
 .details-section h2, .details-section legend { margin-bottom: var(--space-2); padding: 0; }
-.details-section h2, .details-section legend { color: var(--text-1); font-size: var(--fs-small); font-weight: 600; }
-.property-row { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.details-section h2, .details-section legend { color: var(--text-3); font-size: var(--fs-label); font-weight: 500; }
+.property-row { position: relative; display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: var(--space-2); min-height: 32px; }
 .property-row + .property-row { margin-top: 2px; }
 .property-row > span { color: var(--text-3); font-size: var(--fs-small); }
-.property-row select { width: 100%; border-color: transparent; background-color: transparent; font-weight: 500; padding-left: var(--space-2); }
-.property-row select:hover:not(:disabled) { border-color: var(--line-strong); background-color: var(--surface-1); }
-.tag-choices { clear: both; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.property-row select { width: 100%; border-color: transparent; background-color: transparent; background-image: none; font-weight: 400; padding-left: var(--space-8); }
+.property-row select:hover:not(:disabled) { border-color: transparent; background-color: var(--surface-2); background-image: var(--select-chevron); }
+/* Values share one left edge after a 16 px mark: the status dot and the priority arrow, as in the list rows. */
+.property-row::after { position: absolute; left: calc(84px + var(--space-2) + var(--space-2)); top: 50%; translate: 0 -50%; pointer-events: none;
+  display: grid; place-items: center; width: 16px; font-size: 13px; font-weight: 700; line-height: 1; }
+.property-row:has(option[value="open"]:checked) { --dot: var(--open); }
+.property-row:has(option[value="pending"]:checked) { --dot: var(--pending); }
+.property-row:has(option[value="resolved"]:checked) { --dot: var(--ok); }
+.property-row:has(option[value="closed"]:checked) { --dot: var(--text-3); }
+.property-row:has(option[value="open"])::after { content: ""; width: 8px; height: 8px; margin-left: 4px; border-radius: var(--radius-full); background: var(--dot); }
+.property-row:has(option[value="urgent"]:checked)::after { content: "↑" / ""; color: var(--danger); }
+.property-row:has(option[value="urgent"]:checked) select { color: var(--danger); }
+.property-row:has(option[value="high"]:checked)::after { content: "↑" / ""; color: var(--text-2); }
+.property-row:has(option[value="low"]:checked)::after { content: "↓" / ""; color: var(--text-3); }
+.tag-choices { clear: both; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
 .tag-check { position: relative; display: inline-flex; align-items: center; min-height: 28px; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--surface-1); padding: 0 var(--space-3); color: var(--text-2); font-size: var(--fs-small); cursor: pointer; }
 .tag-check input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer; }
-.tag-check:hover { border-color: var(--line-strong); }
-.tag-check:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); font-weight: 500; }
-.tag-check:has(input:checked)::before { content: "✓" / ""; margin-right: var(--space-1); }
+.tag-check { min-height: 24px; border-color: transparent; border-radius: var(--radius-sm); background: transparent; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
+.tag-check::before { content: "#" / ""; margin-right: 1px; color: var(--text-3); }
+.tag-check:hover { background: var(--surface-2); color: var(--text-1); }
+.tag-check:has(input:checked) { color: var(--text-1); font-weight: 500; }
+.tag-check:has(input:checked)::before { content: "✓" / ""; margin-right: var(--space-1); color: var(--text-1); }
 .tag-check:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .tag-create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); margin-top: var(--space-3); }
@@ -365,6 +431,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .drawer-close { display: flex; margin: var(--space-3) var(--space-4) 0 auto; }
   .inbox-shell[data-details-open="true"] .details-panel {
     display: block; position: fixed; inset: var(--space-2) var(--space-2) var(--space-2) auto; z-index: 3; width: min(100% - var(--space-4), 20rem); box-shadow: var(--shadow-3);
+    border-left: 0; border-radius: var(--radius-lg);
   }
 }
 @media (max-width: 44rem) {
@@ -391,7 +458,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .segmented label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* Settings. */
-.form-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-3); }
+/* A field with its Save button stops at a readable width; the button stays beside it. */
+.form-row { display: grid; grid-template-columns: minmax(0, 26rem) auto; justify-content: start; align-items: end; gap: var(--space-3); }
+.form-row > button { justify-self: start; }
+.form-row > small { max-width: 34rem; color: var(--text-3); font-size: var(--fs-label); line-height: 1.45; }
 /* The field and its button share the first line; a save status and a hint take the whole line under them. */
 .form-row > :nth-child(n + 3) { grid-column: 1 / -1; }
 .invite-form { display: grid; grid-template-columns: minmax(0, 1fr) 9rem auto; align-items: end; gap: var(--space-3); }
@@ -484,6 +554,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .cloud-signup h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 .cloud-signup .primary-action { --control: 44px; }
 /* The goal is a radio list; role and source are drop-downs side by side, so the button fits a laptop screen. */
+.signup-optional { display: grid; gap: var(--space-3); }
+.signup-optional > summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+.signup-optional[open] > summary { margin-bottom: var(--space-1); }
 .signup-question { display: grid; margin: 0; border: 0; padding: 0; min-width: 0; }
 .signup-pickers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: end; }
 .signup-pickers > .field { min-width: 0; }
@@ -503,6 +576,15 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* Bulk selection: a checkbox beside each row, and an action bar that replaces the list header. */
 .conversation-item { position: relative; }
 .conversation-item .conversation-row { padding-left: 2.75rem; }
+/* With a mouse, rows start on the column edge; the checkbox shows over the row's left padding on hover or focus,
+   and its column opens once a row is ticked (bulk mode). Select all stays: focus returns to it after a bulk change.
+   Touch keeps the column. */
+@media (pointer: fine) {
+  .conversation-scroll:not(:has(.row-check input:checked)) .conversation-item .conversation-row { padding-left: var(--space-5); }
+  .conversation-scroll:not(:has(.row-check input:checked)) .row-check { left: 3px; width: 15px; opacity: 0; }
+  .conversation-scroll:not(:has(.row-check input:checked)) .conversation-item:is(:hover, :focus-within) .row-check { opacity: 1; }
+  .conversation-scroll:not(:has(.row-check input:checked)) .row-check input { width: 13px; height: 13px; }
+}
 .row-check { position: absolute; z-index: 1; inset: 0 auto 0 0; width: 2.75rem; display: grid; place-items: start center; padding-top: var(--space-3); cursor: pointer; }
 .select-all { position: sticky; top: 0; z-index: 2; background: var(--surface-1); display: flex; align-items: center; gap: var(--space-2); min-height: calc(var(--control, 32px) + var(--space-2) * 2); border-bottom: 1px solid var(--line); padding: var(--space-1) var(--space-2) var(--space-1) 0; color: var(--text-3); font-size: var(--fs-label); }
 .select-all > label { display: flex; align-items: center; align-self: stretch; gap: var(--space-3); cursor: pointer; }
@@ -512,7 +594,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .list-head { display: grid; gap: var(--space-3); }
 /* Bulk actions: one row in place of the select all caption, Gmail style; icons carry a tooltip and a name. */
 .bulk-bar { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); user-select: none; }
-.bulk-count { color: var(--text-1); font-size: var(--fs-small); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bulk-count { color: var(--text-1); font-size: var(--fs-small); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bulk-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-1); }
 .bulk-actions .icon-button { color: var(--text-2); }
 .bulk-actions .icon-button:hover:not(:disabled), .action-menu summary:hover { background: var(--surface-2); color: var(--text-1); }
@@ -529,9 +611,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .action-menu summary[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .action-popover {
   position: absolute; z-index: 5; top: calc(100% + var(--space-1)); right: 0; display: grid; gap: 2px; width: max-content; min-width: 11rem; max-width: 18rem;
-  max-height: 20rem; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1);
+  max-height: 20rem; overflow-y: auto; border: 0; border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-1);
 }
-.action-popover button { justify-content: flex-start; gap: var(--space-2); border-color: transparent; background: transparent; box-shadow: none; font-weight: 400; }
+.action-popover button { justify-content: flex-start; gap: var(--space-2); min-height: 30px; border-color: transparent; border-radius: var(--radius); background: transparent; box-shadow: none; padding: 0 var(--space-2); font-weight: 400; }
 .action-popover button:hover { background: var(--surface-2); }
 .action-popover .muted-copy { margin: 0; padding: var(--space-2); }
 .tag-mark { width: 16px; display: inline-grid; place-items: center; color: var(--text-1); }
@@ -555,6 +637,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .team-confirm label { display: flex; align-items: center; gap: var(--space-2); }
 .team-rename { grid-column: 1 / -1; }
 .team-role { display: flex; gap: var(--space-2); align-items: center; }
+.team-cells { font-size: var(--fs-small); }
+.team-role select { border-color: transparent; background-color: transparent; font-size: var(--fs-small); font-weight: 500; }
+.team-role select:hover:not(:disabled) { border-color: transparent; background-color: var(--surface-2); }
 @media (max-width: 44rem) {
   .team-list { display: block; }
   .team-list article { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-2); }
@@ -584,6 +669,15 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .usage-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .usage-bar[data-level="high"] > span { background: var(--warn); }
 @media (max-width: 56rem) { .current-plan-card { grid-template-columns: 1fr; } }
+/* The step after paying for Founding or Team 25: a boxed card; its email link is the primary action, the import page a plain link. */
+.migration-card { display: grid; gap: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--accent-soft); padding: var(--space-5); margin-bottom: var(--space-2); }
+.migration-card h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.migration-card p { margin: 0; color: var(--text-2); }
+.migration-card .button-row { align-items: center; gap: var(--space-4); margin-top: var(--space-2); }
+.migration-card a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent);
+  padding: 0 var(--space-3); color: var(--on-accent); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
+.migration-card a.button:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+@media (pointer: coarse), (max-width: 30rem) { .migration-card a.button { min-height: var(--touch); } }
 .plan-picker { display: grid; gap: var(--space-4); }
 .plan-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--space-3); }
 .plan-card { display: grid; grid-template-rows: auto auto auto 1fr; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-5); }
@@ -873,4 +967,17 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   background: var(--surface-1);
   color: var(--text-1);
   box-shadow: var(--shadow-2);
+}
+
+/* Standalone tool links in the details pane (not inside a sentence) are quiet until hovered. */
+.details-panel .link-button { color: var(--text-2); font-weight: 500; text-decoration: none; }
+.details-panel .link-button:hover:not(:disabled) { color: var(--text-1); text-decoration: underline; }
+/* AI consent card: its strong edge came from the panel border; it is now a ring. */
+.panel.ai-consent { box-shadow: 0 0 0 1px var(--line-strong); }
+/* Forced colours: the menu rows show their native checkbox again, and selects use the native picker and arrow. */
+@media (forced-colors: active) {
+  .filter-popover .check-row > input:is([type="checkbox"], [type="radio"]) { position: static; width: auto; height: auto; opacity: 1; }
+  .filter-popover .check-row::after { display: none; }
+  .sort-field, .property-row select { appearance: auto; }
+  .property-row::after { forced-color-adjust: auto; }
 }
