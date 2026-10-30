@@ -151,3 +151,11 @@ test('an open menu sits above the setup guide in the corner', () => {
   const dock = layer('features/onboarding/setup-checklist.css', '.setup-dock');
   for (const menu of ['.filter-popover', '.action-popover']) expect(layer('styles/components.css', menu), menu).toBeGreaterThan(dock);
 });
+
+test('the setup guide marks a finished step with a stroke check, not a filled disc', () => {
+  const done = rule(read('features/onboarding/setup-checklist.css'), '.setup-step[data-state="done"] .setup-mark');
+  expect(done).not.toMatch(/background/);
+  expect(done).toMatch(/color:\s*var\(--ok\)/);
+  // The next step's row is a link styled as a primary action; its second line keeps the regular weight.
+  expect(rule(read('features/onboarding/setup-checklist.css'), '.setup-step > a.primary-action .setup-state')).toMatch(/font-weight:\s*400/);
+});

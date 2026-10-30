@@ -49,6 +49,12 @@ test('finished steps read Done, and the bar counts them', () => {
   expect(rows()[0]).toHaveAttribute('data-state', 'done');
 });
 
+test('a finished step is marked with a check, an open one with an empty circle', () => {
+  render(<SetupChecklist progress={progress({ email: 'working' })} admin defaultOpen onHide={vi.fn()} />);
+  expect(rows()[0].querySelector('.setup-mark svg path')).toHaveAttribute('d', 'M20 6 9 17l-5-5');
+  expect(rows()[1].querySelector('.setup-mark svg')).toBeNull();
+});
+
 test('every step links to the screen that finishes it, with plain links', () => {
   render(<SetupChecklist progress={progress({})} admin defaultOpen onHide={vi.fn()} />);
   expect(screen.getByRole('link', { name: /Receive customer email/ })).toHaveAttribute('href', '/settings/channels/type/email');
