@@ -396,6 +396,28 @@ func (s *Store) ConversationChat(ctx context.Context, workspaceID, conversationI
 			}
 			return page, err
 		}
+		// Who wrote the conversation's customer's items (not another member's that joined it): chatter that
+		// names no contact (part of no conversation) is another customer's when someone else wrote it.
+		senders := map[[2]string]bool{}
+		own, err := tx.Query(ctx, `SELECT DISTINCT i.sender_kind,i.sender_value FROM conversation_thread_items l
+			JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
+			WHERE l.workspace_id=$1 AND l.conversation_id=$2::uuid AND l.unlinked_at IS NULL AND i.role=$3 AND i.contact_id=$4::uuid
+				AND i.sender_kind IS NOT NULL AND i.sender_value IS NOT NULL`, workspaceID, conversationID, channels.RoleCustomer, contactID)
+		if err != nil {
+			return page, fmt.Errorf("read conversation senders: %w", err)
+		}
+		for own.Next() {
+			var kind, value string
+			if err := own.Scan(&kind, &value); err != nil {
+				own.Close()
+				return page, err
+			}
+			senders[[2]string{kind, value}] = true
+		}
+		own.Close()
+		if err := own.Err(); err != nil {
+			return page, err
+		}
 		rows, err := tx.Query(ctx, `WITH threads AS (
 				SELECT DISTINCT i.thread_id FROM conversation_thread_items l
 				JOIN channel_thread_items i ON i.workspace_id=l.workspace_id AND i.id=l.item_id
@@ -417,7 +439,7 @@ func (s *Store) ConversationChat(ctx context.Context, workspaceID, conversationI
 				return page, fmt.Errorf("read conversation chat: %w", err)
 			}
 			item.Linked, item.LinkReason = reason != nil, reason
-			item.IsOtherCustomer = item.Role == channels.RoleCustomer && item.ContactID != nil && *item.ContactID != contactID
+			item.IsOtherCustomer = isOtherCustomer(item, contactID, senders)
 			page.Items = append(page.Items, item)
 		}
 		if err := rows.Err(); err != nil {
@@ -426,6 +448,20 @@ func (s *Store) ConversationChat(ctx context.Context, workspaceID, conversationI
 		page.Items, page.Next = cutItemPage(page.Items, limit)
 		return page, nil
 	})
+}
+
+// isOtherCustomer says a chat item is a customer's who is not the conversation's: another contact, or,
+// for one that names none, someone other than who wrote the conversation's own items.
+func isOtherCustomer(item ChatItem, contactID string, senders map[[2]string]bool) bool {
+	switch {
+	case item.Role != channels.RoleCustomer:
+		return false
+	case item.ContactID != nil:
+		return *item.ContactID != contactID
+	case item.Sender.Kind == nil || item.Sender.Value == nil || len(senders) == 0:
+		return false
+	}
+	return !senders[[2]string{*item.Sender.Kind, *item.Sender.Value}]
 }
 
 func cutItemPage(items []ChatItem, limit int) ([]ChatItem, *string) {

@@ -4960,7 +4960,7 @@ export interface components {
             contact_id: string | null;
             /** Format: uuid */
             agent_id: string | null;
-            /** @description On a conversation's chat: a customer who is not the conversation's. */
+            /** @description On a conversation's chat: a customer who is not the conversation's (another contact, or, for chatter that names no contact, someone other than who wrote the conversation's own items). */
             is_other_customer: boolean;
             body: string;
             /** @description Its id on the channel. */
