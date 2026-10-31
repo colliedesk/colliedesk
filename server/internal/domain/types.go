@@ -191,6 +191,8 @@ const (
 	// ChannelHelpChat is the help center's AI chat: a conversation opens when an end user hands a chat
 	// to the team.
 	ChannelHelpChat = "help_chat"
+	// ChannelZalo is a Zalo Official Account: its one-to-one chats and the groups it is in.
+	ChannelZalo = "zalo"
 	// ChannelImported marks a conversation brought over from another helpdesk; Origin.Source keeps its own channel.
 	ChannelImported = "imported"
 	// ChannelAgent marks a conversation a team member started. An older image that does not know the column also writes it.

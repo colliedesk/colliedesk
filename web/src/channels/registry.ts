@@ -4,6 +4,7 @@ import type { LazyPart } from '../ui/lazy-part';
 import { emailChannel } from './email';
 import { helpChatChannel } from './help_chat';
 import { webFormChannel } from './web_form';
+import { zaloChannel } from './zalo';
 
 // What a type's tab shows: the channel it belongs to, read fresh from GET /api/v1/channels/{id}.
 export interface ChannelPanelProps {
@@ -75,7 +76,7 @@ export interface ChannelUI {
 }
 
 // The order here is the order of the Add channel list and of the empty page.
-export const channelTypes: ChannelUI[] = [emailChannel, webFormChannel, helpChatChannel];
+export const channelTypes: ChannelUI[] = [emailChannel, webFormChannel, helpChatChannel, zaloChannel];
 
 // Types the roadmap promises with their tracking issue; shown as not available yet, never added.
 export const upcomingChannels: { label: string; issue: number }[] = [{ label: 'Live chat', issue: 124 }];

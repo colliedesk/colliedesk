@@ -7,12 +7,14 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/channels/channelemail"
 	"github.com/colliedesk/colliedesk/server/internal/channels/helpchat"
 	"github.com/colliedesk/colliedesk/server/internal/channels/webform"
+	"github.com/colliedesk/colliedesk/server/internal/channels/zalo"
 )
 
 // Config is what the types need of the server.
 type Config struct {
 	Email    channelemail.Config
 	HelpChat helpchat.Config
+	Zalo     zalo.Config
 }
 
 // New returns the registry of every type, in the order the web app lists them.
@@ -21,6 +23,7 @@ func New(config Config) *channels.Registry {
 		channelemail.New(config.Email),
 		webform.New(),
 		helpchat.New(config.HelpChat),
+		zalo.New(config.Zalo),
 	)
 	if err != nil {
 		panic(err) // a programming error: the list above is fixed
