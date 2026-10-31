@@ -12,6 +12,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/autoclose"
 	"github.com/colliedesk/colliedesk/server/internal/autofix/githubsync"
 	"github.com/colliedesk/colliedesk/server/internal/autofixworker"
 	"github.com/colliedesk/colliedesk/server/internal/channels"
@@ -171,7 +172,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	// What channels receive and send goes through their types (docs/internals/channels.md): the outbox
 	// worker sends every channel's replies, email through SMTP, Gmail or Microsoft 365; without any,
 	// replies that need them fail with the reason. The journal worker processes what Async channels received.
-	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing, ExtraChannelTypes: e2eChannelTypes}
+	channelConfig := httpapi.Config{Email: emailConfig, Google: googleConfig, Microsoft: microsoftConfig, Billing: billing, ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
 	channelStore := store.NewWithDB(db).WithObjects(storage).WithChannels(httpapi.Channels(channelConfig, httpapi.Outbound(channelConfig), helpchat.Config{})).
 		WithSealKeys(googleConfig.Keys).WithPlanLimits(billingOn)
 	var sender emailoutbox.Sender
@@ -200,6 +201,10 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 	journal := pipeline.New(channelStore, nil).WithWake(wake)
 	// Response clocks a change made stale are counted again (docs/user/response-targets.md).
 	g.Go(func(ctx context.Context) { sla.Worker{Store: channelStore}.Run(ctx, 15*time.Second) })
+	// A chat channel's resolved conversations close by themselves after its auto_close_hours.
+	g.Go(func(ctx context.Context) { autoclose.Worker{Store: channelStore}.Run(ctx, time.Minute) })
+	// A bulk status change tells its customers in their chats a few seconds after it commits.
+	g.Go(func(ctx context.Context) { autoclose.Notices{Store: channelStore}.Run(ctx, 5*time.Second) })
 	// Their reminder and overdue emails go from the platform address, on a server that sends mail.
 	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
 		alerts := sla.Alerts{Store: channelStore, Mailer: email.SMTPSender{Config: emailConfig.SMTP}, From: "noreply@" + emailConfig.MailFromDomain,
@@ -277,7 +282,7 @@ func newGeneration(p *process, loaded serverconfig.Loaded, config builtConfig, l
 		SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: config.ProblemReportWorkspace, SwitchedOff: off, Carry: p.carry, OperatorOrigin: p.operatorOrigin, Operators: p.operators,
 		ServerConfig: p.configStore, CheckConfig: func(snap serverconfig.Snapshot) error { _, err := checkSnapshot(snap); return err }, Environ: os.Getenv,
-		ExtraChannelTypes: e2eChannelTypes}
+		ExtraChannelTypes: e2eChannelTypes, Zalo: e2eZalo}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {

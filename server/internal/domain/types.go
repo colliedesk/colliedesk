@@ -160,6 +160,16 @@ type Conversation struct {
 	DisplayRef   string `json:"display_ref"`
 	// SLA is its response clocks; nil while the workspace's targets are off or none applies to it.
 	SLA *ConversationSLA `json:"sla"`
+	// LastStatusChange is the newest change of its status and who made it; nil when it never changed.
+	LastStatusChange *StatusChangeView `json:"last_status_change"`
+	// StatusNotices are the statuses that, set by the team now, would tell its customer (its chat channel
+	// has words for them); read with one conversation only.
+	StatusNotices []string `json:"status_notices,omitempty"`
+	// MayTellCustomer says a status the team sets may tell its customer: its chat channel is live and has
+	// words for a status other than this one (StatusNotices names which, on the detail).
+	MayTellCustomer bool `json:"may_tell_customer"`
+	// ChatChannelID is the channel of the chat it is in (its newest linked item's), read with it.
+	ChatChannelID *string `json:"-"`
 }
 
 // ConversationSLA is a conversation's response clocks and the most pressing of their states: overdue,
@@ -495,4 +505,15 @@ func (o MessageOrigin) MarshalJSON() ([]byte, error) {
 		o.Kind = "other"
 	}
 	return json.Marshal(plain(o))
+}
+
+// StatusChangeView is one change of a conversation's status: to what, when, and by whom (agent: a team
+// member; token: an AI agent's token; customer: the customer writing again; command: a customer's reopen
+// command; auto_close: the channel closing it by itself; import: an import). Name is the team member's or
+// the token's.
+type StatusChangeView struct {
+	To   string    `json:"to"`
+	At   time.Time `json:"at"`
+	By   string    `json:"by"`
+	Name *string   `json:"name,omitempty"`
 }

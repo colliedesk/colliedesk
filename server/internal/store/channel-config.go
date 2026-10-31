@@ -104,6 +104,16 @@ func numberSeriesExists(ctx context.Context, tx pgx.Tx, workspaceID string, defi
 	return nil
 }
 
+// autoCloseHours is the auto_close_hours of settings over the type's defaults (0: never), which
+// validSettings checked.
+func autoCloseHours(definition channels.Definition, settings json.RawMessage) int {
+	merged, err := definition.Defaults.Merge(settings)
+	if err != nil || merged.AutoCloseHours == nil {
+		return 0
+	}
+	return *merged.AutoCloseHours
+}
+
 func validSettings(definition channels.Definition, settings json.RawMessage) (json.RawMessage, error) {
 	if len(settings) == 0 {
 		return json.RawMessage(`{}`), nil
@@ -120,6 +130,10 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.unmatched_every_seconds": "Use 0 to 86400 seconds."},
 			Message: "Check the channel settings."}
 	}
+	if hours := merged.AutoCloseHours; hours != nil && (*hours < 0 || *hours > 720) {
+		return nil, &channels.FieldError{Fields: map[string]string{"settings.auto_close_hours": "Use 0 (never) to 720 hours."},
+			Message: "Check the channel settings."}
+	}
 	if every := merged.Notices.HelpEverySeconds; every != nil && (*every < 0 || *every > 86400) {
 		return nil, &channels.FieldError{Fields: map[string]string{"settings.notices.help_every_seconds": "Use 0 to 86400 seconds."},
 			Message: "Check the channel settings."}
@@ -127,7 +141,9 @@ func validSettings(definition channels.Definition, settings json.RawMessage) (js
 	for kind, text := range map[string]string{channels.NoticeReceived: merged.Notices.Received, channels.NoticeUnmatched: merged.Notices.Unmatched,
 		channels.NoticeAskConfirm: merged.Notices.AskConfirm, channels.NoticeCancelled: merged.Notices.Cancelled, channels.NoticeExpired: merged.Notices.Expired,
 		channels.NoticeReopenNotFound: merged.Notices.ReopenNotFound, channels.NoticeReopenLegacy: merged.Notices.ReopenLegacy,
-		channels.NoticeReopened: merged.Notices.Reopened, channels.NoticeReopenNoted: merged.Notices.ReopenNoted, channels.NoticeHelp: merged.Notices.Help} {
+		channels.NoticeReopened: merged.Notices.Reopened, channels.NoticeReopenNoted: merged.Notices.ReopenNoted, channels.NoticeHelp: merged.Notices.Help,
+		channels.NoticeStatusPending: merged.Notices.StatusPending, channels.NoticeStatusResolved: merged.Notices.StatusResolved,
+		channels.NoticeStatusClosed: merged.Notices.StatusClosed} {
 		if placeholder := channels.UnknownPlaceholder(kind, text); placeholder != "" {
 			return nil, &channels.FieldError{Fields: map[string]string{"settings.notices." + kind: "This notice cannot fill " + placeholder + "."},
 				Message: "Check the channel settings."}
@@ -266,9 +282,9 @@ func (s *Store) CreateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID stri
 	}
 	enabled := input.Enabled == nil || *input.Enabled
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name,enabled,settings,external_account,created_by_agent_id,disabled_at,disabled_by_agent_id,is_default)
-		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,CASE WHEN NOT $4 THEN now() END,CASE WHEN NOT $4 THEN NULLIF($7,'')::uuid END,$8) RETURNING id::text`,
-		workspaceID, string(kind), name, enabled, settings, change.ExternalAccount, actor.AgentID, makeDefault).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO channels(workspace_id,type,name,enabled,settings,external_account,created_by_agent_id,disabled_at,disabled_by_agent_id,is_default,auto_close_since)
+		VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid,CASE WHEN NOT $4 THEN now() END,CASE WHEN NOT $4 THEN NULLIF($7,'')::uuid END,$8,CASE WHEN $9 > 0 THEN now() END) RETURNING id::text`,
+		workspaceID, string(kind), name, enabled, settings, change.ExternalAccount, actor.AgentID, makeDefault, autoCloseHours(definition, settings)).Scan(&id)
 	if err != nil {
 		return channels.Channel{}, channelWriteError(err)
 	}
@@ -388,7 +404,11 @@ func (s *Store) UpdateChannelTx(ctx context.Context, tx pgx.Tx, workspaceID, id 
 		if err := numberSeriesExists(ctx, tx, workspaceID, definition, settings); err != nil {
 			return channels.Channel{}, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE channels SET settings=$3,updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, id, settings); err != nil {
+		// Closing by itself applies to what is resolved after it was turned on; changing its hours keeps that
+		// time, turning it off clears it.
+		if _, err := tx.Exec(ctx, `UPDATE channels SET settings=$3,updated_at=now(),
+			auto_close_since=CASE WHEN $4 <= 0 THEN NULL ELSE COALESCE(auto_close_since,now()) END
+			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, settings, autoCloseHours(definition, settings)); err != nil {
 			return channels.Channel{}, fmt.Errorf("save channel settings: %w", err)
 		}
 		if err := insertChannelEvent(ctx, tx, current, "config_changed", actor, map[string]any{"settings": true}); err != nil {

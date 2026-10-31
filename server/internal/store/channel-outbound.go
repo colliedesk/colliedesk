@@ -201,6 +201,9 @@ func (s *Store) attachChannelRefs(ctx context.Context, tx pgx.Tx, workspaceID st
 	// once, at the first one, and every address is looked up in them.
 	var mailboxes map[string]*channels.Channel
 	for i := range items {
+		if items[i].ChatChannelID != nil {
+			items[i].MayTellCustomer = mayTell(byID[*items[i].ChatChannelID], items[i].Status)
+		}
 		choice := replyChoice{origin: channels.Type(items[i].Channel)}
 		if items[i].ChannelID != nil {
 			choice.own = byID[*items[i].ChannelID]
@@ -392,6 +395,71 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	return nil
 }
 
+// retryNotice queues a failed channel's own message again on its chat channel, while that channel can send.
+func (s *Store) retryNotice(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID, channelID string) (domain.Message, error) {
+	channel, err := s.channelByID(ctx, tx, workspaceID, channelID)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	switch {
+	case !channel.Live():
+		return domain.Message{}, fmt.Errorf("%w: %s was removed.", ErrOutboundNotReady, channel.Name)
+	case !channel.Enabled:
+		return domain.Message{}, fmt.Errorf("%w: %s is off. Turn it on, then retry.", ErrOutboundNotReady, channel.Name)
+	}
+	result, err := tx.Exec(ctx, `UPDATE channel_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
+		claim_token=NULL,last_error=NULL,last_error_code=NULL,updated_at=now(),created_at=$3
+		WHERE workspace_id=$1 AND message_id=$2 AND status='failed' AND channel_id=$4`, workspaceID, messageID, s.now(), channel.ID)
+	if err != nil {
+		return domain.Message{}, fmt.Errorf("retry notice: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return domain.Message{}, ErrDeliveryNotFailed
+	}
+	return getMessage(ctx, tx, workspaceID, messageID)
+}
+
+// enqueueNotice queues a channel's own message on that chat channel, for the place the conversation's
+// newest item of it is in (the sender reads it there). The conversation's reply channel is neither used
+// nor pinned: a status notice of a chat moved into an email conversation is never emailed.
+func (s *Store) enqueueNotice(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string, channel channels.Channel) error {
+	adapter, ok := s.channels.Adapter(channel.Type)
+	if !ok {
+		return fmt.Errorf("queue notice: no channel type %s", channel.Type)
+	}
+	recipient, err := replyRecipient(ctx, tx, workspaceID, conversationID, channel.ID)
+	if err != nil {
+		return err
+	}
+	prepared, err := adapter.Outbound().Prepare(ctx, tx, channels.PrepareRequest{WorkspaceID: workspaceID, Channel: channel,
+		ConversationID: conversationID, MessageID: messageID, Recipient: recipient, Host: s})
+	if err != nil {
+		return err
+	}
+	external := ""
+	if prepared.ExternalID != "" {
+		external = string(channel.Type) + ":" + prepared.ExternalID
+	}
+	if _, err := tx.Exec(ctx, `UPDATE messages SET channel_id=$3,external_id=COALESCE(NULLIF($4,''),external_id) WHERE workspace_id=$1 AND id=$2`,
+		workspaceID, messageID, channel.ID, external); err != nil {
+		return fmt.Errorf("assign notice channel: %w", err)
+	}
+	status := prepared.Status
+	if status == "" {
+		status = channels.DeliveryQueued
+	}
+	var meta []byte
+	if len(prepared.Meta) > 0 {
+		meta = prepared.Meta
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO channel_outbox(workspace_id,message_id,status,last_error,last_error_code,created_at,recipients,transport,channel_type,channel_id,meta)
+		VALUES($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,1,NULLIF($7,''),$8,$9,$10)`,
+		workspaceID, messageID, status, prepared.Reason, prepared.Code, s.now(), prepared.Transport, string(channel.Type), channel.ID, meta); err != nil {
+		return fmt.Errorf("queue notice: %w", err)
+	}
+	return nil
+}
+
 // RetryDelivery requeues a failed delivery of a reply in this workspace and conversation, if its
 // channel can send now.
 func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, messageID string) (domain.Message, error) {
@@ -413,6 +481,11 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	if !message.Delivery.Retryable {
 		return domain.Message{}, ErrDeliveryFinal
+	}
+	// A channel's own message (a status notice) is retried on the chat channel it was queued on, never on
+	// the conversation's reply channel, which it does not pin either.
+	if message.NoticeKind != nil && message.ChannelID != nil {
+		return s.retryNotice(ctx, tx, workspaceID, conversationID, messageID, *message.ChannelID)
 	}
 	route, err := s.replyRoute(ctx, tx, workspaceID, conversationID)
 	if err != nil {

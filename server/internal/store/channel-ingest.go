@@ -762,7 +762,12 @@ func (s *Store) ingestInbound(ctx context.Context, request IngestRequest) (chann
 			return result, err
 		}
 	} else {
-		if err := setStatusActor(ctx, tx, ""); err != nil {
+		// The customer writing again reopens, or their reopen command does.
+		cause := CauseCustomer
+		if decision.Rule == rules.CommandReopen {
+			cause = CauseCommand
+		}
+		if err := setStatusCause(ctx, tx, statusChange{Cause: cause}); err != nil {
 			return result, err
 		}
 		// An acknowledgement keeps a resolved conversation resolved, and only then is the message marked as

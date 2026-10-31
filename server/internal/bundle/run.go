@@ -449,7 +449,7 @@ func (w *writer) conversation(ctx context.Context, c Conversation) error {
 		}
 	}
 	for _, change := range c.StatusChanges {
-		if _, err := w.tx.Exec(ctx, `INSERT INTO conversation_status_changes(workspace_id,conversation_id,from_status,to_status,changed_at,source) VALUES($1,$2,$3,$4,$5,'import')`,
+		if _, err := w.tx.Exec(ctx, `INSERT INTO conversation_status_changes(workspace_id,conversation_id,from_status,to_status,changed_at,source,cause) VALUES($1,$2,$3,$4,$5,'import','import')`,
 			w.workspaceID, id, change.From, change.To, change.At.UTC()); err != nil {
 			return fmt.Errorf("status change: %w", err)
 		}
@@ -584,13 +584,18 @@ func (w *writer) message(ctx context.Context, c Conversation, conversationID str
 			author = id
 		}
 	}
+	// The name it was written by: the bundle's author_name, else for a message of the chat the sender's.
+	name := message.AuthorName
+	if name == "" && message.Sender != nil && message.Kind != "note" {
+		name = message.Sender.Name
+	}
 	kind := map[string]string{"incoming": "incoming", "outgoing": "reply", "note": "private_note"}[message.Kind]
 	origin, _ := json.Marshal(map[string]any{"import": w.trace(message.ID), "system": "bundle", "external_id": message.ID, "kind": kind,
 		"from": nil, "to": []string{}, "cc": []string{}, "bcc": []string{}})
 	var id string
 	if err := w.tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,author_name,kind,body,origin,created_at)
 		VALUES($1,$2,$3::uuid,NULLIF($4,''),$5,$6,$7,$8) RETURNING id::text`,
-		w.workspaceID, conversationID, author, clip(message.AuthorName), message.Kind, message.Body, origin, message.CreatedAt.UTC()).Scan(&id); err != nil {
+		w.workspaceID, conversationID, author, clip(name), message.Kind, message.Body, origin, message.CreatedAt.UTC()).Scan(&id); err != nil {
 		return "", err
 	}
 	if err := w.mark(ctx, "thread", message.ID, c.ID, id, true); err != nil {

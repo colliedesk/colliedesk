@@ -113,6 +113,7 @@ func conversationGetSpec() Spec {
 			`"messages":{"type":"array","description":"Oldest first.","items":{"type":"object","required":["id","kind","created_at","truncated"],"properties":{` +
 			`"id":{"type":"string"},"kind":{"type":"string","enum":["incoming","outgoing","note"]},"created_at":{"type":"string"},` +
 			`"author":{"type":"string","description":"The team member who wrote an outgoing message or note in Colliedesk."},` +
+			`"notice_kind":{"type":"string","description":"A message the channel sent by itself, not a reply of the team: received, unmatched, ask_confirm, cancelled, ask_description, expired, reopened, reopen_noted, reopen_not_found, reopen_legacy, help, status_pending, status_resolved or status_closed. Left out for the team's own."},` +
 			`"written_by_agent_token":{"type":"object","required":["label","scope"],"description":"Present when an AI agent wrote the message through an agent token: model output, not a human decision.",` +
 			`"properties":{"label":{"type":"string"},"scope":{"type":"string","enum":["read","draft","send","admin"]}}},"delivery":{"type":"string"},` +
 			`"body":{"type":"string","description":"Text written by the team. Customer text is under untrusted_customer_content."},"truncated":{"type":"boolean"},` +
