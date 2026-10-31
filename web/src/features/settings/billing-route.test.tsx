@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { BillingRoute } from './billing-route';
 import { readCheckoutIntent, rememberCheckoutIntent } from './checkout-intent';
@@ -307,9 +307,9 @@ test('a reload of the page the checkout returned to does not welcome the buyer a
   api.me.mockResolvedValue(me('admin'));
   api.billing.mockResolvedValue(foundingPaid);
   api.setupProgress.mockResolvedValue(setup('none'));
-  const first = renderRoute({ checkoutReturned: true });
+  renderRoute({ checkoutReturned: true });
   fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Later' }));
-  first.unmount();
+  cleanup();
   renderRoute({ checkoutReturned: true });
   await screen.findByText('Freshdesk migration');
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

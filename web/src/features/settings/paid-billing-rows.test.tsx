@@ -114,4 +114,8 @@ test('a complimentary plan shows its seats and storage and nothing to buy, charg
 test('a complimentary plan with an end says when it ends', () => {
   show(paidBilling('team', 10, 100, { complimentary: true, complimentary_until: '2027-03-01T00:00:00Z', current_period_end: '2027-03-01T00:00:00Z' }));
   expect(row('Plan')).toHaveTextContent('Complimentary Team plan · no charge · until Mar 1, 2027');
+  // A period end on a complimentary plan is not a charge: there is nothing to cancel and no portal to open.
+  expect(screen.queryByRole('button', { name: 'Cancel plan' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Next charge')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /open billing portal/i })).not.toBeInTheDocument();
 });

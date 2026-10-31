@@ -103,7 +103,7 @@ test('a locked admin can still take the workspace out: Export all data asks for 
 
 test('a 402 workspace_locked from the inbox replaces the inbox with the locked screen', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false })),
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false, admins: ['Maya Reyes', 'Daniel Kim'] })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/conversations': () => json(402, locked),
     '/api/v1/agents': () => json(402, locked),
@@ -112,7 +112,7 @@ test('a 402 workspace_locked from the inbox replaces the inbox with the locked s
   });
   open();
   expect(await screen.findByRole('heading', { level: 1, name: 'This workspace is locked' })).toBeInTheDocument();
-  expect(screen.getByText(/ask an admin to choose a plan/i)).toBeInTheDocument();
+  expect(screen.getByText('Nothing is deleted. Ask an admin to choose a plan: Maya Reyes, Daniel Kim.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Signed in as' })).toBeInTheDocument();
 });
